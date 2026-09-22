@@ -271,20 +271,28 @@ func catalogHealthIssues(health objectcatalog.HealthStatus) []ResourceQueryIssue
 		})
 	}
 	if len(health.DeniedResources) > 0 {
-		const maxNamed = 5
-		named := health.DeniedResources
-		suffix := ""
-		if len(named) > maxNamed {
-			suffix = " and " + strconv.Itoa(len(named)-maxNamed) + " more"
-			named = named[:maxNamed]
-		}
 		issues = append(issues, ResourceQueryIssue{
 			Kind: "Catalog permissions",
-			Message: "Your role cannot list " + strings.Join(named, ", ") + suffix +
+			Message: "Your role cannot list " + limitedCatalogResourceNames(health.DeniedResources) +
 				"; objects of those types are not shown.",
 		})
 	}
+	if len(health.WatchUnavailable) > 0 {
+		issues = append(issues, ResourceQueryIssue{
+			Kind: "Catalog watches",
+			Message: "Live updates are unavailable for " + limitedCatalogResourceNames(health.WatchUnavailable) +
+				"; rows use periodic refresh where LIST is allowed.",
+		})
+	}
 	return issues
+}
+
+func limitedCatalogResourceNames(names []string) string {
+	const maxNamed = 5
+	if len(names) > maxNamed {
+		return strings.Join(names[:maxNamed], ", ") + " and " + strconv.Itoa(len(names)-maxNamed) + " more"
+	}
+	return strings.Join(names, ", ")
 }
 
 func keysetCatalogBatchIndex(hasPrevious bool) int {

@@ -80,5 +80,8 @@ func buildCatalogSnapshotStats(
 	if payload.FirstBatchLatencyMs > 0 {
 		stats.TimeToFirstRowMs = payload.FirstBatchLatencyMs
 	}
+	for _, issue := range payload.Issues {
+		stats.Warnings = append(stats.Warnings, issue.Message)
+	}
 	return stats
 }

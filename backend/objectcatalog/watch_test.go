@@ -106,7 +106,7 @@ func TestFlushUpdateEvent(t *testing.T) {
 	key := catalogKey(desc, "default", "my-deploy")
 	svc.items[key] = Summary{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "my-deploy"}, ResourceVersion: "1"}
 	svc.lastSeen[key] = time.Now()
-	svc.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
+	svc.catalogIndex.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
 
 	obj := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
 		Name: "my-deploy", Namespace: "default",
@@ -138,7 +138,7 @@ func TestFlushDeleteEvent(t *testing.T) {
 	key := catalogKey(desc, "default", "my-deploy")
 	svc.items[key] = Summary{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "my-deploy"}}
 	svc.lastSeen[key] = time.Now()
-	svc.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
+	svc.catalogIndex.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
 
 	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{

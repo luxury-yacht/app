@@ -98,6 +98,10 @@ and retry. The complete multi-namespace collection has no separate deadline;
 caller cancellation still stops it. A failed kind retains prior rows and reports
 partial health without canceling unrelated kinds. Dynamic sources do not gate global ingest readiness.
 A namespace without WATCH permission can still contribute LIST-authorized rows.
+Ingest partition readiness includes permission-skipped namespaces even when no
+reflector runs for them. Catalog health exposes unavailable watches through the
+existing query issues and snapshot warnings, which feed Browse and Diagnostics.
+A watch warning does not make successfully collected LIST rows incomplete.
 
 Callbacks never wait for the catalog publication lock. Coalesce contended
 reconciliation by GVR, acquire publication ownership, then reread the current
@@ -111,7 +115,12 @@ version change is being reconciled, the watch may use a different served version
 translate its group/resource to the catalog descriptor for query identity. CRD
 arrival, deletion and changes to served versions, scope, names, UID or API
 establishment invalidate discovery and request collection through the existing
-resync boundary. Routine metadata, schema and status-reason updates still update
+full-resync boundary. A CRD Add waits for Established before requesting that
+collection; its establishment update supplies the request. Full resync reuses
+the recovery and atomic publication contract. Before introducing affected-kind
+collection, measure a warm full pass with realistic object counts and record
+API LIST requests separately from in-memory work, including aggregated APIs
+when present. Routine metadata, schema and status-reason updates still update
 the CRD's own row without triggering a full recollection. Confirmed deletion
 retires the matching definition UID and reconciles rows, counts, facets and
 finalizer findings.

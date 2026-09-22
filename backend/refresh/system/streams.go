@@ -47,7 +47,6 @@ func registerStreamHandlers(deps streamDeps) (*containerlogsstream.Handler, *eve
 		logger,
 		deps.telemetry,
 		deps.clusterMeta,
-
 		deps.ingestManager,
 	)
 	return logHandler, eventManager, resourceManager, nil

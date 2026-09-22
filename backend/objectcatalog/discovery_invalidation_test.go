@@ -173,8 +173,24 @@ func TestNewCRDAppearsWithoutWaitingForPeriodicCatalogRefresh(t *testing.T) {
 	discovery.lists = []*metav1.APIResourceList{{GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"list", "watch"}}}}}
 	_, err := api.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: "widgets.example.com", UID: "new-definition"},
+		Status:     apiextensionsv1.CustomResourceDefinitionStatus{Conditions: []apiextensionsv1.CustomResourceDefinitionCondition{{Type: apiextensionsv1.Established, Status: apiextensionsv1.ConditionTrue}}},
 		Spec:       apiextensionsv1.CustomResourceDefinitionSpec{Group: "example.com", Scope: apiextensionsv1.NamespaceScoped, Names: apiextensionsv1.CustomResourceDefinitionNames{Kind: "Widget", Plural: "widgets"}, Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{Name: "v1", Served: true, Storage: true}}},
 	}, metav1.CreateOptions{})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool { return svc.Query(QueryOptions{}).TotalItems == 1 }, time.Second, time.Millisecond, "CRD arrival must refresh discovery while the healthy stream suppresses polling")
+}
+
+func TestCRDAddWaitsForEstablishmentBeforeRecollection(t *testing.T) {
+	svc := NewService(Dependencies{ClusterID: "c1"}, nil)
+	notifier := newWatchNotifier(svc)
+	handler := notifier.crdWatchHandler(cache.ResourceEventHandlerFuncs{})
+	crd := &apiextensionsv1.CustomResourceDefinition{ObjectMeta: metav1.ObjectMeta{Name: "widgets.example.com", UID: "widget-definition"}}
+	handler.OnAdd(crd, false)
+	_, requested := notifier.takeFullSyncRequest()
+	require.False(t, requested, "an API not yet established must not trigger a wasted collection")
+	established := crd.DeepCopy()
+	established.Status.Conditions = []apiextensionsv1.CustomResourceDefinitionCondition{{Type: apiextensionsv1.Established, Status: apiextensionsv1.ConditionTrue}}
+	handler.OnUpdate(crd, established)
+	_, requested = notifier.takeFullSyncRequest()
+	require.True(t, requested, "establishment must trigger collection without waiting for the periodic refresh")
 }

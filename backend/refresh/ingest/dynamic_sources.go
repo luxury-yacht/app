@@ -128,7 +128,13 @@ func (m *IngestManager) prepareDynamicEntry(request *dynamicAdmission, project C
 	e.onDemand.Store(true)
 	example := &unstructuredv1.Unstructured{}
 	example.SetGroupVersionKind(spec.GVK)
-	for _, namespace := range allowed {
+	for _, namespace := range request.namespaces {
+		if !slices.Contains(allowed, namespace) {
+			part := &ingestPart{namespace: namespace}
+			part.skipped.Store(true)
+			e.parts = append(e.parts, part)
+			continue
+		}
 		e.addPartition(spec.GVK, namespace, dynamicListWatch(request.client, spec.GVR, namespace), example, func(row interface{}, deleted bool) { m.notifyDynamicSource(e, row, deleted) })
 	}
 	e.store.SetExpectedPartitions(allowed)

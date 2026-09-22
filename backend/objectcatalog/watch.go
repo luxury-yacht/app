@@ -442,6 +442,9 @@ func (n *watchNotifier) crdWatchHandler(base cache.ResourceEventHandlerFuncs) ca
 func (n *watchNotifier) crdDiscoveryChanged(obj interface{}, added bool) {
 	n.service.markDiscoveryStale()
 	if crd, ok := obj.(*apiextensionsv1.CustomResourceDefinition); added && ok {
+		if !crdEstablished(crd) {
+			return
+		}
 		// An initial handler replay does not need another full catalog collection.
 		gr := schema.GroupResource{Group: crd.Spec.Group, Resource: crd.Spec.Names.Plural}
 		if _, desc := n.service.resolveGRToDescriptor(gr); desc != nil {

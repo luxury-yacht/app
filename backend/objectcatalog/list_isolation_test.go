@@ -113,7 +113,7 @@ func TestCatalogListTimeoutDoesNotCancelSiblingKinds(t *testing.T) {
 	}}}}
 	old := summaryFromObject("c1", widgetDesc(), widgetObject("default", "retained", "1"))
 	svc.items[catalogKey(widgetDesc(), "default", "retained")] = old
-	svc.rebuildCacheFromItems(svc.items, []Descriptor{widgetDesc()})
+	svc.catalogIndex.rebuildCacheFromItems(svc.items, []Descriptor{widgetDesc()})
 	err = svc.sync(t.Context())
 	var partial *PartialSyncError
 	require.ErrorAs(t, err, &partial)

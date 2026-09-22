@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -181,6 +182,7 @@ func TestIngestManagerHasSyncedForDegradesAfterDeadline(t *testing.T) {
 	if mgr.RawHasSyncedFor(gvr) {
 		t.Fatalf("RawHasSyncedFor(%s) must remain false after deadline degradation", gvr)
 	}
+	require.Equal(t, []PartitionReadiness{{State: refresh.ResourceReadinessDegraded}}, mgr.PartitionReadinessFor(gvr))
 	if got := mgr.ResourceReadinessFor(gvr); got != refresh.ResourceReadinessDegraded {
 		t.Fatalf("ResourceReadinessFor(%s) after deadline = %s, want degraded", gvr, got)
 	}
@@ -199,6 +201,7 @@ func TestIngestManagerResourceReadinessClassifiesConcreteStoreStates(t *testing.
 	}
 
 	unknown := schema.GroupVersionResource{Group: "unknown.example.com", Version: "v1", Resource: "unknowns"}
+	require.Empty(t, mgr.PartitionReadinessFor(unknown))
 	if got := mgr.ResourceReadinessFor(unknown); got != refresh.ResourceReadinessUnavailable {
 		t.Fatalf("untracked readiness = %s, want unavailable", got)
 	}
@@ -206,6 +209,7 @@ func TestIngestManagerResourceReadinessClassifiesConcreteStoreStates(t *testing.
 	for _, part := range tracked.parts {
 		part.skipped.Store(true)
 	}
+	require.Equal(t, []PartitionReadiness{{State: refresh.ResourceReadinessUnavailable}}, mgr.PartitionReadinessFor(gvr))
 	if got := mgr.ResourceReadinessFor(gvr); got != refresh.ResourceReadinessUnavailable {
 		t.Fatalf("skipped readiness = %s, want unavailable", got)
 	}
@@ -214,12 +218,14 @@ func TestIngestManagerResourceReadinessClassifiesConcreteStoreStates(t *testing.
 	}
 
 	tracked.onDemand.Store(true)
+	require.Equal(t, []PartitionReadiness{{State: refresh.ResourceReadinessPending}}, mgr.PartitionReadinessFor(gvr))
 	if got := mgr.ResourceReadinessFor(gvr); got != refresh.ResourceReadinessPending {
 		t.Fatalf("on-demand readiness = %s, want pending", got)
 	}
 	if err := tracked.store.Replace(nil, "1"); err != nil {
 		t.Fatalf("mark store synced: %v", err)
 	}
+	require.Equal(t, []PartitionReadiness{{State: refresh.ResourceReadinessReady}}, mgr.PartitionReadinessFor(gvr))
 	if got := mgr.ResourceReadinessFor(gvr); got != refresh.ResourceReadinessReady {
 		t.Fatalf("synced readiness = %s, want ready", got)
 	}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCatalogSnapshotOwnsItsRowAndFacetSlices(t *testing.T) {
@@ -411,6 +412,21 @@ func TestCatalogSnapshotIssuesReportDeniedResources(t *testing.T) {
 			t.Fatalf("expected %q in permissions issue %q", expected, permissions)
 		}
 	}
+}
+
+func TestWatchDenialWarnsWithoutDiscardingCompleteListRows(t *testing.T) {
+	payload, _ := buildCatalogSnapshot(
+		objectcatalog.QueryResult{TotalIsExact: true, FacetsExact: true, TotalItems: 2},
+		objectcatalog.QueryOptions{Limit: 1},
+		objectcatalog.HealthStatus{Status: objectcatalog.HealthStateOK, WatchUnavailable: []string{"widgets.example.com (namespace team-a)"}},
+		true, true,
+	)
+	require.Equal(t, ResourceQueryComplete, payload.Completeness)
+	require.Equal(t, 2, payload.Total)
+	require.Len(t, payload.Issues, 1)
+	require.Contains(t, payload.Issues[0].Message, "widgets.example.com (namespace team-a)")
+	stats := buildCatalogSnapshotStats(payload, false)
+	require.Equal(t, []string{payload.Issues[0].Message}, stats.Warnings, "the existing diagnostics warning channel must receive the watch limitation")
 }
 
 func TestCatalogBuildPreservesContinueWhenCachesReady(t *testing.T) {

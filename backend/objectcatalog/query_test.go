@@ -624,7 +624,7 @@ func TestQueryBackendSortsByRequestedFieldAndDirection(t *testing.T) {
 		podDesc.GVR().String(): podDesc,
 	}
 	svc.mu.Unlock()
-	svc.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
+	svc.catalogIndex.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
 
 	first := svc.Query(QueryOptions{Limit: 2, SortField: "name", SortDirection: "desc"})
 	if len(first.Items) != 2 {
@@ -706,7 +706,7 @@ func TestQueryCachedAndUncachedPathsUseSameOrdering(t *testing.T) {
 
 	opts := QueryOptions{Limit: 3, SortField: "age", SortDirection: "desc"}
 	uncached := svc.Query(opts)
-	svc.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
+	svc.catalogIndex.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
 	cached := svc.Query(opts)
 
 	if len(uncached.Items) != len(cached.Items) {
@@ -751,7 +751,7 @@ func TestQueryUsesGVKAndNamespaceFilterContract(t *testing.T) {
 		podDesc.GVR().String():    podDesc,
 	}
 	svc.mu.Unlock()
-	svc.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
+	svc.catalogIndex.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
 
 	result := svc.Query(QueryOptions{
 		Kinds:      []string{"apps/v1/Deployment"},

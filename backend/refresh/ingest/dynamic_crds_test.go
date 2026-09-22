@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,6 +26,18 @@ func dynamicWidgetDefinition() *apiextensionsv1.CustomResourceDefinition {
 
 func dynamicTestProjector(DynamicCatalogSpec) CatalogProjector {
 	return func(o metav1.Object) interface{} { return dynCatRow{Namespace: o.GetNamespace(), Name: o.GetName()} }
+}
+
+func TestDeniedDynamicWatchRemainsVisibleToReadiness(t *testing.T) {
+	crd := dynamicWidgetDefinition()
+	gvr := schema.GroupVersionResource{Group: crd.Spec.Group, Version: "v1", Resource: crd.Spec.Names.Plural}
+	mgr := newStartedDynamicManager(t.Context(), newWidgetDynamicClient(gvr, gvr.GroupVersion().WithKind("Widget")))
+	t.Cleanup(mgr.Stop)
+	mgr.SetPermissionFilter(func(_, _, _ string) bool { return false })
+	require.True(t, mgr.ReconcileCustomResourceDefinition(crd, "v1", dynamicTestProjector))
+	require.True(t, mgr.PermissionSkippedFor(gvr), "denied dynamic sources must retain their permission state")
+	require.Equal(t, refresh.ResourceReadinessUnavailable, mgr.ResourceReadinessFor(gvr))
+	require.Equal(t, []PartitionReadiness{{Namespace: "", State: refresh.ResourceReadinessUnavailable}}, mgr.PartitionReadinessFor(gvr))
 }
 
 func TestCRDSourceUsesServedPreferredVersion(t *testing.T) {

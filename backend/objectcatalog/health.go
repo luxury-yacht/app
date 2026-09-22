@@ -1,16 +1,40 @@
 /*
  * backend/objectcatalog/health.go
  *
- * Catalog health tracking and cache rebuild helpers.
+ * Catalog health and source-availability diagnostics.
  */
 
 package objectcatalog
 
 import (
+	"fmt"
+	"sort"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/refresh"
 )
+
+func (s *Service) watchUnavailable() []string {
+	if s.deps.IngestSource == nil {
+		return nil
+	}
+	var denied []string
+	for _, desc := range s.Descriptors() {
+		for _, part := range s.deps.IngestSource.PartitionReadinessFor(desc.GVR()) {
+			if part.State != refresh.ResourceReadinessUnavailable {
+				continue
+			}
+			name := deniedResourceName(desc)
+			if part.Namespace != "" {
+				name += fmt.Sprintf(" (namespace %s)", part.Namespace)
+			}
+			denied = append(denied, name)
+		}
+	}
+	sort.Strings(denied)
+	return denied
+}
 
 type healthStatus struct {
 	State               HealthState
@@ -102,12 +126,4 @@ func (s *Service) logWarn(msg string) {
 
 func (s *Service) logDebug(msg string) {
 	applog.Debug(s.deps.Logger, msg, componentName)
-}
-
-func (s *Service) rebuildCacheFromItems(items map[string]Summary, descriptors []Descriptor) {
-	s.cacheRebuilds.Add(1)
-	s.mu.Lock()
-	s.catalogIndex.rebuildCacheFromItems(items, descriptors)
-	s.mu.Unlock()
-	s.replaceFinalizerBlockers(items)
 }

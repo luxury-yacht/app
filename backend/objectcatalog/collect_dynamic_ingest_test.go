@@ -241,6 +241,12 @@ func TestPromotedSourcePreservesListOnlyNamespaceRows(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, first, second, "promotion must preserve rows in namespaces that grant LIST but deny WATCH")
 	registerDesc(svc, desc)
+	require.Equal(t, []string{"widgets.example.com (namespace denied)", "widgets.example.com (namespace list-only)"}, svc.Health().WatchUnavailable)
+	readiness := mgr.PartitionReadinessFor(desc.GVR())
+	require.Len(t, readiness, 3, "readiness must include denied partitions without starting reflectors for them")
+	otherVersion := desc.GVR()
+	otherVersion.Version = "v2"
+	require.Equal(t, readiness, mgr.PartitionReadinessFor(otherVersion), "diagnostics must follow the active source when discovery and watch versions differ")
 	svc.replaceIngestCatalogSummaries(desc.GVR(), first)
 	unsubscribe := mgr.SubscribeDynamicCatalogChanges(svc.applyDynamicCatalogChange)
 	defer svc.stopIngestReconciliation()
@@ -353,4 +359,8 @@ func (*fakeDynamicIngestSource) ReconcileDiscoveredResource(schema.GroupVersionR
 func (source *fakeDynamicIngestSource) SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func() {
 	source.AddCatalogSink(gvr, sink)
 	return func() {}
+}
+
+func (f *fakeDynamicIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
+	return nil
 }

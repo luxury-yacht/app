@@ -55,7 +55,8 @@ type HealthStatus struct {
 	// DeniedResources lists resource types (kubectl-style `resource[.group]`)
 	// whose lists were RBAC-forbidden during the last sync — so an RBAC-blocked
 	// catalog is distinguishable from an empty cluster. Sorted.
-	DeniedResources []string `json:"deniedResources,omitempty"`
+	DeniedResources  []string `json:"deniedResources,omitempty"`
+	WatchUnavailable []string `json:"watchUnavailable,omitempty"`
 }
 
 // Summary represents the lightweight metadata captured for each Kubernetes object.
@@ -158,6 +159,7 @@ type Dependencies struct {
 // IngestSource supplies catalog projections from generation-owned sources.
 // Catalog subscriptions detach without retiring the underlying watches.
 type IngestSource interface {
+	PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness
 	ReconcileDiscoveredResource(schema.GroupVersionResource) bool
 	ReadDynamicCatalogSource(schema.GroupResource) (ingest.DynamicCatalogSnapshot, bool)
 	SubscribeDynamicCatalogChanges(func(ingest.DynamicCatalogChange)) func()

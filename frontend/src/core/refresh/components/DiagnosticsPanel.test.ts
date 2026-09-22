@@ -1232,6 +1232,34 @@ describe('DiagnosticsPanel component', () => {
     healthSpy.mockRestore();
   });
 
+  test('surfaces catalog watch availability warnings alongside the retained object count', async () => {
+    mockKubeconfigState.selectedClusterId = 'cluster-a';
+    const scope = buildClusterScope('cluster-a', '?limit=200');
+    const warning = 'widgets.example.com (namespace list-only)';
+    setScopedEntries('catalog', [
+      [
+        scope,
+        {
+          ...createReadyState({ items: [], total: 42 }),
+          scope,
+          stats: { itemCount: 0, buildDurationMs: 1, totalItems: 42, warnings: [warning] },
+        },
+      ],
+    ]);
+    fetchTelemetrySummaryMock.mockResolvedValue(makeTelemetrySummary());
+
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectClusterDataTab(rendered.container);
+    await flushAsync();
+
+    const count = Array.from(rendered.container.querySelectorAll('[title]')).find(
+      (element) => element.getAttribute('title') === warning
+    );
+    expect(count?.textContent).toBe('42');
+    await rendered.unmount();
+  });
+
   test('renders telemetry summaries after successful fetch', async () => {
     vi.useFakeTimers();
     const baseTime = new Date('2024-01-01T12:00:00Z');

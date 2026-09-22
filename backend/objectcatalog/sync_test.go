@@ -1219,7 +1219,7 @@ func TestCatalogReplacementStaysPrivateUntilPublication(t *testing.T) {
 			key := catalogKey(desc, "default", "old")
 			svc.items[key] = old
 			svc.lastSeen[key] = time.Now()
-			svc.rebuildCacheFromItems(svc.items, []Descriptor{desc})
+			svc.catalogIndex.rebuildCacheFromItems(svc.items, []Descriptor{desc})
 			svc.catalogIndex.cachesReady = !cold
 			run := newCatalogSync(svc, svc.now())
 			run.descriptors = []Descriptor{desc}
@@ -1274,4 +1274,12 @@ func (source *blockingIngestSource) SubscribeCatalogSink(gvr schema.GroupVersion
 func (source *controlledIngestSource) SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func() {
 	source.AddCatalogSink(gvr, sink)
 	return func() {}
+}
+
+func (*blockingIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
+	return nil
+}
+
+func (*controlledIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
+	return nil
 }

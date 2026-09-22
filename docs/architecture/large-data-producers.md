@@ -66,6 +66,18 @@ table-persistence and navigation IDs, so removing the domains does not discard
 saved settings. CSV exports hydrate all matching catalog rows through the same
 live API path; projected catalog membership is not a rich detail payload.
 
+A local Kind measurement on 2026-09-22 used the production ingest subsystem and
+catalog service with real Kubernetes clients, 10,000 additional Widget CRs, and
+default catalog options. After initial collection and watch readiness, changing
+the Widget CRD's short names triggered a warm full resync. That pass published
+10,336 objects across 64 resource types in 155 ms; update-to-publication latency
+was 385 ms. Transport counting observed 29 non-CRD LIST requests, 64 permission
+reviews and two discovery requests, with no custom-resource LIST. The pass
+therefore included API work as well as ingest-memory reads. This single local
+sample supports retaining the shared full-resync contract for that fixture;
+it does not establish latency for remote clusters or aggregated extension APIs,
+which were absent. Re-measure those APIs before justifying partial recollection.
+
 Events: cluster and namespace event tables use typed backend query pages over
 the current event set and are `Query Backed Static` for table search, filters,
 sort, counts, and cursor pagination. Object-panel events remain object-scoped

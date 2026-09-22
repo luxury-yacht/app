@@ -29,7 +29,7 @@ func TestIncrementalCatalogPublication(t *testing.T) {
 			svc := NewService(Dependencies{ClusterID: "cluster-a"}, nil)
 			desc := testDeploymentDescriptor()
 			registerDesc(svc, desc)
-			svc.rebuildCacheFromItems(svc.items, []Descriptor{desc})
+			svc.catalogIndex.rebuildCacheFromItems(svc.items, []Descriptor{desc})
 			baseline := svc.cacheRebuilds.Load()
 			updates, unsubscribe := svc.SubscribeStreaming()
 			defer unsubscribe()
@@ -88,7 +88,7 @@ func TestIncrementalQueriesMatchFullPublication(t *testing.T) {
 		registerDesc(svc, desc)
 		svc.items[catalogKey(desc, row.Ref.Namespace, row.Ref.Name)] = row
 	}
-	svc.rebuildCacheFromItems(svc.items, svc.Descriptors())
+	svc.catalogIndex.rebuildCacheFromItems(svc.items, svc.Descriptors())
 	baseline := svc.cacheRebuilds.Load()
 	for i, row := range rows[:12] {
 		row.Ref.UID += "-replacement"

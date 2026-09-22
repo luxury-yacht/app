@@ -198,3 +198,7 @@ func (source replayIngestSource) SubscribeCatalogSink(gvr schema.GroupVersionRes
 	source.AddCatalogSink(gvr, sink)
 	return func() {}
 }
+
+func (replayIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
+	return nil
+}

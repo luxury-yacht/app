@@ -730,3 +730,7 @@ func (source *fakeCatalogIngestSource) SubscribeCatalogSink(gvr schema.GroupVers
 	source.AddCatalogSink(gvr, sink)
 	return func() {}
 }
+
+func (*fakeCatalogIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
+	return nil
+}

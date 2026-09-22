@@ -251,7 +251,6 @@ func (m *Manager) Stop() {
 	}
 	clear(m.subscribers)
 	m.mu.Unlock()
-
 }
 
 func (m *Manager) logWarn(message string) {
@@ -346,12 +345,6 @@ func (m *Manager) handleConfigMap(obj interface{}, updateType MessageType) {
 	m.maybeBroadcastHelmRefreshFromConfigMap(cm, updateType)
 }
 
-// handleConfigMap and handleSecret fire the Helm-release refresh signal for one
-// release-storage object. ConfigMap and Secret are owned-reflector ingest kinds, so
-// the namespace-config table's live notify is driven by the generic ingest notify
-// sink (registerIngestNotifyStreams); these handlers carry ONLY the helm-release
-// side-effect, fed by the dedicated label-filtered helm-storage informers
-// (registerHelmStorageStreams) which hold the full typed release objects.
 func (m *Manager) handleConfigMapEvent(oldObj interface{}, newObj interface{}, updateType MessageType) {
 	switch updateType {
 	case MessageTypeAdded:

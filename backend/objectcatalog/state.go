@@ -41,6 +41,7 @@ func (s *Service) Descriptors() []Descriptor {
 
 // Health returns the current health snapshot of the catalog service.
 func (s *Service) Health() HealthStatus {
+	watchUnavailable := s.watchUnavailable()
 	s.healthMu.RLock()
 	defer s.healthMu.RUnlock()
 	var denied []string
@@ -60,6 +61,7 @@ func (s *Service) Health() HealthStatus {
 		Stale:               s.health.Stale,
 		FailedResources:     s.health.FailedResources,
 		DeniedResources:     denied,
+		WatchUnavailable:    watchUnavailable,
 	}
 }
 

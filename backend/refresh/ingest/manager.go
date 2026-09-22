@@ -628,10 +628,10 @@ func ingestNamespacePermitted(gvr schema.GroupVersionResource, namespace string,
 
 func logSkippedIngestPart(gvr schema.GroupVersionResource, namespace string) {
 	if namespace == "" {
-		klog.V(2).Infof("ingest: skipping %s — identity cannot list/watch it (logged once)", gvr)
+		klog.V(2).Infof("ingest: skipping %s — identity cannot list/watch it", gvr)
 		return
 	}
-	klog.V(2).Infof("ingest: skipping %s in %q — identity cannot list/watch it there (logged once)", gvr, namespace)
+	klog.V(2).Infof("ingest: skipping %s in %q — identity cannot list/watch it there", gvr, namespace)
 }
 
 // SetResumeResourceVersion records the resourceVersion gvr's reflector should resume its
