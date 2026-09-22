@@ -343,33 +343,97 @@ describe('DockablePanel docked behaviour', () => {
     await unmount();
   });
 
-  it('supports keyboard resizing for a bottom-docked control', async () => {
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      value: 1000,
-    });
-    const unmount = await renderPanel(
-      <DockablePanel panelId="panel-bottom" defaultPosition="bottom" isOpen>
-        <div>panel</div>
-      </DockablePanel>
-    );
-    const initialHeight = panelState('panel-bottom').bottomSize.height;
-    const handle = document.querySelector<HTMLElement>('[aria-label="Resize panel height"]');
-
-    await act(async () => {
-      handle?.dispatchEvent(
-        new KeyboardEvent('keydown', {
-          key: 'ArrowUp',
-          bubbles: true,
-          cancelable: true,
-        })
+  it.each(['right', 'bottom'] as const)(
+    'resizes the %s dock with directional arrows and Home/End',
+    async (position) => {
+      const unmount = await renderPanel(
+        <DockablePanel panelId="keyboard-resize" defaultPosition={position} isOpen>
+          <div>panel</div>
+        </DockablePanel>
       );
-      await Promise.resolve();
-    });
+      try {
+        const dimension = position === 'right' ? 'width' : 'height';
+        const control = requireValue(
+          document.querySelector<HTMLInputElement>(`[aria-label="Resize panel ${dimension}"]`),
+          'panel resize control'
+        );
+        const initial = Number(control.value);
+        const grow = position === 'right' ? 'ArrowLeft' : 'ArrowUp';
+        const shrink = position === 'right' ? 'ArrowRight' : 'ArrowDown';
+        const cases = [
+          [grow, initial + 16],
+          [shrink, initial],
+          ['Home', Number(control.min)],
+          [shrink, Number(control.min)],
+          ['End', Number(control.max)],
+          [grow, Number(control.max)],
+        ] as const;
+        for (const [key, expected] of cases) {
+          const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+          await act(async () => control.dispatchEvent(event));
+          const state = panelState('keyboard-resize');
+          const size = position === 'right' ? state.rightSize : state.bottomSize;
+          expect(size[dimension], key).toBe(expected);
+          expect(Number(control.value), key).toBe(expected);
+          expect(event.defaultPrevented, key).toBe(true);
+        }
+      } finally {
+        await unmount();
+      }
+    }
+  );
 
-    expect(panelState('panel-bottom').bottomSize.height).toBeGreaterThan(initialHeight);
-    await unmount();
-  });
+  it.each(['right', 'bottom'] as const)(
+    'blocks native slider resizing on unused keys in the %s dock',
+    async (position) => {
+      const unmount = await renderPanel(
+        <DockablePanel
+          panelId="keyboard-resize"
+          defaultPosition={position}
+          closeActiveTabOnEscape
+          isOpen
+        >
+          <div>panel</div>
+        </DockablePanel>
+      );
+      try {
+        const dimension = position === 'right' ? 'width' : 'height';
+        const control = requireValue(
+          document.querySelector<HTMLInputElement>(`[aria-label="Resize panel ${dimension}"]`),
+          'panel resize control'
+        );
+        const initial = panelState('keyboard-resize');
+        const crossAxisKeys =
+          position === 'right' ? ['ArrowUp', 'ArrowDown'] : ['ArrowLeft', 'ArrowRight'];
+        for (const key of [...crossAxisKeys, 'PageUp', 'PageDown']) {
+          const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+          await act(async () => control.dispatchEvent(event));
+          // jsdom does not perform native range key actions; cancellation is the contract.
+          expect(event.defaultPrevented, key).toBe(true);
+          expect(panelState('keyboard-resize'), key).toEqual(initial);
+        }
+
+        await act(async () => {
+          control.focus();
+          control.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+          );
+        });
+        expect(document.activeElement).not.toBe(control);
+        expect(panelState('keyboard-resize')).toEqual(initial);
+
+        await act(async () => {
+          control.focus();
+          control.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+          );
+        });
+        expect(control.isConnected).toBe(false);
+      } finally {
+        await unmount();
+      }
+    }
+  );
 
   it('maximizes docked content and restores its prior edge and size', async () => {
     const unmount = await renderPanel(

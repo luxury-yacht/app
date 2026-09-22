@@ -271,8 +271,12 @@ and empty-source closure, following the
 
 Group roots are open, nonmodal dialogs; opening a panel must leave the rest of
 the workspace interactive. Dock resize handles use native range inputs for the
-panel dimension, retain arrow-key and Home/End resizing, and expose their size
-bounds. Object-panel Tab order reaches the resize control after the header
+panel dimension and expose their size bounds. Left/Right move the right dock's
+edge by 16px; Up/Down move the bottom dock's edge by 16px. Home/End select the
+minimum/maximum size. The resize handler cancels native range behavior for all
+arrows, Home/End, and PageUp/PageDown; arrows on the other axis and PageUp/PageDown
+leave the size unchanged. Other keys retain their existing handling.
+Object-panel Tab order reaches the resize control after the header
 controls, then wraps to the first tab. Reset native dialog geometry in panel CSS.
 
 `DockablePanelProvider.focusPanel(panelId, clusterId)` owns deferred focus for

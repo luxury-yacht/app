@@ -61,6 +61,28 @@ and `/private/tmp/pr361-ui-checks.md`.
 The Sonar audit recorded five accessibility findings in
 `/private/tmp/pr361-sonar-before.log`; closure awaits analysis after a push.
 
+### Resize keyboard follow-up
+
+The local worktree based on `353dd815` cancels native range key actions before
+applying the dock's directional resize policy. Regression cases cover all arrow
+keys, PageUp/PageDown, Home/End, bounds, Tab navigation, and Escape dismissal.
+The new cancellation tests failed before the fix; browser probes also reproduced
+the unintended 1px and page-step resizing. The focused suite passed 319 tests,
+and the changed hook passed the local complexity limit of 12. Full frontend
+coverage passed 5,090 tests: 89.77% overall statements and 95.31% for the changed
+hook. A fresh Sonar audit reported zero open/confirmed new-code issues on the
+published PR; this local keyboard change has not been analyzed remotely.
+The final prerelease gate passed, including all 5,090 frontend tests. Browser
+and a fresh native macOS build passed both docks' allowed/blocked key checks,
+size limits, and Tab navigation; native Escape dismissal also passed. The
+temporary app was stopped and port 9245 had no listener.
+
+Evidence: `/private/tmp/pr361-resize-keys-focused.log`,
+`/private/tmp/pr361-resize-keys-coverage-summary.log`,
+`/private/tmp/pr361-resize-keys-complexity.log`,
+`/private/tmp/pr361-resize-keys-prerelease.log`,
+`/private/tmp/pr361-resize-keys-sonar.log`, and `/private/tmp/pr361-resize-keys-ui.md`.
+
 ## Remaining checks
 
 - [ ] Reorder tabs in the native app and move a tab between occupied docks.
