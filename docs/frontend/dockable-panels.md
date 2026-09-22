@@ -249,6 +249,9 @@ reconstruction while its freeze is active.
 7. On macOS and Windows, exercise cluster and panel tab moves with both one and
    multiple tabs, targeting new and existing windows. Verify object identity,
    active view, drop placement, phantom animation, and empty-source closure.
+   Cover occupied and empty right/bottom docks; confirm preview bounds match
+   final placement and previews clear after dropping or cancelling. Verify
+   cross-cluster rejection, including empty destination docks.
    Cancelled or failed transfers must preserve the source content. On Linux,
    record drag-out as deferred; still test reordering, moves between existing
    compatible panels, Float, and dock-back.
@@ -266,6 +269,12 @@ a visible insertion indicator alone do not establish transfer success. If
 automation delivers only hover, use a manual drop and inspect content retention
 and empty-source closure, following the
 [completion evidence gate](../workflows/completion.md).
+
+The recorded PR #361 checks on 2026-09-21 did not establish successful native
+tab reordering or drops between occupied docks, into empty docks, or between
+windows. Automation reported `noWindowsAvailable` or left placement unchanged;
+the cause remains undetermined. Windows and Linux UI checks were not run.
+Record the tested revision and platform when these gaps are resolved.
 
 ### Programmatic keyboard focus
 
