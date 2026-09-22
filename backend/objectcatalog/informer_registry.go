@@ -48,23 +48,30 @@ var (
 	gatewayInformerGroupResources = catalogGroupResources(kindspec.CatalogGateway)
 )
 
-// sharedInformerLister lists a shared-informer-backed resource generically through
-// the factory's ForResource, so adding a resource is one map entry, not a lister.
-func sharedInformerLister(factory informers.SharedInformerFactory, gvr schema.GroupVersionResource) informerListFunc {
-	generic, err := factory.ForResource(gvr)
-	if err != nil {
-		return nil
-	}
-	return genericListerFunc(generic.Lister())
+// genericInformer is the generic informer shape shared by the client-go and
+// Gateway API factories.
+type genericInformer interface {
+	Informer() cache.SharedIndexInformer
+	Lister() cache.GenericLister
 }
 
-// gatewayInformerLister is sharedInformerLister for the Gateway-API factory.
-func gatewayInformerLister(factory gatewayinformers.SharedInformerFactory, gvr schema.GroupVersionResource) informerListFunc {
+// sharedInformerFor resolves a shared-informer-backed resource generically through
+// the factory's ForResource, so adding a resource is one map entry, not a lister.
+func sharedInformerFor(factory informers.SharedInformerFactory, gvr schema.GroupVersionResource) genericInformer {
 	generic, err := factory.ForResource(gvr)
 	if err != nil {
 		return nil
 	}
-	return genericListerFunc(generic.Lister())
+	return generic
+}
+
+// gatewayInformerFor is sharedInformerFor for the Gateway-API factory.
+func gatewayInformerFor(factory gatewayinformers.SharedInformerFactory, gvr schema.GroupVersionResource) genericInformer {
+	generic, err := factory.ForResource(gvr)
+	if err != nil {
+		return nil
+	}
+	return generic
 }
 
 // genericListerFunc adapts a client-go GenericLister to the catalog's namespaced

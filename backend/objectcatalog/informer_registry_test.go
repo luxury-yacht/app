@@ -99,13 +99,13 @@ func TestCatalogExcludedKindsDoNotDrift(t *testing.T) {
 }
 
 // TestCatalogSharedInformerResourcesResolve proves every GVR the catalog declares
-// as shared-informer-backed actually resolves to an informer lister via the
-// factory's ForResource. A wrong resource name would make sharedInformerLister
-// return nil and the kind would silently fall back off the informer path.
+// as shared-informer-backed actually resolves to an informer via the factory's
+// ForResource. A wrong resource name would make sharedInformerFor return nil
+// and the kind would silently fall back off the informer path.
 func TestCatalogSharedInformerResourcesResolve(t *testing.T) {
 	factory := informers.NewSharedInformerFactory(fake.NewClientset(), 0)
 	for gr, gvr := range sharedInformerGroupResources {
-		if sharedInformerLister(factory, gvr) == nil {
+		if sharedInformerFor(factory, gvr) == nil {
 			t.Errorf("shared catalog resource %s (%s) does not resolve to an informer lister", gr.String(), gvr.String())
 		}
 	}
@@ -115,7 +115,7 @@ func TestCatalogSharedInformerResourcesResolve(t *testing.T) {
 func TestCatalogGatewayInformerResourcesResolve(t *testing.T) {
 	factory := gatewayinformers.NewSharedInformerFactory(gatewayfake.NewClientset(), 0)
 	for gr, gvr := range gatewayInformerGroupResources {
-		if gatewayInformerLister(factory, gvr) == nil {
+		if gatewayInformerFor(factory, gvr) == nil {
 			t.Errorf("gateway catalog resource %s (%s) does not resolve to an informer lister", gr.String(), gvr.String())
 		}
 	}

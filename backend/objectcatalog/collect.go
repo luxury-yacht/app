@@ -16,6 +16,8 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
+	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -70,8 +72,11 @@ func (s *Service) collectViaAPIExtensionsInformer(desc Descriptor, agg *streamin
 	if s.deps.APIExtensionsInformerFactory == nil {
 		return emitSummaries(agg, nil, nil, false)
 	}
-	lister := s.deps.APIExtensionsInformerFactory.Apiextensions().V1().CustomResourceDefinitions().Lister()
-	items, err := lister.List(labels.Everything())
+	definitions := s.deps.APIExtensionsInformerFactory.Apiextensions().V1().CustomResourceDefinitions()
+	if !definitions.Informer().HasSynced() {
+		return s.collectWithoutSyncedInformer(desc, agg)
+	}
+	items, err := definitions.Lister().List(labels.Everything())
 	if err != nil {
 		return emitSummaries(agg, nil, err, true)
 	}
@@ -93,12 +98,7 @@ func (s *Service) collectViaCoreSharedInformer(
 		// No permission - fall back to listResource which handles 403 gracefully.
 		return emitSummaries(agg, nil, nil, false)
 	}
-	listFn := sharedInformerLister(s.deps.InformerFactory, sharedInformerGroupResources[gr])
-	if listFn == nil {
-		return emitSummaries(agg, nil, nil, false)
-	}
-	summaries, err := s.collectFromNamespacedLister(desc, namespaces, listFn)
-	return emitSummaries(agg, summaries, err, true)
+	return s.collectFromInformer(desc, namespaces, sharedInformerFor(s.deps.InformerFactory, sharedInformerGroupResources[gr]), agg)
 }
 
 func (s *Service) collectViaGatewayInformer(
@@ -110,12 +110,42 @@ func (s *Service) collectViaGatewayInformer(
 	if s.deps.GatewayInformerFactory == nil {
 		return emitSummaries(agg, nil, nil, false)
 	}
-	listFn := gatewayInformerLister(s.deps.GatewayInformerFactory, gatewayInformerGroupResources[gr])
-	if listFn == nil {
+	return s.collectFromInformer(desc, namespaces, gatewayInformerFor(s.deps.GatewayInformerFactory, gatewayInformerGroupResources[gr]), agg)
+}
+
+// collectFromInformer reads a resolved informer's cache once its initial LIST has
+// synced. A nil informer did not resolve, so collection lists the API instead.
+func (s *Service) collectFromInformer(desc Descriptor, namespaces []string, informer genericInformer, agg *streamingAggregator) ([]Summary, bool, error) {
+	if informer == nil {
 		return emitSummaries(agg, nil, nil, false)
 	}
-	summaries, err := s.collectFromNamespacedLister(desc, namespaces, listFn)
+	if !informer.Informer().HasSynced() {
+		return s.collectWithoutSyncedInformer(desc, agg)
+	}
+	summaries, err := s.collectFromNamespacedLister(desc, namespaces, genericListerFunc(informer.Lister()))
 	return emitSummaries(agg, summaries, err, true)
+}
+
+// collectWithoutSyncedInformer handles an informer whose initial LIST has not
+// synced; its empty cache is not authoritative absence. An informer that will
+// never sync (forbidden watch, created after its factory started) is replaced by
+// a live LIST, as when the permission check denies the informer. One still
+// syncing fails the kind like an unsynced ingest store: it keeps its published
+// rows, and the failed-sync retry reads the cache once it has synced.
+func (s *Service) collectWithoutSyncedInformer(desc Descriptor, agg *streamingAggregator) ([]Summary, bool, error) {
+	if s.informerUnavailable(desc) {
+		return emitSummaries(agg, nil, nil, false)
+	}
+	return emitSummaries(agg, nil, fmt.Errorf("catalog informer for %s is not synced", desc.GVR()), true)
+}
+
+func (s *Service) informerUnavailable(desc Descriptor) bool {
+	readiness := s.deps.InformerReadiness
+	if readiness == nil {
+		return false
+	}
+	key := permissions.ResourceKey(desc.Group, desc.Resource)
+	return readiness.ResourceReadiness([]string{key})[key] == refresh.ResourceReadinessUnavailable
 }
 
 func (s *Service) collectFromNamespacedLister(desc Descriptor, namespaces []string, list func(namespace string) ([]metav1.Object, error)) ([]Summary, error) {

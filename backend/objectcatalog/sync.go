@@ -17,6 +17,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"golang.org/x/sync/errgroup"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -528,57 +529,87 @@ func (run *catalogSync) evaluateCapabilities(ctx context.Context) {
 	}
 }
 
+// waitForCaches waits until the informers and tracked ingest stores collection
+// reads from have settled. A settled informer can still be unsynced (forbidden
+// watch, missed sync deadline); collection lists those kinds from the API.
 func (run *catalogSync) waitForCaches(ctx context.Context) error {
-	wait := run.service.deps.WaitForCaches
-	if wait != nil {
-		if err := wait(ctx); err != nil {
-			return fmt.Errorf("waiting for informer caches: %w", err)
-		}
-	}
-	if err := run.waitForIngest(ctx); err != nil {
-		return fmt.Errorf("waiting for catalog ingest stores: %w", err)
-	}
-	return nil
-}
-
-func (run *catalogSync) waitForIngest(ctx context.Context) error {
-	source := run.service.deps.IngestSource
-	gvrs := catalogStaticIngestGVRs(run.descriptors)
-	if source == nil || len(gvrs) == 0 {
+	informerKeys := catalogInformerResourceKeys(run.descriptors)
+	ingestGVRs := catalogStaticIngestGVRs(run.descriptors)
+	if run.sourcesSettled(informerKeys, ingestGVRs) {
 		return nil
 	}
-	waitTimer := time.NewTimer(run.service.opts.IngestSyncWaitTimeout)
+	waitTimer := time.NewTimer(run.service.opts.SourceSyncWaitTimeout)
 	defer waitTimer.Stop()
 	ticker := time.NewTicker(config.RefreshInformerSyncPollInterval)
 	defer ticker.Stop()
 	for {
-		settled := true
-		for _, gvr := range gvrs {
-			if source.Tracks(gvr) && !source.HasSyncedFor(gvr) {
-				settled = false
-				break
-			}
-		}
-		if settled {
-			return nil
-		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("waiting for catalog sources: %w", ctx.Err())
 		case <-waitTimer.C:
-			// A manager that never started cannot arm its per-GVR degrade deadline.
-			// That deadline is measured from manager start and normally settles first;
-			// this independent timer starts at catalog entry so the never-started case
-			// remains bounded even though both use the same configured duration.
-			// Continue into collection so synced resources remain usable and the
-			// existing partial-sync diagnostic plus fast retry can report/recover the
-			// unsynced stores instead of wedging the whole catalog before its run loop.
-			run.service.ingestSyncTimeoutWarnOnce.Do(func() {
-				run.service.logWarn("catalog ingest stores did not settle before the startup deadline; continuing with partial collection")
+			// A factory or manager that never started cannot arm its per-resource
+			// degrade deadline. That deadline is measured from its start and normally
+			// settles first; this independent timer starts at catalog entry so the
+			// never-started case remains bounded even though both use the same
+			// configured duration. Continue into collection so synced resources remain
+			// usable: unsynced informer kinds are listed from the API, and unsynced
+			// ingest stores report partial health and recover through the fast retry.
+			run.service.sourceSyncTimeoutWarnOnce.Do(func() {
+				run.service.logWarn("catalog informers or ingest stores did not settle before the startup deadline; continuing collection")
 			})
 			return nil
 		case <-ticker.C:
+			if run.sourcesSettled(informerKeys, ingestGVRs) {
+				return nil
+			}
 		}
+	}
+}
+
+func (run *catalogSync) sourcesSettled(informerKeys []string, ingestGVRs []schema.GroupVersionResource) bool {
+	deps := run.service.deps
+	if deps.InformerReadiness != nil && len(informerKeys) > 0 && !deps.InformerReadiness.ResourcesSettled(informerKeys) {
+		return false
+	}
+	if deps.IngestSource == nil {
+		return true
+	}
+	for _, gvr := range ingestGVRs {
+		if deps.IngestSource.Tracks(gvr) && !deps.IngestSource.HasSyncedFor(gvr) {
+			return false
+		}
+	}
+	return true
+}
+
+// catalogInformerResourceKeys returns the factory readiness keys for the kinds
+// collection reads from shared, Gateway API or CRD informers.
+func catalogInformerResourceKeys(descriptors []Descriptor) []string {
+	keys := make([]string, 0, len(descriptors))
+	seen := make(map[string]struct{})
+	for _, desc := range descriptors {
+		if !readsInformerCache(desc) {
+			continue
+		}
+		key := permissions.ResourceKey(desc.Group, desc.Resource)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func readsInformerCache(desc Descriptor) bool {
+	if _, owned := catalogIngestOwnedGVRs[desc.GVR()]; owned {
+		return false
+	}
+	switch planCollectionSource(desc).source {
+	case collectionSourceSharedInformer, collectionSourceGatewayInformer, collectionSourceAPIExtensionsInformer:
+		return true
+	default:
+		return false
 	}
 }
 

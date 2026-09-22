@@ -7,13 +7,13 @@
 package objectcatalog
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
@@ -143,17 +143,28 @@ type Dependencies struct {
 	PermissionChecker            permissions.ListWatchChecker           // optional; if nil, assumes all permissions granted
 	IngestSource                 IngestSource                           // optional; supplies catalog rows for ingest-owned kinds
 	ClusterID                    string                                 // stable identifier for the source cluster
-	// WaitForCaches blocks until the informer caches the collect reads from are
-	// synced. sync() calls it between the RBAC preflight and the collect fan-out, so
+	// InformerReadiness reports when the informers collection reads have settled.
+	// sync() waits on it between the RBAC preflight and the collect fan-out, so
 	// discovery + preflight (pure API calls) overlap the factory's initial sync
 	// instead of running after it. nil skips the wait (tests, no factory).
-	WaitForCaches func(ctx context.Context) error
+	InformerReadiness InformerReadiness
 	// AllowedNamespaces is the cluster's namespace scope
 	// (docs/architecture/namespace-scope.md): when non-empty, collection of
 	// namespaced kinds runs per configured namespace instead of
 	// cluster-wide, and a namespace the identity cannot list is skipped
 	// without blanking the others. Empty means cluster-wide (today).
 	AllowedNamespaces []string
+}
+
+// InformerReadiness is the informer factory's startup and data-readiness
+// contract. A resource is settled once its informer has synced, failed
+// permanently (for example a forbidden watch) or passed the factory's sync
+// deadline, so a settled informer is not necessarily synced. ResourceReadiness
+// tells a still-syncing informer (pending, degraded) from one that will never
+// sync (unavailable). Keys use permissions.ResourceKey format.
+type InformerReadiness interface {
+	ResourcesSettled(keys []string) bool
+	ResourceReadiness(keys []string) map[string]refresh.ResourceReadiness
 }
 
 // IngestSource supplies catalog projections from generation-owned sources.
@@ -193,7 +204,7 @@ type TelemetryRecorder interface {
 type Options struct {
 	ResyncInterval             time.Duration // interval between resyncs
 	FailedSyncRetryInterval    time.Duration // short retry after a failed/incomplete sync (default config.ObjectCatalogFailedSyncRetryInterval)
-	IngestSyncWaitTimeout      time.Duration // maximum initial wait for tracked ingest stores before collecting partial data (default config.RefreshInformerSyncDeadline)
+	SourceSyncWaitTimeout      time.Duration // maximum wait per sync for informers and tracked ingest stores before collecting partial data (default config.RefreshInformerSyncDeadline)
 	ListRequestTimeout         time.Duration // budget for one API LIST request, independently renewed for each page and retry
 	PageSize                   int           // number of items per page
 	ListWorkers                int           // number of workers for listing resources

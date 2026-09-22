@@ -21,8 +21,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
-	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/dynamic/fake"
-	informers "k8s.io/client-go/informers"
 	cgofake "k8s.io/client-go/kubernetes/fake"
 	cgotesting "k8s.io/client-go/testing"
 )
@@ -190,6 +189,81 @@ func TestCatalogWaitsForRebuiltIngestStoreBeforeFirstCollection(t *testing.T) {
 		return service.Health().Status == objectcatalog.HealthStateOK
 	}, 3*time.Second, 10*time.Millisecond,
 		"catalog should complete its first collection after the ingest store syncs")
+}
+
+// The shared factory always starts cluster-wide ReplicaSet, HPA and Event
+// informers. A namespace-only identity is forbidden from all three, so those
+// informers never sync. Catalog startup must still publish the rows the identity
+// can read instead of waiting forever for caches that can never fill.
+func TestCatalogStartsForNamespaceScopedIdentityDeniedClusterWideInformers(t *testing.T) {
+	const namespace = "team-a"
+	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
+	app.Refresh.allowedNamespaces = func(string) []string { return []string{namespace} }
+	clients := app.ClusterRuntime.clusterClientsForID(target.meta.ID)
+	kube := clients.client.(*cgofake.Clientset)
+	// Only ReplicaSets in the scope namespace are granted. Denying the other kinds
+	// keeps ingest reflectors, which fake typed REST clients cannot run, skipped.
+	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		review := action.(cgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		attributes := review.Spec.ResourceAttributes
+		review.Status.Allowed = attributes != nil && attributes.Namespace == namespace && attributes.Resource == "replicasets"
+		return true, review, nil
+	})
+	kube.PrependReactor("list", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		if action.GetNamespace() != "" {
+			return false, nil, nil
+		}
+		return true, nil, apierrors.NewForbidden(action.GetResource().GroupResource(), "", errors.New("namespace-only identity"))
+	})
+	kube.Discovery().(*fakediscovery.FakeDiscovery).Resources = []*metav1.APIResourceList{{
+		GroupVersion: "apps/v1",
+		APIResources: []metav1.APIResource{{
+			Name: "replicasets", Kind: "ReplicaSet", Namespaced: true, Verbs: []string{"list", "watch"},
+		}},
+	}}
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	replicaSetGVR := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "replicasets"}
+	replicaSet := &unstructured.Unstructured{}
+	replicaSet.SetGroupVersionKind(schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "ReplicaSet"})
+	replicaSet.SetNamespace(namespace)
+	replicaSet.SetName("web-5d9f")
+	replicaSet.SetUID("replicaset-uid")
+	clients.dynamicClient = fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{replicaSetGVR: "ReplicaSetList"}, replicaSet)
+
+	subsystem, err := system.NewSubsystemWithServices(system.Config{
+		KubernetesClient: kube, APIExtensionsClient: clients.apiextensionsClient, DynamicClient: clients.dynamicClient,
+		ClusterID: target.meta.ID, ClusterName: target.meta.Name, Logger: app.AppLogs.Logger(), ResyncInterval: time.Minute,
+		AllowedNamespaces:     []string{namespace},
+		ObjectDetailsProvider: app.Resources.objectDetailProvider(), NodeMaintenanceStore: app.NodeMaintenanceStore,
+	})
+	require.NoError(t, err)
+	app.Refresh.setRefreshSubsystem(target.meta.ID, subsystem)
+	t.Cleanup(func() {
+		app.Refresh.stopObjectCatalogForCluster(target.meta.ID)
+		cancel()
+		subsystem.StopDoorbellNotifiers()
+		subsystem.ResourceStream.Stop()
+		subsystem.IngestManager.Stop()
+		_ = subsystem.InformerFactory.Shutdown()
+	})
+	subsystem.IngestManager.Start(ctx)
+	require.NoError(t, subsystem.InformerFactory.Start(ctx))
+
+	require.NoError(t, app.Refresh.startObjectCatalogForTarget(target))
+	service := app.Refresh.objectCatalogServiceForCluster(target.meta.ID)
+	require.NotNil(t, service)
+	query := objectcatalog.QueryOptions{Namespaces: []string{namespace}}
+	require.Eventuallyf(t, func() bool {
+		return service.Health().Status == objectcatalog.HealthStateOK && service.Query(query).TotalItems == 1
+	}, 3*time.Second, 10*time.Millisecond,
+		"catalog must publish the namespace's ReplicaSet; health %+v", service.Health())
+	ref := service.Query(query).Items[0].Ref
+	require.Equal(t, target.meta.ID, ref.ClusterID)
+	require.Equal(t, "ReplicaSet", ref.Kind)
+	require.Equal(t, namespace, ref.Namespace)
+	require.Equal(t, "web-5d9f", ref.Name)
 }
 
 type catalogStartingGovernorExecutor struct {
@@ -740,32 +814,6 @@ func TestHydrateCatalogCustomRowsKeepsPageOnRowFailure(t *testing.T) {
 	require.Equal(t, "warning", byName["beta"].StatusState)
 	require.Equal(t, "warning", byName["beta"].StatusPresentation)
 	require.Equal(t, "widgets.example.com", byName["beta"].CRDName)
-}
-
-func TestWaitForFactorySyncHandlesNilFactory(t *testing.T) {
-	if !waitForFactorySync(context.Background(), nil) {
-		t.Fatal("nil factory should return true")
-	}
-}
-
-func TestWaitForFactoriesRespectContextCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	factory := informers.NewSharedInformerFactory(cgofake.NewClientset(), 0)
-	// ensure at least one informer is registered
-	factory.Core().V1().Pods()
-
-	if waitForFactorySync(ctx, factory) {
-		t.Fatal("expected factory sync to stop when context is canceled")
-	}
-
-	apiExtFactory := apiextinformers.NewSharedInformerFactory(apiextensionsfake.NewClientset(), 0)
-	apiExtFactory.Apiextensions().V1().CustomResourceDefinitions()
-
-	if waitForFactorySync(ctx, apiExtFactory) {
-		t.Fatal("expected apiextensions factory sync to stop when context is canceled")
-	}
 }
 
 func setCatalogServiceItems(

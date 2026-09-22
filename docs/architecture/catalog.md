@@ -23,13 +23,27 @@ Keep `catalog-first`. Do not turn that into `catalog-only`.
   the displaced run; retiring an older generation cannot stop the new catalog.
 - If discovery is degraded, preserve known identity where safe and surface
   degraded confidence instead of acting on ambiguous objects.
-- After discovery and permission preflight, collection waits up to the ingest
-  startup deadline for each tracked ingest-owned GVR in that discovery result
-  to settle. This set comes from discovery rather than the catalog's
-  permission-allowed subset; stores outside the discovery result do not gate.
-  If the deadline expires, collection continues with the settled resources,
-  reports the unsynced descriptors through the partial-sync diagnostic, and
-  enters the failed-sync retry cadence instead of blocking the catalog run loop.
+- After discovery and permission preflight, collection waits, bounded by one
+  startup deadline, for the sources that discovery result reads: each tracked
+  ingest-owned GVR, and the informers behind shared, Gateway API and CRD kinds.
+  Informers use the factory's settle contract (synced, permanently failed such
+  as a forbidden watch, or past the factory's sync deadline), never raw client-go
+  cache sync: the shared factory always starts cluster-wide ReplicaSet, HPA v1
+  and Event informers, and a namespace-only identity can never sync them. The
+  set comes from discovery rather than the catalog's permission-allowed subset;
+  sources outside the discovery result, such as the Event informer, do not gate.
+  A settled informer can still be unsynced, and its empty cache is not
+  authoritative absence, so collection reads an informer cache only after it
+  has synced. The factory's `ResourceReadiness` decides the rest: an
+  unavailable informer (forbidden watch, or created after the factory started)
+  is replaced by a live LIST, as when the permission check denies it; a pending
+  or degraded informer fails its kind like an unsynced ingest store. Do not
+  live-LIST a still-syncing informer: that duplicates its initial LIST on large
+  clusters, and a row deleted before the informer syncs would survive until
+  the full resync. If the deadline expires, collection continues with the
+  settled resources, reports unsynced descriptors through the partial-sync
+  diagnostic, and enters the failed-sync retry cadence instead of blocking the
+  catalog run loop.
 - Metadata controls that describe the object universe, such as namespace, Kind,
   and API-group filters, use catalog-derived metadata rather than the current
   row slice. The core API group uses the non-empty `"(core)"` query value and a
@@ -204,13 +218,11 @@ handler registration, cancellation and publication-before-signal through the
 real owners. Table consumption must meet the shared
 [freshness evidence requirements](data-freshness.md#required-evidence-for-resource-source-changes).
 
-Restricted-identity startup requires a separate check.
-`waitForCatalogInformerCaches` in `backend/refresh_object_catalog.go` waits for
-raw shared-informer cache sync; a ready dynamic source alone does not establish
-catalog readiness. A real-cluster probe stalled when ReplicaSet, HPA and Event
-watches were denied, and proceeded after those baseline permissions were granted.
-That startup limitation remains unresolved. Include those denials when validating
-restricted identities; passing custom-resource permission tests is insufficient.
+Restricted-identity changes must cover a namespace-only identity that is denied
+the cluster-wide ReplicaSet, HPA and Event informers, through the production
+subsystem: the catalog must still complete its first collection and publish the
+rows that identity can read. Custom-resource permission tests alone do not
+establish startup.
 
 ## Discovered resource families
 

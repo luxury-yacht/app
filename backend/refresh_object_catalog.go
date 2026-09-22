@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -15,7 +14,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
-	refreshinformer "github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -181,7 +179,11 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 		APIExtensionsInformerFactory: subsystem.InformerFactory.APIExtensionsInformerFactory(),
 		GatewayInformerFactory:       subsystem.InformerFactory.GatewayInformerFactory(),
 		PermissionChecker:            subsystem.InformerFactory,
-		IngestSource:                 subsystem.IngestManager,
+		// The factory's settle contract, not raw client-go cache sync: an informer
+		// whose watch is forbidden or past the sync deadline must not hold the
+		// catalog's first collection forever.
+		InformerReadiness: subsystem.InformerFactory,
+		IngestSource:      subsystem.IngestManager,
 		CapabilityFactory: func() *capabilities.Service {
 			return capabilities.NewService(capabilities.Dependencies{
 				Common:             commonDeps,
@@ -195,12 +197,6 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 		// The cluster's namespace scope (docs/architecture/namespace-scope.md):
 		// namespaced collection fans out per configured namespace.
 		AllowedNamespaces: a.refreshAllowedNamespaces(target.meta.ID),
-		// The catalog waits for informer caches INSIDE sync, between the RBAC
-		// preflight and the collect, so discovery + preflight overlap the factory's
-		// initial sync instead of running after it (see Dependencies.WaitForCaches).
-		WaitForCaches: func(waitCtx context.Context) error {
-			return a.waitForCatalogInformerCaches(waitCtx, subsystem.InformerFactory)
-		},
 	}
 
 	svc := objectcatalog.NewService(deps, nil)
@@ -246,7 +242,7 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 		}()
 		// No cache wait here: the service starts immediately so discovery and the
 		// RBAC preflight overlap the informer factory's initial sync; sync() itself
-		// waits for caches just before the collect (deps.WaitForCaches above).
+		// waits for its sources just before the collect (deps.InformerReadiness above).
 		if err := svc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			a.logger.Warn(fmt.Sprintf("Object catalog terminated unexpectedly: %v", err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 		}
@@ -313,19 +309,6 @@ func (a *RefreshCoordinator) stopObjectCatalog() {
 	if recorder := a.currentTelemetryRecorder(); recorder != nil {
 		recorder.RecordCatalog(false, 0, 0, 0, nil)
 	}
-}
-
-func (a *RefreshCoordinator) waitForCatalogInformerCaches(ctx context.Context, factory *refreshinformer.Factory) error {
-	if factory == nil {
-		return fmt.Errorf("informer factory not initialised")
-	}
-	if !waitForFactorySync(ctx, factory.SharedInformerFactory()) {
-		return fmt.Errorf("shared informer cache sync failed")
-	}
-	if !waitForFactorySync(ctx, factory.APIExtensionsInformerFactory()) {
-		return fmt.Errorf("apiextensions informer cache sync failed")
-	}
-	return nil
 }
 
 func (a *RefreshCoordinator) storeObjectCatalogEntry(clusterID string, entry *objectCatalogEntry) {
@@ -454,26 +437,6 @@ func (a *RefreshCoordinator) catalogNamespaceGroups() []snapshot.CatalogNamespac
 		})
 	}
 	return groups
-}
-
-type cacheSyncWaiter interface {
-	WaitForCacheSync(<-chan struct{}) map[reflect.Type]bool
-}
-
-func waitForFactorySync(ctx context.Context, factory cacheSyncWaiter) bool {
-	if factory == nil {
-		return true
-	}
-	synced := factory.WaitForCacheSync(ctx.Done())
-	if ctx.Err() != nil {
-		return false
-	}
-	for _, ok := range synced {
-		if !ok {
-			return false
-		}
-	}
-	return true
 }
 
 func applyCatalogTelemetry(diag *CatalogDiagnostics, status *telemetry.CatalogStatus) {

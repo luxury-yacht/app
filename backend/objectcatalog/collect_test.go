@@ -12,11 +12,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -24,8 +29,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	clientfeatures "k8s.io/client-go/features"
+	clientfeaturestesting "k8s.io/client-go/features/testing"
+	"k8s.io/client-go/informers"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
 func TestServiceSyncCollectsResources(t *testing.T) {
@@ -733,4 +744,170 @@ func (source *fakeCatalogIngestSource) SubscribeCatalogSink(gvr schema.GroupVers
 
 func (*fakeCatalogIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
 	return nil
+}
+
+// An informer can stop blocking startup before its initial LIST finishes: it
+// passed the factory's sync deadline and is still retrying. Its empty cache does
+// not prove the objects are gone, so the kind must fail and keep its published
+// rows, like an unsynced ingest store, until a retry can read the synced cache.
+func TestCatalogFailsKindWhileInformerIsStillSyncing(t *testing.T) {
+	tests := []struct {
+		name     string
+		desc     Descriptor
+		register func(*Dependencies)
+	}{{
+		name:     "shared informer",
+		desc:     Descriptor{Group: "apps", Version: "v1", Resource: "replicasets", Kind: "ReplicaSet", Scope: ScopeNamespace, Namespaced: true},
+		register: registerUnsyncedReplicaSetInformer,
+	}, {
+		name: "CRD informer",
+		desc: Descriptor{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions", Kind: "CustomResourceDefinition", Scope: ScopeCluster},
+		register: func(deps *Dependencies) {
+			factory := apiextinformers.NewSharedInformerFactory(apiextensionsfake.NewClientset(), 0)
+			factory.Apiextensions().V1().CustomResourceDefinitions().Informer()
+			deps.APIExtensionsInformerFactory = factory
+		},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// The API holds no objects, so listing it instead would also delete the row.
+			deps := Dependencies{
+				ClusterID: "c1",
+				Common: common.Dependencies{DynamicClient: dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+					map[schema.GroupVersionResource]string{test.desc.GVR(): test.desc.Kind + "List"})},
+				InformerReadiness: informerReadinessStub{readiness: refresh.ResourceReadinessDegraded},
+			}
+			test.register(&deps)
+			svc := newSingleKindCatalog(deps, test.desc)
+			object := &unstructured.Unstructured{}
+			object.SetGroupVersionKind(schema.GroupVersionKind{Group: test.desc.Group, Version: test.desc.Version, Kind: test.desc.Kind})
+			if test.desc.Namespaced {
+				object.SetNamespace("default")
+			}
+			object.SetName("retained")
+			old := summaryFromObject("c1", test.desc, object)
+			svc.items[catalogKey(test.desc, object.GetNamespace(), object.GetName())] = old
+			svc.catalogIndex.rebuildCacheFromItems(svc.items, []Descriptor{test.desc})
+
+			err := svc.sync(t.Context())
+
+			var partial *PartialSyncError
+			require.ErrorAs(t, err, &partial)
+			require.Equal(t, []string{test.desc.GVR().String()}, partial.FailedDescriptors)
+			require.Equal(t, []Summary{old}, svc.Query(QueryOptions{Kinds: []string{test.desc.Kind}}).Items,
+				"a still-syncing informer's empty cache must not delete the kind's published rows")
+		})
+	}
+}
+
+// An informer the factory reports unavailable will never sync: the API refused
+// its watch after the permission check passed, or it was created after the
+// factory started (for example Gateway API installed while connected). The kind
+// is collected from the API, as when the permission check denies the informer.
+func TestCatalogListsLiveWhenInformerIsUnavailable(t *testing.T) {
+	desc := Descriptor{Group: "apps", Version: "v1", Resource: "replicasets", Kind: "ReplicaSet", Scope: ScopeNamespace, Namespaced: true}
+	live := &unstructured.Unstructured{}
+	live.SetGroupVersionKind(schema.GroupVersionKind{Group: desc.Group, Version: desc.Version, Kind: desc.Kind})
+	live.SetNamespace("default")
+	live.SetName("live")
+	live.SetUID("live-uid")
+	deps := Dependencies{
+		ClusterID: "c1",
+		Common: common.Dependencies{DynamicClient: dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+			map[schema.GroupVersionResource]string{desc.GVR(): "ReplicaSetList"}, live)},
+		InformerReadiness: informerReadinessStub{readiness: refresh.ResourceReadinessUnavailable},
+	}
+	registerUnsyncedReplicaSetInformer(&deps)
+	svc := newSingleKindCatalog(deps, desc)
+
+	require.NoError(t, svc.sync(t.Context()))
+
+	rows := svc.Query(QueryOptions{Kinds: []string{desc.Kind}}).Items
+	require.Len(t, rows, 1, "an unavailable informer's empty cache must not be published as the kind's membership")
+	require.Equal(t, "live", rows[0].Ref.Name)
+	require.Equal(t, "c1", rows[0].Ref.ClusterID)
+}
+
+// A synced informer is the kind's authoritative source: collection publishes its
+// cache without an API LIST. Each informer factory the catalog reads is covered.
+func TestCatalogReadsSyncedInformerWithoutListingAPI(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	cached := metav1.ObjectMeta{Name: "cached", UID: "cached-uid"}
+	namespacedCached := metav1.ObjectMeta{Name: "cached", Namespace: "default", UID: "cached-uid"}
+	tests := []struct {
+		name     string
+		desc     Descriptor
+		register func(ctx context.Context, deps *Dependencies)
+	}{{
+		name: "shared informer",
+		desc: Descriptor{Group: "apps", Version: "v1", Resource: "replicasets", Kind: "ReplicaSet", Scope: ScopeNamespace, Namespaced: true},
+		register: func(ctx context.Context, deps *Dependencies) {
+			factory := informers.NewSharedInformerFactory(kubernetesfake.NewClientset(&appsv1.ReplicaSet{ObjectMeta: namespacedCached}), 0)
+			factory.Apps().V1().ReplicaSets().Informer()
+			factory.Start(ctx.Done())
+			factory.WaitForCacheSync(ctx.Done())
+			deps.InformerFactory = factory
+		},
+	}, {
+		name: "CRD informer",
+		desc: Descriptor{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions", Kind: "CustomResourceDefinition", Scope: ScopeCluster},
+		register: func(ctx context.Context, deps *Dependencies) {
+			factory := apiextinformers.NewSharedInformerFactory(apiextensionsfake.NewClientset(&apiextensionsv1.CustomResourceDefinition{ObjectMeta: cached}), 0)
+			factory.Apiextensions().V1().CustomResourceDefinitions().Informer()
+			factory.Start(ctx.Done())
+			factory.WaitForCacheSync(ctx.Done())
+			deps.APIExtensionsInformerFactory = factory
+		},
+	}, {
+		name: "Gateway API informer",
+		desc: Descriptor{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "gatewayclasses", Kind: "GatewayClass", Scope: ScopeCluster},
+		register: func(ctx context.Context, deps *Dependencies) {
+			factory := gatewayinformers.NewSharedInformerFactory(gatewayfake.NewSimpleClientset(&gatewayv1.GatewayClass{ObjectMeta: cached}), 0)
+			factory.Gateway().V1().GatewayClasses().Informer()
+			factory.Start(ctx.Done())
+			factory.WaitForCacheSync(ctx.Done())
+			deps.GatewayInformerFactory = factory
+		},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+			listed := false
+			dynamicClient.PrependReactor("list", "*", func(k8stesting.Action) (bool, runtime.Object, error) {
+				listed = true
+				return true, nil, errors.New("collection must read the synced informer")
+			})
+			deps := Dependencies{
+				ClusterID:         "c1",
+				Common:            common.Dependencies{DynamicClient: dynamicClient},
+				InformerReadiness: informerReadinessStub{readiness: refresh.ResourceReadinessReady},
+			}
+			test.register(t.Context(), &deps)
+			svc := newSingleKindCatalog(deps, test.desc)
+
+			require.NoError(t, svc.sync(t.Context()))
+
+			rows := svc.Query(QueryOptions{Kinds: []string{test.desc.Kind}}).Items
+			require.Len(t, rows, 1)
+			require.Equal(t, "cached", rows[0].Ref.Name)
+			require.False(t, listed, "a synced informer must serve the kind without an API LIST")
+		})
+	}
+}
+
+// registerUnsyncedReplicaSetInformer registers a ReplicaSet informer that is never
+// started, so its cache stays empty and unsynced.
+func registerUnsyncedReplicaSetInformer(deps *Dependencies) {
+	factory := informers.NewSharedInformerFactory(kubernetesfake.NewClientset(), 0)
+	factory.Apps().V1().ReplicaSets().Informer()
+	deps.InformerFactory = factory
+}
+
+func newSingleKindCatalog(deps Dependencies, desc Descriptor) *Service {
+	svc := NewService(deps, nil)
+	svc.discoveryClient = &stubDiscovery{lists: []*metav1.APIResourceList{{
+		GroupVersion: desc.Group + "/" + desc.Version,
+		APIResources: []metav1.APIResource{{Name: desc.Resource, Kind: desc.Kind, Namespaced: desc.Namespaced, Verbs: []string{"list", "watch"}}},
+	}}}
+	return svc
 }

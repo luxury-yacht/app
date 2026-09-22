@@ -97,9 +97,9 @@ type Service struct {
 
 	startOnce sync.Once
 	doneCh    chan struct{}
-	// ingestSyncTimeoutWarnOnce prevents a permanently unavailable ingest manager
-	// from repeating the same startup warning on every catalog resync.
-	ingestSyncTimeoutWarnOnce sync.Once
+	// sourceSyncTimeoutWarnOnce prevents a permanently unsettled informer factory
+	// or ingest manager from repeating the same warning on every catalog resync.
+	sourceSyncTimeoutWarnOnce sync.Once
 
 	now func() time.Time
 
@@ -147,7 +147,7 @@ func defaultServiceOptions() Options {
 	return Options{
 		ResyncInterval:             config.ObjectCatalogResyncInterval,
 		FailedSyncRetryInterval:    config.ObjectCatalogFailedSyncRetryInterval,
-		IngestSyncWaitTimeout:      config.RefreshInformerSyncDeadline,
+		SourceSyncWaitTimeout:      config.RefreshInformerSyncDeadline,
 		ListRequestTimeout:         config.ResourceFetchCallTimeout,
 		PageSize:                   config.ObjectCatalogPageSize,
 		ListWorkers:                adjustedListWorkers(),
@@ -166,7 +166,7 @@ func applyServiceOptions(target, source *Options) {
 	}
 	applyPositiveDuration(&target.ResyncInterval, source.ResyncInterval)
 	applyPositiveDuration(&target.FailedSyncRetryInterval, source.FailedSyncRetryInterval)
-	applyPositiveDuration(&target.IngestSyncWaitTimeout, source.IngestSyncWaitTimeout)
+	applyPositiveDuration(&target.SourceSyncWaitTimeout, source.SourceSyncWaitTimeout)
 	applyPositiveDuration(&target.ListRequestTimeout, source.ListRequestTimeout)
 	applyPositiveInt(&target.PageSize, source.PageSize)
 	applyPositiveInt(&target.ListWorkers, source.ListWorkers)

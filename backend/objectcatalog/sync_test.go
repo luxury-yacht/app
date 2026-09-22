@@ -18,6 +18,7 @@ import (
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -840,7 +841,7 @@ func newControlledIngestCatalogService(source IngestSource, waitTimeout time.Dur
 		Telemetry:    recorder,
 		IngestSource: source,
 	}, &Options{
-		IngestSyncWaitTimeout: waitTimeout,
+		SourceSyncWaitTimeout: waitTimeout,
 		ResyncInterval:        time.Hour,
 	}), recorder
 }
@@ -853,12 +854,11 @@ func (r *recordingTelemetry) count() int {
 
 // TestSyncWaitsForCachesBetweenPreflightAndCollect pins the catalog startup overlap:
 // discovery and the RBAC preflight are pure API calls and must run BEFORE the
-// informer-cache wait (so they overlap the factory's ~10s initial sync); only the
-// collect — which reads listers — runs after the wait. A wait failure must abort the
-// sync: collecting from unsynced listers would publish an incomplete catalog as
-// authoritative.
+// informer settle wait (so they overlap the factory's ~10s initial sync); only the
+// collect — which reads listers — runs after the wait. Cancellation during the
+// wait aborts the sync before any collect.
 func TestSyncWaitsForCachesBetweenPreflightAndCollect(t *testing.T) {
-	newFixture := func(waitForCaches func(context.Context) error, order *[]string, mu *sync.Mutex) *Service {
+	newFixture := func(readiness InformerReadiness, order *[]string, mu *sync.Mutex) *Service {
 		record := func(step string) {
 			mu.Lock()
 			*order = append(*order, step)
@@ -866,13 +866,13 @@ func TestSyncWaitsForCachesBetweenPreflightAndCollect(t *testing.T) {
 		}
 
 		scheme := runtime.NewScheme()
-		deployGVK := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
-		scheme.AddKnownTypeWithName(deployGVK, &unstructured.Unstructured{})
-		scheme.AddKnownTypeWithName(deployGVK.GroupVersion().WithKind("DeploymentList"), &unstructured.UnstructuredList{})
+		replicaSetGVK := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "ReplicaSet"}
+		scheme.AddKnownTypeWithName(replicaSetGVK, &unstructured.Unstructured{})
+		scheme.AddKnownTypeWithName(replicaSetGVK.GroupVersion().WithKind("ReplicaSetList"), &unstructured.UnstructuredList{})
 		dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-			{Group: "apps", Version: "v1", Resource: "deployments"}: "DeploymentList",
+			{Group: "apps", Version: "v1", Resource: "replicasets"}: "ReplicaSetList",
 		})
-		dyn.PrependReactor("list", "deployments", func(k8stesting.Action) (bool, runtime.Object, error) {
+		dyn.PrependReactor("list", "replicasets", func(k8stesting.Action) (bool, runtime.Object, error) {
 			record("collect")
 			return false, nil, nil
 		})
@@ -882,7 +882,7 @@ func TestSyncWaitsForCachesBetweenPreflightAndCollect(t *testing.T) {
 		hooked := &hookedPreferredDiscovery{
 			preferredDiscovery: &preferredDiscovery{FakeDiscovery: baseDiscovery, resources: []*metav1.APIResourceList{{
 				GroupVersion: "apps/v1",
-				APIResources: []metav1.APIResource{{Name: "deployments", Namespaced: true, Kind: "Deployment", Verbs: []string{"list"}}},
+				APIResources: []metav1.APIResource{{Name: "replicasets", Namespaced: true, Kind: "ReplicaSet", Verbs: []string{"list"}}},
 			}}},
 			onDiscover: func() { record("discover") },
 		}
@@ -892,19 +892,21 @@ func TestSyncWaitsForCachesBetweenPreflightAndCollect(t *testing.T) {
 				KubernetesClient: &discoveryOverrideClient{Clientset: client, discovery: hooked},
 				DynamicClient:    dyn,
 			},
-			WaitForCaches: waitForCaches,
+			InformerReadiness: readiness,
 		}, nil)
 	}
 
 	t.Run("wait sits between discovery and collect", func(t *testing.T) {
 		var mu sync.Mutex
 		var order []string
-		svc := newFixture(func(context.Context) error {
+		var requested [][]string
+		svc := newFixture(informerReadinessStub{settled: func(keys []string) bool {
 			mu.Lock()
 			order = append(order, "wait")
+			requested = append(requested, keys)
 			mu.Unlock()
-			return nil
-		}, &order, &mu)
+			return true
+		}}, &order, &mu)
 
 		if err := svc.sync(context.Background()); err != nil {
 			t.Fatalf("sync failed: %v", err)
@@ -935,26 +937,51 @@ func TestSyncWaitsForCachesBetweenPreflightAndCollect(t *testing.T) {
 		if !(index("collect") >= 0 && index("wait") < index("collect")) {
 			t.Fatalf("the collect must run AFTER the cache wait, order %v", order)
 		}
+		require.Equal(t, [][]string{{"apps/replicasets"}}, requested,
+			"the wait must ask the factory only about the informers collection reads")
 	})
 
-	t.Run("wait failure aborts the sync before any collect", func(t *testing.T) {
+	t.Run("canceled wait aborts the sync before any collect", func(t *testing.T) {
 		var mu sync.Mutex
 		var order []string
-		waitErr := errors.New("caches unavailable")
-		svc := newFixture(func(context.Context) error { return waitErr }, &order, &mu)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		svc := newFixture(informerReadinessStub{settled: func([]string) bool {
+			cancel()
+			return false
+		}}, &order, &mu)
 
-		err := svc.sync(context.Background())
-		if err == nil || !errors.Is(err, waitErr) {
-			t.Fatalf("expected sync to fail with the cache-wait error, got %v", err)
+		err := svc.sync(ctx)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected sync to stop with the wait's cancellation, got %v", err)
 		}
 		mu.Lock()
 		defer mu.Unlock()
 		for _, s := range order {
 			if s == "collect" {
-				t.Fatalf("no collect may run when the cache wait failed, order %v", order)
+				t.Fatalf("no collect may run when the cache wait was canceled, order %v", order)
 			}
 		}
 	})
+}
+
+// informerReadinessStub reports every requested informer with one readiness
+// state and, when settled is set, delegates the settle check to it.
+type informerReadinessStub struct {
+	settled   func(keys []string) bool
+	readiness refresh.ResourceReadiness
+}
+
+func (s informerReadinessStub) ResourcesSettled(keys []string) bool {
+	return s.settled == nil || s.settled(keys)
+}
+
+func (s informerReadinessStub) ResourceReadiness(keys []string) map[string]refresh.ResourceReadiness {
+	states := make(map[string]refresh.ResourceReadiness, len(keys))
+	for _, key := range keys {
+		states[key] = s.readiness
+	}
+	return states
 }
 
 func TestCatalogContinuesWithPartialSyncWhenTrackedIngestNeverStarts(t *testing.T) {
@@ -987,7 +1014,7 @@ func TestCatalogIngestTimeoutWarningEmittedOncePerService(t *testing.T) {
 
 	for range 2 {
 		run := &catalogSync{service: svc, descriptors: descriptors}
-		require.NoError(t, run.waitForIngest(context.Background()))
+		require.NoError(t, run.waitForCaches(context.Background()))
 	}
 
 	require.Len(t, logger.warnings, 1,
