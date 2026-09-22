@@ -99,6 +99,53 @@ func TestCRDWatchHandlerMarksDiscoveryStale(t *testing.T) {
 	require.Equal(t, 2, baseCalls)
 }
 
+func TestCRDUpdatesRecollectOnlyWhenDiscoveryChanges(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		change func(*apiextensionsv1.CustomResourceDefinition)
+		want   bool
+	}{
+		{"resource version", func(*apiextensionsv1.CustomResourceDefinition) {}, false},
+		{"status reason", func(c *apiextensionsv1.CustomResourceDefinition) { c.Status.Conditions[0].Reason = "Reconciled" }, false},
+		{"labels", func(c *apiextensionsv1.CustomResourceDefinition) { c.Labels = map[string]string{"operator": "updated"} }, false},
+		{"schema", func(c *apiextensionsv1.CustomResourceDefinition) {
+			c.Spec.Versions[0].Schema = &apiextensionsv1.CustomResourceValidation{OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{Type: "object"}}
+		}, false},
+		{"unserved version", func(c *apiextensionsv1.CustomResourceDefinition) {
+			c.Spec.Versions = append(c.Spec.Versions, apiextensionsv1.CustomResourceDefinitionVersion{Name: "v2"})
+		}, false},
+		{"served version", func(c *apiextensionsv1.CustomResourceDefinition) {
+			c.Spec.Versions = append(c.Spec.Versions, apiextensionsv1.CustomResourceDefinitionVersion{Name: "v2", Served: true})
+		}, true},
+		{"scope", func(c *apiextensionsv1.CustomResourceDefinition) { c.Spec.Scope = apiextensionsv1.ClusterScoped }, true},
+		{"names", func(c *apiextensionsv1.CustomResourceDefinition) { c.Spec.Names.Kind = "Replacement" }, true},
+		{"accepted names", func(c *apiextensionsv1.CustomResourceDefinition) { c.Status.AcceptedNames = c.Spec.Names }, true},
+		{"API establishment", func(c *apiextensionsv1.CustomResourceDefinition) {
+			c.Status.Conditions[0].Status = apiextensionsv1.ConditionFalse
+		}, true},
+		{"new incarnation", func(c *apiextensionsv1.CustomResourceDefinition) { c.UID = "replacement" }, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			old := &apiextensionsv1.CustomResourceDefinition{
+				ObjectMeta: metav1.ObjectMeta{Name: "widgets.example.com", UID: "definition", ResourceVersion: "1"},
+				Spec:       apiextensionsv1.CustomResourceDefinitionSpec{Group: "example.com", Scope: apiextensionsv1.NamespaceScoped, Names: apiextensionsv1.CustomResourceDefinitionNames{Kind: "Widget", Plural: "widgets"}, Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{Name: "v1", Served: true, Storage: true}}},
+				Status:     apiextensionsv1.CustomResourceDefinitionStatus{Conditions: []apiextensionsv1.CustomResourceDefinitionCondition{{Type: apiextensionsv1.Established, Status: apiextensionsv1.ConditionTrue}}},
+			}
+			next := old.DeepCopy()
+			next.ResourceVersion = "2"
+			test.change(next)
+			svc := newTestWatchService()
+			notifier := newWatchNotifier(svc)
+			updates := 0
+			handler := notifier.crdWatchHandler(cache.ResourceEventHandlerFuncs{UpdateFunc: func(_, _ interface{}) { updates++ }})
+			handler.UpdateFunc(old, next)
+			require.Equal(t, test.want, svc.discoveryStale.Load())
+			require.Equal(t, test.want, len(notifier.resyncRequested) > 0, "only API-surface changes should request a full collection")
+			require.Equal(t, 1, updates, "every update still reaches the CRD table")
+		})
+	}
+}
+
 func TestNewCRDAppearsWithoutWaitingForPeriodicCatalogRefresh(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

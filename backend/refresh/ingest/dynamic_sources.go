@@ -59,7 +59,20 @@ func (m *IngestManager) ReconcileDynamicCatalogSource(spec DynamicCatalogSpec, p
 	if request == nil {
 		return false
 	}
-	e := m.prepareDynamicEntry(request, project)
+	return m.completeDynamicAdmission(request, project)
+}
+
+func (m *IngestManager) completeDynamicAdmission(request *dynamicAdmission, project CatalogProjector) bool {
+	allowed := make([]string, 0, len(request.namespaces))
+	for _, namespace := range request.namespaces {
+		if ingestNamespacePermitted(request.spec.GVR, namespace, request.filter) {
+			allowed = append(allowed, namespace)
+		}
+	}
+	if !m.dynamicAdmissionNeedsReplacement(request, allowed) {
+		return false
+	}
+	e := m.prepareDynamicEntry(request, project, allowed)
 	ctx, previous, admitted := m.admitDynamicEntry(request, e)
 	if !admitted {
 		return false
@@ -69,6 +82,22 @@ func (m *IngestManager) ReconcileDynamicCatalogSource(spec DynamicCatalogSpec, p
 	}
 	go runDynamicEntry(ctx, e, previous)
 	return true
+}
+
+// Compare the desired source before allocating stores and reflectors. Permission
+// reviews run outside both the definition and lifecycle locks.
+func (m *IngestManager) dynamicAdmissionNeedsReplacement(request *dynamicAdmission, allowed []string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	gr := request.spec.GVR.GroupResource()
+	if m.dynamicAdmissions[gr] != request || m.runDone != request.runDone || lifecycle.Context(request.runDone).Err() != nil {
+		return false
+	}
+	if dynamicEntryNeedsReplacement(m.entryForGroupResourceLocked(gr), &dynamicSource{spec: request.spec, namespaces: allowed}) {
+		return true
+	}
+	delete(m.dynamicAdmissions, gr)
+	return false
 }
 
 func (m *IngestManager) beginDynamicAdmission(spec DynamicCatalogSpec) *dynamicAdmission {
@@ -92,17 +121,16 @@ func (m *IngestManager) beginDynamicAdmission(spec DynamicCatalogSpec) *dynamicA
 	return request
 }
 
-func (m *IngestManager) prepareDynamicEntry(request *dynamicAdmission, project CatalogProjector) *entry {
+func (m *IngestManager) prepareDynamicEntry(request *dynamicAdmission, project CatalogProjector, allowed []string) *entry {
 	spec := request.spec
 	e := &entry{gvr: spec.GVR, store: newIngestProjectingStore(catalogProjectionFor(project))}
 	e.store.AddCatalogSink(request.sink)
 	e.onDemand.Store(true)
 	example := &unstructuredv1.Unstructured{}
 	example.SetGroupVersionKind(spec.GVK)
-	for _, namespace := range request.namespaces {
+	for _, namespace := range allowed {
 		e.addPartition(spec.GVK, namespace, dynamicListWatch(request.client, spec.GVR, namespace), example, func(row interface{}, deleted bool) { m.notifyDynamicSource(e, row, deleted) })
 	}
-	allowed := permittedIngestPartitions(ingestLaunchEntry{gvr: spec.GVR, e: e}, request.filter)
 	e.store.SetExpectedPartitions(allowed)
 	e.dynamic = &dynamicSource{spec: spec, namespaces: allowed, done: make(chan struct{})}
 	return e

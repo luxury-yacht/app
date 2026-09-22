@@ -148,6 +148,7 @@ func defaultServiceOptions() Options {
 		ResyncInterval:             config.ObjectCatalogResyncInterval,
 		FailedSyncRetryInterval:    config.ObjectCatalogFailedSyncRetryInterval,
 		IngestSyncWaitTimeout:      config.RefreshInformerSyncDeadline,
+		ListRequestTimeout:         config.ResourceFetchCallTimeout,
 		PageSize:                   config.ObjectCatalogPageSize,
 		ListWorkers:                adjustedListWorkers(),
 		NamespaceWorkers:           config.ObjectCatalogNamespaceWorkers,
@@ -166,6 +167,7 @@ func applyServiceOptions(target, source *Options) {
 	applyPositiveDuration(&target.ResyncInterval, source.ResyncInterval)
 	applyPositiveDuration(&target.FailedSyncRetryInterval, source.FailedSyncRetryInterval)
 	applyPositiveDuration(&target.IngestSyncWaitTimeout, source.IngestSyncWaitTimeout)
+	applyPositiveDuration(&target.ListRequestTimeout, source.ListRequestTimeout)
 	applyPositiveInt(&target.PageSize, source.PageSize)
 	applyPositiveInt(&target.ListWorkers, source.ListWorkers)
 	applyPositiveInt(&target.NamespaceWorkers, source.NamespaceWorkers)

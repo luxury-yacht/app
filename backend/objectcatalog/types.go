@@ -192,6 +192,7 @@ type Options struct {
 	ResyncInterval             time.Duration // interval between resyncs
 	FailedSyncRetryInterval    time.Duration // short retry after a failed/incomplete sync (default config.ObjectCatalogFailedSyncRetryInterval)
 	IngestSyncWaitTimeout      time.Duration // maximum initial wait for tracked ingest stores before collecting partial data (default config.RefreshInformerSyncDeadline)
+	ListRequestTimeout         time.Duration // budget for one API LIST request, independently renewed for each page and retry
 	PageSize                   int           // number of items per page
 	ListWorkers                int           // number of workers for listing resources
 	NamespaceWorkers           int           // number of workers for processing namespaces

@@ -52,7 +52,8 @@ Keep `catalog-first`. Do not turn that into `catalog-only`.
   published query rows, counts, facets, and readiness until collection finishes;
   it publishes the replacement, including retained failed descriptors, before
   broadcasting its completion signal. A kind still being collected is not an
-  authoritative deletion.
+  authoritative deletion. Collection's working maps remain private until they
+  are swapped into the published state under the catalog write lock.
 - Frontend catalog state resets structural scope changes before React commits,
   so prior rows cannot enter the destination view's replay cache. Custom-resource
   hydration decorates only current catalog membership by full identity and UID,
@@ -92,8 +93,10 @@ not read stream-manager object caches.
 
 Subscribe before initial collection. Read only actually synced namespace
 partitions from ingest; pending or LIST-only partitions use catalog's paginated
-LIST under `ResourceFetchCallTimeout`. A failed collection retains prior rows and
-reports partial health. Dynamic sources do not gate global ingest readiness.
+LIST with `ResourceFetchCallTimeout` for each API request, renewed for each page
+and retry. The complete multi-namespace collection has no separate deadline;
+caller cancellation still stops it. A failed kind retains prior rows and reports
+partial health without canceling unrelated kinds. Dynamic sources do not gate global ingest readiness.
 A namespace without WATCH permission can still contribute LIST-authorized rows.
 
 Callbacks never wait for the catalog publication lock. Coalesce contended
@@ -103,11 +106,15 @@ UIDs before deletion. A queued event from a retired source cannot substitute its
 old payload for a replacement's current state. Synced namespace baselines replace
 only those partitions; preserve pending and LIST-only partitions.
 
-The watch may use a different served version than discovery prefers. Translate
-its group/resource to the catalog descriptor for query identity. CRD arrival,
-change and deletion invalidate discovery and request collection through the
-existing resync boundary. Confirmed deletion retires the matching definition UID
-and reconciles rows, counts, facets and finalizer findings.
+Initial watch admission waits for discovery's preferred served version. While a
+version change is being reconciled, the watch may use a different served version;
+translate its group/resource to the catalog descriptor for query identity. CRD
+arrival, deletion and changes to served versions, scope, names, UID or API
+establishment invalidate discovery and request collection through the existing
+resync boundary. Routine metadata, schema and status-reason updates still update
+the CRD's own row without triggering a full recollection. Confirmed deletion
+retires the matching definition UID and reconciles rows, counts, facets and
+finalizer findings.
 
 Gateway API collection and incremental handlers derive from the same resource
 registry and reuse the Gateway informer factory. Publish catalog membership,

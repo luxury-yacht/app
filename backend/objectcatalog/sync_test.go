@@ -9,6 +9,7 @@ package objectcatalog
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1205,6 +1206,34 @@ func TestSyncKeepsPublishedFamilyUntilRecollectionFinishes(t *testing.T) {
 	require.Len(t, final.Items, 1)
 	require.Equal(t, "AppProject", final.Items[0].Ref.Kind)
 	require.Equal(t, "cluster-1", final.Items[0].Ref.ClusterID)
+}
+
+// Readers must see the last publication while the replacement is assembled,
+// including when an empty query store falls back to the items snapshot.
+func TestCatalogReplacementStaysPrivateUntilPublication(t *testing.T) {
+	for _, cold := range []bool{true, false} {
+		t.Run(fmt.Sprintf("cold=%t", cold), func(t *testing.T) {
+			svc := NewService(Dependencies{ClusterID: "c1"}, nil)
+			desc := widgetDesc()
+			old := summaryFromObject("c1", desc, widgetObject("default", "old", "1"))
+			key := catalogKey(desc, "default", "old")
+			svc.items[key] = old
+			svc.lastSeen[key] = time.Now()
+			svc.rebuildCacheFromItems(svc.items, []Descriptor{desc})
+			svc.catalogIndex.cachesReady = !cold
+			run := newCatalogSync(svc, svc.now())
+			run.descriptors = []Descriptor{desc}
+			run.prepare(t.Context())
+			next := summaryFromObject("c1", desc, widgetObject("default", "new", "2"))
+			run.succeeded[desc.GVR().String()] = []Summary{next}
+			descriptors := run.applyCollectionResults()
+			require.Equal(t, []Summary{old}, svc.Snapshot(), "unfinished replacement must not mutate the published snapshot")
+			require.Equal(t, []Summary{old}, svc.Query(QueryOptions{}).Items)
+			run.publish(descriptors, nil)
+			require.Equal(t, []Summary{next}, svc.Snapshot())
+			require.Equal(t, []Summary{next}, svc.Query(QueryOptions{}).Items)
+		})
+	}
 }
 
 func (*blockingIngestSource) ReadDynamicCatalogSource(schema.GroupResource) (ingest.DynamicCatalogSnapshot, bool) {

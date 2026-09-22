@@ -63,15 +63,13 @@ func (m *IngestManager) definitionChanged(obj interface{}, deleted bool) {
 		return
 	}
 	definitions := m.definitions
-	definitions.mu.Lock()
-	defer definitions.mu.Unlock()
 	if deleted {
 		m.RemoveCustomResourceDefinition(crd)
 		return
 	}
 	// Replay may lag the informer cache. Read its current definition after taking
 	// reconciliation ownership so an older callback cannot restore an old UID.
-	m.reconcileCachedDefinition(definitions, crd.Name)
+	m.reconcileCachedDefinition(definitions, crd.Name, schema.GroupVersionResource{})
 }
 
 // ReconcileDiscoveredResource supplies discovery's preferred version and reports
@@ -84,22 +82,43 @@ func (m *IngestManager) ReconcileDiscoveredResource(gvr schema.GroupVersionResou
 	if definitions == nil {
 		return false
 	}
-	definitions.mu.Lock()
-	defer definitions.mu.Unlock()
-	definitions.preferred[gvr.GroupResource()] = gvr.Version
-	return m.reconcileCachedDefinition(definitions, gvr.Resource+"."+gvr.Group)
+	return m.reconcileCachedDefinition(definitions, gvr.Resource+"."+gvr.Group, gvr)
 }
 
-func (m *IngestManager) reconcileCachedDefinition(definitions *dynamicDefinitions, name string) bool {
+func (m *IngestManager) reconcileCachedDefinition(definitions *dynamicDefinitions, name string, discovered schema.GroupVersionResource) bool {
+	definitions.mu.Lock()
+	if discovered.Version != "" {
+		definitions.preferred[discovered.GroupResource()] = discovered.Version
+	}
+	request, known := m.prepareDefinitionAdmission(definitions, name)
+	definitions.mu.Unlock()
+	if request != nil {
+		m.completeDynamicAdmission(request, definitions.project(request.spec))
+	}
+	return known
+}
+
+// Reserve admission while serializing definition selection, then release that
+// lock before any permission I/O. Newer definitions supersede the reservation.
+func (m *IngestManager) prepareDefinitionAdmission(definitions *dynamicDefinitions, name string) (*dynamicAdmission, bool) {
 	obj, exists, err := definitions.informer.GetStore().GetByKey(name)
 	if err != nil || !exists {
-		return false
+		return nil, false
 	}
 	crd, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
 	if !ok {
-		return false
+		return nil, false
 	}
 	gr := schema.GroupResource{Group: crd.Spec.Group, Resource: crd.Spec.Names.Plural}
-	m.ReconcileCustomResourceDefinition(crd, definitions.preferred[gr], definitions.project)
-	return true
+	preferred := definitions.preferred[gr]
+	if preferred == "" {
+		// Discovery selects the initial served version. A speculative storage-version
+		// watch would fetch everything again when the preferred version arrives.
+		return nil, true
+	}
+	spec, valid := customResourceSpec(crd, preferred)
+	if !valid {
+		return nil, true
+	}
+	return m.beginDynamicAdmission(spec), true
 }

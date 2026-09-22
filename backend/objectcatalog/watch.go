@@ -10,6 +10,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"slices"
 	"sync"
 	"time"
 
@@ -105,8 +107,8 @@ func (n *watchNotifier) flush(events []watchEvent) {
 	}
 	defer s.syncMu.Unlock()
 
-	// sync() parallel goroutines write to the aliased s.items/newItems map
-	// without holding s.mu. Defer to a full resync to avoid a concurrent-write race.
+	// A baseline in progress must incorporate subsequent watch changes before
+	// they are treated as authoritative. Request another pass if it is active.
 	if s.syncInProgress.Load() {
 		n.requestFullSync(len(events), false)
 		return
@@ -277,6 +279,41 @@ func makeHandler(gr schema.GroupResource, notifier *watchNotifier, svc *Service)
 	}
 }
 
+func crdChangesDiscovery(oldObj, newObj interface{}) bool {
+	old, oldOK := oldObj.(*apiextensionsv1.CustomResourceDefinition)
+	next, nextOK := newObj.(*apiextensionsv1.CustomResourceDefinition)
+	if !oldOK || !nextOK {
+		return true
+	}
+	return old.UID != next.UID || old.Spec.Group != next.Spec.Group || old.Spec.Scope != next.Spec.Scope ||
+		!reflect.DeepEqual(old.Spec.Names, next.Spec.Names) ||
+		!reflect.DeepEqual(old.Status.AcceptedNames, next.Status.AcceptedNames) ||
+		!slices.Equal(crdServedVersions(old), crdServedVersions(next)) ||
+		crdEstablished(old) != crdEstablished(next)
+}
+
+func crdServedVersions(crd *apiextensionsv1.CustomResourceDefinition) []string {
+	versions := make([]string, 0, len(crd.Spec.Versions))
+	for _, version := range crd.Spec.Versions {
+		if version.Served {
+			versions = append(versions, version.Name)
+		}
+	}
+	slices.Sort(versions)
+	return versions
+}
+
+// Establishment changes API availability; ordinary status reason/timestamp
+// updates do not change discovery and must not recollect every resource kind.
+func crdEstablished(crd *apiextensionsv1.CustomResourceDefinition) bool {
+	for _, condition := range crd.Status.Conditions {
+		if condition.Type == apiextensionsv1.Established {
+			return condition.Status == apiextensionsv1.ConditionTrue
+		}
+	}
+	return false
+}
+
 func sameObjectResourceVersion(oldObj, newObj interface{}) bool {
 	oldMeta, oldOK := toMetaObject(oldObj)
 	newMeta, newOK := toMetaObject(newObj)
@@ -386,7 +423,7 @@ func (n *watchNotifier) crdWatchHandler(base cache.ResourceEventHandlerFuncs) ca
 			}
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			if !sameObjectResourceVersion(oldObj, newObj) {
+			if crdChangesDiscovery(oldObj, newObj) {
 				n.crdDiscoveryChanged(newObj, false)
 			}
 			if base.UpdateFunc != nil {

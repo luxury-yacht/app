@@ -40,8 +40,6 @@ func (s *Service) collectResource(ctx context.Context, desc Descriptor, namespac
 	if summaries, handled, err := s.collectViaDynamicIngest(ctx, desc, namespaces, agg); handled {
 		return summaries, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, config.ResourceFetchCallTimeout)
-	defer cancel()
 	summaries, err := s.listResource(ctx, desc, namespaces, agg)
 	if err != nil {
 		return nil, err
@@ -277,8 +275,14 @@ func (s *Service) listCatalogPageWithRetry(
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
+	timeout := s.opts.ListRequestTimeout
+	if timeout <= 0 {
+		timeout = config.ResourceFetchCallTimeout
+	}
 	for attempt := range config.ObjectCatalogListRetryMaxAttempts {
-		list, err := resourceInterface.List(ctx, options)
+		requestCtx, cancel := context.WithTimeout(ctx, timeout)
+		list, err := resourceInterface.List(requestCtx, options)
+		cancel()
 		if err == nil {
 			return list, false, nil
 		}

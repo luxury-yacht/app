@@ -1,7 +1,9 @@
 # Custom-resource ingestion completion record
 
-Status: implementation and automated gates passed; required rendered verification
-is blocked. This record remains until the outstanding workflows below are checked.
+Status: review corrections implemented and current automated gates passed;
+required rendered verification remains outstanding. Earlier passing gates did
+not expose the intermittent publication race found in review. This record remains
+until the outstanding workflows below are checked.
 
 ## Delivered scope
 
@@ -26,7 +28,8 @@ Durable guidance is captured in [catalog](../architecture/catalog.md),
 [refresh system](../architecture/refresh-system.md) and
 [large data producers](../architecture/large-data-producers.md).
 Refresh/add-resource skill references were inspected for ownership changes.
-No dependency or transport was added. No commit or PR was created.
+No dependency or transport was added. The review corrections remain local;
+`gh pr view` found no PR for `custom-resources-refactor` on 2026-09-22.
 
 ## Acceptance evidence
 
@@ -36,7 +39,7 @@ No dependency or transport was added. No commit or PR was created.
 | Production source → catalog → cache invalidation → stream notification, below promotion threshold | Passed automated and live backend | `TestCatalogCustomResourceWatchReconcilesTableMembership` uses real subsystem construction and state owners with fake Kubernetes clients. A temporary real-client probe passed external creation/update/completed deletion, finalizer retention and detail-cache eviction on two disposable Kind clusters. It did not render a frontend consumer. |
 | Single dynamic watch owner | Passed automated | `TestSubsystemOwnsOneBelowThresholdCustomResourceWatch` counts fake-client API watches after production construction. No live watch-count or memory comparison was made. |
 | Per-namespace LIST/WATCH, LIST-only and denied access | Passed automated and constrained live backend | Dynamic admission/catalog tests cover these partitions. Real restricted identity returned two authorized Widget rows; only `ingest-allowed` had a ready watch. `ingest-list-only` had LIST but no WATCH; `ingest-denied` contributed no row. See startup limitation below. |
-| Unsynced dynamic source does not block readiness; first LIST includes it; timeout retains rows; recovery avoids duplication | Passed automated | `TestPendingDynamicSourceAllowsCatalogCollectionAndRecovery` uses real HTTP clients, ingest and catalog; red/green exposed and fixed empty all-namespace target normalization and timeout retention. Uses a 100 ms caller deadline, not a performance measurement of the production 30 s limit. |
+| Unsynced dynamic source does not block readiness; first LIST includes it; timeout retains rows; recovery avoids duplication | Passed automated | `TestPendingDynamicSourceAllowsCatalogCollectionAndRecovery` uses real HTTP clients, ingest and catalog; red/green exposed and fixed empty all-namespace target normalization and timeout retention. Its 100 ms caller deadline checks cancellation; the per-request LIST budget and independent-kind regressions are recorded below. |
 | Served-version replacement, scope replacement, CRD deletion/new UID | Passed automated and live backend | Ingest lifecycle tests cover late events, unchanged specifications, incomplete definitions and static-source precedence. A real API-server probe changed v2 from served to unserved, observed v1 retain the object, deleted the CRD, then recreated its name with a new UID and cluster scope; the catalog published the replacement object. |
 | New CRD discovered before periodic resync | Passed automated and live backend | `TestNewCRDAppearsWithoutWaitingForPeriodicCatalogRefresh`; live probe created a new RuntimeWidget definition while the catalog ran. |
 | Publication bursts, callbacks during baseline, detach and terminal shutdown | Passed automated | Real ingest/catalog composition tests include a burst larger than 8,192 objects while publication is blocked, consumer detach/reattach, generation rejection and shutdown. Kubernetes API clients are fake in these regressions. |
@@ -47,6 +50,66 @@ No dependency or transport was added. No commit or PR was created.
 | Saved settings, filtering/paging and export in the actual views | Blocked rendered | Surviving automated tests passed; same native/browser blockers. |
 
 ## Validation results
+
+### Review corrections, 2026-09-22
+
+- **Publication race:** reproduced the reported race with 30 repeated executions
+  of `TestNewCRDAppearsWithoutWaitingForPeriodicCatalogRefresh`
+  (`/tmp/custom-review-race-repro.log`). The replacement maps now stay private
+  until rows, descriptors and query state are published under the catalog lock.
+  `TestCatalogReplacementStaysPrivateUntilPublication` failed before that fix;
+  it and the concurrent new-CRD/warm-publication regressions passed 30 race-enabled
+  repetitions (`/tmp/custom-review-publication-green.log`).
+- **Collection isolation:** each API LIST attempt gets its own timeout. Successful
+  pages/namespaces can collectively exceed that budget, and a failed descriptor
+  does not cancel its peers. Real HTTP regressions failed against the previous
+  behavior (`/tmp/custom-review-list-red.log`) and passed with the fix
+  (`/tmp/custom-review-list-green.log`). The existing capability-failure regression
+  was updated to require sibling checks to finish instead of being canceled.
+- **CRD invalidation:** `TestCRDUpdatesRecollectOnlyWhenDiscoveryChanges` failed
+  for ordinary resourceVersion, label, schema and status-reason changes before
+  the fix (`/tmp/custom-review-crd-red.log`). Full recollection now follows changes
+  to served versions, scope, names, UID or API establishment; the CRD's own row
+  still receives ordinary updates.
+- **Admission work:** permission checks no longer hold the definition-selection
+  lock, and unchanged sources are compared before allocating stores/reflectors.
+  Initial watch admission waits for discovery's preferred served version. Both
+  regressions failed before the fix (`/tmp/custom-review-admission-red.log`) and
+  passed afterward (`/tmp/custom-review-admission-green.log`). A delayed permission
+  response cannot restore an older UID/version: that regression passed 10 race
+  repetitions (`/tmp/custom-review-stale-admission.log`).
+- **Allocation evidence:** `BenchmarkUnchangedCRDReconciliation` measured 37
+  allocations / 2,672 bytes before and 3 allocations / 224 bytes after per call
+  (`/tmp/custom-review-admission-before-bench.log`,
+  `/tmp/custom-review-admission-after-bench.log`). This is a local microbenchmark,
+  not an application memory, latency or API-count measurement.
+
+All five affected packages passed under the race detector
+(`/tmp/custom-review-packages.log`). Additional real-HTTP retry recovery and
+discovery-before-CRD replay/deletion regressions passed
+(`/tmp/custom-review-adjacent.log`). The refreshed backend coverage suite passed
+(`/tmp/custom-review-coverage.log`): catalog 89.7%, ingest 84.8%, system 80.4%.
+The changed LIST entry/retry functions measure 92.3% / 81.8%; `collect.go` as a
+whole remains 77.9% because of coverage gaps in its existing collection adapters.
+The changed definition-admission file measures 83.6%. These are statement
+coverage measurements, not rendered-consumer evidence.
+
+The final `mise exec -- wails3 task qc:prerelease` passed, exit 0
+(`/tmp/custom-review-final-gate.log`), including full Go race tests, 528 frontend
+files / 5,084 tests, bindings, documentation, formatting, lint/typecheck, Knip and
+Trivy (zero reported vulnerabilities). Worktree formatting was inspected and
+`git diff --check` passed. Only this evidence record changed after the gate;
+documentation/whitespace checks were rerun.
+The local gocognit v1.2.1 scan reports at most 12 for changed production functions;
+unchanged `waitForIngest` remains 13 (`/tmp/custom-review-complexity.json`). Remote
+Sonar is unavailable without a PR. No rendered/native workflows were reclassified
+as passed by these backend regressions.
+
+The native blocker was checked again on 2026-09-22: `cua.getState()` reported
+that the Mac was locked and automatic unlock failed. Manual unlock was requested;
+the blocked view workflows remain unrun.
+
+### Earlier implementation evidence
 
 Phases 1, 2 and 3 each passed `mise exec -- wails3 task qc:prerelease` after
 corrections. Phase 3 final log: `/tmp/custom-ingestion-phase3-gate.log`, exit 0,
@@ -115,7 +178,7 @@ files were restored byte-for-byte from the pre-run backup, with no new applicati
 configuration files left over. Both app servers were stopped; process inspection
 found no task-owned app process and no listeners on ports 9245 or 8080.
 
-Latest cleanup gate: `mise exec -- wails3 task qc:prerelease` passed, exit 0
+Earlier cleanup gate: `mise exec -- wails3 task qc:prerelease` passed, exit 0
 (`/tmp/custom-ingestion-final-gate.log`), including full Go race tests, 528 frontend
 files / 5,084 tests, generated bindings, lint/typecheck, Knip and Trivy (zero
 reported vulnerabilities). The worktree was inspected after formatting. Only this

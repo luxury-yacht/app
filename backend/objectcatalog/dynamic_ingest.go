@@ -4,7 +4,6 @@ import (
 	"context"
 	"slices"
 
-	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -21,10 +20,8 @@ func (s *Service) collectViaDynamicIngest(ctx context.Context, desc Descriptor, 
 	rows := s.dynamicCatalogSummaries(source, desc, namespaces)
 	if len(pending) > 0 {
 		// A not-yet-watched or LIST-only partition must be collected, not interpreted
-		// as empty. A stuck initial read is bounded independently of reflector retries.
-		listCtx, cancel := context.WithTimeout(ctx, config.ResourceFetchCallTimeout)
-		defer cancel()
-		listed, err := s.listResourceTargets(listCtx, desc, pending, nil)
+		// as empty. Each API page has its own budget, independent of reflector retries.
+		listed, err := s.listResourceTargets(ctx, desc, pending, nil)
 		if err != nil {
 			return nil, true, err
 		}

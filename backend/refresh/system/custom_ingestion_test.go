@@ -8,6 +8,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -16,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
@@ -39,6 +41,7 @@ func TestSubsystemOwnsOneBelowThresholdCustomResourceWatch(t *testing.T) {
 	object.SetUID("object-a")
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gvr: "WidgetList"}, object)
 	kube := kubefake.NewClientset()
+	kube.Discovery().(*fakediscovery.FakeDiscovery).Resources = []*metav1.APIResourceList{{GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"list", "watch"}}}}}
 	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
 		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
 		attrs := review.Spec.ResourceAttributes
@@ -57,6 +60,13 @@ func TestSubsystemOwnsOneBelowThresholdCustomResourceWatch(t *testing.T) {
 	})
 	subsystem.IngestManager.Start(ctx)
 	require.NoError(t, subsystem.InformerFactory.Start(ctx))
+	catalog := objectcatalog.NewService(objectcatalog.Dependencies{
+		ClusterID: "test-cluster", Common: common.Dependencies{KubernetesClient: kube, DynamicClient: dyn},
+		IngestSource: subsystem.IngestManager, APIExtensionsInformerFactory: subsystem.InformerFactory.APIExtensionsInformerFactory(),
+	}, nil)
+	catalogDone := make(chan error, 1)
+	go func() { catalogDone <- catalog.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-catalogDone })
 	require.Eventually(t, func() bool {
 		source, ok := subsystem.IngestManager.ReadDynamicCatalogSource(gvr.GroupResource())
 		return ok && len(source.ReadyNamespaces) > 0 && len(source.Rows) == 1

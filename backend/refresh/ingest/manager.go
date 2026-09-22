@@ -609,14 +609,21 @@ func runIngestPartition(ctx context.Context, part *ingestPart) {
 func permittedIngestPartitions(launch ingestLaunchEntry, filter func(string, string, string) bool) []string {
 	launched := make([]string, 0, len(launch.e.parts))
 	for _, part := range launch.e.parts {
-		if filter != nil && !filter(launch.gvr.Group, launch.gvr.Resource, part.namespace) {
+		if !ingestNamespacePermitted(launch.gvr, part.namespace, filter) {
 			part.skipped.Store(true)
-			logSkippedIngestPart(launch.gvr, part.namespace)
 			continue
 		}
 		launched = append(launched, part.namespace)
 	}
 	return launched
+}
+
+func ingestNamespacePermitted(gvr schema.GroupVersionResource, namespace string, filter func(string, string, string) bool) bool {
+	if filter == nil || filter(gvr.Group, gvr.Resource, namespace) {
+		return true
+	}
+	logSkippedIngestPart(gvr, namespace)
+	return false
 }
 
 func logSkippedIngestPart(gvr schema.GroupVersionResource, namespace string) {
