@@ -19,9 +19,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -625,30 +623,6 @@ func requireResourceSetEqual(t *testing.T, domain, label string, code []resource
 		key := r.Group + "/" + r.Version + "/" + r.Kind + "/" + r.Resource
 		require.Containsf(t, codeKeys, key, "domain %s %s entry %q not present in projection descriptor", domain, label, key)
 	}
-}
-
-func TestDomainRegistrationRequiresDependencies(t *testing.T) {
-	// Verify that dependency-gated registrations reject missing dependencies.
-	missingDeps := domainRegistrations(registrationDeps{cfg: Config{}})
-
-	custom := findRegistration(t, missingDeps, "namespace-custom")
-	require.NotNil(t, custom.require)
-	require.ErrorContains(t, custom.require(), "dynamic client must be provided for namespace custom resources")
-
-	// The helm domain reads from the shared secrets informer and has no extra
-	// dependency gate.
-	helm := findRegistration(t, missingDeps, "namespace-helm")
-	require.Nil(t, helm.require)
-
-	// Verify that dependency checks pass when the dependencies are provided.
-	withDeps := domainRegistrations(registrationDeps{
-		cfg: Config{
-			DynamicClient: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
-		},
-	})
-
-	customWithDeps := findRegistration(t, withDeps, "namespace-custom")
-	require.NoError(t, customWithDeps.require())
 }
 
 func TestDomainRegistrationProviderAndServiceGatesAreExplicit(t *testing.T) {

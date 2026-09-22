@@ -24,7 +24,7 @@ func TestClusterAttentionDoorbellInvalidatesCacheBeforeBroadcast(t *testing.T) {
 	manager := resourcestream.NewManager(
 		nil, nil, nil,
 		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		nil, nil,
+		nil,
 	)
 	selector, err := resourcestream.ParseStreamSelector("c1", "cluster-attention", "")
 	require.NoError(t, err)

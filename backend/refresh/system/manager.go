@@ -275,6 +275,7 @@ func newIngestInfrastructure(cfg Config, factory *informer.Factory, runtimePerms
 	registerNetworkReflectors(manager, clusterMeta)
 	registerNodeReflector(manager, clusterMeta)
 	manager.SetPermissionFilter(ingestPermissionFilter(runtimePerms))
+	registerCustomResourceIngest(manager, factory, cfg.ClusterID)
 	return manager, nil
 }
 

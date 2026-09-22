@@ -27,7 +27,7 @@ func TestObjectEventsNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T
 		nil,
 		nil,
 		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		nil,
+
 		nil,
 	)
 	selector, err := resourcestream.ParseStreamSelector("c1", "object-events", "team-a:/v1:Pod:web-1")

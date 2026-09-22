@@ -41,7 +41,6 @@ describe('refresh domain registry', () => {
       'cluster-storage',
       'cluster-config',
       'cluster-crds',
-      'cluster-custom',
       'namespace-events',
       'namespace-workloads',
       'namespace-config',
@@ -50,7 +49,6 @@ describe('refresh domain registry', () => {
       'namespace-storage',
       'namespace-autoscaling',
       'namespace-quotas',
-      'namespace-custom',
       'namespace-helm',
     ]);
   });

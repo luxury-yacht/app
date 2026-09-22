@@ -98,9 +98,10 @@ namespace-scope orchestrator.
   evaluated per scope namespace (any-of) instead of one cluster-wide ask
   that a scoped identity always fails (`backend/objectcatalog/sync.go`,
   `preflightNamespaces`).
-- **Resource stream**: per-CRD dynamic informers fan out per namespace for
-  namespaced CRDs; the namespace-custom all-namespaces view lists per scope
-  namespace with per-target Forbidden skip.
+- **Runtime-discovered resources**: ingest admits one watch per permitted namespace
+  using the same partition filter as registry sources. Catalog LIST collection
+  covers pending and LIST-only namespaces; watch reconciliation preserves those
+  rows. Custom tables use the `catalog` domain, with live page hydration.
 - **Metrics**: the pod-metrics poll runs per scope namespace and merges the
   successes (`backend/refresh/metrics/poller.go`); node metrics stay
   cluster-scoped and permission-degrade as before.

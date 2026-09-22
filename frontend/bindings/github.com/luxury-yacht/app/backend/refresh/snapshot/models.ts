@@ -31,9 +31,8 @@ export interface AttentionObjectFindingIgnore {
 
 /**
  * CustomResourceSummary is the page-hydration row shape used by catalog-backed
- * custom-resource tables. It preserves the rich status and metadata fields from
- * the legacy namespace/cluster custom snapshot rows without requiring the
- * production Custom tabs to subscribe to full CRD fanout domains.
+ * custom-resource tables. Rich status and metadata are fetched only after
+ * catalog membership has identified the requested rows.
  */
 export interface CustomResourceSummary {
     "certManager"?: streamrows$0.CertManagerSummary | null;

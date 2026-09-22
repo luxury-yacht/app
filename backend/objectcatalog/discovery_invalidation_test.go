@@ -2,7 +2,17 @@ package objectcatalog
 
 import (
 	"context"
+	"github.com/luxury-yacht/app/backend/resources/common"
+	authorizationv1 "k8s.io/api/authorization/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/informers"
+	kubefake "k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -76,7 +86,7 @@ func TestCRDWatchHandlerMarksDiscoveryStale(t *testing.T) {
 		UpdateFunc: func(interface{}, interface{}) { baseCalls++ },
 		DeleteFunc: func(interface{}) { baseCalls++ },
 	}
-	h := svc.crdWatchHandler(base)
+	h := newWatchNotifier(svc).crdWatchHandler(base)
 
 	require.False(t, svc.discoveryStale.Load())
 	h.AddFunc(nil)
@@ -87,4 +97,37 @@ func TestCRDWatchHandlerMarksDiscoveryStale(t *testing.T) {
 	h.DeleteFunc(nil)
 	require.True(t, svc.discoveryStale.Load(), "a CRD delete marks discovery stale")
 	require.Equal(t, 2, baseCalls)
+}
+
+func TestNewCRDAppearsWithoutWaitingForPeriodicCatalogRefresh(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	kube := kubefake.NewClientset()
+	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		review.Status.Allowed = true
+		return true, review, nil
+	})
+	api := apiextfake.NewClientset()
+	extensions := apiextinformers.NewSharedInformerFactory(api, time.Minute)
+	definitions := extensions.Apiextensions().V1().CustomResourceDefinitions().Informer()
+	extensions.Start(ctx.Done())
+	require.True(t, cache.WaitForCacheSync(ctx.Done(), definitions.HasSynced))
+	discovery := &stubDiscovery{DiscoveryInterface: kube.Discovery()}
+	svc := NewService(Dependencies{
+		Common:    common.Dependencies{KubernetesClient: kube, DynamicClient: widgetDynamicClient(widgetObject("default", "newly-discovered", "1"))},
+		ClusterID: "c1", InformerFactory: informers.NewSharedInformerFactory(kube, time.Minute), APIExtensionsInformerFactory: extensions,
+	}, nil)
+	svc.discoveryClient = discovery
+	done := make(chan error, 1)
+	go func() { done <- svc.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done; extensions.Shutdown() })
+	require.Eventually(t, func() bool { return svc.Health().Status == HealthStateOK && svc.Query(QueryOptions{}).TotalItems == 0 }, time.Second, time.Millisecond)
+	discovery.lists = []*metav1.APIResourceList{{GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"list", "watch"}}}}}
+	_, err := api.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "widgets.example.com", UID: "new-definition"},
+		Spec:       apiextensionsv1.CustomResourceDefinitionSpec{Group: "example.com", Scope: apiextensionsv1.NamespaceScoped, Names: apiextensionsv1.CustomResourceDefinitionNames{Kind: "Widget", Plural: "widgets"}, Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{Name: "v1", Served: true, Storage: true}}},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return svc.Query(QueryOptions{}).TotalItems == 1 }, time.Second, time.Millisecond, "CRD arrival must refresh discovery while the healthy stream suppresses polling")
 }

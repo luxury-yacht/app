@@ -68,8 +68,7 @@ func isIngestOwned(gr schema.GroupResource) bool {
 // when the kind is not ingest-owned or no ingest source is configured. For a cut
 // kind it ALWAYS handles the collect, so the catalog never falls through to the
 // shared factory for a GVR the factory no longer registers. Static cut kinds
-// report an incomplete collect until their own ingest store has synced/settled;
-// dynamic cuts still fall through to LIST until their on-demand reflector syncs.
+// report an incomplete collect until their own ingest store has synced/settled.
 // Summaries for a namespaced kind are filtered to the requested namespaces,
 // matching the lister path's per-namespace scope.
 func (s *Service) collectViaIngest(desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, bool, error) {
@@ -79,19 +78,10 @@ func (s *Service) collectViaIngest(desc Descriptor, namespaces []string, agg *st
 	}
 	gvr := desc.GVR()
 	_, staticCut := catalogIngestOwnedGVRs[gvr]
-	dynamicCut := s.isDynamicallyIngested(gvr)
-	if !staticCut && !dynamicCut {
+	if !staticCut {
 		return nil, false, nil
 	}
-	// A dynamic (on-demand promoted) kind serves from the ingest store only once its
-	// reflector's initial relist has landed; until then return handled=false so the caller
-	// falls through to LIST (no empty flash), exactly as the former promotion path served
-	// from the informer only after HasSynced. Static cut kinds have no fallback informer,
-	// so they remain handled but make the sync incomplete until their own store settles.
-	if dynamicCut && !staticCut && !source.HasSyncedFor(gvr) {
-		return nil, false, nil
-	}
-	if staticCut && !source.HasSyncedFor(gvr) {
+	if !source.HasSyncedFor(gvr) {
 		return nil, true, fmt.Errorf("catalog ingest store for %s is not synced", gvr)
 	}
 	summaries := catalogSummaries(source.CatalogRows(gvr), requestedNamespaceSet(desc, namespaces))
@@ -149,12 +139,21 @@ func (s *Service) applyIngestCatalogSummary(gvr schema.GroupVersionResource, sum
 	if !ok {
 		return
 	}
+	s.publishIngestSummary(desc, summary, deleted)
+}
+
+// The caller owns syncMu; both static and dynamic updates use this publication boundary.
+func (s *Service) publishIngestSummary(desc Descriptor, summary Summary, deleted bool) {
 	key := catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)
 
 	s.mu.Lock()
 	var change catalogChange
 	changed := true
 	if deleted {
+		if existing, ok := s.catalogIndex.items[key]; ok && existing.Ref.UID != summary.Ref.UID {
+			s.mu.Unlock()
+			return
+		}
 		change, changed = s.catalogIndex.deleteItem(key)
 	} else {
 		change = s.catalogIndex.setItem(key, summary, s.now())
@@ -298,8 +297,7 @@ func (s *Service) drainIngestReconciliation(done chan struct{}) {
 		s.ingestPendingMu.Unlock()
 
 		s.syncMu.Lock()
-		rows := s.deps.IngestSource.CatalogRows(gvr)
-		s.replaceIngestCatalogSummariesLocked(gvr, catalogSummaries(rows, nil))
+		s.reconcileCurrentIngestSource(gvr)
 		s.syncMu.Unlock()
 	}
 }

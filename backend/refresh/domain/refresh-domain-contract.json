@@ -154,23 +154,6 @@
       "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
-    "cluster-custom": {
-      "behaviorClass": "resource-stream-table",
-      "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": [""]
-      },
-      "singleCluster": true,
-      "payloadOwner": "backend/refresh/snapshot.ClusterCustomBuilder",
-      "refreshPayloadType": "ClusterCustomSnapshotPayload",
-      "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
-      "coverageContract": "query-refetch-on-signal",
-      "coverageStatus": "enforced"
-    },
     "cluster-events": {
       "behaviorClass": "event-stream",
       "scopeContract": {
@@ -268,23 +251,6 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceConfigBuilder",
       "refreshPayloadType": "NamespaceConfigSnapshotPayload",
-      "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
-      "coverageContract": "query-refetch-on-signal",
-      "coverageStatus": "enforced"
-    },
-    "namespace-custom": {
-      "behaviorClass": "resource-stream-table",
-      "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all"]
-      },
-      "singleCluster": true,
-      "payloadOwner": "backend/refresh/snapshot.NamespaceCustomBuilder",
-      "refreshPayloadType": "NamespaceCustomSnapshotPayload",
       "cachePolicy": "snapshot-cache",
       "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
       "coverageContract": "query-refetch-on-signal",
@@ -651,12 +617,6 @@
         ],
         "relatedResources": []
       },
-      "namespace-custom": {
-        "scopeKind": "namespace",
-        "completeIsScopeLevel": true,
-        "primaryResources": [],
-        "relatedResources": [{"group": "apiextensions.k8s.io", "version": "v1", "kind": "CustomResourceDefinition", "resource": "customresourcedefinitions"}]
-      },
       "namespace-helm": {
         "scopeKind": "namespace",
         "completeIsScopeLevel": true,
@@ -725,12 +685,6 @@
         "completeIsScopeLevel": true,
         "primaryResources": [{"group": "apiextensions.k8s.io", "version": "v1", "kind": "CustomResourceDefinition", "resource": "customresourcedefinitions"}],
         "relatedResources": []
-      },
-      "cluster-custom": {
-        "scopeKind": "cluster",
-        "completeIsScopeLevel": true,
-        "primaryResources": [],
-        "relatedResources": [{"group": "apiextensions.k8s.io", "version": "v1", "kind": "CustomResourceDefinition", "resource": "customresourcedefinitions"}]
       },
       "nodes": {
         "scopeKind": "cluster",
@@ -864,19 +818,6 @@
       }
     },
     {
-      "domain": "cluster-custom",
-      "category": "cluster",
-      "sourceClocks": ["object"],
-      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
-      "frontend": {
-        "refresherName": "cluster-custom",
-        "orchestrator": "resource-stream",
-        "registrationOrder": 21,
-        "diagnosticsStream": "resources",
-        "timing": { "interval": 15000, "cooldown": 1000, "timeout": 60 }
-      }
-    },
-    {
       "domain": "cluster-events",
       "category": "cluster",
       "sourceClocks": ["event"],
@@ -923,7 +864,7 @@
       "frontend": {
         "refresherName": "workloads",
         "orchestrator": "resource-stream",
-        "registrationOrder": 23,
+        "registrationOrder": 22,
         "diagnosticsStream": "resources",
         "timing": { "interval": 5000, "cooldown": 500, "timeout": 10 },
         "priority": 5
@@ -937,7 +878,7 @@
       "frontend": {
         "refresherName": "autoscaling",
         "orchestrator": "resource-stream",
-        "registrationOrder": 28,
+        "registrationOrder": 27,
         "diagnosticsStream": "resources",
         "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 }
       }
@@ -950,22 +891,9 @@
       "frontend": {
         "refresherName": "config",
         "orchestrator": "resource-stream",
-        "registrationOrder": 24,
+        "registrationOrder": 23,
         "diagnosticsStream": "resources",
         "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 }
-      }
-    },
-    {
-      "domain": "namespace-custom",
-      "category": "namespace",
-      "sourceClocks": ["object"],
-      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
-      "frontend": {
-        "refresherName": "custom",
-        "orchestrator": "resource-stream",
-        "registrationOrder": 30,
-        "diagnosticsStream": "resources",
-        "timing": { "interval": 10000, "cooldown": 1000, "timeout": 60 }
       }
     },
     {
@@ -976,7 +904,7 @@
       "frontend": {
         "refresherName": "events",
         "orchestrator": "event-stream",
-        "registrationOrder": 22,
+        "registrationOrder": 21,
         "diagnosticsStream": "events",
         "timing": { "interval": 3000, "cooldown": 1000, "timeout": 10 }
       }
@@ -989,7 +917,7 @@
       "frontend": {
         "refresherName": "helm",
         "orchestrator": "resource-stream",
-        "registrationOrder": 31,
+        "registrationOrder": 29,
         "diagnosticsStream": "resources",
         "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
       }
@@ -1002,7 +930,7 @@
       "frontend": {
         "refresherName": "network",
         "orchestrator": "resource-stream",
-        "registrationOrder": 25,
+        "registrationOrder": 24,
         "diagnosticsStream": "resources",
         "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 }
       }
@@ -1015,7 +943,7 @@
       "frontend": {
         "refresherName": "quotas",
         "orchestrator": "resource-stream",
-        "registrationOrder": 29,
+        "registrationOrder": 28,
         "diagnosticsStream": "resources",
         "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
       }
@@ -1028,7 +956,7 @@
       "frontend": {
         "refresherName": "rbac",
         "orchestrator": "resource-stream",
-        "registrationOrder": 26,
+        "registrationOrder": 25,
         "diagnosticsStream": "resources",
         "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
       }
@@ -1041,7 +969,7 @@
       "frontend": {
         "refresherName": "storage",
         "orchestrator": "resource-stream",
-        "registrationOrder": 27,
+        "registrationOrder": 26,
         "diagnosticsStream": "resources",
         "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
       }

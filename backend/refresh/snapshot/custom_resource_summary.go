@@ -6,9 +6,8 @@ import (
 )
 
 // CustomResourceSummary is the page-hydration row shape used by catalog-backed
-// custom-resource tables. It preserves the rich status and metadata fields from
-// the legacy namespace/cluster custom snapshot rows without requiring the
-// production Custom tabs to subscribe to full CRD fanout domains.
+// custom-resource tables. Rich status and metadata are fetched only after
+// catalog membership has identified the requested rows.
 type CustomResourceSummary struct {
 	CertManager     *streamrows.CertManagerSummary     `json:"certManager,omitempty"`
 	ExternalSecrets *streamrows.ExternalSecretsSummary `json:"externalSecrets,omitempty"`
@@ -41,7 +40,7 @@ func (row *CustomResourceSummary) ResolveLinks(resolve func(*resourcemodel.Resou
 	}
 }
 
-func CustomResourceSummaryFromNamespace(row NamespaceCustomSummary) CustomResourceSummary {
+func CustomResourceSummaryFromNamespace(row streamrows.NamespaceCustomSummary) CustomResourceSummary {
 	return CustomResourceSummary{
 		CertManager: row.CertManager, ExternalSecrets: row.ExternalSecrets, Prometheus: row.Prometheus,
 		ArgoCD:             row.ArgoCD,
@@ -59,7 +58,7 @@ func CustomResourceSummaryFromNamespace(row NamespaceCustomSummary) CustomResour
 	}
 }
 
-func CustomResourceSummaryFromCluster(row ClusterCustomSummary) CustomResourceSummary {
+func CustomResourceSummaryFromCluster(row streamrows.ClusterCustomSummary) CustomResourceSummary {
 	return CustomResourceSummary{
 		CertManager: row.CertManager, ExternalSecrets: row.ExternalSecrets, Prometheus: row.Prometheus,
 		Karpenter:          row.Karpenter,

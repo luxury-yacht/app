@@ -49,7 +49,7 @@ func TestCatalogReactiveResyncCadenceWithoutSharedFactory(t *testing.T) {
 			svc := newTestWatchService()
 			svc.opts.EnableReactiveUpdates = test.reactive
 			svc.opts.ResyncInterval = test.interval
-			svc.deps.CustomResourceSource = &catalogWatchSourceStub{}
+			svc.deps.IngestSource = &fakeCatalogIngestSource{}
 			require.Equal(t, test.want, svc.fullResyncInterval(), "custom-only reactive catalogs use the same safety-net cadence")
 		})
 	}
@@ -794,7 +794,6 @@ func (b *blockingIngestSource) AddCatalogSink(schema.GroupVersionResource, inges
 func (b *blockingIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionResource, schema.GroupVersionKind, ingest.CatalogProjector, bool) bool {
 	return false
 }
-func (b *blockingIngestSource) StopReflectorFor(schema.GroupVersionResource)  {}
 func (b *blockingIngestSource) HasSyncedFor(schema.GroupVersionResource) bool { return false }
 func (b *blockingIngestSource) Tracks(schema.GroupVersionResource) bool       { return false }
 
@@ -811,7 +810,6 @@ func (*controlledIngestSource) AddCatalogSink(schema.GroupVersionResource, inges
 func (*controlledIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionResource, schema.GroupVersionKind, ingest.CatalogProjector, bool) bool {
 	return false
 }
-func (*controlledIngestSource) StopReflectorFor(schema.GroupVersionResource) {}
 func (s *controlledIngestSource) HasSyncedFor(schema.GroupVersionResource) bool {
 	return s.synced.Load()
 }
@@ -1207,4 +1205,44 @@ func TestSyncKeepsPublishedFamilyUntilRecollectionFinishes(t *testing.T) {
 	require.Len(t, final.Items, 1)
 	require.Equal(t, "AppProject", final.Items[0].Ref.Kind)
 	require.Equal(t, "cluster-1", final.Items[0].Ref.ClusterID)
+}
+
+func (*blockingIngestSource) ReadDynamicCatalogSource(schema.GroupResource) (ingest.DynamicCatalogSnapshot, bool) {
+	return ingest.DynamicCatalogSnapshot{}, false
+}
+func (*blockingIngestSource) SubscribeDynamicCatalogChanges(func(ingest.DynamicCatalogChange)) func() {
+	return func() {}
+}
+
+func (*controlledIngestSource) ReadDynamicCatalogSource(schema.GroupResource) (ingest.DynamicCatalogSnapshot, bool) {
+	return ingest.DynamicCatalogSnapshot{}, false
+}
+func (*controlledIngestSource) SubscribeDynamicCatalogChanges(func(ingest.DynamicCatalogChange)) func() {
+	return func() {}
+}
+
+func (*blockingIngestSource) IsDynamicCatalogGeneration(schema.GroupResource, uint64) bool {
+	return false
+}
+
+func (*controlledIngestSource) IsDynamicCatalogGeneration(schema.GroupResource, uint64) bool {
+	return false
+}
+
+func (*blockingIngestSource) ReconcileDiscoveredResource(schema.GroupVersionResource) bool {
+	return false
+}
+
+func (*controlledIngestSource) ReconcileDiscoveredResource(schema.GroupVersionResource) bool {
+	return false
+}
+
+func (source *blockingIngestSource) SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func() {
+	source.AddCatalogSink(gvr, sink)
+	return func() {}
+}
+
+func (source *controlledIngestSource) SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func() {
+	source.AddCatalogSink(gvr, sink)
+	return func() {}
 }

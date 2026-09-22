@@ -40,7 +40,6 @@ func (r replayIngestSource) AddCatalogSink(gvr schema.GroupVersionResource, sink
 func (r replayIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionResource, schema.GroupVersionKind, ingest.CatalogProjector, bool) bool {
 	return false
 }
-func (r replayIngestSource) StopReflectorFor(schema.GroupVersionResource)  {}
 func (r replayIngestSource) HasSyncedFor(schema.GroupVersionResource) bool { return true }
 func (r replayIngestSource) Tracks(schema.GroupVersionResource) bool       { return true }
 
@@ -182,4 +181,20 @@ func TestContendedIngestReplaceReconcilesAuthoritativeRows(t *testing.T) {
 	if svc.ingestDrainDone != nil || len(svc.ingestPending) != 0 {
 		t.Fatal("retired catalog spawned another reconciliation")
 	}
+}
+
+func (replayIngestSource) ReadDynamicCatalogSource(schema.GroupResource) (ingest.DynamicCatalogSnapshot, bool) {
+	return ingest.DynamicCatalogSnapshot{}, false
+}
+func (replayIngestSource) SubscribeDynamicCatalogChanges(func(ingest.DynamicCatalogChange)) func() {
+	return func() {}
+}
+
+func (replayIngestSource) IsDynamicCatalogGeneration(schema.GroupResource, uint64) bool { return false }
+
+func (replayIngestSource) ReconcileDiscoveredResource(schema.GroupVersionResource) bool { return false }
+
+func (source replayIngestSource) SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func() {
+	source.AddCatalogSink(gvr, sink)
+	return func() {}
 }

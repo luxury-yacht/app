@@ -142,16 +142,12 @@ func (g *ResourceGateway) registerDescriptorResponseCacheInvalidation(
 }
 
 func (g *ResourceGateway) registerCustomResourceCacheInvalidation(subsystem *system.Subsystem, selectionKey string) {
-	if subsystem.ResourceStream == nil {
+	if subsystem.IngestManager == nil {
 		return
 	}
-	// Use custom resource stream updates to evict cached YAML for dynamic resources.
-	subsystem.ResourceStream.SetCustomResourceCacheInvalidator(func(ref resourcemodel.ResourceRef) {
-		if ref.ClusterID == "" || ref.Group == "" || ref.Version == "" || ref.Kind == "" || ref.Name == "" {
-			return
-		}
-		g.invalidateResponseCacheForResource(selectionKey, ref)
-	})
+	// This is wired before generation startup, so the initial LIST and later
+	// mutations invalidate responses before catalog publication and its doorbell.
+	subsystem.IngestManager.SetDynamicCatalogSink(g.ingestResponseCacheSink(selectionKey))
 }
 
 // gatewayAPIGroup and apiExtensionsGroup select the non-core informer factory for

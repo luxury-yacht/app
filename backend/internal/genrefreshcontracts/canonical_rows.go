@@ -60,8 +60,6 @@ func canonicalObjectRowSpecs() []canonicalObjectRowSpec {
 		{name: "namespace-helm", typeOf: typeOf[snapshot.NamespaceHelmSummary]()},
 		{name: "pods", typeOf: typeOf[streamrows.PodSummary]()},
 		{name: "namespace-workloads", typeOf: typeOf[streamrows.WorkloadSummary]()},
-		{name: "namespace-custom-legacy", typeOf: typeOf[streamrows.NamespaceCustomSummary]()},
-		{name: "cluster-custom-legacy", typeOf: typeOf[streamrows.ClusterCustomSummary]()},
 		{name: "custom-page-hydration", typeOf: typeOf[snapshot.CustomResourceSummary]()},
 		{name: "object-events", typeOf: typeOf[snapshot.ObjectEventSummary]()},
 	}

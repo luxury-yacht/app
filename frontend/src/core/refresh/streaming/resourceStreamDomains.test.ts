@@ -27,7 +27,6 @@ const EXPECTED_DOMAINS: ResourceDomain[] = [
   'namespace-config',
   'namespace-network',
   'namespace-rbac',
-  'namespace-custom',
   'namespace-helm',
   'namespace-autoscaling',
   'namespace-quotas',
@@ -36,7 +35,6 @@ const EXPECTED_DOMAINS: ResourceDomain[] = [
   'cluster-storage',
   'cluster-config',
   'cluster-crds',
-  'cluster-custom',
   'nodes',
 ];
 
@@ -45,7 +43,6 @@ const CLUSTER_SCOPED_DOMAINS = new Set<ResourceDomain>([
   'cluster-storage',
   'cluster-config',
   'cluster-crds',
-  'cluster-custom',
   'nodes',
 ]);
 

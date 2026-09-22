@@ -551,7 +551,6 @@ describe('DiagnosticsPanel component', () => {
     'namespace-workloads',
     'namespace-autoscaling',
     'namespace-config',
-    'namespace-custom',
     'namespace-events',
     'namespace-helm',
     'namespace-network',

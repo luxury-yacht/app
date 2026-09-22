@@ -100,7 +100,7 @@ func TestDescriptorRegistrationStreamsGatewayWithoutRecreatingIngestWatches(t *t
 	factory := informer.New(client, nil, time.Minute, checker).WithGatewayFactory(
 		gatewayinformers.NewSharedInformerFactory(gatewayClient, time.Minute), gatewayStreamPresence{},
 	)
-	manager := NewManager(nil, nil, nil, snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, nil, nil)
+	manager := NewManager(nil, nil, nil, snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, nil)
 	t.Cleanup(manager.Stop)
 	manager.permissions = factory
 	require.True(t, factory.CanListWatch("gateway.networking.k8s.io", "gateways"))

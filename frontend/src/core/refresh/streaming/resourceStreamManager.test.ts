@@ -132,7 +132,6 @@ beforeEach(() => {
   resetAllScopedDomainStates('namespace-config');
   resetAllScopedDomainStates('namespace-network');
   resetAllScopedDomainStates('namespace-rbac');
-  resetAllScopedDomainStates('namespace-custom');
   resetAllScopedDomainStates('namespace-helm');
   resetAllScopedDomainStates('namespace-autoscaling');
   resetAllScopedDomainStates('namespace-quotas');
@@ -141,7 +140,6 @@ beforeEach(() => {
   resetAllScopedDomainStates('cluster-storage');
   resetAllScopedDomainStates('cluster-config');
   resetAllScopedDomainStates('cluster-crds');
-  resetAllScopedDomainStates('cluster-custom');
   resetAllScopedDomainStates('catalog');
   resetAllScopedDomainStates('pods');
   resetAllScopedDomainStates('namespaces');
@@ -154,7 +152,6 @@ afterEach(() => {
   resetAllScopedDomainStates('namespace-config');
   resetAllScopedDomainStates('namespace-network');
   resetAllScopedDomainStates('namespace-rbac');
-  resetAllScopedDomainStates('namespace-custom');
   resetAllScopedDomainStates('namespace-helm');
   resetAllScopedDomainStates('namespace-autoscaling');
   resetAllScopedDomainStates('namespace-quotas');
@@ -163,7 +160,6 @@ afterEach(() => {
   resetAllScopedDomainStates('cluster-storage');
   resetAllScopedDomainStates('cluster-config');
   resetAllScopedDomainStates('cluster-crds');
-  resetAllScopedDomainStates('cluster-custom');
   resetAllScopedDomainStates('catalog');
   resetAllScopedDomainStates('pods');
   resetAllScopedDomainStates('namespaces');
@@ -202,11 +198,6 @@ describe('resourceStreamManager helpers', () => {
     expect(normalizeResourceScope('namespace-rbac', 'namespace:all')).toBe('namespace:all');
   });
 
-  it('normalizes namespace custom scopes', () => {
-    expect(normalizeResourceScope('namespace-custom', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-custom', 'namespace:all')).toBe('namespace:all');
-  });
-
   it('normalizes namespace helm scopes', () => {
     expect(normalizeResourceScope('namespace-helm', 'default')).toBe('namespace:default');
     expect(normalizeResourceScope('namespace-helm', 'namespace:all')).toBe('namespace:all');
@@ -238,7 +229,6 @@ describe('resourceStreamManager helpers', () => {
     expect(normalizeResourceScope('cluster-storage', 'cluster')).toBe('');
     expect(normalizeResourceScope('cluster-config', '')).toBe('');
     expect(normalizeResourceScope('cluster-crds', 'cluster')).toBe('');
-    expect(normalizeResourceScope('cluster-custom', '')).toBe('');
   });
 });
 

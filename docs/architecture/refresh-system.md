@@ -329,3 +329,12 @@ closure with delivery.
 When the shared session's outgoing queue overflows, close the session. Reconnection
 must reconcile every scope whose queued signal could have been lost. A reset of
 only the incoming frame's scope cannot repair an evicted frame from another scope.
+
+## Custom-resource delivery
+
+Custom and resource-family tables are filtered catalog queries. They use the
+existing `catalog` refresh domain, its shared resource-stream doorbell and live
+page hydration. `cluster-custom` and `namespace-custom` remain navigation/table
+persistence identifiers, not refresh domains; do not restore separate full-list
+snapshot builders under those names. Source ownership and reconciliation follow
+[the catalog contract](catalog.md#watch-to-query-ordering).

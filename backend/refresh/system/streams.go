@@ -47,9 +47,8 @@ func registerStreamHandlers(deps streamDeps) (*containerlogsstream.Handler, *eve
 		logger,
 		deps.telemetry,
 		deps.clusterMeta,
-		deps.cfg.DynamicClient,
+
 		deps.ingestManager,
-		deps.cfg.AllowedNamespaces...,
 	)
 	return logHandler, eventManager, resourceManager, nil
 }

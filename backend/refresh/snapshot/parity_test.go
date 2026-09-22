@@ -26,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/admission"
@@ -125,7 +126,6 @@ func TestSnapshotStreamRowParityCoversAllSupportedDomains(t *testing.T) {
 		"namespace-config":      {},
 		"namespace-network":     {},
 		"namespace-rbac":        {},
-		"namespace-custom":      {},
 		"namespace-autoscaling": {},
 		"namespace-quotas":      {},
 		"namespace-storage":     {},
@@ -133,7 +133,6 @@ func TestSnapshotStreamRowParityCoversAllSupportedDomains(t *testing.T) {
 		"cluster-storage":       {},
 		"cluster-config":        {},
 		"cluster-crds":          {},
-		"cluster-custom":        {},
 	}
 	excluded := map[string]string{
 		"namespace-helm":      "scope-level COMPLETE contract, not per-row projection",
@@ -636,7 +635,7 @@ func parityNamespaceCustomCollisionCase(meta ClusterMeta) parityCase {
 			// returns byte-identical rows.
 			rowARepeat := customresource.BuildNamespaceStreamSummary(meta, crA, customresource.NewDescriptor("rds.services.k8s.aws", "v1alpha1", "dbinstances", "DBInstance", "dbinstances.rds.services.k8s.aws"), "data")
 			requireRowParity(t, []any{rowA}, []any{rowARepeat}, func(r any) string {
-				row := r.(NamespaceCustomSummary)
+				row := r.(streamrows.NamespaceCustomSummary)
 				return row.Ref.Group + "/" + row.Ref.Version + "/" + row.Ref.Kind + "/" + row.Ref.Namespace + "/" + row.Ref.Name
 			})
 		},
@@ -667,7 +666,7 @@ func parityClusterCustomCollisionCase(meta ClusterMeta) parityCase {
 
 			rowARepeat := customresource.BuildClusterStreamSummary(meta, crA, customresource.NewDescriptor("rds.services.k8s.aws", "v1alpha1", "dbclusters", "DBCluster", "dbclusters.rds.services.k8s.aws"))
 			requireRowParity(t, []any{rowA}, []any{rowARepeat}, func(r any) string {
-				row := r.(ClusterCustomSummary)
+				row := r.(streamrows.ClusterCustomSummary)
 				return row.Ref.Group + "/" + row.Ref.Version + "/" + row.Ref.Kind + "/" + row.Ref.Name
 			})
 		},

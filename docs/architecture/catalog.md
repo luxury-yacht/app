@@ -82,27 +82,32 @@ signaling completion.
 
 ## Watch-to-query ordering
 
-Custom-resource membership consumes the refresh subsystem's existing,
-permission-gated dynamic informers through `CustomResourceSource`. Keep this
-interface in the catalog package to avoid importing the stream manager that
-already consumes catalog signals. Deliver callbacks outside manager locks and
-limit them to enqueueing identities; publication later signals that same manager.
+Runtime-discovered resource watches belong to the refresh generation's ingest
+manager. Confirmed generic CRDs are admitted independently of object count;
+non-CRD APIs and resources without visible CRD definitions retain the 5,000-object
+promotion threshold. Existing registry, shared-informer and Gateway sources take
+precedence. Catalog owns discovery and supplies its preferred served version,
+but never owns or stops a watch. Streaming consumes catalog signals; catalog does
+not read stream-manager object caches.
 
-Subscribe before the initial catalog LIST so changes during collection cannot
-fall between the initial snapshot and change delivery. Notifications enqueue
-full object identity; after acquiring catalog publication ownership, resolve
-that identity against the current informer store. An old delete must not erase
-a replacement object. An unsynced, unauthorized, or retired source is not
-authoritative absence; retain membership and use the existing resync recovery path.
+Subscribe before initial collection. Read only actually synced namespace
+partitions from ingest; pending or LIST-only partitions use catalog's paginated
+LIST under `ResourceFetchCallTimeout`. A failed collection retains prior rows and
+reports partial health. Dynamic sources do not gate global ingest readiness.
+A namespace without WATCH permission can still contribute LIST-authorized rows.
 
-The informer may use a different served version than discovery prefers. Read the
-source using its original version, then resolve group/resource to the catalog's
-descriptor for publication and deletion keys. Version drift alone must not
-trigger a full catalog LIST. Coalesce identity-only notifications before the
-bounded payload queue: startup replay retains one pending read per distinct
-identity, including across UID replacement. Pending memory scales with distinct
-identities awaiting reconciliation, not the number of notifications; draining
-releases that batch before resolving current source state.
+Callbacks never wait for the catalog publication lock. Coalesce contended
+reconciliation by GVR, acquire publication ownership, then reread the current
+source. Check source generations before applying incremental changes and object
+UIDs before deletion. A queued event from a retired source cannot substitute its
+old payload for a replacement's current state. Synced namespace baselines replace
+only those partitions; preserve pending and LIST-only partitions.
+
+The watch may use a different served version than discovery prefers. Translate
+its group/resource to the catalog descriptor for query identity. CRD arrival,
+change and deletion invalidate discovery and request collection through the
+existing resync boundary. Confirmed deletion retires the matching definition UID
+and reconciles rows, counts, facets and finalizer findings.
 
 Gateway API collection and incremental handlers derive from the same resource
 registry and reuse the Gateway informer factory. Publish catalog membership,
@@ -117,8 +122,8 @@ safety-net interval use the same reactive-mode condition, including catalogs
 whose only watch source is custom resources.
 
 Catalog retirement cancels the notifier before joining it, removes its informer
-handlers, and unsubscribes from custom-resource changes before completing. It
-does not stop the subsystem's shared watch producers.
+handlers, and detaches static and dynamic ingest subscriptions before completing.
+Detachment joins in-flight delivery without stopping the generation's producers.
 
 ## Layer Model
 

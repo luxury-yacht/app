@@ -654,14 +654,14 @@ describe('RefreshManager global controls', () => {
   });
 
   it('exposes refresher intervals and ignores redundant disable calls', () => {
-    const intervalName = 'namespace-custom' as RefresherName;
+    const intervalName = 'namespace-config' as RefresherName;
 
     refreshManager.register({
       name: intervalName,
       interval: 900,
       cooldown: 300,
       timeout: 2,
-      resource: 'ns-custom',
+      resource: 'ns-config',
     });
 
     expect(refreshManager.getRefresherInterval(intervalName)).toBe(900);

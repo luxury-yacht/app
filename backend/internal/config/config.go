@@ -134,12 +134,6 @@ const (
 	// SnapshotNamespaceRBACEntryLimit caps all-namespaces namespace RBAC snapshot rows.
 	SnapshotNamespaceRBACEntryLimit = 1000
 
-	// SnapshotNamespaceCustomWorkerLimit caps namespace custom-resource list fanout.
-	SnapshotNamespaceCustomWorkerLimit = 8
-
-	// SnapshotClusterCustomWorkerLimit caps cluster custom-resource list fanout.
-	SnapshotClusterCustomWorkerLimit = 8
-
 	// SnapshotNamespaceHelmWorkerLimit caps namespace Helm snapshot fanout.
 	SnapshotNamespaceHelmWorkerLimit = 8
 )

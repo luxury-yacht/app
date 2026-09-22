@@ -230,12 +230,6 @@ func canonicalRowWireFixtures(t *testing.T) canonicalRowWireFixtureDocument {
 	}
 	workloadRow := buildDeploymentOwnSummary(meta.ClusterID, deployment)
 
-	namespacedCustomObject := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "example.io/v1", "kind": "Widget",
-		"metadata": map[string]any{"name": "widget-wire", "namespace": namespace, "uid": "widget-wire-uid", "creationTimestamp": created.Format(time.RFC3339)},
-	}}
-	namespaceCustomRow := customres.BuildNamespaceStreamSummary(meta, namespacedCustomObject, customres.NewDescriptor("example.io", "v1", "widgets", "Widget", "widgets.example.io"), namespace)
-
 	clusterCustomObject := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "example.io/v1", "kind": "ClusterWidget",
 		"metadata": map[string]any{"name": "cluster-widget-wire", "uid": "cluster-widget-wire-uid", "creationTimestamp": created.Format(time.RFC3339)},
@@ -267,8 +261,6 @@ func canonicalRowWireFixtures(t *testing.T) canonicalRowWireFixtureDocument {
 		{Family: "namespace-helm", Boundary: "refresh-snapshot", Domain: "namespace-helm", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("namespace-helm", NamespaceHelmSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: helmRows})},
 		{Family: "pods", Boundary: "refresh-snapshot", Domain: "pods", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("pods", PodSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []PodSummary{podRow}})},
 		{Family: "namespace-workloads", Boundary: "refresh-snapshot", Domain: "namespace-workloads", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("namespace-workloads", NamespaceWorkloadsSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []WorkloadSummary{workloadRow}})},
-		{Family: "namespace-custom-legacy", Boundary: "refresh-snapshot", Domain: "namespace-custom", RowPath: "payload.resources", Snapshot: canonicalFixtureSnapshot("namespace-custom", NamespaceCustomSnapshot{ClusterMeta: meta, Resources: []NamespaceCustomSummary{namespaceCustomRow}})},
-		{Family: "cluster-custom-legacy", Boundary: "refresh-snapshot", Domain: "cluster-custom", RowPath: "payload.resources", Snapshot: canonicalFixtureSnapshot("cluster-custom", ClusterCustomSnapshot{ClusterMeta: meta, Resources: []ClusterCustomSummary{clusterCustomRow}})},
 		{Family: "custom-page-hydration", Boundary: "custom-hydration", Row: hydratedCustomRow},
 		{Family: "object-events", Boundary: "refresh-snapshot", Domain: "object-events", RowPath: "payload.events", Snapshot: canonicalFixtureSnapshot("object-events", ObjectEventsSnapshotPayload{ClusterMeta: meta, Events: []ObjectEventSummary{objectEventRow}})},
 	}

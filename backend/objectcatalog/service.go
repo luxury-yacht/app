@@ -78,13 +78,6 @@ type Service struct {
 	discoveryInvalidate func()
 	discoveryStale      atomic.Bool
 
-	// dynamicIngested is the set of dynamic (CRD-backed) kinds the catalog has promoted
-	// onto the ingest path on demand (see maybePromote). collectViaIngest serves these from
-	// the ingest manager's CatalogRows once their reflector has synced; stopDynamicReflectors
-	// tears them down with the catalog.
-	dynamicMu       sync.RWMutex
-	dynamicIngested map[schema.GroupVersionResource]struct{}
-
 	// suspendPublication lets source registration replay every kind before query
 	// rows, facets, finalizer findings, and streaming signals publish together.
 	suspendPublication atomic.Bool
@@ -136,7 +129,6 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		clusterID:            deps.ClusterID,
 		catalogIndex:         newCatalogIndex(),
 		identity:             newResourceIdentityResolver(deps.Common, deps.Logger),
-		dynamicIngested:      make(map[schema.GroupVersionResource]struct{}),
 		health:               healthStatus{State: HealthStateUnknown},
 		doneCh:               make(chan struct{}),
 		now:                  nowFn,

@@ -127,8 +127,6 @@ func (f *fakeCatalogIngestSource) RegisterDynamicCatalogReflector(schema.GroupVe
 	return false
 }
 
-func (f *fakeCatalogIngestSource) StopReflectorFor(schema.GroupVersionResource) {}
-
 func (f *fakeCatalogIngestSource) HasSyncedFor(gvr schema.GroupVersionResource) bool {
 	if f.synced == nil {
 		return true
@@ -711,4 +709,24 @@ func TestCatalogPortForwardFactsPreserveProtocolEligibility(t *testing.T) {
 			})
 		}
 	}
+}
+
+func (*fakeCatalogIngestSource) ReadDynamicCatalogSource(schema.GroupResource) (ingest.DynamicCatalogSnapshot, bool) {
+	return ingest.DynamicCatalogSnapshot{}, false
+}
+func (*fakeCatalogIngestSource) SubscribeDynamicCatalogChanges(func(ingest.DynamicCatalogChange)) func() {
+	return func() {}
+}
+
+func (*fakeCatalogIngestSource) IsDynamicCatalogGeneration(schema.GroupResource, uint64) bool {
+	return false
+}
+
+func (*fakeCatalogIngestSource) ReconcileDiscoveredResource(schema.GroupVersionResource) bool {
+	return false
+}
+
+func (source *fakeCatalogIngestSource) SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func() {
+	source.AddCatalogSink(gvr, sink)
+	return func() {}
 }

@@ -20,7 +20,6 @@ const NAMESPACE_REFRESHERS = {
   events: 'events',
   quotas: 'quotas',
   autoscaling: 'autoscaling',
-  custom: 'custom',
   helm: 'helm',
 } as const;
 
@@ -31,7 +30,6 @@ const CLUSTER_REFRESHERS = {
   storage: 'cluster-storage',
   config: 'cluster-config',
   crds: 'cluster-crds',
-  custom: 'cluster-custom',
   events: 'cluster-events',
   browse: 'catalog',
   catalogDiff: 'catalog-diff',

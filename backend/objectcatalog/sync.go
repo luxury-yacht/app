@@ -295,15 +295,12 @@ func nextCatalogResyncInterval(syncOK bool, current, retry, full time.Duration) 
 
 func (s *Service) runLoop(ctx context.Context) error {
 	defer close(s.doneCh)
-	defer s.stopDynamicReflectors()
 	defer s.stopIngestReconciliation()
-	notifier := newWatchNotifier(s)
-	if s.opts.EnableReactiveUpdates {
-		// Subscribe before LIST: a deletion during initial collection must not
-		// disappear into the gap between collection and watch registration.
-		unsubscribe := notifier.subscribeCustomResources(ctx)
+	if s.opts.EnableReactiveUpdates && s.deps.IngestSource != nil {
+		unsubscribe := s.deps.IngestSource.SubscribeDynamicCatalogChanges(s.applyDynamicCatalogChange)
 		defer unsubscribe()
 	}
+	notifier := newWatchNotifier(s)
 
 	// Initial sync.
 	initialSyncErr := s.sync(ctx)
@@ -643,9 +640,9 @@ func (run *catalogSync) collectDescriptor(ctx context.Context, index int, desc D
 		ctx, desc, run.service.scopeNamespaces(), run.aggregator,
 	)
 	if err != nil {
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			run.recordFailure(desc, err)
-		}
+		// Cancellation and bounded initial-read timeouts are incomplete reads too:
+		// retain the descriptor's last publication and report partial health.
+		run.recordFailure(desc, err)
 		return err
 	}
 	run.logCollected(desc, len(summaries))

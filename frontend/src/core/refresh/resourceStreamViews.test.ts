@@ -30,7 +30,6 @@ describe('isResourceStreamViewActive', () => {
     ['namespace-config', 'config'],
     ['namespace-network', 'network'],
     ['namespace-rbac', 'rbac'],
-    ['namespace-custom', 'custom'],
     ['namespace-helm', 'helm'],
     ['namespace-autoscaling', 'autoscaling'],
     ['namespace-quotas', 'quotas'],
@@ -51,7 +50,6 @@ describe('isResourceStreamViewActive', () => {
     ['cluster-storage', 'storage'],
     ['cluster-config', 'config'],
     ['cluster-crds', 'crds'],
-    ['cluster-custom', 'custom'],
   ])('activates %s only for cluster view %s', (domain, activeClusterView) => {
     expect(
       isResourceStreamViewActive(domain, context({ currentView: 'cluster', activeClusterView }))

@@ -7,7 +7,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/resourcekind"
-	apiextensionspkg "github.com/luxury-yacht/app/backend/resources/apiextensions"
 	cronjobpkg "github.com/luxury-yacht/app/backend/resources/cronjob"
 	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
 	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
@@ -138,20 +137,6 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		streamResourceDescriptors(domainNamespaceRBAC),
 		[]ResourceDescriptor{},
 	),
-	domainNamespaceCustom: {
-		Domain:               domainNamespaceCustom,
-		ScopeKind:            "namespace",
-		SelectorShape:        namespaceSelectorShape,
-		RowIdentity:          "clusterId + CRD-backed GVK namespace/name",
-		UpdateIdentity:       fullResourceRefUpdateIdentity,
-		PrimaryResources:     []ResourceDescriptor{},
-		RelatedResources:     []ResourceDescriptor{fromIdentity(apiextensionspkg.Identity)},
-		SourceClocks:         []Source{SourceObject},
-		Projection:           "snapshot.BuildNamespaceCustomSummary",
-		AffectedRowResolver:  "dynamic custom informer and CRD signature resolver",
-		StaleScopeResolver:   "CRD custom stream signature resolver",
-		CompleteIsScopeLevel: true,
-	},
 	domainNamespaceHelm: {
 		Domain:               domainNamespaceHelm,
 		ScopeKind:            "namespace",
@@ -204,20 +189,6 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		"apiextensions.BuildStreamSummary",
 		streamResourceDescriptors(domainClusterCRDs),
 	),
-	domainClusterCustom: {
-		Domain:               domainClusterCustom,
-		ScopeKind:            "cluster",
-		SelectorShape:        "clusterId",
-		RowIdentity:          "clusterId + CRD-backed GVK name",
-		UpdateIdentity:       fullResourceRefUpdateIdentity,
-		PrimaryResources:     []ResourceDescriptor{},
-		RelatedResources:     []ResourceDescriptor{fromIdentity(apiextensionspkg.Identity)},
-		SourceClocks:         []Source{SourceObject},
-		Projection:           "snapshot.BuildClusterCustomSummary",
-		AffectedRowResolver:  "dynamic custom informer and CRD signature resolver",
-		StaleScopeResolver:   "CRD custom stream signature resolver",
-		CompleteIsScopeLevel: true,
-	},
 	domainNodes: {
 		Domain:               domainNodes,
 		ScopeKind:            "cluster",

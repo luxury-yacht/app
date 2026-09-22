@@ -36,11 +36,17 @@ func (s *Service) collectResource(ctx context.Context, desc Descriptor, namespac
 	if summaries, handled, err := s.collectViaSharedInformer(desc, namespaces, agg); handled {
 		return summaries, err
 	}
+	confirmedCRD := s.deps.IngestSource != nil && s.deps.IngestSource.ReconcileDiscoveredResource(desc.GVR())
+	if summaries, handled, err := s.collectViaDynamicIngest(ctx, desc, namespaces, agg); handled {
+		return summaries, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, config.ResourceFetchCallTimeout)
+	defer cancel()
 	summaries, err := s.listResource(ctx, desc, namespaces, agg)
 	if err != nil {
 		return nil, err
 	}
-	if planCollectionSource(desc).promotable {
+	if !confirmedCRD && planCollectionSource(desc).promotable {
 		s.maybePromote(desc, len(summaries))
 	}
 	return summaries, nil
@@ -142,13 +148,18 @@ func (s *Service) summariesFromObjects(desc Descriptor, objs []metav1.Object) []
 }
 
 func (s *Service) listResource(ctx context.Context, desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, error) {
+	return s.listResourceTargets(ctx, desc, listTargets(desc, namespaces), agg)
+}
+
+// Targets are resolved API scopes: an empty string means all namespaces and
+// must not be normalized again as a user-provided namespace filter.
+func (s *Service) listResourceTargets(ctx context.Context, desc Descriptor, targets []string, agg *streamingAggregator) ([]Summary, error) {
 	dynamicClient := s.deps.Common.DynamicClient
 	if dynamicClient == nil {
 		return nil, errors.New("dynamic client not available")
 	}
 
 	namespaceable := dynamicClient.Resource(desc.GVR())
-	targets := listTargets(desc, namespaces)
 
 	if len(targets) == 0 {
 		return nil, nil
@@ -339,14 +350,8 @@ func (s *Service) namespaceWorkerLimit(targetCount int) int {
 	return limit
 }
 
-// maybePromote consolidates a dynamic (CRD-backed) kind onto the one ingest path once its
-// object count crosses the promotion threshold: it registers an on-demand dynamic reflector
-// with the ingest manager (which LIST+WATCHes the kind and projects each object to the same
-// Summary buildSummary produces) plus a Catalog-half sink for incremental updates, then
-// records the gvr so collectViaIngest serves it once the reflector has synced. Below the
-// threshold — or with no ingest source — the kind keeps being listed per collect, so a
-// reflector is only ever created on demand. The projection IS buildSummary, so the
-// ingest-served Summaries are byte-identical to the list path's.
+// maybePromote retains the existing threshold policy for dynamic resources whose
+// CRD definition is not visible. Confirmed CRDs are admitted independently of count.
 func (s *Service) maybePromote(desc Descriptor, itemCount int) {
 	if s.opts.InformerPromotionThreshold <= 0 || itemCount < s.opts.InformerPromotionThreshold {
 		return
@@ -356,52 +361,16 @@ func (s *Service) maybePromote(desc Descriptor, itemCount int) {
 		return
 	}
 	gvr := desc.GVR()
-	if s.isDynamicallyIngested(gvr) {
+	if _, exists := source.ReadDynamicCatalogSource(gvr.GroupResource()); exists {
 		return
 	}
 	gvk := schema.GroupVersionKind{Group: desc.Group, Version: desc.Version, Kind: desc.Kind}
-	project := func(obj metav1.Object) interface{} { return s.buildSummary(desc, obj) }
+	clusterID := s.clusterID
+	project := func(obj metav1.Object) interface{} { return summaryFromObject(clusterID, desc, obj) }
 	if !source.RegisterDynamicCatalogReflector(gvr, gvk, project, desc.Namespaced) {
 		return
 	}
-	source.AddCatalogSink(gvr, ingestCatalogSink{service: s, gvr: gvr})
-	s.markDynamicallyIngested(gvr)
 	s.logInfo(fmt.Sprintf("catalog descriptor %s promoted to the ingest path", gvr.String()))
-}
-
-// isDynamicallyIngested reports whether the catalog has promoted gvr onto the ingest path.
-func (s *Service) isDynamicallyIngested(gvr schema.GroupVersionResource) bool {
-	s.dynamicMu.RLock()
-	defer s.dynamicMu.RUnlock()
-	_, ok := s.dynamicIngested[gvr]
-	return ok
-}
-
-// markDynamicallyIngested records that gvr now serves from the ingest path.
-func (s *Service) markDynamicallyIngested(gvr schema.GroupVersionResource) {
-	s.dynamicMu.Lock()
-	defer s.dynamicMu.Unlock()
-	s.dynamicIngested[gvr] = struct{}{}
-}
-
-// stopDynamicReflectors tears down every on-demand dynamic reflector the catalog promoted,
-// asking the ingest manager to stop each, so the reflectors do not outlive the catalog. It
-// is a no-op when no kind was promoted or no ingest source is configured.
-func (s *Service) stopDynamicReflectors() {
-	source := s.deps.IngestSource
-	s.dynamicMu.Lock()
-	gvrs := make([]schema.GroupVersionResource, 0, len(s.dynamicIngested))
-	for gvr := range s.dynamicIngested {
-		gvrs = append(gvrs, gvr)
-	}
-	s.dynamicIngested = make(map[schema.GroupVersionResource]struct{})
-	s.dynamicMu.Unlock()
-	if source == nil {
-		return
-	}
-	for _, gvr := range gvrs {
-		source.StopReflectorFor(gvr)
-	}
 }
 
 func (s *Service) buildSummary(desc Descriptor, item metav1.Object) Summary {

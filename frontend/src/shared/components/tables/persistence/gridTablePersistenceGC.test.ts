@@ -14,8 +14,13 @@ import {
   computeClusterHashes,
   runGridTableGC,
 } from '@shared/components/tables/persistence/gridTablePersistenceGC';
-import { resetGridTableViewRegistryForTests } from '@shared/components/tables/persistence/gridTableViewRegistry';
+import {
+  listRegisteredGridTableViews,
+  resetGridTableViewRegistryForTests,
+} from '@shared/components/tables/persistence/gridTableViewRegistry';
 import { beforeEach, describe, expect, it } from 'vitest';
+
+const productionViewIds = listRegisteredGridTableViews();
 
 describe('gridTablePersistenceGC', () => {
   beforeEach(() => {
@@ -44,6 +49,22 @@ describe('gridTablePersistenceGC', () => {
       ])
     );
     expect(result.kept).toEqual([`gridtable:v1:${clusterHash}:cluster-nodes`]);
+  });
+
+  it('retains saved Custom table settings after retiring their refresh domains', async () => {
+    resetGridTableViewRegistryForTests(productionViewIds);
+    const clusterHash = await computeClusterHash('path:context');
+    const clusterKey = `gridtable:v1:${clusterHash}:cluster-custom`;
+    const namespaceKey = `gridtable:v1:${clusterHash}:namespace-custom:team-a`;
+    setGridTablePersistenceCacheForTesting({
+      [clusterKey]: { version: 3, pageSize: 50, columnOrder: ['name', 'kind'] },
+      [namespaceKey]: { version: 3, pageSize: 100, columnOrder: ['kind', 'name'] },
+    });
+
+    const result = await runGridTableGC({ activeClusterHashes: [clusterHash] });
+
+    expect(result.removed).toEqual([]);
+    expect(result.kept).toEqual(expect.arrayContaining([clusterKey, namespaceKey]));
   });
 
   it('computes hashes for cluster identities', async () => {

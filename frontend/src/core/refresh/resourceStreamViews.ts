@@ -24,7 +24,6 @@ const NAMESPACE_VIEW_BY_DOMAIN: Partial<
   'namespace-config': 'config',
   'namespace-network': 'network',
   'namespace-rbac': 'rbac',
-  'namespace-custom': 'custom',
   'namespace-helm': 'helm',
   'namespace-autoscaling': 'autoscaling',
   'namespace-quotas': 'quotas',
@@ -39,7 +38,6 @@ const CLUSTER_VIEW_BY_DOMAIN: Partial<
   'cluster-storage': 'storage',
   'cluster-config': 'config',
   'cluster-crds': 'crds',
-  'cluster-custom': 'custom',
 };
 
 export const isResourceStreamViewActive = (

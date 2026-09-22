@@ -502,31 +502,6 @@ export interface ClusterConfigSnapshotPayload {
   rows: Array<ClusterConfigEntry> | null;
 }
 
-export interface ClusterCustomEntry {
-  certManager?: CertManagerSummary;
-  externalSecrets?: ExternalSecretsSummary;
-  prometheus?: PrometheusSummary;
-  karpenter?: KarpenterSummary;
-  ref: CanonicalResourceRef;
-  crdName?: string;
-  status?: string;
-  statusState?: string;
-  statusPresentation?: string;
-  ready?: boolean;
-  observedGeneration?: number;
-  conditions?: Array<ConditionFacts>;
-  age: string;
-  labels?: Record<string, string>;
-  annotations?: Record<string, string>;
-}
-
-export interface ClusterCustomSnapshotPayload {
-  clusterId: string;
-  clusterName: string;
-  resources: Array<ClusterCustomEntry> | null;
-  kinds?: Array<string>;
-}
-
 export interface ClusterEventEntry {
   ref: CanonicalResourceRef;
   metadata?: ResourceTableMetadata;
@@ -1116,31 +1091,6 @@ export interface NamespaceConfigSummary {
   data: number;
   age: string;
   ageTimestamp?: number;
-}
-
-export interface NamespaceCustomSnapshotPayload {
-  clusterId: string;
-  clusterName: string;
-  resources: Array<NamespaceCustomSummary> | null;
-  kinds?: Array<string>;
-}
-
-export interface NamespaceCustomSummary {
-  certManager?: CertManagerSummary;
-  externalSecrets?: ExternalSecretsSummary;
-  prometheus?: PrometheusSummary;
-  argoCD?: ArgoCDSummary;
-  ref: CanonicalResourceRef;
-  crdName?: string;
-  status?: string;
-  statusState?: string;
-  statusPresentation?: string;
-  ready?: boolean;
-  observedGeneration?: number;
-  conditions?: Array<ConditionFacts>;
-  age: string;
-  labels?: Record<string, string>;
-  annotations?: Record<string, string>;
 }
 
 export interface NamespaceEventSummary {
@@ -2138,14 +2088,12 @@ export const REFRESH_DOMAINS = [
   'nodes',
   'cluster-config',
   'cluster-crds',
-  'cluster-custom',
   'cluster-events',
   'cluster-rbac',
   'cluster-storage',
   'namespace-workloads',
   'namespace-autoscaling',
   'namespace-config',
-  'namespace-custom',
   'namespace-events',
   'namespace-helm',
   'namespace-network',
@@ -2369,22 +2317,6 @@ export const REFRESH_DOMAIN_POLICIES = [
     },
   },
   {
-    domain: 'cluster-custom',
-    category: 'cluster',
-    cachePolicy: 'snapshot-cache',
-    sourceClocks: ['object'],
-    backend: { registration: 'list', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
-    frontend: {
-      refresherName: 'cluster-custom',
-      orchestrator: 'resource-stream',
-      diagnosticsStream: 'resources',
-      timing: { interval: 15000, cooldown: 1000, timeout: 60 },
-      priority: null,
-      registrationOrder: 21,
-      scheduled: true,
-    },
-  },
-  {
     domain: 'cluster-events',
     category: 'cluster',
     cachePolicy: 'snapshot-cache',
@@ -2444,7 +2376,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 5000, cooldown: 500, timeout: 10 },
       priority: 5,
-      registrationOrder: 23,
+      registrationOrder: 22,
       scheduled: true,
     },
   },
@@ -2460,7 +2392,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 5000, cooldown: 1000, timeout: 10 },
       priority: null,
-      registrationOrder: 28,
+      registrationOrder: 27,
       scheduled: true,
     },
   },
@@ -2476,23 +2408,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 5000, cooldown: 1000, timeout: 10 },
       priority: null,
-      registrationOrder: 24,
-      scheduled: true,
-    },
-  },
-  {
-    domain: 'namespace-custom',
-    category: 'namespace',
-    cachePolicy: 'snapshot-cache',
-    sourceClocks: ['object'],
-    backend: { registration: 'list', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
-    frontend: {
-      refresherName: 'custom',
-      orchestrator: 'resource-stream',
-      diagnosticsStream: 'resources',
-      timing: { interval: 10000, cooldown: 1000, timeout: 60 },
-      priority: null,
-      registrationOrder: 30,
+      registrationOrder: 23,
       scheduled: true,
     },
   },
@@ -2508,7 +2424,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'events',
       timing: { interval: 3000, cooldown: 1000, timeout: 10 },
       priority: null,
-      registrationOrder: 22,
+      registrationOrder: 21,
       scheduled: true,
     },
   },
@@ -2524,7 +2440,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 10000, cooldown: 1000, timeout: 10 },
       priority: null,
-      registrationOrder: 31,
+      registrationOrder: 29,
       scheduled: true,
     },
   },
@@ -2540,7 +2456,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 5000, cooldown: 1000, timeout: 10 },
       priority: null,
-      registrationOrder: 25,
+      registrationOrder: 24,
       scheduled: true,
     },
   },
@@ -2556,7 +2472,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 10000, cooldown: 1000, timeout: 10 },
       priority: null,
-      registrationOrder: 29,
+      registrationOrder: 28,
       scheduled: true,
     },
   },
@@ -2572,7 +2488,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 10000, cooldown: 1000, timeout: 10 },
       priority: null,
-      registrationOrder: 26,
+      registrationOrder: 25,
       scheduled: true,
     },
   },
@@ -2588,7 +2504,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 10000, cooldown: 1000, timeout: 10 },
       priority: null,
-      registrationOrder: 27,
+      registrationOrder: 26,
       scheduled: true,
     },
   },
@@ -2971,14 +2887,12 @@ export interface BackendDomainPayloadMap {
   nodes: ClusterNodeSnapshotPayload;
   'cluster-config': ClusterConfigSnapshotPayload;
   'cluster-crds': ClusterCRDSnapshotPayload;
-  'cluster-custom': ClusterCustomSnapshotPayload;
   'cluster-events': ClusterEventsSnapshotPayload;
   'cluster-rbac': ClusterRBACSnapshotPayload;
   'cluster-storage': ClusterStorageSnapshotPayload;
   'namespace-workloads': NamespaceWorkloadSnapshotPayload;
   'namespace-autoscaling': NamespaceAutoscalingSnapshotPayload;
   'namespace-config': NamespaceConfigSnapshotPayload;
-  'namespace-custom': NamespaceCustomSnapshotPayload;
   'namespace-events': NamespaceEventsSnapshotPayload;
   'namespace-helm': NamespaceHelmSnapshotPayload;
   'namespace-network': NamespaceNetworkSnapshotPayload;

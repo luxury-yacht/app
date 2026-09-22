@@ -613,9 +613,6 @@ const resolveDomainCount = (
   if (domain === 'object-maintenance') {
     return arrayLength(data.drains);
   }
-  if (domain === 'cluster-custom' || domain === 'namespace-custom') {
-    return arrayLength(data.resources);
-  }
   if (domain === 'catalog') {
     return arrayLength(data.items);
   }
@@ -1265,7 +1262,6 @@ const DOMAIN_DIAGNOSTIC_SCOPES: Array<{
   { domain: 'nodes', label: 'Nodes', hasMetrics: true },
   { domain: 'cluster-config', label: 'Cluster Config' },
   { domain: 'cluster-crds', label: 'Cluster CRDs' },
-  { domain: 'cluster-custom', label: 'Cluster Custom' },
   { domain: 'cluster-events', label: 'Cluster Events' },
   { domain: 'object-maintenance', label: 'ObjPanel - Maintenance' },
   { domain: 'catalog', label: 'Browse Catalog' },
@@ -1275,7 +1271,6 @@ const DOMAIN_DIAGNOSTIC_SCOPES: Array<{
   { domain: 'namespace-workloads', label: 'Workloads', hasMetrics: true },
   { domain: 'namespace-autoscaling', label: 'NS Autoscaling' },
   { domain: 'namespace-config', label: 'NS Config' },
-  { domain: 'namespace-custom', label: 'NS Custom' },
   { domain: 'namespace-events', label: 'NS Events' },
   { domain: 'namespace-helm', label: 'NS Helm' },
   { domain: 'namespace-network', label: 'NS Network' },

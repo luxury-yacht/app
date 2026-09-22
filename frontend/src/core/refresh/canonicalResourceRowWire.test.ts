@@ -37,8 +37,8 @@ const valueAtPath = (value: unknown, path: string): unknown =>
 
 describe('canonical resource row wire fixtures', () => {
   it('covers every inventoried producer family with a unique entry', () => {
-    expect(fixture.entries).toHaveLength(24);
-    expect(new Set(fixture.entries.map(({ family }) => family)).size).toBe(24);
+    expect(fixture.entries).toHaveLength(22);
+    expect(new Set(fixture.entries.map(({ family }) => family)).size).toBe(22);
   });
 
   it.each(fixture.entries)('$family survives its production frontend parse boundary', (entry) => {

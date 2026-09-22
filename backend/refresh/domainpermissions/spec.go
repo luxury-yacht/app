@@ -362,12 +362,6 @@ var policySpecs = []policySpec{
 		},
 	},
 	{
-		Domain:  "namespace-custom",
-		Mode:    ModeAll,
-		Runtime: []Resource{fromIdentity(apiextensionspkg.Identity)},
-		Stream:  []Resource{fromIdentity(apiextensionspkg.Identity)},
-	},
-	{
 		Domain:  "namespace-helm",
 		Mode:    ModeAll,
 		Runtime: []Resource{fromIdentity(secretpkg.Identity)},
@@ -463,12 +457,6 @@ var policySpecs = []policySpec{
 	},
 	{
 		Domain:  "cluster-crds",
-		Mode:    ModeAll,
-		Runtime: []Resource{fromIdentity(apiextensionspkg.Identity)},
-		Stream:  []Resource{fromIdentity(apiextensionspkg.Identity)},
-	},
-	{
-		Domain:  "cluster-custom",
 		Mode:    ModeAll,
 		Runtime: []Resource{fromIdentity(apiextensionspkg.Identity)},
 		Stream:  []Resource{fromIdentity(apiextensionspkg.Identity)},

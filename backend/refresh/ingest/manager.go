@@ -8,10 +8,9 @@
  * it loops kindregistry.StreamDescriptors(), and the only per-group code is the
  * finite group/version -> RESTClient mapping every typed informer needs anyway.
  *
- * Beyond the descriptor reflectors it also hosts the on-demand dynamic (CRD-backed)
- * reflectors the catalog promotes at runtime (RegisterDynamicCatalogReflector), which use
- * the dynamic client and are excluded from the readiness gate — so the one ingest path
- * serves both built-in cut kinds and dynamically-discovered custom resources.
+ * Runtime-discovered sources use the same projected stores and permission-filtered
+ * partitions. CRD reconciliation and threshold admission for other dynamic APIs
+ * supply their source specifications; these sources do not gate global readiness.
  */
 
 package ingest
@@ -39,7 +38,6 @@ import (
 
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	unstructuredv1 "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -51,7 +49,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 
-	"github.com/luxury-yacht/app/backend/internal/lifecycle"
 	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 	gatewayscheme "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/scheme"
 )
@@ -122,11 +119,8 @@ type entry struct {
 	// sync so the catalog can serve-when-synced-else-LIST.
 	onDemand atomic.Bool
 
-	// cancel stops just this entry's reflectors. It is set only for on-demand reflectors,
-	// which launch on a context derived from the manager's run context so StopReflectorFor
-	// can tear one down without stopping the rest. Descriptor reflectors run directly on
-	// the run context and leave this nil.
-	cancel context.CancelFunc
+	// dynamic is present only for sources admitted after startup.
+	dynamic *dynamicSource
 }
 
 type ingestLaunchEntry struct {
@@ -179,16 +173,22 @@ type IngestManager struct {
 	kube    kubernetes.Interface
 	apiext  apiextensionsclientset.Interface
 	gateway gatewayversioned.Interface
-	// dynamic serves the on-demand dynamic (CRD-backed) reflectors the catalog promotes at
-	// runtime (RegisterDynamicCatalogReflector). It is optional (SetDynamicClient) because
-	// only that path needs it — the descriptor reflectors use the typed group clients
-	// (restClientFor). nil leaves the on-demand path disabled.
+	// dynamic serves runtime-discovered resources. Registry sources use their typed
+	// group clients; a nil dynamic client disables admission of discovered sources.
 	dynamic dynamic.Interface
 
-	entries map[schema.GroupVersionResource]*entry
+	entries                map[schema.GroupVersionResource]*entry
+	dynamicAdmissions      map[schema.GroupResource]*dynamicAdmission
+	dynamicGeneration      uint64
+	dynamicListeners       map[uint64]*dynamicSubscription
+	nextDynamicListener    uint64
+	dynamicCatalogSink     Sink
+	definitions            *dynamicDefinitions
+	definitionRegistration cache.ResourceEventHandlerRegistration
 
-	mu     sync.Mutex
-	cancel context.CancelFunc
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	stopped bool
 	// runDone is the cancellation signal for the running reflectors, retained so a
 	// reflector registered AFTER Start (an on-demand dynamic reflector) can launch on the
 	// same lifetime — Stop or cancelling Start's ctx winds it down with the rest. nil
@@ -344,77 +344,30 @@ func (m *IngestManager) RegisterReflector(gvr schema.GroupVersionResource, gvk s
 	return true
 }
 
-// RegisterDynamicCatalogReflector starts an on-demand reflector for a dynamic
-// (CRD-backed) kind: it LIST+WATCHes the kind's custom resources through the dynamic
-// client and projects each (decoded as *unstructured.Unstructured) to its object-catalog
-// row via project, wrapped as the Bundle's Catalog half so CatalogRows serves it. It is
-// the consolidation of the catalog's former on-demand promotion informer into the one
-// ingest path: the catalog calls it when a CR kind crosses its promotion threshold.
-// Unlike the descriptor reflectors it launches immediately on the manager's run context
-// (it is registered after Start) and is EXCLUDED from the whole-manager readiness gate
-// (see entry.onDemand). It returns false when no dynamic client is set, the manager is not
-// started, or an entry for gvr already exists.
+// RegisterDynamicCatalogReflector admits a discovered source whose CRD definition
+// is unavailable, including non-CRD APIs. Catalog retains threshold selection for
+// these sources; ingest owns their permissions, workers and generation lifetime.
 func (m *IngestManager) RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project CatalogProjector, namespaced bool) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.dynamic == nil || m.runDone == nil {
-		return false
-	}
-	if _, exists := m.entries[gvr]; exists {
-		return false
-	}
-	e := &entry{gvr: gvr, store: newIngestProjectingStore(catalogProjectionFor(project))}
-	e.onDemand.Store(true)
-	example := &unstructuredv1.Unstructured{}
-	example.SetGroupVersionKind(gvk)
-	// A CRD-backed kind is not in the built-in registry, so its scope
-	// fan-out is decided by the caller-supplied namespaced flag.
-	namespaces := []string{""}
-	if namespaced && len(m.scope) > 0 {
-		namespaces = append([]string(nil), m.scope...)
-	}
-	for _, namespace := range namespaces {
-		e.addPartition(gvk, namespace, dynamicListWatch(m.dynamic, gvr, namespace), example)
-	}
-	e.store.SetExpectedPartitions(namespaces)
-	m.entries[gvr] = e
-	ctx, cancel := context.WithCancel(lifecycle.Context(m.runDone))
-	e.cancel = cancel
-	for _, part := range e.parts {
-		go part.reflector.Run(ctx.Done())
-	}
-	return true
+	return m.ReconcileDynamicCatalogSource(DynamicCatalogSpec{GVR: gvr, GVK: gvk, Namespaced: namespaced}, project)
 }
 
 // addPartition gives typed and dynamic reflectors the same partition-local store view.
-func (e *entry) addPartition(gvk schema.GroupVersionKind, namespace string, lw cache.ListerWatcher, example apiruntime.Object) {
+func (e *entry) addPartition(gvk schema.GroupVersionKind, namespace string, lw cache.ListerWatcher, example apiruntime.Object, afterChange ...func(interface{}, bool)) {
 	name := gvk.String()
 	if namespace != "" {
 		name += " ns=" + namespace
 	}
 	view := e.store.PartitionView(namespace)
+	var target cache.Store = view
+	if len(afterChange) > 0 {
+		target = dynamicStore{Store: view, changed: afterChange[0]}
+	}
 	e.parts = append(e.parts, &ingestPart{
 		namespace: namespace,
 		lw:        lw,
-		reflector: cache.NewNamedReflector(name, lw, example, view, resyncDisabled),
+		reflector: cache.NewNamedReflector(name, lw, example, target, resyncDisabled),
 		view:      view,
 	})
-}
-
-// StopReflectorFor stops and evicts the reflector for gvr — the teardown half of the
-// on-demand dynamic path (the catalog drops a promoted CR kind on shutdown). It cancels
-// only that entry's reflector (on-demand entries carry their own cancel) and removes it,
-// so the manager no longer serves or reports the gvr. It is a no-op when no entry exists.
-func (m *IngestManager) StopReflectorFor(gvr schema.GroupVersionResource) {
-	m.mu.Lock()
-	e, ok := m.entries[gvr]
-	if ok {
-		delete(m.entries, gvr)
-	}
-	m.mu.Unlock()
-	if ok && e.cancel != nil {
-		e.cancel()
-	}
 }
 
 // dynamicListWatch builds a ListerWatcher over the dynamic client for gvr in
@@ -575,7 +528,7 @@ func (m *IngestManager) SetPermissionFilter(fn func(group, resource, namespace s
 	m.mu.Unlock()
 }
 
-// SetDynamicClient installs the dynamic client used for on-demand dynamic (CRD-backed)
+// SetDynamicClient installs the dynamic client used for runtime-discovered
 // reflectors (RegisterDynamicCatalogReflector). It must be set before the first such
 // registration. A nil client (the default) leaves the on-demand path disabled, so
 // RegisterDynamicCatalogReflector returns false and the catalog keeps listing the kind.
@@ -600,6 +553,8 @@ func (m *IngestManager) Start(ctx context.Context) {
 		launchIngestEntry(runCtx, launch, filter)
 	}
 
+	m.startDynamicDefinitions()
+
 	// One log line when the initial syncs settle, naming the slowest kinds — the
 	// per-kind cold-start telemetry (see InitialSyncDurations).
 	go m.logInitialSyncSummary(runCtx)
@@ -608,7 +563,7 @@ func (m *IngestManager) Start(ctx context.Context) {
 func (m *IngestManager) beginRun(ctx context.Context) (context.Context, []ingestLaunchEntry, func(string, string, string) bool, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.cancel != nil {
+	if m.cancel != nil || m.stopped {
 		return nil, nil, nil, false
 	}
 	runCtx, cancel := context.WithCancel(ctx)
@@ -635,16 +590,20 @@ func launchIngestEntry(runCtx context.Context, launch ingestLaunchEntry, filter 
 	// Expected partitions must be declared BEFORE any reflector of the entry
 	// runs, so the store's sync gate counts exactly the launched set.
 	launch.e.store.SetExpectedPartitions(launched)
-	for _, part := range launch.e.parts {
+	launchIngestPartitions(runCtx, launch.e)
+}
+
+func launchIngestPartitions(runCtx context.Context, e *entry) {
+	for _, part := range e.parts {
 		if part.skipped.Load() {
 			continue
 		}
-		part := part
-		// Resume from a persisted resourceVersion when one was set (the store was
-		// restored full from disk); otherwise — the default — this is exactly
-		// part.reflector.Run.
-		go runWithResume(runCtx, part.lw, part.view, part.resumeRV, func() { part.reflector.Run(runCtx.Done()) })
+		go runIngestPartition(runCtx, part)
 	}
+}
+
+func runIngestPartition(ctx context.Context, part *ingestPart) {
+	runWithResume(ctx, part.lw, part.view, part.resumeRV, func() { part.reflector.Run(ctx.Done()) })
 }
 
 func permittedIngestPartitions(launch ingestLaunchEntry, filter func(string, string, string) bool) []string {
@@ -810,11 +769,37 @@ func (m *IngestManager) Stop() {
 	m.mu.Lock()
 	cancel := m.cancel
 	m.cancel = nil
+	m.stopped = true
 	m.runDone = nil
+	m.dynamicAdmissions = nil
+	m.dynamicListeners = nil
+	definitions, registration := m.definitions, m.definitionRegistration
+	m.definitionRegistration = nil
+	dynamicEntries := make([]*entry, 0)
+	for _, e := range m.entries {
+		if e.dynamic != nil {
+			e.dynamic.retired.Store(true)
+			dynamicEntries = append(dynamicEntries, e)
+		}
+	}
 	m.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
+	if definitions != nil && registration != nil {
+		_ = definitions.informer.RemoveEventHandler(registration)
+	}
+	for _, e := range dynamicEntries {
+		e.dynamic.cancel()
+		<-e.dynamic.done
+	}
+	m.mu.Lock()
+	for _, e := range dynamicEntries {
+		if m.entries[e.gvr] == e {
+			delete(m.entries, e.gvr)
+		}
+	}
+	m.mu.Unlock()
 }
 
 // HasSynced reports whether every kind's store has SETTLED — synced or degraded past

@@ -202,9 +202,6 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 			return a.waitForCatalogInformerCaches(waitCtx, subsystem.InformerFactory)
 		},
 	}
-	if subsystem.ResourceStream != nil {
-		deps.CustomResourceSource = subsystem.ResourceStream
-	}
 
 	svc := objectcatalog.NewService(deps, nil)
 	ctx, cancel := context.WithCancel(a.CtxOrBackground())

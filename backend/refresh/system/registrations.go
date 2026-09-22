@@ -4,7 +4,6 @@ package system
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -47,7 +46,6 @@ type domainRegistration struct {
 	preflightListWatch []listWatchCheck       // Preflight checks for list-watch operations
 	direct             func() error           // Direct registration function
 	skipIf             func() bool            // Function to determine if registration should be skipped
-	require            func() error           // Function to determine if registration is required
 	// skipRuntimePolicy exempts the registration from the domain runtime
 	// permission policy. Set ONLY when the domain's data source needs no
 	// cluster permission for this configuration (the scoped namespaces
@@ -84,11 +82,6 @@ type domainRegistrationRunner struct {
 func (r domainRegistrationRunner) run(ctx context.Context, registration domainRegistration) error {
 	if registration.skipIf != nil && registration.skipIf() {
 		return nil
-	}
-	if registration.require != nil {
-		if err := registration.require(); err != nil {
-			return err
-		}
 	}
 	denied, err := r.registerPermissionDenied(ctx, registration)
 	if err != nil || denied {
@@ -407,18 +400,6 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			},
 		}),
 
-		"cluster-custom": accessListRegistration(runtimeAccess, listDomainConfig{
-			name: "cluster-custom",
-			register: func(_ domainpermissions.AllowedResources) error {
-				return snapshot.RegisterClusterCustomDomain(
-					deps.registry,
-					deps.informerFactory.APIExtensionsInformerFactory(),
-					deps.cfg.DynamicClient,
-					deps.cfg.Logger,
-				)
-			},
-		}),
-
 		"cluster-events": directRegistration("cluster-events", func() error {
 			return snapshot.RegisterClusterEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), clusterMeta)
 		}),
@@ -494,21 +475,6 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				)
 			},
 		}),
-
-		"namespace-custom": withRequire(accessListRegistration(runtimeAccess, listDomainConfig{
-			name: "namespace-custom",
-			register: func(_ domainpermissions.AllowedResources) error {
-				return snapshot.RegisterNamespaceCustomDomain(
-					deps.registry,
-					deps.informerFactory.APIExtensionsInformerFactory(),
-					deps.cfg.DynamicClient,
-					deps.cfg.Logger,
-					deps.cfg.AllowedNamespaces,
-				)
-			},
-		}), requireAvailable("dynamic client must be provided for namespace custom resources", func() bool {
-			return deps.cfg.DynamicClient != nil
-		})),
 
 		"namespace-events": directRegistration("namespace-events", func() error {
 			return snapshot.RegisterNamespaceEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), clusterMeta)
@@ -839,18 +805,4 @@ func listWatchRegistration(cfg listWatchDomainConfig) domainRegistration {
 func withSkipUnless(registration domainRegistration, available func() bool) domainRegistration {
 	registration.skipIf = func() bool { return !available() }
 	return registration
-}
-
-func withRequire(registration domainRegistration, require func() error) domainRegistration {
-	registration.require = require
-	return registration
-}
-
-func requireAvailable(message string, available func() bool) func() error {
-	return func() error {
-		if !available() {
-			return errors.New(message)
-		}
-		return nil
-	}
 }

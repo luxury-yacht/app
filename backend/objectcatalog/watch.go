@@ -15,7 +15,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/kindspec"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -36,7 +36,6 @@ type watchEvent struct {
 	gvr       string
 	key       string
 	obj       metav1.Object
-	ref       *resourcemodel.ResourceRef
 }
 
 // watchInformerGroupResources is the set of built-in resources the catalog watches
@@ -48,14 +47,13 @@ var watchInformerGroupResources = catalogGroupResources(kindspec.CatalogShared)
 type watchNotifier struct {
 	service            *Service
 	pending            chan watchEvent
-	customMu           sync.Mutex
-	customPending      map[resourcemodel.ResourceRef]struct{}
-	customChanged      chan struct{}
+	resyncRequested    chan struct{}
 	recoveryMu         sync.Mutex
 	fullSyncRequested  bool
 	coalescedDropCount int
 	lastOverflowWarn   time.Time
 	registrations      []catalogWatchRegistration
+	detachIngest       func()
 }
 
 type catalogWatchRegistration struct {
@@ -71,6 +69,10 @@ func (n *watchNotifier) addHandler(informer cache.SharedIndexInformer, handler c
 }
 
 func (n *watchNotifier) removeHandlers() {
+	if n.detachIngest != nil {
+		n.detachIngest()
+		n.detachIngest = nil
+	}
 	for _, registration := range n.registrations {
 		_ = registration.informer.RemoveEventHandler(registration.handler)
 	}
@@ -85,9 +87,9 @@ type watchBatch struct {
 
 func newWatchNotifier(svc *Service) *watchNotifier {
 	return &watchNotifier{
-		service:       svc,
-		pending:       make(chan watchEvent, config.ObjectCatalogWatchPendingBufferSize),
-		customChanged: make(chan struct{}, 1),
+		service:         svc,
+		pending:         make(chan watchEvent, config.ObjectCatalogWatchPendingBufferSize),
+		resyncRequested: make(chan struct{}, 1),
 	}
 }
 
@@ -110,7 +112,6 @@ func (n *watchNotifier) flush(events []watchEvent) {
 		return
 	}
 
-	events = n.resolveCustomResourceEvents(events)
 	s.mu.Lock()
 	changes := make([]catalogChange, 0, len(events))
 	for _, evt := range events {
@@ -156,7 +157,7 @@ func (n *watchNotifier) run(ctx context.Context) {
 		case <-ctx.Done():
 			n.finishWatchBatch(ctx, &batch, false)
 			return
-		case <-n.customChanged:
+		case <-n.resyncRequested:
 			batch.startTimer()
 		case evt, ok := <-n.pending:
 			if !ok {
@@ -186,7 +187,7 @@ func (b *watchBatch) startTimer() {
 }
 
 func (n *watchNotifier) finishWatchBatch(ctx context.Context, batch *watchBatch, runRecovery bool) {
-	events := append(batch.events, n.takeCustomResourceEvents()...)
+	events := batch.events
 	if len(events) > 0 {
 		n.flush(events)
 	}
@@ -231,6 +232,10 @@ func (n *watchNotifier) requestFullSync(coalescedDrops int, warn bool) {
 		}
 	}
 	n.recoveryMu.Unlock()
+	select {
+	case n.resyncRequested <- struct{}{}:
+	default:
+	}
 
 	if warnMsg != "" {
 		n.service.logWarn(warnMsg)
@@ -316,7 +321,7 @@ func registerWatchHandlers(
 	notifier *watchNotifier,
 	svc *Service,
 ) {
-	svc.registerIngestCatalogSinks()
+	notifier.detachIngest = svc.registerIngestCatalogSinks()
 	registerGatewayWatchHandlers(notifier, svc)
 	if factory == nil {
 		return
@@ -339,7 +344,7 @@ func registerWatchHandlers(
 		// Wrap the CRD handler so a CRD add/delete also marks discovery stale: the next
 		// discover invalidates the disk-cached discovery document, so a newly-created CRD's
 		// kind is discovered promptly rather than waiting out the cache TTL.
-		notifier.addHandler(crdInformer, svc.crdWatchHandler(makeHandler(gr, notifier, svc)))
+		notifier.addHandler(crdInformer, notifier.crdWatchHandler(makeHandler(gr, notifier, svc)))
 	}
 }
 
@@ -372,22 +377,24 @@ func (s *Service) markDiscoveryStale() {
 // crdWatchHandler wraps the CRD informer's catalog handler so a CRD add/update/delete marks
 // discovery stale (forcing a cache invalidation on the next discover) before delegating to
 // the base handler — keeping newly-created CRDs from being hidden by a cached discovery doc.
-func (s *Service) crdWatchHandler(base cache.ResourceEventHandlerFuncs) cache.ResourceEventHandlerFuncs {
+func (n *watchNotifier) crdWatchHandler(base cache.ResourceEventHandlerFuncs) cache.ResourceEventHandlerFuncs {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			s.markDiscoveryStale()
+			n.crdDiscoveryChanged(obj, true)
 			if base.AddFunc != nil {
 				base.AddFunc(obj)
 			}
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			s.markDiscoveryStale()
+			if !sameObjectResourceVersion(oldObj, newObj) {
+				n.crdDiscoveryChanged(newObj, false)
+			}
 			if base.UpdateFunc != nil {
 				base.UpdateFunc(oldObj, newObj)
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
-			s.markDiscoveryStale()
+			n.crdDiscoveryChanged(obj, false)
 			if base.DeleteFunc != nil {
 				base.DeleteFunc(obj)
 			}
@@ -395,20 +402,33 @@ func (s *Service) crdWatchHandler(base cache.ResourceEventHandlerFuncs) cache.Re
 	}
 }
 
+func (n *watchNotifier) crdDiscoveryChanged(obj interface{}, added bool) {
+	n.service.markDiscoveryStale()
+	if crd, ok := obj.(*apiextensionsv1.CustomResourceDefinition); added && ok {
+		// An initial handler replay does not need another full catalog collection.
+		gr := schema.GroupResource{Group: crd.Spec.Group, Resource: crd.Spec.Names.Plural}
+		if _, desc := n.service.resolveGRToDescriptor(gr); desc != nil {
+			return
+		}
+	}
+	n.requestFullSync(0, false)
+}
+
 // registerIngestCatalogSinks registers a Catalog-half sink with the ingest manager
 // for every ingest-owned (cut) kind, so the live catalog index stays current between
 // full collects without reading the shared informer. It is a no-op when no ingest
 // source is configured (the uncut configuration).
-func (s *Service) registerIngestCatalogSinks() {
+func (s *Service) registerIngestCatalogSinks() func() {
 	source := s.deps.IngestSource
 	if source == nil {
-		return
+		return func() {}
 	}
 	// Registering a sink replays the source under its store lock. Defer publication
 	// until every kind is registered, then replace the query baseline once.
 	s.suspendPublication.Store(true)
+	detach := make([]func(), 0, len(catalogIngestOwnedGVRs))
 	for gvr := range catalogIngestOwnedGVRs {
-		source.AddCatalogSink(gvr, ingestCatalogSink{service: s, gvr: gvr})
+		detach = append(detach, source.SubscribeCatalogSink(gvr, ingestCatalogSink{service: s, gvr: gvr}))
 	}
 	s.syncMu.Lock()
 	defer s.syncMu.Unlock()
@@ -419,6 +439,11 @@ func (s *Service) registerIngestCatalogSinks() {
 	s.suspendPublication.Store(false)
 	s.mu.Unlock()
 	s.broadcastStreaming(true)
+	return func() {
+		for _, unsubscribe := range detach {
+			unsubscribe()
+		}
+	}
 }
 
 func (s *Service) resolveGRToDescriptor(gr schema.GroupResource) (string, *Descriptor) {

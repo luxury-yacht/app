@@ -13,18 +13,6 @@ func (m *Manager) canListWatch(group, resource string) bool {
 	return m.permissions == nil || m.permissions.CanListWatch(group, resource)
 }
 
-func (m *Manager) canListWatchInNamespace(group, resource, namespace string) bool {
-	if m.permissions == nil {
-		return true
-	}
-	if scoped, ok := m.permissions.(interface {
-		CanListWatchInNamespace(group, resource, namespace string) bool
-	}); ok {
-		return scoped.CanListWatchInNamespace(group, resource, namespace)
-	}
-	return m.permissions.CanListWatch(group, resource)
-}
-
 func (m *Manager) addResourceEventHandler(informer cache.SharedIndexInformer, handler streamResourceHandler) {
 	if m == nil || informer == nil || handler == nil {
 		return

@@ -15,7 +15,7 @@ func TestEventSignalObserverBroadcastsEventDoorbells(t *testing.T) {
 		nil,
 		nil,
 		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		nil,
+
 		nil,
 	)
 	namespaceSelector, err := resourcestream.ParseStreamSelector("c1", "namespace-events", "namespace:prod")

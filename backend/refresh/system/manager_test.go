@@ -59,30 +59,6 @@ func TestRegisterWorkloadReflectorsRejectsMissingRequiredStore(t *testing.T) {
 	require.ErrorContains(t, err, "Job")
 }
 
-func TestNewSubsystemRequiresDynamicClient(t *testing.T) {
-	cfg := Config{
-		KubernetesClient:    kubernetesfake.NewClientset(),
-		RestConfig:          &rest.Config{},
-		ResyncInterval:      time.Millisecond,
-		MetricsInterval:     time.Millisecond,
-		APIExtensionsClient: apiextensionsfake.NewClientset(),
-		ObjectDetailsProvider: noopObjectDetailProvider{
-			err: snapshot.ErrObjectDetailNotImplemented,
-		},
-		Logger:               applog.Noop,
-		NodeMaintenanceStore: nodemaintenance.NewStore(5),
-	}
-
-	manager, handler, recorder, _, cache, _, err := NewSubsystem(cfg)
-
-	require.Error(t, err)
-	require.Nil(t, manager)
-	require.Nil(t, handler)
-	require.NotNil(t, recorder)
-	require.Nil(t, cache)
-	require.Contains(t, err.Error(), "dynamic client")
-}
-
 func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T) {
 	client := kubernetesfake.NewClientset()
 	client.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {

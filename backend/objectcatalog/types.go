@@ -20,7 +20,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	informers "k8s.io/client-go/informers"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
@@ -142,7 +141,6 @@ type Dependencies struct {
 	GatewayInformerFactory       gatewayinformers.SharedInformerFactory // Gateway API informer factory
 	PermissionChecker            permissions.ListWatchChecker           // optional; if nil, assumes all permissions granted
 	IngestSource                 IngestSource                           // optional; supplies catalog rows for ingest-owned kinds
-	CustomResourceSource         CustomResourceSource                   // optional; reuses the cluster's existing custom-resource watches
 	ClusterID                    string                                 // stable identifier for the source cluster
 	// WaitForCaches blocks until the informer caches the collect reads from are
 	// synced. sync() calls it between the RBAC preflight and the collect fan-out, so
@@ -157,37 +155,19 @@ type Dependencies struct {
 	AllowedNamespaces []string
 }
 
-// CustomResourceSource owns permission-gated custom-resource watches for one
-// cluster. Notifications carry full identity; reads return current informer state
-// so a delayed event cannot overwrite a newer list or a recreated object.
-type CustomResourceSource interface {
-	SubscribeCustomResourceChanges(func(resourcemodel.ResourceRef)) func()
-	// A nil object with ready=true is an authoritative deletion. ready=false
-	// means the watch does not cover this identity or has not finished its list.
-	WatchedCustomResource(resourcemodel.ResourceRef) (metav1.Object, bool)
-}
-
-// IngestSource supplies the object-catalog Summaries for ingest-owned (cut) kinds,
-// whose objects are no longer cached by the shared informer factory. The catalog
-// reads cut kinds' rows from CatalogRows on a full collect, and stays current
-// between collects via the Catalog-half sink registered through AddCatalogSink.
-// *ingest.IngestManager satisfies it. Reads return Summaries the catalog's own
-// projector built at intake (see SummaryProjector), so they are byte-equivalent to
-// the shared-informer collect path.
+// IngestSource supplies catalog projections from generation-owned sources.
+// Catalog subscriptions detach without retiring the underlying watches.
 type IngestSource interface {
+	ReconcileDiscoveredResource(schema.GroupVersionResource) bool
+	ReadDynamicCatalogSource(schema.GroupResource) (ingest.DynamicCatalogSnapshot, bool)
+	SubscribeDynamicCatalogChanges(func(ingest.DynamicCatalogChange)) func()
+	IsDynamicCatalogGeneration(schema.GroupResource, uint64) bool
 	CatalogRows(gvr schema.GroupVersionResource) []interface{}
-	AddCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) bool
-	// RegisterDynamicCatalogReflector starts an on-demand reflector for a dynamic
-	// (CRD-backed) kind, projecting each object to its catalog Summary via project. The
-	// catalog calls it when a CR kind crosses its promotion threshold (maybePromote),
-	// consolidating the former catalog-owned dynamic informer onto the ingest path.
+	SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func()
+	// Threshold admission applies only when discovery has no visible CRD definition.
 	RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project ingest.CatalogProjector, namespaced bool) bool
-	// StopReflectorFor stops and evicts the on-demand reflector for gvr, the teardown half
-	// of the dynamic path (stopDynamicReflectors).
-	StopReflectorFor(gvr schema.GroupVersionResource)
-	// HasSyncedFor reports whether gvr's store has synced, so the catalog serves a promoted
-	// dynamic kind from CatalogRows only once its reflector's initial relist has landed
-	// (else it keeps listing — no empty flash).
+	// HasSyncedFor supplies the static-source readiness gate. Dynamic collection
+	// reads actual per-namespace readiness from ReadDynamicCatalogSource instead.
 	HasSyncedFor(gvr schema.GroupVersionResource) bool
 	// Tracks reports whether the ingest source owns a store for gvr. Static cut kinds
 	// with a tracked store participate in the catalog's pre-collection readiness gate;

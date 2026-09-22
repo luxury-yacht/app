@@ -342,7 +342,7 @@ func TestCatalogDoorbellBridgeBroadcastsCatalogSource(t *testing.T) {
 		nil,
 		nil,
 		snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"},
-		nil,
+
 		nil,
 	)
 	selector, err := resourcestream.ParseStreamSelector("cluster-a", "catalog", "")

@@ -23,6 +23,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/resourcekind"
 )
 
 // registerIngestProjectors wires the Catalog and ObjectMap projectors for every
@@ -157,4 +158,19 @@ func registerNetworkReflectors(mgr *ingest.IngestManager, meta snapshot.ClusterM
 	}
 	mgr.RegisterReflector(snapshot.ServiceGVR, snapshot.ServiceGVK, snapshot.NewServiceIngestProjector(meta), false)
 	mgr.RegisterReflector(snapshot.EndpointSliceGVR, snapshot.EndpointSliceGVK, snapshot.NewEndpointSliceIngestProjector(meta), false)
+}
+
+// Use the already permission-gated CRD informer as lifecycle input. Dynamic
+// rows use the same metadata projection as catalog LIST, without retaining it.
+func registerCustomResourceIngest(mgr *ingest.IngestManager, factory *informer.Factory, clusterID string) {
+	if !factory.CanListWatch("apiextensions.k8s.io", "customresourcedefinitions") {
+		return
+	}
+	extensions := factory.APIExtensionsInformerFactory()
+	if extensions == nil {
+		return
+	}
+	mgr.SetCustomResourceDefinitions(extensions.Apiextensions().V1().CustomResourceDefinitions().Informer(), func(spec ingest.DynamicCatalogSpec) ingest.CatalogProjector {
+		return objectcatalog.SummaryProjector(clusterID, resourcekind.Identity{Group: spec.GVR.Group, Version: spec.GVR.Version, Resource: spec.GVR.Resource, Kind: spec.GVK.Kind, Namespaced: spec.Namespaced})
+	})
 }
