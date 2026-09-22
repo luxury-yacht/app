@@ -261,7 +261,9 @@ func (m *IngestManager) SubscribeDynamicCatalogChanges(listener func(DynamicCata
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if listener == nil || m.stopped {
-		return func() {}
+		return func() {
+			// No listener was registered, so there is nothing to unsubscribe.
+		}
 	}
 	if m.dynamicListeners == nil {
 		m.dynamicListeners = make(map[uint64]*dynamicSubscription)

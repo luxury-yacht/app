@@ -14,7 +14,9 @@ func (s *catalogReplacingSubscription) Replace(rows []interface{}) { s.Sink.(Rep
 // any in-flight store delivery. Detaching a catalog leaves the generation alive.
 func (s *ProjectingStore) SubscribeCatalogSink(sink Sink) func() {
 	if sink == nil {
-		return func() {}
+		return func() {
+			// A nil sink is never registered, so there is nothing to detach.
+		}
 	}
 	subscription := &catalogSubscription{Sink: sink}
 	var observer Sink = subscription
@@ -32,7 +34,9 @@ func (s *ProjectingStore) SubscribeCatalogSink(sink Sink) func() {
 func (m *IngestManager) SubscribeCatalogSink(gvr schema.GroupVersionResource, sink Sink) func() {
 	store := m.StoreFor(gvr)
 	if store == nil {
-		return func() {}
+		return func() {
+			// No store backs this resource, so no sink was registered to detach.
+		}
 	}
 	return store.SubscribeCatalogSink(sink)
 }

@@ -461,7 +461,9 @@ func (n *watchNotifier) crdDiscoveryChanged(obj interface{}, added bool) {
 func (s *Service) registerIngestCatalogSinks() func() {
 	source := s.deps.IngestSource
 	if source == nil {
-		return func() {}
+		return func() {
+			// No ingest source means no sinks were registered, so there is nothing to detach.
+		}
 	}
 	// Registering a sink replays the source under its store lock. Defer publication
 	// until every kind is registered, then replace the query baseline once.
