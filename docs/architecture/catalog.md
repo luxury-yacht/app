@@ -204,6 +204,14 @@ handler registration, cancellation and publication-before-signal through the
 real owners. Table consumption must meet the shared
 [freshness evidence requirements](data-freshness.md#required-evidence-for-resource-source-changes).
 
+Restricted-identity startup requires a separate check.
+`waitForCatalogInformerCaches` in `backend/refresh_object_catalog.go` waits for
+raw shared-informer cache sync; a ready dynamic source alone does not establish
+catalog readiness. A real-cluster probe stalled when ReplicaSet, HPA and Event
+watches were denied, and proceeded after those baseline permissions were granted.
+That startup limitation remains unresolved. Include those denials when validating
+restricted identities; passing custom-resource permission tests is insufficient.
+
 ## Discovered resource families
 
 The catalog owns optional resource-family availability. `DiscoveredResourceFamilies`
