@@ -72,7 +72,7 @@ export function WorkspacePanelLifecycle() {
         await admitted;
         closed = await closeClusterView(windowName, clusterId);
         // Keep the cluster guarded until its frontend selection has settled.
-        return closed ? { release } : null;
+        return closed ? { committedClusterId: clusterId, release } : null;
       } finally {
         if (!closed) {
           release();

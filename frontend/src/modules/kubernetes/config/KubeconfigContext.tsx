@@ -43,6 +43,8 @@ import {
 export type KubeconfigDiscoveryState = 'available' | 'search_paths_missing' | 'no_kubeconfigs';
 
 export interface ClusterClosePreparation {
+  /** The cluster committed by native close, or null for a guard-only participant. */
+  committedClusterId: string | null;
   release: () => void;
 }
 export type ClusterClosePreflight = (
@@ -69,7 +71,10 @@ async function prepareClusterClose(
       }
       preparations.push(preparation);
     }
-    return { release };
+    if (!preparations.some((preparation) => preparation.committedClusterId === clusterId)) {
+      throw new Error(`Native cluster close was not committed for ${clusterId}`);
+    }
+    return { committedClusterId: clusterId, release };
   } catch (error) {
     release();
     throw error;

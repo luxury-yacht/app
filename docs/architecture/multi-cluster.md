@@ -127,7 +127,9 @@ unmount their controls; native removal waits for the prior tab admission.
 Each close captures its registered preflight participants before awaiting them.
 Foreground changes may replace those registrations, but cannot add a second native
 close to the transaction already in progress. Native close is the sole membership
-mutation for that close. After acceptance, the renderer adopts the confirmed
+mutation for that close. The provider requires a participant to report a native
+commit for the requested cluster; missing or uncommitted participants fail the
+close and restore the tab. After acceptance, the renderer adopts the confirmed
 removal and releases its guard without sending another full-set membership write.
 A sibling close may already be committed while its response is still in flight;
 a renderer snapshot cannot establish that ordering. No persistent exclusion set
