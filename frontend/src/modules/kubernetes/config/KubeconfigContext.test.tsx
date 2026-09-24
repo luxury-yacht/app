@@ -6,10 +6,13 @@
  */
 
 import type { types } from '@core/backend-api/models';
+import { ErrorProvider } from '@core/contexts/ErrorContext';
 import {
   resetClusterTabOrderCacheForTesting,
   setClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
+import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotificationSystem';
+import { errorHandler } from '@utils/errorHandler';
 import { act, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,7 +36,6 @@ const {
   getSelectedKubeconfigsMock,
   setSelectedKubeconfigsMock,
   setVisibleClusterMock,
-  errorHandlerHandleMock,
   workspaceState,
   mocks,
 } = vi.hoisted(() => ({
@@ -41,7 +43,6 @@ const {
   getSelectedKubeconfigsMock: vi.fn(),
   setSelectedKubeconfigsMock: vi.fn(),
   setVisibleClusterMock: vi.fn(),
-  errorHandlerHandleMock: vi.fn(),
   workspaceState: {
     selections: [] as string[],
     visibleClusterId: '',
@@ -123,9 +124,13 @@ vi.mock('@/core/refresh', () => ({
   useBackgroundRefresh: () => mocks.backgroundRefreshState,
 }));
 
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: { handle: errorHandlerHandleMock },
+vi.mock('@core/telemetry/sentry', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@core/telemetry/sentry')>()),
+  captureUserVisibleError: vi.fn(),
 }));
+
+const handleError = errorHandler.handle.bind(errorHandler);
+const errorHandlerHandleMock = vi.fn<typeof errorHandler.handle>();
 
 vi.mock('@shared/components/tables/persistence/gridTablePersistenceGC', () => ({
   computeClusterHashes: vi.fn(async () => []),
@@ -533,6 +538,7 @@ describe('KubeconfigContext', () => {
         );
         expect(getContext().selectedClusterId).toBe('alpha:dev');
         unmount();
+        expect(errorHandlerHandleMock).not.toHaveBeenCalled();
       }
     }
   );
@@ -571,34 +577,64 @@ describe('KubeconfigContext', () => {
     }
   });
 
-  it('restores a failed close without overwriting a newer tab switch', async () => {
-    const { getContext, unmount } = await prepareRapidTabs(['alpha', 'beta', 'gamma']);
+  it('notifies once after a failed native close restores its tab without overwriting a newer tab switch', async () => {
+    errorHandlerHandleMock.mockImplementation(handleError);
+    const { getContext, container, unmount } = await prepareRapidTabs(
+      ['alpha', 'beta', 'gamma'],
+      <ErrorProvider>
+        <ErrorNotificationSystem />
+        <PanelLifecycleGuardProvider>
+          <DockablePanelProvider>
+            <WorkspacePanelLifecycle />
+          </DockablePanelProvider>
+        </PanelLifecycleGuardProvider>
+      </ErrorProvider>
+    );
     let rejectClose!: (error: Error) => void;
-    getContext().registerClusterClosePreflight(
+    mocks.nativeClose.mockImplementationOnce(
       () =>
         new Promise((_, reject) => {
           rejectClose = reject;
         })
     );
     let closing!: Promise<void>;
-    await act(async () => {
-      closing = getContext().closeKubeconfig('/kube/alpha:dev');
-      getContext().setActiveKubeconfig('/kube/gamma:dev');
-    });
-    expect(getContext().selectedKubeconfigs).toEqual(['/kube/beta:dev', '/kube/gamma:dev']);
-    await act(async () => {
-      const failed = expect(closing).rejects.toThrow('close failed');
-      rejectClose(new Error('close failed'));
-      await failed;
-    });
-    expect(getContext().selectedKubeconfigs).toEqual([
-      '/kube/alpha:dev',
-      '/kube/beta:dev',
-      '/kube/gamma:dev',
-    ]);
-    expect(getContext().selectedKubeconfig).toBe('/kube/gamma:dev');
-    expect(workspaceState.selections).toEqual(getContext().selectedKubeconfigs);
-    unmount();
+    let duplicate!: Promise<void>;
+    try {
+      await act(async () => {
+        closing = getContext().closeKubeconfig('/kube/alpha:dev');
+        duplicate = getContext().closeKubeconfig('alpha:dev');
+        getContext().setActiveKubeconfig('/kube/gamma:dev');
+      });
+      expect(duplicate).toBe(closing);
+      expect(getContext().selectedKubeconfigs).toEqual(['/kube/beta:dev', '/kube/gamma:dev']);
+      expect(container.querySelector('[data-app-region="notifications"]')).toBeNull();
+      const failure = new Error('close failed');
+      await act(async () => {
+        const failed = expect(closing).rejects.toBe(failure);
+        rejectClose(failure);
+        await failed;
+      });
+      expect(getContext().selectedKubeconfigs).toEqual([
+        '/kube/alpha:dev',
+        '/kube/beta:dev',
+        '/kube/gamma:dev',
+      ]);
+      expect(getContext().selectedKubeconfig).toBe('/kube/gamma:dev');
+      expect(workspaceState.selections).toEqual(getContext().selectedKubeconfigs);
+      expect(mocks.nativeClose).toHaveBeenCalledExactlyOnceWith('browser-workspace', 'alpha:dev');
+      expect(errorHandlerHandleMock).toHaveBeenCalledExactlyOnceWith(
+        failure,
+        expect.objectContaining({ context: 'closeKubeconfig', clusterId: 'alpha:dev' }),
+        expect.any(String)
+      );
+      expect(container.querySelectorAll('.error-notification')).toHaveLength(1);
+      expect(container.querySelector('.error-notification-message')?.textContent).toContain(
+        'alpha'
+      );
+      expect(container.querySelector('.error-context')?.textContent).toContain('alpha:dev');
+    } finally {
+      unmount();
+    }
   });
 
   it('preserves a newer tab switch when an earlier open finishes', async () => {
@@ -1022,6 +1058,11 @@ describe('KubeconfigContext', () => {
         );
         expect(setSelectedKubeconfigsMock).not.toHaveBeenCalled();
         expect(release).toHaveBeenCalledTimes(participant === 'absent' ? 0 : 1);
+        expect(errorHandlerHandleMock).toHaveBeenCalledExactlyOnceWith(
+          expect.any(Error),
+          expect.objectContaining({ context: 'closeKubeconfig', clusterId: 'alpha:dev' }),
+          expect.any(String)
+        );
       } finally {
         unmount();
       }
@@ -1116,6 +1157,8 @@ describe('KubeconfigContext', () => {
     setVisibleClusterMock.mockReset();
     setVisibleClusterMock.mockResolvedValue(undefined);
     errorHandlerHandleMock.mockReset();
+    vi.spyOn(errorHandler, 'handle').mockImplementation(errorHandlerHandleMock);
+    errorHandler.clearHistory();
     workspaceState.selections = [];
     workspaceState.visibleClusterId = '';
     workspaceState.clusters = {};

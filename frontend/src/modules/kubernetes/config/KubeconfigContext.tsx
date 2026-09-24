@@ -719,7 +719,15 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         }
       };
       // Capture panel guards before switching away can unmount their controls.
-      const pending = close();
+      const pending = close().catch((error) => {
+        // Report once for all callers awaiting this close, after cleanup settles.
+        errorHandler.handle(
+          error,
+          { context: 'closeKubeconfig', clusterId: targetClusterId },
+          `Failed to close cluster "${targetClusterId}".`
+        );
+        throw error;
+      });
       closingClustersRef.current.set(targetClusterId, pending);
       markSelectionClosing(targetSelection, true);
       activateSelection(
