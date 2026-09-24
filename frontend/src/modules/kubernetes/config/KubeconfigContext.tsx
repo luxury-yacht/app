@@ -47,15 +47,13 @@ export interface ClusterClosePreparation {
 }
 export type ClusterClosePreflight = (
   clusterId: string,
-  admitted: Promise<void>,
-  onCommitted: () => void
+  admitted: Promise<void>
 ) => Promise<ClusterClosePreparation | null>;
 
 async function prepareClusterClose(
-  preflights: Iterable<ClusterClosePreflight>,
+  preflights: readonly ClusterClosePreflight[],
   clusterId: string,
-  admitted: Promise<void>,
-  onCommitted: () => void
+  admitted: Promise<void>
 ): Promise<ClusterClosePreparation | null> {
   const preparations: ClusterClosePreparation[] = [];
   const release = () =>
@@ -63,10 +61,8 @@ async function prepareClusterClose(
       preparation.release();
     });
   try {
-    // Foreground changes replace registered callbacks while a close is pending.
-    // Capture this transaction's participants so it cannot close the same view twice.
-    for (const preflight of [...preflights]) {
-      const preparation = await preflight(clusterId, admitted, onCommitted);
+    for (const preflight of preflights) {
+      const preparation = await preflight(clusterId, admitted);
       if (!preparation) {
         release();
         return null;
@@ -176,8 +172,6 @@ type SelectionTransitionOptions = {
   errorMessage: string;
 };
 
-type SelectionTransitionResult = Awaited<ReturnType<typeof ApplyClusterWorkspace>>;
-
 export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children }) => {
   const [kubeconfigs, setKubeconfigs] = useState<types.KubeconfigInfo[]>([]);
   const [kubeconfigDiscoveryState, setKubeconfigDiscoveryState] =
@@ -203,7 +197,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const clusterClosePreflightsRef = useRef(new Set<ClusterClosePreflight>());
   const closingClustersRef = useRef(new Map<string, Promise<void>>());
   const closingSelectionsRef = useRef(new Set<string>());
-  const closedSelectionsRef = useRef(new Set<string>());
   const [closingSelections, setClosingSelections] = useState<ReadonlySet<string>>(new Set());
   const pendingOpenIntentsRef = useRef(new Map<string, symbol>());
   // Prevent refresh context churn until the backend confirms selection updates.
@@ -457,11 +450,8 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   );
 
   const completeSelectionTransition = useCallback(
-    (plan: SelectionTransitionPlan, result: SelectionTransitionResult) => {
-      if (result.error) {
-        throw new Error(result.error);
-      }
-      const confirmedSelections = normalizeSelections(result.state.selectedKubeconfigs || []);
+    (plan: SelectionTransitionPlan, selections: string[], visibleClusterId: string) => {
+      const confirmedSelections = normalizeSelections(selections);
       const confirmedActive = retainedActiveSelection(
         visibleSelectionsFor(confirmedSelections),
         selectedKubeconfigRef.current
@@ -473,7 +463,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       selectionPendingRef.current = false;
       applyCommittedSelection(confirmedSelections, confirmedActive);
       const confirmedMeta = resolveClusterMeta(confirmedActive, kubeconfigsRef.current);
-      if (visibilityQueueRef.current || confirmedMeta.id !== result.state.visibleClusterId) {
+      if (visibilityQueueRef.current || confirmedMeta.id !== visibleClusterId) {
         activateVisibleCluster(confirmedMeta.id);
       }
       if (plan.shouldEmitChanged) {
@@ -510,9 +500,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     }: SelectionTransitionOptions) => {
       const previousSelections = selectedKubeconfigsRef.current;
       const previousActive = selectedKubeconfigRef.current;
-      const normalizedSelections = normalizeSelections(configs).filter(
-        (selection) => !closedSelectionsRef.current.has(selection)
-      );
+      const normalizedSelections = normalizeSelections(configs);
       const plan = buildSelectionTransitionPlan(
         previousSelections,
         previousActive,
@@ -523,24 +511,17 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
 
       try {
         beginSelectionTransition(plan);
-        const apply = () => {
-          // A sibling can commit its native close after this write was queued.
-          // Only explicit open intent may remove that close from the exclusion set.
-          const selections = plan.normalizedSelections.filter(
-            (selection) => !closedSelectionsRef.current.has(selection)
-          );
-          const active = retainedActiveSelection(selections, plan.nextActive);
-          return clusterWorkspaceStore.reconcileCommand(
+        const apply = () =>
+          clusterWorkspaceStore.reconcileCommand(
             () =>
               ApplyClusterWorkspace({
                 windowId: getWindowIdentity(),
-                selectedKubeconfigs: selections,
+                selectedKubeconfigs: plan.normalizedSelections,
                 updateSelectedKubeconfigs: true,
-                visibleClusterId: resolveClusterMeta(active, kubeconfigsRef.current).id,
+                visibleClusterId: plan.nextClusterId,
               }),
             () => requestId === latestSelectionRequestIdRef.current
           );
-        };
         const pending = selectionQueueRef.current?.then(apply) ?? apply();
         const settled = pending.then(
           () => undefined,
@@ -557,7 +538,14 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         if (requestId !== latestSelectionRequestIdRef.current) {
           return;
         }
-        completeSelectionTransition(plan, result);
+        if (result.error) {
+          throw new Error(result.error);
+        }
+        completeSelectionTransition(
+          plan,
+          result.state.selectedKubeconfigs || [],
+          result.state.visibleClusterId
+        );
       } catch (error) {
         if (requestId !== latestSelectionRequestIdRef.current) {
           return;
@@ -584,9 +572,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       if (closingClustersRef.current.size > 0) {
         await Promise.allSettled(closingClustersRef.current.values());
       }
-      configs.forEach((selection) => {
-        closedSelectionsRef.current.delete(selection.trim());
-      });
       const requestId = latestSelectionRequestIdRef.current + 1;
       latestSelectionRequestIdRef.current = requestId;
       return applySelectionTransition({
@@ -619,7 +604,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         }
         pendingOpenIntentsRef.current.delete(target);
       }
-      closedSelectionsRef.current.delete(target);
 
       const requestId = latestSelectionRequestIdRef.current + 1;
       latestSelectionRequestIdRef.current = requestId;
@@ -638,6 +622,35 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       });
     },
     [applySelectionTransition]
+  );
+
+  const adoptClosedSelection = useCallback(
+    (selection: string, clusterId: string) => {
+      const previous = selectedKubeconfigsRef.current;
+      const remaining = previous.filter((value) => value !== selection);
+      const plan = buildSelectionTransitionPlan(
+        previous,
+        selectedKubeconfigRef.current,
+        remaining,
+        selectedKubeconfigRef.current,
+        kubeconfigsRef.current
+      );
+      ++latestSelectionRequestIdRef.current;
+      // Native close already committed this removal. Replacing membership here
+      // could reopen a sibling whose native response is still in flight.
+      clusterWorkspaceStore.confirmClosedSelection(selection, clusterId);
+      beginSelectionTransition(plan);
+      completeSelectionTransition(
+        plan,
+        remaining,
+        clusterWorkspaceStore.getSnapshot().visibleClusterId
+      );
+      updateRefreshContext(
+        resolveClusterMeta(committedActiveRef.current, kubeconfigsRef.current),
+        selectedClusterIdsFor(remaining, kubeconfigsRef.current)
+      );
+    },
+    [beginSelectionTransition, completeSelectionTransition, updateRefreshContext]
   );
 
   const closeKubeconfig = useCallback(
@@ -672,38 +685,19 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         let preparation: ClusterClosePreparation | null = null;
         let accepted = false;
         try {
+          // Foreground changes can replace registrations while a close is pending.
+          // Snapshot this transaction's participants before awaiting any of them.
           preparation = await prepareClusterClose(
-            clusterClosePreflightsRef.current,
+            [...clusterClosePreflightsRef.current],
             targetClusterId,
-            admitted,
-            () => closedSelectionsRef.current.add(targetSelection)
+            admitted
           );
           if (!preparation) {
             return;
           }
           await admitted;
           accepted = true;
-          closedSelectionsRef.current.add(targetSelection);
-          const remaining = selectedKubeconfigsRef.current.filter(
-            (selection) => !closedSelectionsRef.current.has(selection)
-          );
-          clusterWorkspaceStore.confirmClosedSelection(targetSelection, targetClusterId);
-          applyCommittedSelection(
-            remaining,
-            retainedActiveSelection(visibleSelectionsFor(remaining), selectedKubeconfigRef.current)
-          );
-          updateRefreshContext(
-            resolveClusterMeta(committedActiveRef.current, kubeconfigsRef.current),
-            selectedClusterIdsFor(remaining, kubeconfigsRef.current)
-          );
-          const requestId = ++latestSelectionRequestIdRef.current;
-          await applySelectionTransition({
-            configs: remaining,
-            requestId,
-            activeSelection: selectedKubeconfigRef.current,
-            context: 'closeKubeconfig',
-            errorMessage: 'Failed to close cluster',
-          });
+          adoptClosedSelection(targetSelection, targetClusterId);
         } finally {
           preparation?.release();
           resumeRequests();
@@ -732,14 +726,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       );
       return pending;
     },
-    [
-      applySelectionTransition,
-      applyCommittedSelection,
-      updateRefreshContext,
-      activateSelection,
-      markSelectionClosing,
-      visibleSelectionsFor,
-    ]
+    [adoptClosedSelection, activateSelection, markSelectionClosing, visibleSelectionsFor]
   );
 
   const registerClusterClosePreflight = useCallback((preflight: ClusterClosePreflight) => {

@@ -18,7 +18,6 @@ const mocks = vi.hoisted(() => ({
   close: vi.fn(async () => false),
   flush: vi.fn<() => Promise<void>>(async () => undefined),
   preflight: null as ClusterClosePreflight | null,
-  committed: vi.fn(),
   resume: vi.fn(),
   focus: vi.fn(async () => undefined),
   windowClose: vi.fn(async () => undefined),
@@ -123,11 +122,7 @@ it('guards panels immediately but waits for tab admission before native close', 
   });
   let closing!: Promise<ClusterClosePreparation | null>;
   await act(async () => {
-    closing = requireValue(mocks.preflight, 'Close must be registered')(
-      'production',
-      admitted,
-      mocks.committed
-    );
+    closing = requireValue(mocks.preflight, 'Close must be registered')('production', admitted);
   });
   const edit = requireValue(container.querySelector('button'), 'Editable panel must be mounted');
   await act(async () => edit.click());
@@ -139,7 +134,6 @@ it('guards panels immediately but waits for tab admission before native close', 
   });
   expect(mocks.close).toHaveBeenCalledWith('app-a', 'production');
   expect(mocks.resume).toHaveBeenCalledWith(false);
-  expect(mocks.committed).not.toHaveBeenCalled();
   await act(async () => edit.click());
   expect(edit.textContent).toBe('1');
 });
@@ -161,8 +155,7 @@ it('closes a cluster without a full-window overlay or blocking unrelated input',
   act(() => {
     closing = requireValue(mocks.preflight, 'Close must be registered')(
       'production',
-      Promise.resolve(),
-      mocks.committed
+      Promise.resolve()
     );
   });
   unrelated.click();
@@ -186,7 +179,7 @@ it('blocks edits during publication and releases input when cluster close is den
   const preflight = requireValue(mocks.preflight, 'Cluster preflight must be registered');
   let closing = Promise.resolve<ClusterClosePreparation | null>(null);
   act(() => {
-    closing = preflight('production', Promise.resolve(), mocks.committed);
+    closing = preflight('production', Promise.resolve());
   });
   const edit = requireValue(container.querySelector('button'), 'Editable panel must be mounted');
   await act(async () => edit.click());
@@ -211,15 +204,13 @@ it('keeps the affected cluster guarded after native approval until the selection
   await act(async () => {
     preparation = await requireValue(mocks.preflight, 'Close must be registered')(
       'production',
-      Promise.resolve(),
-      mocks.committed
+      Promise.resolve()
     );
   });
   const edit = requireValue(container.querySelector('button'), 'Editable panel must be mounted');
   await act(async () => edit.click());
   expect(edit.textContent).toBe('0');
   expect(mocks.resume).not.toHaveBeenCalled();
-  expect(mocks.committed).toHaveBeenCalledOnce();
   expect(container.querySelector('.panel-transfer-status')).toBeNull();
   await act(async () =>
     requireValue(preparation, 'Approved close must return its lease').release()
@@ -236,8 +227,7 @@ it('releases input when publication fails without requesting native closure', as
     await expect(
       requireValue(mocks.preflight, 'Cluster preflight must be registered')(
         'production',
-        Promise.resolve(),
-        mocks.committed
+        Promise.resolve()
       )
     ).rejects.toThrow(failure);
   });
@@ -285,8 +275,7 @@ it('keeps existing unsaved edits open without publishing or closing', async () =
     expect(
       await requireValue(mocks.preflight, 'Cluster preflight must be registered')(
         'production',
-        Promise.resolve(),
-        mocks.committed
+        Promise.resolve()
       )
     ).toBeNull();
   });

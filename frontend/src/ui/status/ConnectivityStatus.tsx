@@ -73,7 +73,8 @@ const ConnectivityStatus: React.FC = () => {
   }, [isPaused]);
 
   const actions = [
-    ...(presentation.actionLabel || (isPaused && selectedClusterId)
+    ...(presentation.actionLabel ||
+    (isPaused && selectedClusterId && lifecycleState !== 'disconnected')
       ? [
           {
             label: presentation.actionLabel ?? 'Refresh Now',

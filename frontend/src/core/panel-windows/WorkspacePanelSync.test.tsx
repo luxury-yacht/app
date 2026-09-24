@@ -425,7 +425,7 @@ it('does not read a revoked cluster while the frontend still displays its closin
     return true;
   });
   await act(async () => {
-    await mocks.preflight?.('production', Promise.resolve(), () => undefined);
+    await mocks.preflight?.('production', Promise.resolve());
   });
   expect(mocks.close).toHaveBeenCalledOnce();
   expect(mocks.report).not.toHaveBeenCalled();
@@ -452,7 +452,7 @@ it('finishes an in-flight directory read before revoking its cluster view', asyn
   act(() => mocks.changed?.({ clusterId: 'production' }));
   let closing: Promise<unknown> | undefined;
   await act(async () => {
-    closing = mocks.preflight?.('production', Promise.resolve(), () => undefined);
+    closing = mocks.preflight?.('production', Promise.resolve());
   });
   const calledBeforeRead = mocks.close.mock.calls.length;
   await act(async () => {

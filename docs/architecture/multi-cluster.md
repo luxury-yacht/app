@@ -126,10 +126,12 @@ retention use the managed set. Local close guards run before switching away can
 unmount their controls; native removal waits for the prior tab admission.
 Each close captures its registered preflight participants before awaiting them.
 Foreground changes may replace those registrations, but cannot add a second native
-close to the transaction already in progress. A native close records its accepted
-selection before returning to the renderer close flow. Every full-set membership
-dispatch excludes all accepted closes, including sibling closes that committed
-after the write was queued. Only explicit reopen intent clears that exclusion.
+close to the transaction already in progress. Native close is the sole membership
+mutation for that close. After acceptance, the renderer adopts the confirmed
+removal and releases its guard without sending another full-set membership write.
+A sibling close may already be committed while its response is still in flight;
+a renderer snapshot cannot establish that ordering. No persistent exclusion set
+survives the close, so transfer hydration can readmit that cluster normally.
 Panel directory reads, object opens,
 and docked publication also require confirmed membership from the workspace state
 plane; optimistic tab visibility does not authorize native panel access. This gate
@@ -148,8 +150,10 @@ failure for its own cluster and collects batch errors without cancelling healthy
 siblings. Open, close, release, pruning, and startup use that same failure owner.
 Refresh publication proceeds with installed clients even when another build
 fails; when none remain, it retires the previous refresh runtime. Failed tabs
-stay admitted and unavailable. Discovery and preflight must
-propagate the connection context so cancellation drains their HTTP requests.
+stay admitted and unavailable; their recovery guidance is to close and reopen
+the tab, because refreshing data cannot rebuild missing clients. Discovery and
+preflight must propagate the connection context so cancellation drains their HTTP
+requests.
 Closing a canceled connection also removes lifecycle and API-diagnostics entries
 that never acquired installed clients. API diagnostics retire with shared cluster
 workspace state on deselection, pruning, and final-tab clearing; peer-owned

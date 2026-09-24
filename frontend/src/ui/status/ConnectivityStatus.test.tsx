@@ -4,6 +4,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClusterAuthState } from '@/core/contexts/AuthErrorContext';
+import { requireValue } from '@/test-utils/requireValue';
 
 let mockLifecycleState = 'ready';
 let mockNamespaceReady = true;
@@ -11,7 +12,11 @@ let mockHealth: 'healthy' | 'degraded' | 'unknown' = 'healthy';
 let mockSelectedClusterId = 'cluster-a';
 let mockSelectedClusterName = 'alpha';
 let mockAutoRefreshEnabled = true;
-const setAutoRefreshEnabledMock = vi.hoisted(() => vi.fn());
+const { setAutoRefreshEnabledMock, retryAuthMock, requestRefreshMock } = vi.hoisted(() => ({
+  setAutoRefreshEnabledMock: vi.fn(),
+  retryAuthMock: vi.fn(),
+  requestRefreshMock: vi.fn(),
+}));
 let mockAuthState: ClusterAuthState = {
   hasError: false,
   isRecovering: false,
@@ -48,14 +53,17 @@ vi.mock('@shared/components/status/StatusIndicator', () => ({
       aria-label={ariaLabel}
     >
       {message}
+      {(actions ?? []).map((action) => (
+        <button type="button" key={action.label} onClick={action.onClick}>
+          {action.label}
+        </button>
+      ))}
     </div>
   ),
 }));
 
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: {
-    triggerManualRefreshForContext: vi.fn(),
-  },
+vi.mock('@/core/data-access', () => ({
+  requestContextRefresh: requestRefreshMock,
 }));
 
 vi.mock('@/hooks/useWailsRuntimeEvents', () => ({
@@ -66,7 +74,7 @@ vi.mock('@/hooks/useWailsRuntimeEvents', () => ({
 
 vi.mock('@/core/contexts/AuthErrorContext', () => ({
   useAuthError: () => ({
-    handleRetry: vi.fn(),
+    handleRetry: retryAuthMock,
   }),
   useActiveClusterAuthState: () => mockAuthState,
 }));
@@ -107,7 +115,31 @@ describe('ConnectivityStatus', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
+  it.each([true, false])(
+    'offers no data-refresh action for a disconnected cluster when auto-refresh is %s',
+    async (enabled) => {
+      mockLifecycleState = 'disconnected';
+      mockAutoRefreshEnabled = enabled;
+      await act(async () => {
+        root.render(<ConnectivityStatus />);
+      });
+      const indicator = container.querySelector('[data-testid="indicator"]');
+      expect(indicator?.getAttribute('data-status')).toBe('unhealthy');
+      expect(indicator?.getAttribute('data-actions')).not.toContain('Refresh Now');
+      expect(indicator?.getAttribute('data-actions')).toContain(
+        enabled ? 'Disable Auto-Refresh' : 'Enable Auto-Refresh'
+      );
+      act(() => requireValue(container.querySelector('button'), 'Auto-refresh toggle').click());
+      expect(setAutoRefreshEnabledMock).toHaveBeenCalledWith(!enabled);
+      expect(requestRefreshMock).not.toHaveBeenCalled();
+      expect(retryAuthMock).not.toHaveBeenCalled();
+    }
+  );
+
   beforeEach(() => {
+    setAutoRefreshEnabledMock.mockClear();
+    retryAuthMock.mockClear();
+    requestRefreshMock.mockClear();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -164,6 +196,9 @@ describe('ConnectivityStatus', () => {
     expect(indicator?.textContent).toContain('alpha is connected is ready to use.');
     expect(indicator?.getAttribute('data-actions')).toBe('Refresh Now|Disable Auto-Refresh');
     expect(indicator?.getAttribute('aria-label')).toContain('Connectivity: Ready.');
+    act(() => requireValue(container.querySelector('button'), 'Refresh action').click());
+    expect(requestRefreshMock).toHaveBeenCalledWith({ reason: 'user' });
+    expect(retryAuthMock).not.toHaveBeenCalled();
   });
 
   it('shows auth failure details and retry action', () => {
@@ -186,6 +221,11 @@ describe('ConnectivityStatus', () => {
     expect(indicator?.getAttribute('data-actions')).toBe('Retry Auth|Disable Auto-Refresh');
     expect(indicator?.textContent).toContain('Authentication failed');
     expect(indicator?.textContent).toContain('token expired');
+    act(() =>
+      requireValue(container.querySelector('button'), 'Authentication retry action').click()
+    );
+    expect(retryAuthMock).toHaveBeenCalledWith('cluster-a');
+    expect(requestRefreshMock).not.toHaveBeenCalled();
   });
 
   it('shows enable auto-refresh when auto-refresh is paused', () => {
