@@ -14,7 +14,9 @@ import { WorkspacePanelLifecycle } from './WorkspacePanelLifecycle';
 const mocks = vi.hoisted(() => ({
   close: vi.fn(async () => false),
   flush: vi.fn<() => Promise<void>>(async () => undefined),
-  preflight: null as null | ((clusterId: string) => Promise<ClusterClosePreparation | null>),
+  preflight: null as
+    | null
+    | ((clusterId: string, admitted?: Promise<void>) => Promise<ClusterClosePreparation | null>),
   resume: vi.fn(),
   focus: vi.fn(async () => undefined),
   windowClose: vi.fn(async () => undefined),
@@ -50,9 +52,12 @@ vi.mock('@/core/desktop-runtime', () => ({
 }));
 vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
-    selectedClusterIds: ['production'],
+    managedClusterIds: ['production'],
     registerClusterClosePreflight: (
-      preflight: (clusterId: string) => Promise<ClusterClosePreparation | null>
+      preflight: (
+        clusterId: string,
+        admitted?: Promise<void>
+      ) => Promise<ClusterClosePreparation | null>
     ) => {
       mocks.preflight = preflight;
       return () => undefined;
@@ -112,6 +117,29 @@ beforeEach(async () => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+});
+
+it('guards panels immediately but waits for tab admission before native close', async () => {
+  let admit!: () => void;
+  const admitted = new Promise<void>((resolve) => {
+    admit = resolve;
+  });
+  let closing!: Promise<ClusterClosePreparation | null>;
+  await act(async () => {
+    closing = requireValue(mocks.preflight, 'Close must be registered')('production', admitted);
+  });
+  const edit = requireValue(container.querySelector('button'), 'Editable panel must be mounted');
+  await act(async () => edit.click());
+  expect(edit.textContent).toBe('0');
+  expect(mocks.close).not.toHaveBeenCalled();
+  await act(async () => {
+    admit();
+    await closing;
+  });
+  expect(mocks.close).toHaveBeenCalledWith('app-a', 'production');
+  expect(mocks.resume).toHaveBeenCalledWith(false);
+  await act(async () => edit.click());
+  expect(edit.textContent).toBe('1');
 });
 
 it('closes a cluster without a full-window overlay or blocking unrelated input', async () => {

@@ -573,6 +573,34 @@ describe('refreshOrchestrator', () => {
     expect(requestSignal?.aborted).toBe(true);
   });
 
+  it('discards a late catalog failure after cluster close and leaves the other cluster usable', async () => {
+    registerCatalogDomain();
+    const clusterId = 'closing';
+    const scope = buildClusterScope(clusterId, 'limit=1');
+    setRuntimeScopeEnabled('catalog', scope, true);
+    eventBus.emit('cluster:lifecycle', { clusterId, state: 'ready' });
+    eventBus.emit('cluster:lifecycle', { clusterId: 'retained', state: 'ready' });
+    let rejectSnapshot!: (error: Error) => void;
+    let requestSignal: AbortSignal | undefined;
+    clientMocks.fetchSnapshotMock.mockImplementation((_domain, options) => {
+      requestSignal = options.signal;
+      return new Promise((_resolve, reject) => {
+        rejectSnapshot = reject;
+      });
+    });
+    const request = refreshOrchestrator.fetchScopedDomain('catalog', scope, { isManual: false });
+    await vi.waitFor(() => expect(requestSignal).toBeDefined());
+    const resume = clusterWorkspaceStore.holdClusterRequests(clusterId);
+    expect(requestSignal?.aborted).toBe(true);
+    expect(clusterReadiness.isServiceable('retained')).toBe(true);
+    refreshOrchestrator.updateContext({ allConnectedClusterIds: ['retained'] });
+    rejectSnapshot(new Error('object catalog service unavailable'));
+    await request;
+    resume();
+    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+    expect(getScopedDomainState('catalog', scope)?.status).not.toBe('error');
+  });
+
   it("stops only the activating cluster's in-flight snapshots", async () => {
     registerStreamingClusterConfigDomain();
     const scopeA = buildClusterScope('cluster-a', '');
@@ -1395,6 +1423,66 @@ describe('refreshOrchestrator', () => {
     expect(eventScopes()).toContain(keptScope);
     expect(eventScopes()).not.toContain(removedScope);
   });
+
+  it('does not start a queued stream or recreate diagnostics after its cluster closes', async () => {
+    const start = vi.fn(async () => undefined);
+    refreshOrchestrator.registerDomain({
+      domain: 'namespaces',
+      refresherName: SYSTEM_REFRESHERS.namespaces,
+      category: 'system',
+      streaming: { start, snapshotless: true },
+    });
+    const scope = 'closing|';
+    eventBus.emit('cluster:lifecycle', { clusterId: 'closing', state: 'ready' });
+    refreshOrchestrator.setScopedDomainEnabled('namespaces', scope, true);
+    refreshOrchestrator.updateContext({ allConnectedClusterIds: ['retained'] });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(start).not.toHaveBeenCalled();
+    expect(orchestratorInternals.clusterRuntimes.has('closing')).toBe(false);
+    expect(getRefreshState().scopedDomainEntries.namespaces ?? []).toEqual([]);
+
+    // An explicit reopen owns a fresh runtime and may start its own stream.
+    refreshOrchestrator.updateContext({ allConnectedClusterIds: ['retained', 'closing'] });
+    refreshOrchestrator.setScopedDomainEnabled('namespaces', scope, true);
+    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+  });
+
+  it.each(['resolve', 'reject'] as const)(
+    'retires a pending stream that settles with %s after cluster close',
+    async (outcome) => {
+      let resolve!: (cleanup: () => void) => void;
+      let reject!: (error: Error) => void;
+      const cleanup = vi.fn();
+      const pending = new Promise<() => void>((done, fail) => {
+        resolve = done;
+        reject = fail;
+      });
+      const start = vi.fn(() => pending);
+      refreshOrchestrator.registerDomain({
+        domain: 'namespaces',
+        refresherName: SYSTEM_REFRESHERS.namespaces,
+        category: 'system',
+        streaming: { start, snapshotless: true },
+      });
+      eventBus.emit('cluster:lifecycle', { clusterId: 'closing', state: 'ready' });
+      refreshOrchestrator.setScopedDomainEnabled('namespaces', 'closing|', true);
+      await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+      refreshOrchestrator.updateContext({ allConnectedClusterIds: ['retained'] });
+      if (outcome === 'resolve') {
+        resolve(cleanup);
+      } else {
+        reject(new Error('retired connection'));
+      }
+      await pending.catch(() => undefined);
+      await Promise.resolve();
+      expect(cleanup).toHaveBeenCalledTimes(outcome === 'resolve' ? 1 : 0);
+      expect(orchestratorInternals.clusterRuntimes.has('closing')).toBe(false);
+      expect(getRefreshState().scopedDomainEntries.namespaces ?? []).toEqual([]);
+      expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+    }
+  );
 
   it('drops deferred refresh work when its cluster is removed', async () => {
     registerStreamingClusterConfigDomain();

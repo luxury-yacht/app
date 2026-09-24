@@ -14,9 +14,12 @@ import { act, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import { PanelLifecycleGuardProvider } from '@/core/panel-windows/panelLifecycleGuards';
+import { WorkspacePanelLifecycle } from '@/core/panel-windows/WorkspacePanelLifecycle';
 import { clusterReadiness } from '@/core/refresh/clusterReadiness';
 import { TabDragProvider } from '@/shared/components/tabs/dragCoordinator';
 import { requireValue } from '@/test-utils/requireValue';
+import { DockablePanelProvider } from '@/ui/dockable/DockablePanelProvider';
 import ClusterTabs from '@/ui/layout/ClusterTabs';
 import { KubeconfigProvider, useKubeconfig } from './KubeconfigContext';
 
@@ -40,11 +43,30 @@ const {
     clusters: {} as Record<string, { clusterId: string; lifecycle: string }>,
   },
   mocks: {
+    nativeClose: vi.fn(),
+    panelIdsForCluster: () => [],
+    panelSync: {
+      flush: async () => undefined,
+      quiesceCluster: async () => () => undefined,
+    },
     refreshOrchestrator: {
       updateContext: vi.fn(),
     },
     backgroundRefreshState: { enabled: true },
   },
+}));
+
+vi.mock('@/core/panel-windows/index', () => ({
+  closeClusterView: (...args: unknown[]) => mocks.nativeClose(...args),
+  onWorkspaceCloseRequested: () => () => undefined,
+  onApplicationQuitPreflightRequested: () => () => undefined,
+  onApplicationQuitPreflightSettled: () => () => undefined,
+}));
+vi.mock('@/core/panel-windows/WorkspacePanelSync', () => ({
+  usePanelWorkspaceSync: () => mocks.panelSync,
+}));
+vi.mock('@/modules/object-panel/contexts/ObjectPanelStateContext', () => ({
+  useObjectPanelState: () => ({ panelIdsForCluster: mocks.panelIdsForCluster }),
 }));
 
 vi.mock('@core/backend-api', () => ({
@@ -68,10 +90,8 @@ vi.mock('@core/backend-api', () => ({
       await setSelectedKubeconfigsMock(command.selectedKubeconfigs);
       workspaceState.selections = [...command.selectedKubeconfigs];
     }
-    if (command.visibleClusterId) {
-      await setVisibleClusterMock(command.visibleClusterId);
-      workspaceState.visibleClusterId = command.visibleClusterId;
-    }
+    await setVisibleClusterMock(command.visibleClusterId);
+    workspaceState.visibleClusterId = command.visibleClusterId;
     return {
       state: {
         selectedKubeconfigs: workspaceState.selections,
@@ -153,6 +173,507 @@ const renderProvider = async (children?: ReactNode) => {
 };
 
 describe('KubeconfigContext', () => {
+  const prepareRapidTabs = async (selected = ['alpha'], children?: ReactNode) => {
+    getKubeconfigsMock.mockResolvedValue(
+      kubeconfigDiscoveryResult(
+        ['alpha', 'beta', 'gamma'].map((name) => ({
+          name,
+          path: `/kube/${name}`,
+          context: 'dev',
+          isDefault: false,
+          isCurrentContext: false,
+          invalid: false,
+          invalidReason: '',
+        }))
+      )
+    );
+    getSelectedKubeconfigsMock.mockResolvedValue(selected.map((name) => `/kube/${name}:dev`));
+    return renderProvider(children);
+  };
+
+  it.each(['admitted', 'opening'] as const)(
+    'keeps rapid closes removed for %s tabs when native lifecycle guards rerender after foreground changes',
+    async (state) => {
+      const { getContext, unmount } = await prepareRapidTabs(
+        state === 'admitted' ? ['alpha', 'beta', 'gamma'] : ['alpha'],
+        <PanelLifecycleGuardProvider>
+          <DockablePanelProvider>
+            <WorkspacePanelLifecycle />
+          </DockablePanelProvider>
+        </PanelLifecycleGuardProvider>
+      );
+      let finishNativeClose!: () => void;
+      const nativeResponse = new Promise<void>((resolve) => {
+        finishNativeClose = resolve;
+      });
+      mocks.nativeClose.mockImplementation(async (_window: string, clusterId: string) => {
+        const selection = `/kube/${clusterId}`;
+        if (!workspaceState.selections.includes(selection)) {
+          throw new Error('cluster close source is not live');
+        }
+        workspaceState.selections = workspaceState.selections.filter(
+          (value) => value !== selection
+        );
+        await nativeResponse;
+        return true;
+      });
+      let closing!: Promise<void>[];
+      let settled!: Promise<PromiseSettledResult<void>[]>;
+      let admit!: () => void;
+      const admission = new Promise<void>((resolve) => {
+        admit = resolve;
+      });
+      let opening: Promise<void>[] = [];
+      try {
+        if (state === 'opening') {
+          setSelectedKubeconfigsMock.mockImplementation(() => admission);
+          await act(async () => {
+            opening = ['beta', 'gamma'].map((name) =>
+              getContext().openKubeconfig(`/kube/${name}:dev`)
+            );
+          });
+        }
+        await act(async () => {
+          closing = ['alpha', 'beta', 'gamma'].map((name) =>
+            getContext().closeKubeconfig(`/kube/${name}:dev`)
+          );
+          settled = Promise.allSettled(closing);
+        });
+        expect(getContext().selectedKubeconfigs).toEqual([]);
+        await act(async () => {
+          admit();
+          await Promise.all(opening);
+          finishNativeClose();
+          await settled;
+        });
+        expect(getContext().selectedKubeconfigs).toEqual([]);
+        expect(getContext().managedKubeconfigs).toEqual([]);
+        expect(workspaceState.selections).toEqual([]);
+        expect(await settled).toEqual(
+          closing.map(() => ({ status: 'fulfilled', value: undefined }))
+        );
+        expect(mocks.nativeClose).toHaveBeenCalledTimes(3);
+      } finally {
+        admit();
+        finishNativeClose();
+        unmount();
+      }
+    }
+  );
+
+  it('preserves tab order while an immediate close awaits a denied native result', async () => {
+    setClusterTabOrder(['/kube/gamma:dev', '/kube/alpha:dev', '/kube/beta:dev']);
+    const { container, getContext, unmount } = await prepareRapidTabs(
+      ['alpha', 'beta', 'gamma'],
+      <TabDragProvider>
+        <ClusterTabs />
+      </TabDragProvider>
+    );
+    let deny!: () => void;
+    getContext().registerClusterClosePreflight(
+      () =>
+        new Promise<null>((resolve) => {
+          deny = () => resolve(null);
+        })
+    );
+    let closing!: Promise<void>;
+    await act(async () => {
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Close gamma:dev"]'),
+        'Close gamma'
+      ).click();
+      closing = getContext().closeKubeconfig('/kube/gamma:dev');
+    });
+    expect(container.querySelector('button[aria-label="Close gamma:dev"]')).toBeNull();
+    await act(async () => {
+      deny();
+      await closing;
+    });
+    const tabs = [...container.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent);
+    expect(tabs).toEqual(['Global', 'gamma:dev', 'alpha:dev', 'beta:dev']);
+    unmount();
+  });
+
+  it.each([{ selected: ['alpha'] }, { selected: ['alpha', 'beta'] }])(
+    'removes a closing tab before native acceptance while retaining its managed state ($selected)',
+    async ({ selected }) => {
+      const { getContext, unmount } = await prepareRapidTabs(selected);
+      let deny!: () => void;
+      getContext().registerClusterClosePreflight(
+        () =>
+          new Promise<null>((resolve) => {
+            deny = () => resolve(null);
+          })
+      );
+      let closing!: Promise<void>;
+      try {
+        await act(async () => {
+          closing = getContext().closeKubeconfig('/kube/alpha:dev');
+        });
+        expect(getContext().selectedKubeconfigs).toEqual(
+          selected.filter((name) => name !== 'alpha').map((name) => `/kube/${name}:dev`)
+        );
+        expect(getContext().selectedClusterId).toBe(selected.length > 1 ? 'beta:dev' : '');
+        expect(getContext().managedClusterIds).toContain('alpha:dev');
+      } finally {
+        await act(async () => {
+          deny();
+          await closing;
+        });
+        expect(getContext().selectedKubeconfigs).toEqual(
+          selected.map((name) => `/kube/${name}:dev`)
+        );
+        expect(getContext().selectedClusterId).toBe('alpha:dev');
+        unmount();
+      }
+    }
+  );
+
+  it('removes a tab immediately even while its open acknowledgement is pending', async () => {
+    const { getContext, unmount } = await prepareRapidTabs();
+    let acceptOpen!: () => void;
+    setSelectedKubeconfigsMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          acceptOpen = resolve;
+        })
+    );
+    let opening!: Promise<void>;
+    let closing!: Promise<void>;
+    try {
+      await act(async () => {
+        opening = getContext().openKubeconfig('/kube/beta:dev');
+      });
+      await act(async () => {
+        closing = getContext().closeKubeconfig('/kube/beta:dev');
+      });
+      expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev']);
+      expect(getContext().selectedClusterId).toBe('alpha:dev');
+    } finally {
+      await act(async () => {
+        acceptOpen();
+        await Promise.all([opening, closing]);
+      });
+      expect(workspaceState.selections).toEqual(['/kube/alpha:dev']);
+      unmount();
+    }
+  });
+
+  it('restores a failed close without overwriting a newer tab switch', async () => {
+    const { getContext, unmount } = await prepareRapidTabs(['alpha', 'beta', 'gamma']);
+    let rejectClose!: (error: Error) => void;
+    getContext().registerClusterClosePreflight(
+      () =>
+        new Promise((_, reject) => {
+          rejectClose = reject;
+        })
+    );
+    let closing!: Promise<void>;
+    await act(async () => {
+      closing = getContext().closeKubeconfig('/kube/alpha:dev');
+      getContext().setActiveKubeconfig('/kube/gamma:dev');
+    });
+    expect(getContext().selectedKubeconfigs).toEqual(['/kube/beta:dev', '/kube/gamma:dev']);
+    await act(async () => {
+      const failed = expect(closing).rejects.toThrow('close failed');
+      rejectClose(new Error('close failed'));
+      await failed;
+    });
+    expect(getContext().selectedKubeconfigs).toEqual([
+      '/kube/alpha:dev',
+      '/kube/beta:dev',
+      '/kube/gamma:dev',
+    ]);
+    expect(getContext().selectedKubeconfig).toBe('/kube/gamma:dev');
+    expect(workspaceState.selections).toEqual(getContext().selectedKubeconfigs);
+    unmount();
+  });
+
+  it('preserves a newer tab switch when an earlier open finishes', async () => {
+    const { getContext, unmount } = await prepareRapidTabs();
+    let finishOpen!: () => void;
+    setSelectedKubeconfigsMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishOpen = resolve;
+        })
+    );
+    let opening!: Promise<void>;
+    try {
+      await act(async () => {
+        opening = getContext().openKubeconfig('/kube/beta:dev');
+      });
+      await act(async () => {
+        getContext().setActiveKubeconfig('/kube/alpha:dev');
+      });
+      expect(getContext().selectedKubeconfig).toBe('/kube/alpha:dev');
+      await act(async () => {
+        finishOpen();
+        await opening;
+      });
+      expect(getContext().selectedKubeconfig).toBe('/kube/alpha:dev');
+      expect(workspaceState.visibleClusterId).toBe('alpha:dev');
+    } finally {
+      unmount();
+    }
+  });
+
+  it('honors a reopen requested while the same cluster close is awaiting acceptance', async () => {
+    const { getContext, unmount } = await prepareRapidTabs(['alpha', 'beta']);
+    let acceptClose!: () => void;
+    const release = vi.fn();
+    getContext().registerClusterClosePreflight(
+      () =>
+        new Promise((resolve) => {
+          acceptClose = () => resolve({ release });
+        })
+    );
+    let closing!: Promise<void>;
+    let reopening!: Promise<void>;
+    try {
+      await act(async () => {
+        closing = getContext().closeKubeconfig('/kube/alpha:dev');
+      });
+      await act(async () => {
+        reopening = getContext().openKubeconfig('/kube/alpha:dev');
+      });
+      await act(async () => {
+        acceptClose();
+        await Promise.all([closing, reopening]);
+      });
+      expect(getContext().selectedKubeconfigs).toEqual(['/kube/beta:dev', '/kube/alpha:dev']);
+      expect(workspaceState.selections).toEqual(getContext().selectedKubeconfigs);
+      expect(getContext().selectedKubeconfig).toBe('/kube/alpha:dev');
+      expect(release).toHaveBeenCalledOnce();
+    } finally {
+      unmount();
+    }
+  });
+
+  it('keeps backend membership aligned after overlapping opens settle', async () => {
+    const { getContext, unmount } = await prepareRapidTabs();
+    let finishFirst!: () => void;
+    setSelectedKubeconfigsMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishFirst = resolve;
+        })
+    );
+    let first!: Promise<void>;
+    let second!: Promise<void>;
+    try {
+      await act(async () => {
+        first = getContext().openKubeconfig('/kube/beta:dev');
+        second = getContext().openKubeconfig('/kube/gamma:dev');
+      });
+      await act(async () => {
+        finishFirst();
+        await Promise.all([first, second]);
+      });
+      expect(getContext().selectedKubeconfigs).toEqual([
+        '/kube/alpha:dev',
+        '/kube/beta:dev',
+        '/kube/gamma:dev',
+      ]);
+      expect(workspaceState.selections).toEqual(getContext().selectedKubeconfigs);
+      expect(workspaceState.visibleClusterId).toBe('gamma:dev');
+    } finally {
+      unmount();
+    }
+  });
+
+  it.each(['close', 'replace'] as const)(
+    'honors the final %s when a reopen was queued behind the first close',
+    async (lastAction) => {
+      const { getContext, unmount } = await prepareRapidTabs(['alpha', 'beta']);
+      let acceptClose!: () => void;
+      const preflight = vi.fn(
+        () =>
+          new Promise<{ release: () => void }>((resolve) => {
+            acceptClose = () => resolve({ release: vi.fn() });
+          })
+      );
+      getContext().registerClusterClosePreflight(preflight);
+      try {
+        await act(async () => {
+          const closing = getContext().closeKubeconfig('/kube/alpha:dev');
+          const reopening = getContext().openKubeconfig('/kube/alpha:dev');
+          const finalClose =
+            lastAction === 'close'
+              ? getContext().closeKubeconfig('/kube/alpha:dev')
+              : getContext().setSelectedKubeconfigs(['/kube/beta:dev']);
+          acceptClose();
+          await Promise.all([closing, reopening, finalClose]);
+        });
+        expect(getContext().selectedKubeconfigs).toEqual(['/kube/beta:dev']);
+        expect(workspaceState.selections).toEqual(['/kube/beta:dev']);
+        expect(preflight).toHaveBeenCalledOnce();
+      } finally {
+        unmount();
+      }
+    }
+  );
+
+  it('holds only the closing cluster requests before native teardown and resumes a denied close', async () => {
+    const { getContext, unmount } = await prepareRapidTabs(['alpha', 'beta']);
+    workspaceState.clusters = {
+      'alpha:dev': { clusterId: 'alpha:dev', lifecycle: 'ready' },
+      'beta:dev': { clusterId: 'beta:dev', lifecycle: 'ready' },
+    };
+    eventBus.emit('cluster:lifecycle', { clusterId: 'alpha:dev', state: 'ready' });
+    eventBus.emit('cluster:lifecycle', { clusterId: 'beta:dev', state: 'ready' });
+    let serviceableDuringClose = true;
+    getContext().registerClusterClosePreflight(async () => {
+      serviceableDuringClose = clusterReadiness.isServiceable('alpha:dev');
+      expect(clusterReadiness.isServiceable('beta:dev')).toBe(true);
+      return null;
+    });
+    try {
+      await act(async () => {
+        await getContext().closeKubeconfig('/kube/alpha:dev');
+        await flushPromises();
+      });
+      expect(serviceableDuringClose).toBe(false);
+      expect(clusterReadiness.isServiceable('alpha:dev')).toBe(true);
+      expect(getContext().selectedKubeconfigs).toHaveLength(2);
+    } finally {
+      unmount();
+    }
+  });
+
+  it('keeps readiness received while an open acknowledgement is in flight', async () => {
+    const { getContext, unmount } = await prepareRapidTabs();
+    let finishOpen!: () => void;
+    setSelectedKubeconfigsMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishOpen = resolve;
+        })
+    );
+    let opening!: Promise<void>;
+    try {
+      await act(async () => {
+        opening = getContext().openKubeconfig('/kube/beta:dev');
+      });
+      eventBus.emit('cluster:lifecycle', { clusterId: 'beta:dev', state: 'ready' });
+      await act(async () => {
+        finishOpen();
+        await opening;
+      });
+      expect(clusterReadiness.isServiceable('beta:dev')).toBe(true);
+    } finally {
+      unmount();
+    }
+  });
+
+  it('clears foreground demand after closing all tabs while an earlier switch is in flight', async () => {
+    const { getContext, unmount } = await prepareRapidTabs(['alpha', 'beta']);
+    let finishSwitch!: () => void;
+    setVisibleClusterMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSwitch = resolve;
+        })
+    );
+    try {
+      await act(async () => {
+        getContext().setActiveKubeconfig('/kube/beta:dev');
+      });
+      await act(async () => {
+        await getContext().setSelectedKubeconfigs([]);
+      });
+      await act(async () => {
+        finishSwitch();
+        await flushPromises();
+      });
+      expect(getContext().selectedKubeconfigs).toEqual([]);
+      expect(workspaceState.selections).toEqual([]);
+      expect(workspaceState.visibleClusterId).toBe('');
+    } finally {
+      unmount();
+    }
+  });
+
+  it('preserves a tab switch made after a reopen that is waiting for close acceptance', async () => {
+    const { getContext, unmount } = await prepareRapidTabs(['alpha', 'beta']);
+    let acceptClose!: () => void;
+    getContext().registerClusterClosePreflight(
+      () =>
+        new Promise((resolve) => {
+          acceptClose = () => resolve({ release: vi.fn() });
+        })
+    );
+    let closing!: Promise<void>;
+    let reopening!: Promise<void>;
+    try {
+      await act(async () => {
+        closing = getContext().closeKubeconfig('/kube/alpha:dev');
+        reopening = getContext().openKubeconfig('/kube/alpha:dev');
+        getContext().setActiveKubeconfig('/kube/beta:dev');
+      });
+      await act(async () => {
+        acceptClose();
+        await Promise.all([closing, reopening]);
+      });
+      expect(getContext().selectedKubeconfig).toBe('/kube/beta:dev');
+      expect(workspaceState.visibleClusterId).toBe('beta:dev');
+      expect(workspaceState.selections).toEqual(['/kube/beta:dev', '/kube/alpha:dev']);
+    } finally {
+      unmount();
+    }
+  });
+
+  it('converges renderer and backend ownership through repeated overlapping tab bursts', async () => {
+    const { getContext, unmount } = await prepareRapidTabs(
+      ['alpha'],
+      <PanelLifecycleGuardProvider>
+        <DockablePanelProvider>
+          <WorkspacePanelLifecycle />
+        </DockablePanelProvider>
+      </PanelLifecycleGuardProvider>
+    );
+    setSelectedKubeconfigsMock.mockImplementation(flushPromises);
+    mocks.nativeClose.mockImplementation(async (_window: string, clusterId: string) => {
+      const selection = `/kube/${clusterId}`;
+      if (!workspaceState.selections.includes(selection)) {
+        throw new Error('cluster close source is not live');
+      }
+      workspaceState.selections = workspaceState.selections.filter((value) => value !== selection);
+      await flushPromises();
+      return true;
+    });
+    try {
+      for (let iteration = 0; iteration < 25; iteration++) {
+        await act(async () => {
+          const opening = getContext().openKubeconfig('/kube/beta:dev');
+          const sibling = getContext().openKubeconfig('/kube/gamma:dev');
+          const closing = getContext().closeKubeconfig('/kube/beta:dev');
+          const reopening = getContext().openKubeconfig('/kube/beta:dev');
+          getContext().setActiveKubeconfig('/kube/alpha:dev');
+          await Promise.all([opening, sibling, closing, reopening]);
+        });
+        expect(getContext().selectedKubeconfigs).toEqual([
+          '/kube/alpha:dev',
+          '/kube/gamma:dev',
+          '/kube/beta:dev',
+        ]);
+        expect(workspaceState.selections).toEqual(getContext().selectedKubeconfigs);
+        expect(workspaceState.visibleClusterId).toBe('alpha:dev');
+        await act(async () => {
+          await Promise.all([
+            getContext().closeKubeconfig('/kube/beta:dev'),
+            getContext().closeKubeconfig('/kube/gamma:dev'),
+          ]);
+        });
+        expect(workspaceState.selections).toEqual(['/kube/alpha:dev']);
+        expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev']);
+      }
+      expect(errorHandlerHandleMock).not.toHaveBeenCalled();
+    } finally {
+      unmount();
+    }
+  });
+
   it('keeps a denied tab open and removes an accepted tab before the follow-up selection RPC settles', async () => {
     getKubeconfigsMock.mockResolvedValue(
       kubeconfigDiscoveryResult(
@@ -194,7 +715,7 @@ describe('KubeconfigContext', () => {
     );
     try {
       await act(async () => closeAlpha());
-      expect(preflight).toHaveBeenLastCalledWith('alpha:alpha');
+      expect(preflight).toHaveBeenLastCalledWith('alpha:alpha', expect.any(Promise));
       expect(container.querySelector('button[aria-label="Close alpha"]')).toBeNull();
       expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
         'beta'
@@ -333,6 +854,7 @@ describe('KubeconfigContext', () => {
     expect(release).toHaveBeenCalledOnce();
   });
   beforeEach(() => {
+    mocks.nativeClose.mockReset();
     mocks.refreshOrchestrator.updateContext.mockReset();
     getKubeconfigsMock.mockReset();
     getSelectedKubeconfigsMock.mockReset();
@@ -846,7 +1368,7 @@ describe('KubeconfigContext', () => {
     unmount();
   });
 
-  it('dispatches superseding selection updates immediately', async () => {
+  it('serializes backend membership writes while presenting the latest tab intent immediately', async () => {
     const kubeconfigs: types.KubeconfigInfo[] = [
       {
         name: 'alpha',
@@ -881,7 +1403,7 @@ describe('KubeconfigContext', () => {
 
     let resolveFirst!: () => void;
     const firstCall = new Promise<void>((resolve) => {
-      // Keep the first selection pending so the second request can supersede it.
+      // Hold admission of the first tab set while the user opens another tab.
       resolveFirst = resolve;
     });
 
@@ -900,7 +1422,16 @@ describe('KubeconfigContext', () => {
       await flushPromises();
     });
 
-    expect(setSelectedKubeconfigsMock).toHaveBeenCalledTimes(2);
+    expect(setSelectedKubeconfigsMock).toHaveBeenCalledTimes(1);
+    expect(getContext().selectedKubeconfigs).toEqual([
+      '/kube/alpha:dev',
+      '/kube/beta:prod',
+      '/kube/gamma:staging',
+    ]);
+    await act(async () => {
+      resolveFirst();
+      await secondPromise;
+    });
     expect(setSelectedKubeconfigsMock).toHaveBeenNthCalledWith(2, [
       '/kube/alpha:dev',
       '/kube/beta:prod',
@@ -985,7 +1516,7 @@ describe('KubeconfigContext', () => {
     unmount();
   });
 
-  it('keeps a close request authoritative when cluster initialization is still pending', async () => {
+  it('waits for tab admission before closing and preserves the close through pending lifecycle work', async () => {
     const kubeconfigs: types.KubeconfigInfo[] = [
       {
         name: 'alpha',
@@ -1046,9 +1577,14 @@ describe('KubeconfigContext', () => {
     });
     expect(getContext().selectedKubeconfig).toBe('/kube/alpha:dev');
 
+    let closing!: Promise<void>;
     await act(async () => {
-      await getContext().closeKubeconfig('/kube/alpha:dev');
-      await flushPromises();
+      closing = getContext().closeKubeconfig('/kube/alpha:dev');
+    });
+    expect(setSelectedKubeconfigsMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveSelection();
+      await closing;
     });
 
     expect(setSelectedKubeconfigsMock).toHaveBeenLastCalledWith([
@@ -1330,9 +1866,13 @@ describe('KubeconfigContext', () => {
     ]);
     expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev', '/kube/gamma:staging']);
 
+    let secondClose!: Promise<void>;
     await act(async () => {
-      await getContext().closeKubeconfig('/kube/gamma:staging');
-      await flushPromises();
+      secondClose = getContext().closeKubeconfig('/kube/gamma:staging');
+    });
+    await act(async () => {
+      resolveFirstClose();
+      await secondClose;
     });
 
     expect(setSelectedKubeconfigsMock).toHaveBeenNthCalledWith(2, ['/kube/alpha:dev']);

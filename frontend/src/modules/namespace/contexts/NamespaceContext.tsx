@@ -240,7 +240,8 @@ const projectNamespaceListItem = (
 };
 
 export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }) => {
-  const { selectedKubeconfig, selectedClusterId, selectedClusterIds } = useKubeconfig();
+  const { selectedKubeconfig, selectedClusterId, selectedClusterIds, managedClusterIds } =
+    useKubeconfig();
   const { getClusterState } = useClusterLifecycle();
   const activeClusterId = selectedClusterId?.trim() || '';
   const activeClusterRefreshAvailable = activeClusterId
@@ -265,8 +266,8 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   );
   const namespacesRefreshScope = activeClusterRefreshAvailable ? namespacesScope : '';
   const retainedNamespaceScopes = useMemo(
-    () => buildNamespaceScopes(selectedClusterIds),
-    [selectedClusterIds]
+    () => buildNamespaceScopes(managedClusterIds),
+    [managedClusterIds]
   );
   const namespaceScopes = useMemo(
     () => buildNamespaceScopes(refreshAvailableClusterIds),
@@ -651,10 +652,10 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
 
   useEffect(() => {
     setNamespaceSelections((prev) => {
-      if (selectedClusterIds.length === 0) {
+      if (managedClusterIds.length === 0) {
         return prev.__default__ ? { __default__: prev.__default__ } : {};
       }
-      const allowed = new Set(selectedClusterIds);
+      const allowed = new Set(managedClusterIds);
       const next: Record<string, string | undefined> = {};
       Object.entries(prev).forEach(([key, value]) => {
         if (key === '__default__' || allowed.has(key)) {
@@ -663,7 +664,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       });
       return next;
     });
-  }, [selectedClusterIds]);
+  }, [managedClusterIds]);
 
   useEffect(() => {
     const handleResetViews = () => {

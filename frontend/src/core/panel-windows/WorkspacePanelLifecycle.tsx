@@ -15,7 +15,7 @@ import { usePanelWorkspaceSync } from './WorkspacePanelSync';
 
 export function WorkspacePanelLifecycle() {
   const windowName = getWindowIdentity();
-  const { selectedClusterIds, registerClusterClosePreflight } = useKubeconfig();
+  const { managedClusterIds, registerClusterClosePreflight } = useKubeconfig();
   const { panelIdsForCluster } = useObjectPanelState();
   const { focusPanel } = useDockablePanelContext();
   const guards = usePanelLifecycleGuardRegistry();
@@ -54,7 +54,7 @@ export function WorkspacePanelLifecycle() {
   );
 
   const closeCluster = useCallback(
-    async (clusterId: string) => {
+    async (clusterId: string, admitted: Promise<void>) => {
       const transactionId = `cluster-close-${globalThis.crypto.randomUUID()}`;
       let resume: ((closed: boolean) => void) | undefined;
       let closed = false;
@@ -69,6 +69,7 @@ export function WorkspacePanelLifecycle() {
         if (!(await preflight([clusterId], transactionId, '', clusterId, prepare))) {
           return null;
         }
+        await admitted;
         closed = await closeClusterView(windowName, clusterId);
         // Keep the cluster guarded until its frontend selection has settled.
         return closed ? { release } : null;
@@ -91,7 +92,7 @@ export function WorkspacePanelLifecycle() {
           return;
         }
         const transactionId = `window-close-${globalThis.crypto.randomUUID()}`;
-        void preflight(selectedClusterIds, transactionId, 'Closing window…')
+        void preflight(managedClusterIds, transactionId, 'Closing window…')
           .then((allowed) => (allowed ? acknowledgeWorkspaceWindowClose(windowName) : undefined))
           .catch((error) =>
             reportOperationalError(error, {
@@ -101,11 +102,11 @@ export function WorkspacePanelLifecycle() {
           )
           .finally(() => guards.releaseTransfer(transactionId));
       }),
-    [windowName, selectedClusterIds, preflight, guards]
+    [windowName, managedClusterIds, preflight, guards]
   );
   const prepareQuit = useCallback(
-    (transactionId: string, status: string) => preflight(selectedClusterIds, transactionId, status),
-    [selectedClusterIds, preflight]
+    (transactionId: string, status: string) => preflight(managedClusterIds, transactionId, status),
+    [managedClusterIds, preflight]
   );
   useApplicationQuitPreflight(windowName, prepareQuit);
   return null;

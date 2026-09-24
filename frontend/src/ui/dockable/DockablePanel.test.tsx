@@ -28,7 +28,7 @@ vi.mock('@core/backend-api', () => ({
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: vi.fn(() => ({
     selectedClusterId: 'cluster-a',
-    selectedClusterIds: ['cluster-a'],
+    managedClusterIds: ['cluster-a'],
   })),
 }));
 

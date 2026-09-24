@@ -95,6 +95,7 @@ const viewState = {
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     ...mockState,
+    managedKubeconfigs: mockState.selectedKubeconfigs,
     selectedClusterIds: mockState.selectedKubeconfigs.map(
       (selection) => mockState.getClusterMeta(selection).id
     ),

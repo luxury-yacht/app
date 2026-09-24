@@ -22,12 +22,14 @@ const clearLogViewerPrefsMock = vi.fn();
 let mockClusterId = 'cluster-a';
 let mockClusterName = 'Cluster A';
 let mockClusterIds = ['cluster-a', 'cluster-b'];
+let mockVisibleClusterIds: string[] | undefined;
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     selectedClusterId: mockClusterId,
     selectedClusterName: mockClusterName,
-    selectedClusterIds: mockClusterIds,
+    managedClusterIds: mockClusterIds,
+    selectedClusterIds: mockVisibleClusterIds ?? mockClusterIds,
   }),
 }));
 
@@ -73,6 +75,7 @@ describe('ObjectPanelStateContext', () => {
     mockClusterId = 'cluster-a';
     mockClusterName = 'Cluster A';
     mockClusterIds = ['cluster-a', 'cluster-b'];
+    mockVisibleClusterIds = undefined;
     stateRef.current = null;
     activeTabProbeRef.current = undefined;
     resetScopedDomainMock.mockReset();
@@ -365,6 +368,31 @@ describe('ObjectPanelStateContext', () => {
     });
     expect(stateRef.current?.openPanels.has(panelId)).toBe(false);
     expect(activeTabProbeRef.current).toBeUndefined();
+  });
+
+  it('retains panels while a tab is hidden for close and restores them after denial', async () => {
+    await renderProvider();
+    act(() => {
+      stateRef.current?.onRowClick({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'default',
+        clusterId: 'cluster-a',
+      });
+    });
+    const panelId = requireValue(
+      Array.from(stateRef.current?.openPanels.keys() ?? [])[0],
+      'Opened panel'
+    );
+    mockVisibleClusterIds = ['cluster-b'];
+    mockClusterId = 'cluster-b';
+    await renderProvider();
+    expect(stateRef.current?.getOwnedPanel('cluster-a', panelId)).toBeDefined();
+    expect(resetScopedDomainMock).not.toHaveBeenCalled();
+    mockVisibleClusterIds = undefined;
+    mockClusterId = 'cluster-a';
+    await renderProvider();
+    expect(stateRef.current?.openPanels.has(panelId)).toBe(true);
   });
 
   it('clears object panel state when a tab is closed', async () => {

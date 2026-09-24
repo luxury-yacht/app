@@ -20,6 +20,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     selectedClusterId: fixtures.clusterId,
     selectedClusterIds: fixtures.clusterIds,
+    managedClusterIds: fixtures.clusterIds,
   }),
 }));
 vi.mock('@core/desktop-runtime', () => ({

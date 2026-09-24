@@ -415,6 +415,9 @@ func TestApplySelectionPruneRemovesClusterWorkspaceState(t *testing.T) {
 	app.ClusterWorkspace.incrementClusterScopeRevision("cluster-b")
 	app.ClusterRuntime.clusterClients["cluster-b"] = &clusterClients{meta: ClusterMeta{ID: "cluster-b", Name: "Staging"}}
 
+	registry := app.ClusterRuntime.ensureKubernetesAPIMetricsRegistry()
+	registry.getOrCreate(ClusterMeta{ID: "cluster-a"}, 200, 500)
+	registry.getOrCreate(ClusterMeta{ID: "cluster-b"}, 200, 500)
 	app.Workspace.applySelectionPrune(nil, nil, []string{"cluster-a"}, "test")
 
 	state := app.Workspace.GetClusterWorkspaceState()
@@ -423,6 +426,10 @@ func TestApplySelectionPruneRemovesClusterWorkspaceState(t *testing.T) {
 	require.Equal(t, ClusterHealthDegraded, state.Clusters["cluster-b"].Health)
 	require.Equal(t, uint64(1), state.Clusters["cluster-b"].ScopeRevision)
 	require.Equal(t, map[string]ClusterLifecycleState{"cluster-b": ClusterStateReady}, app.ClusterRuntime.clusterLifecycle.GetAllStates())
+	diagnostics, err := app.ClusterRuntime.GetKubernetesAPIClientDiagnostics()
+	require.NoError(t, err)
+	require.Len(t, diagnostics, 1)
+	require.Equal(t, "cluster-b", diagnostics[0].ClusterID)
 }
 
 func TestApplyClusterWorkspaceReturnsAuthoritativeActivationState(t *testing.T) {

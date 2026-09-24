@@ -49,7 +49,7 @@ func DiscoverViaDiscovery(ctx context.Context, discoveryClient discovery.Discove
 		return EmptyPresence(), nil
 	}
 
-	_, resources, err := discoveryClient.ServerGroupsAndResources()
+	_, resources, err := discovery.ToDiscoveryInterfaceWithContext(discoveryClient).ServerGroupsAndResourcesWithContext(ctx)
 	presence := EmptyPresence()
 	for _, list := range resources {
 		recordGatewayAPIResources(presence, list)

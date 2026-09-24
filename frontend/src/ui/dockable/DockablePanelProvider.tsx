@@ -241,7 +241,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   // PanelLayoutStore that holds tab lifetime, group geometry and membership for
   // that cluster. The active store mirrors selectedClusterId. Cluster
   // tab close prunes the entry.
-  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+  const { selectedClusterId, managedClusterIds } = useKubeconfig();
   const storesRef = useRef<Map<string, PanelLayoutStore>>(new Map());
 
   const getOrCreateStoreForCluster = useCallback(
@@ -277,13 +277,13 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   // per-cluster `openPanels` slices). The '__default__' key is never
   // pruned — it's the no-cluster-selected slot.
   useEffect(() => {
-    const allowed = new Set(selectedClusterIds ?? []);
+    const allowed = new Set(managedClusterIds ?? []);
     for (const clusterKey of Array.from(storesRef.current.keys())) {
       if (clusterKey !== '__default__' && !allowed.has(clusterKey)) {
         storesRef.current.delete(clusterKey);
       }
     }
-  }, [selectedClusterIds]);
+  }, [managedClusterIds]);
 
   // Tab group state lives inside the active cluster's store. Subscribe
   // via useSyncExternalStore so React re-renders on any tabGroups change

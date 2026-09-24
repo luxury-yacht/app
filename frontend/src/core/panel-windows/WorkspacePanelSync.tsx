@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { readPanelWorkspace } from '@/core/app-state-access';
 import type { panelwindow } from '@/core/backend-api/models';
+import { useClusterWorkspaceSnapshot } from '@/core/cluster-workspace/useClusterWorkspace';
 import { getWindowIdentity } from '@/core/desktop-runtime';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import { useLocalPanelSnapshots } from '@/modules/object-panel/contexts/ObjectPanelStateContext';
@@ -82,7 +83,24 @@ function collectDockedPanelGroups(
 
 export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode }>) {
   const windowName = getWindowIdentity();
-  const { selectedClusterIds, selectedClusterId, kubeconfigsLoading } = useKubeconfig();
+  const {
+    selectedClusterIds: visibleClusterIds,
+    managedClusterIds,
+    selectedClusterId,
+    kubeconfigsLoading,
+    getClusterMeta,
+  } = useKubeconfig();
+  const { selectedKubeconfigs: admittedSelections } = useClusterWorkspaceSnapshot();
+  const admittedClusterIds = useMemo(
+    () => new Set(admittedSelections.map((selection) => getClusterMeta(selection).id)),
+    [admittedSelections, getClusterMeta]
+  );
+  // Tabs paint before their membership RPC settles. Native panel operations
+  // require the backend to have admitted that tab, independently of connection readiness.
+  const selectedClusterIds = useMemo(
+    () => visibleClusterIds.filter((id) => admittedClusterIds.has(id)),
+    [visibleClusterIds, admittedClusterIds]
+  );
   const local = useLocalPanelSnapshots();
   const { getClusterTabGroups, tabGroups } = useDockablePanelContext();
   const restoreWorkspacePanels = useRestoreWorkspacePanels();
@@ -100,10 +118,10 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
   const closingClusters = useSyncExternalStore(activity.subscribe, activity.getSnapshot);
   const groups = useMemo(
     () =>
-      collectDockedPanelGroups(selectedClusterIds, local, (clusterId) =>
+      collectDockedPanelGroups(managedClusterIds, local, (clusterId) =>
         clusterId === selectedClusterId ? tabGroups : getClusterTabGroups(clusterId)
       ),
-    [selectedClusterIds, selectedClusterId, local, getClusterTabGroups, tabGroups]
+    [managedClusterIds, selectedClusterId, local, getClusterTabGroups, tabGroups]
   );
   const current = useRef({ selectedClusterIds, local, groups });
   current.current = { selectedClusterIds, local, groups };
@@ -162,11 +180,12 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
   );
 
   useEffect(() => {
-    activity.reconcile(selectedClusterIds);
+    activity.reconcile(managedClusterIds);
     // Publications replace every docked group in this renderer. Resume only
-    // when each accepted close is reflected in the rendered cluster selection.
+    // after accepted closes release their managed cluster membership.
     if (
-      Array.from(closingClusters).some(([id, closed]) => !closed || selectedClusterIds.includes(id))
+      groups.some((group) => !admittedClusterIds.has(group.clusterId)) ||
+      Array.from(closingClusters).some(([id, closed]) => !closed || managedClusterIds.includes(id))
     ) {
       return;
     }
@@ -184,7 +203,7 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
         });
       }
     );
-  }, [groups, windowName, selectedClusterIds, closingClusters, activity]);
+  }, [groups, windowName, managedClusterIds, closingClusters, activity, admittedClusterIds]);
 
   const removeForeignPlacements = useCallback(
     (clusterId: string, panels: panelwindow.WorkspacePanel[]) => {

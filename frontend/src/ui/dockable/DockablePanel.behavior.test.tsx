@@ -41,7 +41,7 @@ function UnsavedPanel({ panelId }: Readonly<{ panelId: string }>) {
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: vi.fn(() => ({
     selectedClusterId: 'cluster-a',
-    selectedClusterIds: ['cluster-a'],
+    managedClusterIds: ['cluster-a'],
   })),
 }));
 
@@ -196,7 +196,7 @@ describe('DockablePanel docked behaviour', () => {
     const renderCluster = async (clusterId: string) => {
       vi.mocked(useKubeconfig).mockReturnValue({
         selectedClusterId: clusterId,
-        selectedClusterIds: ['cluster-a', 'cluster-b'],
+        managedClusterIds: ['cluster-a', 'cluster-b'],
       } as ReturnType<typeof useKubeconfig>);
       await act(async () =>
         root.render(
@@ -243,7 +243,7 @@ describe('DockablePanel docked behaviour', () => {
       host.remove();
       vi.mocked(useKubeconfig).mockReturnValue({
         selectedClusterId: 'cluster-a',
-        selectedClusterIds: ['cluster-a'],
+        managedClusterIds: ['cluster-a'],
       } as ReturnType<typeof useKubeconfig>);
     }
   });

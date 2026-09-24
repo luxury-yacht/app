@@ -53,7 +53,7 @@ const DEFAULT_SIDEBAR_SELECTION: SidebarSelectionType = {
 };
 
 export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ children }) => {
-  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+  const { selectedClusterId, managedClusterIds } = useKubeconfig();
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(250);
   const [isResizing, setIsResizing] = useState(false);
@@ -80,10 +80,10 @@ export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ chil
 
   useEffect(() => {
     setSidebarSelections((prev) => {
-      if (selectedClusterIds.length === 0) {
+      if (managedClusterIds.length === 0) {
         return prev.__default__ ? { __default__: prev.__default__ } : {};
       }
-      const allowed = new Set(selectedClusterIds);
+      const allowed = new Set(managedClusterIds);
       const next: Record<string, SidebarSelectionType> = {};
       Object.entries(prev).forEach(([key, storedValue]) => {
         if (key === '__default__' || allowed.has(key)) {
@@ -92,7 +92,7 @@ export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ chil
       });
       return next;
     });
-  }, [selectedClusterIds]);
+  }, [managedClusterIds]);
 
   const setSidebarSelectionForCluster = useCallback(
     (clusterId: string, selection: SidebarSelectionType) => {

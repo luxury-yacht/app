@@ -18,7 +18,7 @@ let mockClusterIds = ['cluster-a', 'cluster-b'];
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     selectedClusterId: mockClusterId,
-    selectedClusterIds: mockClusterIds,
+    managedClusterIds: mockClusterIds,
   }),
 }));
 

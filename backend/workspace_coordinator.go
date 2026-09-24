@@ -64,10 +64,10 @@ type workspaceRefresh interface {
 	SetVisibleCluster(string)
 	SetWindowVisibleCluster(string, string)
 	currentTelemetryRecorder() *telemetry.Recorder
+	ensureObjectCatalogForCluster(string) error
 	rebuildClusterSubsystem(string)
 	releaseWorkspaceWindowForeground(string)
 	setupRefreshSubsystemForSelections([]kubeconfigSelection) error
-	startObjectCatalogForTarget(catalogTarget) error
 	stopObjectCatalog()
 	teardownClusterSubsystem(string)
 	teardownRefreshSubsystem()

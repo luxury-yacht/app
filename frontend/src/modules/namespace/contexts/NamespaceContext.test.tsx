@@ -125,6 +125,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
     selectedKubeconfig: 'test',
     selectedClusterId: mockClusterId,
     selectedClusterIds: mockClusterIds,
+    managedClusterIds: mockClusterIds,
   }),
 }));
 

@@ -12,6 +12,9 @@ func (a *WorkspaceCoordinator) removeClusterWorkspaceState(clusterID string) {
 	}
 	a.PanelWorkspaceDirectory().RemoveCluster(clusterID)
 	a.clusterWorkspace.removeClusterWorkspaceRuntimeState(clusterID)
+	// Diagnostics begin during client construction, so retirement cannot depend
+	// on the cluster having reached the installed client pool.
+	a.clusterRuntime.ensureKubernetesAPIMetricsRegistry().remove(clusterID)
 	a.clusterRuntime.removeClusterLifecycleState(clusterID)
 }
 
@@ -188,11 +191,23 @@ func (a *WorkspaceCoordinator) applyWorkspaceSelections(
 	windowID string,
 	selections []string,
 ) error {
+	intent, err := a.commitWorkspaceSelections(mutation, windowID, selections)
+	if err != nil || intent == nil {
+		return err
+	}
+	return a.finishKubeconfigSelection(mutation, *intent)
+}
+
+func (a *WorkspaceCoordinator) commitWorkspaceSelections(
+	mutation *selectionMutation,
+	windowID string,
+	selections []string,
+) (*selectionChangeIntent, error) {
 	var normalized []string
 	if len(selections) > 0 {
 		_, normalizedSelections, err := a.normalizeSelectionSet(selections)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		normalized = normalizedSelections
 	}
@@ -202,9 +217,14 @@ func (a *WorkspaceCoordinator) applyWorkspaceSelections(
 	union := a.aggregateWorkspaceSelectionsLocked()
 	a.workspaceSelectionsMu.Unlock()
 	if selectionSetsEqual(union, a.GetSelectedKubeconfigs()) {
-		return nil
+		return nil, nil
 	}
-	return a.setSelectedKubeconfigs(mutation, union)
+	intent, err := a.prepareKubeconfigSelection(mutation, union)
+	if err != nil {
+		return nil, err
+	}
+	a.commitKubeconfigSelection(mutation, &intent)
+	return &intent, nil
 }
 
 // ReleaseWorkspaceWindow relinquishes both foreground demand and every cluster
@@ -251,6 +271,9 @@ func (a *WorkspaceCoordinator) ApplyClusterWorkspace(command ClusterWorkspaceCom
 		}
 		a.updateClusterWorkspaceVisibility(windowID, command)
 		return clusterWorkspaceResult(a.latestClusterWorkspaceState(windowID), nil)
+	}
+	if windowID != "" {
+		return a.acceptWorkspaceSelection(windowID, command)
 	}
 	var state ClusterWorkspaceState
 	captured := false
@@ -315,15 +338,11 @@ func (a *WorkspaceCoordinator) updateClusterWorkspaceSelections(
 
 func (a *WorkspaceCoordinator) updateClusterWorkspaceVisibility(windowID string, command ClusterWorkspaceCommand) {
 	clusterID := strings.TrimSpace(command.VisibleClusterID)
-	if windowID != "" && command.UpdateSelectedKubeconfigs {
+	if windowID != "" {
 		a.refresh.SetWindowVisibleCluster(windowID, clusterID)
 		return
 	}
 	if clusterID == "" {
-		return
-	}
-	if windowID != "" {
-		a.refresh.SetWindowVisibleCluster(windowID, clusterID)
 		return
 	}
 	a.refresh.SetVisibleCluster(clusterID)

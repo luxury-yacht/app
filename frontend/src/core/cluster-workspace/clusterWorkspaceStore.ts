@@ -335,8 +335,26 @@ export class ClusterWorkspaceStore {
 
   applyWireState(wire: ClusterWorkspaceWireState): void {
     this.authoritativeGeneration++;
-    this.pendingHydrationFields.clear();
     this.mergeWireState(wire);
+  }
+
+  async reconcileCommand<T extends { state: ClusterWorkspaceWireState }>(
+    request: () => Promise<T>,
+    accept: () => boolean
+  ): Promise<T> {
+    const generation = this.generation;
+    const liveFields = new Map<string, Set<LiveWorkspaceField>>();
+    this.pendingHydrationFields.add(liveFields);
+    try {
+      const result = await request();
+      if (generation === this.generation && accept()) {
+        this.authoritativeGeneration++;
+        this.mergeWireState(result.state, liveFields);
+      }
+      return result;
+    } finally {
+      this.pendingHydrationFields.delete(liveFields);
+    }
   }
 
   // The native close command has already removed this view. A later selection
@@ -619,6 +637,23 @@ export class ClusterWorkspaceStore {
   }
 
   beginForegroundActivation(clusterId: string): void {
+    this.beginRequestHold(clusterId);
+  }
+
+  // Close preflight must stop requests before the backend can retire producers.
+  // A rejected close releases the same readiness gate and resumes retained work.
+  holdClusterRequests(clusterId: string): () => void {
+    this.beginRequestHold(clusterId);
+    let released = false;
+    return () => {
+      if (!released) {
+        released = true;
+        this.endForegroundActivation(clusterId);
+      }
+    };
+  }
+
+  private beginRequestHold(clusterId: string): void {
     const normalized = clusterId.trim();
     if (!normalized) {
       return;

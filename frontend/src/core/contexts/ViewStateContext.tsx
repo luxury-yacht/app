@@ -148,7 +148,7 @@ interface NavigationStateProviderProps {
 }
 
 const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ children }) => {
-  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+  const { selectedClusterId, selectedClusterIds, managedClusterIds } = useKubeconfig();
   // Keep navigation state scoped per cluster tab to avoid cross-tab state bleed.
   const [navigationStateByCluster, setNavigationStateByCluster] = useState<
     Record<string, NavigationTabState>
@@ -201,10 +201,10 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
 
   useEffect(() => {
     setNavigationStateByCluster((prev) => {
-      if (selectedClusterIds.length === 0) {
+      if (managedClusterIds.length === 0) {
         return prev.__default__ ? { __default__: prev.__default__ } : {};
       }
-      const allowed = new Set(selectedClusterIds);
+      const allowed = new Set(managedClusterIds);
       const next: Record<string, NavigationTabState> = {};
       Object.entries(prev).forEach(([key, storedValue]) => {
         if (key === '__default__' || allowed.has(key)) {
@@ -213,14 +213,15 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
       });
       return next;
     });
-  }, [selectedClusterIds]);
+  }, [managedClusterIds]);
 
   useEffect(() => {
-    if (workspace === resolvedWorkspace) {
+    const retainedWorkspace = resolveNavigationWorkspace(workspace, managedClusterIds.length);
+    if (workspace === retainedWorkspace) {
       return;
     }
-    setWorkspace(resolvedWorkspace);
-  }, [resolvedWorkspace, workspace]);
+    setWorkspace(retainedWorkspace);
+  }, [managedClusterIds.length, workspace]);
 
   // Enhanced setViewType that notifies RefreshManager
   const setViewType = useCallback(

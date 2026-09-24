@@ -54,6 +54,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
   const { viewType, navigateToGlobal, activateClusterWorkspace } = useViewState();
   const {
     selectedKubeconfigs,
+    managedKubeconfigs,
     selectedKubeconfig,
     kubeconfigsLoading,
     setActiveKubeconfig,
@@ -132,11 +133,12 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
     if (kubeconfigsLoading || !tabOrderHydrated) {
       return;
     }
-    if (ordersMatch(mergedOrder, tabOrder)) {
+    const retainedOrder = mergeClusterTabOrder(managedKubeconfigs, tabOrder);
+    if (ordersMatch(retainedOrder, tabOrder)) {
       return;
     }
-    setClusterTabOrder(mergedOrder);
-  }, [kubeconfigsLoading, mergedOrder, tabOrder, tabOrderHydrated]);
+    setClusterTabOrder(retainedOrder);
+  }, [kubeconfigsLoading, managedKubeconfigs, tabOrder, tabOrderHydrated]);
 
   const tabsById = useMemo(() => {
     const map = new Map<string, ClusterTab>();

@@ -29,11 +29,19 @@ func (a *WorkspaceCoordinator) syncClusterClientPoolWithBuilder(
 	}
 	desired := a.clusterRuntime.desiredClusterClientSelections(selections)
 	tasks := a.clusterRuntime.clusterClientCreateTasks(desired)
-	if err := a.clusterRuntime.createClusterClients(ctx, tasks, build); err != nil {
-		return err
-	}
 	a.cleanupRemovedClusterClients(a.clusterRuntime.removeUndesiredClusterClients(desired))
-	return nil
+	a.cleanupUnselectedClusterStates(desired)
+	return a.clusterRuntime.createClusterClients(ctx, tasks, build)
+}
+
+// Canceled connection attempts have lifecycle state without installed clients.
+// Remove that state as well as client-backed state when tab ownership is released.
+func (a *WorkspaceCoordinator) cleanupUnselectedClusterStates(desired map[string]kubeconfigSelection) {
+	for clusterID := range a.clusterRuntime.clusterLifecycleStates() {
+		if _, keep := desired[clusterID]; !keep {
+			a.removeClusterWorkspaceState(clusterID)
+		}
+	}
 }
 
 func (a *WorkspaceCoordinator) cleanupRemovedClusterClients(removed []removedClusterClient) {
@@ -48,7 +56,6 @@ func (a *WorkspaceCoordinator) cleanupRemovedClusterClients(removed []removedClu
 		}
 	}
 	for _, item := range removed {
-		a.clusterRuntime.ensureKubernetesAPIMetricsRegistry().remove(item.clusterID)
 		a.removeClusterWorkspaceState(item.clusterID)
 	}
 }

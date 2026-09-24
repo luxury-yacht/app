@@ -374,12 +374,18 @@ class RefreshOrchestrator {
     let readyTask: Promise<void>;
     readyTask = Promise.resolve()
       .then(() => {
-        if (!this.isScopedDomainEnabledInternal(domain, normalizedScope)) {
+        if (
+          !this.isRuntimeCurrent(runtime) ||
+          !this.isScopedDomainEnabledInternal(domain, normalizedScope)
+        ) {
           return;
         }
         this.startStreamingScope(domain, normalizedScope, streaming);
       })
       .catch((error) => {
+        if (!this.isRuntimeCurrent(runtime)) {
+          return;
+        }
         const message =
           error instanceof Error ? error.message : 'Failed to initialise refresh subsystem';
         setScopedDomainState(domain, normalizedScope, (previous) => ({
@@ -891,6 +897,10 @@ class RefreshOrchestrator {
     startPromise: Promise<(() => void) | undefined>,
     cleanup: (() => void) | undefined
   ): void {
+    if (!this.isRuntimeCurrent(runtime)) {
+      this.runStreamingCleanup(cleanup, domain, scope);
+      return;
+    }
     const enabledNow = this.isScopedDomainEnabledInternal(domain, scope);
     if (!enabledNow || runtime.isStreamingCancelled(domain, scope)) {
       runtime.failStreamingStart(domain, scope, startPromise);
@@ -944,6 +954,9 @@ class RefreshOrchestrator {
     error: unknown
   ): void {
     runtime.failStreamingStart(domain, scope, startPromise);
+    if (!this.isRuntimeCurrent(runtime)) {
+      return;
+    }
     const message = error instanceof Error ? error.message : String(error);
     setScopedDomainState(domain, scope, (previous) => ({
       ...previous,
@@ -1095,6 +1108,14 @@ class RefreshOrchestrator {
       return this.getClusterRuntime(parsed.clusterIds[0]);
     }
     return this.coordinatorRuntime;
+  }
+
+  // Async work belongs to the runtime that started it, including across a
+  // close/reopen of the same cluster. Checking ownership must not create one.
+  private isRuntimeCurrent(runtime: ClusterRefreshRuntime): boolean {
+    return (
+      runtime === this.coordinatorRuntime || this.clusterRuntimes.get(runtime.clusterId) === runtime
+    );
   }
 
   private getAllRuntimes(): ClusterRefreshRuntime[] {
@@ -1360,6 +1381,9 @@ class RefreshOrchestrator {
       return;
     }
 
+    if (!this.isRuntimeCurrent(runtime)) {
+      return;
+    }
     await this.performFetch(domain, normalizedScope, {
       ...(options.coalesce ? { coalesce: true } : {}),
       isManual: options.isManual ?? true,

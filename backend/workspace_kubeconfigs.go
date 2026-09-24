@@ -293,18 +293,8 @@ func (a *WorkspaceCoordinator) clearKubeconfigSelection(persist bool) error {
 
 // clearClusterRuntime retires the clients after empty selection has committed.
 func (a *WorkspaceCoordinator) clearClusterRuntime() {
-	removed := a.clusterRuntime.clearClusterClientPool()
-	for _, item := range removed {
-		if item.authManager != nil {
-			item.authManager.Shutdown()
-		}
-	}
-	for _, item := range removed {
-		if a.operations != nil {
-			a.operations.StopCluster(item.clusterID)
-		}
-		a.removeClusterWorkspaceState(item.clusterID)
-	}
+	a.cleanupRemovedClusterClients(a.clusterRuntime.clearClusterClientPool())
+	a.cleanupUnselectedClusterStates(nil)
 	a.refresh.teardownRefreshSubsystem()
 }
 

@@ -74,15 +74,18 @@ func TestCloseClusterViewAcknowledgesCommittedSelectionBeforeRuntimeCleanup(t *t
 	release()
 	select {
 	case result := <-reopened:
-		// The fixture has no on-disk kubeconfig: even a failed connection must
-		// retain the new tab after old cleanup, so it can show recovery actions.
-		require.NotEmpty(t, result.Error)
+		// Reopen acknowledges membership before connection. A missing on-disk
+		// kubeconfig must retain that admitted tab and report work failure separately.
+		require.Empty(t, result.Error)
 		require.Equal(t, []string{selection}, result.State.SelectedKubeconfigs)
 	case <-time.After(time.Second):
 		t.Fatal("reopen did not resume after cleanup")
 	}
 	require.True(t, workspace.waitForSelectionMutationIdle(time.Second))
 	require.Equal(t, []string{"config:prod"}, workspace.WindowClusterIDs("app-a"))
+	diagnostics, err := workspace.GetSelectionDiagnostics()
+	require.NoError(t, err)
+	require.NotEmpty(t, diagnostics.LastError)
 }
 
 func TestCloseClusterViewRetainsOtherClustersAndReportsCleanupFailureAfterAcceptance(t *testing.T) {
@@ -164,6 +167,9 @@ func TestCloseClusterViewKeepsSharedRuntimeUntilTheLastViewCloses(t *testing.T) 
 	setTestConfigEnv(t)
 	app := newWorkspaceCoordinatorTestFixture(t)
 	coordinator := app.Workspace
+	app.ClusterRuntime.initializeClusterLifecycle()
+	app.ClusterRuntime.setClusterLifecycleState("config:prod", ClusterStateReady)
+	app.ClusterRuntime.ensureKubernetesAPIMetricsRegistry().getOrCreate(ClusterMeta{ID: "config:prod"}, 200, 500).record(200, time.Now())
 	coordinator.kubeconfigsMu.Lock()
 	coordinator.setSelectedKubeconfigsLocked([]string{"/tmp/config:prod"})
 	coordinator.kubeconfigsMu.Unlock()
@@ -176,9 +182,17 @@ func TestCloseClusterViewKeepsSharedRuntimeUntilTheLastViewCloses(t *testing.T) 
 	require.Empty(t, coordinator.WindowClusterIDs("app-a"))
 	require.Equal(t, []string{"config:prod"}, coordinator.WindowClusterIDs("app-b"))
 	require.Equal(t, []string{"/tmp/config:prod"}, coordinator.GetSelectedKubeconfigs())
+	diagnostics, err := app.ClusterRuntime.GetKubernetesAPIClientDiagnostics()
+	require.NoError(t, err)
+	require.Len(t, diagnostics, 1, "a peer still owns the API client diagnostics")
+	require.Equal(t, int64(1), diagnostics[0].TotalRequests)
 	require.Equal(t, panelwindow.PanelLocationRetained, coordinator.PanelWorkspaceDirectory().Snapshot("config:prod").Panels[0].Location.Kind)
 	require.Error(t, coordinator.CloseClusterView("app-a", "config:prod"))
 	require.Error(t, coordinator.CloseClusterView("app-b", "foreign"))
 	require.NoError(t, coordinator.CloseClusterView("app-b", "config:prod"))
 	require.Empty(t, coordinator.GetSelectedKubeconfigs())
+	require.True(t, coordinator.waitForSelectionMutationIdle(time.Second))
+	diagnostics, err = app.ClusterRuntime.GetKubernetesAPIClientDiagnostics()
+	require.NoError(t, err)
+	require.Empty(t, diagnostics)
 }

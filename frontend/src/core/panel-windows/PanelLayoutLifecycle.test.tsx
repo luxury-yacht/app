@@ -19,6 +19,7 @@ vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     selectedClusterId: selection.active,
     selectedClusterIds: selection.ids,
+    managedClusterIds: selection.ids,
   }),
 }));
 vi.mock('@/core/data-access', () => ({ resetRefreshDomain: vi.fn() }));

@@ -33,15 +33,13 @@ func (a *WorkspaceCoordinator) startObjectCatalog() {
 		return
 	}
 
-	a.refresh.stopObjectCatalog()
-
 	targets := a.catalogTargets()
 	if len(targets) == 0 {
 		return
 	}
 
 	for _, target := range targets {
-		if err := a.refresh.startObjectCatalogForTarget(target); err != nil {
+		if err := a.refresh.ensureObjectCatalogForCluster(target.meta.ID); err != nil {
 			a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", target.meta.ID, err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 			continue
 		}

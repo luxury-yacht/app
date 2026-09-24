@@ -255,9 +255,8 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   children,
   initialGroupSnapshot,
 }) => {
-  const { selectedClusterId, selectedClusterName, selectedClusterIds } = useKubeconfig();
-  // Ensure a stable fallback array when kubeconfig mocks omit selectedClusterIds.
-  const activeClusterIds = selectedClusterIds ?? EMPTY_CLUSTER_IDS;
+  const { selectedClusterId, selectedClusterName, managedClusterIds } = useKubeconfig();
+  const activeClusterIds = managedClusterIds ?? EMPTY_CLUSTER_IDS;
   // Keep object panel state scoped per cluster tab to avoid cross-tab state leakage.
   const [objectPanelStateByCluster, setObjectPanelStateByCluster] = useState<
     Record<string, ObjectPanelState>

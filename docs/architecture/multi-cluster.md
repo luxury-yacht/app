@@ -105,6 +105,49 @@ cluster activation and returns the resulting authoritative per-window
 snapshot. Selection UI must use that response instead of chaining separate
 selection, auth, lifecycle, and visible-cluster reads.
 
+Selection acknowledgement follows the membership and restart-selection commit,
+before connecting to the selected clusters. The renderer serializes membership
+RPCs in user order, while tab identity paints immediately and foreground commands
+use an independent ordered lane. A later tab switch remains authoritative when
+an earlier membership acknowledgement arrives. Reopens wait for close guards and
+accepted removal to settle. Discovery hydration and delayed command snapshots
+cannot overwrite newer selection intent or lifecycle events.
+
+A close click removes the visible tab and selects its neighbor immediately,
+including when the tab's open acknowledgement or native close is still pending.
+`selectedKubeconfigs` and `selectedClusterIds` describe these visible tabs;
+`managedKubeconfigs` and `managedClusterIds` retain closing clusters until native
+removal is accepted. Persisted tab ordering uses the managed selection so denial
+restores the original tab position.
+Panel publication, panel/layout ownership, navigation, sidebar, and namespace
+retention use the managed set. Local close guards run before switching away can
+unmount their controls; native removal waits for the prior tab admission.
+Each close captures its registered preflight participants before awaiting them.
+Foreground changes may replace those registrations, but cannot add a second native
+close to the transaction already in progress. Panel directory reads, object opens,
+and docked publication also require confirmed membership from the workspace state
+plane; optimistic tab visibility does not authorize native panel access. This gate
+does not wait for cluster connection readiness or block the membership command.
+A denied or failed preflight restores the tab and retained state without
+overwriting a newer foreground choice. Only accepted removal disposes that
+cluster's retained state. Global navigation likewise remains retained until the
+close is accepted even while its tab is temporarily hidden.
+
+A process-selection change can cancel obsolete connection work before waiting
+for the selection mutation. Peer ownership changes that leave the process union
+unchanged preserve in-flight authentication. Runtime work retains the serialized
+mutation and shutdown drain; admitted tabs report subsequent connection failure
+through lifecycle state and selection diagnostics. Discovery and preflight must
+propagate the connection context so cancellation drains their HTTP requests.
+Closing a canceled connection also removes lifecycle and API-diagnostics entries
+that never acquired installed clients. API diagnostics retire with shared cluster
+workspace state on deselection, pruning, and final-tab clearing; peer-owned
+clusters retain their diagnostics and request history.
+Frontend stream and snapshot continuations belong to the runtime instance that
+started them. Once removal retires that instance, queued work cannot recreate it;
+late subscriptions are disposed and late failures cannot republish scoped state.
+An explicit reopen creates a new runtime with independent work.
+
 The backend retains one cluster-tab set per app window plus cluster-scoped
 panel references. Their deterministic union owns process-wide selected
 kubeconfigs, clients, refresh subsystems, catalogs, and runtime operations.
@@ -122,6 +165,11 @@ selection mutations wait for that cleanup; background cleanup failures are
 reported in selection diagnostics and cluster-scoped application logs without
 restoring an accepted tab close. Panel guards and publication flushes still
 finish before the close is accepted.
+The renderer holds that cluster's request gate before native close preflight,
+aborts its requests and streams, and prunes its refresh runtime on acceptance.
+A denied close releases the hold and resumes retained work. Selection changes
+retain catalogs for surviving clusters; catalog teardown belongs to removal or
+replacement of the owning refresh generation.
 Cluster-tab movement stages the target
 before removing the source, preserving the process selection throughout.
 A panel-only renderer projects its fixed cluster without creating an app-view

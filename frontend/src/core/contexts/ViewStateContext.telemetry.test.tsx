@@ -15,6 +15,7 @@ const contextMocks = vi.hoisted(() => ({
   kubeconfig: {
     selectedClusterId: 'cluster-a',
     selectedClusterIds: ['cluster-a'],
+    managedClusterIds: ['cluster-a'],
   },
   modal: {},
   objectPanel: { showObjectPanel: false },
@@ -62,6 +63,9 @@ describe('ViewStateProvider navigation synchronization', () => {
   let root: Root;
 
   beforeEach(() => {
+    contextMocks.kubeconfig.selectedClusterIds = ['cluster-a'];
+    contextMocks.kubeconfig.managedClusterIds = ['cluster-a'];
+    contextMocks.kubeconfig.selectedClusterId = 'cluster-a';
     telemetryMocks.setActiveViewContext.mockReset();
     refreshMocks.updateContext.mockReset();
     contextMocks.sidebar.setSidebarSelection.mockReset();
@@ -89,6 +93,85 @@ describe('ViewStateProvider navigation synchronization', () => {
       clusterId: 'cluster-a',
       objectPanelOpen: false,
     });
+  });
+
+  it.each([false, true])(
+    'retains Global navigation until tab close is accepted (%s)',
+    (accepted) => {
+      let navigation!: ReturnType<typeof useViewState>;
+      const Probe = () => {
+        navigation = useViewState();
+        return null;
+      };
+      const render = () =>
+        act(() =>
+          root.render(
+            <ViewStateProvider>
+              <Probe />
+            </ViewStateProvider>
+          )
+        );
+      contextMocks.kubeconfig.selectedClusterIds = ['cluster-a', 'cluster-b'];
+      contextMocks.kubeconfig.managedClusterIds = ['cluster-a', 'cluster-b'];
+      render();
+      act(() => navigation.navigateToGlobal());
+      expect(navigation.viewType).toBe('global');
+      contextMocks.kubeconfig.selectedClusterIds = ['cluster-b'];
+      render();
+      expect(navigation.viewType).toBe('overview');
+      if (accepted) {
+        contextMocks.kubeconfig.managedClusterIds = ['cluster-b'];
+        render();
+      }
+      contextMocks.kubeconfig.selectedClusterIds = ['cluster-a', 'cluster-b'];
+      contextMocks.kubeconfig.managedClusterIds = ['cluster-a', 'cluster-b'];
+      render();
+      expect(navigation.viewType).toBe(accepted ? 'overview' : 'global');
+    }
+  );
+
+  it('retains cluster navigation during close and disposes it only after acceptance', () => {
+    let navigation!: ReturnType<typeof useViewState>;
+    const Probe = () => {
+      navigation = useViewState();
+      return null;
+    };
+    const render = () =>
+      act(() =>
+        root.render(
+          <ViewStateProvider>
+            <Probe />
+          </ViewStateProvider>
+        )
+      );
+    contextMocks.kubeconfig.selectedClusterIds = ['cluster-a', 'cluster-b'];
+    contextMocks.kubeconfig.managedClusterIds = ['cluster-a', 'cluster-b'];
+    render();
+    act(() =>
+      navigation.restoreClusterNavigationState('cluster-a', {
+        ...navigation.getClusterNavigationState('cluster-a'),
+        viewType: 'cluster',
+        activeClusterView: 'nodes',
+      })
+    );
+    contextMocks.kubeconfig.selectedClusterId = 'cluster-b';
+    contextMocks.kubeconfig.selectedClusterIds = ['cluster-b'];
+    render();
+    expect(navigation.getClusterNavigationState('cluster-a').activeClusterView).toBe('nodes');
+    contextMocks.kubeconfig.selectedClusterIds = ['cluster-a', 'cluster-b'];
+    contextMocks.kubeconfig.selectedClusterId = 'cluster-a';
+    render();
+    expect(navigation.activeClusterTab).toBe('nodes');
+    contextMocks.kubeconfig.selectedClusterIds = [];
+    contextMocks.kubeconfig.managedClusterIds = [];
+    contextMocks.kubeconfig.selectedClusterId = '';
+    render();
+    contextMocks.kubeconfig.selectedClusterIds = ['cluster-a'];
+    contextMocks.kubeconfig.managedClusterIds = ['cluster-a'];
+    contextMocks.kubeconfig.selectedClusterId = 'cluster-a';
+    render();
+    expect(navigation.viewType).toBe('overview');
+    expect(navigation.activeClusterTab).toBeNull();
   });
 
   it('opens Workloads when a namespace is selected outside the namespace view', () => {

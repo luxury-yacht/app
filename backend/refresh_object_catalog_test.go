@@ -159,6 +159,21 @@ func TestStartObjectCatalogForTargetStartsForForegroundSubsystem(t *testing.T) {
 	require.NotNil(t, app.Refresh.objectCatalogServiceForCluster(target.meta.ID), "a live cluster must start its catalog")
 }
 
+func TestWorkspaceCatalogReconciliationPreservesRetainedClusterCatalog(t *testing.T) {
+	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
+	require.NoError(t, app.Refresh.startObjectCatalogForTarget(target))
+	previous := app.Refresh.snapshotObjectCatalogEntries()[0]
+	// This is the final phase shared by selection changes and startup. A tab
+	// changing elsewhere must not withdraw a retained cluster's catalog route.
+	app.Workspace.startObjectCatalog()
+	require.Same(t, previous.service, app.Refresh.objectCatalogServiceForCluster(target.meta.ID))
+	select {
+	case <-previous.done:
+		t.Fatal("selection reconciliation retired the retained cluster's catalog")
+	default:
+	}
+}
+
 func TestCatalogWaitsForRebuiltIngestStoreBeforeFirstCollection(t *testing.T) {
 	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
 	clients := app.ClusterRuntime.clusterClientsForID(target.meta.ID)

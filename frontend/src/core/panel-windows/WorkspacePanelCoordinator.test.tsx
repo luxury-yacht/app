@@ -194,6 +194,7 @@ vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
       return () => undefined;
     },
     selectedClusterIds: mocks.selectedClusterIds,
+    managedClusterIds: mocks.selectedClusterIds,
     selectedKubeconfigs: ['cluster-1'],
     getClusterMeta: (value: string) => ({ id: value, name: value }),
     setActiveKubeconfig: vi.fn(),

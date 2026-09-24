@@ -9,6 +9,13 @@ import (
 // The registry has already checked panel guards. Cleanup retains the selection
 // mutation lease so reopen and shutdown cannot race the retiring runtime.
 func (a *WorkspaceCoordinator) CloseClusterView(windowID, clusterID string) error {
+	current := a.GetClusterWorkspaceStateForWindow(windowID).SelectedKubeconfigs
+	remaining := slices.DeleteFunc(slices.Clone(current), func(selection string) bool {
+		return a.clusterIDForSelection(selection) == clusterID
+	})
+	if len(remaining) != len(current) {
+		a.cancelObsoleteWorkspaceConnection(windowID, remaining)
+	}
 	accepted := make(chan error, 1)
 	go func() {
 		committed := false
