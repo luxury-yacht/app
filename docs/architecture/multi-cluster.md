@@ -111,7 +111,9 @@ RPCs in user order, while tab identity paints immediately and foreground command
 use an independent ordered lane. A later tab switch remains authoritative when
 an earlier membership acknowledgement arrives. Reopens wait for close guards and
 accepted removal to settle. Discovery hydration and delayed command snapshots
-cannot overwrite newer selection intent or lifecycle events.
+cannot overwrite newer selection intent or lifecycle events. Discovery reads deferred
+by a membership change or close must run again after those operations settle, so
+discovered removals are reconciled against the latest backend selection.
 
 A close click removes the visible tab and selects its neighbor immediately,
 including when the tab's open acknowledgement or native close is still pending.
@@ -124,7 +126,11 @@ retention use the managed set. Local close guards run before switching away can
 unmount their controls; native removal waits for the prior tab admission.
 Each close captures its registered preflight participants before awaiting them.
 Foreground changes may replace those registrations, but cannot add a second native
-close to the transaction already in progress. Panel directory reads, object opens,
+close to the transaction already in progress. A native close records its accepted
+selection before returning to the renderer close flow. Every full-set membership
+dispatch excludes all accepted closes, including sibling closes that committed
+after the write was queued. Only explicit reopen intent clears that exclusion.
+Panel directory reads, object opens,
 and docked publication also require confirmed membership from the workspace state
 plane; optimistic tab visibility does not authorize native panel access. This gate
 does not wait for cluster connection readiness or block the membership command.
@@ -137,7 +143,12 @@ A process-selection change can cancel obsolete connection work before waiting
 for the selection mutation. Peer ownership changes that leave the process union
 unchanged preserve in-flight authentication. Runtime work retains the serialized
 mutation and shutdown drain; admitted tabs report subsequent connection failure
-through lifecycle state and selection diagnostics. Discovery and preflight must
+through lifecycle state and selection diagnostics. Client construction records
+failure for its own cluster and collects batch errors without cancelling healthy
+siblings. Open, close, release, pruning, and startup use that same failure owner.
+Refresh publication proceeds with installed clients even when another build
+fails; when none remain, it retires the previous refresh runtime. Failed tabs
+stay admitted and unavailable. Discovery and preflight must
 propagate the connection context so cancellation drains their HTTP requests.
 Closing a canceled connection also removes lifecycle and API-diagnostics entries
 that never acquired installed clients. API diagnostics retire with shared cluster

@@ -1087,20 +1087,25 @@ describe('refreshOrchestrator', () => {
       if (source === 'event') {
         eventBus.emit('cluster:lifecycle', { clusterId: 'cluster-new', state: 'loading' });
       } else {
-        clusterWorkspaceStore.applyWireState({
-          selectedKubeconfigs: [],
-          visibleClusterId: 'cluster-new',
-          clusters: {
-            'cluster-new': {
-              clusterId: 'cluster-new',
-              clusterName: 'New cluster',
-              lifecycle: 'loading',
-              auth: { state: 'valid' },
-              health: 'healthy',
-              scopeRevision: 0,
+        await clusterWorkspaceStore.reconcileCommand(
+          async () => ({
+            state: {
+              selectedKubeconfigs: [],
+              visibleClusterId: 'cluster-new',
+              clusters: {
+                'cluster-new': {
+                  clusterId: 'cluster-new',
+                  clusterName: 'New cluster',
+                  lifecycle: 'loading',
+                  auth: { state: 'valid' },
+                  health: 'healthy',
+                  scopeRevision: 0,
+                },
+              },
             },
-          },
-        });
+          }),
+          () => true
+        );
       }
       await vi.waitFor(() => expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledOnce());
       expect(getScopedDomainState('cluster-config', scope).status).toBe('ready');

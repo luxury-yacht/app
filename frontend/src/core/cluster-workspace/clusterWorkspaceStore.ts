@@ -333,11 +333,6 @@ export class ClusterWorkspaceStore {
     };
   }
 
-  applyWireState(wire: ClusterWorkspaceWireState): void {
-    this.authoritativeGeneration++;
-    this.mergeWireState(wire);
-  }
-
   async reconcileCommand<T extends { state: ClusterWorkspaceWireState }>(
     request: () => Promise<T>,
     accept: () => boolean

@@ -21,7 +21,7 @@ func (a *WorkspaceCoordinator) acceptWorkspaceSelection(windowID string, command
 			if intent == nil {
 				return nil
 			}
-			return a.finishAcceptedSelection(mutation, *intent)
+			return a.finishKubeconfigSelection(mutation, *intent)
 		})
 		if !committed {
 			accepted <- clusterWorkspaceResult(a.latestClusterWorkspaceState(windowID), err)
@@ -30,21 +30,6 @@ func (a *WorkspaceCoordinator) acceptWorkspaceSelection(windowID string, command
 		}
 	}()
 	return <-accepted
-}
-
-func (a *WorkspaceCoordinator) finishAcceptedSelection(mutation *selectionMutation, intent selectionChangeIntent) error {
-	err := a.finishKubeconfigSelection(mutation, intent)
-	if err == nil || mutation.context().Err() != nil {
-		return err
-	}
-	for _, selection := range intent.normalizedSelections {
-		clusterID := a.clusterIDForParsedSelection(selection)
-		switch a.clusterRuntime.clusterLifecycleState(clusterID) {
-		case "", ClusterStateConnecting, ClusterStateConnected, ClusterStateReconnecting:
-			a.clusterRuntime.setClusterLifecycleState(clusterID, ClusterStateDisconnected)
-		}
-	}
-	return err
 }
 
 // Ownership-only edits must preserve another view's in-flight authentication.

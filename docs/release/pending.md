@@ -20,6 +20,8 @@
 
 ### Fixed
 
+- Cluster tabs close immediately and stay closed during rapid opening, closing, and switching. Closed clusters release their connections and disappear from K8s API diagnostics; closing a sibling no longer causes a catalog error toast.
+- A failed cluster connection no longer interrupts healthy clusters opened alongside it or leaves failed tabs stuck connecting after another tab closes.
 - Unsaved YAML edits are no longer lost when another tab in the same dock opens, closes, moves, or is reordered. An error in one tab no longer discards work in the other tabs.
 - Moving a cluster tab to a new window keeps its docked panels, tab order, and selected views.
 - Custom resource views update immediately when custom resources change.

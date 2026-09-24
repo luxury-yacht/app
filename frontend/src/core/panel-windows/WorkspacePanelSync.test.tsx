@@ -2,6 +2,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { clusterWorkspaceStore } from '@/core/cluster-workspace/clusterWorkspaceStore';
+import type { ClusterClosePreflight } from '@/modules/kubernetes/config/KubeconfigContext';
 import { PanelLifecycleGuardProvider } from './panelLifecycleGuards';
 import { WorkspacePanelLifecycle } from './WorkspacePanelLifecycle';
 import { usePanelWorkspaceSync, WorkspacePanelSync } from './WorkspacePanelSync';
@@ -44,7 +45,7 @@ const mocks = vi.hoisted(() => ({
   open: vi.fn(),
   report: vi.fn(),
   close: vi.fn(),
-  preflight: null as null | ((clusterId: string) => Promise<unknown>),
+  preflight: null as ClusterClosePreflight | null,
 }));
 vi.mock('@/core/app-state-access', () => ({ readPanelWorkspace: mocks.read }));
 vi.mock('@/core/backend-api', () => ({
@@ -134,12 +135,18 @@ beforeEach(async () => {
 });
 
 it('waits for confirmed tab membership before panel reads, opens, and publication, then resumes on admission', async () => {
-  await act(async () =>
-    clusterWorkspaceStore.applyWireState({
-      selectedKubeconfigs: [],
-      visibleClusterId: '',
-      clusters: {},
-    })
+  await act(
+    async () =>
+      await clusterWorkspaceStore.reconcileCommand(
+        async () => ({
+          state: {
+            selectedKubeconfigs: [],
+            visibleClusterId: '',
+            clusters: {},
+          },
+        }),
+        () => true
+      )
   );
   mocks.read.mockClear();
   mocks.open.mockClear();
@@ -156,12 +163,18 @@ it('waits for confirmed tab membership before panel reads, opens, and publicatio
   expect(mocks.read).not.toHaveBeenCalled();
   expect(mocks.open).not.toHaveBeenCalled();
   expect(mocks.publish).not.toHaveBeenCalled();
-  await act(async () =>
-    clusterWorkspaceStore.applyWireState({
-      selectedKubeconfigs: ['production'],
-      visibleClusterId: 'production',
-      clusters: {},
-    })
+  await act(
+    async () =>
+      await clusterWorkspaceStore.reconcileCommand(
+        async () => ({
+          state: {
+            selectedKubeconfigs: ['production'],
+            visibleClusterId: 'production',
+            clusters: {},
+          },
+        }),
+        () => true
+      )
   );
   expect(mocks.read).toHaveBeenCalledWith('app-a', 'production');
   expect(mocks.publish).toHaveBeenCalledWith('app-a', [
@@ -412,7 +425,7 @@ it('does not read a revoked cluster while the frontend still displays its closin
     return true;
   });
   await act(async () => {
-    await mocks.preflight?.('production');
+    await mocks.preflight?.('production', Promise.resolve(), () => undefined);
   });
   expect(mocks.close).toHaveBeenCalledOnce();
   expect(mocks.report).not.toHaveBeenCalled();
@@ -439,7 +452,7 @@ it('finishes an in-flight directory read before revoking its cluster view', asyn
   act(() => mocks.changed?.({ clusterId: 'production' }));
   let closing: Promise<unknown> | undefined;
   await act(async () => {
-    closing = mocks.preflight?.('production');
+    closing = mocks.preflight?.('production', Promise.resolve(), () => undefined);
   });
   const calledBeforeRead = mocks.close.mock.calls.length;
   await act(async () => {

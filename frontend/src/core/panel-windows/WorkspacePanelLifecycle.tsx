@@ -54,7 +54,7 @@ export function WorkspacePanelLifecycle() {
   );
 
   const closeCluster = useCallback(
-    async (clusterId: string, admitted: Promise<void>) => {
+    async (clusterId: string, admitted: Promise<void>, onCommitted: () => void) => {
       const transactionId = `cluster-close-${globalThis.crypto.randomUUID()}`;
       let resume: ((closed: boolean) => void) | undefined;
       let closed = false;
@@ -71,6 +71,9 @@ export function WorkspacePanelLifecycle() {
         }
         await admitted;
         closed = await closeClusterView(windowName, clusterId);
+        if (closed) {
+          onCommitted();
+        }
         // Keep the cluster guarded until its frontend selection has settled.
         return closed ? { release } : null;
       } finally {

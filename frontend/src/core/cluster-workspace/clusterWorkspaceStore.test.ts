@@ -73,6 +73,94 @@ describe('ClusterWorkspaceStore', () => {
     }
   });
 
+  it('merges command membership without overwriting live lifecycle and auth events', async () => {
+    const runtime = createWailsRuntimeHarness();
+    const store = new ClusterWorkspaceStore({
+      read: async () => emptyState(),
+      onEvent: runtime.onEvent,
+    });
+    const release = store.acquire();
+    try {
+      await store.hydrate();
+      let finish!: (value: { state: ClusterWorkspaceWireState }) => void;
+      const command = store.reconcileCommand(
+        () =>
+          new Promise<{ state: ClusterWorkspaceWireState }>((resolve) => {
+            finish = resolve;
+          }),
+        () => true
+      );
+      runtime.emit('cluster:lifecycle', { clusterId: 'cluster-a', state: 'ready' });
+      runtime.emit('cluster:auth:failed', { clusterId: 'cluster-a', reason: 'expired' });
+      finish({
+        state: {
+          selectedKubeconfigs: ['alpha:dev'],
+          visibleClusterId: 'cluster-a',
+          clusters: {
+            'cluster-a': {
+              clusterId: 'cluster-a',
+              clusterName: 'Alpha',
+              lifecycle: 'connecting',
+              auth: { state: 'valid' },
+              health: 'healthy',
+              scopeRevision: 3,
+            },
+          },
+        },
+      });
+      await command;
+      expect(store.getSnapshot().selectedKubeconfigs).toEqual(['alpha:dev']);
+      expect(store.getSnapshot().visibleClusterId).toBe('cluster-a');
+      expect(store.getCluster('cluster-a')).toMatchObject({
+        lifecycle: 'ready',
+        auth: { hasError: true, reason: 'expired' },
+        health: 'healthy',
+        scopeRevision: 3,
+      });
+    } finally {
+      release();
+    }
+  });
+
+  it.each(['superseded', 'released', 'rejected'] as const)(
+    'ignores a %s command result and continues accepting later commands',
+    async (cause) => {
+      const store = new ClusterWorkspaceStore({
+        read: async () => emptyState(),
+        onEvent: () => () => undefined,
+      });
+      const release = store.acquire();
+      await store.hydrate();
+      let finish!: (value: { state: ClusterWorkspaceWireState }) => void;
+      let fail!: (error: Error) => void;
+      const command = store.reconcileCommand(
+        () =>
+          new Promise<{ state: ClusterWorkspaceWireState }>((resolve, reject) => {
+            finish = resolve;
+            fail = reject;
+          }),
+        () => cause !== 'superseded'
+      );
+      if (cause === 'released') {
+        release();
+      }
+      if (cause === 'rejected') {
+        fail(new Error('RPC failed'));
+        await expect(command).rejects.toThrow('RPC failed');
+      } else {
+        finish({ state: { ...emptyState(), selectedKubeconfigs: ['stale:dev'] } });
+        await command;
+      }
+      expect(store.getSnapshot().selectedKubeconfigs).toEqual([]);
+      await store.reconcileCommand(
+        async () => ({ state: { ...emptyState(), selectedKubeconfigs: ['current:dev'] } }),
+        () => true
+      );
+      expect(store.getSnapshot().selectedKubeconfigs).toEqual(['current:dev']);
+      release();
+    }
+  );
+
   it('bridges permission recovery without changing namespace scope revisions', async () => {
     const runtime = createWailsRuntimeHarness();
     const store = new ClusterWorkspaceStore({
@@ -135,7 +223,7 @@ describe('ClusterWorkspaceStore', () => {
     unsubscribe();
   });
 
-  it('continues notifying subscribers after one subscriber throws', () => {
+  it('continues notifying subscribers after one subscriber throws', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const store = new ClusterWorkspaceStore({
       read: async () => emptyState(),
@@ -147,7 +235,12 @@ describe('ClusterWorkspaceStore', () => {
     const laterSubscriber = vi.fn();
     store.subscribe(laterSubscriber);
 
-    expect(() => store.applyWireState(emptyState())).not.toThrow();
+    await expect(
+      store.reconcileCommand(
+        async () => ({ state: emptyState() }),
+        () => true
+      )
+    ).resolves.toBeDefined();
     expect(laterSubscriber).toHaveBeenCalledOnce();
   });
 
@@ -414,7 +507,10 @@ describe('ClusterWorkspaceStore', () => {
     runtime.emit('cluster:auth:failed', { clusterId: 'cluster-a', reason: 'stale token' });
     runtime.emit('cluster:health:degraded', { clusterId: 'cluster-a' });
     runtime.emit('cluster:scope:changed', { clusterId: 'cluster-a' });
-    store.applyWireState(emptyState());
+    await store.reconcileCommand(
+      async () => ({ state: emptyState() }),
+      () => true
+    );
     await store.refresh();
 
     expect(store.getCluster('cluster-a')).toMatchObject({
@@ -438,7 +534,10 @@ describe('ClusterWorkspaceStore', () => {
 
     const release = store.acquire();
     const hydration = store.hydrate();
-    store.applyWireState(emptyState());
+    await store.reconcileCommand(
+      async () => ({ state: emptyState() }),
+      () => true
+    );
     resolveHydration({
       ...emptyState(),
       clusters: {
@@ -483,19 +582,24 @@ describe('ClusterWorkspaceStore', () => {
       read: async () => emptyState(),
       onEvent: () => () => undefined,
     });
-    store.applyWireState({
-      ...emptyState(),
-      clusters: {
-        'cluster-a': {
-          clusterId: 'cluster-a',
-          clusterName: 'Alpha',
-          lifecycle: 'ready',
-          auth: { state: 'valid' },
-          health: 'healthy',
-          scopeRevision: 0,
+    await store.reconcileCommand(
+      async () => ({
+        state: {
+          ...emptyState(),
+          clusters: {
+            'cluster-a': {
+              clusterId: 'cluster-a',
+              clusterName: 'Alpha',
+              lifecycle: 'ready',
+              auth: { state: 'valid' },
+              health: 'healthy',
+              scopeRevision: 0,
+            },
+          },
         },
-      },
-    });
+      }),
+      () => true
+    );
 
     expect(store.isServiceable('cluster-a')).toBe(true);
     store.beginForegroundActivation('cluster-a');
@@ -522,7 +626,10 @@ it('keeps a confirmed cluster-view close ahead of an older workspace read', asyn
   const release = store.acquire();
   try {
     const loading = store.hydrate();
-    store.applyWireState(stale);
+    await store.reconcileCommand(
+      async () => ({ state: stale }),
+      () => true
+    );
     store.confirmClosedSelection('alpha:dev', 'alpha');
     finish(stale);
     await loading;

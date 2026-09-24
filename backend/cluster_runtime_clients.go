@@ -2,8 +2,10 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	appconfig "github.com/luxury-yacht/app/backend/internal/config"
@@ -210,11 +212,26 @@ func (a *ClusterRuntimeManager) clusterClientCreateTasks(desired map[string]kube
 func (a *ClusterRuntimeManager) createClusterClients(ctx context.Context, tasks []clusterClientCreateTask, build clusterClientBuilder) error {
 	a.markClusterClientTasksConnecting(tasks)
 	limit := clusterClientBuildConcurrencyLimit(len(tasks))
-	return parallel.ForEach(ctx, tasks, limit, func(taskCtx context.Context, task clusterClientCreateTask) error {
-		return a.runClusterOperation(taskCtx, task.meta.ID, func(opCtx context.Context) error {
-			return a.buildAndInstallClusterClient(opCtx, task, build)
+	var failures []error
+	var failuresMu sync.Mutex
+	// Client failures belong to a cluster. Only selection cancellation may stop
+	// sibling builds; retain every failure for the selection diagnostics.
+	_ = parallel.ForEach(ctx, tasks, limit, func(taskCtx context.Context, task clusterClientCreateTask) error {
+		err := a.runClusterOperation(taskCtx, task.meta.ID, func(opCtx context.Context) error {
+			buildErr := a.buildAndInstallClusterClient(opCtx, task, build)
+			if buildErr != nil && !errors.Is(opCtx.Err(), context.Canceled) {
+				a.setClusterLifecycleState(task.meta.ID, ClusterStateDisconnected)
+			}
+			return buildErr
 		})
+		if err != nil {
+			failuresMu.Lock()
+			failures = append(failures, fmt.Errorf("cluster %s: %w", task.meta.ID, err))
+			failuresMu.Unlock()
+		}
+		return nil
 	})
+	return errors.Join(failures...)
 }
 
 func (a *ClusterRuntimeManager) markClusterClientTasksConnecting(tasks []clusterClientCreateTask) {

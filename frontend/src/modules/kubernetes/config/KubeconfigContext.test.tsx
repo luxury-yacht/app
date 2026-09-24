@@ -261,6 +261,89 @@ describe('KubeconfigContext', () => {
     }
   );
 
+  it('never readmits an accepted sibling close in an intermediate membership write', async () => {
+    const { getContext, unmount } = await prepareRapidTabs(
+      ['alpha', 'beta', 'gamma'],
+      <PanelLifecycleGuardProvider>
+        <DockablePanelProvider>
+          <WorkspacePanelLifecycle />
+        </DockablePanelProvider>
+      </PanelLifecycleGuardProvider>
+    );
+    let finishNative!: () => void;
+    const nativeResponse = new Promise<void>((resolve) => {
+      finishNative = resolve;
+    });
+    const nativeClosed = new Set<string>();
+    const readmitted: string[][] = [];
+    mocks.nativeClose.mockImplementation(async (_window: string, clusterId: string) => {
+      await nativeResponse;
+      const selection = `/kube/${clusterId}`;
+      workspaceState.selections = workspaceState.selections.filter((value) => value !== selection);
+      nativeClosed.add(selection);
+      return true;
+    });
+    setSelectedKubeconfigsMock.mockImplementation(async (selections: string[]) => {
+      const reopened = selections.filter((selection) => nativeClosed.has(selection));
+      if (reopened.length) {
+        readmitted.push(reopened);
+      }
+    });
+    try {
+      let closes!: Promise<void>[];
+      await act(async () => {
+        closes = ['alpha', 'beta'].map((name) => getContext().closeKubeconfig(`/kube/${name}:dev`));
+      });
+      expect(mocks.nativeClose).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        finishNative();
+        await Promise.all(closes);
+      });
+      expect(readmitted).toEqual([]);
+      expect(workspaceState.selections).toEqual(['/kube/gamma:dev']);
+      expect(getContext().managedKubeconfigs).toEqual(['/kube/gamma:dev']);
+    } finally {
+      finishNative();
+      unmount();
+    }
+  });
+
+  it('reconciles discovery removals deferred while a close guard is pending', async () => {
+    const { getContext, unmount } = await prepareRapidTabs(['alpha', 'beta']);
+    let deny!: () => void;
+    getContext().registerClusterClosePreflight(
+      () =>
+        new Promise<null>((resolve) => {
+          deny = () => resolve(null);
+        })
+    );
+    let close!: Promise<void>;
+    try {
+      await act(async () => {
+        close = getContext().closeKubeconfig('/kube/alpha:dev');
+      });
+      getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev']);
+      getKubeconfigsMock.mockResolvedValue(
+        kubeconfigDiscoveryResult(
+          getContext().kubeconfigs.filter((config) => config.name === 'alpha')
+        )
+      );
+      await act(async () => {
+        await getContext().loadKubeconfigs(true);
+      });
+      await act(async () => {
+        deny();
+        await close;
+        await flushPromises();
+      });
+      expect(getContext().managedKubeconfigs).toEqual(['/kube/alpha:dev']);
+      expect(workspaceState.selections).toEqual(['/kube/alpha:dev']);
+    } finally {
+      deny();
+      unmount();
+    }
+  });
+
   it('preserves tab order while an immediate close awaits a denied native result', async () => {
     setClusterTabOrder(['/kube/gamma:dev', '/kube/alpha:dev', '/kube/beta:dev']);
     const { container, getContext, unmount } = await prepareRapidTabs(
@@ -715,7 +798,11 @@ describe('KubeconfigContext', () => {
     );
     try {
       await act(async () => closeAlpha());
-      expect(preflight).toHaveBeenLastCalledWith('alpha:alpha', expect.any(Promise));
+      expect(preflight).toHaveBeenLastCalledWith(
+        'alpha:alpha',
+        expect.any(Promise),
+        expect.any(Function)
+      );
       expect(container.querySelector('button[aria-label="Close alpha"]')).toBeNull();
       expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
         'beta'

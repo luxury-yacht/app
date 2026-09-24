@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -44,9 +45,9 @@ func (a *WorkspaceCoordinator) connectSelectedClustersAtStartup(ctx context.Cont
 	if a.kubeClientInitializer != nil {
 		return a.kubeClientInitializer(ctx)
 	}
-	selections, err := a.preflightSelectedClusterClients(ctx)
-	if err != nil {
-		return err
+	selections, clientErr := a.preflightSelectedClusterClients(ctx)
+	if len(selections) == 0 {
+		return clientErr
 	}
 
 	// Client preflight is cancellable and runs outside the selection lock. The
@@ -57,7 +58,7 @@ func (a *WorkspaceCoordinator) connectSelectedClustersAtStartup(ctx context.Cont
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return a.finishKubernetesClientInitialization(ctx, selections)
+	return errors.Join(clientErr, a.finishKubernetesClientInitialization(ctx, selections))
 }
 
 func (a *WorkspaceCoordinator) preflightSelectedClusterClients(ctx context.Context) ([]kubeconfigSelection, error) {
@@ -71,20 +72,14 @@ func (a *WorkspaceCoordinator) preflightSelectedClusterClients(ctx context.Conte
 		return nil, fmt.Errorf("no kubeconfig selections available")
 	}
 
-	if err := a.syncClusterClientPoolWithContext(ctx, selections); err != nil {
-		return nil, err
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	return selections, nil
+	return selections, a.syncClusterClientPoolWithContext(ctx, selections)
 }
 
 func (a *WorkspaceCoordinator) finishKubernetesClientInitialization(
 	ctx context.Context,
 	selections []kubeconfigSelection,
 ) error {
-	if err := a.refresh.updateRefreshSubsystemSelections(selections); err != nil {
+	if err := a.publishConnectedClusterSelections(selections); err != nil {
 		a.logger.ErrorWithCause(err, "Failed to initialise refresh subsystem", logsources.Refresh)
 		return fmt.Errorf("failed to initialise refresh subsystem: %w", err)
 	}
@@ -124,4 +119,21 @@ func (a *WorkspaceCoordinator) restoreKubeconfigSelection() {
 	if len(normalized) > 0 {
 		a.preferences.SetSelectedKubeconfigsSnapshot(normalized)
 	}
+}
+
+// Admission retains failed tabs, while refresh only publishes installed clients.
+// A failed sibling must neither block healthy routes nor retain deselected ones.
+func (a *WorkspaceCoordinator) publishConnectedClusterSelections(selections []kubeconfigSelection) error {
+	connected := make([]kubeconfigSelection, 0, len(selections))
+	for _, selection := range selections {
+		meta := a.clusterRuntime.clusterMetaForSelection(selection)
+		if a.clusterRuntime.clusterClientsForID(meta.ID) != nil || a.clusterRuntime.clusterClientsForSelection(selection) != nil {
+			connected = append(connected, selection)
+		}
+	}
+	if len(connected) == 0 {
+		a.refresh.teardownRefreshSubsystem()
+		return nil
+	}
+	return a.refresh.updateRefreshSubsystemSelections(connected)
 }
