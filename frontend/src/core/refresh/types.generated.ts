@@ -588,8 +588,20 @@ export interface ClusterIdentity {
   name: string;
   namespace: string;
   serviceAccount?: ResourceRef;
-  bindings: Array<ResourceRef> | null;
+  bindings: Array<ClusterIdentityBinding> | null;
   grantScopes: Array<string> | null;
+}
+
+export interface ClusterIdentityBinding {
+  clusterId: string;
+  group: string;
+  version: string;
+  kind: string;
+  resource?: string;
+  namespace?: string;
+  name?: string;
+  uid?: string;
+  role?: ResourceRef;
 }
 
 export interface ClusterNodeSnapshotEntry {

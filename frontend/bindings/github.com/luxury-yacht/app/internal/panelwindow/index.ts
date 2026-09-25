@@ -16,6 +16,7 @@ export type {
     ClusterTabTransferRequest,
     ClusterViewSnapshot,
     GroupSnapshot,
+    IdentityReference,
     NativeDescriptor,
     ObjectReference,
     PanelLocation,

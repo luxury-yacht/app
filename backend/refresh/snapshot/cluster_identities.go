@@ -26,13 +26,18 @@ const clusterIdentitiesDomainName = "cluster-identities"
 // ClusterIdentity is a subject, not a Kubernetes resource. Only an observed
 // ServiceAccount has an object ref; bindings always identify real source objects.
 type ClusterIdentity struct {
-	ClusterID      string                      `json:"clusterId"`
-	Kind           string                      `json:"kind"`
-	Name           string                      `json:"name"`
-	Namespace      string                      `json:"namespace"`
-	ServiceAccount *resourcemodel.ResourceRef  `json:"serviceAccount,omitempty"`
-	Bindings       []resourcemodel.ResourceRef `json:"bindings"`
-	GrantScopes    []string                    `json:"grantScopes"`
+	ClusterID      string                     `json:"clusterId"`
+	Kind           string                     `json:"kind"`
+	Name           string                     `json:"name"`
+	Namespace      string                     `json:"namespace"`
+	ServiceAccount *resourcemodel.ResourceRef `json:"serviceAccount,omitempty"`
+	Bindings       []ClusterIdentityBinding   `json:"bindings"`
+	GrantScopes    []string                   `json:"grantScopes"`
+}
+
+type ClusterIdentityBinding struct {
+	resourcemodel.ResourceRef
+	Role *resourcemodel.ResourceRef `json:"role,omitempty"`
 }
 
 type ClusterIdentitiesSnapshot struct {
@@ -72,7 +77,7 @@ func (b *ClusterIdentitiesBuilder) Build(ctx context.Context, scope string) (*re
 	adapter := identitiesQueryAdapter()
 	capabilities := newTypedResourceCapabilities(
 		[]string{"kind", "name", "namespace", "bindings", "grantScopes"},
-		[]string{"kinds", "namespaces"}, []string{"kind", "name", "namespace", "grantScopes", "bindings"},
+		[]string{"kinds", "namespaces", "identity"}, []string{"kind", "name", "namespace", "grantScopes", "bindings"},
 		[]string{"User", "Group", "ServiceAccount"},
 	)
 	resolved := resolveTypedSnapshotPageViaStore(clusterIdentitiesDomainName, rows, query, adapter,
@@ -170,6 +175,7 @@ func collectIdentityBindings(clusterID string, identities map[string]*ClusterIde
 		return
 	}
 	seen := map[string]bool{}
+	binding := bindingWithRole(clusterID, projection)
 	for _, edge := range projection.node.Edges {
 		subject := identityFromSubjectLink(clusterID, edge)
 		if subject == nil {
@@ -180,11 +186,23 @@ func collectIdentityBindings(clusterID string, identities map[string]*ClusterIde
 			continue
 		}
 		seen[key] = true
-		appendIdentityBinding(identities, key, subject, projection.ref)
+		appendIdentityBinding(identities, key, subject, binding)
 	}
 }
 
-func appendIdentityBinding(identities map[string]*ClusterIdentity, key string, subject *ClusterIdentity, binding resourcemodel.ResourceRef) {
+func bindingWithRole(clusterID string, projection identityProjection) ClusterIdentityBinding {
+	binding := ClusterIdentityBinding{ResourceRef: projection.ref}
+	for _, edge := range projection.node.Edges {
+		if edge.Type == objectmapspec.EdgeGrants && edge.Link.Ref != nil && edge.Link.Ref.ClusterID == clusterID {
+			ref := *edge.Link.Ref
+			binding.Role = &ref
+			break
+		}
+	}
+	return binding
+}
+
+func appendIdentityBinding(identities map[string]*ClusterIdentity, key string, subject *ClusterIdentity, binding ClusterIdentityBinding) {
 	existing := identities[key]
 	if existing == nil {
 		if subject.Kind == "ServiceAccount" {
@@ -218,7 +236,7 @@ func identityFromSubjectLink(clusterID string, edge objectmapspec.Edge) *Cluster
 
 func newClusterIdentity(clusterID, kind, namespace, name string) *ClusterIdentity {
 	return &ClusterIdentity{ClusterID: clusterID, Kind: kind, Namespace: namespace, Name: name,
-		Bindings: []resourcemodel.ResourceRef{}, GrantScopes: []string{}}
+		Bindings: []ClusterIdentityBinding{}, GrantScopes: []string{}}
 }
 
 func identityRowKey(row ClusterIdentity) string {
@@ -238,7 +256,9 @@ func identitiesQueryAdapter() typedTableQueryAdapter[ClusterIdentity] {
 			}
 			return values
 		},
-		Predicate: func(ClusterIdentity, string, string) bool { return true },
+		Predicate: func(row ClusterIdentity, field, value string) bool {
+			return field != "identity" || identityRowKey(row) == value
+		},
 		SortValue: identitySortValue,
 		NumericSort: func(row ClusterIdentity, field string) (float64, bool) {
 			return float64(len(row.Bindings)), field == "bindings"

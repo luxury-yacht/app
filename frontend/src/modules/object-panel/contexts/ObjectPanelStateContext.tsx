@@ -1,3 +1,12 @@
+import {
+  buildPanelTarget,
+  type IdentityPanelRef,
+  isIdentityPanelRef,
+  type PanelTarget,
+  panelTargetFromSnapshot,
+  panelTargetId,
+  panelTargetSnapshot,
+} from '../panelTarget';
 /**
  * frontend/src/modules/object-panel/contexts/ObjectPanelStateContext.tsx
  *
@@ -9,12 +18,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { clearContainerLogsStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
 import { clearLogViewerPrefs } from '@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
-import {
-  buildObjectPanelRef,
-  getObjectPanelScopeEvictions,
-  type ObjectPanelRef,
-  objectPanelId,
-} from '@modules/object-panel/objectPanelRef';
+import { getObjectPanelScopeEvictions } from '@modules/object-panel/objectPanelRef';
 import type React from 'react';
 import {
   createContext,
@@ -41,7 +45,10 @@ export { objectPanelId } from '@modules/object-panel/objectPanelRef';
  * back. The cache is freed when the user closes the panel or after the
  * panel commits to another native renderer.
  */
-const evictPanelScopes = (ref: ObjectPanelRef): void => {
+const evictPanelScopes = (ref: PanelTarget): void => {
+  if (isIdentityPanelRef(ref)) {
+    return;
+  }
   getObjectPanelScopeEvictions(ref).forEach(({ domain, scope }) => {
     resetRefreshDomain(domain, scope);
     if (domain === 'container-logs') {
@@ -52,7 +59,7 @@ const evictPanelScopes = (ref: ObjectPanelRef): void => {
 
 interface ObjectPanelState {
   // Map of panelId → objectRef for all open object panels
-  openPanels: Map<string, ObjectPanelRef>;
+  openPanels: Map<string, PanelTarget>;
   // Map of panelId → which sub-tab (Details/YAML/Events/etc.) is active
   // for that panel. Lifted out of ObjectPanel's useReducer so the active
   // sub-tab survives cluster switches: ObjectPanel components unmount
@@ -75,7 +82,7 @@ const copyPanelState = (state: ObjectPanelState): ObjectPanelState => ({
 const putOwnedPanel = (
   state: ObjectPanelState,
   panelId: string,
-  objectRef: ObjectPanelRef,
+  objectRef: PanelTarget,
   activeView: ViewType
 ): void => {
   state.openPanels.set(panelId, objectRef);
@@ -115,14 +122,14 @@ interface ObjectPanelStateContextType {
   // Derived: true if any object panel is open
   showObjectPanel: boolean;
   // The full map of open panels
-  openPanels: Map<string, ObjectPanelRef>;
+  openPanels: Map<string, PanelTarget>;
   pendingNativeOpenPanelIds: Set<string>;
 
   // Open/activate a panel for the given object reference.
   // If the object is already open, activates the existing tab.
   // Returns the panelId for the object.
   onRowClick: (
-    data: KubernetesObjectReference,
+    data: KubernetesObjectReference | IdentityPanelRef,
     options?: { pendingNativeOpen?: boolean }
   ) => string;
 
@@ -155,10 +162,13 @@ interface ObjectPanelStateContextType {
     clusterId: string,
     panelId: string
   ) => {
-    objectRef: ObjectPanelRef;
+    objectRef: PanelTarget;
     activeView: ViewType;
   } | null;
-  upsertOwnedPanel: (objectRef: KubernetesObjectReference, activeView: ViewType) => string;
+  upsertOwnedPanel: (
+    objectRef: KubernetesObjectReference | IdentityPanelRef,
+    activeView: ViewType
+  ) => string;
   removeOwnedPanel: (clusterId: string, panelId: string) => void;
   panelIdsForCluster: (clusterId: string) => string[];
 }
@@ -197,12 +207,9 @@ export const useLocalPanelSnapshots = () => {
       Object.fromEntries(
         Object.entries(states).map(([clusterId, state]) => [
           clusterId,
-          Array.from(state.openPanels.entries()).map(([panelId, objectRef]) => ({
-            kind: 'object' as panelwindow.TabKind,
-            panelId,
-            objectRef: { ...objectRef, namespace: objectRef.namespace ?? '' },
-            activeView: state.activeTabs.get(panelId) ?? 'details',
-          })),
+          Array.from(state.openPanels.entries()).map(([panelId, ref]) =>
+            panelTargetSnapshot(panelId, ref, state.activeTabs.get(panelId) ?? 'details')
+          ),
         ])
       ),
     [states]
@@ -233,13 +240,10 @@ const stateFromGroupSnapshot = (
   if (!snapshot) {
     return {};
   }
-  const openPanels = new Map<string, ObjectPanelRef>();
+  const openPanels = new Map<string, PanelTarget>();
   const activeTabs = new Map<string, ViewType>();
   for (const tab of snapshot.tabs ?? []) {
-    openPanels.set(
-      tab.panelId,
-      buildObjectPanelRef(tab.objectRef as unknown as KubernetesObjectReference)
-    );
+    openPanels.set(tab.panelId, panelTargetFromSnapshot(tab));
     activeTabs.set(tab.panelId, tab.activeView as ViewType);
   }
   return {
@@ -336,10 +340,13 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   );
 
   const onRowClick = useCallback(
-    (data: KubernetesObjectReference, options?: { pendingNativeOpen?: boolean }): string => {
-      const enriched = hydrateClusterMeta(data);
-      const panelRef = buildObjectPanelRef(enriched);
-      const panelId = objectPanelId(panelRef);
+    (
+      data: KubernetesObjectReference | IdentityPanelRef,
+      options?: { pendingNativeOpen?: boolean }
+    ): string => {
+      const enriched = isIdentityPanelRef(data) ? data : hydrateClusterMeta(data);
+      const panelRef = buildPanelTarget(enriched);
+      const panelId = panelTargetId(panelRef);
 
       updateClusterState(panelRef.clusterId, (prev) => {
         const shouldMarkPending = options?.pendingNativeOpen === true;
@@ -408,7 +415,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
           putOwnedPanel(
             next,
             tab.panelId,
-            buildObjectPanelRef(tab.objectRef as unknown as KubernetesObjectReference),
+            panelTargetFromSnapshot(tab),
             tab.activeView as ViewType
           );
         }
@@ -431,9 +438,9 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   }, []);
 
   const upsertOwnedPanel = useCallback(
-    (data: KubernetesObjectReference, activeView: ViewType): string => {
-      const panelRef = buildObjectPanelRef(data);
-      const panelId = objectPanelId(panelRef);
+    (data: KubernetesObjectReference | IdentityPanelRef, activeView: ViewType): string => {
+      const panelRef = buildPanelTarget(data);
+      const panelId = panelTargetId(panelRef);
       setObjectPanelStateByCluster((previous) => {
         const current = previous[panelRef.clusterId] ?? DEFAULT_OBJECT_PANEL_STATE;
         const next = copyPanelState(current);

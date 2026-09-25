@@ -13,8 +13,11 @@ maximize and restore.
   `version`, `kind`, `namespace`, and `name`.
 - Opening an object goes through the object-panel and native-panel boundaries;
   feature code must not splice panel location state directly.
-- A shared cluster workspace contains each object once across docked, native,
-  and retained placements; every app view accesses that same collection.
+- A shared cluster workspace contains each object or observed identity once
+  across docked, native, and retained placements; every app view accesses that
+  same collection. Identity targets preserve exact User/Group names and carry
+  no object reference. Both target types use the shared `obj:` panel ID prefix
+  for layout preferences; identity IDs encode cluster, subject kind, and name.
 - One native window represents one tab group with immutable
   `clusterId` and `groupId`. Tabs from different clusters never share a group.
 - Docked and native renderers share the group chrome and object content

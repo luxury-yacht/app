@@ -168,6 +168,32 @@ describe('useObjectPanel', () => {
     expect(mockFocusPanel).not.toHaveBeenCalled();
   });
 
+  it('opens identities through the shared registry and preserves exact subjects when focusing again', async () => {
+    const ref = {
+      targetType: 'identity' as const,
+      clusterId: 'test-cluster',
+      kind: 'User' as const,
+      name: ' alice ',
+    };
+    await act(async () => hookResult.openWithIdentity(ref));
+    expect(sharedPanelMocks.open).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        kind: 'identity',
+        identityRef: { clusterId: ref.clusterId, kind: ref.kind, name: ref.name },
+        activeView: 'details',
+      })
+    );
+    const tab = sharedPanelMocks.open.mock.calls[0][1];
+    expect(tab.objectRef).toBeUndefined();
+    expect([...hookResult.openPanels.values()]).toEqual([ref]);
+    expect(mockFocusPanel).toHaveBeenLastCalledWith(tab.panelId, ref.clusterId);
+    await act(async () => hookResult.openWithIdentity(ref));
+    expect(hookResult.openPanels.size).toBe(1);
+    await act(async () => hookResult.openWithIdentity({ ...ref, kind: 'Group' }));
+    expect(hookResult.openPanels.size).toBe(2);
+  });
+
   it('opens the panel with object details', async () => {
     const pod = {
       kind: 'Pod',
@@ -230,7 +256,7 @@ describe('useObjectPanel', () => {
     const panelId = objectPanelId(pod);
     sharedPanelMocks.open.mockResolvedValue({
       render: true,
-      panel: { tab: { panelId, objectRef: pod, activeView: 'events' } },
+      panel: { tab: { kind: 'object', panelId, objectRef: pod, activeView: 'events' } },
     });
     await act(async () => hookResult.openWithObject(pod));
     expect(activeTabs.get(panelId)).toBe('events');

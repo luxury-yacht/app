@@ -23,7 +23,7 @@ describe('application code-splitting boundaries', () => {
       '@modules/namespace/components/AllNamespacesView',
       '@modules/namespace/components/NsResourcesViews',
       '@/modules/browse/components/BrowseView',
-      '@modules/object-panel/components/ObjectPanel/ObjectPanel',
+      '@modules/object-panel/components/PanelContent',
     ];
 
     for (const modulePath of deferredModules) {

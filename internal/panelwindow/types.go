@@ -9,7 +9,17 @@ const GroupSchemaVersion = 1
 
 type TabKind string
 
-const TabKindObject TabKind = "object"
+const (
+	TabKindObject   TabKind = "object"
+	TabKindIdentity TabKind = "identity"
+)
+
+// IdentityReference identifies an observed RBAC subject, not an API object.
+type IdentityReference struct {
+	ClusterID string `json:"clusterId"`
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+}
 
 // ObjectReference is the complete object identity allowed across a native
 // panel-window boundary. Group and namespace are present but may be empty for
@@ -34,10 +44,46 @@ func ValidateObjectReference(ref ObjectReference) error {
 }
 
 type TabSnapshot struct {
-	Kind       TabKind         `json:"kind"`
-	PanelID    string          `json:"panelId"`
-	ObjectRef  ObjectReference `json:"objectRef"`
-	ActiveView string          `json:"activeView"`
+	Kind        TabKind           `json:"kind"`
+	PanelID     string            `json:"panelId"`
+	ObjectRef   ObjectReference   `json:"objectRef,omitempty,omitzero"`
+	IdentityRef IdentityReference `json:"identityRef,omitempty,omitzero"`
+	ActiveView  string            `json:"activeView"`
+}
+
+func (tab TabSnapshot) ClusterID() string {
+	if tab.Kind == TabKindIdentity {
+		return tab.IdentityRef.ClusterID
+	}
+	return tab.ObjectRef.ClusterID
+}
+
+type panelIdentity struct {
+	kind    TabKind
+	object  ObjectReference
+	subject IdentityReference
+}
+
+func (tab TabSnapshot) identity() panelIdentity {
+	return panelIdentity{tab.Kind, tab.ObjectRef, tab.IdentityRef}
+}
+
+func validateTabReference(tab TabSnapshot) error {
+	switch tab.Kind {
+	case TabKindObject:
+		if tab.IdentityRef != (IdentityReference{}) {
+			return fmt.Errorf("object panel contains a subject reference")
+		}
+		return ValidateObjectReference(tab.ObjectRef)
+	case TabKindIdentity:
+		ref := tab.IdentityRef
+		if tab.ObjectRef != (ObjectReference{}) || strings.TrimSpace(ref.ClusterID) == "" || ref.Name == "" || (ref.Kind != "User" && ref.Kind != "Group") || tab.ActiveView != "details" {
+			return fmt.Errorf("invalid identity panel reference or view")
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported panel kind %q", tab.Kind)
+	}
 }
 
 type WindowBounds struct {
@@ -95,9 +141,6 @@ func validateGroupTab(
 	clusterID string,
 	panelIDs map[string]struct{},
 ) error {
-	if tab.Kind != TabKindObject {
-		return fmt.Errorf("panel tab %d has unsupported kind %q", index, tab.Kind)
-	}
 	if strings.TrimSpace(tab.PanelID) == "" || strings.TrimSpace(tab.ActiveView) == "" {
 		return fmt.Errorf("panel tab %d requires panel identity and active view", index)
 	}
@@ -105,14 +148,14 @@ func validateGroupTab(
 		return fmt.Errorf("panel group contains duplicate panel id %q", tab.PanelID)
 	}
 	panelIDs[tab.PanelID] = struct{}{}
-	if err := ValidateObjectReference(tab.ObjectRef); err != nil {
-		return fmt.Errorf("panel tab %q has incomplete object identity", tab.PanelID)
+	if err := validateTabReference(tab); err != nil {
+		return fmt.Errorf("panel tab %q: %w", tab.PanelID, err)
 	}
-	if tab.ObjectRef.ClusterID != clusterID {
+	if tab.ClusterID() != clusterID {
 		return fmt.Errorf(
 			"panel tab %q belongs to cluster %q, not group cluster %q",
 			tab.PanelID,
-			tab.ObjectRef.ClusterID,
+			tab.ClusterID(),
 			clusterID,
 		)
 	}

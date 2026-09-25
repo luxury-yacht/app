@@ -46,6 +46,15 @@ export interface GroupSnapshot {
     "useInitialPosition"?: boolean;
 }
 
+/**
+ * IdentityReference identifies an observed RBAC subject, not an API object.
+ */
+export interface IdentityReference {
+    "clusterId": string;
+    "kind": string;
+    "name": string;
+}
+
 export interface NativeDescriptor {
     "schemaVersion": number;
     "role": NativeRole;
@@ -115,12 +124,14 @@ export enum TabKind {
     $zero = "",
 
     TabKindObject = "object",
+    TabKindIdentity = "identity",
 };
 
 export interface TabSnapshot {
     "kind": TabKind;
     "panelId": string;
-    "objectRef": ObjectReference;
+    "objectRef"?: ObjectReference;
+    "identityRef"?: IdentityReference;
     "activeView": string;
 }
 

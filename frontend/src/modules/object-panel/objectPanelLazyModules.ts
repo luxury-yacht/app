@@ -5,8 +5,7 @@ type ObjectPanelModuleLoaders = {
   loadDetails: () => Promise<unknown>;
 };
 
-export const loadObjectPanel = () =>
-  import('@modules/object-panel/components/ObjectPanel/ObjectPanel');
+export const loadObjectPanel = () => import('@modules/object-panel/components/PanelContent');
 
 const defaultLoaders: ObjectPanelModuleLoaders = {
   loadPanel: loadObjectPanel,

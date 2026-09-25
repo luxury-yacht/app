@@ -6,7 +6,7 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { RefreshManagerProvider } from '@core/refresh';
 import { FixedClusterProvider } from '@modules/kubernetes/config/KubeconfigContext';
 import { NamespaceProvider } from '@modules/namespace/contexts/NamespaceContext';
-import ObjectPanel from '@modules/object-panel/components/ObjectPanel/ObjectPanel';
+import ObjectPanel from '@modules/object-panel/components/PanelContent';
 import {
   ObjectPanelStateProvider,
   useObjectPanelActiveTabs,

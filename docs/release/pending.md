@@ -1,6 +1,6 @@
 ### Added
 
-- Added Cluster → Identities outside Resources, showing users and groups referenced by visible RBAC bindings and visible service accounts, with direct binding counts, grant scopes, and links to source bindings.
+- Added Cluster → Identities outside Resources, showing users and groups referenced by visible RBAC bindings and visible service accounts, with direct binding counts, grant scopes, and links to source bindings. User and Group badges open read-only Details panels with binding and role links; ServiceAccounts open their resource panels.
 
 ### Changed
 

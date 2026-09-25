@@ -67,8 +67,9 @@ their producers own a known GVR and a concrete object.
 
 The [Identities view](cluster-identities.md) contains observed subjects rather
 than object rows. Its User/Group keys preserve exact authentication names and
-carry no fabricated GVK. Only actual ServiceAccounts and source bindings have
-object references.
+carry no fabricated GVK. Only actual ServiceAccounts, source bindings, and their referenced roles have
+object references. User/Group panels use a distinct identity target in the shared
+panel registry, with a read-only binding view and no resource actions.
 
 Synthetic app resources still need stable identity. Helm releases use
 `helm.sh/v3`, `HelmRelease`.

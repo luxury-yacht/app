@@ -1,3 +1,4 @@
+import { panelTargetFromSnapshot, panelTargetId } from '@modules/object-panel/panelTarget';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { panelwindow } from '@/core/backend-api/models';
@@ -65,12 +66,7 @@ const initialWindowBounds = (panelIds: readonly string[]): panelwindow.WindowBou
 type OwnedPanel = NonNullable<ReturnType<ReturnType<typeof useObjectPanelState>['getOwnedPanel']>>;
 
 const sameTransferredTab = (owned: OwnedPanel, tab: panelwindow.TabSnapshot): boolean =>
-  owned.objectRef.clusterId === tab.objectRef.clusterId &&
-  owned.objectRef.group === tab.objectRef.group &&
-  owned.objectRef.version === tab.objectRef.version &&
-  owned.objectRef.kind === tab.objectRef.kind &&
-  (owned.objectRef.namespace ?? '') === tab.objectRef.namespace &&
-  owned.objectRef.name === tab.objectRef.name &&
+  panelTargetId(owned.objectRef) === panelTargetId(panelTargetFromSnapshot(tab)) &&
   owned.activeView === tab.activeView;
 
 const isAuthoritativeTransferSource = (

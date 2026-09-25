@@ -41,6 +41,7 @@ const VIEW_IDS = new Set<string>([
   'namespace-browse',
   'object-panel-pods',
   'object-panel-jobs',
+  'object-panel-identity-bindings',
 ]);
 
 export const isRegisteredGridTableView = (viewId: string): boolean => VIEW_IDS.has(viewId);

@@ -1,3 +1,4 @@
+import type { panelwindow } from '@/core/backend-api/models';
 /**
  * frontend/src/shared/components/tabs/dragCoordinator/types.ts
  *
@@ -16,19 +17,7 @@ export type TabDragPayload =
       sourceWindowName?: string;
       sourceWindowGroupId?: string;
       clusterId?: string;
-      tab?: {
-        kind: string;
-        panelId: string;
-        objectRef: {
-          clusterId: string;
-          group: string;
-          version: string;
-          kind: string;
-          namespace: string;
-          name: string;
-        };
-        activeView: string;
-      };
+      tab?: Omit<panelwindow.TabSnapshot, 'kind'> & { kind: string };
     };
 
 /**

@@ -11,13 +11,14 @@ const state = vi.hoisted(() => ({
   clusterId: 'cluster-a',
   rows: [] as ClusterIdentity[],
   open: vi.fn(),
+  openIdentity: vi.fn(),
   navigate: vi.fn(),
 }));
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterId: state.clusterId }),
 }));
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: state.open }),
+  useObjectPanel: () => ({ openWithObject: state.open, openWithIdentity: state.openIdentity }),
 }));
 vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ available: true, navigateToView: state.navigate }),
@@ -85,6 +86,7 @@ describe('ClusterViewIdentities', () => {
     document.body.appendChild(host);
     root = ReactDOM.createRoot(host);
     state.open.mockClear();
+    state.openIdentity.mockClear();
     state.navigate.mockClear();
     state.clusterId = 'cluster-a';
     state.rows = [
@@ -141,9 +143,38 @@ describe('ClusterViewIdentities', () => {
     act(() => badge?.dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true })));
     expect(state.navigate).toHaveBeenCalledExactlyOnceWith(state.rows[2].serviceAccount);
     expect(state.open).toHaveBeenCalledTimes(1);
+  });
 
-    expect(host.querySelector('button[data-kind-value="User"]')).toBeNull();
-    expect(host.querySelector('button[data-kind-value="Group"]')).toBeNull();
+  it('opens User and Group identity targets from badges and names without object actions', async () => {
+    state.rows[0].name = ' alice ';
+    await act(async () =>
+      root.render(
+        <KeyboardProvider>
+          <ClusterResourcesViews activeTab="identities" />
+        </KeyboardProvider>
+      )
+    );
+    const user = host.querySelector<HTMLButtonElement>('button[data-kind-value="User"]');
+    expect(user).not.toBeNull();
+    act(() => user?.click());
+    expect(state.openIdentity).toHaveBeenLastCalledWith({
+      targetType: 'identity',
+      clusterId: 'cluster-a',
+      kind: 'User',
+      name: ' alice ',
+    });
+    const group = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === 'developers'
+    );
+    expect(group).toBeDefined();
+    act(() => group?.click());
+    expect(state.openIdentity).toHaveBeenLastCalledWith({
+      targetType: 'identity',
+      clusterId: 'cluster-a',
+      kind: 'Group',
+      name: 'developers',
+    });
+    expect(state.open).not.toHaveBeenCalled();
   });
 
   it('opens real service accounts and source bindings without offering user or group object actions', async () => {
@@ -156,12 +187,7 @@ describe('ClusterViewIdentities', () => {
     );
     expect(host.textContent).toContain('alice');
     expect(host.textContent).toContain('developers');
-    expect(
-      [...host.querySelectorAll('button')].find((el) => el.textContent === 'alice')
-    ).toBeUndefined();
-    expect(
-      [...host.querySelectorAll('button')].find((el) => el.textContent === 'developers')
-    ).toBeUndefined();
+    expect(state.open).not.toHaveBeenCalled();
     const serviceAccount = [...host.querySelectorAll('button')].find(
       (el) => el.textContent === 'builder'
     );

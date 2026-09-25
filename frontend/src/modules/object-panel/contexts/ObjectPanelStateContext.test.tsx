@@ -201,7 +201,7 @@ describe('ObjectPanelStateContext', () => {
       clusterId: 'cluster-a',
       groupId: 'group-pending',
       activePanelId: panelId,
-      tabs: [{ panelId, objectRef, activeView: 'details' }],
+      tabs: [{ kind: 'object', panelId, objectRef, activeView: 'details' }],
     } as panelwindow.GroupSnapshot;
 
     act(() => {
@@ -236,7 +236,12 @@ describe('ObjectPanelStateContext', () => {
       currentState().restorePanelTabs({
         clusterId: 'cluster-a',
         tabs: [
-          { panelId: incomingId, objectRef: { ...ref, name: 'incoming' }, activeView: 'yaml' },
+          {
+            kind: 'object',
+            panelId: incomingId,
+            objectRef: { ...ref, name: 'incoming' },
+            activeView: 'yaml',
+          },
         ],
       } as panelwindow.GroupSnapshot);
     });

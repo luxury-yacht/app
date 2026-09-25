@@ -123,7 +123,7 @@ func (r *Registry) abortReadyPanelWindow(descriptor PanelWindowDescriptor) error
 func (r *Registry) restoreFailedPanelOpen(targetWindow string, previous []panelwindow.WorkspacePanel) {
 	for i := range previous {
 		panel := &previous[i]
-		if panel.Location.Kind == panelwindow.PanelLocationDocked && !r.windowHasCluster(panel.Location.WindowName, panel.Tab.ObjectRef.ClusterID) {
+		if panel.Location.Kind == panelwindow.PanelLocationDocked && !r.windowHasCluster(panel.Location.WindowName, panel.Tab.ClusterID()) {
 			panel.Location.Kind = panelwindow.PanelLocationRetained
 			panel.Location.WindowName = ""
 		}
@@ -139,17 +139,17 @@ func (r *Registry) GetPanelWorkspace(windowName, clusterID string) (panelwindow.
 }
 
 func (r *Registry) OpenPanelWorkspaceObject(windowName string, tab panelwindow.TabSnapshot) (panelwindow.PanelOpenResult, error) {
-	if !r.windowHasCluster(windowName, tab.ObjectRef.ClusterID) {
-		return panelwindow.PanelOpenResult{}, fmt.Errorf("window %q does not display cluster %q", windowName, tab.ObjectRef.ClusterID)
+	if !r.windowHasCluster(windowName, tab.ClusterID()) {
+		return panelwindow.PanelOpenResult{}, fmt.Errorf("window %q does not display cluster %q", windowName, tab.ClusterID())
 	}
-	reservation := r.workspace.ReserveCluster(tab.ObjectRef.ClusterID)
-	defer r.releasePanelReservation(reservation, tab.ObjectRef.ClusterID)
-	if err := r.retainPanelWorkspace(tab.ObjectRef.ClusterID); err != nil {
+	reservation := r.workspace.ReserveCluster(tab.ClusterID())
+	defer r.releasePanelReservation(reservation, tab.ClusterID())
+	if err := r.retainPanelWorkspace(tab.ClusterID()); err != nil {
 		return panelwindow.PanelOpenResult{}, err
 	}
 	r.workspaceMu.Lock()
 	defer r.workspaceMu.Unlock()
-	if !reservation.Live() || !r.windowHasCluster(windowName, tab.ObjectRef.ClusterID) {
+	if !reservation.Live() || !r.windowHasCluster(windowName, tab.ClusterID()) {
 		return panelwindow.PanelOpenResult{}, fmt.Errorf("panel source no longer displays the cluster")
 	}
 	location := panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: windowName, GroupID: "right", Active: true}
@@ -166,7 +166,7 @@ func (r *Registry) OpenPanelWorkspaceObject(windowName string, tab panelwindow.T
 			return panelwindow.PanelOpenResult{}, err
 		}
 	}
-	r.emitWorkspaceChanged(tab.ObjectRef.ClusterID)
+	r.emitWorkspaceChanged(tab.ClusterID())
 	return panelwindow.PanelOpenResult{Panel: panel, Render: render}, nil
 }
 
@@ -178,7 +178,7 @@ func (r *Registry) releasePanelReservation(reservation *panelwindow.WorkspaceRes
 func (r *Registry) focusWorkspacePanel(panel panelwindow.WorkspacePanel) error {
 	location := panel.Location
 	eventName := panelwindow.WorkspaceFocusRequestedEventName
-	var event any = panelwindow.WorkspaceFocusRequestedEvent{ClusterID: panel.Tab.ObjectRef.ClusterID, PanelID: panel.Tab.PanelID}
+	var event any = panelwindow.WorkspaceFocusRequestedEvent{ClusterID: panel.Tab.ClusterID(), PanelID: panel.Tab.PanelID}
 	if location.Kind == panelwindow.PanelLocationWindow {
 		eventName = panelwindow.WindowFocusRequestedEventName
 		event = panelwindow.WindowFocusRequestedEvent{PanelID: panel.Tab.PanelID}
@@ -279,7 +279,7 @@ func (r *Registry) provisionalDockTabs(windowName string) map[string]provisional
 			continue
 		}
 		for _, tab := range descriptor.Snapshot.Tabs {
-			tabs[tab.ObjectRef.ClusterID+"\x00"+tab.PanelID] = provisionalDockTab{tab, position}
+			tabs[tab.ClusterID()+"\x00"+tab.PanelID] = provisionalDockTab{tab, position}
 		}
 	}
 	return tabs

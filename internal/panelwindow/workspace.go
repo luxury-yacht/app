@@ -117,7 +117,7 @@ func validatePanelLocation(location PanelLocation) error {
 // Open atomically claims an object or returns its existing placement so another
 // app window can focus it without creating a second panel.
 func (d *WorkspaceDirectory) Open(tab TabSnapshot, location PanelLocation, reservations ...*WorkspaceReservation) (WorkspacePanel, bool, error) {
-	if err := validateGroupTab(0, tab, tab.ObjectRef.ClusterID, make(map[string]struct{})); err != nil {
+	if err := validateGroupTab(0, tab, tab.ClusterID(), make(map[string]struct{})); err != nil {
 		return WorkspacePanel{}, false, err
 	}
 	if err := validatePanelLocation(location); err != nil {
@@ -128,12 +128,12 @@ func (d *WorkspaceDirectory) Open(tab TabSnapshot, location PanelLocation, reser
 	if err := d.validateReservationsLocked(reservations); err != nil {
 		return WorkspacePanel{}, false, err
 	}
-	key := workspacePanelKey{tab.ObjectRef.ClusterID, tab.PanelID}
-	if current, exists := d.panels[key]; exists && current.Tab.ObjectRef != tab.ObjectRef {
+	key := workspacePanelKey{tab.ClusterID(), tab.PanelID}
+	if current, exists := d.panels[key]; exists && current.Tab.identity() != tab.identity() {
 		return WorkspacePanel{}, false, fmt.Errorf("panel identity does not match its object")
 	}
 	for existingKey, current := range d.panels {
-		if current.Tab.ObjectRef == tab.ObjectRef {
+		if current.Tab.identity() == tab.identity() {
 			key = existingKey
 			break
 		}
@@ -182,7 +182,7 @@ func (d *WorkspaceDirectory) Move(tab TabSnapshot, source, target PanelLocation)
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	key := workspacePanelKey{tab.ObjectRef.ClusterID, tab.PanelID}
+	key := workspacePanelKey{tab.ClusterID(), tab.PanelID}
 	panel, ok := d.panels[key]
 	if !ok || panel.Tab != tab || panel.Location != source {
 		return fmt.Errorf("panel transfer source is stale")
@@ -235,7 +235,7 @@ func (d *WorkspaceDirectory) RestoreTransferredPanels(targetWindow string, previ
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	for _, panel := range previous {
-		key := workspacePanelKey{panel.Tab.ObjectRef.ClusterID, panel.Tab.PanelID}
+		key := workspacePanelKey{panel.Tab.ClusterID(), panel.Tab.PanelID}
 		current, exists := d.panels[key]
 		if exists && current.Location.WindowName == targetWindow && current.Tab == panel.Tab {
 			d.panels[key] = panel
@@ -246,7 +246,7 @@ func (d *WorkspaceDirectory) RestoreTransferredPanels(targetWindow string, previ
 
 func panelsFromGroups(windowName string, kind PanelLocationKind, groups []WorkspaceGroup) (map[workspacePanelKey]WorkspacePanel, error) {
 	panels := make(map[workspacePanelKey]WorkspacePanel)
-	objects := make(map[ObjectReference]struct{})
+	objects := make(map[panelIdentity]struct{})
 	for _, group := range groups {
 		location := PanelLocation{Kind: kind, WindowName: windowName, GroupID: group.GroupID}
 		if err := validatePanelLocation(location); err != nil {
@@ -299,7 +299,7 @@ func (d *WorkspaceDirectory) PublishWindowWithTransfers(windowName string, kind 
 	}
 	approved := make(map[workspacePanelKey]PlacementTransfer)
 	for _, transfer := range transfers {
-		approved[workspacePanelKey{transfer.Tab.ObjectRef.ClusterID, transfer.Tab.PanelID}] = transfer
+		approved[workspacePanelKey{transfer.Tab.ClusterID(), transfer.Tab.PanelID}] = transfer
 	}
 	if err := d.validatePublicationLocked(windowName, next, approved); err != nil {
 		return nil, err
@@ -307,7 +307,7 @@ func (d *WorkspaceDirectory) PublishWindowWithTransfers(windowName string, kind 
 	d.replacePublishedWindowLocked(windowName, next)
 	committed := make([]string, 0, len(transfers))
 	for _, transfer := range transfers {
-		panel, found := next[workspacePanelKey{transfer.Tab.ObjectRef.ClusterID, transfer.Tab.PanelID}]
+		panel, found := next[workspacePanelKey{transfer.Tab.ClusterID(), transfer.Tab.PanelID}]
 		if found && panel.Tab == transfer.Tab && panel.Location.GroupID == transfer.TargetGroupID {
 			committed = append(committed, transfer.TransferID)
 		}
@@ -328,19 +328,19 @@ func (d *WorkspaceDirectory) validatePublicationLocked(windowName string, next m
 			if !exists || !validPublicationTransfer(previous, panel, transfer) {
 				return fmt.Errorf("panel transfer source is stale")
 			}
-		} else if exists && (previous.Location.WindowName != windowName || previous.Tab.ObjectRef != panel.Tab.ObjectRef) {
+		} else if exists && (previous.Location.WindowName != windowName || previous.Tab.identity() != panel.Tab.identity()) {
 			return fmt.Errorf("panel %q is owned by another placement", key.panelID)
 		}
-		if err := d.validateObjectIdentityLocked(key, panel.Tab.ObjectRef); err != nil {
+		if err := d.validateObjectIdentityLocked(key, panel.Tab.identity()); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (d *WorkspaceDirectory) validateObjectIdentityLocked(key workspacePanelKey, ref ObjectReference) error {
+func (d *WorkspaceDirectory) validateObjectIdentityLocked(key workspacePanelKey, ref panelIdentity) error {
 	for existingKey, panel := range d.panels {
-		if existingKey != key && panel.Tab.ObjectRef == ref {
+		if existingKey != key && panel.Tab.identity() == ref {
 			return fmt.Errorf("object already has panel %q", existingKey.panelID)
 		}
 	}
@@ -360,16 +360,16 @@ func (d *WorkspaceDirectory) Snapshot(clusterID string) WorkspaceSnapshot {
 	return snapshot
 }
 
-func addWorkspaceGroupPanels(group WorkspaceGroup, location PanelLocation, panels map[workspacePanelKey]WorkspacePanel, objects map[ObjectReference]struct{}) error {
+func addWorkspaceGroupPanels(group WorkspaceGroup, location PanelLocation, panels map[workspacePanelKey]WorkspacePanel, objects map[panelIdentity]struct{}) error {
 	for index, tab := range group.Tabs {
 		key := workspacePanelKey{group.ClusterID, tab.PanelID}
 		if _, exists := panels[key]; exists {
 			return fmt.Errorf("panel %q appears in multiple groups", tab.PanelID)
 		}
-		if _, duplicate := objects[tab.ObjectRef]; duplicate {
+		if _, duplicate := objects[tab.identity()]; duplicate {
 			return fmt.Errorf("object appears in multiple panel tabs")
 		}
-		objects[tab.ObjectRef] = struct{}{}
+		objects[tab.identity()] = struct{}{}
 		location.Index = index
 		location.Active = tab.PanelID == group.ActivePanelID
 		panels[key] = WorkspacePanel{Tab: tab, Location: location}

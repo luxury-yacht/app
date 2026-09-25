@@ -1,3 +1,4 @@
+import { panelTargetFromSnapshot } from '@modules/object-panel/panelTarget';
 import { useCallback, useEffect, useRef } from 'react';
 import type { backend } from '@/core/backend-api/models';
 import { useZoom } from '@/core/contexts/ZoomContext';
@@ -46,7 +47,6 @@ import {
   useObjectPanelActiveTabs,
   useObjectPanelState,
 } from '@/modules/object-panel/contexts/ObjectPanelStateContext';
-import type { KubernetesObjectReference } from '@/types/view-state';
 import { useDockablePanelContext } from '@/ui/dockable';
 import { getGroupTabs } from '@/ui/dockable/tabGroupState';
 import { executeBackendApplicationMenuCommand } from '@/ui/layout/ApplicationMenuCommandContext';
@@ -315,7 +315,7 @@ export function PanelWindowShortcuts({
         }
         guards.freeze(request.transferId, [request.tab.panelId]);
         const panelId = upsertOwnedPanel(
-          { ...request.tab.objectRef } as KubernetesObjectReference,
+          panelTargetFromSnapshot(request.tab),
           request.tab.activeView as ViewType
         );
         if (panelId !== request.tab.panelId) {

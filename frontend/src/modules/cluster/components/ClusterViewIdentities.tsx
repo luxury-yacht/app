@@ -1,4 +1,5 @@
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
@@ -51,28 +52,39 @@ function IdentityBindings({ row }: Readonly<{ row: ClusterIdentity }>) {
 }
 
 const buildColumns = (
-  objectLink: ReturnType<typeof useObjectLink>
-): GridColumnDefinition<ClusterIdentity>[] =>
-  cf.withColumnSizing(
+  objectLink: ReturnType<typeof useObjectLink>,
+  openIdentity: ReturnType<typeof useObjectPanel>['openWithIdentity']
+): GridColumnDefinition<ClusterIdentity>[] => {
+  const serviceAccountLink = objectLink<ClusterIdentity>((row) =>
+    row.serviceAccount ? buildRequiredObjectReference(row.serviceAccount) : undefined
+  );
+  const links = {
+    onClick: (row: ClusterIdentity) => {
+      if (row.serviceAccount) {
+        serviceAccountLink.onClick(row);
+      } else if (row.kind === 'User' || row.kind === 'Group') {
+        openIdentity({
+          targetType: 'identity',
+          clusterId: row.clusterId,
+          kind: row.kind,
+          name: row.name,
+        });
+      }
+    },
+    onAltClick: serviceAccountLink.onAltClick,
+    isInteractive: (row: ClusterIdentity) =>
+      Boolean(row.serviceAccount) || row.kind === 'User' || row.kind === 'Group',
+  };
+  return cf.withColumnSizing(
     [
       cf.createKindColumn<ClusterIdentity>({
         getKind: (row) => row.kind,
-        ...objectLink<ClusterIdentity>((row) =>
-          row.serviceAccount ? buildRequiredObjectReference(row.serviceAccount) : undefined
-        ),
-        isInteractive: (row) => Boolean(row.serviceAccount),
+        ...links,
       }),
-      {
-        ...cf.createTextColumn<ClusterIdentity>('name', 'Name', (row) => row.name),
-        render: (row: ClusterIdentity) =>
-          row.serviceAccount ? (
-            <ObjectPanelLink objectRef={buildRequiredObjectReference(row.serviceAccount)}>
-              {row.name}
-            </ObjectPanelLink>
-          ) : (
-            row.name
-          ),
-      },
+      cf.createResourceNameColumn<ClusterIdentity>({
+        ...links,
+        getClassName: () => 'object-panel-link',
+      }),
       cf.createTextColumn<ClusterIdentity>('namespace', 'Namespace', (row) => row.namespace || '—'),
       {
         ...cf.createTextColumn<ClusterIdentity>(
@@ -96,6 +108,7 @@ const buildColumns = (
       grantScopes: { width: 300 },
     }
   );
+};
 
 const filterOptionOverrides = {
   searchPlaceholder: 'Search identities and bindings...',
@@ -111,7 +124,11 @@ const filterOptionOverrides = {
 export default function ClusterViewIdentities() {
   const { selectedClusterId } = useKubeconfig();
   const objectLink = useObjectLink();
-  const columns = useMemo(() => buildColumns(objectLink), [objectLink]);
+  const { openWithIdentity } = useObjectPanel();
+  const columns = useMemo(
+    () => buildColumns(objectLink, openWithIdentity),
+    [objectLink, openWithIdentity]
+  );
   const { source, gridTableProps, favModal } = useQueryBackedClusterResourceGridTable<
     ClusterIdentitiesSnapshot,
     ClusterIdentity

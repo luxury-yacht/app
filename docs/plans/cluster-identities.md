@@ -140,3 +140,91 @@ The browser mouse, focused keyboard and Alt-click checks were repeated after
 reference normalization and delivered the same complete reference. Final worktree
 inspection and `git diff --check` passed; the completion-record update also passed
 `qc:docs`.
+
+## User and Group panels
+
+Implement the accepted read-only Details panel: exact identity and cluster,
+direct binding count/scopes, source binding and role links, and partial visibility.
+No YAML, mutation actions, inferred membership, or effective permissions.
+
+The native tab protocol currently admits only object references. Add an explicit
+identity target through the same registry, shared directory, local panel state,
+snapshots, drag/restore, and docked/native renderers. Object references retain
+their full GVK contract; subject targets carry cluster/type/exact name only.
+Directory comparisons must distinguish subject type and exact name, and opening
+an already-owned subject must focus its existing placement.
+
+Data remains in the cluster-identities refresh domain. Extend its shared
+projection with role references and an exact subject predicate, then lease that
+domain through existing query/refresh hooks in each visible panel. Permission and
+source readiness remain authoritative. Hidden panels release visible demand;
+transfers restore identity and refetch data through the destination's runtime.
+
+| Outcome | Status | Evidence |
+| --- | --- | --- |
+| Protocol preserves exact subjects and rejects mixed/foreign references | passed | New native protocol test first rejected the identity tab kind; identity snapshot and target tests now pass, preserving exact names without GVK |
+| Shared ownership, restore, movement and close preserve identity | passed | `internal/panelwindow/identity_test.go`, shared panel state/opening tests, and native undock/redock observations below |
+| Details show exact live bindings, role references and visibility | passed | Exact-subject backend query test initially returned three subjects, then passed with one; panel tests cover readiness, deletion, subject/cluster changes, partial coverage, errors, and role navigation |
+| User/Group links open panels; ServiceAccount actions retain behavior | passed | New routed badge/name test first failed for the missing User button; final suite covers identity targets and ServiceAccount click/Alt-click/resource rendering |
+| Rendered docked/native panel interactions | passed | Native accessibility observations and Playwright checks below |
+| Focused tests, coverage and complexity | passed | Final frontend coverage: 531 files / 5,139 tests; backend coverage task passed; local Go/TypeScript scores at most 12 |
+| Final prerelease gate and documentation checks | passed | `qc:prerelease` exited 0 after the embedded-table correction; final worktree inspection, `git diff --check`, and `qc:docs` passed |
+
+### Native and rendered checks (2026-09-25)
+
+`mise exec -- wails3 dev -port 9246` started the development app without stopping
+the existing Vite process on port 9245. Native automation used bounded macOS
+System Events calls against the `luxury-yacht` process. The selected cluster was
+`fusionauth-sandbox`.
+
+- Clicked the first Group badge: the panel showed Group
+  `eks:kube-proxy-windows`, one direct binding, and Cluster-wide scope.
+- Clicked **Undock panel to floating window**: a second native window appeared
+  with the same Group identity, binding count, scope, and populated table.
+- Clicked **Dock panel to right side**: the floating window was destroyed
+  (window count returned to one) and the Group content returned to the dock.
+- Clicked its `ClusterRole: system:node-proxier` link: the existing resource panel
+  loaded ClusterRole details and rules.
+- Selected the User tab `eks:authenticator`: Details showed one direct binding
+  scoped to `kube-system`. After the layout correction, native accessibility
+  reported the binding heading at y=496, height=26, and the binding table at
+  y=618, height=41, so the table was below the heading.
+
+The browser preview on the emitted Vite URL cannot call native Wails methods.
+A Playwright-only harness rendered the real header, Details tab, overview fields,
+ResourceInventoryTable, GridTable, and links, replacing query data, grid binding,
+cluster/zoom context, and link dispatch with fixtures. It exercised populated,
+partial, empty, loading, error, and role-link dispatch states. The first screenshot
+exposed a missing `embedded` table flag; after adding it, the overview ended at
+y=232.39 and the table began at y=297.67. Light and dark screenshots were inspected:
+`.playwright-mcp/identity-panel-details-light.png` and
+`.playwright-mcp/identity-panel-details-dark.png`. These preview fixtures do not
+substitute for the native window observations above. macOS window image capture
+returned `could not create image from window`; native geometry was checked through
+accessibility instead.
+
+### Validation measurements
+
+- Backend coverage task passed. Directly affected files: cluster identities
+  93.22%, native tab types 96.00%, workspace directory 81.25%, app-window workspace
+  84.65% statement coverage.
+- Final frontend coverage task passed with 5,139 tests; overall statement coverage
+  89.86%. Every changed production frontend file measured at least 80%. Identity
+  Details measured 87.50%, IdentityPanel 91.66%, its query hook 100%, target helpers
+  95%, and the shared target renderer 100%.
+- Pinned gocognit 1.2.1 reported no inspected Go function above 12. Biome's local
+  cognitive-complexity check at threshold 12 reported no diagnostics for the 16
+  changed production frontend files. These are local checks, not a remote Sonar
+  analysis; no PR was created or pushed.
+- The full frontend run caught the old lazy-import target assertion. It was
+  updated to the shared target renderer; focused tests and final coverage passed.
+- Logs: `/tmp/identity-panels-backend-coverage.log`,
+  `/tmp/identity-panels-frontend-coverage-layout.log`,
+  `/tmp/identity-panels-go-complexity.json`,
+  `/tmp/identity-panels-ts-complexity.json`, and
+  `/tmp/identity-panels-prerelease-final.log`.
+
+Playwright fixture routes were removed and the browser was returned to
+`about:blank`. The development app remains available on port 9246 for review.
+The final gate applied no additional frontend formatting changes; the worktree
+was inspected after it completed. No git state changes or PR operations were run.

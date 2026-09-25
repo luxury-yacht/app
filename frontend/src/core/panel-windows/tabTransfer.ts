@@ -1,33 +1,11 @@
+import { panelTargetFromSnapshot, panelTargetId } from '@modules/object-panel/panelTarget';
 import type { panelwindow } from '@/core/backend-api/models';
 import { getObjectPanelLayoutDefaults } from '@/core/settings/appPreferences';
 import type { TabDragPayload } from '@/shared/components/tabs/dragCoordinator';
 
 export type DockableTabDragPayload = Extract<TabDragPayload, { kind: 'dockable-tab' }>;
 
-export const objectPanelTabSnapshot = (
-  panelId: string,
-  objectRef: {
-    clusterId: string;
-    group: string;
-    version: string;
-    kind: string;
-    namespace?: string;
-    name: string;
-  },
-  activeView: string
-): panelwindow.TabSnapshot => ({
-  kind: 'object' as panelwindow.TabKind,
-  panelId,
-  objectRef: {
-    clusterId: objectRef.clusterId,
-    group: objectRef.group,
-    version: objectRef.version,
-    kind: objectRef.kind,
-    namespace: objectRef.namespace ?? '',
-    name: objectRef.name,
-  },
-  activeView,
-});
+export { panelTargetSnapshot as objectPanelTabSnapshot } from '@modules/object-panel/panelTarget';
 
 export const singleTabGroupSnapshot = (
   request: panelwindow.TabTransferRequest
@@ -97,14 +75,7 @@ export function samePanelTab(
   ) {
     return false;
   }
-  const a = left.objectRef,
-    b = right.objectRef;
   return (
-    a.clusterId === b.clusterId &&
-    a.group === b.group &&
-    a.version === b.version &&
-    a.kind === b.kind &&
-    a.namespace === b.namespace &&
-    a.name === b.name
+    panelTargetId(panelTargetFromSnapshot(left)) === panelTargetId(panelTargetFromSnapshot(right))
   );
 }

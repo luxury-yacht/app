@@ -19,7 +19,8 @@ namespace; user/group names remain opaque and case-sensitive.
 
 These subject rows are not canonical Kubernetes object rows. Only the optional
 `serviceAccount` field and the `bindings` list carry real, complete resource
-references. User/group names and Kind badges remain non-interactive.
+references. Each binding includes its projected role reference when available.
+User/group names and Kind badges open read-only identity panels.
 ServiceAccount names and Kind badges open their object panel; Alt-click uses
 the shared navigation to reveal the account in its resource table. Source bindings
 open through the shared object-panel links. Duplicate subjects within a binding
@@ -51,6 +52,26 @@ with a deletion timestamp remains present until actually removed. The frontend
 refetches on change signals and uses its existing polling fallback when the
 stream is unavailable. Background refreshes retain the inactive cluster ID.
 
+## Identity panels
+
+User and Group panels share the docked/native registry, directory, tab state,
+header, Details tab, and table components with resource panels. Their explicit
+`identity` tab target contains only cluster ID, subject kind, and the exact name;
+it never invents a Kubernetes GVK. ServiceAccounts retain resource panels.
+
+Details queries the existing domain with an exact JSON identity predicate. It
+leases query demand while visible, waits for source readiness, and refetches on
+the domain's reconciliation signals. The destination reconstructs this demand
+when a panel transfers; identity panels do not evict the shared cluster domain
+when they close. Binding links and role links use their complete resource refs.
+The binding table contains the whole returned subject's visible binding list and
+uses Local Partial mode when source coverage is incomplete.
+
+The panel exposes direct bindings and grant scopes, with partial visibility and
+error states. An identity removed from all visible bindings remains an open panel
+with an empty binding list. It has no YAML, mutation actions, group membership,
+or effective permission calculation.
+
 ## Regression coverage
 
 - `backend/refresh/snapshot/cluster_identities_test.go`: subject equality,
@@ -62,5 +83,6 @@ stream is unavailable. Background refreshes retain the inactive cluster ID.
 - `backend/refresh/resourcestream/ingest_notify_test.go`: source updates/deletes
   notify the cluster identity view.
 - `ClusterViewIdentities.test.tsx`: real table/link interaction with the query
-  hook replaced by fixture rows; only real object references open panels.
+  hook replaced by fixture rows; subjects open identity targets and actual
+  ServiceAccounts/bindings open complete object references.
 - Sidebar and background-refresh tests cover route placement and cluster routing.

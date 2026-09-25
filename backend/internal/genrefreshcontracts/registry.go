@@ -155,6 +155,7 @@ var contractTypes = []typeSpec{
 	{name: "AttentionSeverityCounts", typeOf: typeOf[snapshot.AttentionSeverityCounts]()},
 	{name: "ClusterAttentionSnapshot", typeOf: typeOf[snapshot.ClusterAttentionSnapshot]()},
 	{name: "ClusterIdentity", typeOf: typeOf[snapshot.ClusterIdentity]()},
+	{name: "ClusterIdentityBinding", typeOf: typeOf[snapshot.ClusterIdentityBinding]()},
 	{name: "ClusterIdentitiesSnapshot", typeOf: typeOf[snapshot.ClusterIdentitiesSnapshot]()},
 	{name: "ClusterRBACEntry", typeOf: typeOf[streamrows.ClusterRBACEntry]()},
 	{name: "ClusterRBACSnapshotPayload", typeOf: typeOf[snapshot.ClusterRBACSnapshot]()},

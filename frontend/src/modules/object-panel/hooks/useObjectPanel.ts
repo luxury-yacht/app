@@ -1,3 +1,11 @@
+import {
+  buildPanelTarget,
+  type IdentityPanelRef,
+  isIdentityPanelRef,
+  type PanelTarget,
+  panelTargetFromSnapshot,
+  panelTargetId,
+} from '../panelTarget';
 /**
  * frontend/src/modules/object-panel/hooks/useObjectPanel.ts
  *
@@ -11,7 +19,7 @@
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
-import { type ObjectPanelRef, objectPanelId } from '@modules/object-panel/objectPanelRef';
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import { assertObjectRefHasRequiredIdentity } from '@shared/utils/objectIdentity';
 import { useDockablePanelContext } from '@ui/dockable';
 import { getGroupForPanel } from '@ui/dockable/tabGroupState';
@@ -148,19 +156,22 @@ export function useObjectPanel() {
   const mountSharedPanel = useCallback(
     (
       tab: panelwindow.TabSnapshot,
-      enriched: KubernetesObjectReference,
+      enriched: PanelTarget,
       shouldAutoFloat: boolean,
       requestedView?: ViewType
     ) => {
-      const panelId = objectPanelId(enriched);
-      if (!activateObjectCluster(tab.objectRef.clusterId)) {
+      const panelId = panelTargetId(enriched);
+      const restored = panelTargetFromSnapshot(tab);
+      if (!activateObjectCluster(restored.clusterId)) {
         return;
       }
-      onRowClick({ ...enriched, ...tab.objectRef }, { pendingNativeOpen: shouldAutoFloat });
+      onRowClick(isIdentityPanelRef(restored) ? restored : { ...enriched, ...tab.objectRef }, {
+        pendingNativeOpen: shouldAutoFloat,
+      });
       // Set the requested initial tab in the same React batch as the open so
       // the panel mounts on that tab instead of flashing Details first.
       setObjectPanelActiveTab(
-        tab.objectRef.clusterId,
+        restored.clusterId,
         panelId,
         (requestedView ?? tab.activeView) as ViewType
       );
@@ -168,18 +179,14 @@ export function useObjectPanel() {
         pendingFloatPanelIdRef.current = panelId;
       }
 
-      focusPanel(panelId, tab.objectRef.clusterId);
+      focusPanel(panelId, restored.clusterId);
     },
     [activateObjectCluster, onRowClick, setObjectPanelActiveTab, focusPanel]
   );
 
-  const openWithObject = useCallback(
-    (obj: KubernetesObjectReference, options?: OpenWithObjectOptions) => {
-      const enriched = hydrateClusterMeta(obj);
-      // Runtime defense for incomplete object refs. Catches programmatic ref
-      // constructions that the openWithObjectAudit literal walker can't see.
-      assertObjectRefHasRequiredIdentity(enriched);
-      const panelId = objectPanelId(enriched);
+  const openTarget = useCallback(
+    (enriched: PanelTarget, options?: OpenWithObjectOptions) => {
+      const panelId = panelTargetId(enriched);
       const ownedPanel = getOwnedPanel(enriched.clusterId, panelId);
       const requestedView = options?.initialTab;
       const shouldAutoFloat =
@@ -209,14 +216,23 @@ export function useObjectPanel() {
           })
         );
     },
-    [
-      hydrateClusterMeta,
-      getOwnedPanel,
-      panelWindowRole,
-      updateExistingPanelView,
-      mountSharedPanel,
-      openSharedPanel,
-    ]
+    [getOwnedPanel, panelWindowRole, updateExistingPanelView, mountSharedPanel, openSharedPanel]
+  );
+
+  const openWithObject = useCallback(
+    (obj: KubernetesObjectReference, options?: OpenWithObjectOptions) => {
+      const enriched = hydrateClusterMeta(obj);
+      assertObjectRefHasRequiredIdentity(enriched);
+      openTarget(enriched, options);
+    },
+    [hydrateClusterMeta, openTarget]
+  );
+
+  const openWithIdentity = useCallback(
+    (ref: IdentityPanelRef) => {
+      openTarget(buildPanelTarget(ref));
+    },
+    [openTarget]
   );
 
   const close = useCallback(() => {
@@ -244,6 +260,7 @@ export function useObjectPanel() {
     openPanels,
     // Open or activate a tab for an object.
     openWithObject,
+    openWithIdentity,
     // Close the current panel (or all panels if outside ObjectPanel tree).
     close,
   };
