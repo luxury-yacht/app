@@ -6,7 +6,9 @@ import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import Tooltip from '@shared/components/Tooltip';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { useMemo } from 'react';
 import type { ClusterIdentitiesSnapshot, ClusterIdentity } from '@/core/refresh/types';
 import './ClusterViewIdentities.css';
 
@@ -48,43 +50,52 @@ function IdentityBindings({ row }: Readonly<{ row: ClusterIdentity }>) {
   );
 }
 
-const columns: GridColumnDefinition<ClusterIdentity>[] = cf.withColumnSizing(
-  [
-    cf.createKindColumn<ClusterIdentity>({ getKind: (row) => row.kind }),
-    {
-      ...cf.createTextColumn<ClusterIdentity>('name', 'Name', (row) => row.name),
-      render: (row: ClusterIdentity) =>
-        row.serviceAccount ? (
-          <ObjectPanelLink objectRef={buildRequiredObjectReference(row.serviceAccount)}>
-            {row.name}
-          </ObjectPanelLink>
-        ) : (
-          row.name
+const buildColumns = (
+  objectLink: ReturnType<typeof useObjectLink>
+): GridColumnDefinition<ClusterIdentity>[] =>
+  cf.withColumnSizing(
+    [
+      cf.createKindColumn<ClusterIdentity>({
+        getKind: (row) => row.kind,
+        ...objectLink<ClusterIdentity>((row) =>
+          row.serviceAccount ? buildRequiredObjectReference(row.serviceAccount) : undefined
         ),
-    },
-    cf.createTextColumn<ClusterIdentity>('namespace', 'Namespace', (row) => row.namespace || '—'),
-    {
-      ...cf.createTextColumn<ClusterIdentity>(
-        'bindings',
-        'Bindings',
-        (row) => row.bindings?.length ?? 0
+        isInteractive: (row) => Boolean(row.serviceAccount),
+      }),
+      {
+        ...cf.createTextColumn<ClusterIdentity>('name', 'Name', (row) => row.name),
+        render: (row: ClusterIdentity) =>
+          row.serviceAccount ? (
+            <ObjectPanelLink objectRef={buildRequiredObjectReference(row.serviceAccount)}>
+              {row.name}
+            </ObjectPanelLink>
+          ) : (
+            row.name
+          ),
+      },
+      cf.createTextColumn<ClusterIdentity>('namespace', 'Namespace', (row) => row.namespace || '—'),
+      {
+        ...cf.createTextColumn<ClusterIdentity>(
+          'bindings',
+          'Bindings',
+          (row) => row.bindings?.length ?? 0
+        ),
+        render: (row: ClusterIdentity) => <IdentityBindings row={row} />,
+      },
+      cf.createTextColumn<ClusterIdentity>(
+        'grantScopes',
+        'Grant scopes',
+        (row) => row.grantScopes?.join(', ') || '—'
       ),
-      render: (row: ClusterIdentity) => <IdentityBindings row={row} />,
-    },
-    cf.createTextColumn<ClusterIdentity>(
-      'grantScopes',
-      'Grant scopes',
-      (row) => row.grantScopes?.join(', ') || '—'
-    ),
-  ],
-  {
-    kind: { autoWidth: true },
-    name: { width: 300 },
-    namespace: { width: 180 },
-    bindings: { autoWidth: true },
-    grantScopes: { width: 300 },
-  }
-);
+    ],
+    {
+      kind: { autoWidth: true },
+      name: { width: 300 },
+      namespace: { width: 180 },
+      bindings: { autoWidth: true },
+      grantScopes: { width: 300 },
+    }
+  );
 
 const filterOptionOverrides = {
   searchPlaceholder: 'Search identities and bindings...',
@@ -99,6 +110,8 @@ const filterOptionOverrides = {
 
 export default function ClusterViewIdentities() {
   const { selectedClusterId } = useKubeconfig();
+  const objectLink = useObjectLink();
+  const columns = useMemo(() => buildColumns(objectLink), [objectLink]);
   const { source, gridTableProps, favModal } = useQueryBackedClusterResourceGridTable<
     ClusterIdentitiesSnapshot,
     ClusterIdentity

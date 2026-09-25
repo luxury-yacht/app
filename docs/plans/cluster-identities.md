@@ -104,3 +104,39 @@ proves rendered Wails content, not native window operations.
 The extra development processes were stopped and Playwright fixture routes
 removed after validation. The browser test workspace was returned to no open
 clusters.
+
+## ServiceAccount Kind badge interaction — 2026-09-25
+
+Scope: make the ServiceAccount Kind badge open the existing object panel and
+support standard Alt-click navigation. User and Group panels remain discussion
+only; their badges remain non-interactive.
+
+The backend's optional `serviceAccount` reference is the producer. The existing
+`createKindColumn` and `useObjectLink` consume it; the existing panel and view
+navigation hooks receive the complete reference. Interactivity depends on that
+reference being present. No new refresh readiness, panel lifetime, or provider
+ordering is introduced; dependencies remain from the table to existing shared
+hooks. The regression uses a row from a different cluster than the selected
+cluster to detect an accidental selected-cluster fallback.
+
+| Outcome | Status | Evidence |
+| --- | --- | --- |
+| ServiceAccount badge opens the row's complete object reference | passed | New real-table interaction regression failed for the missing button, then passed; only panel dispatch, view navigation, query transport and provider contexts are mocked |
+| Alt-click uses the same reference without also opening a panel | passed | Same regression, real Kind column and `useObjectLink` |
+| User/Group badges offer no object action; existing name/binding links work | passed | New negative interaction assertions and existing identity-link regression |
+| Browser mouse and keyboard activation dispatch the ServiceAccount reference | passed | Playwright mouse, focused Enter/Space and Alt-click checks on the actual component/shared table; query, panel dispatch, navigation and cluster/zoom contexts replaced with fixtures |
+| Coverage and local complexity | passed | `test:frontend-coverage`: 529 files / 5,131 tests; focused coverage rerun after reference normalization: component statement coverage 88.46%; Biome maximum complexity 12 check and typecheck passed |
+| Prerelease gate | passed | Final `qc:prerelease` exit 0 after test lint corrections and reference normalization; includes backend race checks, typecheck, 5,131 frontend tests, lint, docs and security checks |
+
+The browser fixture captured the complete `cluster-b` ServiceAccount reference
+for all four activations while the selected cluster context was `cluster-a`.
+Keyboard checks focused the badge before each activation. A combined rapid
+sequence under-counted activations; separate focused checks each delivered the
+expected dispatch. Native panel rendering was not exercised. The screenshot
+`.playwright-mcp/identities-clickable-kind.png` was inspected, and fixture routes
+were removed after validation.
+
+The browser mouse, focused keyboard and Alt-click checks were repeated after
+reference normalization and delivered the same complete reference. Final worktree
+inspection and `git diff --check` passed; the completion-record update also passed
+`qc:docs`.

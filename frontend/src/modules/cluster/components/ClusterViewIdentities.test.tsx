@@ -71,12 +71,22 @@ describe('ClusterViewIdentities', () => {
     namespace: 'payments',
     name: 'readers',
   };
+  const serviceAccountRef = {
+    clusterId: 'cluster-a',
+    group: '',
+    version: 'v1',
+    kind: 'ServiceAccount',
+    resource: 'serviceaccounts',
+    namespace: 'ci',
+    name: 'builder',
+  };
   beforeEach(() => {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = ReactDOM.createRoot(host);
     state.open.mockClear();
     state.navigate.mockClear();
+    state.clusterId = 'cluster-a';
     state.rows = [
       {
         clusterId: 'cluster-a',
@@ -101,21 +111,39 @@ describe('ClusterViewIdentities', () => {
         namespace: 'ci',
         bindings: [],
         grantScopes: [],
-        serviceAccount: {
-          clusterId: 'cluster-a',
-          group: '',
-          version: 'v1',
-          kind: 'ServiceAccount',
-          resource: 'serviceaccounts',
-          namespace: 'ci',
-          name: 'builder',
-        },
+        serviceAccount: serviceAccountRef,
       },
     ];
   });
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+  });
+
+  it('opens and reveals the service account from its Kind badge with the row identity', async () => {
+    state.rows[2] = {
+      ...state.rows[2],
+      clusterId: 'cluster-b',
+      serviceAccount: { ...serviceAccountRef, clusterId: 'cluster-b' },
+    };
+    await act(async () =>
+      root.render(
+        <KeyboardProvider>
+          <ClusterResourcesViews activeTab="identities" />
+        </KeyboardProvider>
+      )
+    );
+    const badge = host.querySelector<HTMLButtonElement>('button[data-kind-value="ServiceAccount"]');
+    expect(badge).not.toBeNull();
+    act(() => badge?.click());
+    expect(state.open).toHaveBeenCalledExactlyOnceWith(state.rows[2].serviceAccount);
+
+    act(() => badge?.dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true })));
+    expect(state.navigate).toHaveBeenCalledExactlyOnceWith(state.rows[2].serviceAccount);
+    expect(state.open).toHaveBeenCalledTimes(1);
+
+    expect(host.querySelector('button[data-kind-value="User"]')).toBeNull();
+    expect(host.querySelector('button[data-kind-value="Group"]')).toBeNull();
   });
 
   it('opens real service accounts and source bindings without offering user or group object actions', async () => {

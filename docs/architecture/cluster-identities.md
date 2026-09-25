@@ -19,7 +19,9 @@ namespace; user/group names remain opaque and case-sensitive.
 
 These subject rows are not canonical Kubernetes object rows. Only the optional
 `serviceAccount` field and the `bindings` list carry real, complete resource
-references. User/group names render as text. ServiceAccounts and source bindings
+references. User/group names and Kind badges remain non-interactive.
+ServiceAccount names and Kind badges open their object panel; Alt-click uses
+the shared navigation to reveal the account in its resource table. Source bindings
 open through the shared object-panel links. Duplicate subjects within a binding
 count once. Grant scopes identify the namespace of a RoleBinding or cluster-wide
 scope of a ClusterRoleBinding; they do not describe the referenced role's rules.
