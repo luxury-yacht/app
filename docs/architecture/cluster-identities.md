@@ -2,30 +2,25 @@
 
 Identities is a cluster-scoped view of observed subjects. It appears directly
 under Cluster, after Events, outside Resources. User and Group rows come from
-subjects in readable RoleBindings and ClusterRoleBindings. ServiceAccount rows
-come from readable ServiceAccount objects, including accounts without direct
-bindings. A binding reference alone does not establish a ServiceAccount's
-existence. The view is not an account directory and does not infer group
-membership or effective access.
+subjects in readable RoleBindings and ClusterRoleBindings. ServiceAccounts remain
+in the RBAC resource tables and are excluded from Identities. The view is not an
+account directory and does not infer group membership or effective access.
 
 ## Data and identity
 
 `backend/refresh/snapshot/cluster_identities.go` derives rows from the existing
-ingest-owned RoleBinding, ClusterRoleBinding, and ServiceAccount object-map
-projections. These carry the canonical binding subject links from the shared
-resource model. No additional LIST/watch, catalog inference, or frontend join
-is used. Subject keys contain cluster ID, type, exact name, and ServiceAccount
-namespace; user/group names remain opaque and case-sensitive.
+ingest-owned RoleBinding and ClusterRoleBinding object-map projections. These
+carry the canonical binding subject links from the shared resource model. No
+additional LIST/watch, catalog inference, or frontend join is used. Subject keys contain cluster ID, type, an empty namespace, and exact
+name; user/group names remain opaque and case-sensitive.
 
-These subject rows are not canonical Kubernetes object rows. Only the optional
-`serviceAccount` field and the `bindings` list carry real, complete resource
-references. Each binding includes its projected role reference when available.
+These subject rows are not canonical Kubernetes object rows. The `bindings` list
+carries real, complete resource references. Each binding includes its projected
+role reference when available.
 User/group names and Kind badges open read-only identity panels.
-ServiceAccount names and Kind badges open their object panel; Alt-click uses
-the shared navigation to reveal the account in its resource table. Source bindings
-open through the shared object-panel links. Duplicate subjects within a binding
-count once. Grant scopes identify the namespace of a RoleBinding or cluster-wide
-scope of a ClusterRoleBinding; they do not describe the referenced role's rules.
+Source bindings open through the shared object-panel links. Duplicate subjects
+within a binding count once. Grant scopes identify the namespace of a RoleBinding
+or cluster-wide scope of a ClusterRoleBinding; they do not describe the referenced role's rules.
 
 ## Queries and freshness
 
@@ -40,9 +35,10 @@ sorting, paging, exports, and table persistence use that contract. Custom
 resource metadata columns are unavailable because subjects have no object labels
 or annotations.
 
-Permission admission accepts any readable source. Each query applies current
-source permissions and readiness; unavailable sources produce partial query
-coverage instead of authoritative absence. The existing cluster lifecycle owns
+Permission admission accepts either readable binding source. ServiceAccount
+permissions and readiness do not affect this domain's coverage. Each query applies
+current source permissions and readiness; unavailable sources produce partial
+query coverage instead of authoritative absence. The existing cluster lifecycle owns
 permission recovery and source startup.
 
 Projectors and notification sinks register before ingestion starts. Source intake
@@ -79,10 +75,10 @@ or effective permission calculation.
   and cluster scope rejection.
 - `backend/refresh/system/cluster_identities_test.go`: production registration
   and real REST LIST/watch intake through projection, cache invalidation, and
-  subscriber delivery for all three sources.
+  subscriber delivery for both binding sources.
 - `backend/refresh/resourcestream/ingest_notify_test.go`: source updates/deletes
-  notify the cluster identity view.
+  notify the cluster identity view; ServiceAccount changes notify RBAC only.
 - `ClusterViewIdentities.test.tsx`: real table/link interaction with the query
-  hook replaced by fixture rows; subjects open identity targets and actual
-  ServiceAccounts/bindings open complete object references.
+  hook replaced by fixture rows; subjects open identity targets and source
+  bindings open complete object references.
 - Sidebar and background-refresh tests cover route placement and cluster routing.

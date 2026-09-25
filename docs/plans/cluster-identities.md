@@ -3,9 +3,10 @@
 ## Scope
 
 Add Identities directly under Cluster, after Events and outside Resources.
-Show User and Group subjects referenced by readable bindings and ServiceAccount
-objects across the connection's accessible namespaces. Users/groups are derived
-subjects, never fabricated Kubernetes resources. Keep RBAC tables unchanged.
+Show User and Group subjects referenced by readable bindings. Users/groups are
+derived subjects, never fabricated Kubernetes resources. Keep the Identities
+name and RBAC tables unchanged. The service-account removal section below
+supersedes the original three-source implementation evidence.
 
 ## Contract trace
 
@@ -254,3 +255,56 @@ Storybook configuration currently fails for all app stories (react-docgen stack
 overflow on `src/core/settings/appPreferences.ts`), so a temporary configuration
 with docgen disabled was used and then removed. Native window rendering was not
 exercised; the change does not touch native placement or lifetime.
+
+## Users and Groups only — 2026-09-25
+
+Requested outcome: remove ServiceAccounts from Identities and retain its name.
+Remove the now-empty Namespace column; keep direct bindings, grant scopes, and
+User/Group panel links.
+
+Contract trace: the domain composition in `domainpermissions/spec.go` supplies
+registration permission checks, snapshot source coverage, and ingest signal
+routing. The snapshot is consumed by the query-backed Identities table and the
+exact-subject User/Group Details query. Only RoleBinding and ClusterRoleBinding
+projections will contribute. Their existing commit-before-invalidation ordering
+and bootstrap admission remain in place; a ServiceAccount permission or pending
+source must not make the identities result partial. No new dependency direction
+or readiness gate is introduced. ServiceAccount updates retain their RBAC signal.
+
+| Outcome | Status | Evidence |
+| --- | --- | --- |
+| Rows, counts, and kinds contain only Users/Groups, including with bound/unbound ServiceAccounts present | passed | `TestClusterIdentitiesDerivesSubjectsAndBindingProvenance` failed with 6 instead of 4 rows before the fix; final focused suite and full backend coverage passed |
+| Coverage and registration depend only on bindings; RBAC still receives ServiceAccount changes | passed | Source-coverage, registration, and ServiceAccount notification regressions failed before the source narrowing and passed afterward; full backend coverage passed |
+| Binding create/update/completed deletion refresh the narrowed domain | passed | `TestIdentitiesProductionIngestInvalidatesBeforeSignaling` passed with the production subsystem, REST LIST/watch and external object-tracker changes, including deletion-requested versus completed deletion |
+| User/Group and binding links retain correct cluster identity | passed | Focused frontend suite: 2 files / 6 tests; full coverage: 531 files / 5,138 tests. Query transport and panel dispatch are mocked; table, badges, tooltip and object links are real |
+| Identities name retained; Namespace column and ServiceAccount copy removed | passed | Existing sidebar label inspected in the browser; Playwright exercised the actual Identities component on Wails dev URL 9246 with fixture rows, showing Kind, Name, Bindings and Grant scopes; screenshot inspected |
+| Coverage, local complexity, prerelease and final diff review | passed | Backend/frontend coverage and local complexity checks passed; `mise exec -- wails3 task qc:prerelease` exited 0; final worktree and `git diff --check` inspected |
+
+Validation detail:
+
+- `mise exec -- wails3 task test:backend-coverage` exited 0. The changed
+  `cluster_identities.go` file measured 96/103 statements (93.20%); changed
+  functions measured 86.7–100%.
+- `mise exec -- wails3 task test:frontend-coverage` exited 0: 531 files and
+  5,138 tests. `ClusterViewIdentities.tsx` measured 24/26 statements (92.3%);
+  overall frontend statements measured 89.84%. The removed ServiceAccount-only
+  interaction test is no longer applicable; surviving subject and binding
+  interaction tests retain coverage above the required threshold.
+- Pinned gocognit v1.2.1: changed functions at most 5, all functions in the
+  snapshot file at most 9. Biome with a local threshold of 12 reported no
+  findings for the changed table functions. This is local evidence, not a
+  remote Sonar analysis.
+- Playwright browser routes replaced query transport, kubeconfig/zoom contexts,
+  shortcut hooks and panel dispatch. The actual table and shared components
+  rendered populated, empty, loading and error states. User badge and Group name
+  dispatched exact identity targets; the binding popover dispatched the full
+  RoleBinding reference. `.playwright-mcp/identities-users-groups.png` was
+  inspected. Preview routes were removed afterward.
+- Browser fixtures do not establish native window placement or live-cluster
+  behavior. This change does not modify native panel placement/lifetime;
+  freshness evidence comes from the production ingestion integration test.
+
+- Final `mise exec -- wails3 task qc:prerelease` exited 0, including backend
+  race tests, frontend lint/typecheck, 531 files / 5,138 frontend tests, and
+  security checks. The gate's formatted worktree was inspected. Documentation
+  completion updates passed `qc:docs` and `git diff --check` afterward.

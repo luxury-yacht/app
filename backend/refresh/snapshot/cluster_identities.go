@@ -23,16 +23,15 @@ import (
 
 const clusterIdentitiesDomainName = "cluster-identities"
 
-// ClusterIdentity is a subject, not a Kubernetes resource. Only an observed
-// ServiceAccount has an object ref; bindings always identify real source objects.
+// ClusterIdentity is an observed User or Group subject, not a Kubernetes resource.
+// Bindings identify the real source objects that reference the subject.
 type ClusterIdentity struct {
-	ClusterID      string                     `json:"clusterId"`
-	Kind           string                     `json:"kind"`
-	Name           string                     `json:"name"`
-	Namespace      string                     `json:"namespace"`
-	ServiceAccount *resourcemodel.ResourceRef `json:"serviceAccount,omitempty"`
-	Bindings       []ClusterIdentityBinding   `json:"bindings"`
-	GrantScopes    []string                   `json:"grantScopes"`
+	ClusterID   string                   `json:"clusterId"`
+	Kind        string                   `json:"kind"`
+	Name        string                   `json:"name"`
+	Namespace   string                   `json:"namespace"`
+	Bindings    []ClusterIdentityBinding `json:"bindings"`
+	GrantScopes []string                 `json:"grantScopes"`
 }
 
 type ClusterIdentityBinding struct {
@@ -78,7 +77,7 @@ func (b *ClusterIdentitiesBuilder) Build(ctx context.Context, scope string) (*re
 	capabilities := newTypedResourceCapabilities(
 		[]string{"kind", "name", "namespace", "bindings", "grantScopes"},
 		[]string{"kinds", "namespaces", "identity"}, []string{"kind", "name", "namespace", "grantScopes", "bindings"},
-		[]string{"User", "Group", "ServiceAccount"},
+		[]string{"User", "Group"},
 	)
 	resolved := resolveTypedSnapshotPageViaStore(clusterIdentitiesDomainName, rows, query, adapter,
 		querypageSchemaFromAdapter(adapter, capabilities.SortableFields),
@@ -106,13 +105,9 @@ func (b *ClusterIdentitiesBuilder) sources(ctx context.Context) []typedTableReso
 	resources := domainpermissions.CompositionByDomain()[clusterIdentitiesDomainName].Runtime
 	sources := make([]typedTableResourceSource, 0, len(resources))
 	for _, resource := range resources {
-		queryKinds := []string{"User", "Group", "ServiceAccount"}
-		if resource.Kind == "ServiceAccount" {
-			queryKinds = []string{"ServiceAccount"}
-		}
 		sources = append(sources, typedTableResourceSource{
 			Kind: resource.Kind, Group: resource.Group, Resource: resource.Resource,
-			State: typedTableSourceState(b.allowed.Allows(resource.Group, resource.Resource)), QueryKinds: queryKinds,
+			State: typedTableSourceState(b.allowed.Allows(resource.Group, resource.Resource)), QueryKinds: []string{"User", "Group"},
 		})
 	}
 	return withTypedTableResourceReadiness(ctx, clusterIdentitiesDomainName, sources)
@@ -147,14 +142,6 @@ func (b *ClusterIdentitiesBuilder) collect(clusterID string, sources []typedTabl
 	projections := b.projections(clusterID, sources)
 	identities := map[string]*ClusterIdentity{}
 	for _, projection := range projections {
-		if projection.ref.Kind == "ServiceAccount" {
-			row := newClusterIdentity(clusterID, "ServiceAccount", projection.ref.Namespace, projection.ref.Name)
-			ref := projection.ref
-			row.ServiceAccount = &ref
-			identities[identityRowKey(*row)] = row
-		}
-	}
-	for _, projection := range projections {
 		collectIdentityBindings(clusterID, identities, projection)
 	}
 	rows := make([]ClusterIdentity, 0, len(identities))
@@ -171,9 +158,6 @@ func (b *ClusterIdentitiesBuilder) collect(clusterID string, sources []typedTabl
 }
 
 func collectIdentityBindings(clusterID string, identities map[string]*ClusterIdentity, projection identityProjection) {
-	if projection.ref.Kind == "ServiceAccount" {
-		return
-	}
 	seen := map[string]bool{}
 	binding := bindingWithRole(clusterID, projection)
 	for _, edge := range projection.node.Edges {
@@ -205,9 +189,6 @@ func bindingWithRole(clusterID string, projection identityProjection) ClusterIde
 func appendIdentityBinding(identities map[string]*ClusterIdentity, key string, subject *ClusterIdentity, binding ClusterIdentityBinding) {
 	existing := identities[key]
 	if existing == nil {
-		if subject.Kind == "ServiceAccount" {
-			return // A binding reference does not establish object existence.
-		}
 		identities[key] = subject
 		existing = subject
 	}
@@ -224,9 +205,6 @@ func appendIdentityBinding(identities map[string]*ClusterIdentity, key string, s
 func identityFromSubjectLink(clusterID string, edge objectmapspec.Edge) *ClusterIdentity {
 	if edge.Type != objectmapspec.EdgeBinds {
 		return nil
-	}
-	if ref := edge.Link.Ref; ref != nil && ref.ClusterID == clusterID && ref.Kind == "ServiceAccount" && ref.Namespace != "" {
-		return newClusterIdentity(clusterID, ref.Kind, ref.Namespace, ref.Name)
 	}
 	if ref := edge.Link.Display; ref != nil && ref.ClusterID == clusterID && (ref.Kind == "User" || ref.Kind == "Group") && ref.Name != "" {
 		return newClusterIdentity(clusterID, ref.Kind, "", ref.Name)

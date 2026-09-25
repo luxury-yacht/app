@@ -66,17 +66,13 @@ func TestClusterIdentitiesDerivesSubjectsAndBindingProvenance(t *testing.T) {
 		Subjects:   []rbacv1.Subject{{Kind: "User", APIGroup: rbacv1.GroupName, Name: "alice"}},
 	})}
 	payload := identityTestBuild(t, b, context.Background(), "?limit=100")
-	require.Len(t, payload.Rows, 6)
-	require.Equal(t, 6, payload.Total)
+	require.Len(t, payload.Rows, 4)
+	require.Equal(t, 4, payload.Total)
+	require.ElementsMatch(t, []string{"User", "Group"}, payload.Kinds)
 	for _, row := range payload.Rows {
 		require.Equal(t, "cluster-a", row.ClusterID)
-		if row.Kind != "ServiceAccount" {
-			require.Nil(t, row.ServiceAccount)
-			require.Empty(t, row.Namespace)
-		} else {
-			require.NotNil(t, row.ServiceAccount)
-			require.Equal(t, "v1", row.ServiceAccount.Version)
-		}
+		require.Contains(t, []string{"User", "Group"}, row.Kind)
+		require.Empty(t, row.Namespace)
 		if row.Kind == "User" && row.Name == "alice" {
 			require.Len(t, row.Bindings, 2)
 			require.Equal(t, []string{"Cluster-wide", "team-a"}, row.GrantScopes)
@@ -86,14 +82,24 @@ func TestClusterIdentitiesDerivesSubjectsAndBindingProvenance(t *testing.T) {
 				require.Equal(t, "v1", binding.Version)
 			}
 		}
-		if row.Kind == "ServiceAccount" && row.Namespace == "team-b" {
-			require.Len(t, row.Bindings, 1)
-			require.Equal(t, []string{"team-a"}, row.GrantScopes)
-		}
 	}
 	encoded, err := json.Marshal(payload.Rows)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), `"kind":"User","resource"`)
+}
+
+func TestClusterIdentitiesCoverageDoesNotDependOnServiceAccounts(t *testing.T) {
+	b, rows := identityTestBuilder()
+	rows[rolebinding.Identity.GVR()] = []interface{}{identityTestProjection(rolebinding.Descriptor,
+		&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "readers", Namespace: "team-a"}, Subjects: []rbacv1.Subject{{Kind: "User", Name: "alice"}}})}
+	for _, state := range []refresh.ResourceReadiness{refresh.ResourceReadinessUnavailable, refresh.ResourceReadinessPending} {
+		ctx := withResourceReadiness(context.Background(), map[string]refresh.ResourceReadiness{"core/serviceaccounts": state})
+		payload := identityTestBuild(t, b, ctx, "?limit=10")
+		require.Len(t, payload.Rows, 1)
+		require.Equal(t, ResourceQueryComplete, payload.Completeness)
+		require.True(t, payload.TotalIsExact)
+		require.Empty(t, payload.Issues)
+	}
 }
 
 func TestIdentityPanelQueryPreservesExactSubjectAndBindingRole(t *testing.T) {

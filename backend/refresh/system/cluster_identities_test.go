@@ -42,7 +42,6 @@ func TestIdentitiesRegistrationAcceptsAnyReadableSource(t *testing.T) {
 		require.ElementsMatch(t, []listCheck{
 			{group: "rbac.authorization.k8s.io", resource: "rolebindings"},
 			{group: "rbac.authorization.k8s.io", resource: "clusterrolebindings"},
-			{group: "", resource: "serviceaccounts"},
 		}, registration.list.checks)
 		return
 	}
@@ -86,8 +85,8 @@ func TestIdentitiesProductionIngestInvalidatesBeforeSignaling(t *testing.T) {
 		return result.Payload.(snapshot.ClusterIdentitiesSnapshot)
 	}
 	initial := build()
-	require.Len(t, initial.Rows, 1)
-	require.Len(t, build().Rows, 1) // Prime the cache before the external mutation.
+	require.Empty(t, initial.Rows)
+	require.Empty(t, build().Rows) // Prime the cache before the external mutation.
 
 	awaitChange := func(name, rv string, total int) snapshot.ClusterIdentitiesSnapshot {
 		t.Helper()
@@ -116,32 +115,30 @@ func TestIdentitiesProductionIngestInvalidatesBeforeSignaling(t *testing.T) {
 		Subjects:   []rbacv1.Subject{{Kind: "User", APIGroup: rbacv1.GroupName, Name: "alice"}},
 	}, metav1.CreateOptions{})
 	require.NoError(t, err)
-	require.Contains(t, awaitChange("readers", "2", 2).Kinds, "User")
+	require.Contains(t, awaitChange("readers", "2", 1).Kinds, "User")
 	binding.Subjects[0].Name = "bob"
 	binding.ResourceVersion = "3"
 	binding, err = kube.RbacV1().RoleBindings("team-a").Update(ctx, binding, metav1.UpdateOptions{})
 	require.NoError(t, err)
-	changed := awaitChange("readers", "3", 2)
+	changed := awaitChange("readers", "3", 1)
 	require.Equal(t, "bob", changed.Rows[0].Name)
 	now := metav1.Now()
 	binding.DeletionTimestamp = &now
 	binding.ResourceVersion = "4"
 	_, err = kube.RbacV1().RoleBindings("team-a").Update(ctx, binding, metav1.UpdateOptions{})
 	require.NoError(t, err)
-	awaitChange("readers", "4", 2) // Deletion requested is still a present binding.
+	awaitChange("readers", "4", 1) // Deletion requested is still a present binding.
 	require.NoError(t, kube.RbacV1().RoleBindings("team-a").Delete(ctx, "readers", metav1.DeleteOptions{}))
-	require.NotContains(t, awaitChange("readers", "4", 1).Kinds, "User")
+	require.NotContains(t, awaitChange("readers", "4", 0).Kinds, "User")
 
 	_, err = kube.RbacV1().ClusterRoleBindings().Create(ctx, &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{Name: "auditors", ResourceVersion: "5", UID: "binding-2"},
 		Subjects:   []rbacv1.Subject{{Kind: "Group", APIGroup: rbacv1.GroupName, Name: "auditors"}},
 	}, metav1.CreateOptions{})
 	require.NoError(t, err)
-	require.Contains(t, awaitChange("auditors", "5", 2).Kinds, "Group")
+	require.Contains(t, awaitChange("auditors", "5", 1).Kinds, "Group")
 	require.NoError(t, kube.RbacV1().ClusterRoleBindings().Delete(ctx, "auditors", metav1.DeleteOptions{}))
-	awaitChange("auditors", "5", 1)
-	require.NoError(t, kube.CoreV1().ServiceAccounts("team-a").Delete(ctx, "builder", metav1.DeleteOptions{}))
-	require.Empty(t, awaitChange("builder", "1", 0).Rows)
+	awaitChange("auditors", "5", 0)
 }
 
 // The production owned-ingest reflectors need a real REST client. This API keeps

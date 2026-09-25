@@ -7,7 +7,6 @@ import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import Tooltip from '@shared/components/Tooltip';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { useMemo } from 'react';
 import type { ClusterIdentitiesSnapshot, ClusterIdentity } from '@/core/refresh/types';
@@ -52,17 +51,11 @@ function IdentityBindings({ row }: Readonly<{ row: ClusterIdentity }>) {
 }
 
 const buildColumns = (
-  objectLink: ReturnType<typeof useObjectLink>,
   openIdentity: ReturnType<typeof useObjectPanel>['openWithIdentity']
 ): GridColumnDefinition<ClusterIdentity>[] => {
-  const serviceAccountLink = objectLink<ClusterIdentity>((row) =>
-    row.serviceAccount ? buildRequiredObjectReference(row.serviceAccount) : undefined
-  );
   const links = {
     onClick: (row: ClusterIdentity) => {
-      if (row.serviceAccount) {
-        serviceAccountLink.onClick(row);
-      } else if (row.kind === 'User' || row.kind === 'Group') {
+      if (row.kind === 'User' || row.kind === 'Group') {
         openIdentity({
           targetType: 'identity',
           clusterId: row.clusterId,
@@ -71,9 +64,7 @@ const buildColumns = (
         });
       }
     },
-    onAltClick: serviceAccountLink.onAltClick,
-    isInteractive: (row: ClusterIdentity) =>
-      Boolean(row.serviceAccount) || row.kind === 'User' || row.kind === 'Group',
+    isInteractive: (row: ClusterIdentity) => row.kind === 'User' || row.kind === 'Group',
   };
   return cf.withColumnSizing(
     [
@@ -85,7 +76,6 @@ const buildColumns = (
         ...links,
         getClassName: () => 'object-panel-link',
       }),
-      cf.createTextColumn<ClusterIdentity>('namespace', 'Namespace', (row) => row.namespace || '—'),
       {
         ...cf.createTextColumn<ClusterIdentity>(
           'bindings',
@@ -103,7 +93,6 @@ const buildColumns = (
     {
       kind: { autoWidth: true },
       name: { width: 300 },
-      namespace: { width: 180 },
       bindings: { autoWidth: true },
       grantScopes: { width: 300 },
     }
@@ -116,19 +105,15 @@ const filterOptionOverrides = {
     <Tooltip
       trigger="click"
       triggerLabel="About identities"
-      content="Users and groups are derived from visible RBAC bindings, not a complete account directory. Service accounts come from visible Kubernetes objects. Binding counts show direct references; group membership and effective access are not inferred."
+      content="Users and groups are derived from visible RBAC bindings, not a complete account directory. Binding counts show direct references; group membership and effective access are not inferred."
     />
   ),
 };
 
 export default function ClusterViewIdentities() {
   const { selectedClusterId } = useKubeconfig();
-  const objectLink = useObjectLink();
   const { openWithIdentity } = useObjectPanel();
-  const columns = useMemo(
-    () => buildColumns(objectLink, openWithIdentity),
-    [objectLink, openWithIdentity]
-  );
+  const columns = useMemo(() => buildColumns(openWithIdentity), [openWithIdentity]);
   const { source, gridTableProps, favModal } = useQueryBackedClusterResourceGridTable<
     ClusterIdentitiesSnapshot,
     ClusterIdentity
@@ -155,7 +140,7 @@ export default function ClusterViewIdentities() {
       columns={columns}
       favModal={favModal}
       spinnerMessage="Loading identities..."
-      emptyMessage="No identities found in visible bindings or service accounts"
+      emptyMessage="No users or groups found in visible bindings"
       diagnosticsLabel="Cluster Identities"
     />
   );

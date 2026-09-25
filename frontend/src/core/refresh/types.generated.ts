@@ -587,7 +587,6 @@ export interface ClusterIdentity {
   kind: string;
   name: string;
   namespace: string;
-  serviceAccount?: ResourceRef;
   bindings: Array<ClusterIdentityBinding> | null;
   grantScopes: Array<string> | null;
 }

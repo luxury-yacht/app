@@ -72,15 +72,6 @@ describe('ClusterViewIdentities', () => {
     namespace: 'payments',
     name: 'readers',
   };
-  const serviceAccountRef = {
-    clusterId: 'cluster-a',
-    group: '',
-    version: 'v1',
-    kind: 'ServiceAccount',
-    resource: 'serviceaccounts',
-    namespace: 'ci',
-    name: 'builder',
-  };
   beforeEach(() => {
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -106,15 +97,6 @@ describe('ClusterViewIdentities', () => {
         bindings: [],
         grantScopes: [],
       },
-      {
-        clusterId: 'cluster-a',
-        kind: 'ServiceAccount',
-        name: 'builder',
-        namespace: 'ci',
-        bindings: [],
-        grantScopes: [],
-        serviceAccount: serviceAccountRef,
-      },
     ];
   });
   afterEach(() => {
@@ -122,31 +104,9 @@ describe('ClusterViewIdentities', () => {
     host.remove();
   });
 
-  it('opens and reveals the service account from its Kind badge with the row identity', async () => {
-    state.rows[2] = {
-      ...state.rows[2],
-      clusterId: 'cluster-b',
-      serviceAccount: { ...serviceAccountRef, clusterId: 'cluster-b' },
-    };
-    await act(async () =>
-      root.render(
-        <KeyboardProvider>
-          <ClusterResourcesViews activeTab="identities" />
-        </KeyboardProvider>
-      )
-    );
-    const badge = host.querySelector<HTMLButtonElement>('button[data-kind-value="ServiceAccount"]');
-    expect(badge).not.toBeNull();
-    act(() => badge?.click());
-    expect(state.open).toHaveBeenCalledExactlyOnceWith(state.rows[2].serviceAccount);
-
-    act(() => badge?.dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true })));
-    expect(state.navigate).toHaveBeenCalledExactlyOnceWith(state.rows[2].serviceAccount);
-    expect(state.open).toHaveBeenCalledTimes(1);
-  });
-
   it('opens User and Group identity targets from badges and names without object actions', async () => {
     state.rows[0].name = ' alice ';
+    state.rows[0].clusterId = 'cluster-b';
     await act(async () =>
       root.render(
         <KeyboardProvider>
@@ -159,7 +119,7 @@ describe('ClusterViewIdentities', () => {
     act(() => user?.click());
     expect(state.openIdentity).toHaveBeenLastCalledWith({
       targetType: 'identity',
-      clusterId: 'cluster-a',
+      clusterId: 'cluster-b',
       kind: 'User',
       name: ' alice ',
     });
@@ -177,7 +137,7 @@ describe('ClusterViewIdentities', () => {
     expect(state.open).not.toHaveBeenCalled();
   });
 
-  it('opens real service accounts and source bindings without offering user or group object actions', async () => {
+  it('opens source bindings with their complete object identity', async () => {
     await act(async () =>
       root.render(
         <KeyboardProvider>
@@ -188,13 +148,6 @@ describe('ClusterViewIdentities', () => {
     expect(host.textContent).toContain('alice');
     expect(host.textContent).toContain('developers');
     expect(state.open).not.toHaveBeenCalled();
-    const serviceAccount = [...host.querySelectorAll('button')].find(
-      (el) => el.textContent === 'builder'
-    );
-    expect(serviceAccount).toBeDefined();
-    act(() => serviceAccount?.click());
-    expect(state.open).toHaveBeenCalledWith(state.rows[2].serviceAccount);
-
     const count = host.querySelector<HTMLElement>('[aria-label="Bindings for alice"]');
     expect(count).not.toBeNull();
     await act(async () => count?.click());

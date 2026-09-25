@@ -30,7 +30,7 @@ import (
 )
 
 func TestIdentitySourcesSignalClusterViewOnChangeAndDeletion(t *testing.T) {
-	for _, descriptor := range []streamspec.Descriptor{rolebinding.StreamDescriptor, clusterrolebinding.StreamDescriptor, serviceaccount.StreamDescriptor} {
+	for _, descriptor := range []streamspec.Descriptor{rolebinding.StreamDescriptor, clusterrolebinding.StreamDescriptor} {
 		t.Run(descriptor.Kind, func(t *testing.T) {
 			manager := &Manager{clusterMeta: snapshot.ClusterMeta{ClusterID: "c1"}, logger: applog.Noop,
 				subscribers: make(map[string]map[string]map[uint64]*subscription)}
@@ -51,6 +51,28 @@ func TestIdentitySourcesSignalClusterViewOnChangeAndDeletion(t *testing.T) {
 			deleted := requireNextUpdate(t, sub)
 			require.Equal(t, MessageTypeDeleted, deleted.Type)
 		})
+	}
+}
+
+func TestServiceAccountChangesSignalRBACWithoutSignalingIdentities(t *testing.T) {
+	manager := &Manager{clusterMeta: snapshot.ClusterMeta{ClusterID: "c1"}, logger: applog.Noop,
+		subscribers: make(map[string]map[string]map[uint64]*subscription)}
+	identities, err := subscribeForTest(t, manager, "cluster-identities", "")
+	require.NoError(t, err)
+	rbac, err := subscribeForTest(t, manager, serviceaccount.StreamDescriptor.Domain, "namespace:team-a")
+	require.NoError(t, err)
+	summary := objectcatalog.Summary{Ref: resourcemodel.ResourceRef{
+		ClusterID: "c1", Version: "v1", Kind: "ServiceAccount", Resource: "serviceaccounts", Namespace: "team-a", Name: "builder",
+	}, ResourceVersion: "17"}
+	sink := manager.ingestNotifySink(serviceaccount.StreamDescriptor)
+	sink.Upsert(summary)
+	require.Equal(t, MessageTypeModified, requireNextUpdate(t, rbac).Type)
+	sink.Delete(summary)
+	require.Equal(t, MessageTypeDeleted, requireNextUpdate(t, rbac).Type)
+	select {
+	case update := <-identities.Updates:
+		t.Fatalf("service account change reached identities: %#v", update)
+	default:
 	}
 }
 
