@@ -1,0 +1,6 @@
+/* The shared section grid reserves height for an Overview whose rows are absent while
+   details load. The identity summary always renders its rows, so the reservation would
+   only leave empty space below them. */
+.object-panel-section-grid.identity-summary-grid {
+  min-height: 0;
+}

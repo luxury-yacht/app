@@ -228,3 +228,29 @@ Playwright fixture routes were removed and the browser was returned to
 `about:blank`. The development app remains available on port 9246 for review.
 The final gate applied no additional frontend formatting changes; the worktree
 was inspected after it completed. No git state changes or PR operations were run.
+
+## User and Group panel polish — 2026-09-25
+
+Scope: keep the accepted Details layout (summary section, then the Direct bindings
+table) and fix its presentation. Three structural alternatives were prototyped in
+Storybook and declined in favour of this. Presentation-only: no query, refresh,
+identity, persistence-key, or panel-lifetime change.
+
+| Outcome | Status | Evidence |
+| --- | --- | --- |
+| Role column visible at the default docked width | passed | Columns use `withColumnSizing` auto widths like the Pods/Events panel tables; the mixed fixture fits at 700px (`PANEL_DEFAULTS.DEFAULT_WIDTH`); longer rows scroll inside `gridtable-wrapper` (measured 761px content in 620px) |
+| Summary section uses the standard Overview title; stacked sections spaced like other Details sections | passed | Rendered screenshots, dark and light |
+| Partial coverage stays exposed without a floating paragraph | passed | Warning chip beside the binding count; tooltip shows the label on hover; `role="status"` region carries the full label (visually hidden text); existing panel test asserts the status region |
+| Errors use the Details tab error block | passed | `.error-message` with `role="alert"`; existing panel test asserts the alert |
+| Role references use the RBAC overview `Kind/name` form | passed | Existing panel test opens `ClusterRole/reader` with the complete reference |
+| No dead space below the summary rows | passed | Identity summary grid opts out of the shared 100px loading reservation (`IdentityDetails.css`, double-class selector); other Overviews keep it; screenshots at 700px and 1600px |
+| Embedded table header is one color across its full width | passed | Removed the embedded header's `--grid-bg-primary` override in `gridtables.css`; header row, cells, and overflow now all use `--grid-bg-header`. The identity bindings table is the only production `embedded` table; screenshots at 1600px, light and dark |
+| Tests, coverage, complexity, gate | passed | Identity tests 7/7; `IdentityDetails.tsx` 90% statements (focused Vitest coverage); Biome cognitive complexity `IdentityDetails` 10, `BindingCount` ≤1; `qc:prerelease` exit 0 (531 files / 5,139 frontend tests) |
+
+Rendered evidence came from Storybook with the real `IdentityDetails`, header, and
+tab strip; only `useIdentityDetails` was replaced with fixtures (loading, empty,
+populated, partial, error, many-namespace, and built-in group cases). The default
+Storybook configuration currently fails for all app stories (react-docgen stack
+overflow on `src/core/settings/appPreferences.ts`), so a temporary configuration
+with docgen disabled was used and then removed. Native window rendering was not
+exercised; the change does not touch native placement or lifetime.

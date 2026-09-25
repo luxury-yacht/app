@@ -201,7 +201,7 @@ describe('IdentityPanel', () => {
     act(() => button('team-readers')?.click());
     const { role: _role, ...bindingRef } = binding;
     expect(mocks.open).toHaveBeenLastCalledWith(bindingRef);
-    act(() => button('ClusterRole: reader')?.click());
+    act(() => button('ClusterRole/reader')?.click());
     expect(mocks.open).toHaveBeenLastCalledWith({ ...role, namespace: undefined });
     act(() => button('Close panel')?.click());
     expect(mocks.close).toHaveBeenCalledWith(identity.clusterId, panelTargetId(identity));
@@ -238,7 +238,7 @@ describe('IdentityPanel', () => {
     });
     await render();
     expect(host.querySelector('[role="status"]')).not.toBeNull();
-    expect(button('ClusterRole: reader')).toBeUndefined();
+    expect(button('ClusterRole/reader')).toBeUndefined();
     mocks.request.mockResolvedValue({
       status: 'executed',
       data: { status: 'error', error: 'Permission denied' },

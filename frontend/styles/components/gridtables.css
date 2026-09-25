@@ -756,7 +756,6 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-pagination {
    ============================================ */
 
 .gridtable-container.embedded .gridtable-header {
-  background-color: var(--grid-bg-primary);
   border-top: 1px solid var(--grid-border-color);
 }
 
