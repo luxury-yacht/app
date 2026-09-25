@@ -45,3 +45,11 @@
   color: var(--color-text);
   overflow-wrap: anywhere;
 }
+
+/* Binding kind after each "Used by" entry of a ClusterRole, which mixes
+   ClusterRoleBindings with RoleBindings from several namespaces. */
+.rbac-binding-kind {
+  margin-left: var(--spacing-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}

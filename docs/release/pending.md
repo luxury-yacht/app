@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Role and ClusterRole Details show a Permissions table with one row per resource and every verb the role grants it, similar to `kubectl describe`. Grants limited to named objects are marked. ClusterRole "Used by" lists all its bindings in one place, with namespaces shown for RoleBindings.
+
 ### Fixed
 
 - Fixed cluster tab handling when clusters are rapidly opened and closed. Closed clusters close immediately and release their connections in the background. Closing a sibling no longer causes a catalog error.

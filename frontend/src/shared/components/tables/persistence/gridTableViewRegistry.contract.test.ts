@@ -43,6 +43,12 @@ const DIRECT_GRIDTABLE_USAGE_EXCEPTIONS = {
     reason:
       'Parsed container log lines — NOT a Kubernetes resource inventory. A bounded log buffer with log-line expansion behavior; legitimately not a resource table, so it stays direct.',
   },
+  'modules/object-panel/components/ObjectPanel/Details/DetailsTabRBACRules.tsx': {
+    kind: 'classified-table',
+    mode: 'Local Complete',
+    reason:
+      'Permission rows flattened from one Role/ClusterRole detail DTO (resource + verbs) — NOT Kubernetes objects: no object identity, kind/namespace facets, or per-view persistence. The rows are the role’s complete rule set; header sort only.',
+  },
 } as const;
 
 const DIRECT_USE_TABLE_SORT_EXCEPTIONS = {
@@ -56,6 +62,12 @@ const DIRECT_USE_TABLE_SORT_EXCEPTIONS = {
     mode: 'Local Partial',
     reason:
       'Age-sorts the bespoke no-filter object-events feed (no filter bar / sort persistence). Lifecycle is controller-owned; this is presentation-only sort for the activity feed.',
+  },
+  'modules/object-panel/components/ObjectPanel/Details/DetailsTabRBACRules.tsx': {
+    kind: 'classified-table',
+    mode: 'Local Complete',
+    reason:
+      'Header sort for the non-resource Role/ClusterRole permissions table (complete rule set from the detail DTO; no filter bar or sort persistence).',
   },
 } as const;
 

@@ -1,31 +1,33 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabRBACRules.tsx
  *
- * Dedicated Rules section for Role / ClusterRole detail views. Renders one
- * card per policyRule, with verbs as risk-colored StatusChips and bare `*`
- * wildcards in apiGroups / resources / nonResourceURLs highlighted inline.
+ * Permissions section for Role / ClusterRole detail views: one table row per resource (and per
+ * non-resource URL) with every verb the role's rules grant it, the same shape `kubectl describe`
+ * prints. Verbs are risk-colored chips and bare `*` wildcards are highlighted.
  *
- * Sibling to Overview / Containers / Resource Utilization in the Details
- * tab — rules are the primary content of a Role/ClusterRole and earn their
- * own top-level section.
+ * Sibling to Overview / Containers / Resource Utilization in the Details tab — rules are the
+ * primary content of a Role/ClusterRole and earn their own top-level section.
  */
 
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
-import { withStableListKeys } from '@shared/utils/stableListKeys';
-import React from 'react';
+import {
+  createStatusChipMeasurementElement,
+  type StatusChipVariant,
+} from '@shared/components/StatusChip';
+import * as cf from '@shared/components/tables/columnFactories';
+import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
+import type React from 'react';
+import { useMemo } from 'react';
+import { useTableSort } from '@/hooks/useTableSort';
+import {
+  buildPermissionRows,
+  type PermissionRow,
+  type PolicyRuleInput,
+} from './rbacPermissionRows';
 import '../shared.css';
 import './DetailsTabRBACRules.css';
 
-interface PolicyRule {
-  apiGroups?: string[];
-  resources?: string[];
-  resourceNames?: string[];
-  verbs?: string[];
-  nonResourceURLs?: string[];
-}
-
 interface RBACRulesProps {
-  policyRules?: PolicyRule[];
+  policyRules?: PolicyRuleInput[] | null;
 }
 
 // Map a verb to a StatusChip variant by risk level. The split tracks
@@ -56,86 +58,95 @@ const verbVariant = (verb: string): StatusChipVariant => {
   return 'info';
 };
 
-// Render a list of comma-joined values, wrapping bare `*` in a warning-style
-// span so over-permissive wildcards stand out. A `mapValue` hook lets the
-// caller customise how non-wildcard values render (e.g. apiGroup's `""` rule).
-const joinRuleValues = (
-  values: string[],
-  mapValue: (v: string) => React.ReactNode = (v) => v
-): React.ReactNode =>
-  withStableListKeys(values, (value) => value).map(({ key, value: v }, i) => (
-    <React.Fragment key={key}>
-      {i > 0 && ', '}
-      {v === '*' ? <span className="rule-wildcard">*</span> : mapValue(v)}
-    </React.Fragment>
-  ));
+const verbLabel = (verb: string): string => (verb === '*' ? '* (all)' : verb);
 
-// apiGroup convention: empty string = "core" API group on the wire. We
-// surface "core" so the value reads as a name rather than as an empty-string
-// artifact.
-const renderApiGroup = (g: string): React.ReactNode => (g === '' ? 'core' : g);
+// A bare `*` means every group/resource — highlight it without promoting it to a chip.
+const renderWildcard = (value: string): React.ReactNode =>
+  value === '*' ? <span className="rule-wildcard">*</span> : value;
+
+const apiGroupLabel = (row: PermissionRow): string => {
+  if (row.apiGroup === null) {
+    return 'Non-resource URL';
+  }
+  return row.apiGroup === '' ? 'core' : row.apiGroup;
+};
+
+const namesLabel = (count: number): string => (count === 1 ? '1 name' : `${count} names`);
+
+// Cells render host elements only: GridTable's auto-width measurer copies host markup and its
+// classes without mounting components, so the chips carry StatusChip's own classes.
+const renderVerbChips = (verbs: string[]): React.ReactNode => (
+  <span className="rule-verbs rule-verbs--nowrap">
+    {verbs.map((verb) => {
+      const chip = createStatusChipMeasurementElement(verbVariant(verb), verbLabel(verb));
+      return (
+        <span key={verb} className={chip.className}>
+          {chip.textContent}
+        </span>
+      );
+    })}
+  </span>
+);
+
+const columns: GridColumnDefinition<PermissionRow>[] = cf.withColumnSizing(
+  [
+    {
+      ...cf.createTextColumn<PermissionRow>('resource', 'Resource', (row) => row.resource),
+      // A grant limited to named objects must not read as a grant on every object.
+      render: (row) => (
+        <span>
+          {renderWildcard(row.resource)}
+          {row.resourceNames.length > 0 && (
+            <span className="rbac-permission-names">{namesLabel(row.resourceNames.length)}</span>
+          )}
+        </span>
+      ),
+    },
+    {
+      ...cf.createTextColumn<PermissionRow>('apiGroup', 'API group', apiGroupLabel),
+      render: (row) => renderWildcard(apiGroupLabel(row)),
+    },
+    {
+      ...cf.createTextColumn<PermissionRow>('verbs', 'Verbs', (row) => row.verbs.join(', ')),
+      render: (row) => renderVerbChips(row.verbs),
+    },
+    cf.createTextColumn<PermissionRow>(
+      'resourceNames',
+      'Resource names',
+      (row) => row.resourceNames.join(', ') || undefined
+    ),
+  ],
+  {
+    resource: { autoWidth: true },
+    apiGroup: { autoWidth: true },
+    verbs: { autoWidth: true },
+    resourceNames: { autoWidth: true },
+  }
+);
+
+const permissionRowKey = (row: PermissionRow): string => row.key;
 
 const Rules: React.FC<RBACRulesProps> = ({ policyRules }) => {
-  if (!policyRules || policyRules.length === 0) {
+  const rows = useMemo(() => buildPermissionRows(policyRules), [policyRules]);
+  const { sortedData, sortConfig, handleSort } = useTableSort(rows, undefined, 'asc', {
+    columns,
+  });
+
+  if (rows.length === 0) {
     return null;
   }
 
   return (
     <div className="object-panel-section">
-      <div className="object-panel-section-title">Rules</div>
-      <div className="rules-card-list">
-        {withStableListKeys(policyRules, (rule) => JSON.stringify(rule)).map(
-          ({ key, value: rule }) => {
-            const resources = rule.resources ?? [];
-            const nonResourceURLs = rule.nonResourceURLs ?? [];
-            const resourceNames = rule.resourceNames ?? [];
-            const hasResources = resources.length > 0;
-            const hasNonResourceURLs = nonResourceURLs.length > 0;
-            const hasResourceNames = resourceNames.length > 0;
-            let resourceTitle: React.ReactNode = '(no resources)';
-            if (hasResources) {
-              resourceTitle = joinRuleValues(resources);
-            } else if (hasNonResourceURLs) {
-              resourceTitle = joinRuleValues(nonResourceURLs);
-            }
-
-            return (
-              <div key={key} className="rules-card">
-                <div className="rules-card-header">
-                  <span className="rules-card-title">{resourceTitle}</span>
-                  {hasResources && (
-                    <span className="rules-card-meta">
-                      in{' '}
-                      {rule.apiGroups && rule.apiGroups.length > 0
-                        ? joinRuleValues(rule.apiGroups, renderApiGroup)
-                        : 'core'}
-                    </span>
-                  )}
-                  {hasResourceNames && (
-                    <span className="rules-card-meta">named {rule.resourceNames?.join(', ')}</span>
-                  )}
-                  {!!(hasResources && hasNonResourceURLs) && (
-                    <span className="rules-card-meta">
-                      and URLs: {joinRuleValues(nonResourceURLs)}
-                    </span>
-                  )}
-                </div>
-                {rule.verbs && rule.verbs.length > 0 && (
-                  <div className="rule-verbs">
-                    {withStableListKeys(rule.verbs, (verb) => verb).map(
-                      ({ key: verbKey, value: v }) => (
-                        <StatusChip key={verbKey} variant={verbVariant(v)}>
-                          {v === '*' ? '* (all)' : (v ?? '')}
-                        </StatusChip>
-                      )
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          }
-        )}
-      </div>
+      <div className="object-panel-section-title">Permissions</div>
+      <GridTable<PermissionRow>
+        embedded
+        data={sortedData}
+        columns={columns}
+        keyExtractor={permissionRowKey}
+        sortConfig={sortConfig}
+        onSort={handleSort}
+      />
     </div>
   );
 };

@@ -166,24 +166,32 @@ const renderRoleRef = (
 /**
  * Renders the backlink list to the bindings that grant a Role/ClusterRole. For Roles the bindings
  * live in the same namespace; for ClusterRoles they're cluster-scoped ClusterRoleBindings.
+ * `qualified` prefixes namespaced bindings with their namespace and names each binding's kind, for
+ * lists that mix bindings from several namespaces.
  */
-const renderUsedByBindings = (bindings: resourcemodel.ResourceRef[]): React.ReactNode => (
+const renderUsedByBindings = (
+  bindings: resourcemodel.ResourceRef[],
+  { qualified = false }: { qualified?: boolean } = {}
+): React.ReactNode => (
   <div className="overview-stacked">
     {withStableListKeys(
       bindings,
       (bindingRef) =>
         `${bindingRef.clusterId}-${bindingRef.group}-${bindingRef.version}-${bindingRef.kind}-${bindingRef.namespace ?? ''}-${bindingRef.name ?? ''}`
     ).map(({ key, value: bindingRef }) => (
-      <ObjectPanelLink
-        key={key}
-        objectRef={{
-          ...bindingRef,
-          group: bindingRef.group,
-          version: bindingRef.version,
-        }}
-      >
-        {bindingRef.name ?? bindingRef.kind}
-      </ObjectPanelLink>
+      <span key={key}>
+        <ObjectPanelLink
+          objectRef={{
+            ...bindingRef,
+            group: bindingRef.group,
+            version: bindingRef.version,
+          }}
+        >
+          {qualified && bindingRef.namespace ? `${bindingRef.namespace}/` : ''}
+          {bindingRef.name ?? bindingRef.kind}
+        </ObjectPanelLink>
+        {!!qualified && <span className="rbac-binding-kind">{bindingRef.kind}</span>}
+      </span>
     ))}
   </div>
 );
@@ -323,18 +331,16 @@ export const clusterRoleDescriptor: OverviewDescriptor<ClusterRoleDetails> = {
         render: (d) => (d.aggregationRule ? renderAggregation(d.aggregationRule) : undefined),
       },
       {
+        // ClusterRoleBindings and RoleBindings (across namespaces) that reference this role.
         field: 'clusterRoleBindings',
+        derivedFrom: ['roleBindings'],
         label: 'Used by',
         fullWidth: true,
-        hidden: (d) => (d.clusterRoleBindings?.length ?? 0) === 0,
-        render: (d) => renderUsedByBindings(d.clusterRoleBindings ?? []),
-      },
-      {
-        field: 'roleBindings',
-        label: 'Used by role bindings',
-        fullWidth: true,
-        hidden: (d) => (d.roleBindings?.length ?? 0) === 0,
-        render: (d) => renderUsedByBindings(d.roleBindings ?? []),
+        hidden: (d) => (d.clusterRoleBindings?.length ?? 0) + (d.roleBindings?.length ?? 0) === 0,
+        render: (d) =>
+          renderUsedByBindings([...(d.clusterRoleBindings ?? []), ...(d.roleBindings ?? [])], {
+            qualified: true,
+          }),
       },
     ],
   },

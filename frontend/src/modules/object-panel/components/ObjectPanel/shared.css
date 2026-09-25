@@ -12,6 +12,9 @@
   padding: 0;
   background: transparent;
   font: inherit;
+  /* The link is a <button>; keep the surrounding alignment instead of the UA's centered
+     button text, which shows whenever a flex column stretches the link to full width. */
+  text-align: inherit;
   color: var(--color-object-panel-link);
   cursor: pointer;
   text-decoration: none;

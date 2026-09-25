@@ -100,7 +100,7 @@ const buildColumns = (
 };
 
 const filterOptionOverrides = {
-  searchPlaceholder: 'Search identities and bindings...',
+  searchPlaceholder: 'Search identities...',
   customActions: (
     <Tooltip
       trigger="click"

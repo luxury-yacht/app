@@ -6,7 +6,12 @@
  * via the OverviewContext.
  */
 
-import type { clusterrolebinding, rolebinding, serviceaccount } from '@core/backend-api/models';
+import type {
+  clusterrole,
+  clusterrolebinding,
+  rolebinding,
+  serviceaccount,
+} from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -14,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import {
   clusterRoleBindingDescriptor,
+  clusterRoleDescriptor,
   roleBindingDescriptor,
   serviceAccountDescriptor,
 } from './descriptors/rbac';
@@ -35,7 +41,9 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/components/ObjectPanelLink', () => ({
-  ObjectPanelLink: ({ children }: React.PropsWithChildren) => <span>{children}</span>,
+  ObjectPanelLink: ({ children, objectRef }: React.PropsWithChildren<{ objectRef?: unknown }>) => (
+    <span data-object-ref={JSON.stringify(objectRef)}>{children}</span>
+  ),
 }));
 
 vi.mock('@shared/components/Tooltip', () => ({
@@ -71,6 +79,41 @@ describe('RBACOverview', () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it('lists every binding that uses a ClusterRole with namespaced bindings told apart', async () => {
+    const binding = (kind: string, name: string, namespace?: string) => ({
+      clusterId: 'test-cluster',
+      group: 'rbac.authorization.k8s.io',
+      version: 'v1',
+      kind,
+      resource: kind === 'RoleBinding' ? 'rolebindings' : 'clusterrolebindings',
+      namespace,
+      name,
+    });
+    await renderDescriptor(
+      root,
+      clusterRoleDescriptor,
+      partialModelFixture<clusterrole.ClusterRoleDetails>({
+        kind: 'ClusterRole',
+        name: 'admin',
+        clusterRoleBindings: [binding('ClusterRoleBinding', 'platform-admins')],
+        roleBindings: [
+          binding('RoleBinding', 'admins', 'checkout'),
+          binding('RoleBinding', 'admins', 'payments'),
+        ],
+      })
+    );
+
+    const links = [...container.querySelectorAll<HTMLElement>('[data-object-ref]')].map((link) => ({
+      text: link.textContent,
+      ref: JSON.parse(link.dataset.objectRef ?? 'null'),
+    }));
+    expect(links).toEqual([
+      { text: 'platform-admins', ref: binding('ClusterRoleBinding', 'platform-admins') },
+      { text: 'checkout/admins', ref: binding('RoleBinding', 'admins', 'checkout') },
+      { text: 'payments/admins', ref: binding('RoleBinding', 'admins', 'payments') },
+    ]);
   });
 
   it('renders binding role reference and inline subjects list', async () => {
