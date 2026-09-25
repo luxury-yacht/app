@@ -1,5 +1,7 @@
 ### Added
 
+- Added Cluster → Identities outside Resources, showing users and groups referenced by visible RBAC bindings and visible service accounts, with direct binding counts, grant scopes, and links to source bindings.
+
 ### Changed
 
 ### Fixed

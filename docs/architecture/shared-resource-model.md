@@ -65,6 +65,11 @@ supplies it. Canonical snapshot, stream, catalog, and typed-query table rows are
 a narrower contract: their `ref` requires both `resource` and `name` because
 their producers own a known GVR and a concrete object.
 
+The [Identities view](cluster-identities.md) contains observed subjects rather
+than object rows. Its User/Group keys preserve exact authentication names and
+carry no fabricated GVK. Only actual ServiceAccounts and source bindings have
+object references.
+
 Synthetic app resources still need stable identity. Helm releases use
 `helm.sh/v3`, `HelmRelease`.
 

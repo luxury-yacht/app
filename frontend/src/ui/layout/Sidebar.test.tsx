@@ -215,6 +215,22 @@ describe('Sidebar', () => {
     });
   };
 
+  it('opens cluster identities while Resources remains collapsed', () => {
+    renderSidebar();
+    const host = requireValue(container, 'expected Sidebar container');
+    const resources = host.querySelector<HTMLButtonElement>(
+      '[data-sidebar-target-kind="cluster-toggle"][data-sidebar-target-id="resources"]'
+    );
+    expect(resources?.getAttribute('aria-expanded')).toBe('false');
+    const identities = host.querySelector<HTMLButtonElement>(
+      '[data-sidebar-target-view="identities"]'
+    );
+    expect(identities).not.toBeNull();
+    act(() => identities?.click());
+    expect(viewStateMock.setActiveClusterView).toHaveBeenCalledWith('identities');
+    expect(resources?.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('exposes navigation items and disclosure state with native buttons', () => {
     renderSidebar();
 

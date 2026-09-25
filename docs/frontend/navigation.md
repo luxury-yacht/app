@@ -48,7 +48,9 @@ frontend cache follow the same rule.
 
 ## Cluster Sidebar Organization
 
-Overview, Attention, Browse, and Events are direct cluster links. The independently
+Overview, Attention, Browse, Events, and Identities are direct cluster links.
+Identities is an observed-subject view, not a Kubernetes resource category; it
+remains outside Resources. See [cluster identities](../architecture/cluster-identities.md). The independently
 collapsible Resources group contains Config, Namespaces, Nodes, RBAC, and Storage,
 in that order.
 The Extensions group contains CRDs and Custom Resources, followed by discovered

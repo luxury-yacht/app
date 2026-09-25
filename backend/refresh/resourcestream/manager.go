@@ -82,8 +82,9 @@ const (
 	// doorbell domains its POLLS STAY ON: the doorbell only rings on
 	// successful collections, so a metrics-less cluster would otherwise
 	// freeze the overview's object-derived counts.
-	domainClusterOverview  = "cluster-overview"
-	domainClusterAttention = "cluster-attention"
+	domainClusterOverview   = "cluster-overview"
+	domainClusterAttention  = "cluster-attention"
+	domainClusterIdentities = "cluster-identities"
 )
 
 const (

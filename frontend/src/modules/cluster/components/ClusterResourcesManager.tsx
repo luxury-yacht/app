@@ -20,6 +20,7 @@ import type { RefreshDomain } from '@/core/refresh/types';
 // excluded — browse owns its own lifecycle.)
 const CLUSTER_DOMAIN_SET = new Set<RefreshDomain>([
   'cluster-attention',
+  'cluster-identities',
   'nodes',
   'cluster-rbac',
   'cluster-storage',

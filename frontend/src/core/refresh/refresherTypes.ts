@@ -25,6 +25,7 @@ const NAMESPACE_REFRESHERS = {
 
 const CLUSTER_REFRESHERS = {
   attention: 'cluster-attention',
+  identities: 'cluster-identities',
   nodes: 'cluster-nodes',
   rbac: 'cluster-rbac',
   storage: 'cluster-storage',

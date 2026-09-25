@@ -404,6 +404,13 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			return snapshot.RegisterClusterEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), clusterMeta)
 		}),
 
+		"cluster-identities": accessListRegistration(runtimeAccess, listDomainConfig{
+			name: "cluster-identities",
+			register: func(allowed domainpermissions.AllowedResources) error {
+				return snapshot.RegisterClusterIdentitiesDomain(deps.registry, allowed, deps.ingestManager)
+			},
+		}),
+
 		"cluster-rbac": accessListRegistration(runtimeAccess, listDomainConfig{
 			name: "cluster-rbac",
 			register: func(allowed domainpermissions.AllowedResources) error {

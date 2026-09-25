@@ -30,6 +30,7 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
       'cluster-config',
       'cluster-crds',
       'cluster-events',
+      'cluster-identities',
       'cluster-rbac',
       'cluster-storage',
       'namespace-autoscaling',

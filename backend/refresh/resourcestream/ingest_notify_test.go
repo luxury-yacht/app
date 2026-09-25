@@ -9,13 +9,17 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
+	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
+	"github.com/luxury-yacht/app/backend/resources/rolebinding"
+	"github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
@@ -24,6 +28,31 @@ import (
 	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
+
+func TestIdentitySourcesSignalClusterViewOnChangeAndDeletion(t *testing.T) {
+	for _, descriptor := range []streamspec.Descriptor{rolebinding.StreamDescriptor, clusterrolebinding.StreamDescriptor, serviceaccount.StreamDescriptor} {
+		t.Run(descriptor.Kind, func(t *testing.T) {
+			manager := &Manager{clusterMeta: snapshot.ClusterMeta{ClusterID: "c1"}, logger: applog.Noop,
+				subscribers: make(map[string]map[string]map[uint64]*subscription)}
+			sub, err := subscribeForTest(t, manager, "cluster-identities", "")
+			require.NoError(t, err)
+			summary := objectcatalog.Summary{Ref: resourcemodel.ResourceRef{
+				ClusterID: "c1", Group: descriptor.Group, Version: descriptor.Version,
+				Kind: descriptor.Kind, Resource: descriptor.Resource, Namespace: "team-a", Name: "readers",
+			}, ResourceVersion: "17"}
+			sink := manager.ingestNotifySink(descriptor)
+			sink.Upsert(summary)
+			added := requireNextUpdate(t, sub)
+			require.Equal(t, "cluster-identities", added.Domain)
+			require.Equal(t, "", added.Scope)
+			require.Equal(t, "c1", added.ClusterID)
+			require.Equal(t, SourceObject, added.Source)
+			sink.Delete(summary)
+			deleted := requireNextUpdate(t, sub)
+			require.Equal(t, MessageTypeDeleted, deleted.Type)
+		})
+	}
+}
 
 // TestIngestNotifySinkBroadcastsNamespacedSignal proves the signal-only change signal
 // for an IngestOwned namespaced kind (ResourceQuota → namespace-quotas) fires from the

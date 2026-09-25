@@ -84,6 +84,15 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
   },
   {
     scope: 'cluster',
+    sidebarGroup: 'primary',
+    id: 'identities',
+    label: 'Identities',
+    description: 'View users and groups referenced by RBAC bindings and service accounts',
+    keywords: ['identities', 'users', 'groups', 'serviceaccounts', 'access', 'subjects'],
+    refresher: 'cluster-identities',
+  },
+  {
+    scope: 'cluster',
     sidebarGroup: 'resources',
     id: 'config',
     label: 'Config',

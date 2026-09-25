@@ -60,6 +60,7 @@ const REFRESHER_TO_DOMAIN: Record<string, RefreshDomain> = {
   // Cluster refreshers
   'cluster-nodes': 'nodes',
   'cluster-rbac': 'cluster-rbac',
+  'cluster-identities': 'cluster-identities',
   'cluster-storage': 'cluster-storage',
   'cluster-config': 'cluster-config',
   'cluster-crds': 'cluster-crds',

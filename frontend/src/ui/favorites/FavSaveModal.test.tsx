@@ -967,6 +967,7 @@ describe('FavSaveModal', () => {
       'cluster:attention',
       'cluster:browse',
       'cluster:events',
+      'cluster:identities',
       'cluster:config',
       'cluster:namespaces',
       'cluster:nodes',

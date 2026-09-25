@@ -579,6 +579,7 @@ const resolvePollingDetails = (params: {
 const ROW_COUNT_DOMAINS = new Set<RefreshDomain>([
   'nodes',
   'cluster-rbac',
+  'cluster-identities',
   'cluster-storage',
   'cluster-config',
   'cluster-crds',
@@ -1267,6 +1268,7 @@ const DOMAIN_DIAGNOSTIC_SCOPES: Array<{
   { domain: 'catalog', label: 'Browse Catalog' },
   { domain: 'catalog-diff', label: 'Diff Catalog' },
   { domain: 'cluster-rbac', label: 'Cluster RBAC' },
+  { domain: 'cluster-identities', label: 'Cluster Identities' },
   { domain: 'cluster-storage', label: 'Cluster Storage' },
   { domain: 'namespace-workloads', label: 'Workloads', hasMetrics: true },
   { domain: 'namespace-autoscaling', label: 'NS Autoscaling' },

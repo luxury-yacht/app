@@ -558,6 +558,7 @@ describe('refresh domain contract', () => {
             'object-events',
             'cluster-overview',
             'cluster-attention',
+            'cluster-identities',
           ]).toContain(entry.domain);
           expect(inventory.behaviorClass).toBe(
             entry.domain === 'object-events'

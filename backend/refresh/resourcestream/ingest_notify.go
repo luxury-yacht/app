@@ -21,6 +21,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
@@ -60,15 +61,22 @@ func (m *Manager) registerIngestNotifyStreams(ingestManager *ingest.IngestManage
 // registered after the reflector started still signals the current set, matching an
 // informer's re-delivery of its store to a late handler.
 func (m *Manager) ingestNotifySink(d streamspec.Descriptor) ingest.Sink {
-	return ingestNotifySink{manager: m, desc: d}
+	identities := false
+	for _, source := range domainpermissions.CompositionByDomain()[domainClusterIdentities].Runtime {
+		if source.Group == d.Group && source.Resource == d.Resource {
+			identities = true
+		}
+	}
+	return ingestNotifySink{manager: m, desc: d, identities: identities}
 }
 
 // ingestNotifySink adapts the signal-only broadcast to an ingest.Sink. The reflector
 // delivers the projected catalog Summary (never the source object), which carries
 // every identity field the broadcast needs.
 type ingestNotifySink struct {
-	manager *Manager
-	desc    streamspec.Descriptor
+	manager    *Manager
+	desc       streamspec.Descriptor
+	identities bool
 }
 
 func (s ingestNotifySink) Upsert(row interface{}) {
@@ -97,4 +105,10 @@ func (s ingestNotifySink) broadcastSignal(row interface{}, updateType MessageTyp
 		scopes = scopesForNamespace(summary.Ref.Namespace)
 	}
 	s.manager.broadcast(d.Domain, scopes, update)
+	if s.identities {
+		// The retained projections have already committed. Invalidate even with
+		// no subscribers so returning to Identities cannot replay stale bindings.
+		s.manager.broadcast(domainClusterIdentities, scopesForCluster(),
+			s.manager.newObjectUpdate(updateType, domainClusterIdentities, summary.ResourceVersion, ref))
+	}
 }

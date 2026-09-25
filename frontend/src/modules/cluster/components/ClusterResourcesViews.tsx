@@ -14,6 +14,7 @@ import ClusterViewCustom, {
   ClusterViewKarpenter,
 } from '@modules/cluster/components/ClusterViewCustom';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
+import ClusterViewIdentities from '@modules/cluster/components/ClusterViewIdentities';
 import ClusterViewNamespaces from '@modules/cluster/components/ClusterViewNamespaces';
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
 import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
@@ -69,6 +70,8 @@ function ClusterResourcesViews({
     switch (activeTab) {
       case 'attention':
         return <ClusterViewAttention />;
+      case 'identities':
+        return <ClusterViewIdentities />;
       case 'namespaces':
         return <ClusterViewNamespaces />;
       case 'nodes':

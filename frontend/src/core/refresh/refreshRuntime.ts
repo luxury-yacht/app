@@ -518,6 +518,7 @@ const MULTI_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>([
   'catalog',
   'catalog-diff',
   'cluster-attention',
+  'cluster-identities',
   'cluster-config',
   'cluster-crds',
   'cluster-events',

@@ -166,6 +166,11 @@ const doorbellDomainDescriptors = [
     scopeKind: 'cluster',
     isClusterScoped: true,
   },
+  {
+    domain: 'cluster-identities',
+    scopeKind: 'cluster',
+    isClusterScoped: true,
+  },
 ] satisfies ResourceStreamDomainDescriptor[];
 
 export const DOORBELL_STREAM_DOMAINS = doorbellDomainDescriptors.map(

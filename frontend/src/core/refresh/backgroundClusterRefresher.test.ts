@@ -69,6 +69,28 @@ describe('BackgroundClusterRefresher', () => {
     expect(fetchForCluster).not.toHaveBeenCalled();
   });
 
+  it('refreshes an inactive identities view using its own cluster', async () => {
+    const fetchForCluster = vi
+      .spyOn(refreshOrchestrator, 'fetchDomainForCluster')
+      .mockResolvedValue(undefined);
+    const refresher = new BackgroundClusterRefresher(
+      () => ({
+        viewType: 'cluster',
+        previousView: 'overview',
+        activeNamespaceView: 'workloads',
+        activeClusterView: 'identities',
+      }),
+      () => undefined
+    );
+    refresher.updateClusters('cluster-a', ['cluster-a', 'cluster-b']);
+    await (refresher as unknown as { tick: () => Promise<void> }).tick();
+    expect(fetchForCluster).toHaveBeenCalledExactlyOnceWith(
+      'cluster-identities',
+      'cluster-b',
+      undefined
+    );
+  });
+
   it('refreshes background clusters as separate single-cluster requests', async () => {
     const fetchForCluster = vi
       .spyOn(refreshOrchestrator, 'fetchDomainForCluster')

@@ -101,6 +101,7 @@ describe('ClusterResourcesManager', () => {
       'cluster-config',
       'cluster-crds',
       'cluster-events',
+      'cluster-identities',
       'cluster-rbac',
       'cluster-storage',
       'nodes',

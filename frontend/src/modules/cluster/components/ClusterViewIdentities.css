@@ -1,0 +1,8 @@
+.identity-binding-links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  max-height: calc(var(--control-height-md) * 8);
+  overflow-y: auto;
+}

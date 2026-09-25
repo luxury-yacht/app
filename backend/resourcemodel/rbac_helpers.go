@@ -144,6 +144,9 @@ func rbacSubjectFacts(clusterID, fallbackNamespace string, subject rbacv1.Subjec
 	case "User", "Group":
 		if subject.Name != "" {
 			link := displayResourceLink(clusterID, subject.APIGroup, "", subject.Kind, "", subject.Namespace, subject.Name)
+			// Authentication subject names are opaque; trimming would merge
+			// distinct principals when aggregating binding relationships.
+			link.Display.Name = subject.Name
 			facts.Link = &link
 		}
 	}

@@ -50,6 +50,7 @@ describe('refresh domain registry', () => {
       'namespace-autoscaling',
       'namespace-quotas',
       'namespace-helm',
+      'cluster-identities',
     ]);
   });
 
