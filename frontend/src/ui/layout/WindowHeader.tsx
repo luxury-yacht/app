@@ -14,7 +14,9 @@ import { installDirectionalWindowResizeCursor } from './windowResizeCursor';
 import './windowResizeCursor.css';
 
 interface WindowHeaderProps {
-  clusterName?: string;
+  // Centered, draggable window title: the active view in a workspace, the
+  // cluster name in a panel window.
+  title?: string;
   leading?: React.ReactNode;
   children?: React.ReactNode;
 }
@@ -65,7 +67,7 @@ const runWindowOperation = (action: string, operation: () => Promise<void>) => {
   );
 };
 
-const WindowHeader: React.FC<WindowHeaderProps> = ({ clusterName, leading, children }) => {
+const WindowHeader: React.FC<WindowHeaderProps> = ({ title, leading, children }) => {
   const isMac = isMacPlatform();
   const isLinux = !isMac && !isWindowsPlatform();
   const usesCustomFrame = usesCustomWindowFrame();
@@ -139,9 +141,9 @@ const WindowHeader: React.FC<WindowHeaderProps> = ({ clusterName, leading, child
         }}
         onDoubleClick={() => void toggleWindowMaximize()}
       >
-        {clusterName ? (
-          <span className="app-header-cluster-name" title={clusterName}>
-            {clusterName}
+        {title ? (
+          <span className="app-header-title" title={title}>
+            {title}
           </span>
         ) : null}
       </button>

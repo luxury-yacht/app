@@ -44,6 +44,7 @@ import type { NamespaceViewType } from '@ui/navigation/types';
 import { AuthFailureOverlay } from '@ui/overlays/AuthFailureOverlay';
 import { setLastSettingsTab } from '@ui/settings/settingsTabPreference';
 import { eventBus } from '@/core/events';
+import { formatActiveViewHeaderTitle, getActiveViewTab } from '@/core/navigation/activeViewTitle';
 import { shouldShowActiveClusterAuthFailure } from '@/core/navigation/workspace';
 import { PanelLifecycleClusterSurface } from '@/core/panel-windows/panelLifecycleGuards';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
@@ -238,6 +239,18 @@ export const AppLayout: React.FC = () => {
   const commands = useCommandPaletteCommands();
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const hasActiveClusters = kubeconfig.selectedClusterIds.length > 0;
+  const headerTitle = hasActiveClusters
+    ? formatActiveViewHeaderTitle({
+        viewType: viewState.viewType,
+        activeViewTab: getActiveViewTab(
+          viewState.viewType,
+          viewState.activeGlobalTab,
+          viewState.activeNamespaceTab,
+          viewState.activeClusterTab
+        ),
+        namespace: namespace.selectedNamespace,
+      })
+    : undefined;
   const clusterSelectionPhase = getClusterSelectionPhase({
     hasSelectedClusters: hasActiveClusters,
     kubeconfigsLoading: kubeconfig.kubeconfigsLoading,
@@ -292,7 +305,7 @@ export const AppLayout: React.FC = () => {
   return (
     <div className="app-container">
       <AppRegionNavigation />
-      <AppHeader />
+      <AppHeader title={headerTitle} />
       <ClusterTabs onOpenCluster={handleOpenCluster} />
 
       <main className={`app-main ${hasActiveClusters ? '' : 'app-main-inactive'}`}>

@@ -37,8 +37,12 @@ import {
   useRef,
   useState,
 } from 'react';
+import {
+  buildActiveViewTitleParts,
+  getActiveViewLabel,
+  getActiveViewTab,
+} from '@/core/navigation/activeViewTitle';
 import { favoriteMatchesCluster, resolveFavoriteRoute } from '@/core/navigation/favoriteRoute';
-import { getViewDescriptor, type ViewScope } from '@/core/navigation/viewRegistry';
 import type { Favorite, FavoritePaneState } from '@/core/persistence/favorites';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import FavSaveModal, { type FavoriteModalColumn } from './FavSaveModal';
@@ -214,21 +218,6 @@ const favoriteFilterOptionsSignature = (options: GridTableFilterOptions): string
 
 const favoriteColumnsSignature = (columns: FavoriteModalColumn[] | undefined): string =>
   JSON.stringify(columns ?? []);
-
-const getActiveViewTab = (
-  viewType: ActiveViewType,
-  activeGlobalTab: string | null,
-  activeNamespaceTab: string | null,
-  activeClusterTab: string | null
-): string | null => {
-  if (viewType === 'global') {
-    return activeGlobalTab;
-  }
-  if (viewType === 'namespace') {
-    return activeNamespaceTab;
-  }
-  return activeClusterTab;
-};
 
 interface FavoriteLocation {
   selectedKubeconfig: string;
@@ -520,33 +509,19 @@ export function useFavToggle(state: FavToggleState): {
 
   const isFavorited = currentFavoriteMatch !== null;
 
-  // Build a human-readable display label for the view tab.
-  const viewLabel = useMemo(() => {
-    const tab = activeViewTab ?? '';
-    let scope: ViewScope;
-
-    if (viewType === 'global') {
-      scope = 'global';
-    } else if (viewType === 'namespace') {
-      scope = 'namespace';
-    } else {
-      scope = 'cluster';
-    }
-
-    return getViewDescriptor(scope, tab)?.label ?? tab;
-  }, [viewType, activeViewTab]);
+  const viewLabel = useMemo(
+    () => getActiveViewLabel(viewType, activeViewTab),
+    [viewType, activeViewTab]
+  );
 
   // Auto-generate a default name for new favorites.
   const defaultName = useMemo(() => {
-    const parts: string[] = [];
-    if (viewType !== 'global' && selectedClusterName) {
-      parts.push(selectedClusterName);
-    }
-    if (viewType === 'namespace' && selectedNamespace) {
-      parts.push(selectedNamespace);
-    }
-    parts.push(viewLabel);
-    const base = parts.join(' / ');
+    const base = buildActiveViewTitleParts({
+      viewType,
+      activeViewTab,
+      clusterName: selectedClusterName,
+      namespace: selectedNamespace,
+    }).join(' / ');
     const panes = paneGroup
       ? paneGroup.expectedPaneIds.map((id) => paneGroup.getPane(id)?.snapshot).filter(Boolean)
       : [currentPane];
@@ -562,7 +537,7 @@ export function useFavToggle(state: FavToggleState): {
           pane.filters.includeMetadata)
     );
     return hasActiveFilters ? `${base} (filtered)` : base;
-  }, [currentPane, paneGroup, selectedClusterName, selectedNamespace, viewLabel, viewType]);
+  }, [activeViewTab, currentPane, paneGroup, selectedClusterName, selectedNamespace, viewType]);
 
   const modalPanes = useMemo(
     () =>

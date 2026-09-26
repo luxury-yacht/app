@@ -1,5 +1,6 @@
 ### Added
 
+- The app header shows the active view with its scope, for example `payments - Workloads` in a namespace or `Cluster - Nodes` in the cluster.
 - Added Cluster → Identities outside Resources, showing users and groups referenced by visible RBAC bindings, with direct binding counts, grant scopes, and links to source bindings. User and Group badges open read-only Details panels with binding and role links.
 
 ### Changed

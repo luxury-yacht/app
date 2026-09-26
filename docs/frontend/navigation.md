@@ -25,6 +25,16 @@ one retained workspace per open cluster.
 - Foreground-cluster blocking overlays must not cover Global views. Each Global
   row owns and presents its originating cluster's lifecycle/auth state.
 
+## Active View Title
+
+The workspace header shows the active view as `scope - view`, built by
+`core/navigation/activeViewTitle.ts`; the cluster tabs below it already name the
+cluster. The scope is the namespace on namespace views (the All Namespaces scope
+by its display name) and `Cluster` on cluster views, including Overview. Global
+views show only the view, and no title is shown while no cluster is open. Default names for new favorites
+add the cluster name (except on Global views) and join the parts with ` / `.
+Panel windows show their cluster name in the same header slot.
+
 ## Favorites
 
 `favoriteRoute.ts` owns persisted route and cluster-target interpretation. A

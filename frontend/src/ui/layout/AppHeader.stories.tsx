@@ -20,9 +20,9 @@ export const Default: Story = {};
 
 /** Native panel header — shared drag surface without workspace controls. */
 export const PanelWindow: Story = {
-  render: () => <WindowHeader clusterName="Production" />,
+  render: () => <WindowHeader title="Production" />,
 };
 
 export const PanelWindowLongClusterName: Story = {
-  render: () => <WindowHeader clusterName="Production · customer-platform-us-east-1:production" />,
+  render: () => <WindowHeader title="Production · customer-platform-us-east-1:production" />,
 };

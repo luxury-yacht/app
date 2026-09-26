@@ -75,9 +75,7 @@ vi.mock('@ui/errors', () => ({
   PanelErrorBoundary: PassThrough,
 }));
 vi.mock('@ui/layout/WindowHeader', () => ({
-  default: ({ clusterName }: { clusterName?: string }) => (
-    <div data-testid="app-header">{clusterName}</div>
-  ),
+  default: ({ title }: { title?: string }) => <div data-testid="app-header">{title}</div>,
 }));
 vi.mock('@ui/shortcuts', () => ({ KeyboardProvider: PassThrough }));
 vi.mock('@ui/shortcuts/components/TextContextMenu', () => ({ default: () => null }));

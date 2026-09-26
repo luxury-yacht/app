@@ -267,7 +267,7 @@ function PanelWindowSurface({
       <PanelWindowShortcuts descriptor={descriptor} ready={ready} />
       <AppRegionNavigation />
       <TextContextMenu />
-      <WindowHeader clusterName={clusterName} />
+      <WindowHeader title={clusterName} />
       <ErrorNotificationSystem />
       <div className="panel-window-content content">
         <DockablePanelLayer />

@@ -44,7 +44,7 @@
   app-region: drag;
 }
 
-.app-header-cluster-name {
+.app-header-title {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;

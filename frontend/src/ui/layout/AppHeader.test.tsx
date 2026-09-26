@@ -121,9 +121,9 @@ describe('AppHeader', () => {
     'identifies the panel cluster in the visible header (mac=%s)',
     async (isMac) => {
       platformMock.isMacPlatform.mockReturnValue(isMac);
-      await act(async () => root.render(<WindowHeader clusterName="Production" />));
+      await act(async () => root.render(<WindowHeader title="Production" />));
       expect(container.querySelector('header')?.textContent).toContain('Production');
-      expect(container.querySelector('.app-header-cluster-name')?.getAttribute('title')).toBe(
+      expect(container.querySelector('.app-header-title')?.getAttribute('title')).toBe(
         'Production'
       );
     }

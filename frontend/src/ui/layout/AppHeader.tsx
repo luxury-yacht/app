@@ -10,8 +10,8 @@ import { isMacPlatform, usesCustomWindowFrame } from '@/utils/platform';
 import AppMenuBar from './AppMenuBar';
 import WindowHeader from './WindowHeader';
 
-const AppHeader: React.FC = () => (
-  <WindowHeader leading={usesCustomWindowFrame() ? <AppMenuBar /> : null}>
+const AppHeader: React.FC<{ title?: string }> = ({ title }) => (
+  <WindowHeader title={title} leading={usesCustomWindowFrame() ? <AppMenuBar /> : null}>
     <div className="app-header-controls">
       <UpdateStatus />
       <div className="status-indicators">
