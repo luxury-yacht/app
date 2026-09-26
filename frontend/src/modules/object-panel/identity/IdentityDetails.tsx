@@ -41,12 +41,12 @@ function BindingCount({
   return (
     <span className="overview-condition-list">
       {count}
-      <span role="status">
+      <output>
         <StatusChip variant="warning" tooltip={partialLabel}>
           Partial
         </StatusChip>
         <span className="sr-only">{partialLabel}</span>
-      </span>
+      </output>
     </span>
   );
 }

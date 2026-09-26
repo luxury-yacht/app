@@ -243,7 +243,7 @@ describe('IdentityPanel', () => {
       data: { status: 'ready', data: partial },
     });
     await render();
-    expect(host.querySelector('[role="status"]')).not.toBeNull();
+    expect(host.querySelector('output')).not.toBeNull();
     expect(button('ClusterRole/reader')).toBeUndefined();
     mocks.request.mockResolvedValue({
       status: 'executed',
