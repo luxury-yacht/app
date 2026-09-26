@@ -97,6 +97,8 @@ frontend denial and stream latches. It does not change namespace-scope revisions
 - A cached permission may serve multiple features. Diagnostics matches static
   permission-spec membership at the same scope as well as the last query's
   feature, so one feature querying a shared grant does not hide it from another.
+  The row uses the matching view feature for its label without changing the
+  cached query's provenance; unfiltered views retain the cached feature.
 - Telemetry-bound capability summaries and breadcrumbs may include structural
   group/version, resource, verb, and scope type. They must not include the
   caller-supplied permission key, raw namespace, or object name; timing metrics

@@ -219,13 +219,8 @@ export const CLUSTER_PERMISSIONS: PermissionSpecList[] = [
   {
     feature: PERMISSION_FEATURES.clusterIdentities,
     specs: [
-      { kind: 'RoleBinding', group: 'rbac.authorization.k8s.io', version: 'v1', verb: 'list' },
-      {
-        kind: 'ClusterRoleBinding',
-        group: 'rbac.authorization.k8s.io',
-        version: 'v1',
-        verb: 'list',
-      },
+      { kind: 'RoleBinding', verb: 'list' },
+      { kind: 'ClusterRoleBinding', verb: 'list' },
     ],
   },
   {

@@ -497,7 +497,7 @@ describe('queryClusterPermissions', () => {
         )?.pending
       ).toBe(false)
     );
-    const rowsFor = (tab: 'identities' | 'rbac') =>
+    const rowsFor = (tab: 'identities' | 'rbac' | 'browse') =>
       buildPermissionRows({
         permissionMap: getUserPermissionMap(),
         capabilityDescriptorIndex: new Map(),
@@ -506,12 +506,13 @@ describe('queryClusterPermissions', () => {
         selectedClusterId: 'cluster-a',
       });
     expect(
-      rowsFor('identities').map(({ resource, verb, scope, isDenied, clusterId }) => ({
+      rowsFor('identities').map(({ resource, verb, scope, isDenied, clusterId, feature }) => ({
         resource,
         verb,
         scope,
         isDenied,
         clusterId,
+        feature,
       }))
     ).toEqual([
       {
@@ -520,6 +521,7 @@ describe('queryClusterPermissions', () => {
         scope: 'Cluster',
         isDenied: false,
         clusterId: 'cluster-a',
+        feature: PERMISSION_FEATURES.clusterIdentities,
       },
       {
         resource: 'RoleBinding',
@@ -527,15 +529,25 @@ describe('queryClusterPermissions', () => {
         scope: 'Cluster',
         isDenied: true,
         clusterId: 'cluster-a',
+        feature: PERMISSION_FEATURES.clusterIdentities,
       },
     ]);
     expect(rowsFor('rbac')).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ resource: 'ClusterRoleBinding', verb: 'list' }),
+        expect.objectContaining({
+          resource: 'ClusterRoleBinding',
+          verb: 'list',
+          feature: PERMISSION_FEATURES.clusterRBAC,
+        }),
         expect.objectContaining({ resource: 'ClusterRole', verb: 'delete' }),
       ])
     );
     expect(rowsFor('rbac').some((row) => row.resource === 'RoleBinding')).toBe(false);
+    const sharedKey = getPermissionKey('ClusterRoleBinding', 'list', null, null, 'cluster-a');
+    expect(rowsFor('browse').find((row) => row.id === sharedKey)?.feature).toBe(
+      PERMISSION_FEATURES.clusterRBAC
+    );
+    expect(getUserPermissionMap().get(sharedKey)?.feature).toBe(PERMISSION_FEATURES.clusterRBAC);
   });
 
   it('does not cache cluster-not-active responses as permission errors', async () => {
