@@ -25,6 +25,10 @@ own focus trap, backdrop, escape handling, or app-background blocking.
 
 - Shared modal surface and focus trap:
   `frontend/src/shared/components/modals`
+- Two-pane category sidebar (Settings, Keyboard Shortcuts): `ModalSidebarNav`
+  in the same folder. The owning modal passes `handleModalSidebarKeyDown` to its
+  focus trap so arrow keys, Home, and End move between categories from one Tab
+  stop; Enter and Space select.
 - App-owned modal routing/state:
   `frontend/src/ui/modals`,
   `frontend/src/core/contexts/ModalStateContext.tsx`

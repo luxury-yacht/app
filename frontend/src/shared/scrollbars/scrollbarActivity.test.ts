@@ -418,6 +418,79 @@ describe('scrollbar activity tracking', () => {
     expect(thumb?.style.top).toBe('31px');
   });
 
+  // An overlay that reaches past its owner's padding box makes the owner scrollable, and the
+  // modal then keeps scrolling after the content under the pointer reaches its end.
+  const createBorderedModal = () => {
+    const modal = document.createElement('div');
+    modal.className = 'modal-container';
+    modal.getBoundingClientRect = () =>
+      ({
+        bottom: 420,
+        height: 360,
+        left: 100,
+        right: 500,
+        top: 60,
+        width: 400,
+        x: 100,
+        y: 60,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    defineMetric(modal, 'clientTop', 1);
+    defineMetric(modal, 'clientLeft', 1);
+    defineMetric(modal, 'clientWidth', 398);
+    defineMetric(modal, 'clientHeight', 358);
+    document.body.appendChild(modal);
+    return modal;
+  };
+  const overlayBox = (overlay: HTMLElement | null) => {
+    const box = requireValue(overlay, 'expected overlay element').style;
+    return {
+      top: Number.parseFloat(box.top),
+      bottom: Number.parseFloat(box.top) + Number.parseFloat(box.height),
+      right: Number.parseFloat(box.left) + Number.parseFloat(box.width),
+    };
+  };
+
+  it('keeps overlays for content flush with a bordered modal inside its scroll range', () => {
+    const modal = createBorderedModal();
+    const element = createScrollableElement();
+    // Fills the modal to its inner (padding-box) right and bottom edges.
+    element.getBoundingClientRect = () =>
+      ({
+        bottom: 419,
+        height: 329,
+        left: 120,
+        right: 499,
+        top: 90,
+        width: 379,
+        x: 120,
+        y: 90,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    modal.appendChild(element);
+
+    dispatchWheel(element);
+
+    const gutter = overlayBox(modal.querySelector('.scrollbar-overlay-gutter--vertical'));
+    expect(gutter.top).toBe(29);
+    expect(gutter.bottom).toBeLessThanOrEqual(modal.clientHeight);
+    expect(gutter.right).toBeLessThanOrEqual(modal.clientWidth);
+  });
+
+  it('keeps a scrolling modal’s own overlay within its visible area', () => {
+    const modal = createBorderedModal();
+    modal.style.overflowY = 'auto';
+    defineMetric(modal, 'scrollHeight', 900);
+    modal.scrollTop = 200;
+
+    dispatchWheel(modal);
+
+    const gutter = overlayBox(modal.querySelector('.scrollbar-overlay-gutter--vertical'));
+    expect(gutter.top).toBe(200);
+    expect(gutter.bottom).toBeLessThanOrEqual(modal.scrollTop + modal.clientHeight);
+    expect(gutter.right).toBeLessThanOrEqual(modal.scrollLeft + modal.clientWidth);
+  });
+
   it('keeps modal diff viewer overlays inside the modal stacking context', () => {
     const modal = document.createElement('div');
     modal.className = 'modal-container object-diff-modal';

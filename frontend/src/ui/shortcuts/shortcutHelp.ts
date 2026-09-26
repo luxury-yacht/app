@@ -1,4 +1,9 @@
-import type { RegisteredShortcut, ShortcutGroup, ShortcutMap } from '@/types/shortcuts';
+import type {
+  RegisteredShortcut,
+  ShortcutGroup,
+  ShortcutHelpRow,
+  ShortcutMap,
+} from '@/types/shortcuts';
 import { getShortcutKey } from './utils';
 
 const CATEGORY_ORDER: Readonly<Record<string, number>> = {
@@ -51,4 +56,27 @@ export function buildShortcutHelpGroups(shortcuts: ShortcutMap): ShortcutGroup[]
         })),
       };
     });
+}
+
+/**
+ * Collapse a help group's registrations into one row per action. Rows keep
+ * the group's help order; a binding registered twice for the same action
+ * (for example by two mounted owners) is listed once.
+ */
+export function buildShortcutHelpRows(group: ShortcutGroup): ShortcutHelpRow[] {
+  const rows = new Map<string, ShortcutHelpRow>();
+  const seenBindings = new Set<string>();
+
+  for (const { key, modifiers, description } of group.shortcuts) {
+    const bindingId = `${description}\u0000${getShortcutKey(key, modifiers)}`;
+    if (seenBindings.has(bindingId)) {
+      continue;
+    }
+    seenBindings.add(bindingId);
+    const row = rows.get(description) ?? { description, bindings: [] };
+    row.bindings.push(modifiers ? { key, modifiers } : { key });
+    rows.set(description, row);
+  }
+
+  return Array.from(rows.values());
 }

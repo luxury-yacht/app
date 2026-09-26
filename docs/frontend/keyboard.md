@@ -134,9 +134,11 @@ Surface kinds include:
 - Manually added namespace removal is visible on row focus. Removing an entry
   restores the stable namespace selector; the inline Add editor restores its
   button on commit or cancellation.
-- Keyboard shortcut help derives its categories and key labels from registered
-  shortcuts through `ui/shortcuts/shortcutHelp.ts`; keep descriptions and footer
-  key hints consistent with those registrations.
+- Keyboard shortcut help derives its categories, rows, and key labels from
+  registered shortcuts through `ui/shortcuts/shortcutHelp.ts`. Registrations
+  that share a description in one category appear as one row listing each
+  binding. `?` and `/` close the help unless focus is in its filter field,
+  where they type; Escape always closes it.
 - Adjustable separators support the appropriate arrow keys and Home/End while
   publishing their current, minimum, and maximum values.
 - Panels and table regions own focused keyboard behavior without blocking the

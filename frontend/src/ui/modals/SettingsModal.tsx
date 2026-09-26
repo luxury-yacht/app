@@ -15,6 +15,11 @@ import {
   KubeconfigsIcon,
 } from '@shared/components/icons/SettingsIcons';
 import { CategoryIcon, CloseIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
+import {
+  handleModalSidebarKeyDown,
+  ModalSidebarNav,
+  type ModalSidebarNavItem,
+} from '@shared/components/modals/ModalSidebarNav';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { useModalPresence } from '@shared/components/modals/useModalPresence';
@@ -60,39 +65,14 @@ const TABS: TabDefinition[] = [
 
 const KNOWN_TAB_IDS = new Set<SettingsTabId>(TABS.map((tab) => tab.id));
 
+const SIDEBAR_ITEMS: ReadonlyArray<ModalSidebarNavItem<SettingsTabId>> = TABS.map(
+  ({ id, label, icon: Icon }) => ({ id, label, icon: <Icon width={16} height={16} /> })
+);
+
 // A previously-persisted tab that no longer exists (e.g. the removed Kubeconfigs
 // tab) falls back to the default so the settings panel is never blank.
 const resolveTab = (tab: SettingsTabId | null | undefined): SettingsTabId =>
   tab && KNOWN_TAB_IDS.has(tab) ? tab : DEFAULT_SETTINGS_TAB;
-
-const handleCategoryKeyDown = (event: KeyboardEvent) => {
-  const target = event.target;
-  if (
-    !(target instanceof HTMLButtonElement) ||
-    !target.matches('.settings-modal-tab') ||
-    event.ctrlKey ||
-    event.altKey ||
-    event.metaKey
-  ) {
-    return false;
-  }
-  const buttons = Array.from(
-    target.closest('.settings-modal-tabs')?.querySelectorAll<HTMLButtonElement>('button') ?? []
-  );
-  const index = buttons.indexOf(target);
-  const destinations: Partial<Record<string, number>> = {
-    ArrowDown: (index + 1) % buttons.length,
-    ArrowUp: (index - 1 + buttons.length) % buttons.length,
-    Home: 0,
-    End: buttons.length - 1,
-  };
-  const nextIndex = destinations[event.key];
-  if (nextIndex === undefined) {
-    return false;
-  }
-  buttons[nextIndex]?.focus();
-  return true;
-};
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialTab }) => {
   const elementIdPrefix = useId();
@@ -100,16 +80,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
   const [activeTab, setActiveTab] = useState<SettingsTabId>(() =>
     resolveTab(initialTab ?? getLastSettingsTab())
   );
-  const [focusedTab, setFocusedTab] = useState(activeTab);
   const [appInfo, setAppInfo] = useState<backend.AppInfo | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
   // Restore the selected section whenever the modal opens or its override changes.
   useEffect(() => {
     if (isOpen) {
-      const openingTab = resolveTab(initialTab ?? getLastSettingsTab());
-      setActiveTab(openingTab);
-      setFocusedTab(openingTab);
+      setActiveTab(resolveTab(initialTab ?? getLastSettingsTab()));
     }
   }, [isOpen, initialTab]);
 
@@ -139,7 +116,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
   useModalFocusTrap({
     ref: modalRef,
     disabled: !shouldRender,
-    onKeyDown: handleCategoryKeyDown,
+    onKeyDown: handleModalSidebarKeyDown,
     onEscape: () => {
       if (!isOpen) {
         return false;
@@ -151,7 +128,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
 
   const handleTabChange = (tab: SettingsTabId) => {
     setActiveTab(tab);
-    setFocusedTab(tab);
     setLastSettingsTab(tab);
   };
 
@@ -187,35 +163,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
         </button>
       </div>
 
-      <div className="settings-modal-body">
-        <nav className="settings-modal-sidebar" aria-label="Settings sections">
-          <ul className="settings-modal-tabs">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = tab.id === activeTab;
-              return (
-                <li key={tab.id}>
-                  <button
-                    type="button"
-                    className={`settings-modal-tab${isActive ? ' settings-modal-tab--active' : ''}`}
-                    tabIndex={tab.id === focusedTab ? 0 : -1}
-                    onFocus={() => setFocusedTab(tab.id)}
-                    onClick={() => handleTabChange(tab.id)}
-                    aria-current={isActive ? 'page' : undefined}
-                  >
-                    <Icon width={16} height={16} />
-                    <span>{tab.label}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          {!!appInfo?.version && (
-            <div className="settings-modal-version" role="status" aria-label="App version">
-              {appInfo.version}
-            </div>
-          )}
-        </nav>
+      <div className="modal-split-body">
+        <ModalSidebarNav
+          label="Settings sections"
+          items={SIDEBAR_ITEMS}
+          activeId={activeTab}
+          onSelect={handleTabChange}
+          footer={
+            !!appInfo?.version && (
+              <div className="settings-modal-version" role="status" aria-label="App version">
+                {appInfo.version}
+              </div>
+            )
+          }
+        />
 
         <div className="settings-modal-content">
           {activeTab === 'appearance' && <AppearanceSection />}

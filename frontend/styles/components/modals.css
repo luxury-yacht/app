@@ -177,6 +177,89 @@
 }
 
 /* ==========================================================================
+   Shared Two-Pane Modal Sidebar
+   ========================================================================== */
+
+/* Body splits into a category sidebar + the modal's content pane (ModalSidebarNav). */
+.modal-split-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  background: var(--modal-content-bg);
+}
+
+/* Sidebar nav */
+.modal-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 0.5rem;
+  overflow-y: auto;
+  background: var(--modal-footer-bg);
+}
+
+.modal-sidebar-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.modal-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.modal-sidebar-item svg {
+  flex-shrink: 0;
+}
+
+.modal-sidebar-item:hover {
+  background: var(--color-bg-tertiary, var(--color-bg-secondary));
+  color: var(--color-text);
+}
+
+.modal-sidebar-item--active,
+.modal-sidebar-item--active:hover {
+  background: var(--color-accent);
+  color: var(--color-accent-text, var(--color-bg));
+}
+
+.modal-sidebar-item--active svg {
+  color: var(--color-accent-text, var(--color-bg));
+}
+
+/* Optional item count, pushed to the trailing edge. */
+.modal-sidebar-count {
+  margin-left: auto;
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-tertiary);
+}
+
+.modal-sidebar-item--active .modal-sidebar-count {
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* ==========================================================================
    Shared Modal Forms
    ========================================================================== */
 

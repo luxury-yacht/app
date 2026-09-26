@@ -1,99 +1,99 @@
-/* ShortcutHelpModal specific sizing */
+/* ShortcutHelpModal: category sidebar (shared modal-sidebar) + filterable list. */
 .shortcut-help-modal {
-  max-width: 720px;
+  max-width: 600px;
+  /* Keep one height while switching categories or filtering. The shared
+     surface still caps it to the available window height. */
+  height: calc(var(--modal-viewport-height) * 0.75);
 }
 
-/* Content area inherits from modal-content */
+.shortcut-help-context {
+  margin: 1rem 0 0;
+  padding: 0.5rem 0.75rem;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
 
-/* No shortcuts message */
-.no-shortcuts {
+/* The filter stays in place while the results scroll beneath it. */
+.shortcut-help-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.shortcut-help-filter {
+  flex-shrink: 0;
+  margin: 1rem 1.5rem;
+}
+
+.shortcut-help-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 1.5rem 1rem;
+}
+
+.shortcut-help-empty {
+  margin: 0;
+  padding: 2rem 0;
   text-align: center;
   color: var(--color-text-tertiary);
-  font-style: italic;
-  padding: 3rem 0;
-  font-size: 0.9375rem;
 }
 
-/* Shortcut groups with enhanced styling */
-.shortcut-group {
-  margin-bottom: 2rem;
-}
-
-.shortcut-group:last-child {
-  margin-bottom: 0;
+.shortcut-group + .shortcut-group {
+  margin-top: 1.25rem;
 }
 
 .shortcut-group h3 {
-  margin: 0 0 1rem 0;
-  font-size: 0.75rem;
+  margin: 0 0 0.35rem;
+  padding-bottom: 0.4rem;
+  font-size: var(--font-size-sm);
   font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
   color: var(--color-text-tertiary);
-  padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--color-border);
 }
 
-/* Shortcut list with grid layout */
-.shortcut-list {
-  display: grid;
-  gap: 0.5rem;
-}
-
-/* Individual shortcut items with enhanced design */
+/* Action on the left, keys on the right, as in the command palette. */
 .shortcut-item {
-  display: grid;
-  grid-template-columns: minmax(140px, max-content) 1fr;
-  align-items: center;
-  gap: 1.5rem;
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  padding: 0.4rem 1rem;
-  background: var(--shortcut-item-bg);
-  border: 1px solid var(--shortcut-item-border);
-  border-radius: 8px;
-  transition:
-    background-color 150ms ease,
-    border-color 150ms ease,
-    color 150ms ease;
-}
-
-/* Shortcut description */
-.shortcut-description {
-  color: var(--color-text-secondary);
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-
-/* Footer with improved styling */
-.shortcut-help-modal-footer {
-  padding: 1rem 2rem;
-  border-top: 1px solid var(--color-border);
-  text-align: center;
-  font-size: 0.875rem;
-  color: var(--color-text-tertiary);
-  background: var(--color-bg-secondary);
-}
-
-.shortcut-help-modal-footer p {
-  margin: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
+  min-height: 1.85rem;
+  padding: 0.15rem 0.25rem;
+  border-bottom: 1px solid var(--shortcut-item-border);
 }
 
-/* Animations are provided by shared modal styles. */
+.shortcut-item:last-child {
+  border-bottom: none;
+}
 
-/* Responsive design */
-@media (max-width: 640px) {
-  .shortcut-help-modal-footer {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
+.shortcut-description {
+  min-width: 0;
+  font-size: var(--font-size-normal);
+  line-height: 1.35;
+  color: var(--color-text);
+}
 
-  .shortcut-item {
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
-  }
+.shortcut-item .keycap {
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.shortcut-binding {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.shortcut-binding-separator {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
+
+.shortcut-item kbd {
+  font-size: 0.7rem;
+  min-width: 1.35rem;
+  padding: 0.15rem 0.3rem;
 }

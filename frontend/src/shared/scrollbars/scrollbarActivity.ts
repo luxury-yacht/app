@@ -110,14 +110,17 @@ const canScrollAxis = (element: HTMLElement, axis: 'horizontal' | 'vertical'): b
     : element.scrollHeight > element.clientHeight;
 };
 
+// Overlays are absolutely positioned from the owner's padding edge, inside its border.
+// Measuring from the border box would push them past the owner's content and make the
+// owner itself scrollable.
 const toOverlayCoordinateRect = (rect: DOMRect, container: HTMLElement): DOMRect => {
   if (container === document.body) {
     return rect;
   }
 
   const containerRect = container.getBoundingClientRect();
-  const left = rect.left - containerRect.left + container.scrollLeft;
-  const top = rect.top - containerRect.top + container.scrollTop;
+  const left = rect.left - containerRect.left - container.clientLeft + container.scrollLeft;
+  const top = rect.top - containerRect.top - container.clientTop + container.scrollTop;
   const width = rect.width;
   const height = rect.height;
   return toClipRect({ top, left, width, height });
@@ -347,11 +350,24 @@ const setOverlayPosition = (
   overlay.horizontalThumb.style.position = position;
 };
 
+// An owner that scrolls itself hosts its own overlay in its scrolled content. Its track must
+// cover exactly the visible client box; a border-box track would extend the scroll range on
+// every scroll step.
+const readOverlayTrackRect = (element: HTMLElement, container: HTMLElement): DOMRect =>
+  element === container
+    ? toClipRect({
+        top: element.scrollTop,
+        left: element.scrollLeft,
+        width: element.clientWidth,
+        height: element.clientHeight,
+      })
+    : toOverlayCoordinateRect(element.getBoundingClientRect(), container);
+
 const readOverlayGeometryContext = (
   element: HTMLElement,
   overlay: OverlayScrollbarElements
 ): OverlayGeometryContext => ({
-  rect: toOverlayCoordinateRect(element.getBoundingClientRect(), overlay.container),
+  rect: readOverlayTrackRect(element, overlay.container),
   clipRect: toOverlayCoordinateRect(getOverflowClipRect(element), overlay.container),
   scrollbarWidth: readScrollbarNumberToken('--scrollbar-width', 10),
   scrollbarHeight: readScrollbarNumberToken('--scrollbar-height', 10),

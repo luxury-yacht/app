@@ -46,3 +46,12 @@ export interface ShortcutGroup {
     description: string;
   }>;
 }
+
+// One help row per action; alternative bindings (Enter/Space, Cmd+S/Ctrl+S) share it.
+export interface ShortcutHelpRow {
+  description: string;
+  bindings: Array<{
+    key: string;
+    modifiers?: ShortcutModifiers;
+  }>;
+}
