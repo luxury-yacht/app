@@ -12,8 +12,7 @@ import { useMemo } from 'react';
 import type { ClusterIdentitiesSnapshot, ClusterIdentity } from '@/core/refresh/types';
 import './ClusterViewIdentities.css';
 
-const identityKey = (row: ClusterIdentity) =>
-  JSON.stringify([row.clusterId, row.kind, row.namespace, row.name]);
+const identityKey = (row: ClusterIdentity) => JSON.stringify([row.clusterId, row.kind, row.name]);
 
 function IdentityBindings({ row }: Readonly<{ row: ClusterIdentity }>) {
   const bindings = row.bindings ?? [];
@@ -64,7 +63,6 @@ const buildColumns = (
         });
       }
     },
-    isInteractive: (row: ClusterIdentity) => row.kind === 'User' || row.kind === 'Group',
   };
   return cf.withColumnSizing(
     [

@@ -11,8 +11,13 @@ account directory and does not infer group membership or effective access.
 `backend/refresh/snapshot/cluster_identities.go` derives rows from the existing
 ingest-owned RoleBinding and ClusterRoleBinding object-map projections. These
 carry the canonical binding subject links from the shared resource model. No
-additional LIST/watch, catalog inference, or frontend join is used. Subject keys contain cluster ID, type, an empty namespace, and exact
-name; user/group names remain opaque and case-sensitive.
+additional LIST/watch, catalog inference, or frontend join is used. Subject keys
+contain cluster ID, kind, and exact name; user/group names remain opaque and
+case-sensitive. Subjects have no namespace field or namespace filter/sort.
+
+The Details predicate is a JSON array `[clusterId, kind, name]`. The backend
+decodes it and compares all three fields exactly. JSON escaping differences
+between Go and JavaScript must not change which subject matches.
 
 These subject rows are not canonical Kubernetes object rows. The `bindings` list
 carries real, complete resource references. Each binding includes its projected
@@ -20,7 +25,8 @@ role reference when available.
 User/group names and Kind badges open read-only identity panels.
 Source bindings open through the shared object-panel links. Duplicate subjects
 within a binding count once. Grant scopes identify the namespace of a RoleBinding
-or cluster-wide scope of a ClusterRoleBinding; they do not describe the referenced role's rules.
+or cluster-wide scope of a ClusterRoleBinding; they do not describe the
+referenced role's rules.
 
 ## Queries and freshness
 
@@ -38,8 +44,10 @@ or annotations.
 Permission admission accepts either readable binding source. ServiceAccount
 permissions and readiness do not affect this domain's coverage. Each query applies
 current source permissions and readiness; unavailable sources produce partial
-query coverage instead of authoritative absence. The existing cluster lifecycle owns
-permission recovery and source startup.
+query coverage instead of authoritative absence. The existing cluster lifecycle
+owns permission recovery and source startup. Diagnostics uses the dedicated
+`cluster.identities` feature with only cluster-wide `list` checks for RoleBinding
+and ClusterRoleBinding.
 
 Projectors and notification sinks register before ingestion starts. Source intake
 commits retained projections before notifying the snapshot invalidator and
@@ -68,11 +76,19 @@ error states. An identity removed from all visible bindings remains an open pane
 with an empty binding list. It has no YAML, mutation actions, group membership,
 or effective permission calculation.
 
+Details stacks Overview above Direct bindings using the shared section styles.
+The binding columns size to their content and role links use `Kind/name`.
+Partial visibility appears beside the count as a warning chip with an accessible
+explanation; errors use the shared Details error block. The embedded binding
+table uses shared GridTable styling, also used by the Role/ClusterRole Permissions
+table.
+
 ## Regression coverage
 
 - `backend/refresh/snapshot/cluster_identities_test.go`: subject equality,
   direct binding provenance, global queries, removal, permissions, readiness,
-  and cluster scope rejection.
+  equivalent JSON encodings, malformed/mismatched subject predicates, and cluster
+  scope rejection.
 - `backend/refresh/system/cluster_identities_test.go`: production registration
   and real REST LIST/watch intake through projection, cache invalidation, and
   subscriber delivery for both binding sources.
@@ -82,3 +98,6 @@ or effective permission calculation.
   hook replaced by fixture rows; subjects open identity targets and source
   bindings open complete object references.
 - Sidebar and background-refresh tests cover route placement and cluster routing.
+- `permissionStore.test.ts`: real permission batching and diagnostics selection
+  retain only the two cluster-wide binding LIST checks for Identities, preserve
+  RBAC diagnostics, and exclude other clusters. The permission broker is mocked.

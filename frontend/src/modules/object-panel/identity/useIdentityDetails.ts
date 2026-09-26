@@ -31,7 +31,7 @@ export function useIdentityDetails(ref: IdentityPanelRef, enabled: boolean) {
     [ref.kind]
   );
   const predicates = useMemo(
-    () => ({ identity: JSON.stringify([ref.clusterId, ref.kind, '', ref.name]) }),
+    () => ({ identity: JSON.stringify([ref.clusterId, ref.kind, ref.name]) }),
     [ref.clusterId, ref.kind, ref.name]
   );
   return useTypedResourceQuery<ClusterIdentitiesSnapshot, ClusterIdentity>({

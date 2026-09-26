@@ -586,7 +586,6 @@ export interface ClusterIdentity {
   clusterId: string;
   kind: string;
   name: string;
-  namespace: string;
   bindings: Array<ClusterIdentityBinding> | null;
   grantScopes: Array<string> | null;
 }

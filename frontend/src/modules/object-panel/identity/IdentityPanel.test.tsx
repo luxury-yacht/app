@@ -125,7 +125,6 @@ const payload = (bindings: ClusterIdentityBinding[] = [binding]): ClusterIdentit
       clusterId: 'cluster-a',
       kind: 'User',
       name: identity.name,
-      namespace: '',
       bindings,
       grantScopes: ['payments'],
     },
@@ -188,7 +187,7 @@ describe('IdentityPanel', () => {
     await render();
     const scope = mocks.request.mock.calls[0][0].scope as string;
     expect(decodeURIComponent(scope.replace(/\+/g, ' '))).toContain(
-      'predicate.identity=["cluster-a","User",""," alice "]'
+      'predicate.identity=["cluster-a","User"," alice "]'
     );
     expect(mocks.demand).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: true, demand: 'query' })
@@ -205,6 +204,13 @@ describe('IdentityPanel', () => {
     expect(mocks.open).toHaveBeenLastCalledWith({ ...role, namespace: undefined });
     act(() => button('Close panel')?.click());
     expect(mocks.close).toHaveBeenCalledWith(identity.clusterId, panelTargetId(identity));
+  });
+  it('encodes the complete opaque subject as a three-field query identity', async () => {
+    const ref: IdentityPanelRef = { ...identity, kind: 'Group', name: ' R&D <ops>\u2028\u2029 ' };
+    await render(ref);
+    const scope = mocks.request.mock.calls[0][0].scope as string;
+    const predicate = new URLSearchParams(scope.split('?')[1]).get('predicate.identity');
+    expect(JSON.parse(predicate ?? 'null')).toEqual([ref.clusterId, ref.kind, ref.name]);
   });
   it('holds queries during warm-up while retaining demand, then responds to binding deletion', async () => {
     mocks.live = { status: 'initialising' };
@@ -249,7 +255,7 @@ describe('IdentityPanel', () => {
     const lastScope = mocks.request.mock.calls[mocks.request.mock.calls.length - 1][0]
       .scope as string;
     expect(decodeURIComponent(lastScope.replace(/\+/g, ' '))).toContain(
-      '["cluster-b","Group",""," alice "]'
+      '["cluster-b","Group"," alice "]'
     );
   });
 });

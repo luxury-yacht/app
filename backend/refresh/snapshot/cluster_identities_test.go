@@ -69,10 +69,12 @@ func TestClusterIdentitiesDerivesSubjectsAndBindingProvenance(t *testing.T) {
 	require.Len(t, payload.Rows, 4)
 	require.Equal(t, 4, payload.Total)
 	require.ElementsMatch(t, []string{"User", "Group"}, payload.Kinds)
+	require.NotContains(t, payload.Capabilities.SortableFields, "namespace")
+	require.NotContains(t, payload.Capabilities.FilterableFields, "namespaces")
+	require.NotContains(t, payload.Capabilities.SearchableFields, "namespace")
 	for _, row := range payload.Rows {
 		require.Equal(t, "cluster-a", row.ClusterID)
 		require.Contains(t, []string{"User", "Group"}, row.Kind)
-		require.Empty(t, row.Namespace)
 		if row.Kind == "User" && row.Name == "alice" {
 			require.Len(t, row.Bindings, 2)
 			require.Equal(t, []string{"Cluster-wide", "team-a"}, row.GrantScopes)
@@ -109,7 +111,7 @@ func TestIdentityPanelQueryPreservesExactSubjectAndBindingRole(t *testing.T) {
 		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: "reader"},
 		Subjects:   []rbacv1.Subject{{Kind: "User", Name: " alice "}, {Kind: "Group", Name: " alice "}, {Kind: "User", Name: "alice"}},
 	})}
-	scope := "?predicate.identity=" + url.QueryEscape(`["cluster-a","User",""," alice "]`)
+	scope := "?predicate.identity=" + url.QueryEscape(`["cluster-a","User"," alice "]`)
 	payload := identityTestBuild(t, b, context.Background(), scope)
 	require.Len(t, payload.Rows, 1)
 	require.Equal(t, " alice ", payload.Rows[0].Name)
@@ -120,6 +122,54 @@ func TestIdentityPanelQueryPreservesExactSubjectAndBindingRole(t *testing.T) {
 	require.Equal(t, map[string]any{"clusterId": "cluster-a", "group": rbacv1.GroupName, "version": "v1", "kind": "Role", "resource": "roles", "namespace": "team-a", "name": "reader"}, bindings[0]["role"])
 	delete(rows, rolebinding.Identity.GVR())
 	require.Empty(t, identityTestBuild(t, b, context.Background(), scope).Rows)
+}
+
+func TestIdentityPanelQueryMatchesEquivalentJSONSubjectNames(t *testing.T) {
+	b, rows := identityTestBuilder()
+	name := "R&D <ops>"
+	rows[rolebinding.Identity.GVR()] = []interface{}{identityTestProjection(rolebinding.Descriptor, &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "readers", Namespace: "team-a"},
+		Subjects: []rbacv1.Subject{
+			{Kind: "Group", Name: name},
+			{Kind: "Group", Name: `R\u0026D <ops>`},
+			{Kind: "User", Name: name},
+		},
+	})}
+	for _, key := range []string{
+		`["cluster-a","Group","R&D <ops>"]`,
+		`["cluster-a","Group","R\u0026D \u003cops\u003e"]`,
+	} {
+		t.Run(key, func(t *testing.T) {
+			payload := identityTestBuild(t, b, context.Background(), "?predicate.identity="+url.QueryEscape(key))
+			require.Len(t, payload.Rows, 1)
+			require.Equal(t, name, payload.Rows[0].Name)
+			require.Equal(t, "Group", payload.Rows[0].Kind)
+			require.Len(t, payload.Rows[0].Bindings, 1)
+			require.Equal(t, "readers", payload.Rows[0].Bindings[0].Name)
+		})
+	}
+}
+
+func TestIdentityPanelQueryRejectsIncompleteOrDifferentSubjectKeys(t *testing.T) {
+	b, rows := identityTestBuilder()
+	rows[rolebinding.Identity.GVR()] = []interface{}{identityTestProjection(rolebinding.Descriptor, &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "readers", Namespace: "team-a"},
+		Subjects:   []rbacv1.Subject{{Kind: "Group", Name: "R&D <ops>"}},
+	})}
+	for _, key := range []string{
+		`["cluster-b","Group","R&D <ops>"]`,
+		`["cluster-a","User","R&D <ops>"]`,
+		`["cluster-a","Group","R&D <ops> "]`,
+		`["cluster-a","Group"]`,
+		`["cluster-a","Group","R&D <ops>","extra"]`,
+		`["cluster-a","Group",42]`,
+		`not-json`,
+	} {
+		t.Run(key, func(t *testing.T) {
+			payload := identityTestBuild(t, b, context.Background(), "?predicate.identity="+url.QueryEscape(key))
+			require.Empty(t, payload.Rows)
+		})
+	}
 }
 
 func TestClusterIdentitiesQueriesAllSubjectsAndTracksSourceRemoval(t *testing.T) {

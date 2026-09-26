@@ -7,6 +7,8 @@
  */
 
 import {
+  ALL_NAMESPACE_PERMISSIONS,
+  CLUSTER_PERMISSIONS,
   getPermissionKey,
   PERMISSION_FEATURES,
   type PermissionFeatureKey,
@@ -567,17 +569,40 @@ interface PermissionRowFilter {
   selectedClusterId?: string | null;
 }
 
+const permissionRowMatchesFeature = (
+  row: PermissionRow,
+  scopedFeatureSet: Set<PermissionFeatureKey>
+): boolean => {
+  if (row.feature && scopedFeatureSet.has(row.feature)) {
+    return true;
+  }
+  // One cached grant may serve several features; its last query's feature is
+  // only provenance. Match shared grants against the specs for this scope too.
+  const specLists = row.descriptorNamespace ? ALL_NAMESPACE_PERMISSIONS : CLUSTER_PERMISSIONS;
+  return specLists.some(
+    (list) =>
+      scopedFeatureSet.has(list.feature) &&
+      list.specs.some(
+        (spec) =>
+          getPermissionKey(
+            spec.kind,
+            spec.verb,
+            row.descriptorNamespace,
+            spec.subresource ?? null,
+            row.clusterId,
+            spec.group,
+            spec.version
+          ) === row.id
+      )
+  );
+};
+
 const permissionRowMatchesClusterView = (
   row: PermissionRow,
   scopedFeatureSet: Set<PermissionFeatureKey>
 ): boolean =>
   row.scope === 'Cluster' ||
-  Boolean(
-    row.descriptorNamespace &&
-      row.feature !== null &&
-      row.feature !== undefined &&
-      scopedFeatureSet.has(row.feature)
-  );
+  Boolean(row.descriptorNamespace && permissionRowMatchesFeature(row, scopedFeatureSet));
 
 const permissionRowMatchesNamespaceView = (
   row: PermissionRow,
@@ -594,7 +619,7 @@ const permissionRowMatchesFilter = (row: PermissionRow, filter: PermissionRowFil
     return false;
   }
   const matchesFeature =
-    !filter.hasFeatureFilters || Boolean(row.feature && filter.scopedFeatureSet.has(row.feature));
+    !filter.hasFeatureFilters || permissionRowMatchesFeature(row, filter.scopedFeatureSet);
   if (!matchesFeature) {
     return false;
   }

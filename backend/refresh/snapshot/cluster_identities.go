@@ -29,7 +29,6 @@ type ClusterIdentity struct {
 	ClusterID   string                   `json:"clusterId"`
 	Kind        string                   `json:"kind"`
 	Name        string                   `json:"name"`
-	Namespace   string                   `json:"namespace"`
 	Bindings    []ClusterIdentityBinding `json:"bindings"`
 	GrantScopes []string                 `json:"grantScopes"`
 }
@@ -75,8 +74,8 @@ func (b *ClusterIdentitiesBuilder) Build(ctx context.Context, scope string) (*re
 	rows := b.collect(meta.ClusterID, sources)
 	adapter := identitiesQueryAdapter()
 	capabilities := newTypedResourceCapabilities(
-		[]string{"kind", "name", "namespace", "bindings", "grantScopes"},
-		[]string{"kinds", "namespaces", "identity"}, []string{"kind", "name", "namespace", "grantScopes", "bindings"},
+		[]string{"kind", "name", "bindings", "grantScopes"},
+		[]string{"kinds", "identity"}, []string{"kind", "name", "grantScopes", "bindings"},
 		[]string{"User", "Group"},
 	)
 	resolved := resolveTypedSnapshotPageViaStore(clusterIdentitiesDomainName, rows, query, adapter,
@@ -207,35 +206,44 @@ func identityFromSubjectLink(clusterID string, edge objectmapspec.Edge) *Cluster
 		return nil
 	}
 	if ref := edge.Link.Display; ref != nil && ref.ClusterID == clusterID && (ref.Kind == "User" || ref.Kind == "Group") && ref.Name != "" {
-		return newClusterIdentity(clusterID, ref.Kind, "", ref.Name)
+		return newClusterIdentity(clusterID, ref.Kind, ref.Name)
 	}
 	return nil
 }
 
-func newClusterIdentity(clusterID, kind, namespace, name string) *ClusterIdentity {
-	return &ClusterIdentity{ClusterID: clusterID, Kind: kind, Namespace: namespace, Name: name,
+func newClusterIdentity(clusterID, kind, name string) *ClusterIdentity {
+	return &ClusterIdentity{ClusterID: clusterID, Kind: kind, Name: name,
 		Bindings: []ClusterIdentityBinding{}, GrantScopes: []string{}}
 }
 
 func identityRowKey(row ClusterIdentity) string {
-	key, _ := json.Marshal([4]string{row.ClusterID, row.Kind, row.Namespace, row.Name})
+	key, _ := json.Marshal([3]string{row.ClusterID, row.Kind, row.Name})
 	return string(key)
+}
+
+func identityMatchesKey(row ClusterIdentity, value string) bool {
+	var fields []string
+	if err := json.Unmarshal([]byte(value), &fields); err != nil {
+		return false
+	}
+	// Compare decoded fields: Go and JavaScript escape HTML/Unicode differently.
+	return slices.Equal(fields, []string{row.ClusterID, row.Kind, row.Name})
 }
 
 func identitiesQueryAdapter() typedTableQueryAdapter[ClusterIdentity] {
 	return typedTableQueryAdapter[ClusterIdentity]{
 		Key:       identityRowKey,
 		Kind:      func(row ClusterIdentity) string { return row.Kind },
-		Namespace: func(row ClusterIdentity) string { return row.Namespace },
+		Namespace: func(ClusterIdentity) string { return "" },
 		SearchText: func(row ClusterIdentity) []string {
-			values := []string{row.Kind, row.Name, row.Namespace, strings.Join(row.GrantScopes, " ")}
+			values := []string{row.Kind, row.Name, strings.Join(row.GrantScopes, " ")}
 			for _, binding := range row.Bindings {
 				values = append(values, binding.Name)
 			}
 			return values
 		},
 		Predicate: func(row ClusterIdentity, field, value string) bool {
-			return field != "identity" || identityRowKey(row) == value
+			return field != "identity" || identityMatchesKey(row, value)
 		},
 		SortValue: identitySortValue,
 		NumericSort: func(row ClusterIdentity, field string) (float64, bool) {
@@ -248,8 +256,6 @@ func identitySortValue(row ClusterIdentity, field string) string {
 	switch field {
 	case "kind":
 		return row.Kind
-	case "namespace":
-		return row.Namespace
 	case "grantScopes":
 		return strings.Join(row.GrantScopes, ", ")
 	default:

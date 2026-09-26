@@ -54,7 +54,7 @@ const OVERVIEW_FEATURES = [PERMISSION_FEATURES.clusterOverview] as const;
 
 const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly PermissionFeatureKey[]> = {
   attention: [],
-  identities: [PERMISSION_FEATURES.clusterRBAC, PERMISSION_FEATURES.namespaceRBAC],
+  identities: [PERMISSION_FEATURES.clusterIdentities],
   namespaces: [], // The view is backed by the permission-gated namespaces domain.
   nodes: [PERMISSION_FEATURES.clusterNodes, PERMISSION_FEATURES.nodeActions],
   rbac: [PERMISSION_FEATURES.clusterRBAC],
