@@ -33,8 +33,10 @@ export const getActiveViewLabel = (viewType: ViewType, activeViewTab: string | n
   if (viewType === 'overview') {
     return 'Overview';
   }
-  const tab = activeViewTab ?? '';
-  return getViewDescriptor(toViewScope(viewType), tab)?.label ?? tab;
+  if (!activeViewTab) {
+    return '';
+  }
+  return getViewDescriptor(toViewScope(viewType), activeViewTab)?.label ?? activeViewTab;
 };
 
 interface ActiveViewLocation {
