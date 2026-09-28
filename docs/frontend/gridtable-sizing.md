@@ -22,6 +22,10 @@ loading transition can temporarily leave no rendered cells. Measurements from
 becoming a column width. Intrinsic measurements reserve one additional CSS pixel so subpixel paint
 rounding cannot clip the content edge.
 
+The header measurement reproduces the rendered header cell markup inside a `gridtable-header`
+row. Header styles such as the uppercase label transform are declared on the row, so a lone cell
+probe measures narrower than the rendered label and truncates header-bound columns.
+
 Measurement must not mount cell components or run their effects. Plain composite values declare
 `measurementText`; composites whose wrapper styling changes box width declare an inert
 `measurementElement` with the same host tag and classes as the rendered wrapper. Keep that markup

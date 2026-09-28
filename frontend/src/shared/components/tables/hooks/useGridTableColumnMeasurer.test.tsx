@@ -5,6 +5,8 @@
  * Covers key behaviors and edge cases for useGridTableColumnMeasurer.
  */
 
+import { readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import { createKindColumn } from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { useGridTableColumnMeasurer } from '@shared/components/tables/hooks/useGridTableColumnMeasurer';
@@ -80,6 +82,42 @@ const renderHarness = async (tableData: SampleRow[]) => {
 };
 
 describe('useGridTableColumnMeasurer', () => {
+  it('sizes to the header as the table renders it, including the header row uppercase', async () => {
+    // The app's header styles: the header row, not the cell, uppercases labels.
+    const style = document.createElement('style');
+    style.textContent = readFileSync(
+      path.resolve(__dirname, '../../../../../styles/components/gridtables.css'),
+      'utf8'
+    ).replace(/^@import[^;]*;/gm, '');
+    document.head.appendChild(style);
+    // Uppercase glyphs are wider than lowercase ones.
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get(this: HTMLElement) {
+        const text = this.textContent ?? '';
+        const shown =
+          getComputedStyle(this).textTransform === 'uppercase' ? text.toUpperCase() : text;
+        return [...shown].reduce((width, char) => width + (/[A-Z]/.test(char) ? 10 : 7), 0);
+      },
+    });
+    const harness = await renderHarness([{ name: '1' }]);
+
+    try {
+      const width = harness.measure({
+        key: 'endpoints',
+        header: 'Endpoints',
+        sortable: false,
+        render: (row) => row.name,
+      });
+
+      // "ENDPOINTS" is 9 uppercase glyphs, plus the one-pixel paint gutter.
+      expect(width).toBe(91);
+    } finally {
+      style.remove();
+      await harness.cleanup();
+    }
+  });
+
   it('falls back to default width when DOM metrics are zero', async () => {
     const harness = await renderHarness([{ name: 'alpha' }]);
 
