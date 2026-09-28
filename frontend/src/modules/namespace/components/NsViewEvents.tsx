@@ -19,7 +19,6 @@ import {
   useEventsGridParts,
 } from '@shared/events/EventsGridView';
 import { eventGridObjectNamespace, namespaceEventRowIdentity } from '@shared/events/eventGridModel';
-import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import React, { useCallback, useMemo } from 'react';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 
@@ -48,20 +47,18 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       [namespace, selectedClusterId]
     );
 
-    const columns = useMemo(
-      () =>
-        buildColumns({
-          namespaceColumn: showNamespaceColumn
-            ? cf.createTextColumn(
-                'namespace',
-                EVENT_LABELS.namespace,
-                (event: EventGridRow) => eventGridObjectNamespace(event) ?? '-',
-                namespaceColumnLink
-              )
-            : undefined,
-        }),
-      [buildColumns, namespaceColumnLink, showNamespaceColumn]
-    );
+    const columns = useMemo(() => {
+      const eventColumns = buildColumns();
+      return showNamespaceColumn
+        ? cf.withNamespaceColumn(eventColumns, {
+            afterColumnKey: 'objectName',
+            accessor: (event: EventGridRow) => eventGridObjectNamespace(event) ?? '-',
+            width: 200,
+            minWidth: 200,
+            ...namespaceColumnLink,
+          })
+        : eventColumns;
+    }, [buildColumns, namespaceColumnLink, showNamespaceColumn]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
     const defaultSort = useMemo(

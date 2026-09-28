@@ -108,6 +108,17 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       ];
 
       baseColumns.push(
+        cf.createTextColumn<HelmData>(
+          'status',
+          'Status',
+          (resource) => {
+            const status = resource.status || resource.info?.status || 'unknown';
+            return status;
+          },
+          {
+            getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
+          }
+        ),
         cf.createTextColumn<HelmData>('chart', 'Chart', (resource) => {
           if (!resource.chart) {
             return '-';
@@ -134,17 +145,6 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           {
             getClassName: (resource) =>
               resource.appVersion || resource.app_version ? 'app-version' : undefined,
-          }
-        ),
-        cf.createTextColumn<HelmData>(
-          'status',
-          'Status',
-          (resource) => {
-            const status = resource.status || resource.info?.status || 'unknown';
-            return status;
-          },
-          {
-            getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
           }
         ),
         cf.createTextColumn<HelmData>(

@@ -308,6 +308,22 @@ describe('NsViewEvents', () => {
     return gridTablePropsRef.current;
   };
 
+  it('places Namespace right after the involved object in All Namespaces', async () => {
+    const props = await renderEventsView({ namespace: ALL_NAMESPACES_SCOPE });
+
+    expect(props.columns.map((column) => column.key)).toEqual([
+      'kind',
+      'type',
+      'source',
+      'objectType',
+      'objectName',
+      'namespace',
+      'reason',
+      'message',
+      'age',
+    ]);
+  });
+
   it('defines Last Seen as the visible Event timestamp sort column', async () => {
     const event = baseEvent({ ageTimestamp: 42 });
     const props = await renderEventsView();

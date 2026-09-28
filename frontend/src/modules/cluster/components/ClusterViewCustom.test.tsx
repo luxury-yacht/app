@@ -320,6 +320,20 @@ describe('ClusterViewCustom', () => {
     expect(runObjectActionMock).not.toHaveBeenCalled();
   });
 
+  it('leads generic custom resources with the identity columns followed by Status', async () => {
+    await act(async () => {
+      root.render(<ClusterViewCustom />);
+    });
+
+    expect(gridTablePropsRef.current.columns.map((column) => column.header)).toEqual([
+      'Kind',
+      'Name',
+      'Status',
+      'CRD',
+      'Age',
+    ]);
+  });
+
   it('scopes Karpenter queries and renders the resource-specific columns', async () => {
     await act(async () => {
       root.render(<ClusterViewCustom resourceFamily="karpenter" />);

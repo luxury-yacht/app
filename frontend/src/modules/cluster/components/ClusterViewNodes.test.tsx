@@ -399,6 +399,22 @@ describe('ClusterViewNodes', () => {
     );
   });
 
+  it('leads with the identity columns followed by Status', async () => {
+    await renderNodes([baseNode]);
+
+    expect(gridTablePropsRef.current.columns.map((column) => column.key)).toEqual([
+      'kind',
+      'name',
+      'status',
+      'version',
+      'pods',
+      'restarts',
+      'cpu',
+      'memory',
+      'age',
+    ]);
+  });
+
   it('keeps node metric animation history separate for equal names in different clusters', async () => {
     await renderNodes([baseNode]);
     for (const key of ['cpu', 'memory']) {

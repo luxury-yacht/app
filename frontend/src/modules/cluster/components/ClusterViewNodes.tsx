@@ -136,9 +136,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         getClassName: () => 'object-panel-link',
         isInteractive: () => true,
       }),
-      cf.createTextColumn<ClusterNodeRow>('version', 'Version', (row) => row.version || '—', {
-        sortValue: (row) => (row.version || '').toLowerCase(),
-      }),
       {
         key: 'status',
         header: 'Status',
@@ -173,6 +170,9 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
           );
         },
       },
+      cf.createTextColumn<ClusterNodeRow>('version', 'Version', (row) => row.version || '—', {
+        sortValue: (row) => (row.version || '').toLowerCase(),
+      }),
       cf.createTextColumn<ClusterNodeRow>('pods', 'Pods', (row) => row.pods || '—', {
         alignHeader: 'center',
         alignData: 'center',

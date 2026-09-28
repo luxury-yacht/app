@@ -139,6 +139,7 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
           ),
         getClassName: () => 'object-panel-link',
       }),
+      customResourceStatusColumn,
       // CRD column: each cell is a clickable link back to the CRD
       // that defines the row's Kind. The cell hides itself (renders
       // as the column factory's default placeholder) for rows that
@@ -176,7 +177,6 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
         crdColumn.sortValue = (resource) => (resource.crdName ?? '').toLowerCase();
         return crdColumn;
       })(),
-      customResourceStatusColumn,
       cf.createAgeColumn(),
     ],
     [

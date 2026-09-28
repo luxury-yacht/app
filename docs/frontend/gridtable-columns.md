@@ -14,6 +14,13 @@ selected by the column change. Custom label/annotation columns have a separate
   position (after its nearest declared predecessor), never appended after the
   user's trailing column — so a view can add columns without breaking saved
   layouts (`reconcileColumnOrder`).
+- Declare resource tables in this default order: Kind, Name, Namespace, Status,
+  view-specific columns, Age. A table that shows Namespace only in All
+  Namespaces adds it with `withNamespaceColumn` anchored after Name; Events,
+  which has no Name column, anchors it after Object Name. Keep Status, or the
+  view's equivalent state column, immediately after the identity columns. The
+  only exception is Type (Normal/Warning), which stays second in the Events
+  tables.
 - Column capabilities are declarative. Set `hideable: false` or
   `resizable: false` on the definition; the shared table must not infer either
   capability from `name`, `kind`, `type`, `age`, or another key.

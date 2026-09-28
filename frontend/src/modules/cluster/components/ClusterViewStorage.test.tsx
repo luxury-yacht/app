@@ -188,6 +188,24 @@ describe('ClusterViewStorage', () => {
     expect(getGridTableProps().filters?.options?.showKindDropdown).toBe(false);
   });
 
+  it('leads with the identity columns followed by Status', async () => {
+    await act(async () => {
+      root.render(<ClusterViewStorage />);
+      await Promise.resolve();
+    });
+
+    expect(getGridTableProps().columns.map((column) => column.key)).toEqual([
+      'kind',
+      'name',
+      'status',
+      'capacity',
+      'accessModes',
+      'storageClass',
+      'claim',
+      'age',
+    ]);
+  });
+
   it('uses backend statusPresentation for PersistentVolume status styling', async () => {
     await act(async () => {
       root.render(<ClusterViewStorage />);

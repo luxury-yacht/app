@@ -120,18 +120,15 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
   );
 
   /**
-   * Builds the shared event columns. The namespace view passes its namespace
-   * column (inserted after the type column) and omits the cluster view's
-   * allowRowClick suppression on the kind column.
+   * Builds the shared event columns. The cluster view suppresses row clicks on
+   * the kind column; the namespace view keeps them.
    */
   const buildColumns = useCallback(
     ({
-      namespaceColumn,
       kindAllowRowClick = true,
     }: {
-      namespaceColumn?: GridColumnDefinition<EventGridRow>;
       kindAllowRowClick?: boolean;
-    }): GridColumnDefinition<EventGridRow>[] => {
+    } = {}): GridColumnDefinition<EventGridRow>[] => {
       const baseColumns: GridColumnDefinition<EventGridRow>[] = [
         cf.createKindColumn<EventGridRow>({
           getKind: () => 'Event',
@@ -141,13 +138,6 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
           ...(kindAllowRowClick ? {} : { allowRowClick: false }),
         }),
         createEventTypeColumn<EventGridRow>(),
-      ];
-
-      if (namespaceColumn) {
-        baseColumns.push(namespaceColumn);
-      }
-
-      baseColumns.push(
         cf.createTextColumn('source', EVENT_LABELS.source, (event) => event.source || '-'),
         cf.createTextColumn<EventGridRow>('objectType', EVENT_LABELS.objectType, (event) => {
           const parsed = splitEventObjectTarget(event.object);
@@ -175,13 +165,12 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
         ),
         cf.createTextColumn('reason', EVENT_LABELS.reason, (event) => event.reason || '-'),
         cf.createTextColumn('message', EVENT_LABELS.message, (event) => event.message || '-'),
-        cf.createAgeColumn<EventGridRow>('age', EVENT_LABELS.lastSeen, (event) => event.age)
-      );
+        cf.createAgeColumn<EventGridRow>('age', EVENT_LABELS.lastSeen, (event) => event.age),
+      ];
 
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         type: { autoWidth: true },
-        namespace: { width: 200 },
         source: { width: 200 },
         objectType: { autoWidth: true },
         objectName: { width: 200 },

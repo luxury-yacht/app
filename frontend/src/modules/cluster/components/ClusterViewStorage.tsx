@@ -85,11 +85,11 @@ const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
         onAltClick: identity.navigate,
         getClassName: () => 'object-panel-link',
       }),
-      cf.createTextColumn('capacity', 'Capacity', (pv) => pv.capacity || '-'),
-      cf.createTextColumn('accessModes', 'Access Modes', (pv) => pv.accessModes || '-'),
       cf.createTextColumn<StorageData>('status', 'Status', (pv) => pv.status || 'Unknown', {
         getClassName: (pv) => backendStatusTextClass(pv.statusPresentation),
       }),
+      cf.createTextColumn('capacity', 'Capacity', (pv) => pv.capacity || '-'),
+      cf.createTextColumn('accessModes', 'Access Modes', (pv) => pv.accessModes || '-'),
       cf.createTextColumn<StorageData>(
         'storageClass',
         'Class',

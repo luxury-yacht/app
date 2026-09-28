@@ -97,8 +97,8 @@ describe('useBrowseColumns', () => {
     expect(crossNamespaceColumns.map((column) => column.key)).toEqual([
       'kind',
       'name',
-      'api',
       'namespace',
+      'api',
       'age',
     ]);
 
@@ -142,8 +142,8 @@ describe('useBrowseColumns', () => {
     expect(hook.get().map((column) => [column.key, column.autoWidth])).toEqual([
       ['kind', true],
       ['name', true],
-      ['api', true],
       ['namespace', true],
+      ['api', true],
       ['age', true],
     ]);
 
