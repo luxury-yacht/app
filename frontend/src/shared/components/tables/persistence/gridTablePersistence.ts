@@ -25,6 +25,7 @@ import type {
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
 import { reconcileColumnOrder } from '@shared/components/tables/gridTableColumnOrder';
 import {
+  DEFAULT_GRID_TABLE_FILTER_STATE,
   hasNonDefaultGridTableFilters,
   normalizeGridTableFilterState,
   normalizeGridTableQueryFacets,
@@ -632,6 +633,31 @@ export const prunePersistedState = <T>(
 export const buildPersistedStateForSave = <T>(
   context: GridTableSaveContext<T>
 ): GridTablePersistedState | null => normalizeStateForPersistence(context, context);
+
+// A shared Namespaces selection is stored as an ordinary persisted state that
+// holds only that filter, so cluster transfer, reset-all, and GC treat it like
+// any other table entry.
+export const loadSharedNamespaceFilter = (key: string): MultiSelectFilterSelection =>
+  loadPersistedState(key)?.filters?.namespaces ?? ALL_MULTISELECT_FILTER;
+
+export const saveSharedNamespaceFilter = (
+  key: string,
+  namespaces: MultiSelectFilterSelection
+): void => {
+  const next = buildPersistedStateForSave({
+    columns: [],
+    filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, namespaces },
+  });
+  const current = persistenceCache[key] ?? null;
+  if (JSON.stringify(next) === JSON.stringify(current)) {
+    return;
+  }
+  if (next) {
+    savePersistedState(key, next);
+  } else {
+    clearPersistedState(key);
+  }
+};
 
 export const captureClusterTableState = async (
   clusterId: string

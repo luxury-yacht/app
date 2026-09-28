@@ -539,6 +539,12 @@ export interface QueryBackedNamespaceGridParams<
     QueryBackedGridParamsCommon<TPayload, TRow> {
   /** Optional: the wrapper resolves a canonical default when omitted. */
   keyExtractor?: (item: TRow, index: number) => string;
+  /**
+   * All Namespaces tables that show the Namespaces filter share one selection
+   * per cluster. Set false for a pane whose Namespaces filter another table's
+   * selection drives.
+   */
+  sharesAllNamespacesFilter?: boolean;
 }
 
 export function useQueryBackedNamespaceResourceGridTable<
@@ -558,6 +564,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   defaultSort = { key: 'name', direction: 'asc' },
   namespace,
   supportsCustomMetadataColumns,
+  sharesAllNamespacesFilter = true,
   ...tableParams
 }: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow, TPayload> {
   const resolvedKeyExtractor = useResolvedQueryKeyExtractor(
@@ -565,18 +572,21 @@ export function useQueryBackedNamespaceResourceGridTable<
     tableParams.objectIdentity?.key,
     clusterId
   );
+  const allNamespaces = namespace === ALL_NAMESPACES_SCOPE;
   const persistence = useGridTablePersistence<TRow>({
     viewId: tableParams.viewId,
     clusterIdentity: clusterId ?? '',
     namespace,
-    isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
+    isNamespaceScoped: !allNamespaces,
     columns: tableParams.columns,
 
     filterOptions: {
       ...tableParams.filterOptions,
-      isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE,
+      isNamespaceScoped: !allNamespaces,
     },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+    shareNamespaceFilter:
+      allNamespaces && Boolean(tableParams.showNamespaceFilters) && sharesAllNamespacesFilter,
   });
   const liveScope = useMemo(
     () =>

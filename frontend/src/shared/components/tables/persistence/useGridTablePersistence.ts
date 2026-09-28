@@ -6,6 +6,10 @@
  */
 
 import type { SortConfig } from '@hooks/useTableSort';
+import {
+  ALL_MULTISELECT_FILTER,
+  type MultiSelectFilterSelection,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { CustomMetadataColumnDefinition } from '@shared/components/tables/customMetadataColumns';
 import type {
   ColumnWidthState,
@@ -22,9 +26,11 @@ import {
   type GridTablePersistenceKeyParts,
   hydrateGridTablePersistence,
   loadPersistedState,
+  loadSharedNamespaceFilter,
   prunePersistedState,
   registerPendingGridTableSave,
   savePersistedState,
+  saveSharedNamespaceFilter,
 } from '@shared/components/tables/persistence/gridTablePersistence';
 import { subscribeGridTableResetAll } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import {
@@ -45,6 +51,11 @@ export interface UseGridTablePersistenceParams<T> {
   filterOptions?: GridTableFilterPersistenceOptions;
   pageSizeOptions?: readonly number[];
   enabled?: boolean;
+  /**
+   * Keep the Namespaces filter in one per-cluster entry shared by every table
+   * that sets this, instead of in this table's own entry.
+   */
+  shareNamespaceFilter?: boolean;
 }
 
 export interface UseGridTablePersistenceResult {
@@ -68,6 +79,8 @@ export interface UseGridTablePersistenceResult {
 }
 
 const SAVE_DEBOUNCE_MS = 250;
+// Key segment of the per-cluster entry holding the shared Namespaces filter.
+const SHARED_NAMESPACE_FILTER_VIEW_ID = 'shared-namespace-filter';
 
 interface GridTablePersistenceState {
   sortConfig: SortConfig | null;
@@ -78,13 +91,27 @@ interface GridTablePersistenceState {
   filters: GridTableFilterState;
   pageSize: number | null;
   hydrated: boolean;
+  // The shared Namespaces entry this state was hydrated from. A render that
+  // still holds another cluster's state must not write into the new entry.
+  sharedNamespaceKey: string | null;
 }
 
-type GridTablePersistenceUpdate = Partial<Omit<GridTablePersistenceState, 'hydrated'>>;
+type GridTablePersistenceUpdate = Partial<
+  Omit<GridTablePersistenceState, 'hydrated' | 'sharedNamespaceKey'>
+>;
+
+interface SharedNamespaceFilter {
+  key: string;
+  namespaces: MultiSelectFilterSelection;
+}
 
 type GridTablePersistenceAction =
   | { type: 'scopeChanged' }
-  | { type: 'hydrated'; persisted: ReturnType<typeof prunePersistedState> }
+  | {
+      type: 'hydrated';
+      persisted: ReturnType<typeof prunePersistedState>;
+      sharedNamespaceFilter: SharedNamespaceFilter | null;
+    }
   | { type: 'reset' }
   | { type: 'update'; update: GridTablePersistenceUpdate };
 
@@ -97,21 +124,29 @@ const createPendingPersistenceState = (): GridTablePersistenceState => ({
   filters: DEFAULT_GRID_TABLE_FILTER_STATE,
   pageSize: null,
   hydrated: false,
+  sharedNamespaceKey: null,
 });
 
 const hydratePersistenceState = (
-  persisted: ReturnType<typeof prunePersistedState>
-): GridTablePersistenceState => ({
-  ...createPendingPersistenceState(),
-  sortConfig: persisted?.sort ?? null,
-  columnVisibility: persisted?.columnVisibility ?? null,
-  columnOrder: persisted?.columnOrder ?? null,
-  columnWidths: persisted?.columnWidths ?? null,
-  customColumns: persisted?.customColumns ?? [],
-  filters: persisted?.filters ?? DEFAULT_GRID_TABLE_FILTER_STATE,
-  pageSize: persisted?.pageSize ?? null,
-  hydrated: true,
-});
+  persisted: ReturnType<typeof prunePersistedState>,
+  sharedNamespaceFilter: SharedNamespaceFilter | null
+): GridTablePersistenceState => {
+  const filters = persisted?.filters ?? DEFAULT_GRID_TABLE_FILTER_STATE;
+  return {
+    ...createPendingPersistenceState(),
+    sortConfig: persisted?.sort ?? null,
+    columnVisibility: persisted?.columnVisibility ?? null,
+    columnOrder: persisted?.columnOrder ?? null,
+    columnWidths: persisted?.columnWidths ?? null,
+    customColumns: persisted?.customColumns ?? [],
+    filters: sharedNamespaceFilter
+      ? { ...filters, namespaces: sharedNamespaceFilter.namespaces }
+      : filters,
+    pageSize: persisted?.pageSize ?? null,
+    hydrated: true,
+    sharedNamespaceKey: sharedNamespaceFilter?.key ?? null,
+  };
+};
 
 const gridTablePersistenceReducer = (
   state: GridTablePersistenceState,
@@ -121,7 +156,7 @@ const gridTablePersistenceReducer = (
     case 'scopeChanged':
       return createPendingPersistenceState();
     case 'hydrated':
-      return hydratePersistenceState(action.persisted);
+      return hydratePersistenceState(action.persisted, action.sharedNamespaceFilter);
     case 'reset':
       return {
         ...createPendingPersistenceState(),
@@ -129,6 +164,7 @@ const gridTablePersistenceReducer = (
         columnVisibility: {},
         columnWidths: {},
         hydrated: state.hydrated,
+        sharedNamespaceKey: state.sharedNamespaceKey,
       };
     case 'update':
       return { ...state, ...action.update };
@@ -144,6 +180,7 @@ export function useGridTablePersistence<T>({
   filterOptions: requestedFilterOptions,
   pageSizeOptions,
   enabled = true,
+  shareNamespaceFilter = false,
 }: UseGridTablePersistenceParams<T>): UseGridTablePersistenceResult {
   const filterOptions = useStableSelectedValue(requestedFilterOptions);
   const [clusterHash, setClusterHash] = useState<string>('');
@@ -165,6 +202,7 @@ export function useGridTablePersistence<T>({
     filters,
     pageSize,
     hydrated,
+    sharedNamespaceKey: hydratedSharedNamespaceKey,
   } = persistenceState;
   const persistenceSetters = useMemo(
     () => ({
@@ -227,12 +265,21 @@ export function useGridTablePersistence<T>({
     setStorageKey(key);
   }, [clusterHash, viewId, namespace, isNamespaceScoped, enabled, persistenceMode]);
 
+  const sharedNamespaceKey = useMemo(
+    () =>
+      enabled && shareNamespaceFilter
+        ? buildGridTableStorageKey({ clusterHash, viewId: SHARED_NAMESPACE_FILTER_VIEW_ID })
+        : null,
+    [clusterHash, enabled, shareNamespaceFilter]
+  );
+
   useEffect(() => {
     void storageKey;
+    void sharedNamespaceKey;
     // Force re-hydration when the storage key changes (e.g., namespace switch).
     lastSavePayloadRef.current = '';
     dispatchPersistence({ type: 'scopeChanged' });
-  }, [storageKey]);
+  }, [storageKey, sharedNamespaceKey]);
 
   useEffect(() => {
     let active = true;
@@ -258,14 +305,28 @@ export function useGridTablePersistence<T>({
       });
 
       lastHydratedPayloadRef.current = pruned ? JSON.stringify(pruned) : '';
-      dispatchPersistence({ type: 'hydrated', persisted: pruned });
+      dispatchPersistence({
+        type: 'hydrated',
+        persisted: pruned,
+        sharedNamespaceFilter: sharedNamespaceKey
+          ? { key: sharedNamespaceKey, namespaces: loadSharedNamespaceFilter(sharedNamespaceKey) }
+          : null,
+      });
     };
 
     void loadPersisted();
     return () => {
       active = false;
     };
-  }, [storageKey, hydrated, columns, filterOptions, isNamespaceScoped, pageSizeOptions]);
+  }, [
+    storageKey,
+    sharedNamespaceKey,
+    hydrated,
+    columns,
+    filterOptions,
+    isNamespaceScoped,
+    pageSizeOptions,
+  ]);
 
   const resetLocalState = useCallback(() => {
     if (storageKey) {
@@ -281,6 +342,21 @@ export function useGridTablePersistence<T>({
     return unsubscribe;
   }, [resetLocalState]);
 
+  // Saved immediately rather than debounced: moving to another view unmounts
+  // this table before a debounced save would run.
+  const namespaceFilter = filters.namespaces;
+  useEffect(() => {
+    if (sharedNamespaceKey && hydratedSharedNamespaceKey === sharedNamespaceKey) {
+      saveSharedNamespaceFilter(sharedNamespaceKey, namespaceFilter);
+    }
+  }, [sharedNamespaceKey, hydratedSharedNamespaceKey, namespaceFilter]);
+
+  // A shared Namespaces selection lives only in the shared entry.
+  const tableFilters = useMemo(
+    () => (sharedNamespaceKey ? { ...filters, namespaces: ALL_MULTISELECT_FILTER } : filters),
+    [filters, sharedNamespaceKey]
+  );
+
   useEffect(() => {
     if (!storageKey || !hydrated || !enabled) {
       return;
@@ -295,7 +371,7 @@ export function useGridTablePersistence<T>({
         columnOrder,
         columnWidths,
         sort: sortConfig,
-        filters,
+        filters: tableFilters,
         pageSize,
         filterOptions: {
           ...filterOptions,
@@ -343,7 +419,7 @@ export function useGridTablePersistence<T>({
     columnWidths,
     customColumns,
     sortConfig,
-    filters,
+    tableFilters,
     pageSize,
     filterOptions,
     pageSizeOptions,

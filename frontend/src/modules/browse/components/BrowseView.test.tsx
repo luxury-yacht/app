@@ -581,6 +581,15 @@ describe('BrowseView', () => {
       expect(persistenceArgsRef.cluster?.enabled).toBe(true);
       expect(persistenceArgsRef.namespace?.enabled).toBe(false);
     });
+
+    it('does not apply the All Namespaces selection to cluster-scoped objects', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      expect(persistenceArgsRef.cluster?.shareNamespaceFilter ?? false).toBe(false);
+    });
   });
 
   describe('Namespace scope (namespace=specific)', () => {
@@ -704,6 +713,15 @@ describe('BrowseView', () => {
       });
 
       expect(persistenceArgsRef.cluster?.viewId).toBe('all-namespaces-browse');
+    });
+
+    it('shares the Namespaces selection with the other All Namespaces views', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
+        await Promise.resolve();
+      });
+
+      expect(persistenceArgsRef.cluster?.shareNamespaceFilter).toBe(true);
     });
 
     it('enables only cluster persistence for all-namespaces browse', async () => {

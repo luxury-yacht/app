@@ -243,6 +243,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     enabled: !isNamespaceScoped,
+    shareNamespaceFilter: scope === 'all-namespaces',
   });
 
   const namespacePersistence = useNamespaceGridTablePersistence<BrowseTableRow>({

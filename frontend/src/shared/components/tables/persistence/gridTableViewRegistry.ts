@@ -42,6 +42,9 @@ const VIEW_IDS = new Set<string>([
   'object-panel-pods',
   'object-panel-jobs',
   'object-panel-identity-bindings',
+  // Not a view: the per-cluster Namespaces selection that All Namespaces
+  // tables share (useGridTablePersistence shareNamespaceFilter).
+  'shared-namespace-filter',
 ]);
 
 export const isRegisteredGridTableView = (viewId: string): boolean => VIEW_IDS.has(viewId);

@@ -2,6 +2,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { createAgeColumn } from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import type { UseGridTablePersistenceParams } from '@shared/components/tables/persistence/useGridTablePersistence';
 import type React from 'react';
 import { act, isValidElement } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -46,6 +47,7 @@ const {
   persistedFiltersRef,
   setFiltersMock,
   setPageSizeMock,
+  gridPersistenceParamsRef,
 } = vi.hoisted(() => ({
   liveDomainStateRef: {
     current: {
@@ -95,6 +97,7 @@ const {
   persistedFiltersRef: { current: null as Record<string, unknown> | null },
   setFiltersMock: vi.fn(),
   setPageSizeMock: vi.fn(),
+  gridPersistenceParamsRef: { current: null as UseGridTablePersistenceParams<TestRow> | null },
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -127,21 +130,24 @@ vi.mock('./useResourceGridTable', () => ({
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: () => ({
-    storageKey: 'gridtable:v1:cluster-a:cluster-nodes',
-    sortConfig: null,
-    setSortConfig: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    filters: persistedFiltersRef.current ?? DEFAULT_GRID_TABLE_FILTER_STATE,
-    setFilters: setFiltersMock,
-    pageSize: persistedPageSizeRef.current,
-    setPageSize: setPageSizeMock,
-    hydrated: persistenceHydratedRef.current,
-    resetState: vi.fn(),
-  }),
+  useGridTablePersistence: (params: UseGridTablePersistenceParams<TestRow>) => {
+    gridPersistenceParamsRef.current = params;
+    return {
+      storageKey: 'gridtable:v1:cluster-a:cluster-nodes',
+      sortConfig: null,
+      setSortConfig: vi.fn(),
+      columnVisibility: null,
+      setColumnVisibility: vi.fn(),
+      columnWidths: null,
+      setColumnWidths: vi.fn(),
+      filters: persistedFiltersRef.current ?? DEFAULT_GRID_TABLE_FILTER_STATE,
+      setFilters: setFiltersMock,
+      pageSize: persistedPageSizeRef.current,
+      setPageSize: setPageSizeMock,
+      hydrated: persistenceHydratedRef.current,
+      resetState: vi.fn(),
+    };
+  },
 }));
 
 const columns: GridColumnDefinition<TestRow>[] = [
@@ -218,6 +224,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     persistedPageSizeRef.current = null;
     persistenceHydratedRef.current = true;
     persistedFiltersRef.current = null;
+    gridPersistenceParamsRef.current = null;
     setFiltersMock.mockReset();
     setPageSizeMock.mockReset();
     useTypedResourceQueryMock.mockReturnValue({
@@ -279,6 +286,60 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useNamespaceResourceGridTableMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ supportsCustomMetadataColumns: false })
     );
+  });
+
+  it.each([
+    {
+      name: 'an All Namespaces table showing the Namespaces filter shares it',
+      namespace: ALL_NAMESPACES_SCOPE,
+      showNamespaceFilters: true,
+      sharesAllNamespacesFilter: undefined,
+      shared: true,
+    },
+    {
+      name: 'an All Namespaces table without the Namespaces filter keeps no hidden selection',
+      namespace: ALL_NAMESPACES_SCOPE,
+      showNamespaceFilters: false,
+      sharesAllNamespacesFilter: undefined,
+      shared: false,
+    },
+    {
+      name: 'an All Namespaces pane can opt out',
+      namespace: ALL_NAMESPACES_SCOPE,
+      showNamespaceFilters: true,
+      sharesAllNamespacesFilter: false,
+      shared: false,
+    },
+    {
+      name: 'a single-namespace table never reads the All Namespaces selection',
+      namespace: 'team-a',
+      showNamespaceFilters: true,
+      sharesAllNamespacesFilter: undefined,
+      shared: false,
+    },
+  ])('$name', ({ namespace, showNamespaceFilters, sharesAllNamespacesFilter, shared }) => {
+    const Probe: React.FC = () => {
+      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+        queryTableMode: 'Query Backed Dynamic',
+        clusterId: 'cluster-a',
+        domain: 'namespace-workloads',
+        label: 'Workloads',
+        selectRows,
+        viewId: 'namespace-workloads',
+        namespace,
+        columns,
+        supportsCustomMetadataColumns: true,
+        showNamespaceFilters,
+        ...(sharesAllNamespacesFilter === undefined ? {} : { sharesAllNamespacesFilter }),
+      });
+      return null;
+    };
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    expect(gridPersistenceParamsRef.current?.shareNamespaceFilter ?? false).toBe(shared);
   });
 
   it('forwards an explicit custom metadata capability to cluster tables', () => {

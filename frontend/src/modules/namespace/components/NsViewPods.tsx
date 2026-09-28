@@ -374,6 +374,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       rowIdentity: keyExtractor,
       showKindDropdown: false,
       showNamespaceFilters: showNamespaceFilter,
+      // Workload selection rewrites this pane's Namespace filter.
+      sharesAllNamespacesFilter: false,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
       filterOptionOverrides:
         podsPaneActions.length > 0 ? { beforeNamespaceActions: podsPaneActions } : undefined,

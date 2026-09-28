@@ -120,4 +120,31 @@ describe('useNamespaceGridTablePersistence', () => {
     });
     container.remove();
   });
+
+  it.each([
+    { namespace: 'namespace:all', shared: true },
+    { namespace: 'team-a', shared: false },
+  ])(
+    'shares the Namespaces selection only for All Namespaces ($namespace)',
+    async ({ namespace, shared }) => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = ReactDOM.createRoot(container);
+
+      await act(async () => {
+        root.render(<Harness namespace={namespace} />);
+      });
+
+      const lastParams = requireValue(
+        capturedParams[capturedParams.length - 1],
+        'expected captured persistence params'
+      );
+      expect(lastParams.shareNamespaceFilter ?? false).toBe(shared);
+
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  );
 });

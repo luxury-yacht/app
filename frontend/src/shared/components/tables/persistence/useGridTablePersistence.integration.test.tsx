@@ -5,7 +5,11 @@
  * Covers key behaviors and edge cases for useGridTablePersistence.integration.
  */
 
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import type {
+  GridColumnDefinition,
+  GridTableFilterState,
+} from '@shared/components/tables/GridTable.types';
+import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import type React from 'react';
 import { act, useEffect } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -13,6 +17,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
 import {
+  buildGridTableStorageKey,
+  computeClusterHash,
   getGridTablePersistenceSnapshot,
   resetGridTablePersistenceCacheForTesting,
 } from './gridTablePersistence';
@@ -192,5 +198,155 @@ describe('useGridTablePersistence integration', () => {
       root.unmount();
     });
     container.remove();
+  });
+});
+
+describe('useGridTablePersistence shared Namespaces filter', () => {
+  const ALL_NAMESPACES = 'namespace:all';
+  const CLUSTER_A = 'path-a:context-a';
+  const CLUSTER_B = 'path-b:context-b';
+
+  let container: HTMLDivElement;
+  let root: ReactDOM.Root;
+
+  beforeEach(() => {
+    latestState = null;
+    vi.useFakeTimers();
+    resetAppPreferencesCacheForTesting();
+    resetGridTablePersistenceCacheForTesting();
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    vi.useRealTimers();
+  });
+
+  interface TableProps {
+    viewId: string;
+    clusterIdentity?: string;
+    shareNamespaceFilter?: boolean;
+  }
+
+  const AllNamespacesTable: React.FC<TableProps> = ({
+    viewId,
+    clusterIdentity = CLUSTER_A,
+    shareNamespaceFilter = true,
+  }) => {
+    const state = useGridTablePersistence<Row>({
+      viewId,
+      clusterIdentity,
+      namespace: ALL_NAMESPACES,
+      isNamespaceScoped: false,
+      columns,
+      shareNamespaceFilter,
+    });
+
+    useEffect(() => {
+      latestState = state;
+    }, [state]);
+
+    return null;
+  };
+
+  const expectedStorageKey = async ({ viewId, clusterIdentity = CLUSTER_A }: TableProps) =>
+    buildGridTableStorageKey({
+      clusterHash: await computeClusterHash(clusterIdentity),
+      viewId,
+      namespace: ALL_NAMESPACES,
+    });
+
+  // Navigating between All Namespaces views unmounts one view and mounts the
+  // next, so each call remounts unless the caller keeps the same instance.
+  const showTable = async (props: TableProps, { remount = true } = {}) => {
+    const key = remount ? `${props.clusterIdentity ?? CLUSTER_A}|${props.viewId}` : 'table';
+    await act(async () => {
+      root.render(<AllNamespacesTable key={key} {...props} />);
+    });
+    const storageKey = await expectedStorageKey(props);
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      if (latestState?.hydrated && latestState.storageKey === storageKey) {
+        return getLatestState();
+      }
+    }
+    throw new Error(`Table ${props.viewId} never hydrated for ${storageKey}`);
+  };
+
+  const selectNamespaces = async (filters: Partial<GridTableFilterState>) => {
+    await act(async () => {
+      getLatestState().setFilters({ ...DEFAULT_GRID_TABLE_FILTER_STATE, ...filters });
+    });
+  };
+
+  const flushSaves = async () => {
+    await act(async () => {
+      vi.runAllTimers();
+    });
+  };
+
+  it('carries the Namespaces selection, and only that filter, between All Namespaces tables', async () => {
+    await showTable({ viewId: 'namespace-workloads' });
+    await selectNamespaces({
+      namespaces: { mode: 'some', values: ['team-a'] },
+      kinds: { mode: 'some', values: ['Deployment'] },
+    });
+    await flushSaves();
+
+    const config = await showTable({ viewId: 'namespace-config' });
+    expect(config.filters.namespaces).toEqual({ mode: 'some', values: ['team-a'] });
+    expect(config.filters.kinds).toEqual({ mode: 'all' });
+
+    await selectNamespaces({ namespaces: { mode: 'all' } });
+    await flushSaves();
+
+    const workloads = await showTable({ viewId: 'namespace-workloads' });
+    expect(workloads.filters.namespaces).toEqual({ mode: 'all' });
+    expect(workloads.filters.kinds).toEqual({ mode: 'some', values: ['Deployment'] });
+  });
+
+  it('carries a selection made immediately before navigating to another view', async () => {
+    await showTable({ viewId: 'namespace-workloads' });
+    await selectNamespaces({ namespaces: { mode: 'some', values: ['team-a'] } });
+
+    const events = await showTable({ viewId: 'namespace-events' });
+
+    expect(events.filters.namespaces).toEqual({ mode: 'some', values: ['team-a'] });
+  });
+
+  it('keeps the shared selection per cluster, including when a mounted table switches cluster', async () => {
+    await showTable({ viewId: 'namespace-workloads' }, { remount: false });
+    await selectNamespaces({ namespaces: { mode: 'some', values: ['team-a'] } });
+    await flushSaves();
+
+    const otherCluster = await showTable(
+      { viewId: 'namespace-workloads', clusterIdentity: CLUSTER_B },
+      { remount: false }
+    );
+    expect(otherCluster.filters.namespaces).toEqual({ mode: 'all' });
+
+    const backOnFirstCluster = await showTable({ viewId: 'namespace-config' });
+    expect(backOnFirstCluster.filters.namespaces).toEqual({ mode: 'some', values: ['team-a'] });
+  });
+
+  it('leaves tables that do not share the filter with their own Namespaces selection', async () => {
+    await showTable({ viewId: 'namespace-workloads' });
+    await selectNamespaces({ namespaces: { mode: 'some', values: ['team-a'] } });
+    await flushSaves();
+
+    const pods = await showTable({ viewId: 'namespace-pods', shareNamespaceFilter: false });
+    expect(pods.filters.namespaces).toEqual({ mode: 'all' });
+    await selectNamespaces({ namespaces: { mode: 'some', values: ['team-z'] } });
+    await flushSaves();
+
+    const config = await showTable({ viewId: 'namespace-config' });
+    expect(config.filters.namespaces).toEqual({ mode: 'some', values: ['team-a'] });
   });
 });

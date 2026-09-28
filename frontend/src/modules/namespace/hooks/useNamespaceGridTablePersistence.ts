@@ -102,6 +102,7 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
     filterOptions,
     pageSizeOptions,
     enabled,
+    shareNamespaceFilter: !isNamespaceScoped,
   });
 
   const sortConfig = useMemo<SortConfig>(

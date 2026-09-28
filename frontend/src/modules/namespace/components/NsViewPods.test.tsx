@@ -54,6 +54,7 @@ const {
   scopedLifecycleMock,
   setFiltersMock,
   persistedFiltersRef,
+  gridPersistenceParamsRef,
   runObjectActionMock,
   errorHandlerMock,
 } = vi.hoisted(() => ({
@@ -82,6 +83,7 @@ const {
       includeMetadata: false,
     } as GridTableFilterState,
   },
+  gridPersistenceParamsRef: { current: null as { shareNamespaceFilter?: boolean } | null },
   runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   errorHandlerMock: { handle: vi.fn() },
 }));
@@ -209,21 +211,24 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => {
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => {
   return {
-    useGridTablePersistence: () => ({
-      storageKey: 'gridtable:v1:alpha:namespace-pods',
-      sortConfig: { key: 'name', direction: 'asc' },
-      setSortConfig: vi.fn(),
-      columnWidths: {},
-      setColumnWidths: vi.fn(),
-      columnVisibility: null,
-      setColumnVisibility: vi.fn(),
-      filters: persistedFiltersRef.current,
-      setFilters: setFiltersMock,
-      pageSize: null,
-      setPageSize: vi.fn(),
-      resetState: vi.fn(),
-      hydrated: true,
-    }),
+    useGridTablePersistence: (params: { shareNamespaceFilter?: boolean }) => {
+      gridPersistenceParamsRef.current = params;
+      return {
+        storageKey: 'gridtable:v1:alpha:namespace-pods',
+        sortConfig: { key: 'name', direction: 'asc' },
+        setSortConfig: vi.fn(),
+        columnWidths: {},
+        setColumnWidths: vi.fn(),
+        columnVisibility: null,
+        setColumnVisibility: vi.fn(),
+        filters: persistedFiltersRef.current,
+        setFilters: setFiltersMock,
+        pageSize: null,
+        setPageSize: vi.fn(),
+        resetState: vi.fn(),
+        hydrated: true,
+      };
+    },
   };
 });
 
@@ -699,6 +704,9 @@ describe('NsViewPods', () => {
     };
     await renderPods(props);
 
+    // Workload selection rewrites this pane's Namespace filter, so it must not
+    // leak into the selection the All Namespaces views share.
+    expect(gridPersistenceParamsRef.current?.shareNamespaceFilter ?? false).toBe(false);
     expect(setFiltersMock).toHaveBeenCalledWith({
       search: '',
       kinds: { mode: 'all' },

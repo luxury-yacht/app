@@ -65,6 +65,14 @@ placement and zoom follow [interaction boundaries](gridtable-interaction.md#inte
 - Use query-backed search when upstream query parameters shape the dataset.
 - Namespace filters must preserve cluster-scoped resources where the table
   includes them.
+- All Namespaces tables that show the Namespaces filter share one selection per
+  cluster, so a selection follows the user between All Namespaces views.
+  `useGridTablePersistence({ shareNamespaceFilter })` keeps it in the cluster's
+  `shared-namespace-filter` entry, saved immediately rather than debounced
+  because navigation unmounts the table; the table's own entry stores its other
+  filters with Namespaces at `all`. The Workloads route's Pods pane opts out
+  because workload selection rewrites its Namespaces filter. Single-namespace and
+  cluster views never read the shared selection.
 - Multi-cluster local tables use the first-class Cluster filter. Dropdown option
   values and row accessors carry `clusterId`; context names are display labels
   only. Build the option vocabulary from the table's full open-cluster scope so
