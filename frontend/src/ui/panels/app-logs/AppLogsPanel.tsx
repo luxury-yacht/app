@@ -18,6 +18,7 @@ import {
   filterSelectionToDropdownValues,
   isNarrowingFilterSelection,
   type MultiSelectFilterSelection,
+  multiSelectFilterTriggerLabel,
   pruneFilterSelectionToOptions,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
@@ -838,7 +839,13 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
             showBulkActions
             ariaLabel="Filter by cluster"
             renderOption={renderClusterOption}
-            renderValue={() => 'Clusters'}
+            renderValue={(value) =>
+              multiSelectFilterTriggerLabel(
+                'Clusters',
+                clusterFilter,
+                normalizeDropdownValue(value)
+              )
+            }
           />
 
           <Dropdown
@@ -849,7 +856,13 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
             showBulkActions
             ariaLabel="Filter by component"
             renderOption={renderLogFilterOption}
-            renderValue={() => 'Components'}
+            renderValue={(value) =>
+              multiSelectFilterTriggerLabel(
+                'Components',
+                componentFilter,
+                normalizeDropdownValue(value)
+              )
+            }
           />
 
           <Dropdown
@@ -860,7 +873,13 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
             showBulkActions
             ariaLabel="Filter by log level"
             renderOption={renderLogFilterOption}
-            renderValue={() => 'Log Levels'}
+            renderValue={(value) =>
+              multiSelectFilterTriggerLabel(
+                'Log Levels',
+                logLevelFilter,
+                normalizeDropdownValue(value)
+              )
+            }
           />
 
           <div className="app-logs-filter-group">

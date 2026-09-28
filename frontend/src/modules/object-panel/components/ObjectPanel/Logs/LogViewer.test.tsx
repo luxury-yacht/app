@@ -168,11 +168,16 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     onChange,
     options = [],
     multiple = false,
+    renderValue,
   }: {
     value?: string | string[];
     onChange?: (v: string | string[]) => void;
     options?: Array<{ label?: string; value: string; disabled?: boolean }>;
     multiple?: boolean;
+    renderValue?: (
+      value: string | string[],
+      options: Array<{ label: string; value: string }>
+    ) => React.ReactNode;
   }) => {
     const testId =
       multiple ||
@@ -187,27 +192,36 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
           ? 'pod-options-dropdown'
           : 'pod-filter-dropdown';
     return (
-      <select
-        data-testid={testId}
-        multiple={multiple}
-        value={value}
-        onChange={(event) => {
-          const target = event.target as HTMLSelectElement;
-          onChange?.(
-            multiple
-              ? Array.from(target.selectedOptions).map((option) => option.value)
-              : target.value
-          );
-        }}
-      >
-        {withStableListKeys(options ?? [], (opt) => `${opt?.value ?? ''}:${opt?.label ?? ''}`).map(
-          ({ key, value: opt }) => (
+      <>
+        <span data-testid={`${testId}-value`}>
+          {renderValue?.(
+            value,
+            options.map((opt) => ({ value: opt.value, label: opt.label ?? opt.value }))
+          )}
+        </span>
+        <select
+          data-testid={testId}
+          multiple={multiple}
+          value={value}
+          onChange={(event) => {
+            const target = event.target as HTMLSelectElement;
+            onChange?.(
+              multiple
+                ? Array.from(target.selectedOptions).map((option) => option.value)
+                : target.value
+            );
+          }}
+        >
+          {withStableListKeys(
+            options ?? [],
+            (opt) => `${opt?.value ?? ''}:${opt?.label ?? ''}`
+          ).map(({ key, value: opt }) => (
             <option key={key} value={opt?.value} disabled={Boolean(opt?.disabled)}>
               {opt?.label ?? opt?.value}
             </option>
-          )
-        )}
-      </select>
+          ))}
+        </select>
+      </>
     );
   },
 }));
@@ -2101,9 +2115,13 @@ describe('LogViewer active pod synchronisation', () => {
     expect(optionLabels).toContain('Pods');
     expect(optionLabels).toContain('Init Containers');
     expect(optionLabels).toContain('Containers');
+    const workloadFilterLabel = () =>
+      container.querySelector('[data-testid="pod-container-dropdown-value"]')?.textContent;
+    expect(workloadFilterLabel()).toBe('Logs');
 
     await setMultiSelectValues(workloadFilter, ['pod:web-1', 'container:app']);
     await flushAsync();
+    expect(workloadFilterLabel()).toBe('Logs (2)');
 
     const filteredLines = Array.from(container.querySelectorAll('.log-viewer-line')).map((el) =>
       el.textContent?.replace(/\s+/g, ' ').trim()
@@ -2125,6 +2143,7 @@ describe('LogViewer active pod synchronisation', () => {
       'No logs match the current filters'
     );
     expect(getContainerLogsStreamScopeParams(defaultScope)).toEqual({ matchNone: true });
+    expect(workloadFilterLabel()).toBe('Logs (0)');
   });
 
   it('filters workload logs when pod and container metadata are clicked', async () => {

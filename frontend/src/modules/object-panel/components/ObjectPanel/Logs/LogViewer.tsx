@@ -14,6 +14,7 @@ import {
   ALL_MULTISELECT_FILTER,
   filterSelectionValues,
   isNarrowingFilterSelection,
+  multiSelectFilterTriggerLabel,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
@@ -322,40 +323,6 @@ const CONTAINER_FILTER_VALUE: Record<LogContainerKind, (container: string) => st
 
 const toContainerFilterValueForKind = (container: string, kind: LogContainerKind): string =>
   CONTAINER_FILTER_VALUE[kind](container);
-
-const summarizeWorkloadSelection = (
-  selectedValues: string[],
-  options: DropdownOption[]
-): string => {
-  if (selectedValues.length === 0) {
-    return 'All Logs';
-  }
-
-  if (selectedValues.length === 1) {
-    return options.find((option) => option.value === selectedValues[0])?.label ?? 'All Logs';
-  }
-
-  const podCount = selectedValues.filter((value) => value.startsWith(POD_FILTER_PREFIX)).length;
-  const initContainerCount = selectedValues.filter((value) =>
-    value.startsWith(INIT_FILTER_PREFIX)
-  ).length;
-  const containerCount = selectedValues.filter(
-    (value) => value.startsWith(CONTAINER_FILTER_PREFIX) || value.startsWith(DEBUG_FILTER_PREFIX)
-  ).length;
-  const labels: string[] = [];
-
-  if (podCount > 0) {
-    labels.push(`${podCount} Pod${podCount === 1 ? '' : 's'}`);
-  }
-  if (initContainerCount > 0) {
-    labels.push(`${initContainerCount} Init Container${initContainerCount === 1 ? '' : 's'}`);
-  }
-  if (containerCount > 0) {
-    labels.push(`${containerCount} Container${containerCount === 1 ? '' : 's'}`);
-  }
-
-  return labels.join(', ');
-};
 
 const formatSelectedFilterLabel = (
   filterValue: string,
@@ -1237,8 +1204,8 @@ const LogViewerControls = ({
             multiple
             showBulkActions
             placeholder={isPendingLogs ? 'Loading logs…' : 'All Logs'}
-            renderValue={(value, options) =>
-              summarizeWorkloadSelection(normalizeDropdownValue(value), options)
+            renderValue={(value) =>
+              multiSelectFilterTriggerLabel('Logs', selectedFilters, normalizeDropdownValue(value))
             }
             className="logs-viewer-selector-dropdown"
           />

@@ -6,6 +6,7 @@ import {
   filterSelectionMatches,
   filterSelectionToDropdownValues,
   migrateLegacyMultiSelectFilterSelection,
+  multiSelectFilterTriggerLabel,
   NONE_MULTISELECT_FILTER,
   normalizeExactMultiSelectFilterSelection,
   normalizeMultiSelectFilterSelection,
@@ -85,6 +86,16 @@ describe('multiSelectFilterSelection', () => {
         { value: '__empty__', label: '__empty__' },
       ])
     ).toEqual(['', '__empty__']);
+  });
+
+  it('shows no count for an all selection and a checked count otherwise, including zero', () => {
+    expect(multiSelectFilterTriggerLabel('Kinds', ALL_MULTISELECT_FILTER, ['alpha', 'beta'])).toBe(
+      'Kinds'
+    );
+    expect(
+      multiSelectFilterTriggerLabel('Kinds', { mode: 'some', values: ['alpha'] }, ['alpha'])
+    ).toBe('Kinds (1)');
+    expect(multiSelectFilterTriggerLabel('Kinds', NONE_MULTISELECT_FILTER, [])).toBe('Kinds (0)');
   });
 
   it('preserves case-distinct identity values for exact selections', () => {

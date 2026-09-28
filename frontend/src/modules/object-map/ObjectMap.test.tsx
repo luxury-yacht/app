@@ -1126,6 +1126,7 @@ describe('ObjectMap', () => {
     expect(kindTrigger).toBeTruthy();
     expect(container.querySelector('[data-testid="mock-node-deploy"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="mock-node-pod"]')).toBeTruthy();
+    expect(kindTrigger?.querySelector('.dropdown-value')?.textContent).toBe('Kinds');
 
     await act(async () => {
       requireValue(kindTrigger, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
@@ -1149,6 +1150,7 @@ describe('ObjectMap', () => {
       );
       await Promise.resolve();
     });
+    expect(kindTrigger?.querySelector('.dropdown-value')?.textContent).toBe('Kinds (0)');
 
     const nextPodOption = Array.from(
       document.body.querySelectorAll<HTMLElement>('.dropdown-option')

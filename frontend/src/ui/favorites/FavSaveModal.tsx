@@ -18,6 +18,7 @@ import {
   filterSelectionToDropdownValues,
   filterSelectionValues,
   type MultiSelectFilterSelection,
+  multiSelectFilterTriggerLabel,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { FavoriteGenericIcon } from '@shared/components/icons/FavoriteIcons';
@@ -94,18 +95,6 @@ const mergeSavedOptions = (
       .filter((value) => !values.has(value))
       .map((value) => ({ value, label: value })),
   ];
-};
-
-const semanticSelectionDisplayValue = (
-  selection: MultiSelectFilterSelection
-): string | undefined => {
-  if (selection.mode === 'all') {
-    return 'All';
-  }
-  if (selection.mode === 'none') {
-    return 'None';
-  }
-  return `${selection.values.length} selected`;
 };
 
 interface FavoritePaneFiltersProps {
@@ -194,7 +183,13 @@ const FavoritePaneFilters: React.FC<FavoritePaneFiltersProps> = ({
                 id={`${elementIdPrefix}-${pane.id}-${definition.key}`}
                 options={options}
                 value={filterSelectionToDropdownValues(selection, options, comparison)}
-                displayValue={semanticSelectionDisplayValue(selection)}
+                renderValue={(value) =>
+                  multiSelectFilterTriggerLabel(
+                    definition.label,
+                    selection,
+                    normalizeDropdownValue(value)
+                  )
+                }
                 onChange={(value) => {
                   const next = filterSelectionFromDropdownValues(
                     normalizeDropdownValue(value),

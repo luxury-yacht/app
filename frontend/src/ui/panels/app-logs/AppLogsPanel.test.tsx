@@ -22,8 +22,9 @@ interface CapturedDropdownProps {
   options: DropdownOption[];
   onChange: (value: string | string[]) => void;
   renderOption?: (option: DropdownOption, isSelected: boolean) => ReactNode;
-  renderValue: () => string;
+  renderValue: (value: string | string[], options: DropdownOption[]) => ReactNode;
   showBulkActions?: boolean;
+  ariaLabel: string;
 }
 
 const getAppLogsMock = vi.hoisted(() => vi.fn());
@@ -62,7 +63,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
   Dropdown: (props: CapturedDropdownProps) => {
     dropdownInstances.push(props);
-    return <div data-testid={`dropdown-${props.renderValue()}`}></div>;
+    return <div data-testid={`dropdown-${props.ariaLabel}`}></div>;
   },
 }));
 
@@ -159,8 +160,13 @@ const setInputValue = (input: HTMLInputElement, value: string) => {
   setter?.call(input, value);
 };
 
-const latestDropdown = (renderValue: string) =>
-  [...dropdownInstances].reverse().find((instance) => instance.renderValue() === renderValue);
+const latestDropdown = (ariaLabel: string) =>
+  [...dropdownInstances].reverse().find((instance) => instance.ariaLabel === ariaLabel);
+
+const triggerText = (ariaLabel: string) => {
+  const instance = latestDropdown(ariaLabel);
+  return instance?.renderValue(instance.value, instance.options);
+};
 
 let restoreClipboard: (() => void) | undefined;
 
@@ -437,8 +443,8 @@ describe('AppLogsPanel', () => {
     const countBadge = container.querySelector('.app-logs-count');
     expect(countBadge?.textContent).toBe('(2)');
 
-    const logLevelsDropdown = latestDropdown('Log Levels');
-    const componentsDropdown = latestDropdown('Components');
+    const logLevelsDropdown = latestDropdown('Filter by log level');
+    const componentsDropdown = latestDropdown('Filter by component');
     expect(logLevelsDropdown).toBeTruthy();
     expect(componentsDropdown).toBeTruthy();
 
@@ -448,25 +454,28 @@ describe('AppLogsPanel', () => {
     });
 
     await act(async () => {
-      latestDropdown('Components')?.onChange(['core']);
+      latestDropdown('Filter by component')?.onChange(['core']);
       await Promise.resolve();
     });
 
     expect(countBadge?.textContent).toBe('(1 / 2)');
+    expect(triggerText('Filter by component')).toBe('Components (1)');
 
     await act(async () => {
-      latestDropdown('Components')?.onChange(['core', 'worker']);
+      latestDropdown('Filter by component')?.onChange(['core', 'worker']);
       await Promise.resolve();
     });
 
     expect(countBadge?.textContent).toBe('(2)');
+    expect(triggerText('Filter by component')).toBe('Components');
 
     await act(async () => {
-      latestDropdown('Components')?.onChange([]);
+      latestDropdown('Filter by component')?.onChange([]);
       await Promise.resolve();
     });
 
     expect(countBadge?.textContent).toBe('(0 / 2)');
+    expect(triggerText('Filter by component')).toBe('Components (0)');
 
     cleanup();
   });
@@ -500,7 +509,7 @@ describe('AppLogsPanel', () => {
       '[alpha]'
     );
 
-    const clustersDropdown = latestDropdown('Clusters');
+    const clustersDropdown = latestDropdown('Filter by cluster');
     expect(clustersDropdown).toBeTruthy();
     expect(clustersDropdown?.options.map((option) => option.label)).toEqual([
       'kube-alpha:alpha',
@@ -554,10 +563,12 @@ describe('AppLogsPanel', () => {
     const { container, cleanup } = await renderPanel();
     try {
       await flushInitialLoad();
-      expect(latestDropdown('Clusters')?.value).toEqual(expect.arrayContaining(clusterIds));
+      expect(latestDropdown('Filter by cluster')?.value).toEqual(
+        expect.arrayContaining(clusterIds)
+      );
 
       await act(async () => {
-        latestDropdown('Clusters')?.onChange([clusterIds[0]]);
+        latestDropdown('Filter by cluster')?.onChange([clusterIds[0]]);
       });
       expect(
         Array.from(
@@ -565,10 +576,10 @@ describe('AppLogsPanel', () => {
           (entry) => entry.textContent
         )
       ).toEqual([clusterIds[0]]);
-      expect(latestDropdown('Clusters')?.value).toEqual([clusterIds[0]]);
+      expect(latestDropdown('Filter by cluster')?.value).toEqual([clusterIds[0]]);
 
       await act(async () => {
-        latestDropdown('Clusters')?.onChange(clusterIds);
+        latestDropdown('Filter by cluster')?.onChange(clusterIds);
       });
       expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
       getAppLogsSinceMock.mockResolvedValue([
@@ -579,7 +590,7 @@ describe('AppLogsPanel', () => {
         await Promise.resolve();
       });
       expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
-      expect(latestDropdown('Clusters')?.value).toEqual(clusterIds);
+      expect(latestDropdown('Filter by cluster')?.value).toEqual(clusterIds);
     } finally {
       cleanup();
     }
@@ -613,7 +624,7 @@ describe('AppLogsPanel', () => {
     );
     expect(clusters).toEqual(['[Global]', '[alpha]']);
 
-    const clustersDropdown = latestDropdown('Clusters');
+    const clustersDropdown = latestDropdown('Filter by cluster');
     expect(clustersDropdown?.options.map((option) => option.label)).toEqual([
       'Global',
       'kube-alpha:alpha',
@@ -657,9 +668,9 @@ describe('AppLogsPanel', () => {
 
     await flushInitialLoad();
 
-    const logLevelsDropdown = latestDropdown('Log Levels');
-    const componentsDropdown = latestDropdown('Components');
-    const clustersDropdown = latestDropdown('Clusters');
+    const logLevelsDropdown = latestDropdown('Filter by log level');
+    const componentsDropdown = latestDropdown('Filter by component');
+    const clustersDropdown = latestDropdown('Filter by cluster');
 
     expect(logLevelsDropdown?.showBulkActions).toBe(true);
     expect(componentsDropdown?.showBulkActions).toBe(true);

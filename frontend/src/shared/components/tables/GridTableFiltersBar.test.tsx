@@ -148,9 +148,6 @@ describe('GridTableFiltersBar', () => {
             onReset={vi.fn()}
             onToggleCaseSensitive={vi.fn()}
             renderOption={(option) => option.label}
-            renderKindsValue={() => 'Kinds'}
-            renderNamespacesValue={() => 'Namespaces'}
-            renderClustersValue={() => 'Clusters'}
             {...props}
           />
         </ZoomProvider>
@@ -472,9 +469,6 @@ describe('GridTableFiltersBar', () => {
             onReset={vi.fn()}
             onToggleCaseSensitive={vi.fn()}
             renderOption={(option) => option.label}
-            renderKindsValue={() => 'Kinds'}
-            renderNamespacesValue={() => 'Namespaces'}
-            renderClustersValue={() => 'Clusters'}
           />
         </ZoomProvider>
       );

@@ -137,7 +137,6 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     disabled,
     searchable,
     showBulkActions,
-    displayValue,
     multiple,
     dropdownClassName,
     renderOption,
@@ -155,7 +154,6 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
           disabled={disabled}
           data-searchable={searchable ? 'true' : 'false'}
           data-bulk-actions={showBulkActions ? 'true' : 'false'}
-          data-display-value={typeof displayValue === 'string' ? displayValue : undefined}
           onChange={(e) => onChange(e.target.value)}
         >
           {opts.map((option) => (
@@ -535,10 +533,10 @@ describe('FavSaveModal', () => {
       })
     );
 
-    const kinds = container.querySelector('[data-testid="dropdown-All kinds"]');
-    const namespaces = container.querySelector('[data-testid="dropdown-All namespaces"]');
-    expect(kinds?.getAttribute('data-display-value')).toBe('All');
-    expect(namespaces?.getAttribute('data-display-value')).toBe('None');
+    const kinds = container.querySelector('[data-testid="dropdown-value-All kinds"]');
+    const namespaces = container.querySelector('[data-testid="dropdown-value-All namespaces"]');
+    expect(kinds?.textContent).toBe('Kinds');
+    expect(namespaces?.textContent).toBe('Namespaces (0)');
   });
 
   it('does not close when overlay is clicked', async () => {

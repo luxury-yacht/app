@@ -191,31 +191,6 @@ export function useGridTableFiltersPresentation<T>({
     []
   );
 
-  const renderKindsValue = useCallback(
-    (_value: string | string[], _options: DropdownOption[]) => {
-      const count = activeFilters.kinds.mode === 'some' ? activeFilters.kinds.values.length : 0;
-      return count > 0 ? `Kinds (${count})` : 'Kinds';
-    },
-    [activeFilters.kinds]
-  );
-  const renderNamespacesValue = useCallback(
-    (value: string | string[], _options: DropdownOption[]) => {
-      void value;
-      const count =
-        activeFilters.namespaces.mode === 'some' ? activeFilters.namespaces.values.length : 0;
-      return count > 0 ? `Namespaces (${count})` : 'Namespaces';
-    },
-    [activeFilters.namespaces]
-  );
-  const renderClustersValue = useCallback(
-    (value: string | string[], _options: DropdownOption[]) => {
-      void value;
-      const count =
-        activeFilters.clusters.mode === 'some' ? activeFilters.clusters.values.length : 0;
-      return count > 0 ? `Clusters (${count})` : 'Clusters';
-    },
-    [activeFilters.clusters]
-  );
   const renderColumnsValue = useCallback(
     (_value: string | string[], _options: DropdownOption[]) => 'Columns',
     []
@@ -341,9 +316,6 @@ export function useGridTableFiltersPresentation<T>({
       showNamespaceDropdown,
       showClusterDropdown,
       renderOption: renderFilterOption,
-      renderKindsValue,
-      renderNamespacesValue,
-      renderClustersValue,
       renderColumnsValue: columnsDropdown?.renderValue ?? renderColumnsValue,
       columnOptions: columnsDropdown?.options,
       columnValue: columnsDropdown?.value,
@@ -385,9 +357,6 @@ export function useGridTableFiltersPresentation<T>({
       showNamespaceDropdown,
       showClusterDropdown,
       renderFilterOption,
-      renderKindsValue,
-      renderNamespacesValue,
-      renderClustersValue,
       columnsDropdown,
       renderColumnsValue,
       showColumnsDropdown,

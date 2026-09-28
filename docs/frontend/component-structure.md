@@ -78,6 +78,12 @@ Selection is a real checkbox, not a text glyph, and it is decided in one place.
 `Dropdown` also adds the multi-select menu styling (`dropdown-filter-menu`)
 whenever `multiple` is set, so consumers never pass that class.
 
+A multi-select filter's trigger text comes from `multiSelectFilterTriggerLabel`
+(`shared/components/dropdowns/multiSelectFilterSelection.ts`): the bare label
+when everything is selected, and `Label (N)` otherwise, including `Label (0)`,
+so an empty selection never looks unfiltered. Column-visibility menus keep
+their own `Columns` text.
+
 - Do not hand-roll `.dropdown-filter-option` / `.dropdown-filter-box` markup in a
   feature renderer. Before this component existed the same markup was duplicated
   seven times across five files and drifted apart.

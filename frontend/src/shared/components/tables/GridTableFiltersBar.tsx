@@ -13,6 +13,7 @@ import {
   ALL_MULTISELECT_FILTER,
   filterSelectionToDropdownValues,
   type MultiSelectFilterSelection,
+  multiSelectFilterTriggerLabel,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import {
@@ -52,9 +53,6 @@ interface GridTableFiltersBarProps {
   /** Toggle the case-sensitive search filter. */
   onToggleCaseSensitive: () => void;
   renderOption: (option: DropdownOption, isSelected: boolean) => React.ReactNode;
-  renderKindsValue: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
-  renderNamespacesValue: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
-  renderClustersValue: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
   renderColumnsValue?: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
   columnOptions?: DropdownOption[];
   columnValue?: string[];
@@ -101,7 +99,8 @@ interface ResolvedMultiselectFilterControl {
   name: string;
   label: string;
   singularLabel: string;
-  clearLabel: string;
+  /** Names the filter on its dropdown trigger and in its clear action. */
+  triggerLabel: string;
   placeholder: string;
   placement: FilterControlPlacement;
   visible: boolean;
@@ -111,7 +110,6 @@ interface ResolvedMultiselectFilterControl {
   options: DropdownOption[];
   onChange: (value: string | string[]) => void;
   onClear: () => void;
-  renderValue: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
 }
 
 type PrimaryFilterItem =
@@ -180,7 +178,7 @@ function buildActiveFilterChips(
     chips.push({
       key: control.key,
       label,
-      removeLabel: `Clear ${control.clearLabel} filter`,
+      removeLabel: `Clear ${control.triggerLabel} filter`,
       onRemove: control.onClear,
     });
   }
@@ -364,9 +362,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   onReset,
   onToggleCaseSensitive,
   renderOption,
-  renderKindsValue,
-  renderNamespacesValue,
-  renderClustersValue,
   renderColumnsValue = () => 'Columns',
   columnOptions,
   columnValue,
@@ -415,7 +410,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       name: 'gridtable-filter-kind',
       label: 'Kinds',
       singularLabel: 'Kind',
-      clearLabel: 'Kinds',
+      triggerLabel: 'Kinds',
       placeholder: 'All kinds',
       placement: 'kind',
       visible: showKindDropdown,
@@ -425,7 +420,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       options: resolvedFilterOptions.kinds,
       onChange: onKindsChange,
       onClear: () => onFiltersChange({ kinds: ALL_MULTISELECT_FILTER }),
-      renderValue: renderKindsValue,
     },
     {
       key: 'namespaces',
@@ -434,7 +428,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       name: 'gridtable-filter-namespace',
       label: 'Namespaces',
       singularLabel: 'Namespace',
-      clearLabel: 'Namespaces',
+      triggerLabel: 'Namespaces',
       placeholder: 'All namespaces',
       placement: 'namespace',
       visible: showNamespaceDropdown,
@@ -444,7 +438,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       options: resolvedFilterOptions.namespaces,
       onChange: onNamespacesChange,
       onClear: () => onFiltersChange({ namespaces: ALL_MULTISELECT_FILTER }),
-      renderValue: renderNamespacesValue,
     },
     {
       key: 'clusters',
@@ -453,7 +446,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       name: 'gridtable-filter-cluster',
       label: 'Clusters',
       singularLabel: 'Cluster',
-      clearLabel: 'Clusters',
+      triggerLabel: 'Clusters',
       placeholder: 'All clusters',
       placement: 'cluster',
       visible: showClusterDropdown,
@@ -463,11 +456,9 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       options: resolvedFilterOptions.clusters ?? [],
       onChange: onClustersChange,
       onClear: () => onFiltersChange({ clusters: ALL_MULTISELECT_FILTER }),
-      renderValue: renderClustersValue,
     },
     ...queryFacets.map((facet): ResolvedMultiselectFilterControl => {
       const selection = activeFilters.queryFacets?.[facet.key] ?? ALL_MULTISELECT_FILTER;
-      const count = selection.mode === 'some' ? selection.values.length : 0;
       return {
         key: `query-facet-${facet.key}`,
         role: `query-facet-${facet.key}`,
@@ -475,7 +466,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         name: `gridtable-filter-${facet.key}`,
         label: queryFacetChipType(facet),
         singularLabel: queryFacetChipSingularType(facet),
-        clearLabel: facet.label,
+        triggerLabel: facet.label,
         placeholder: facet.placeholder,
         placement: facet.placement === 'before-kinds' ? 'before-kinds' : 'after-clusters',
         visible: true,
@@ -491,7 +482,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
               [facet.key]: ALL_MULTISELECT_FILTER,
             },
           }),
-        renderValue: () => (count > 0 ? `${facet.label} (${count})` : facet.label),
       };
     }),
   ];
@@ -532,32 +522,37 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
 
   const activeFilterChips = buildActiveFilterChips(activeFilters, filterControls, onFiltersChange);
 
-  const renderFilterControl = (control: ResolvedMultiselectFilterControl) => (
-    <div
-      key={control.key}
-      className="gridtable-filter-group"
-      data-gridtable-filter-role={control.role}
-    >
-      <Dropdown
-        id={control.id}
-        name={control.name}
-        multiple
-        searchable={control.searchable}
-        showBulkActions={control.bulkActions}
-        placeholder={control.placeholder}
-        value={filterSelectionToDropdownValues(
-          control.selection,
-          control.options,
-          control.key === 'clusters' ? 'exact' : 'case-insensitive'
-        )}
-        options={control.options}
-        disabled={!control.options.length}
-        onChange={control.onChange}
-        renderOption={renderOption}
-        renderValue={control.renderValue}
-      />
-    </div>
-  );
+  const renderFilterControl = (control: ResolvedMultiselectFilterControl) => {
+    const checkedValues = filterSelectionToDropdownValues(
+      control.selection,
+      control.options,
+      control.key === 'clusters' ? 'exact' : 'case-insensitive'
+    );
+    return (
+      <div
+        key={control.key}
+        className="gridtable-filter-group"
+        data-gridtable-filter-role={control.role}
+      >
+        <Dropdown
+          id={control.id}
+          name={control.name}
+          multiple
+          searchable={control.searchable}
+          showBulkActions={control.bulkActions}
+          placeholder={control.placeholder}
+          value={checkedValues}
+          options={control.options}
+          disabled={!control.options.length}
+          onChange={control.onChange}
+          renderOption={renderOption}
+          renderValue={() =>
+            multiSelectFilterTriggerLabel(control.triggerLabel, control.selection, checkedValues)
+          }
+        />
+      </div>
+    );
+  };
 
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {

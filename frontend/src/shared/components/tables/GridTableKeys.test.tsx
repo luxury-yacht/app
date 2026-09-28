@@ -109,9 +109,6 @@ describe('GridTableKeys filter target selectors', () => {
       onReset: vi.fn(),
       onToggleCaseSensitive: vi.fn(),
       renderOption: (opt) => opt.label,
-      renderKindsValue: () => 'Kinds',
-      renderNamespacesValue: () => 'Namespaces',
-      renderClustersValue: () => 'Clusters',
       showKindDropdown: true,
       showNamespaceDropdown: true,
       ...overrides,
@@ -240,9 +237,6 @@ describe('GridTableKeys filter target selectors', () => {
             onReset={vi.fn()}
             onToggleCaseSensitive={vi.fn()}
             renderOption={(option) => option.label}
-            renderKindsValue={() => 'Kinds'}
-            renderNamespacesValue={() => 'Namespaces'}
-            renderClustersValue={() => 'Clusters'}
             showKindDropdown
           />
           <div ref={wrapperRef}>
@@ -346,9 +340,6 @@ describe('GridTableKeys filter target selectors', () => {
             onReset={vi.fn()}
             onToggleCaseSensitive={vi.fn()}
             renderOption={(option) => option.label}
-            renderKindsValue={() => 'Kinds'}
-            renderNamespacesValue={() => 'Namespaces'}
-            renderClustersValue={() => 'Clusters'}
             renderColumnsValue={() => 'Columns'}
             showColumnsDropdown
             columnOptions={[{ label: 'Name', value: 'name' }]}

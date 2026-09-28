@@ -1281,6 +1281,23 @@ describe('GridTable interactions (non-virtualized)', () => {
       container.querySelector('[data-gridtable-filter-role="namespace"] .dropdown-value')
         ?.textContent
     ).toBe('Namespaces');
+
+    // An empty selection must not read like the unfiltered "all" state.
+    currentFilters = { ...currentFilters, kinds: { mode: 'none' } };
+    await act(async () => {
+      rerender({
+        data: createRows(5),
+        filters: makeFilters(),
+        virtualization: { enabled: false },
+      });
+      await Promise.resolve();
+    });
+
+    await flushAsync();
+
+    expect(
+      container.querySelector('[data-gridtable-filter-role="kind"] .dropdown-value')?.textContent
+    ).toBe('Kinds (0)');
   });
 
   it('shows a loading overlay when requested', async () => {

@@ -158,6 +158,17 @@ export const filterSelectionMatches = (
 export const isNarrowingFilterSelection = (selection: MultiSelectFilterSelection): boolean =>
   selection.mode !== 'all';
 
+/**
+ * Trigger text for a multi-select filter. An "all" selection shows the bare
+ * label; any narrowing selection shows how many options are checked, including
+ * (0), so an empty selection never reads like an unfiltered one.
+ */
+export const multiSelectFilterTriggerLabel = (
+  label: string,
+  selection: MultiSelectFilterSelection,
+  checkedValues: readonly string[]
+): string => (selection.mode === 'all' ? label : `${label} (${checkedValues.length})`);
+
 export const filterSelectionValues = (
   selection: MultiSelectFilterSelection,
   comparison: FilterValueComparison = 'case-insensitive'
