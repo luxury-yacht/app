@@ -15,6 +15,8 @@
  * that height and clip the first table mid-row.
  */
 
+import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import { normalizeDropdownValue } from '@shared/components/dropdowns/dropdownValue';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import {
   isTableNoValueText,
@@ -22,7 +24,7 @@ import {
   TableCellValue,
 } from '@shared/components/tables/tableNoValue';
 import type React from 'react';
-import { useDeferredValue, useMemo, useState } from 'react';
+import { useDeferredValue, useId, useMemo, useState } from 'react';
 
 import type { BrokerReadRow, ConnectionsRow } from './diagnosticsPanelTypes';
 import { formatLastUpdated } from './diagnosticsPanelUtils';
@@ -33,6 +35,15 @@ const LEAF_KIND_LABELS: Record<'scope' | 'target', string> = {
 };
 
 type BrokerFilter = 'all' | 'Cluster Data' | 'App State';
+
+const BROKER_FILTER_OPTIONS: DropdownOption[] = [
+  { value: 'all', label: 'All' },
+  { value: 'Cluster Data', label: 'Cluster Data' },
+  { value: 'App State', label: 'App State' },
+];
+
+const isBrokerFilter = (value: string): value is BrokerFilter =>
+  BROKER_FILTER_OPTIONS.some((option) => option.value === value);
 
 const LastErrorCell: React.FC<{ value: string; at?: number }> = ({ value, at }) => {
   const hasError = Boolean(value) && !isTableNoValueText(value);
@@ -120,6 +131,7 @@ export const ConnectionsTable: React.FC<ConnectionsTableProps> = ({
   summary,
   callsSummary,
 }) => {
+  const brokerLabelId = useId();
   const [brokerFilter, setBrokerFilter] = useState<BrokerFilter>('all');
   const [showIssuesOnly, setShowIssuesOnly] = useState(false);
   const [query, setQuery] = useState('');
@@ -216,19 +228,22 @@ export const ConnectionsTable: React.FC<ConnectionsTableProps> = ({
                 placeholder="Filter reads"
               />
             </label>
-            <label className="diagnostics-section-filter">
-              <span className="diagnostics-section-filter-label">Broker</span>
-              <select
-                data-diagnostics-focusable="true"
-                className="diagnostics-section-select"
+            <div className="diagnostics-section-filter">
+              <span id={brokerLabelId} className="diagnostics-section-filter-label">
+                Broker
+              </span>
+              <Dropdown
+                options={BROKER_FILTER_OPTIONS}
                 value={brokerFilter}
-                onChange={(event) => setBrokerFilter(event.target.value as BrokerFilter)}
-              >
-                <option value="all">All</option>
-                <option value="Cluster Data">Cluster Data</option>
-                <option value="App State">App State</option>
-              </select>
-            </label>
+                onChange={(value) => {
+                  const next = normalizeDropdownValue(value)[0];
+                  if (next && isBrokerFilter(next)) {
+                    setBrokerFilter(next);
+                  }
+                }}
+                ariaLabelledBy={brokerLabelId}
+              />
+            </div>
             <button
               data-diagnostics-focusable="true"
               type="button"

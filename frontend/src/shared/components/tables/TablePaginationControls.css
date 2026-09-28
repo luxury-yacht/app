@@ -34,14 +34,6 @@
   min-width: 0;
 }
 
-.table-pagination-page-size .dropdown-value {
-  text-align: right;
-}
-
-.dropdown-menu.table-pagination-page-size-menu {
-  min-width: max(5rem, var(--dropdown-menu-anchor-width));
-}
-
 .table-pagination-status {
   display: inline-flex;
   align-items: center;

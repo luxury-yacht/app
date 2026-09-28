@@ -190,7 +190,6 @@ const ObjectMapToolbar: React.FC<ObjectMapToolbarProps> = ({
             id={`${elementIdPrefix}-object-map-kind-filter`}
             name="object-map-kind-filter"
             multiple
-            size="compact"
             searchable
             showBulkActions
             placeholder="All kinds"
@@ -198,7 +197,6 @@ const ObjectMapToolbar: React.FC<ObjectMapToolbarProps> = ({
             options={kindOptions}
             disabled={kindOptions.length === 0}
             onChange={onKindsChange}
-            dropdownClassName="dropdown-filter-menu"
             ariaLabel="Filter map kinds"
             renderOption={renderFilterOption}
             renderValue={renderKindsValue}

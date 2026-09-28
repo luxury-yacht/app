@@ -170,8 +170,8 @@
   color: var(--color-text-secondary);
 }
 
-.diagnostics-section-input,
-.diagnostics-section-select {
+.diagnostics-section-input {
+  width: 12rem;
   min-width: 0;
   height: 1.9rem;
   border: 1px solid var(--color-border);
@@ -180,10 +180,6 @@
   color: var(--color-text);
   font-size: 0.75rem;
   padding: 0 0.55rem;
-}
-
-.diagnostics-section-input {
-  width: 12rem;
 }
 
 .diagnostics-empty td {

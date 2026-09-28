@@ -289,13 +289,12 @@ function renderColumnsDropdown({
         name="gridtable-filter-columns"
         multiple
         showBulkActions
-        size="compact"
         placeholder="Columns"
         value={columnValue}
         options={columnOptions}
         disabled={!columnOptions.length}
         onChange={onColumnsChange}
-        dropdownClassName="dropdown-filter-menu dropdown-columns-menu"
+        dropdownClassName="dropdown-columns-menu"
         renderOption={renderColumnOption}
         renderOptionActions={renderColumnOrderActions}
         getOptionRowProps={getColumnRowProps}
@@ -543,7 +542,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         id={control.id}
         name={control.name}
         multiple
-        size="compact"
         searchable={control.searchable}
         showBulkActions={control.bulkActions}
         placeholder={control.placeholder}
@@ -555,7 +553,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         options={control.options}
         disabled={!control.options.length}
         onChange={control.onChange}
-        dropdownClassName="dropdown-filter-menu"
         renderOption={renderOption}
         renderValue={control.renderValue}
       />

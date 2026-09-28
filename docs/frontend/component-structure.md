@@ -59,6 +59,12 @@ constraints, scroll/resize repositioning, outside-click containment, and popup
 keyboard registration. Consumers may provide a direct popup class through
 `dropdownClassName`; do not style a portaled menu through a trigger ancestor.
 
+Every selectable dropdown uses the shared `Dropdown`, not a native `<select>`,
+and the shared stylesheet (`styles/components/dropdowns.css`) owns its look. A
+consumer may size the trigger to fit its layout slot. Do not restyle the trigger,
+menu, options, or group headers for one feature. Group related options with
+`group: 'header'` rows instead of custom option markup.
+
 A focusable body-level popup must declare its owning popup ID, and a control
 inside the owning modal must reference that ID with `aria-controls`. The shared
 modal focus trap uses that explicit relationship to keep the popup interactive
@@ -69,6 +75,8 @@ without admitting unrelated body content into the modal focus boundary.
 Every multi-select `Dropdown` renders its option content through the shared
 `DropdownFilterOption` (`shared/components/dropdowns/Dropdown/DropdownFilterOption.tsx`).
 Selection is a real checkbox, not a text glyph, and it is decided in one place.
+`Dropdown` also adds the multi-select menu styling (`dropdown-filter-menu`)
+whenever `multiple` is set, so consumers never pass that class.
 
 - Do not hand-roll `.dropdown-filter-option` / `.dropdown-filter-box` markup in a
   feature renderer. Before this component existed the same markup was duplicated

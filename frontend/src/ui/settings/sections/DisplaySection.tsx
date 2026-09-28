@@ -95,7 +95,6 @@ function DisplaySection() {
           value={String(defaultTablePageSize)}
           onChange={handleDefaultTablePageSizeChange}
           ariaLabel="Default page size"
-          size="compact"
           className="settings-page-size-dropdown"
         />
       </SettingRow>

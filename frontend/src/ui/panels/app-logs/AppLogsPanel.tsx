@@ -835,10 +835,8 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
             value={filterSelectionToDropdownValues(clusterFilter, clusterOptions, 'exact')}
             onChange={handleClusterDropdownChange}
             multiple
-            size="small"
             showBulkActions
             ariaLabel="Filter by cluster"
-            dropdownClassName="dropdown-filter-menu"
             renderOption={renderClusterOption}
             renderValue={() => 'Clusters'}
           />
@@ -848,10 +846,8 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
             value={filterSelectionToDropdownValues(componentFilter, componentOptions)}
             onChange={handleComponentDropdownChange}
             multiple
-            size="small"
             showBulkActions
             ariaLabel="Filter by component"
-            dropdownClassName="dropdown-filter-menu"
             renderOption={renderLogFilterOption}
             renderValue={() => 'Components'}
           />
@@ -861,10 +857,8 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
             value={filterSelectionToDropdownValues(logLevelFilter, LOG_LEVEL_BASE_OPTIONS)}
             onChange={handleLogLevelDropdownChange}
             multiple
-            size="small"
             showBulkActions
             ariaLabel="Filter by log level"
-            dropdownClassName="dropdown-filter-menu"
             renderOption={renderLogFilterOption}
             renderValue={() => 'Log Levels'}
           />

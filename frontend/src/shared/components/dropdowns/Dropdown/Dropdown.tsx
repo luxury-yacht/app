@@ -1048,7 +1048,6 @@ const Dropdown = <TMetadata,>({
   onChange,
   placeholder = 'Select...',
   displayValue,
-  variant = 'default',
   disabled = false,
   loading = false,
   error = false,
@@ -1351,7 +1350,6 @@ const Dropdown = <TMetadata,>({
 
   const containerClasses = [
     'dropdown',
-    variant !== 'default' && `variant-${variant}`,
     error && 'error',
     disabled && 'disabled',
     loading && 'loading',
@@ -1367,6 +1365,8 @@ const Dropdown = <TMetadata,>({
     'dropdown-menu--portal',
     `position-${dropdownPosition}`,
     `position-horizontal-${horizontalPosition}`,
+    // Every multi-select menu shares the checkbox-list styling.
+    multiple && 'dropdown-filter-menu',
     dropdownClassName,
   ]
     .filter(Boolean)

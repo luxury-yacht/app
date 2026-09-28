@@ -70,7 +70,6 @@
 }
 
 .dropdown .dropdown-trigger {
-  /* Default/compact/small all use same styling for consistency */
   padding: 0 2rem 0 var(--spacing-md);
   min-height: 12px;
   font-size: var(--font-size-button);
@@ -286,7 +285,7 @@
   padding-right: 2px;
 }
 
-/* Shared multi-select filter styling (Browse filters & Application Logs) */
+/* Multi-select menus: Dropdown adds `dropdown-filter-menu` whenever `multiple` is set. */
 .dropdown-menu.dropdown-filter-menu .dropdown-option {
   gap: 0;
   padding: 3px 12px;
@@ -445,9 +444,9 @@
 .dropdown-group-header {
   padding: 6px 10px 4px 10px;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 400;
   text-transform: uppercase;
-  color: var(--color-text);
+  color: var(--color-text-tertiary);
   background-color: var(--color-bg-secondary);
   border-bottom: 1px solid var(--color-border);
   cursor: default;

@@ -33,8 +33,6 @@ export interface DropdownProps<TMetadata = unknown> {
   // Display props
   placeholder?: string;
   displayValue?: string | ((value: string) => string);
-  size?: 'default' | 'compact' | 'small';
-  variant?: 'default' | 'minimal' | 'outlined';
 
   // State props
   disabled?: boolean;

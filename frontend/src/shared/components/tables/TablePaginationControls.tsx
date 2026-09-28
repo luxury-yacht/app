@@ -143,9 +143,6 @@ const TablePaginationControls: React.FC<TablePaginationControlsProps> = ({
         <Dropdown
           id={`${idPrefix}-page-size`}
           name={`${idPrefix}-page-size`}
-          size="compact"
-          variant="outlined"
-          dropdownClassName="table-pagination-page-size-menu"
           ariaLabel="Rows per page"
           value={String(pageSize)}
           options={pageOptions}

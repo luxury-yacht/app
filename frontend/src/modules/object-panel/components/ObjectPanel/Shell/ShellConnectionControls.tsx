@@ -51,7 +51,6 @@ export default function ShellConnectionControls({
   disabledReason,
 }: Readonly<ShellConnectionControlsProps>) {
   const elementIdPrefix = useId();
-  const shellDropdownMenuClassName = 'shell-tab__dropdown-menu';
   const shellOptions = useMemo<DropdownOption[]>(
     () => [
       { value: '/bin/sh', label: '/bin/sh' },
@@ -78,8 +77,6 @@ export default function ShellConnectionControls({
           options={shellOptions}
           value={commandOverride}
           onChange={handleShellChange}
-          size="compact"
-          dropdownClassName={shellDropdownMenuClassName}
           placeholder="Select shell"
           ariaLabel="Shell command selector"
         />
@@ -138,8 +135,6 @@ export default function ShellConnectionControls({
                   options={debugImageOptions}
                   value={debugImage}
                   onChange={handleDebugImageChange}
-                  size="compact"
-                  dropdownClassName={shellDropdownMenuClassName}
                   placeholder="Select image"
                   ariaLabel="Debug container image"
                 />
@@ -160,8 +155,6 @@ export default function ShellConnectionControls({
                   options={containerOptions}
                   value={debugTarget || containerOptions[0]?.value || ''}
                   onChange={handleDebugTargetChange}
-                  size="compact"
-                  dropdownClassName={shellDropdownMenuClassName}
                   placeholder="Target container"
                   ariaLabel="Target container for process sharing"
                 />
@@ -176,8 +169,6 @@ export default function ShellConnectionControls({
                   options={containerOptions}
                   value={activeContainer || containerOptions[0]?.value || ''}
                   onChange={handleContainerChange}
-                  size="compact"
-                  dropdownClassName={shellDropdownMenuClassName}
                   placeholder="Containers unavailable"
                   ariaLabel="Shell container selector"
                 />

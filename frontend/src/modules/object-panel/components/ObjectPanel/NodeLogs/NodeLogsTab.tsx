@@ -58,14 +58,6 @@ const NODE_LOG_APPEND_OVERLAP_MS = 5000;
 
 type CopyFeedback = 'idle' | 'copied' | 'error';
 
-type NodeLogSourceOptionMetadata =
-  | { kind: 'header' }
-  | {
-      kind: 'child';
-      childLabel: string;
-      isLastChild: boolean;
-    };
-
 const getNodeLogSourceLeafLabel = (label: string): string => {
   const segments = label.split(' / ');
   return segments[segments.length - 1] || label;
@@ -136,25 +128,12 @@ const buildNodeLogSourceOptions = (sources: NodeLogSource[]): DropdownOption[] =
       return;
     }
 
-    options.push({
-      value: `header:${root}`,
-      label: root,
-      group: 'header',
-      metadata: { kind: 'header' } satisfies NodeLogSourceOptionMetadata,
-    });
+    options.push({ value: `header:${root}`, label: root, group: 'header' });
 
-    groupSources.forEach((source, index) => {
+    groupSources.forEach((source) => {
       const segments = source.label.split(' / ');
       const childLabel = segments.slice(1).join(' / ') || segments[0] || source.label;
-      options.push({
-        value: source.path,
-        label: childLabel,
-        metadata: {
-          kind: 'child',
-          childLabel,
-          isLastChild: index === groupSources.length - 1,
-        } satisfies NodeLogSourceOptionMetadata,
-      });
+      options.push({ value: source.path, label: childLabel });
     });
   });
 
@@ -436,28 +415,6 @@ const getCopyIconFeedback = (copyFeedback: CopyFeedback): 'success' | 'error' | 
     return 'success';
   }
   return copyFeedback === 'error' ? 'error' : null;
-};
-
-const renderNodeLogSourceOption = (option: DropdownOption): React.ReactNode => {
-  if (option.group === 'header') {
-    return <span className="node-log-source-header">{option.label}</span>;
-  }
-  const metadata = option.metadata as NodeLogSourceOptionMetadata | undefined;
-  if (metadata?.kind !== 'child') {
-    return <span className="node-log-source-label">{option.label}</span>;
-  }
-  const className = [
-    'node-log-source-label',
-    'node-log-source-child',
-    metadata.isLastChild && 'node-log-source-child-last',
-  ]
-    .filter(Boolean)
-    .join(' ');
-  return (
-    <span className={className}>
-      <span className="node-log-source-child-text">{metadata.childLabel}</span>
-    </span>
-  );
 };
 
 const NodeLogsAvailability = ({
@@ -1081,11 +1038,8 @@ const NodeLogsTab = ({
                   setSelectedSourcePath(Array.isArray(value) ? (value[0] ?? '') : value)
                 }
                 placeholder={loading ? 'Loading logs…' : 'Select log source'}
-                size="compact"
                 className="logs-viewer-selector-dropdown"
-                dropdownClassName="node-log-source-menu"
                 ariaLabel="Node log source"
-                renderOption={renderNodeLogSourceOption}
                 renderValue={() =>
                   selectedSource
                     ? getNodeLogSourceLeafLabel(selectedSource.label)

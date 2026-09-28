@@ -197,7 +197,6 @@ export default function CustomMetadataColumnEditor({
               searchable
               disabled={state.mode === 'edit' || availableKeys.length === 0}
               className="custom-metadata-column-editor__key-dropdown"
-              dropdownClassName="custom-metadata-column-editor__key-menu"
             />
             {state.mode === 'create' && availableKeys.length === 0 && (
               <span className="modal-field-message">

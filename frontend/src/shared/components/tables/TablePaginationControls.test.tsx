@@ -126,7 +126,6 @@ describe('TablePaginationControls', () => {
 
     const menu = document.body.querySelector('[role="listbox"]');
     expect(menu).not.toBeNull();
-    expect(menu?.classList.contains('table-pagination-page-size-menu')).toBe(true);
 
     act(() => {
       Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'))

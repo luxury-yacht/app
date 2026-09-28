@@ -7,8 +7,6 @@
   overflow: hidden;
 }
 
-/* Note: This component uses the Dropdown component with standard styles from Dropdown.css */
-
 .logs-viewer-controls {
   display: flex;
   align-items: center;

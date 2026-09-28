@@ -37,10 +37,6 @@
   text-overflow: ellipsis;
 }
 
-.custom-metadata-column-editor__key-menu {
-  min-width: min(440px, calc(100vw - 32px));
-}
-
 .custom-metadata-column-editor__samples > span {
   display: block;
   margin-bottom: 6px;

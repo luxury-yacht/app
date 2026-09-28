@@ -1240,7 +1240,6 @@ const LogViewerControls = ({
             renderValue={(value, options) =>
               summarizeWorkloadSelection(normalizeDropdownValue(value), options)
             }
-            size="compact"
             className="logs-viewer-selector-dropdown"
           />
         </div>

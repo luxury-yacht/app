@@ -46,7 +46,6 @@ import type {
   FavoriteTableState,
 } from '@/core/persistence/favorites';
 import { runUserAction } from '@/core/telemetry/sentry';
-import '@shared/components/KubeconfigSelector.css';
 import './FavSaveModal.css';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 
@@ -193,7 +192,6 @@ const FavoritePaneFilters: React.FC<FavoritePaneFiltersProps> = ({
               </label>
               <Dropdown
                 id={`${elementIdPrefix}-${pane.id}-${definition.key}`}
-                dropdownClassName="fav-save-dropdown-menu"
                 options={options}
                 value={filterSelectionToDropdownValues(selection, options, comparison)}
                 displayValue={semanticSelectionDisplayValue(selection)}
@@ -405,7 +403,7 @@ const FavoritePaneTableState: React.FC<FavoritePaneTableStateProps> = ({
             value={columnValue}
             options={columnOptions}
             onChange={handleColumnsChange}
-            dropdownClassName="dropdown-filter-menu dropdown-columns-menu"
+            dropdownClassName="dropdown-columns-menu"
             renderOption={renderColumnOption}
             renderOptionActions={renderColumnOrderActions}
             getOptionRowProps={getColumnRowProps}
@@ -419,7 +417,6 @@ const FavoritePaneTableState: React.FC<FavoritePaneTableStateProps> = ({
           <label htmlFor={`${elementIdPrefix}-${pane.id}-sort-column`}>Sort by</label>
           <Dropdown
             id={`${elementIdPrefix}-${pane.id}-sort-column`}
-            dropdownClassName="fav-save-dropdown-menu"
             options={sortOptions}
             value={state.tableState.sortColumn}
             onChange={(value) => onChange({ ...state.tableState, sortColumn: value as string })}
@@ -430,7 +427,6 @@ const FavoritePaneTableState: React.FC<FavoritePaneTableStateProps> = ({
           <label htmlFor={`${elementIdPrefix}-${pane.id}-sort-direction`}>Direction</label>
           <Dropdown
             id={`${elementIdPrefix}-${pane.id}-sort-direction`}
-            dropdownClassName="fav-save-dropdown-menu"
             options={[
               { value: 'asc', label: 'Ascending' },
               { value: 'desc', label: 'Descending' },
@@ -801,25 +797,18 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
 
   // ----- Dropdown options -----
 
-  // Cluster dropdown: all available kubeconfigs, formatted like KubeconfigSelector.
+  // Cluster dropdown: kubeconfig contexts grouped under their file.
   const clusterOptions = useMemo(() => {
-    const seen = new Set<string>();
-    return kubeconfigs.map((kc) => {
-      const isFirstForFile = !seen.has(kc.name);
-      if (isFirstForFile) {
-        seen.add(kc.name);
-      }
-      return {
-        value: `${kc.path}:${kc.context}`,
-        label: `${kc.name} [${kc.context}]`,
-        metadata: {
-          isFirstForFile,
-          filename: kc.name,
-          context: kc.context,
-          isCurrentContext: kc.isCurrentContext,
-        },
-      };
+    const files = new Map<string, { name: string; contexts: string[] }>();
+    kubeconfigs.forEach((kc) => {
+      const file = files.get(kc.path) ?? { name: kc.name, contexts: [] };
+      file.contexts.push(kc.context);
+      files.set(kc.path, file);
     });
+    return Array.from(files, ([path, file]): DropdownOption[] => [
+      { value: `__kubeconfig_file__:${path}`, label: file.name, group: 'header' },
+      ...file.contexts.map((context) => ({ value: `${path}:${context}`, label: context })),
+    ]).flat();
   }, [kubeconfigs]);
 
   // View dropdown: depends on scope.
@@ -1024,7 +1013,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                 </label>
                 <Dropdown
                   options={clusterOptions}
-                  dropdownClassName="fav-save-dropdown-menu"
                   value={clusterSelection}
                   onChange={(val) => setClusterSelection(val as string)}
                   placeholder="Select cluster..."
@@ -1034,20 +1022,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                       return 'Select cluster...';
                     }
                     const match = clusterOptions.find((o) => o.value === val);
-                    return match?.metadata?.context ?? val ?? 'Select cluster...';
+                    return match?.label ?? val ?? 'Select cluster...';
                   }}
-                  renderOption={(option) => (
-                    <div
-                      className={`kubeconfig-option${!option.metadata?.isFirstForFile ? ' no-filename' : ''}${option.metadata?.isCurrentContext ? ' current-context' : ''}`}
-                    >
-                      {!!option.metadata?.isFirstForFile && (
-                        <div className="kubeconfig-filename">{option.metadata.filename}</div>
-                      )}
-                      <div className="kubeconfig-context">
-                        <span className="kubeconfig-context-label">{option.metadata?.context}</span>
-                      </div>
-                    </div>
-                  )}
                 />
               </div>
             </div>
@@ -1061,7 +1037,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                 <label htmlFor={`${elementIdPrefix}-favorite-view`}>View</label>
                 <Dropdown
                   id={`${elementIdPrefix}-favorite-view`}
-                  dropdownClassName="fav-save-dropdown-menu"
                   options={ALL_VIEWS}
                   value={selectedView}
                   onChange={(val) => setSelectedView(val as string)}
@@ -1074,7 +1049,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   <label htmlFor={`${elementIdPrefix}-favorite-namespace`}>Namespace</label>
                   <Dropdown
                     id={`${elementIdPrefix}-favorite-namespace`}
-                    dropdownClassName="fav-save-dropdown-menu"
                     options={namespaceOptions}
                     value={selectedNamespace}
                     onChange={(val) => setSelectedNamespace(val as string)}

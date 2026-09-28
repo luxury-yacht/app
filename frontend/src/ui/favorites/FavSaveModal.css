@@ -4,12 +4,6 @@
   max-width: calc(var(--modal-width-md) + var(--spacing-xxl));
 }
 
-/* Limit dropdown menu height inside the modal so it doesn't overflow
-   the viewport. The modal content remains scrollable normally. */
-.dropdown-menu.fav-save-dropdown-menu {
-  max-height: min(200px, var(--dropdown-menu-available-height));
-}
-
 .fav-save-footer-spacer {
   flex: 1;
 }
