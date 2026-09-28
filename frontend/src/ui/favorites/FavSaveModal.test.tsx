@@ -88,6 +88,15 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
         isDefault: true,
         isCurrentContext: true,
       },
+      {
+        name: 'broken',
+        path: '/home/user/.kube/broken',
+        context: 'broken-context',
+        isDefault: false,
+        isCurrentContext: false,
+        invalid: true,
+        invalidReason: 'no cluster',
+      },
     ],
     loadKubeconfigs: vi.fn().mockResolvedValue(undefined),
   }),
@@ -157,7 +166,7 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
           onChange={(e) => onChange(e.target.value)}
         >
           {opts.map((option) => (
-            <option key={option.value} value={option.value}>
+            <option key={option.value} value={option.value} disabled={option.disabled}>
               {option.label}
             </option>
           ))}
@@ -537,6 +546,19 @@ describe('FavSaveModal', () => {
     const namespaces = container.querySelector('[data-testid="dropdown-value-All namespaces"]');
     expect(kinds?.textContent).toBe('Kinds');
     expect(namespaces?.textContent).toBe('Namespaces (0)');
+  });
+
+  it('does not offer invalid kubeconfig contexts as the favorite cluster', async () => {
+    await renderComponent(makeProps());
+
+    const clusterSelect = requireValue(
+      container.querySelector<HTMLSelectElement>('[data-testid="dropdown-Select cluster..."]'),
+      'expected the cluster dropdown'
+    );
+    const optionFor = (value: string) =>
+      Array.from(clusterSelect.options).find((option) => option.value === value);
+    expect(optionFor('/home/user/.kube/broken:broken-context')?.disabled).toBe(true);
+    expect(optionFor('/home/user/.kube/config:prod-cluster')?.disabled).toBe(false);
   });
 
   it('does not close when overlay is clicked', async () => {

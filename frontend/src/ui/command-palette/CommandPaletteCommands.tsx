@@ -14,6 +14,7 @@ import {
   useAvailableNamespaceViews,
 } from '@core/navigation/useAvailableResourceViews';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { KubeconfigContextLabel } from '@modules/kubernetes/config/KubeconfigContextLabel';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { FavoriteGenericIcon, FavoritePinIcon } from '@shared/components/icons/FavoriteIcons';
@@ -147,20 +148,6 @@ const getKubeconfigDescription = (config: KubeconfigEntry) => {
   return config.name !== config.context ? `From ${config.name}` : 'Switch to this context';
 };
 
-const KubeconfigCommandLabel = ({ config }: { config: KubeconfigEntry }) => (
-  <span className="command-palette-kubeconfig-label">
-    <span className="command-palette-kubeconfig-context">{config.context}</span>
-    {config.invalid ? (
-      <span className="command-palette-kubeconfig-invalid" title={config.invalidReason}>
-        ⚠ invalid
-      </span>
-    ) : null}
-    {config.name !== config.context ? (
-      <span className="command-palette-kubeconfig-file">{config.name}</span>
-    ) : null}
-  </span>
-);
-
 const buildKubeconfigCommand = (
   config: KubeconfigEntry,
   selectedKubeconfigs: string[],
@@ -172,7 +159,7 @@ const buildKubeconfigCommand = (
   return {
     id: `kubeconfig-${configValue}`,
     label: `${config.name}:${config.context}`,
-    renderLabel: <KubeconfigCommandLabel config={config} />,
+    renderLabel: <KubeconfigContextLabel config={config} />,
     description: getKubeconfigDescription(config),
     category: 'Kubeconfigs',
     icon: !config.invalid && isActive ? '✓' : undefined,

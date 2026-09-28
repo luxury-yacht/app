@@ -7,6 +7,7 @@
  */
 
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { KubeconfigContextLabel } from '@modules/kubernetes/config/KubeconfigContextLabel';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
@@ -792,19 +793,20 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
 
   // ----- Dropdown options -----
 
-  // Cluster dropdown: kubeconfig contexts grouped under their file.
-  const clusterOptions = useMemo(() => {
-    const files = new Map<string, { name: string; contexts: string[] }>();
-    kubeconfigs.forEach((kc) => {
-      const file = files.get(kc.path) ?? { name: kc.name, contexts: [] };
-      file.contexts.push(kc.context);
-      files.set(kc.path, file);
-    });
-    return Array.from(files, ([path, file]): DropdownOption[] => [
-      { value: `__kubeconfig_file__:${path}`, label: file.name, group: 'header' },
-      ...file.contexts.map((context) => ({ value: `${path}:${context}`, label: context })),
-    ]).flat();
-  }, [kubeconfigs]);
+  // Cluster dropdown: one row per kubeconfig context, formatted like the Command Palette.
+  const clusterOptions = useMemo(
+    () =>
+      kubeconfigs.map(
+        (kc): DropdownOption<(typeof kubeconfigs)[number]> => ({
+          value: `${kc.path}:${kc.context}`,
+          label: kc.context,
+          // Like the Command Palette, an invalid context cannot be chosen.
+          disabled: kc.invalid,
+          metadata: kc,
+        })
+      ),
+    [kubeconfigs]
+  );
 
   // View dropdown: depends on scope.
   // Namespace dropdown: "All Namespaces" at top, then actual namespaces.
@@ -1019,6 +1021,13 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     const match = clusterOptions.find((o) => o.value === val);
                     return match?.label ?? val ?? 'Select cluster...';
                   }}
+                  renderOption={(option) =>
+                    option.metadata ? (
+                      <KubeconfigContextLabel config={option.metadata} />
+                    ) : (
+                      option.label
+                    )
+                  }
                 />
               </div>
             </div>
