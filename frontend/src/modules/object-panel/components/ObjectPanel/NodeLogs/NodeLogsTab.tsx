@@ -25,12 +25,7 @@ import {
   getLogViewerScrollPosition,
   setLogViewerScrollPosition,
 } from '../Logs/logViewerPrefsCache';
-import { buildParsedLogCsv, buildParsedLogDataColumns } from '../Logs/parsedLogColumns';
-import {
-  deriveParsedLogFieldKeys,
-  formatParsedValue,
-  formatRawOrPrettyJsonLine,
-} from '../Logs/parsedLogUtils';
+import { formatRawOrPrettyJsonLine } from '../Logs/parsedLogUtils';
 import type { CapabilityState } from '../types';
 import { fetchNodeLogs, type NodeLogFetchResponse, type NodeLogSource } from './nodeLogsApi';
 import '../Logs/LogViewer.css';
@@ -43,6 +38,7 @@ import {
   logCopyText,
   splitDisplayRows,
   useLogPresentation,
+  useRawViewFallback,
 } from '../Logs/hooks/useLogPresentation';
 import { useLogScrollRestoration } from '../Logs/hooks/useLogScrollRestoration';
 import { useTerminalTheme } from '../Logs/hooks/useTerminalTheme';
@@ -570,7 +566,6 @@ const NodeLogsTab = ({
     caseSensitiveMatches,
     regexMatches,
     displayMode,
-    parsedLogs,
     expandedRows,
   } = options;
   const logsContentRef = useRef<HTMLElement>(null);
@@ -608,9 +603,12 @@ const NodeLogsTab = ({
   const {
     filterText,
     filteredEntries: filteredLines,
-    parsedCandidates,
+    hasVisibleLines,
     canParseLogs,
     hasInvalidRegex,
+    parsedRows,
+    tableColumns,
+    parsedCsv,
   } = useLogPresentation({
     entries: lines,
     options,
@@ -630,22 +628,7 @@ const NodeLogsTab = ({
   );
   const isParsedView = displayMode === 'parsed';
 
-  useEffect(() => {
-    if (displayMode !== 'raw' && !canParseLogs && filteredLines.length > 0) {
-      dispatch({ type: 'SET_DISPLAY_MODE', payload: 'raw' });
-    }
-  }, [canParseLogs, displayMode, filteredLines.length]);
-
-  useEffect(() => {
-    dispatch({ type: 'SET_PARSED_LOGS', payload: isParsedView ? parsedCandidates : [] });
-  }, [isParsedView, parsedCandidates]);
-
-  const derivedFieldKeys = useMemo(() => deriveParsedLogFieldKeys(parsedLogs), [parsedLogs]);
-
-  const tableColumns = useMemo(
-    () => buildParsedLogDataColumns(derivedFieldKeys),
-    [derivedFieldKeys]
-  );
+  useRawViewFallback({ displayMode, hasVisibleLines, canParseLogs, dispatch });
 
   const displayLines = useMemo(
     () =>
@@ -661,16 +644,6 @@ const NodeLogsTab = ({
     [displayLines, selectedSource?.path]
   );
 
-  const parsedCsv = useMemo(
-    () =>
-      isParsedView
-        ? buildParsedLogCsv(parsedLogs, tableColumns, (entry, key) =>
-            formatParsedValue(entry.data[key])
-          )
-        : '',
-    [isParsedView, parsedLogs, tableColumns]
-  );
-
   const displayedText = useMemo(
     () => logCopyText(displayMode, displayLines, parsedCsv),
     [displayLines, displayMode, parsedCsv]
@@ -682,13 +655,13 @@ const NodeLogsTab = ({
   const hasLoadedContent = content.length > 0;
   const hasCopyableContent = displayedText.length > 0;
   const displayedLogCount = isParsedView
-    ? parsedLogs.length
+    ? parsedRows.length
     : filteredLines.filter((line) => line.length > 0).length;
   const countLabel = getNodeLogCountLabel(Boolean(selectedSource), displayedLogCount);
   const rowCount = getNodeLogRowCount(
     content,
     isParsedView,
-    parsedLogs.length,
+    parsedRows.length,
     renderedDisplayRows.length
   );
 
@@ -697,7 +670,7 @@ const NodeLogsTab = ({
     isActive,
     isParsedView,
     rowCount,
-    tailFollowSignal: `${selectedSource?.path ?? ''}:${parsedLogs.length}:${renderedDisplayRows.length}`,
+    tailFollowSignal: `${selectedSource?.path ?? ''}:${parsedRows.length}:${renderedDisplayRows.length}`,
     cacheKey: panelId,
     getScrollPosition: getLogViewerScrollPosition,
     setScrollPosition: setLogViewerScrollPosition,
@@ -840,7 +813,7 @@ const NodeLogsTab = ({
             logsContentRef={logsContentRef}
             wrapText={wrapText}
             renderMessageContent={renderMessageContent}
-            parsedLogs={parsedLogs}
+            parsedLogs={parsedRows}
             tableColumns={tableColumns}
             expandedRows={expandedRows}
             onToggleParsedRow={handleToggleParsedRow}

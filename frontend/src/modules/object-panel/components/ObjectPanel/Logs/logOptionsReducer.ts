@@ -32,7 +32,6 @@ export interface LogOptionsState {
   wrapText: boolean;
   showAnsiColors: boolean;
   displayMode: LogDisplayMode;
-  parsedLogs: ParsedLogEntry[];
   expandedRows: Set<string>;
   copyFeedback: CopyFeedback;
 }
@@ -49,7 +48,6 @@ export type LogOptionsAction =
   | { type: 'TOGGLE_SHOW_ANSI_COLORS' }
   | { type: 'TOGGLE_PARSED_VIEW' }
   | { type: 'SET_DISPLAY_MODE'; payload: LogDisplayMode }
-  | { type: 'SET_PARSED_LOGS'; payload: ParsedLogEntry[] }
   | { type: 'TOGGLE_ROW_EXPANSION'; payload: string }
   | { type: 'SET_COPY_FEEDBACK'; payload: CopyFeedback };
 
@@ -66,7 +64,6 @@ const LOG_OPTIONS_ACTION_TYPES = new Set<string>(
     TOGGLE_SHOW_ANSI_COLORS: true,
     TOGGLE_PARSED_VIEW: true,
     SET_DISPLAY_MODE: true,
-    SET_PARSED_LOGS: true,
     TOGGLE_ROW_EXPANSION: true,
     SET_COPY_FEEDBACK: true,
   } satisfies Record<LogOptionsAction['type'], true>)
@@ -85,7 +82,6 @@ export const initialLogOptionsState: LogOptionsState = {
   wrapText: true,
   showAnsiColors: true,
   displayMode: 'raw',
-  parsedLogs: [],
   expandedRows: new Set<string>(),
   copyFeedback: 'idle',
 };
@@ -117,11 +113,10 @@ const toggleSearchOption = <S extends LogOptionsState>(state: S, action: LogOpti
   }
 };
 
-// A display mode change drops parsed rows and row expansion.
+// A display mode change collapses expanded table rows.
 const setDisplayMode = <S extends LogOptionsState>(state: S, displayMode: LogDisplayMode): S => ({
   ...state,
   displayMode,
-  parsedLogs: displayMode === 'parsed' ? state.parsedLogs : [],
   expandedRows: new Set<string>(),
 });
 
@@ -156,8 +151,6 @@ export function logOptionsReducer<S extends LogOptionsState>(
       return setDisplayMode(state, state.displayMode === 'parsed' ? 'raw' : 'parsed');
     case 'SET_DISPLAY_MODE':
       return setDisplayMode(state, action.payload);
-    case 'SET_PARSED_LOGS':
-      return { ...state, parsedLogs: action.payload };
     case 'TOGGLE_ROW_EXPANSION':
       return toggleRowExpansion(state, action.payload);
     case 'SET_COPY_FEEDBACK':

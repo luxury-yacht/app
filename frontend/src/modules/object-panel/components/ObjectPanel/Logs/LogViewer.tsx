@@ -31,7 +31,7 @@ import { useContainerLogsStream } from './hooks/useContainerLogsStream';
 import { useLogCopyAction, useLogSelectionCopy } from './hooks/useLogCopyAction';
 import { useLogFiltering } from './hooks/useLogFiltering';
 import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
-import { logCopyText, splitDisplayRows } from './hooks/useLogPresentation';
+import { logCopyText, splitDisplayRows, useRawViewFallback } from './hooks/useLogPresentation';
 import './LogViewer.css';
 import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
 import { eventBus } from '@/core/events';
@@ -105,8 +105,7 @@ import {
   logViewerReducer,
 } from './logViewerReducer';
 import ParsedLogTable from './ParsedLogTable';
-import { buildParsedLogCsv, buildParsedLogDataColumns } from './parsedLogColumns';
-import { deriveParsedLogFieldKeys, formatRawOrPrettyJsonLine } from './parsedLogUtils';
+import { formatRawOrPrettyJsonLine } from './parsedLogUtils';
 import { buildStablePodColorMap } from './podColors';
 import RawLogViewer, { type RenderedLogRow } from './RawLogViewer';
 
@@ -1206,7 +1205,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     caseSensitiveMatches,
     regexMatches,
     displayMode,
-    parsedLogs,
     expandedRows,
   } = state;
   const showPreviousContainerLogs = state.mode.kind === 'previous';
@@ -1394,14 +1392,69 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   });
   const showPausedLogsState = logsLoadingState.showPausedEmptyState;
 
-  const { filterText, filteredEntries, parsedCandidates, canParseContainerLogs } = useLogFiltering({
+  // Generate consistent colors for pods (workload view).
+  // Reads the shared --hash-color-N palette so pod-log colors and kind badges
+  // draw from the same set; values resolve per appearance mode.
+  const podColors = useMemo(() => {
+    const styles = getComputedStyle(document.documentElement);
+    const palette = POD_LOG_COLOR_PALETTE_SLOTS.map((slot) =>
+      styles.getPropertyValue(`--hash-color-${slot}`).trim()
+    );
+    const fallbackColor = styles.getPropertyValue('--hash-color-fallback').trim();
+    return buildStablePodColorMap(availablePods, palette, fallbackColor);
+  }, [availablePods]);
+  const formatApiTimestamp = useCallback(
+    (timestamp: string) =>
+      formatTimestampForMode(
+        timestamp,
+        timestampMode,
+        apiTimestampFormat,
+        apiTimestampUseLocalTimeZone
+      ),
+    [apiTimestampFormat, apiTimestampUseLocalTimeZone, timestampMode]
+  );
+  // The table view's pod, container and timestamp columns, ahead of the JSON fields.
+  const metadataColumns = useMemo(
+    () =>
+      buildContainerLogMetadataColumns({
+        isWorkload,
+        showTimestamp: timestampMode !== 'hidden',
+        podColors,
+        formatTimestamp: formatApiTimestamp,
+        getContainerLabel: (entry) =>
+          formatContainerLabel(entry.container ?? '', logContainerKind(entry)),
+        onSelectPod: handleSelectPodFilter,
+        onSelectContainer: (entry) =>
+          handleSelectContainerFilter(entry.container ?? '', logContainerKind(entry)),
+      }),
+    [
+      formatApiTimestamp,
+      handleSelectContainerFilter,
+      handleSelectPodFilter,
+      isWorkload,
+      podColors,
+      timestampMode,
+    ]
+  );
+  const exportTableValue = useCallback(
+    (row: ParsedLogEntry, key: string) => containerLogExportValue(row, key, formatApiTimestamp),
+    [formatApiTimestamp]
+  );
+  const {
+    filterText,
+    filteredEntries,
+    hasVisibleLines,
+    canParseLogs: canParseContainerLogs,
+    parsedRows,
+    tableColumns,
+    parsedCsv,
+  } = useLogFiltering({
     logEntries,
     isWorkload,
     selectedFilters,
-    textFilter,
-    inverseMatches,
-    caseSensitiveMatches,
-    regexMatches,
+    options: state,
+    metadataColumns,
+    exportValue: exportTableValue,
   });
   // Highlighting follows the filter as applied, so it never runs ahead of it.
   const highlightRegex = useMemo(
@@ -1438,18 +1491,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       dispatch({ type: 'SET_SHOW_PREVIOUS_LOGS', payload: false });
     }
   }, [supportsPreviousContainerLogs, showPreviousContainerLogs]);
-
-  // Generate consistent colors for pods (workload view).
-  // Reads the shared --hash-color-N palette so pod-log colors and kind badges
-  // draw from the same set; values resolve per appearance mode.
-  const podColors = useMemo(() => {
-    const styles = getComputedStyle(document.documentElement);
-    const palette = POD_LOG_COLOR_PALETTE_SLOTS.map((slot) =>
-      styles.getPropertyValue(`--hash-color-${slot}`).trim()
-    );
-    const fallbackColor = styles.getPropertyValue('--hash-color-fallback').trim();
-    return buildStablePodColorMap(availablePods, palette, fallbackColor);
-  }, [availablePods]);
 
   useEffect(() => {
     if (isWorkload) {
@@ -1682,7 +1723,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   const hasCopyableContent = hasCopyableContainerLogs(
     isParsedView,
-    parsedLogs.length,
+    parsedRows.length,
     filteredEntries.length
   );
   const hasAnsiLogEntries = useMemo(
@@ -1694,30 +1735,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const countLabel = getContainerLogCountLabel(displayedLogCount);
   const countTitle = `${countLabel}. Filtering and copy actions apply only to the current log buffer.`;
 
-  useEffect(() => {
-    if (displayMode !== 'raw' && !canParseContainerLogs) {
-      dispatch({ type: 'SET_DISPLAY_MODE', payload: 'raw' });
-    }
-  }, [canParseContainerLogs, displayMode]);
-
-  useEffect(() => {
-    if (!isParsedView) {
-      dispatch({ type: 'SET_PARSED_LOGS', payload: [] });
-      return;
-    }
-    if (!parsedCandidates.length) {
-      // Only exit parsed view if there are entries but none are JSON.
-      // When entries are empty (e.g. stream reconnecting or switching to
-      // previous logs), keep parsed view active but clear stale data so
-      // old logs aren't displayed while waiting for new data.
-      dispatch({ type: 'SET_PARSED_LOGS', payload: [] });
-      if (filteredEntries.length > 0) {
-        dispatch({ type: 'SET_DISPLAY_MODE', payload: 'raw' });
-      }
-      return;
-    }
-    dispatch({ type: 'SET_PARSED_LOGS', payload: parsedCandidates });
-  }, [filteredEntries.length, isParsedView, parsedCandidates]);
+  useRawViewFallback({
+    displayMode,
+    hasVisibleLines,
+    canParseLogs: canParseContainerLogs,
+    dispatch,
+  });
 
   const renderMessageContent = useLogMessageRenderer({
     highlightRegex,
@@ -1805,7 +1828,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     rootRef: logsContentRef,
     isActive,
     isParsedView,
-    rowCount: isParsedView ? parsedLogs.length : logEntries.length,
+    rowCount: isParsedView ? parsedRows.length : logEntries.length,
     tailFollowSignal: displayLogs,
     cacheKey: panelId,
     getScrollPosition: getLogViewerScrollPosition,
@@ -1818,70 +1841,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
     resumeTailFollowing();
   }, [autoRefresh, resumeTailFollowing]);
-
-  const derivedFieldKeys = useMemo(() => deriveParsedLogFieldKeys(parsedLogs), [parsedLogs]);
-
-  const tableColumns = useMemo(() => {
-    if (derivedFieldKeys.length === 0) {
-      return [];
-    }
-
-    const columns = buildContainerLogMetadataColumns({
-      isWorkload,
-      showTimestamp: timestampMode !== 'hidden',
-      podColors,
-      formatTimestamp: (timestamp) =>
-        formatTimestampForMode(
-          timestamp,
-          timestampMode,
-          apiTimestampFormat,
-          apiTimestampUseLocalTimeZone
-        ),
-      getContainerLabel: (entry) =>
-        formatContainerLabel(entry.container ?? '', logContainerKind(entry)),
-      onSelectPod: handleSelectPodFilter,
-      onSelectContainer: (entry) =>
-        handleSelectContainerFilter(entry.container ?? '', logContainerKind(entry)),
-    });
-
-    // Promote well-known timestamp and level fields to appear first, then add
-    // the remaining user-data columns (shared with the node-logs tab).
-    return columns.concat(
-      buildParsedLogDataColumns(derivedFieldKeys, new Set(columns.map((col) => col.key)))
-    );
-  }, [
-    derivedFieldKeys,
-    handleSelectContainerFilter,
-    handleSelectPodFilter,
-    isWorkload,
-    podColors,
-    timestampMode,
-    apiTimestampFormat,
-    apiTimestampUseLocalTimeZone,
-  ]);
-
-  const parsedCsv = useMemo(() => {
-    if (!isParsedView) {
-      return '';
-    }
-    return buildParsedLogCsv(parsedLogs, tableColumns, (entry, key) =>
-      containerLogExportValue(entry, key, (timestamp) =>
-        formatTimestampForMode(
-          timestamp,
-          timestampMode,
-          apiTimestampFormat,
-          apiTimestampUseLocalTimeZone
-        )
-      )
-    );
-  }, [
-    isParsedView,
-    parsedLogs,
-    tableColumns,
-    timestampMode,
-    apiTimestampFormat,
-    apiTimestampUseLocalTimeZone,
-  ]);
 
   const handleCopyContainerLogs = useLogCopyAction({
     text: logCopyText(displayMode, displayLines, parsedCsv),
@@ -1929,7 +1888,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   const renderedLogContent = renderLogViewerContent({
     isParsedView,
-    parsedLogs,
+    parsedLogs: parsedRows,
     tableColumns,
     expandedRows,
     onToggleParsedRow: handleToggleParsedRow,

@@ -34,8 +34,11 @@ keeps its own source selection and transport.
   off in regex mode.
 - `hooks/useLogPresentation.ts`: the deferred text filter (a viewer supplies the
   texts an entry matches; container search also matches pod and container
-  names), JSON detection cached per line, parsed candidates, display rows and
-  copy text.
+  names), JSON detection cached per line, the parsed JSON table (rows, columns
+  and CSV; Container Logs passes pod, container and timestamp columns and its
+  CSV value formatter), display rows and copy text. Parsed rows are derived, not
+  stored. `useRawViewFallback` returns the JSON views to raw only when lines are
+  shown and none is JSON; an empty log keeps the view.
 - `logToolbar.tsx`: the icon bar. Timestamps, previous logs and settings are
   optional features; Node Logs passes none of them.
 - `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts. `T` (timestamps) and

@@ -16,25 +16,19 @@ import {
   logFilterSelectionMatchesNone,
   type SelectedLogSources,
 } from '../logFilterSelection';
-import type { ParsedLogEntry } from '../logOptionsReducer';
-import { useLogPresentation } from './useLogPresentation';
+import {
+  type LogPresentation,
+  type LogPresentationSource,
+  useLogPresentation,
+} from './useLogPresentation';
 
 interface UseLogFilteringParams {
   logEntries: ContainerLogsEntry[];
   isWorkload: boolean;
   selectedFilters: MultiSelectFilterSelection;
-  textFilter: string;
-  inverseMatches: boolean;
-  caseSensitiveMatches: boolean;
-  regexMatches: boolean;
-}
-
-interface UseLogFilteringResult {
-  // The text filter as applied (it trails typing).
-  filterText: string;
-  filteredEntries: ContainerLogsEntry[];
-  parsedCandidates: ParsedLogEntry[];
-  canParseContainerLogs: boolean;
+  options: LogPresentationSource<ContainerLogsEntry>['options'];
+  metadataColumns: LogPresentationSource<ContainerLogsEntry>['metadataColumns'];
+  exportValue: LogPresentationSource<ContainerLogsEntry>['exportValue'];
 }
 
 const matchesSelectedContainer = (
@@ -89,11 +83,10 @@ export function useLogFiltering({
   logEntries,
   isWorkload,
   selectedFilters,
-  textFilter,
-  inverseMatches,
-  caseSensitiveMatches,
-  regexMatches,
-}: UseLogFilteringParams): UseLogFilteringResult {
+  options,
+  metadataColumns,
+  exportValue,
+}: UseLogFilteringParams): LogPresentation<ContainerLogsEntry> {
   // Entries arrive in time order: the stream manager inserts them in order and
   // previous-logs fetches are sorted by the backend.
   const sourceEntries = useMemo(
@@ -118,13 +111,13 @@ export function useLogFiltering({
     }),
     [isWorkload]
   );
-  const { filterText, filteredEntries, parsedCandidates, canParseLogs } = useLogPresentation({
+  return useLogPresentation({
     entries: sourceEntries,
-    options: { textFilter, inverseMatches, caseSensitiveMatches, regexMatches },
+    options,
     searchTexts: containerLogSearchTexts,
     lineOf: containerLogLine,
     parsedMetadata,
+    metadataColumns,
+    exportValue,
   });
-
-  return { filterText, filteredEntries, parsedCandidates, canParseContainerLogs: canParseLogs };
 }

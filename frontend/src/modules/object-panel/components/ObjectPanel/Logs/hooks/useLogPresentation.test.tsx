@@ -9,9 +9,11 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
-import { initialLogOptionsState, type LogOptionsState } from '../logOptionsReducer';
-import { buildParsedLogCsv, buildParsedLogDataColumns } from '../parsedLogColumns';
-import { deriveParsedLogFieldKeys, formatParsedValue } from '../parsedLogUtils';
+import {
+  initialLogOptionsState,
+  type LogOptionsState,
+  type ParsedLogEntry,
+} from '../logOptionsReducer';
 import {
   type LogPresentationSource,
   logCopyText,
@@ -54,14 +56,7 @@ describe('useLogPresentation', () => {
     ...overrides,
   });
 
-  const csvFor = (parsed: ReturnType<typeof useLogPresentation>['parsedCandidates']) =>
-    buildParsedLogCsv(
-      parsed,
-      buildParsedLogDataColumns(deriveParsedLogFieldKeys(parsed)),
-      (entry, key) => formatParsedValue(entry.data[key])
-    );
-
-  it('presents node log lines: filter, parsed rows, and the parsed copy text', async () => {
+  it('presents node log lines: filter, table rows, and the table CSV', async () => {
     const lines = [
       '{"level":"info","msg":"boot"}',
       'plain text',
@@ -75,16 +70,17 @@ describe('useLogPresentation', () => {
     });
 
     expect(result.filteredEntries).toEqual([lines[0], lines[2]]);
-    expect(result.parsedCandidates.map((entry) => entry.data)).toEqual([
+    expect(result.parsedRows.map((entry) => entry.data)).toEqual([
       { level: 'info', msg: 'boot' },
       { level: 'error', msg: 'crash' },
     ]);
-    expect(logCopyText('parsed', ['ignored'], csvFor(result.parsedCandidates))).toBe(
+    expect(result.tableColumns.map((column) => column.key)).toEqual(['level', 'msg']);
+    expect(logCopyText('parsed', ['ignored'], result.parsedCsv)).toBe(
       'level,msg\ninfo,boot\nerror,crash'
     );
   });
 
-  it('presents container entries: pod and container names match, metadata rides along', async () => {
+  it('presents container entries: names match, metadata columns lead the table', async () => {
     const entries: ContainerLogsEntry[] = [
       {
         _seq: 1,
@@ -103,16 +99,21 @@ describe('useLogPresentation', () => {
         isInit: false,
       },
     ];
+    const podColumn = { key: 'pod', header: 'pod', render: (row: ParsedLogEntry) => row.pod };
     const result = await present({
       entries,
-      options: options({ textFilter: 'WEB' }),
+      options: options({ textFilter: 'WEB', displayMode: 'parsed' }),
       searchTexts: (entry) => [entry.line, entry.pod, entry.container],
       lineOf: (entry) => entry.line,
       parsedMetadata: (entry) => ({ pod: entry.pod, container: entry.container, seq: entry._seq }),
+      metadataColumns: [podColumn],
+      exportValue: (row, key) => (key === 'pod' ? (row.pod ?? '') : String(row.data[key])),
     });
 
     expect(result.filteredEntries).toEqual([entries[0]]);
-    expect(result.parsedCandidates).toEqual([
+    expect(result.tableColumns.map((column) => column.key)).toEqual(['pod', 'msg']);
+    expect(result.parsedCsv).toBe('pod,msg\nweb-1,ready');
+    expect(result.parsedRows).toEqual([
       {
         data: { msg: 'ready' },
         rawLine: '{"msg":"ready"}',
@@ -125,6 +126,19 @@ describe('useLogPresentation', () => {
     expect(logCopyText('raw', ['[web-1/app] {"msg":"ready"}'], '')).toBe(
       '[web-1/app] {"msg":"ready"}'
     );
+  });
+
+  it('builds no table outside the table view, but still reports parseable lines', async () => {
+    const result = await present({
+      entries: ['{"msg":"ready"}'],
+      options: options(),
+      searchTexts: (line) => [line],
+      lineOf: (line) => line,
+    });
+
+    expect(result.canParseLogs).toBe(true);
+    expect(result.parsedRows).toEqual([]);
+    expect(result.parsedCsv).toBe('');
   });
 
   it('inverts, respects case, and reports an invalid regex', async () => {

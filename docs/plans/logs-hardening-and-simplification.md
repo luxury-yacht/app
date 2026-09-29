@@ -527,7 +527,7 @@ Frontend:
   regex), display (wrap, ANSI, raw/pretty/parsed), expanded rows, copy feedback
   and auto-refresh. The container reducer composes it with its own fields
   (source filters, timestamps, `live | previous`, containers, pods).
-- [x] **C2 `useLogPresentation`.** Done 2026-09-28: `hooks/useLogPresentation.ts` (deferred filter, search-text accessor, JSON detection cached per entry object or line value, parsed candidates) plus `splitDisplayRows` and `logCopyText`. Source filters and line formatting stay per viewer. Red test: `useLogPresentation.test.tsx` with node and container fixtures. Original scope: Lines plus a search-text accessor
+- [x] **C2 `useLogPresentation`.** Done 2026-09-28: `hooks/useLogPresentation.ts` (deferred filter, search-text accessor, JSON detection cached per entry object or line value) plus `splitDisplayRows` and `logCopyText`. Completed 2026-09-29: the hook also derives the parsed JSON table (rows, columns with optional metadata columns first, CSV with an optional value formatter), replacing each viewer's copy and the stored `parsedLogs` state; `useRawViewFallback` replaced the viewers' two different fallback rules with the documented one (an empty log keeps the table view; red test in `LogViewer.test.tsx`). Source filters and line formatting stay per viewer. Red tests: `useLogPresentation.test.tsx` with node and container fixtures. Original scope: Lines plus a search-text accessor
   (container search also matches pod and container names;
   `useLogFiltering.ts:132-151`) produce filtered lines, parsed candidates,
   display rows, CSV and copy text. Cache JSON detection per entry. Defer the text

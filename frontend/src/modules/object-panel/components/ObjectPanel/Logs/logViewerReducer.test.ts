@@ -121,23 +121,21 @@ describe('logViewerReducer state transitions', () => {
     expect(logViewerReducer(result, { type: 'TOGGLE_CASE_SENSITIVE_MATCHES' })).toBe(result);
   });
 
-  it('toggles parsed rows and clears parsed state when returning to raw mode', () => {
-    const parsedEntry = { data: { level: 'info' }, rawLine: '{}', lineNumber: 1 };
-    const parsed = logViewerReducer(base(), { type: 'SET_PARSED_LOGS', payload: [parsedEntry] });
-    const shown = logViewerReducer(parsed, { type: 'TOGGLE_PARSED_VIEW' });
+  it('toggles the table view and its row expansion', () => {
+    const shown = logViewerReducer(base(), { type: 'TOGGLE_PARSED_VIEW' });
     const expanded = logViewerReducer(shown, { type: 'TOGGLE_ROW_EXPANSION', payload: 'row-1' });
     const collapsed = logViewerReducer(expanded, {
       type: 'TOGGLE_ROW_EXPANSION',
       payload: 'row-1',
     });
-    const raw = logViewerReducer(collapsed, { type: 'SET_DISPLAY_MODE', payload: 'raw' });
+    const raw = logViewerReducer(expanded, { type: 'SET_DISPLAY_MODE', payload: 'raw' });
 
     expect(shown.displayMode).toBe('parsed');
     expect(expanded.expandedRows.has('row-1')).toBe(true);
     expect(collapsed.expandedRows.has('row-1')).toBe(false);
     expect(raw.displayMode).toBe('raw');
-    expect(raw.parsedLogs).toEqual([]);
-    expect(logViewerReducer(shown, { type: 'TOGGLE_PARSED_VIEW' }).parsedLogs).toEqual([]);
+    expect(raw.expandedRows.size).toBe(0);
+    expect(logViewerReducer(shown, { type: 'TOGGLE_PARSED_VIEW' }).displayMode).toBe('raw');
   });
 
   it('updates copy feedback and clears filtering and display mode on scope resets', () => {

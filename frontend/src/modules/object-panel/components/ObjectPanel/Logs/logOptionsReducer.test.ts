@@ -36,14 +36,14 @@ describe('logOptionsReducer', () => {
     expect(logOptionsReducer(regex, { type: 'TOGGLE_CASE_SENSITIVE_MATCHES' })).toBe(regex);
   });
 
-  it('clears parsed rows and expansion when the display mode changes', () => {
-    const parsed = apply(
+  it('collapses expanded table rows when the display mode changes', () => {
+    const expanded = apply(
       { type: 'SET_DISPLAY_MODE', payload: 'parsed' },
-      { type: 'SET_PARSED_LOGS', payload: [{ data: { a: 1 }, rawLine: '{"a":1}', lineNumber: 1 }] },
       { type: 'TOGGLE_ROW_EXPANSION', payload: 'row-1' }
     );
-    const raw = logOptionsReducer(parsed, { type: 'SET_DISPLAY_MODE', payload: 'raw' });
-    expect(raw).toMatchObject({ displayMode: 'raw', parsedLogs: [] });
+    expect(expanded.expandedRows.has('row-1')).toBe(true);
+    const raw = logOptionsReducer(expanded, { type: 'SET_DISPLAY_MODE', payload: 'raw' });
+    expect(raw.displayMode).toBe('raw');
     expect(raw.expandedRows.size).toBe(0);
   });
 

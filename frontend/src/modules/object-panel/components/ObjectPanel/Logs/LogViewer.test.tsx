@@ -1325,6 +1325,47 @@ describe('LogViewer active pod synchronisation', () => {
     expect(filteredMetadataSpans.some((span) => span.textContent?.includes('[app]'))).toBe(false);
   });
 
+  // An empty log (reconnecting, or switching to previous logs) says nothing
+  // about whether the lines are JSON, so the table view stays on until lines
+  // arrive that are not.
+  it('keeps the table view while the log is empty', async () => {
+    const panelId = 'obj:test:parsed-while-empty';
+    setLogViewerPrefs(panelId, {
+      selectedFilters: [],
+      autoRefresh: true,
+      timestampMode: 'default',
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: '',
+      highlightMatches: false,
+      inverseMatches: false,
+      caseSensitiveMatches: false,
+      regexMatches: false,
+      displayMode: 'parsed',
+      isParsedView: true,
+      expandedRows: [],
+      showPreviousContainerLogs: false,
+    });
+    seedLogSnapshot([]);
+    await renderViewer({ activePodNames: ['web-1'], panelId });
+
+    await act(async () => {
+      seedLogSnapshot([
+        {
+          pod: 'web-1',
+          container: 'app',
+          line: '{"level":"info","msg":"ready"}',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+      ]);
+      await Promise.resolve();
+    });
+
+    expect(getLogViewerPrefs(panelId)?.displayMode).toBe('parsed');
+    expect(container.querySelector('[data-testid="gridtable-parsed-logs"]')).not.toBeNull();
+  });
+
   it('toggles parsed JSON view when structured logs are available', async () => {
     seedLogSnapshot(
       [

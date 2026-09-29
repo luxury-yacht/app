@@ -137,7 +137,6 @@ const resetForNewScope = (state: LogViewerState): LogViewerState => ({
   caseSensitiveMatches: false,
   regexMatches: false,
   displayMode: 'raw',
-  parsedLogs: [],
   expandedRows: new Set<string>(),
   mode: LIVE_MODE,
 });
