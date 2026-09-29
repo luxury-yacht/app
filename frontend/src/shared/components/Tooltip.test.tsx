@@ -247,6 +247,39 @@ describe('Tooltip', () => {
     vi.useRealTimers();
   });
 
+  // Only a scroll that can move the trigger detaches the fixed-position
+  // tooltip. A neighbouring region that scrolls on its own (a log view
+  // following new lines) must not close it.
+  it('keeps a hover tooltip open while an unrelated region scrolls', async () => {
+    vi.useFakeTimers();
+
+    const { container, cleanup } = await renderTooltip({ content: 'Tip' });
+    const neighbour = document.createElement('div');
+    document.body.appendChild(neighbour);
+
+    const trigger = container.querySelector('.tooltip-trigger') as HTMLElement;
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(250);
+    });
+    expect(container.querySelector('.tooltip')).toBeTruthy();
+
+    await act(async () => {
+      neighbour.dispatchEvent(new Event('scroll'));
+    });
+    expect(container.querySelector('.tooltip')).toBeTruthy();
+
+    // A container holding the trigger scrolls: the trigger moves, so it closes.
+    await act(async () => {
+      container.dispatchEvent(new Event('scroll'));
+    });
+    expect(container.querySelector('.tooltip')).toBeFalsy();
+
+    neighbour.remove();
+    cleanup();
+    vi.useRealTimers();
+  });
+
   it('keeps an interactive tooltip open while its own content scrolls', async () => {
     // The document-level scroll dismisser exists because the tooltip is
     // fixed-positioned and would detach from its trigger when the page

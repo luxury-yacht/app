@@ -165,7 +165,7 @@ class LogBuffer {
 
   truncation(): ContainerLogsSnapshotPayload['truncation'] {
     return this.received > this.entries.length
-      ? { shown: this.entries.length, total: this.received }
+      ? { shown: this.entries.length, received: this.received }
       : null;
   }
 }
@@ -539,7 +539,7 @@ const buildStats = (buffer: LogBuffer): SnapshotStats => {
   return {
     itemCount: buffer.entries.length,
     buildDurationMs: 0,
-    totalItems: truncation?.total,
+    totalItems: truncation?.received,
     truncated: truncation !== null,
   };
 };

@@ -204,7 +204,7 @@ describe('ContainerLogsStreamManager', () => {
       entries: [entry('2024-01-01T00:00:04Z', 'late'.padEnd(25, '.'))],
     });
     expect(lines()).toEqual(['late'.padEnd(25, '.'), 'big'.padEnd(950, '.')]);
-    expect(state().data?.truncation).toEqual({ shown: 2, total: 5 });
+    expect(state().data?.truncation).toEqual({ shown: 2, received: 5 });
     manager.stopAll(true);
   });
 
@@ -220,7 +220,7 @@ describe('ContainerLogsStreamManager', () => {
       entries: [entry('2024-01-01T00:00:01Z', 'kept')],
     });
 
-    expect(state().data?.truncation).toEqual({ shown: 1, total: 41 });
+    expect(state().data?.truncation).toEqual({ shown: 1, received: 41 });
     manager.stopAll(true);
   });
 
@@ -367,7 +367,7 @@ describe('ContainerLogsStreamManager', () => {
     eventBus.emit('settings:obj-panel-logs-buffer-size', 100);
 
     expect(state().data?.entries).toHaveLength(100);
-    expect(state().data?.truncation).toEqual({ shown: 100, total: 150 });
+    expect(state().data?.truncation).toEqual({ shown: 100, received: 150 });
     manager.stopAll(true);
   });
 });

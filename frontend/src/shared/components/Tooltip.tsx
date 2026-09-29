@@ -307,6 +307,20 @@ const Tooltip: React.FC<TooltipProps> = ({
       }
       hide();
     };
+    // Only a scroll of the page or of a container holding the trigger moves
+    // the trigger; a neighbouring region scrolling on its own (a log view
+    // following new lines) leaves the tooltip where it belongs.
+    const dismissOnScroll = (event: Event) => {
+      const triggerElement = triggerRef.current;
+      if (
+        triggerElement &&
+        event.target instanceof Node &&
+        !event.target.contains(triggerElement)
+      ) {
+        return;
+      }
+      dismissOutside(event);
+    };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         hide();
@@ -315,7 +329,7 @@ const Tooltip: React.FC<TooltipProps> = ({
 
     document.addEventListener('mousedown', dismissOutside, true);
     document.addEventListener('touchstart', dismissOutside, true);
-    document.addEventListener('scroll', dismissOutside, true);
+    document.addEventListener('scroll', dismissOnScroll, true);
     document.addEventListener('keydown', handleKeyDown);
     window.addEventListener('resize', hide);
     window.addEventListener('blur', hide);
@@ -323,7 +337,7 @@ const Tooltip: React.FC<TooltipProps> = ({
     return () => {
       document.removeEventListener('mousedown', dismissOutside, true);
       document.removeEventListener('touchstart', dismissOutside, true);
-      document.removeEventListener('scroll', dismissOutside, true);
+      document.removeEventListener('scroll', dismissOnScroll, true);
       document.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', hide);
       window.removeEventListener('blur', hide);

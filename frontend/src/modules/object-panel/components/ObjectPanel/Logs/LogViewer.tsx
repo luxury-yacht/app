@@ -19,8 +19,10 @@ import {
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
+import Tooltip from '@shared/components/Tooltip';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { compareUtf16Strings } from '@shared/utils/sort';
 import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
@@ -58,6 +60,7 @@ import type { LogDisplayMode, LogTimestampMode } from '../types';
 import { containsAnsi } from './ansi';
 import { buildContainerLogMetadataColumns, containerLogExportValue } from './containerLogColumns';
 import {
+  bufferFullNotice,
   buildContainerLogNotices,
   LIVE_LOGS_UNAVAILABLE_MESSAGE,
   onlyUnavailableIssues,
@@ -793,6 +796,7 @@ type LogViewerControlsProps = {
   hasActiveResultFilter: boolean;
   countTitle: string;
   countLabel: string;
+  bufferFull: string | null;
   dispatch: React.Dispatch<LogViewerAction>;
 };
 
@@ -807,6 +811,7 @@ const LogViewerControls = ({
   hasActiveResultFilter,
   countTitle,
   countLabel,
+  bufferFull,
   dispatch,
 }: LogViewerControlsProps) => (
   <div
@@ -862,6 +867,13 @@ const LogViewerControls = ({
         </div>
       </div>
       <IconBar items={iconItems} />
+      {bufferFull ? (
+        <Tooltip content={bufferFull} triggerLabel="Log buffer is full">
+          <span className="logs-viewer-buffer-full">
+            <WarningIcon width={16} height={16} />
+          </span>
+        </Tooltip>
+      ) : null}
       {!!hasActiveResultFilter && (
         <span className="logs-viewer-count" title={countTitle}>
           {countLabel}
@@ -1016,6 +1028,8 @@ type LogViewerSource = {
   entries: ContainerLogsEntry[];
   issues: ContainerLogsTargetIssue[];
   notices: string[];
+  // Shown as a tooltip beside the toolbar rather than above the lines.
+  bufferFullNotice: string | null;
   displayError: string | null;
   // The live failure, when that is what stopped the view.
   liveFailure: string | null;
@@ -1048,8 +1062,8 @@ const resolveLogViewerSource = ({
         warnings: previous.warnings,
         // A container without a previous run is the empty state, not a problem.
         issues: previous.issues.filter((issue) => issue.state !== 'unavailable'),
-        truncation: null,
       }),
+      bufferFullNotice: null,
       displayError: previous.error,
       liveFailure: null,
       isPending: !hasScope || (previous.loading && previous.entries.length === 0),
@@ -1062,6 +1076,7 @@ const resolveLogViewerSource = ({
     entries: live.entries,
     issues: live.issues,
     notices: buildContainerLogNotices(live),
+    bufferFullNotice: bufferFullNotice(live.truncation),
     displayError: liveFailure,
     liveFailure,
     isPending: !hasScope || isAwaitingLiveLogs(live, streamExpected),
@@ -1948,6 +1963,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       hasActiveResultFilter={hasActiveResultFilter}
       countTitle={countTitle}
       countLabel={countLabel}
+      bufferFull={source.bufferFullNotice}
       dispatch={dispatch}
     />
   );

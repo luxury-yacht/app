@@ -56,6 +56,12 @@
    controls row. Uses tabular-nums so the value doesn't jitter as
    entries stream in, and the secondary text color so it reads as
    metadata rather than a primary control. */
+.logs-viewer-buffer-full {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-warning);
+}
+
 .logs-viewer-count {
   font-size: var(--font-size-small, 0.75rem);
   color: var(--color-text-secondary);

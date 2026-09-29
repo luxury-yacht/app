@@ -269,7 +269,22 @@ vi.mock('@shared/components/LoadingSpinner', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: { children?: React.ReactNode }) => <>{children ?? null}</>,
+  default: ({
+    children,
+    content,
+    triggerLabel,
+  }: {
+    children?: React.ReactNode;
+    content?: React.ReactNode;
+    triggerLabel?: string;
+  }) => (
+    <span
+      data-trigger-label={triggerLabel}
+      data-tooltip={typeof content === 'string' ? content : undefined}
+    >
+      {children ?? null}
+    </span>
+  ),
 }));
 
 const testClusterId = 'alpha:ctx';
@@ -286,7 +301,7 @@ const seedLogSnapshot = (
     phase: ContainerLogsStreamPhase;
     warnings: ContainerLogsWarning[];
     issues: ContainerLogsTargetIssue[];
-    truncation: { shown: number; total: number } | null;
+    truncation: { shown: number; received: number } | null;
     generatedAt: number;
   }> = {}
 ) => {
@@ -883,8 +898,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(FetchContainerLogs).not.toHaveBeenCalled();
   });
 
-  // F12 / AC12: lost lines and a full buffer are both visible.
-  it('shows dropped-entry and truncation notices', async () => {
+  // F12 / AC12: lost lines are reported in the warning bar; a full buffer is a
+  // warning icon beside the toolbar so it takes no space above the lines.
+  it('shows dropped-entry and buffer-full notices', async () => {
     seedLogSnapshot(
       [
         {
@@ -896,14 +912,26 @@ describe('LogViewer active pod synchronisation', () => {
         },
       ],
       defaultScope,
-      { warnings: [{ kind: 'dropped', count: 3 }], truncation: { shown: 1, total: 40 } }
+      { warnings: [{ kind: 'dropped', count: 3 }], truncation: { shown: 1, received: 40 } }
     );
 
     await renderViewer({ activePodNames: ['web-1'], isActive: false });
 
     const notices = container.querySelector('[aria-label="Log warnings"]')?.textContent ?? '';
     expect(notices).toContain('Dropped 3 log entries');
-    expect(notices).toContain('Showing most recent 1 of 40 log entries');
+    expect(notices).not.toContain('Log buffer is full');
+    const bufferFull = container.querySelector(
+      '.logs-viewer-controls [data-trigger-label="Log buffer is full"]'
+    );
+    expect(bufferFull?.getAttribute('data-tooltip')).toBe(
+      'Log buffer is full. Only showing the most recent 1 log.'
+    );
+  });
+
+  it('shows no buffer-full indicator while the buffer has room', async () => {
+    await renderViewer({ activePodNames: ['web-1', 'web-2'], isActive: false });
+
+    expect(container.querySelector('[data-trigger-label="Log buffer is full"]')).toBeNull();
   });
 
   it('merges per-tab and global target-limit warnings into one message', async () => {

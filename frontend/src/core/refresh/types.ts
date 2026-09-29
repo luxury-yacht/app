@@ -63,8 +63,10 @@ export interface ContainerLogsSnapshotPayload {
   phase: ContainerLogsStreamPhase;
   warnings: ContainerLogsWarning[];
   issues: ContainerLogsTargetIssue[];
-  // Set once the buffer has left out entries it received: `shown` of `total`.
-  truncation: { shown: number; total: number } | null;
+  // Set once the buffer has left out entries: it holds `shown` of the
+  // `received` entries delivered since the last snapshot. `received` is not the
+  // container's total log size.
+  truncation: { shown: number; received: number } | null;
 }
 
 export type DomainPayloadMap = BackendDomainPayloadMap & {
