@@ -29,19 +29,24 @@ const (
 	nodeLogServicePrefix     = "service:"
 )
 
+// Node log pages are plain text and HTML listings. The clientset negotiates
+// protobuf-then-JSON for built-in kinds, and a node answers 406 Not Acceptable
+// to a request that accepts neither, so node log requests say what they accept.
+const nodeLogAcceptHeader = "text/plain, */*"
+
 var (
 	nodeLogAnchorPattern = regexp.MustCompile(`<a\s+href="([^"]+)">([^<]+)</a>`)
 	nodeLogFetchRawFunc  = func(ctx context.Context, client rest.Interface, absPath string) ([]byte, error) {
 		if client == nil {
 			return nil, fmt.Errorf("kubernetes REST client not initialized")
 		}
-		return client.Get().AbsPath(absPath).DoRaw(ctx)
+		return nodeLogRequest(client, absPath).DoRaw(ctx)
 	}
 	nodeLogFetchProbeFunc = func(ctx context.Context, client rest.Interface, absPath string, maxBytes int) ([]byte, error) {
 		if client == nil {
 			return nil, fmt.Errorf("kubernetes REST client not initialized")
 		}
-		stream, err := client.Get().AbsPath(absPath).Stream(ctx)
+		stream, err := nodeLogRequest(client, absPath).Stream(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -52,6 +57,10 @@ var (
 	}
 	wellKnownNodeLogServices = []string{"kubelet", "containerd", "crio", "cri-o", "docker"}
 )
+
+func nodeLogRequest(client rest.Interface, absPath string) *rest.Request {
+	return client.Get().AbsPath(absPath).SetHeader("Accept", nodeLogAcceptHeader)
+}
 
 type nodeLogListingEntry struct {
 	Href  string

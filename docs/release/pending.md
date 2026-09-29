@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Node logs load again on clusters where the Logs tab said "Logs are not available on this node" with a 406 error.
 - Auto-sized table columns no longer truncate their headers when the header is wider than the column's values.
 - Container logs no longer show "Loading logs..." forever after an error.
 - Live container logs now follow pods that start later, including their init containers, a pod recreated with the same name, and newly added debug containers.

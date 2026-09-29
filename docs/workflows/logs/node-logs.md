@@ -12,6 +12,9 @@ object panel. They are snapshot/fetch based, not container log streaming.
 - Source switching should clearly reset or preserve content by policy.
 - Path-backed discovery and service-backed queries have different failure and
   filtering behavior; do not merge them accidentally.
+- Node log requests set their own `Accept` header (`text/plain, */*`). The
+  typed clientset they go through negotiates protobuf-then-JSON for built-in
+  kinds, and a node answers 406 to a request that accepts neither.
 - Search, display, toolbar, keyboard shortcuts and copy come from the shared
   viewer shell ([overview.md](overview.md#shared-viewer-shell)); source
   selection and transport stay node-log specific. Node Logs has no timestamp or
