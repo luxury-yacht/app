@@ -15,7 +15,6 @@ import {
  */
 
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { clearContainerLogsStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
 import { clearLogViewerPrefs } from '@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import { getObjectPanelScopeEvictions } from '@modules/object-panel/objectPanelRef';
@@ -31,6 +30,7 @@ import {
 } from 'react';
 import type { panelwindow } from '@/core/backend-api/models';
 import { resetRefreshDomain } from '@/core/data-access';
+import { clearContainerLogsStreamScopeParams } from '@/core/refresh/streaming/containerLogsStreamScopeParams';
 import type { KubernetesObjectReference } from '@/types/view-state';
 
 export { objectPanelId } from '@modules/object-panel/objectPanelRef';

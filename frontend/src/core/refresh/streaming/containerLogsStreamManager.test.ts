@@ -16,14 +16,14 @@ const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 
 vi.mock('@utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
 
-import {
-  resetContainerLogsStreamScopeParamsCacheForTesting,
-  setContainerLogsStreamScopeParams,
-} from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
 import { eventBus } from '@/core/events';
 import { getScopedDomainState, resetScopedDomainState } from '../store';
 import type { ContainerLogsStreamEventPayload, ContainerLogsWireEntry } from '../types';
 import { CONTAINER_LOGS_MAX_BYTES, ContainerLogsStreamManager } from './containerLogsStreamManager';
+import {
+  resetContainerLogsStreamScopeParamsCacheForTesting,
+  setContainerLogsStreamScopeParams,
+} from './containerLogsStreamScopeParams';
 
 const SCOPE = 'cluster-a|default:/v1:Pod:example';
 

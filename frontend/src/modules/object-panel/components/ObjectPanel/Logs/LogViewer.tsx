@@ -8,24 +8,12 @@
  */
 
 import type { types } from '@core/backend-api/models';
-import ActiveFilterChips, { type ActiveFilterChip } from '@shared/components/ActiveFilterChips';
-import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
-import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { normalizeDropdownValue } from '@shared/components/dropdowns/dropdownValue';
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import {
   ALL_MULTISELECT_FILTER,
   filterSelectionValues,
   isNarrowingFilterSelection,
-  multiSelectFilterTriggerLabel,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
-import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
-import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { WarningIcon } from '@shared/components/icons/SharedIcons';
-import LoadingSpinner from '@shared/components/LoadingSpinner';
-import ScrollableRegion from '@shared/components/ScrollableRegion';
-import Tooltip from '@shared/components/Tooltip';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { compareUtf16Strings } from '@shared/utils/sort';
 import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { readContainerLogsScopeContainers, requestData } from '@/core/data-access';
 import { useContainerLogsStream } from './hooks/useContainerLogsStream';
@@ -33,14 +21,13 @@ import { useLogCopyAction, useLogSelectionCopy } from './hooks/useLogCopyAction'
 import { useLogFiltering } from './hooks/useLogFiltering';
 import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import { logCopyText, useRawViewFallback } from './hooks/useLogPresentation';
-import { LogMetadataButton } from './LogMetadataButton';
 import './LogViewer.css';
-import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
 import { eventBus } from '@/core/events';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { type DomainSnapshotState, useRefreshScopedDomain } from '@/core/refresh/store';
+import { setContainerLogsStreamScopeParams } from '@/core/refresh/streaming/containerLogsStreamScopeParams';
 import type {
   ContainerLogsEntry,
   ContainerLogsSnapshotPayload,
@@ -52,24 +39,40 @@ import {
   getObjPanelLogsApiTimestampFormat,
   getObjPanelLogsApiTimestampUseLocalTimeZone,
 } from '@/core/settings/appPreferences';
-import {
-  DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
-  formatDefaultObjPanelLogsApiTimestamp,
-  formatObjPanelLogsApiTimestamp,
-} from '@/utils/objPanelLogsApiTimestampFormat';
 import { INACTIVE_SCOPE } from '../constants';
-import type { LogDisplayMode, LogTimestampMode } from '../types';
 import { containsAnsi } from './ansi';
 import { buildContainerLogMetadataColumns, containerLogExportValue } from './containerLogColumns';
+import {
+  buildActiveLogFilterChips,
+  CONTAINER_FILTER_PREFIX,
+  containerSelectorOptions,
+  DEBUG_FILTER_PREFIX,
+  formatContainerLabel,
+  INIT_FILTER_PREFIX,
+  type LogContainerKind,
+  logContainerKind,
+  toContainerFilterValueForKind,
+  toPodFilterValue,
+} from './containerLogFilters';
 import {
   bufferFullNotice,
   buildContainerLogNotices,
   LIVE_LOGS_UNAVAILABLE_MESSAGE,
   onlyUnavailableIssues,
   PREVIOUS_LOGS_UNAVAILABLE_MESSAGE,
-  RETRY_HINT,
 } from './containerLogNotices';
-import { setContainerLogsStreamScopeParams } from './containerLogsStreamScopeParamsCache';
+import {
+  buildContainerLogDisplay,
+  type ContainerLogRow,
+  renderContainerLogRow,
+  shouldDisplayPodContainerMetadata,
+} from './containerLogRows';
+import { formatTimestampForMode } from './containerLogTimestamps';
+import {
+  filterEntriesForActivePods,
+  getWorkloadPodNames,
+  useActivePodSet,
+} from './hooks/useActivePodSet';
 import { useAnchoredLogEntries } from './hooks/useAnchoredLogEntries';
 import { useLogMessageRenderer } from './hooks/useLogMessageRenderer';
 import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
@@ -80,19 +83,22 @@ import {
 } from './hooks/usePreviousContainerLogs';
 import { useTerminalTheme } from './hooks/useTerminalTheme';
 import {
+  LogViewerControls,
+  LogViewerReadyView,
+  renderLogViewerBlockingState,
+  renderLogViewerContent,
+} from './LogViewerLayout';
+import {
   classifySelectedLogSources,
   logFilterBackendValues,
   logFilterSelectionForOnlyContainer,
   logFilterSelectionForOnlyPod,
-  logFilterSelectionFromDropdownValues,
-  logFilterSelectionLabel,
   logFilterSelectionMatchesNone,
-  logFilterSelectionToDropdownValues,
   pruneLogFilterSelectionToOptions,
 } from './logFilterSelection';
 import type { ParsedLogEntry } from './logOptionsReducer';
 import { buildLogSearchRegex, isValidRegexPattern } from './logSearch';
-import { buildLogToolbarItems, LogTextFilter } from './logToolbar';
+import { buildLogToolbarItems } from './logToolbar';
 import {
   getLogViewerPrefs,
   getLogViewerScrollPosition,
@@ -103,12 +109,10 @@ import {
   applyLogViewerPrefs,
   extractLogViewerPrefs,
   initialLogViewerState,
+  type LogViewerAction,
   logViewerReducer,
 } from './logViewerReducer';
-import ParsedLogTable from './ParsedLogTable';
-import { formatRawOrPrettyJsonLine } from './parsedLogUtils';
 import { buildStablePodColorMap } from './podColors';
-import RawLogViewer, { type RenderedLogRow } from './RawLogViewer';
 
 interface LogViewerProps {
   resourceKind: string;
@@ -135,158 +139,6 @@ const CONTAINER_LOGS_DOMAIN = 'container-logs' as const;
 const POD_LOG_COLOR_PALETTE_SLOTS = Array.from({ length: 24 }, (_, index) => index + 1);
 const EMPTY_CONTAINER_LOG_ENTRIES: ContainerLogsEntry[] = [];
 
-const formatShortTimestamp = (timestamp: string, useLocalTimeZone: boolean): string => {
-  const parsed = new Date(timestamp);
-  if (Number.isNaN(parsed.getTime())) {
-    return formatDefaultObjPanelLogsApiTimestamp(timestamp, useLocalTimeZone);
-  }
-  const hours = String(useLocalTimeZone ? parsed.getHours() : parsed.getUTCHours()).padStart(
-    2,
-    '0'
-  );
-  const minutes = String(useLocalTimeZone ? parsed.getMinutes() : parsed.getUTCMinutes()).padStart(
-    2,
-    '0'
-  );
-  const seconds = String(useLocalTimeZone ? parsed.getSeconds() : parsed.getUTCSeconds()).padStart(
-    2,
-    '0'
-  );
-  const millis = String(
-    useLocalTimeZone ? parsed.getMilliseconds() : parsed.getUTCMilliseconds()
-  ).padStart(3, '0');
-  return `${hours}:${minutes}:${seconds}.${millis}`;
-};
-
-const formatLocalizedTimestamp = (timestamp: string, useLocalTimeZone: boolean): string => {
-  const parsed = new Date(timestamp);
-  if (Number.isNaN(parsed.getTime())) {
-    return formatDefaultObjPanelLogsApiTimestamp(timestamp, useLocalTimeZone);
-  }
-  return parsed.toLocaleString([], {
-    hour12: false,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZone: useLocalTimeZone ? undefined : 'UTC',
-  });
-};
-
-const formatTimestampForMode = (
-  timestamp: string,
-  mode: LogTimestampMode,
-  apiTimestampFormat: string,
-  useLocalTimeZone: boolean
-): string => {
-  if (!timestamp || mode === 'hidden') {
-    return '';
-  }
-  switch (mode) {
-    case 'default':
-      return formatObjPanelLogsApiTimestamp(timestamp, apiTimestampFormat, useLocalTimeZone);
-    case 'short':
-      return formatShortTimestamp(timestamp, useLocalTimeZone);
-    case 'localized':
-      return formatLocalizedTimestamp(timestamp, useLocalTimeZone);
-    default:
-      return formatObjPanelLogsApiTimestamp(
-        timestamp,
-        DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
-        useLocalTimeZone
-      );
-  }
-};
-
-type LogContainerKind = 'regular' | 'init' | 'ephemeral';
-
-interface LogContainerTraits {
-  isInit?: boolean;
-  isEphemeral?: boolean;
-}
-
-const logContainerKind = (traits: LogContainerTraits): LogContainerKind => {
-  if (traits.isInit) {
-    return 'init';
-  }
-  if (traits.isEphemeral) {
-    return 'ephemeral';
-  }
-  return 'regular';
-};
-
-const CONTAINER_LABEL_SUFFIX: Record<LogContainerKind, string> = {
-  regular: '',
-  init: ':init',
-  ephemeral: ' (debug)',
-};
-
-const formatContainerLabel = (container: string, kind: LogContainerKind): string =>
-  `${container}${CONTAINER_LABEL_SUFFIX[kind]}`;
-
-const POD_FILTER_PREFIX = 'pod:';
-const INIT_FILTER_PREFIX = 'init:';
-const CONTAINER_FILTER_PREFIX = 'container:';
-const DEBUG_FILTER_PREFIX = 'debug:';
-const EMPTY_CONTAINER_LOG_PLACEHOLDER = '[container emitted an empty log]';
-
-const toPodFilterValue = (pod: string): string => `${POD_FILTER_PREFIX}${pod}`;
-const toInitContainerFilterValue = (container: string): string =>
-  `${INIT_FILTER_PREFIX}${container}`;
-const toContainerFilterValue = (container: string): string =>
-  `${CONTAINER_FILTER_PREFIX}${container}`;
-const toDebugContainerFilterValue = (container: string): string =>
-  `${DEBUG_FILTER_PREFIX}${container}`;
-
-const CONTAINER_FILTER_VALUE: Record<LogContainerKind, (container: string) => string> = {
-  regular: toContainerFilterValue,
-  init: toInitContainerFilterValue,
-  ephemeral: toDebugContainerFilterValue,
-};
-
-const toContainerFilterValueForKind = (container: string, kind: LogContainerKind): string =>
-  CONTAINER_FILTER_VALUE[kind](container);
-
-// Init containers have their own group, so only debug containers are marked.
-const containerSelectorOptions = (
-  containers: types.PodContainer[],
-  kind: LogContainerKind,
-  group: string
-): DropdownOption[] =>
-  containers
-    .filter((container) => logContainerKind(container) === kind)
-    .map((container) => ({
-      value: toContainerFilterValueForKind(container.name, kind),
-      label: kind === 'ephemeral' ? `${container.name} (debug)` : container.name,
-      group,
-    }))
-    .sort((left, right) => left.label.localeCompare(right.label));
-
-const formatSelectedFilterLabel = (
-  filterValue: string,
-  optionsByValue: Map<string, string>
-): string => {
-  const knownLabel = optionsByValue.get(filterValue);
-  if (knownLabel) {
-    return knownLabel;
-  }
-  if (filterValue.startsWith(POD_FILTER_PREFIX)) {
-    return filterValue.substring(POD_FILTER_PREFIX.length);
-  }
-  if (filterValue.startsWith(INIT_FILTER_PREFIX)) {
-    return filterValue.substring(INIT_FILTER_PREFIX.length);
-  }
-  if (filterValue.startsWith(CONTAINER_FILTER_PREFIX)) {
-    return filterValue.substring(CONTAINER_FILTER_PREFIX.length);
-  }
-  if (filterValue.startsWith(DEBUG_FILTER_PREFIX)) {
-    return `${filterValue.substring(DEBUG_FILTER_PREFIX.length)} (debug)`;
-  }
-  return filterValue;
-};
-
 type LogEmptyState =
   | 'none'
   | 'no_logs_yet'
@@ -297,383 +149,6 @@ type LogEmptyState =
   | 'auto_refresh_off';
 
 type ContainerLogsSnapshotState = DomainSnapshotState<ContainerLogsSnapshotPayload>;
-
-const getWorkloadPodNames = (
-  entries: ContainerLogsEntry[],
-  activePods: string[] | null
-): string[] =>
-  (activePods ?? Array.from(new Set(entries.map((entry) => entry.pod).filter(Boolean))))
-    .slice()
-    .sort(compareUtf16Strings);
-
-// Lines of pods the workload no longer has are hidden. The filter applies only
-// once the pod list is known, and an empty list hides every line only after
-// pods were seen, so the first, still-loading list does not blank the view.
-const filterEntriesForActivePods = (
-  entries: ContainerLogsEntry[],
-  activePods: Set<string> | null
-): ContainerLogsEntry[] =>
-  activePods === null ? entries : entries.filter((entry) => activePods.has(entry.pod));
-
-const NO_ACTIVE_PODS = new Set<string>();
-
-const normalizeActivePodNames = (activePodNames: string[] | null): string[] | null =>
-  activePodNames === null
-    ? null
-    : activePodNames
-        .map((name) => (typeof name === 'string' ? name.trim() : ''))
-        .filter((name) => name.length > 0);
-
-const useActivePodSet = (
-  activePodNames: string[] | null,
-  enabled: boolean,
-  scope: string | null
-): Set<string> | null => {
-  const seenPodsRef = useRef<{ scope: string | null; seen: boolean }>({ scope, seen: false });
-  // Reset during render, like syncContainerLogsScope, so a new scope never
-  // inherits the previous one's history.
-  if (seenPodsRef.current.scope !== scope) {
-    seenPodsRef.current = { scope, seen: false };
-  }
-  const names = useMemo(() => normalizeActivePodNames(activePodNames), [activePodNames]);
-  const activePods = useMemo(() => (names && names.length > 0 ? new Set(names) : null), [names]);
-  useEffect(() => {
-    if (enabled && activePods) {
-      seenPodsRef.current.seen = true;
-    }
-  }, [activePods, enabled]);
-  if (!enabled || names === null) {
-    return null;
-  }
-  return activePods ?? (seenPodsRef.current.seen ? NO_ACTIVE_PODS : null);
-};
-
-type LogViewerAction = Parameters<typeof logViewerReducer>[1];
-
-const buildTextFilterChip = (
-  textFilter: string,
-  regexMatches: boolean,
-  hasInvalidRegex: boolean,
-  dispatch: React.Dispatch<LogViewerAction>
-): ActiveFilterChip | null => {
-  const trimmedTextFilter = textFilter.trim();
-  if (!trimmedTextFilter) {
-    return null;
-  }
-  let label = `Text: ${trimmedTextFilter}`;
-  if (regexMatches) {
-    label = hasInvalidRegex
-      ? `Regex: ${trimmedTextFilter} (invalid expression)`
-      : `Regex: ${trimmedTextFilter}`;
-  }
-  return {
-    key: 'text-filter',
-    label,
-    removeLabel: 'Clear text filter',
-    onRemove: () => dispatch({ type: 'SET_TEXT_FILTER', payload: '' }),
-  };
-};
-
-const removeSelectedFilterValue = (selectedValues: string[], filterValue: string) => {
-  const values = selectedValues.filter((value) => value !== filterValue);
-  return values.length > 0 ? { mode: 'some' as const, values } : ALL_MULTISELECT_FILTER;
-};
-
-const buildSelectedFilterChips = (
-  selectedFilterValues: string[],
-  optionsByValue: Map<string, string>,
-  dispatch: React.Dispatch<LogViewerAction>
-): ActiveFilterChip[] =>
-  selectedFilterValues.map((filterValue) => {
-    const label =
-      logFilterSelectionLabel(filterValue) ??
-      formatSelectedFilterLabel(filterValue, optionsByValue);
-    return {
-      key: `selected-filter:${filterValue}`,
-      label,
-      removeLabel: `Remove filter ${label}`,
-      onRemove: () =>
-        dispatch({
-          type: 'SET_SELECTED_FILTERS',
-          payload: removeSelectedFilterValue(selectedFilterValues, filterValue),
-        }),
-    };
-  });
-
-const optionalActiveFilterChip = (
-  enabled: boolean,
-  chip: ActiveFilterChip
-): ActiveFilterChip | null => (enabled ? chip : null);
-
-const buildActiveLogFilterChips = ({
-  textFilter,
-  regexMatches,
-  hasInvalidRegex,
-  showPreviousContainerLogs,
-  selectedFilterValues,
-  selectorOptionLabelsByValue,
-  highlightMatches,
-  inverseMatches,
-  caseSensitiveMatches,
-  dispatch,
-  stopPreviousLogs,
-}: {
-  textFilter: string;
-  regexMatches: boolean;
-  hasInvalidRegex: boolean;
-  showPreviousContainerLogs: boolean;
-  selectedFilterValues: string[];
-  selectorOptionLabelsByValue: Map<string, string>;
-  highlightMatches: boolean;
-  inverseMatches: boolean;
-  caseSensitiveMatches: boolean;
-  dispatch: React.Dispatch<LogViewerAction>;
-  stopPreviousLogs: () => void;
-}): ActiveFilterChip[] => {
-  const chips = [
-    buildTextFilterChip(textFilter, regexMatches, hasInvalidRegex, dispatch),
-    optionalActiveFilterChip(showPreviousContainerLogs, {
-      key: 'previous-logs',
-      label: 'Showing previous logs',
-      removeLabel: 'Return to live logs',
-      onRemove: stopPreviousLogs,
-    }),
-    ...buildSelectedFilterChips(selectedFilterValues, selectorOptionLabelsByValue, dispatch),
-    optionalActiveFilterChip(highlightMatches, {
-      key: 'highlight',
-      label: 'Highlight',
-      removeLabel: 'Disable highlight matches',
-      onRemove: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
-    }),
-    optionalActiveFilterChip(inverseMatches, {
-      key: 'invert',
-      label: 'Invert',
-      removeLabel: 'Disable invert filter',
-      onRemove: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
-    }),
-    optionalActiveFilterChip(caseSensitiveMatches, {
-      key: 'case-sensitive',
-      label: 'Match case',
-      removeLabel: 'Disable case-sensitive matching',
-      onRemove: () => dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }),
-    }),
-    optionalActiveFilterChip(regexMatches && !textFilter.trim(), {
-      key: 'regex',
-      label: 'Regex',
-      removeLabel: 'Disable regex matching',
-      onRemove: () => dispatch({ type: 'TOGGLE_REGEX_MATCHES' }),
-    }),
-  ];
-  return chips.filter((chip): chip is ActiveFilterChip => chip !== null);
-};
-
-const shouldDisplayPodContainerMetadata = (
-  selectedContainerFilterCount: number,
-  singlePodSelectableContainerCount: number
-): boolean =>
-  selectedContainerFilterCount !== 1 &&
-  !(selectedContainerFilterCount === 0 && singlePodSelectableContainerCount === 1);
-
-type ContainerLogFormatOptions = {
-  displayMode: LogDisplayMode;
-  showAnsiColors: boolean;
-  timestampMode: LogTimestampMode;
-  apiTimestampFormat: string;
-  apiTimestampUseLocalTimeZone: boolean;
-  isWorkload: boolean;
-  showContainerMetadata: boolean;
-};
-
-/** Where a line came from; workload views also name the pod. */
-type ContainerLogSource = { pod: string | null; container: string; kind: LogContainerKind };
-
-type ContainerLogRowMetadata = { timestamp: string; source: ContainerLogSource | null };
-
-/**
- * A raw-view row. An entry's first row carries the entry's metadata; the
- * continuation rows of a pretty-printed JSON line carry none.
- */
-interface ContainerLogRow extends RenderedLogRow {
-  metadata?: ContainerLogRowMetadata;
-}
-
-type ContainerLogDisplay = {
-  rows: ContainerLogRow[];
-  /** One line per entry, as the copy action writes it. */
-  copyLines: string[];
-};
-
-const NO_CONTAINER_LOG_DISPLAY: ContainerLogDisplay = { rows: [], copyLines: [] };
-
-const containerLogRowMetadata = (
-  entry: ContainerLogsEntry,
-  options: ContainerLogFormatOptions
-): ContainerLogRowMetadata => ({
-  timestamp: formatTimestampForMode(
-    entry.timestamp ?? '',
-    options.timestampMode,
-    options.apiTimestampFormat,
-    options.apiTimestampUseLocalTimeZone
-  ),
-  source:
-    options.isWorkload || options.showContainerMetadata
-      ? {
-          pod: options.isWorkload ? entry.pod : null,
-          container: entry.container,
-          kind: logContainerKind(entry),
-        }
-      : null,
-});
-
-const containerLogMessage = (
-  entry: ContainerLogsEntry,
-  options: ContainerLogFormatOptions
-): string => {
-  const content = formatRawOrPrettyJsonLine(
-    entry.line,
-    options.displayMode,
-    options.showAnsiColors
-  );
-  return content.trim().length > 0 ? content : EMPTY_CONTAINER_LOG_PLACEHOLDER;
-};
-
-const formatContainerLogSource = (source: ContainerLogSource): string => {
-  const label = formatContainerLabel(source.container, source.kind);
-  return source.pod === null ? label : `${source.pod}/${label}`;
-};
-
-// The copied line reads like the row: `[timestamp] [pod/container] message`.
-const formatContainerLogCopyLine = (
-  { timestamp, source }: ContainerLogRowMetadata,
-  message: string
-): string =>
-  [
-    timestamp ? `[${timestamp}]` : '',
-    source ? `[${formatContainerLogSource(source)}]` : '',
-    message,
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-const buildContainerLogDisplay = ({
-  entries,
-  emptyStateMessage,
-  ...options
-}: ContainerLogFormatOptions & {
-  entries: ContainerLogsEntry[];
-  emptyStateMessage: string;
-}): ContainerLogDisplay => {
-  if (entries.length === 0) {
-    // The empty-state message shows as the log's only line.
-    return emptyStateMessage
-      ? { rows: [{ key: 'empty', line: emptyStateMessage }], copyLines: [emptyStateMessage] }
-      : NO_CONTAINER_LOG_DISPLAY;
-  }
-  const rows: ContainerLogRow[] = [];
-  const copyLines = entries.map((entry, index) => {
-    const metadata = containerLogRowMetadata(entry, options);
-    const message = containerLogMessage(entry, options);
-    const entryKey = entry._seq ?? `entry:${index}`;
-    message.split('\n').forEach((segment, segmentIndex) => {
-      rows.push({
-        key: `${entryKey}:${segmentIndex}`,
-        line: segment,
-        metadata: segmentIndex === 0 ? metadata : undefined,
-      });
-    });
-    return formatContainerLogCopyLine(metadata, message);
-  });
-  return { rows, copyLines };
-};
-
-type RenderLogMessage = (message: string, keyPrefix: string) => React.ReactNode;
-type SelectContainerFilter = (container: string, kind: LogContainerKind) => void;
-
-// Workload views color a line's metadata with its pod's color.
-const podColorStyle = (podColor: string | undefined): React.CSSProperties | undefined =>
-  podColor === undefined ? undefined : ({ '--pod-color': podColor } as React.CSSProperties);
-
-const renderContainerLogSource = ({
-  source,
-  podColor,
-  selectPod,
-  selectContainer,
-}: {
-  source: ContainerLogSource;
-  podColor: string | undefined;
-  selectPod: (pod: string) => void;
-  selectContainer: SelectContainerFilter;
-}): React.ReactNode => {
-  const { pod } = source;
-  const label = formatContainerLabel(source.container, source.kind);
-  return (
-    <span
-      className={
-        pod === null ? 'log-viewer-metadata' : 'log-viewer-metadata log-viewer-metadata--bold'
-      }
-      style={podColorStyle(podColor)}
-    >
-      {'['}
-      {pod !== null && (
-        <>
-          <LogMetadataButton
-            subject="pod"
-            name={pod}
-            podColor={podColor}
-            onSelect={() => selectPod(pod)}
-          />
-          {'/'}
-        </>
-      )}
-      <LogMetadataButton
-        subject="container"
-        name={label}
-        podColor={podColor}
-        onSelect={() => selectContainer(source.container, source.kind)}
-      />
-      {']'}
-    </span>
-  );
-};
-
-const renderContainerLogRow = ({
-  row,
-  podColors,
-  selectPod,
-  selectContainer,
-  renderMessage,
-}: {
-  row: ContainerLogRow;
-  podColors: Record<string, string>;
-  selectPod: (pod: string) => void;
-  selectContainer: SelectContainerFilter;
-  renderMessage: RenderLogMessage;
-}): React.ReactNode => {
-  const message = renderMessage(row.line, `line-${row.key}`);
-  const { timestamp = '', source = null } = row.metadata ?? {};
-  const pod = source?.pod ?? null;
-  const podColor = pod === null ? undefined : podColors[pod] || podColors.__fallback__;
-  return (
-    <div className="log-viewer-line">
-      {!!timestamp && (
-        <>
-          <span
-            className={
-              podColor === undefined ? 'log-viewer-metadata' : 'log-viewer-metadata pod-color-text'
-            }
-            style={podColorStyle(podColor)}
-          >
-            [{timestamp}]
-          </span>{' '}
-        </>
-      )}
-      {source ? (
-        <>{renderContainerLogSource({ source, podColor, selectPod, selectContainer })} </>
-      ) : null}
-      {message}
-    </div>
-  );
-};
 
 const requestLogScopeContainers = async (
   clusterId: string,
@@ -689,244 +164,6 @@ const requestLogScopeContainers = async (
   });
   return result.status === 'executed' ? (result.data ?? []) : [];
 };
-
-const renderLogViewerContent = ({
-  isParsedView,
-  parsedLogs,
-  tableColumns,
-  expandedRows,
-  onToggleParsedRow,
-  displayRows,
-  logsContentRef,
-  wrapText,
-  renderRawLogRow,
-}: {
-  isParsedView: boolean;
-  parsedLogs: ParsedLogEntry[];
-  tableColumns: GridColumnDefinition<ParsedLogEntry>[];
-  expandedRows: Set<string>;
-  onToggleParsedRow: (rowKey: string) => void;
-  displayRows: ContainerLogRow[];
-  logsContentRef: React.RefObject<HTMLElement | null>;
-  wrapText: boolean;
-  renderRawLogRow: (row: ContainerLogRow) => React.ReactNode;
-}): React.ReactNode => {
-  if (isParsedView) {
-    return (
-      <ParsedLogTable
-        rows={parsedLogs}
-        columns={tableColumns}
-        expandedRows={expandedRows}
-        onToggleRow={onToggleParsedRow}
-      />
-    );
-  }
-  if (displayRows.length === 0) {
-    return null;
-  }
-  return (
-    <RawLogViewer
-      rows={displayRows}
-      scrollContainerRef={logsContentRef}
-      wrapText={wrapText}
-      renderRow={renderRawLogRow}
-    />
-  );
-};
-
-const renderLogViewerBlockingState = ({
-  loading,
-  loadingMessage,
-  paused,
-  displayError,
-  retryHint,
-  hasEntries,
-}: {
-  loading: boolean;
-  loadingMessage: string;
-  paused: boolean;
-  displayError: string | null;
-  retryHint: boolean;
-  hasEntries: boolean;
-}) => {
-  if (loading) {
-    return (
-      <div className="object-panel-tab-content">
-        <LoadingSpinner message={loadingMessage} />
-      </div>
-    );
-  }
-  if (paused) {
-    return (
-      <div className="object-panel-tab-content">
-        <div className="logs-viewer-display-empty">
-          <ClusterDataPausedState />
-        </div>
-      </div>
-    );
-  }
-  if (displayError && !hasEntries) {
-    return (
-      <div className="object-panel-tab-content">
-        <div className="logs-viewer-display-error">
-          <div className="error-message">
-            Error: <ErrorSurface kind="reported" message={displayError} />
-          </div>
-          {retryHint ? <div className="logs-viewer-retry-hint">{RETRY_HINT}</div> : null}
-        </div>
-      </div>
-    );
-  }
-  return null;
-};
-
-type LogViewerControlsProps = {
-  activeFilterChips: ActiveFilterChip[];
-  selectorOptions: DropdownOption[];
-  selectedFilters: Parameters<typeof logFilterSelectionToDropdownValues>[0];
-  isPendingLogs: boolean;
-  filterInputRef: React.RefObject<HTMLInputElement | null>;
-  textFilter: string;
-  iconItems: IconBarItem[];
-  hasActiveResultFilter: boolean;
-  countTitle: string;
-  countLabel: string;
-  bufferFull: string | null;
-  dispatch: React.Dispatch<LogViewerAction>;
-};
-
-const LogViewerControls = ({
-  activeFilterChips,
-  selectorOptions,
-  selectedFilters,
-  isPendingLogs,
-  filterInputRef,
-  textFilter,
-  iconItems,
-  hasActiveResultFilter,
-  countTitle,
-  countLabel,
-  bufferFull,
-  dispatch,
-}: LogViewerControlsProps) => (
-  <div
-    className={`logs-viewer-controls${activeFilterChips.length > 0 ? ' logs-viewer-controls--with-active-filters' : ''}`}
-  >
-    <div className="logs-viewer-controls-left">
-      {selectorOptions.length > 0 && (
-        <div className="logs-viewer-control-group">
-          <Dropdown
-            options={selectorOptions}
-            value={logFilterSelectionToDropdownValues(selectedFilters, selectorOptions)}
-            onChange={(value) =>
-              dispatch({
-                type: 'SET_SELECTED_FILTERS',
-                payload: logFilterSelectionFromDropdownValues(
-                  normalizeDropdownValue(value),
-                  selectorOptions
-                ),
-              })
-            }
-            multiple
-            showBulkActions
-            placeholder={isPendingLogs ? 'Loading logs…' : 'All Logs'}
-            renderValue={(value) =>
-              multiSelectFilterTriggerLabel('Logs', selectedFilters, normalizeDropdownValue(value))
-            }
-            className="logs-viewer-selector-dropdown"
-          />
-        </div>
-      )}
-      <LogTextFilter
-        inputRef={filterInputRef}
-        value={textFilter}
-        dispatch={dispatch}
-        title="Filter logs by text (searches in log lines, pods, and containers)"
-      />
-      <IconBar items={iconItems} />
-      {bufferFull ? (
-        <Tooltip content={bufferFull} triggerLabel="Log buffer is full">
-          <span className="logs-viewer-buffer-full">
-            <WarningIcon width={16} height={16} />
-          </span>
-        </Tooltip>
-      ) : null}
-      {!!hasActiveResultFilter && (
-        <span className="logs-viewer-count" title={countTitle}>
-          {countLabel}
-        </span>
-      )}
-    </div>
-  </div>
-);
-
-type LogViewerReadyViewProps = {
-  controls: React.ReactNode;
-  activeFilterChips: ActiveFilterChip[];
-  clearAllFilters: () => void;
-  visibleLogWarnings: string[];
-  logsContentRef: React.RefObject<HTMLElement | null>;
-  renderedLogContent: React.ReactNode;
-  isParsedView: boolean;
-  isTailFollowing: boolean;
-  resumeScrolling: () => void;
-  isSettingsOpen: boolean;
-  closeSettings: () => void;
-};
-
-const LogViewerReadyView = ({
-  controls,
-  activeFilterChips,
-  clearAllFilters,
-  visibleLogWarnings,
-  logsContentRef,
-  renderedLogContent,
-  isParsedView,
-  isTailFollowing,
-  resumeScrolling,
-  isSettingsOpen,
-  closeSettings,
-}: LogViewerReadyViewProps) => (
-  <>
-    <div className="object-panel-tab-content">
-      <div className="logs-viewer-display">
-        {controls}
-        <ActiveFilterChips
-          ariaLabel="Active log filters"
-          chips={activeFilterChips}
-          onClearAll={clearAllFilters}
-          className="logs-viewer-active-filters"
-        />
-        {visibleLogWarnings.length > 0 && (
-          <div className="logs-viewer-warning-bar" role="status" aria-label="Log warnings">
-            {visibleLogWarnings.join(' ')}
-          </div>
-        )}
-        <div className="logs-viewer-content-frame">
-          <ScrollableRegion
-            className="logs-viewer-content selectable"
-            ref={logsContentRef}
-            aria-label="Log output"
-            tabIndex={isParsedView ? -1 : 0}
-          >
-            {renderedLogContent}
-          </ScrollableRegion>
-          {!isTailFollowing && (
-            <button
-              type="button"
-              className="logs-viewer-resume-scrolling"
-              aria-label="Resume scrolling"
-              onClick={resumeScrolling}
-            >
-              Resume scrolling
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-    <ObjPanelLogsSettingsModal isOpen={isSettingsOpen} onClose={closeSettings} />
-  </>
-);
 
 const syncContainerLogsScope = ({
   scope,

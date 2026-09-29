@@ -19,6 +19,10 @@ import {
   resetScopedDomainState,
   setScopedDomainState,
 } from '@/core/refresh/store';
+import {
+  getContainerLogsStreamScopeParams,
+  resetContainerLogsStreamScopeParamsCacheForTesting,
+} from '@/core/refresh/streaming/containerLogsStreamScopeParams';
 import type {
   ContainerLogsEntry,
   ContainerLogsStreamPhase,
@@ -30,10 +34,6 @@ import {
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
-import {
-  getContainerLogsStreamScopeParams,
-  resetContainerLogsStreamScopeParamsCacheForTesting,
-} from './containerLogsStreamScopeParamsCache';
 import LogViewer from './LogViewer';
 import type { ParsedLogEntry } from './logOptionsReducer';
 import {

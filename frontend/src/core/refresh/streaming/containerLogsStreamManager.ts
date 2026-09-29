@@ -7,7 +7,6 @@
  * entry buffer projected into the store.
  */
 
-import { getContainerLogsStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
 import { type JSONSocket, JSONStream } from '@wailsio/runtime';
 import { eventBus } from '@/core/events';
 import {
@@ -32,6 +31,7 @@ import {
   parseContainerLogsFrame,
   transitionContainerLogsProtocol,
 } from './containerLogsStreamProtocol';
+import { getContainerLogsStreamScopeParams } from './containerLogsStreamScopeParams';
 import { StreamErrorNotifier } from './streamErrorNotifier';
 import { streamReconnectDelay } from './streamTiming';
 import { StreamVisibilityController } from './streamVisibilityController';

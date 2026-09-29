@@ -1,7 +1,8 @@
 /**
- * frontend/src/modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache.ts
+ * frontend/src/core/refresh/streaming/containerLogsStreamScopeParams.ts
  *
- * Module-level cache of per-scope backend container logs stream filters.
+ * Per-scope source selection the container-logs stream sends when it opens.
+ * Container Logs writes it; the stream manager reads it for each request.
  *
  * This mirrors the panel-lifetime persistence used by logViewerPrefsCache:
  * scopes survive transient unmount/remount cycles caused by cluster
