@@ -48,7 +48,7 @@ func TestSubsystemOwnsOneBelowThresholdCustomResourceWatch(t *testing.T) {
 		review.Status.Allowed = attrs.Resource == "customresourcedefinitions" || attrs.Resource == "widgets"
 		return true, review, nil
 	})
-	subsystem, err := NewSubsystemWithServices(Config{KubernetesClient: kube, APIExtensionsClient: apiextensionsfake.NewClientset(crd), DynamicClient: dyn, ClusterID: "test-cluster", Logger: applog.Noop, ObjectDetailsProvider: noopObjectDetailProvider{}, NodeMaintenanceStore: nodemaintenance.NewStore(5), ResyncInterval: time.Minute})
+	subsystem, err := NewSubsystemWithServices(context.Background(), Config{KubernetesClient: kube, APIExtensionsClient: apiextensionsfake.NewClientset(crd), DynamicClient: dyn, ClusterID: "test-cluster", Logger: applog.Noop, ObjectDetailsProvider: noopObjectDetailProvider{}, NodeMaintenanceStore: nodemaintenance.NewStore(5), ResyncInterval: time.Minute})
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(func() {

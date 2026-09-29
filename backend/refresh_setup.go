@@ -28,14 +28,14 @@ func (r *RefreshCoordinator) resolveMetricsInterval() time.Duration {
 	return r.metricsInterval
 }
 
-func (a *RefreshCoordinator) setupRefreshSubsystemForSelections(selections []kubeconfigSelection) error {
+func (a *RefreshCoordinator) setupRefreshSubsystemForSelections(buildCtx context.Context, selections []kubeconfigSelection) error {
 	if !a.runtimeAvailable() {
 		return errors.New("application context not initialised")
 	}
 
 	ctx := a.beginRefreshRuntimeContext()
 
-	subsystems, clusterOrder, err := a.buildRefreshSubsystems(selections)
+	subsystems, clusterOrder, err := a.buildRefreshSubsystems(buildCtx, selections)
 	if err != nil {
 		return err
 	}
@@ -192,6 +192,7 @@ func buildSubsystemsInSelectionOrder(
 // buildRefreshSubsystems creates refresh subsystems for the active cluster selections.
 // All clusters are treated equally - there is no "primary" or "host" cluster.
 func (a *RefreshCoordinator) buildRefreshSubsystems(
+	buildCtx context.Context,
 	selections []kubeconfigSelection,
 ) (map[string]*system.Subsystem, []string, error) {
 	subsystems := make(map[string]*system.Subsystem)
@@ -208,11 +209,11 @@ func (a *RefreshCoordinator) buildRefreshSubsystems(
 	// ordering (preflight before domain registration) lives inside each build and is
 	// untouched by the fan-out.
 	outcomes, err := buildSubsystemsInSelectionOrder(
-		a.CtxOrBackground(),
+		buildCtx,
 		len(selections),
 		clusterClientBuildConcurrencyLimit(len(selections)),
-		func(_ context.Context, index int) (subsystemBuildOutcome, error) {
-			return a.buildRefreshSubsystemOutcome(selections[index])
+		func(buildCtx context.Context, index int) (subsystemBuildOutcome, error) {
+			return a.buildRefreshSubsystemOutcome(buildCtx, selections[index])
 		},
 	)
 	if err != nil {
@@ -230,7 +231,7 @@ func (a *RefreshCoordinator) buildRefreshSubsystems(
 	return subsystems, clusterOrder, nil
 }
 
-func (a *RefreshCoordinator) buildRefreshSubsystemOutcome(selection kubeconfigSelection) (subsystemBuildOutcome, error) {
+func (a *RefreshCoordinator) buildRefreshSubsystemOutcome(buildCtx context.Context, selection kubeconfigSelection) (subsystemBuildOutcome, error) {
 	clusterMeta := a.clusterRuntime.clusterMetaForSelection(selection)
 	if clusterMeta.ID == "" {
 		return subsystemBuildOutcome{}, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
@@ -246,7 +247,7 @@ func (a *RefreshCoordinator) buildRefreshSubsystemOutcome(selection kubeconfigSe
 	if !a.clusterClientsAllowRefresh(clients, clusterMeta) {
 		return subsystemBuildOutcome{id: clusterMeta.ID}, nil
 	}
-	subsystem, err := a.buildRefreshSubsystemForSelection(selection, clients, clusterMeta)
+	subsystem, err := a.buildRefreshSubsystemForSelection(buildCtx, selection, clients, clusterMeta)
 	if err != nil {
 		return subsystemBuildOutcome{}, err
 	}
@@ -271,6 +272,7 @@ func (a *RefreshCoordinator) clusterClientsAllowRefresh(clients *clusterClients,
 }
 
 func (a *RefreshCoordinator) buildRefreshSubsystemForSelection(
+	buildCtx context.Context,
 	selection kubeconfigSelection,
 	clients *clusterClients,
 	clusterMeta ClusterMeta,
@@ -307,7 +309,7 @@ func (a *RefreshCoordinator) buildRefreshSubsystemForSelection(
 	}
 	cfg.ObjectCatalogNamespaces = a.catalogNamespaceGroups
 
-	subsystem, err := a.buildRefreshSubsystem(cfg)
+	subsystem, err := a.buildRefreshSubsystem(buildCtx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -529,8 +531,8 @@ func (a *RefreshCoordinator) startPublishedClusterReadiness(clusterID string) {
 }
 
 // buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.
-func (a *RefreshCoordinator) buildRefreshSubsystem(cfg system.Config) (*system.Subsystem, error) {
-	subsystem, err := newRefreshSubsystemWithServices(cfg)
+func (a *RefreshCoordinator) buildRefreshSubsystem(buildCtx context.Context, cfg system.Config) (*system.Subsystem, error) {
+	subsystem, err := newRefreshSubsystemWithServices(buildCtx, cfg)
 	if err != nil {
 		return nil, err
 	}

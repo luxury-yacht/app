@@ -87,6 +87,13 @@ carry a complete `ResourceRef`: `clusterId`, `group`, `version`, `kind`,
 payloads. `frontend/src/core/refresh/types.generated.ts` is generated; register
 Go DTOs and run `go generate ./backend` instead of editing it.
 
+Subsystem construction carries its caller's operation context through informer
+permission checks, preflight, and domain registration. The entire permission
+startup phase is bounded by `PermissionPreflightTimeout`; cancellation or expiry
+aborts construction instead of publishing permission-denied fallback domains.
+The construction context is separate from the process refresh lifetime, so
+finishing a selection operation does not stop a published subsystem.
+
 Handler and stream replacement publish the new aggregate generation before
 stopping the old producers. Global teardown reverses that visibility first:
 unpublish the handler and stream generation, then stop their producers. Factory

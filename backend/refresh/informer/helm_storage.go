@@ -97,7 +97,7 @@ func (s *HelmStorageSource) ConfigMapInformer() cache.SharedIndexInformer {
 // a no-op (nil informers) for a kind without permission, so a denied secret/configmap
 // never creates a filtered watch. The informers are created but not started here; the
 // owning Factory's Start runs the filtered factory alongside the shared one.
-func (f *Factory) newHelmStorageSource() *HelmStorageSource {
+func (f *Factory) newHelmStorageSource(ctx context.Context) *HelmStorageSource {
 	if f == nil || f.kubeClient == nil {
 		return nil
 	}
@@ -116,11 +116,11 @@ func (f *Factory) newHelmStorageSource() *HelmStorageSource {
 		}),
 	)
 	source := &HelmStorageSource{factory: helmFactory}
-	if f.canListWatchHelmStorage("", "secrets") {
+	if f.canListWatchHelmStorage(ctx, "", "secrets") {
 		source.secretInformer = helmFactory.Core().V1().Secrets().Informer()
 		f.registerInformer("", "secrets", source.secretInformer)
 	}
-	if f.canListWatchHelmStorage("", "configmaps") {
+	if f.canListWatchHelmStorage(ctx, "", "configmaps") {
 		source.configInformer = helmFactory.Core().V1().ConfigMaps().Informer()
 		f.registerInformer("", "configmaps", source.configInformer)
 	}
@@ -133,8 +133,7 @@ func (f *Factory) newHelmStorageSource() *HelmStorageSource {
 // its gate deliberately bypasses any configured namespace scope
 // (docs/architecture/namespace-scope.md): a per-namespace grant must not create an
 // informer whose cluster-wide watch would only 403.
-func (f *Factory) canListWatchHelmStorage(group, resource string) bool {
-	ctx := context.Background()
+func (f *Factory) canListWatchHelmStorage(ctx context.Context, group, resource string) bool {
 	listDecision, listErr := f.runtimePermissions.CanClusterWide(ctx, group, resource, "list")
 	if listErr != nil || !listDecision.Allowed {
 		return false

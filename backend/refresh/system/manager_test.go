@@ -32,7 +32,7 @@ import (
 func TestNewInformerInfrastructureDisablesWatchList(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
 
-	checker, factory, err := newInformerInfrastructure(Config{
+	checker, factory, err := newInformerInfrastructure(context.Background(), Config{
 		KubernetesClient:  kubernetesfake.NewClientset(),
 		ResyncInterval:    time.Minute,
 		AllowedNamespaces: []string{"default"},
@@ -139,7 +139,7 @@ func (fakeInformerHub) Shutdown() error { return nil }
 // kept in test scope: production uses NewSubsystemWithServices directly.
 // NewSubsystem prepares the refresh manager, HTTP handler, and supporting services.
 func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Recorder, []PermissionIssue, map[string]bool, *informer.Factory, error) {
-	subsystem, err := NewSubsystemWithServices(cfg)
+	subsystem, err := NewSubsystemWithServices(context.Background(), cfg)
 	if err != nil {
 		recorder := telemetry.NewRecorder()
 		recorder.SetClusterMeta(cfg.ClusterID, cfg.ClusterName)

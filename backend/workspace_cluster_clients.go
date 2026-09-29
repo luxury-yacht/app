@@ -79,7 +79,7 @@ func (a *WorkspaceCoordinator) finishKubernetesClientInitialization(
 	ctx context.Context,
 	selections []kubeconfigSelection,
 ) error {
-	if err := a.publishConnectedClusterSelections(selections); err != nil {
+	if err := a.publishConnectedClusterSelections(ctx, selections); err != nil {
 		a.logger.ErrorWithCause(err, "Failed to initialise refresh subsystem", logsources.Refresh)
 		return fmt.Errorf("failed to initialise refresh subsystem: %w", err)
 	}
@@ -123,7 +123,7 @@ func (a *WorkspaceCoordinator) restoreKubeconfigSelection() {
 
 // Admission retains failed tabs, while refresh only publishes installed clients.
 // A failed sibling must neither block healthy routes nor retain deselected ones.
-func (a *WorkspaceCoordinator) publishConnectedClusterSelections(selections []kubeconfigSelection) error {
+func (a *WorkspaceCoordinator) publishConnectedClusterSelections(ctx context.Context, selections []kubeconfigSelection) error {
 	connected := make([]kubeconfigSelection, 0, len(selections))
 	for _, selection := range selections {
 		meta := a.clusterRuntime.clusterMetaForSelection(selection)
@@ -135,5 +135,5 @@ func (a *WorkspaceCoordinator) publishConnectedClusterSelections(selections []ku
 		a.refresh.teardownRefreshSubsystem()
 		return nil
 	}
-	return a.refresh.updateRefreshSubsystemSelections(connected)
+	return a.refresh.updateRefreshSubsystemSelections(ctx, connected)
 }

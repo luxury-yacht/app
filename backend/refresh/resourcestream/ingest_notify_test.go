@@ -148,13 +148,13 @@ func TestDescriptorRegistrationStreamsGatewayWithoutRecreatingIngestWatches(t *t
 			ObjectMeta: metav1.ObjectMeta{Name: "edge", Namespace: "default", UID: "gateway-uid", ResourceVersion: "7"},
 		}}}, nil
 	})
-	factory := informer.New(client, nil, time.Minute, checker).WithGatewayFactory(
+	factory := informer.New(context.Background(), client, nil, time.Minute, checker).WithGatewayFactory(context.Background(),
 		gatewayinformers.NewSharedInformerFactory(gatewayClient, time.Minute), gatewayStreamPresence{},
 	)
 	manager := NewManager(nil, nil, nil, snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, nil)
 	t.Cleanup(manager.Stop)
 	manager.permissions = factory
-	require.True(t, factory.CanListWatch("gateway.networking.k8s.io", "gateways"))
+	require.True(t, factory.CanListWatchWithContext(context.Background(), "gateway.networking.k8s.io", "gateways"))
 	manager.registerDescriptorStreams(factory)
 	sub, err := subscribeForTest(t, manager, domainNamespaceNetwork, "namespace:default")
 	require.NoError(t, err)

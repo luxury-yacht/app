@@ -64,7 +64,7 @@ func TestWorkspaceConnectionFailureDoesNotStrandHealthySibling(t *testing.T) {
 				}}, nil
 			}}
 			original := newRefreshSubsystemWithServices
-			newRefreshSubsystemWithServices = func(cfg system.Config) (*system.Subsystem, error) {
+			newRefreshSubsystemWithServices = func(_ context.Context, cfg system.Config) (*system.Subsystem, error) {
 				return &system.Subsystem{
 					Manager: refresh.NewManager(nil, nil, nil, nil, nil), SnapshotService: service,
 					ClusterMeta:        snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName},

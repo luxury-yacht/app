@@ -21,9 +21,9 @@ func TestPermissionRevalidationUsesRecordedNamespace(t *testing.T) {
 	// Discovery-backed CRDs are intentionally absent from the static scope
 	// predicate, so a generic Can call would check them cluster-wide.
 	checker.SetScope([]string{"team-a"}, func(_, _ string) bool { return false })
-	factory := informer.New(fake.NewClientset(), nil, 0, checker)
+	factory := informer.New(context.Background(), fake.NewClientset(), nil, 0, checker)
 
-	require.True(t, factory.CanListWatchInNamespace("example.com", "widgets", "team-a"))
+	require.True(t, factory.CanListWatchInNamespace(context.Background(), "example.com", "widgets", "team-a"))
 
 	subsystem := &Subsystem{
 		RuntimePerms:    checker,
@@ -40,9 +40,9 @@ func TestPermissionRevalidationPreservesDefaultScopeEvaluation(t *testing.T) {
 	checker.SetScope([]string{"team-a"}, func(group, resource string) bool {
 		return group == "apps" && resource == "deployments"
 	})
-	factory := informer.New(fake.NewClientset(), nil, 0, checker)
+	factory := informer.New(context.Background(), fake.NewClientset(), nil, 0, checker)
 
-	require.True(t, factory.CanListWatch("apps", "deployments"))
+	require.True(t, factory.CanListWatchWithContext(context.Background(), "apps", "deployments"))
 
 	subsystem := &Subsystem{
 		RuntimePerms:    checker,
@@ -56,8 +56,8 @@ func TestPermissionRevalidationDetectsRevocationAtRecordedNamespace(t *testing.T
 	initialChecker := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(_ context.Context, _, _, _, namespace string) (bool, error) {
 		return namespace == "team-a", nil
 	})
-	factory := informer.New(fake.NewClientset(), nil, 0, initialChecker)
-	require.True(t, factory.CanListWatchInNamespace("example.com", "widgets", "team-a"))
+	factory := informer.New(context.Background(), fake.NewClientset(), nil, 0, initialChecker)
+	require.True(t, factory.CanListWatchInNamespace(context.Background(), "example.com", "widgets", "team-a"))
 
 	var checkedNamespaces []string
 	revalidationChecker := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(_ context.Context, group, resource, _, namespace string) (bool, error) {
@@ -80,8 +80,8 @@ func TestPermissionRevalidationDetectsRevocationAtRecordedNamespace(t *testing.T
 
 func TestPermissionRevalidationDetectsRestoredGrant(t *testing.T) {
 	denied := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return false, nil })
-	factory := informer.New(fake.NewClientset(), nil, 0, denied)
-	require.False(t, factory.CanListWatchInNamespace("example.com", "widgets", "team-a"))
+	factory := informer.New(context.Background(), fake.NewClientset(), nil, 0, denied)
+	require.False(t, factory.CanListWatchInNamespace(context.Background(), "example.com", "widgets", "team-a"))
 	allowed := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return true, nil })
 	subsystem := &Subsystem{RuntimePerms: allowed, InformerFactory: factory}
 	require.True(t, subsystem.permissionsChanged(context.Background()), "restoring a denied scope must trigger reconstruction too")
@@ -89,11 +89,11 @@ func TestPermissionRevalidationDetectsRestoredGrant(t *testing.T) {
 
 func TestDeniedPermissionRevalidationReviewsEachScopeOncePerCacheWindow(t *testing.T) {
 	denied := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return false, nil })
-	factory := informer.New(fake.NewClientset(), nil, 0, denied)
+	factory := informer.New(context.Background(), fake.NewClientset(), nil, 0, denied)
 	const namespaces = 100
 	for range 5 {
 		for i := range namespaces {
-			require.False(t, factory.CanListWatchInNamespace("example.com", "widgets", fmt.Sprintf("team-%d", i)))
+			require.False(t, factory.CanListWatchInNamespace(context.Background(), "example.com", "widgets", fmt.Sprintf("team-%d", i)))
 		}
 	}
 	for window := range 2 {
@@ -125,8 +125,8 @@ func (h *permissionRevalidationHub) Shutdown() error { close(h.stopped); return 
 
 func TestPermissionChangesDelegateReplacementBeforeStoppingProducers(t *testing.T) {
 	allowed := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return true, nil })
-	factory := informer.New(fake.NewClientset(), nil, 0, allowed)
-	require.True(t, factory.CanListWatch("", "pods"))
+	factory := informer.New(context.Background(), fake.NewClientset(), nil, 0, allowed)
+	require.True(t, factory.CanListWatchWithContext(context.Background(), "", "pods"))
 	denied := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return false, nil })
 	hub := &permissionRevalidationHub{stopped: make(chan struct{})}
 	manager := refresh.NewManager(nil, hub, nil, nil, nil)

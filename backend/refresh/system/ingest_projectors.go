@@ -12,6 +12,7 @@
 package system
 
 import (
+	"context"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -162,8 +163,8 @@ func registerNetworkReflectors(mgr *ingest.IngestManager, meta snapshot.ClusterM
 
 // Use the already permission-gated CRD informer as lifecycle input. Dynamic
 // rows use the same metadata projection as catalog LIST, without retaining it.
-func registerCustomResourceIngest(mgr *ingest.IngestManager, factory *informer.Factory, clusterID string) {
-	if !factory.CanListWatch("apiextensions.k8s.io", "customresourcedefinitions") {
+func registerCustomResourceIngest(ctx context.Context, mgr *ingest.IngestManager, factory *informer.Factory, clusterID string) {
+	if !factory.CanListWatchWithContext(ctx, "apiextensions.k8s.io", "customresourcedefinitions") {
 		return
 	}
 	extensions := factory.APIExtensionsInformerFactory()

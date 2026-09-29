@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -9,7 +10,7 @@ import (
 )
 
 // updateRefreshSubsystemSelections updates active refresh subsystems without restarting the HTTP server.
-func (a *RefreshCoordinator) updateRefreshSubsystemSelections(selections []kubeconfigSelection) error {
+func (a *RefreshCoordinator) updateRefreshSubsystemSelections(ctx context.Context, selections []kubeconfigSelection) error {
 	if err := a.validateRefreshSelectionUpdate(); err != nil {
 		return err
 	}
@@ -17,13 +18,13 @@ func (a *RefreshCoordinator) updateRefreshSubsystemSelections(selections []kubec
 		return nil
 	}
 	if a.refreshSelectionUpdateNeedsSetup() {
-		return a.setupRefreshSubsystemForSelections(selections)
+		return a.setupRefreshSubsystemForSelections(ctx, selections)
 	}
 	plan, err := a.planRefreshSelectionUpdate(selections)
 	if err != nil {
 		return err
 	}
-	update, err := a.buildRefreshSelectionUpdate(plan, selections)
+	update, err := a.buildRefreshSelectionUpdate(ctx, plan, selections)
 	if err != nil {
 		return err
 	}
@@ -85,6 +86,7 @@ type refreshSelectionUpdate struct {
 }
 
 func (a *RefreshCoordinator) buildRefreshSelectionUpdate(
+	ctx context.Context,
 	plan refreshSelectionPlan,
 	selections []kubeconfigSelection,
 ) (refreshSelectionUpdate, error) {
@@ -97,7 +99,7 @@ func (a *RefreshCoordinator) buildRefreshSelectionUpdate(
 			update.next[id] = existing
 			continue
 		}
-		if err := a.buildNewRefreshSubsystem(&update, plan, selections, id, selection); err != nil {
+		if err := a.buildNewRefreshSubsystem(ctx, &update, plan, selections, id, selection); err != nil {
 			a.stopRefreshSubsystems(update.new)
 			return refreshSelectionUpdate{}, err
 		}
@@ -106,20 +108,21 @@ func (a *RefreshCoordinator) buildRefreshSelectionUpdate(
 }
 
 func (a *RefreshCoordinator) buildNewRefreshSubsystem(
+	ctx context.Context,
 	update *refreshSelectionUpdate,
 	plan refreshSelectionPlan,
 	selections []kubeconfigSelection,
 	id string,
 	selection kubeconfigSelection,
 ) error {
-	clients, err := a.ensureClusterClients(id, selections)
+	clients, err := a.ensureClusterClients(ctx, id, selections)
 	if err != nil {
 		return err
 	}
 	if !a.canBuildRefreshSubsystem(id, plan.metaByID[id], clients) {
 		return nil
 	}
-	subsystem, err := a.buildRefreshSubsystemForSelection(selection, clients, plan.metaByID[id])
+	subsystem, err := a.buildRefreshSubsystemForSelection(ctx, selection, clients, plan.metaByID[id])
 	if err != nil {
 		return err
 	}
@@ -128,12 +131,12 @@ func (a *RefreshCoordinator) buildNewRefreshSubsystem(
 	return nil
 }
 
-func (a *RefreshCoordinator) ensureClusterClients(id string, selections []kubeconfigSelection) (*clusterClients, error) {
+func (a *RefreshCoordinator) ensureClusterClients(ctx context.Context, id string, selections []kubeconfigSelection) (*clusterClients, error) {
 	clients := a.clusterRuntime.clusterClientsForID(id)
 	if clients != nil {
 		return clients, nil
 	}
-	if err := a.clusterRuntime.ensureClusterClientsForSelections(a.CtxOrBackground(), selections); err != nil {
+	if err := a.clusterRuntime.ensureClusterClientsForSelections(ctx, selections); err != nil {
 		return nil, err
 	}
 	clients = a.clusterRuntime.clusterClientsForID(id)

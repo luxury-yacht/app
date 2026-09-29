@@ -108,7 +108,7 @@ func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool
 	checker := refreshpermissions.NewCheckerWithReview(clusterID, time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		return true, nil
 	})
-	factory := refreshinformer.New(kubeClient, apiExtensionsClient, time.Minute, checker)
+	factory := refreshinformer.New(context.Background(), kubeClient, apiExtensionsClient, time.Minute, checker)
 	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
 	app.ClusterRuntime.clusterClients[clusterID] = &clusterClients{
 		meta:                ClusterMeta{ID: clusterID, Name: "Cluster A"},
@@ -247,7 +247,7 @@ func TestCatalogStartsForNamespaceScopedIdentityDeniedClusterWideInformers(t *te
 	clients.dynamicClient = fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
 		map[schema.GroupVersionResource]string{replicaSetGVR: "ReplicaSetList"}, replicaSet)
 
-	subsystem, err := system.NewSubsystemWithServices(system.Config{
+	subsystem, err := system.NewSubsystemWithServices(context.Background(), system.Config{
 		KubernetesClient: kube, APIExtensionsClient: clients.apiextensionsClient, DynamicClient: clients.dynamicClient,
 		ClusterID: target.meta.ID, ClusterName: target.meta.Name, Logger: app.AppLogs.Logger(), ResyncInterval: time.Minute,
 		AllowedNamespaces:     []string{namespace},

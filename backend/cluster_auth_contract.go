@@ -86,7 +86,7 @@ func (r clusterSubsystemRebuild) run() {
 	if !ok {
 		return
 	}
-	subsystem, ok := r.buildSubsystem(newClients)
+	subsystem, ok := r.buildSubsystem(context.Background(), newClients)
 	if !ok {
 		return
 	}
@@ -198,8 +198,8 @@ func clusterClientsAuthInvalid(clients *clusterClients) bool {
 	return clients.authFailedOnInit || (clients.authManager != nil && !clients.authManager.IsValid())
 }
 
-func (r clusterSubsystemRebuild) buildSubsystem(clients *clusterClients) (*system.Subsystem, bool) {
-	subsystem, err := r.refresh.buildRefreshSubsystemForSelection(r.selection, clients, clients.meta)
+func (r clusterSubsystemRebuild) buildSubsystem(ctx context.Context, clients *clusterClients) (*system.Subsystem, bool) {
+	subsystem, err := r.refresh.buildRefreshSubsystemForSelection(ctx, r.selection, clients, clients.meta)
 	if err != nil {
 		r.reportBuildError("subsystem", "subsystem rebuild failed", err)
 		return nil, false

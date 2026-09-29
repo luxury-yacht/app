@@ -85,7 +85,7 @@ func testCatalogCustomResourceWatchReconcilesTableMembership(t *testing.T, stora
 	definition := &apiextensionsv1.CustomResourceDefinition{ObjectMeta: metav1.ObjectMeta{Name: "externalsecrets.external-secrets.io", UID: "definition-a"}, Spec: apiextensionsv1.CustomResourceDefinitionSpec{Group: gvr.Group, Names: apiextensionsv1.CustomResourceDefinitionNames{Plural: gvr.Resource, Kind: "ExternalSecret"}, Scope: apiextensionsv1.NamespaceScoped, Versions: versions}}
 	_, err := clients.apiextensionsClient.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, definition, metav1.CreateOptions{})
 	require.NoError(t, err)
-	subsystem, err := system.NewSubsystemWithServices(system.Config{
+	subsystem, err := system.NewSubsystemWithServices(context.Background(), system.Config{
 		KubernetesClient: kube, APIExtensionsClient: clients.apiextensionsClient, DynamicClient: dynamic,
 		ClusterID: target.meta.ID, ClusterName: target.meta.Name, Logger: app.AppLogs.Logger(), ResyncInterval: time.Minute,
 		ObjectDetailsProvider: app.Resources.objectDetailProvider(), NodeMaintenanceStore: app.NodeMaintenanceStore,

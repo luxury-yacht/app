@@ -357,7 +357,7 @@ func TestPermissionReplacementConstructionOutcomesPreserveOwnership(t *testing.T
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			originalBuilder := newRefreshSubsystemWithServices
-			newRefreshSubsystemWithServices = func(system.Config) (*system.Subsystem, error) {
+			newRefreshSubsystemWithServices = func(context.Context, system.Config) (*system.Subsystem, error) {
 				if test.buildError != nil {
 					return nil, test.buildError
 				}

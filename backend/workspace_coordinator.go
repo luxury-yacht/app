@@ -67,11 +67,11 @@ type workspaceRefresh interface {
 	ensureObjectCatalogForCluster(string) error
 	rebuildClusterSubsystem(string)
 	releaseWorkspaceWindowForeground(string)
-	setupRefreshSubsystemForSelections([]kubeconfigSelection) error
+	setupRefreshSubsystemForSelections(context.Context, []kubeconfigSelection) error
 	stopObjectCatalog()
 	teardownClusterSubsystem(string)
 	teardownRefreshSubsystem()
-	updateRefreshSubsystemSelections([]kubeconfigSelection) error
+	updateRefreshSubsystemSelections(context.Context, []kubeconfigSelection) error
 	visibleClusterForWindow(string) string
 }
 

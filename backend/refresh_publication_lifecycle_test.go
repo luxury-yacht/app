@@ -57,7 +57,7 @@ func testRefreshPublicationLifecycle(t *testing.T, path string, fetchOnLoading b
 		}}, nil
 	}}
 	originalBuilder := newRefreshSubsystemWithServices
-	newRefreshSubsystemWithServices = func(cfg system.Config) (*system.Subsystem, error) {
+	newRefreshSubsystemWithServices = func(_ context.Context, cfg system.Config) (*system.Subsystem, error) {
 		return &system.Subsystem{
 			Manager: refresh.NewManager(nil, nil, nil, nil, nil), SnapshotService: service,
 			ClusterMeta:        snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName},
@@ -85,11 +85,11 @@ func testRefreshPublicationLifecycle(t *testing.T, path string, fetchOnLoading b
 
 	switch path {
 	case "startup":
-		require.NoError(t, app.Refresh.setupRefreshSubsystemForSelections(selections))
+		require.NoError(t, app.Refresh.setupRefreshSubsystemForSelections(context.Background(), selections))
 	case "selector", "sibling-auth-recovery":
-		require.NoError(t, app.Refresh.setupRefreshSubsystemForSelections(selections[:1]))
+		require.NoError(t, app.Refresh.setupRefreshSubsystemForSelections(context.Background(), selections[:1]))
 		if path == "selector" {
-			require.NoError(t, app.Refresh.updateRefreshSubsystemSelections(selections))
+			require.NoError(t, app.Refresh.updateRefreshSubsystemSelections(context.Background(), selections))
 		} else {
 			activatePublicationTestCluster(t, app.Refresh, selections[1], app.ClusterRuntime.clusterClientsForID(ids[1]))
 		}
@@ -116,7 +116,7 @@ func testRefreshPublicationLifecycle(t *testing.T, path string, fetchOnLoading b
 func activatePublicationTestCluster(t *testing.T, coordinator *RefreshCoordinator, selection kubeconfigSelection, clients *clusterClients) {
 	t.Helper()
 	coordinator.clusterRuntime.setClusterLifecycleState(clients.meta.ID, ClusterStateAuthFailed)
-	subsystem, err := coordinator.buildRefreshSubsystemForSelection(selection, clients, clients.meta)
+	subsystem, err := coordinator.buildRefreshSubsystemForSelection(context.Background(), selection, clients, clients.meta)
 	require.NoError(t, err)
 	rebuild := clusterSubsystemRebuild{refresh: coordinator, clusterID: clients.meta.ID, selection: selection}
 	require.True(t, rebuild.activateSubsystem(clients, subsystem))
@@ -149,7 +149,7 @@ func TestFailedRefreshPublicationDoesNotAdvertiseLoading(t *testing.T) {
 			app.ClusterRuntime.setClusterLifecycleState(meta.ID, ClusterStateAuthFailed)
 			t.Cleanup(func() { app.ClusterRuntime.clusterLifecycle.Remove(meta.ID) })
 			originalBuilder := newRefreshSubsystemWithServices
-			newRefreshSubsystemWithServices = func(system.Config) (*system.Subsystem, error) {
+			newRefreshSubsystemWithServices = func(context.Context, system.Config) (*system.Subsystem, error) {
 				if failure == "construction" {
 					return nil, errors.New("construction failed")
 				}
@@ -161,7 +161,7 @@ func TestFailedRefreshPublicationDoesNotAdvertiseLoading(t *testing.T) {
 				rebuild := clusterSubsystemRebuild{refresh: app.Refresh, clusterID: meta.ID}
 				require.False(t, rebuild.bootstrapRefreshRouting(nil, nil))
 			} else {
-				err := app.Refresh.setupRefreshSubsystemForSelections([]kubeconfigSelection{selection})
+				err := app.Refresh.setupRefreshSubsystemForSelections(context.Background(), []kubeconfigSelection{selection})
 				if failure == "authentication" {
 					require.NoError(t, err, "auth failures remain recoverable")
 				} else {

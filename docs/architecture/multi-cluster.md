@@ -145,8 +145,13 @@ close is accepted even while its tab is temporarily hidden.
 
 A process-selection change can cancel obsolete connection work before waiting
 for the selection mutation. Peer ownership changes that leave the process union
-unchanged preserve in-flight authentication. Runtime work retains the serialized
-mutation and shutdown drain; admitted tabs report subsequent connection failure
+unchanged preserve in-flight authentication. Adding a panel reference to an
+already-owned selection, or releasing a reference while another owner remains,
+uses the short workspace-ownership lock and does not wait for connection work.
+The ownership check and reference update are atomic: a reference cannot bypass
+retirement after the last owner has been removed. Final-reference release stays
+serialized with runtime teardown. Both paths participate in the shutdown drain.
+Runtime work retains the serialized mutation and shutdown drain; admitted tabs report subsequent connection failure
 through lifecycle state and selection diagnostics. Client construction records
 failure for its own cluster and collects batch errors without cancelling healthy
 siblings. Open, close, release, pruning, and startup use that same failure owner.
