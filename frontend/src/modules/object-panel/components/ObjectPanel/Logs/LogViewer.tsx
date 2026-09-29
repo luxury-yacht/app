@@ -398,9 +398,6 @@ const buildContainerLogsSnapshotState = (
 };
 
 type BackendLogSelection = {
-  container: string;
-  includeInit: boolean;
-  includeEphemeral: boolean;
   selectedFilters: string[];
   matchNone: boolean;
 };
@@ -419,12 +416,8 @@ const buildContainerLogsFetchRequest = (
   scope,
   selectedFilters: selection.selectedFilters,
   matchNone: selection.matchNone,
-  container: selection.container,
-  includeInit: selection.includeInit,
-  includeEphemeral: selection.includeEphemeral,
   previous,
   tailLines: getObjPanelLogsBufferMaxSize(),
-  sinceSeconds: 0,
 });
 
 const mapFetchedContainerLogEntries = (
@@ -1612,15 +1605,13 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       }),
     [caseSensitiveMatches, highlightMatches, inverseMatches, regexMatches, textFilter]
   );
-  const backendLogSelection = useMemo(() => {
-    return {
-      container: '',
-      includeInit: true,
-      includeEphemeral: true,
+  const backendLogSelection = useMemo<BackendLogSelection>(
+    () => ({
       selectedFilters: logFilterBackendValues(selectedFilters),
       matchNone: logFilterSelectionMatchesNone(selectedFilters),
-    };
-  }, [selectedFilters]);
+    }),
+    [selectedFilters]
+  );
 
   // Keep this synchronous with render so a scope-reset re-render cannot
   // interrupt streaming startup.

@@ -32,7 +32,7 @@ func TestSelectTargetsPrefersReadyRunningPods(t *testing.T) {
 
 	targets, total := SelectTargets(
 		[]*corev1.Pod{pending, runningNotReady, readyRunning},
-		DefaultContainerSelection(""),
+		ScopeSelection{},
 		10,
 	)
 	if total != 3 {
@@ -72,7 +72,7 @@ func TestSelectTargetsAppliesLimitAfterDeterministicSort(t *testing.T) {
 		},
 	}
 
-	targets, total := SelectTargets([]*corev1.Pod{podB, podA}, DefaultContainerSelection(""), 2)
+	targets, total := SelectTargets([]*corev1.Pod{podB, podA}, ScopeSelection{}, 2)
 	if total != 3 {
 		t.Fatalf("expected 3 total targets, got %d", total)
 	}

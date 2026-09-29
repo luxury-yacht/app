@@ -25,7 +25,11 @@ func (g *ResourceGateway) FetchContainerLogs(clusterID string, req ContainerLogs
 		return ContainerLogsFetchResponse{Error: err.Error()}
 	}
 	service := pods.NewService(deps)
-	return service.FetchContainerLogs(g.CtxOrBackground(), req)
+	ctx, cancel := resourceFetchContext(g)
+	if cancel != nil {
+		defer cancel()
+	}
+	return service.FetchContainerLogs(ctx, req)
 }
 func (g *ResourceGateway) GetPodContainers(clusterID, namespace, podName string) ([]string, error) {
 	if err := requirePodObject(namespace, podName); err != nil {

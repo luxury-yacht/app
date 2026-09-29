@@ -35,51 +35,15 @@ func (t SelectedTarget) Key() string {
 
 func SelectTargets(
 	pods []*corev1.Pod,
-	options ContainerSelectionOptions,
+	selection ScopeSelection,
 	limit int,
 ) ([]SelectedTarget, int) {
-	if len(pods) == 0 {
-		return nil, 0
-	}
-
 	if limit <= 0 {
 		limit = DefaultPerScopeTargetLimit
 	}
 	limit = ClampPerScopeTargetLimit(limit)
 
-	type rankedTarget struct {
-		target SelectedTarget
-		rank   int
-	}
-
-	var ranked []rankedTarget
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
-		rank := rankPodForLogs(pod)
-		for _, container := range EnumerateContainersWithOptions(pod, options) {
-			ranked = append(ranked, rankedTarget{
-				target: SelectedTarget{
-					Namespace: pod.Namespace,
-					PodName:   pod.Name,
-					Container: container,
-				},
-				rank: rank,
-			})
-		}
-	}
-
-	sort.Slice(ranked, func(i, j int) bool {
-		if ranked[i].rank != ranked[j].rank {
-			return ranked[i].rank < ranked[j].rank
-		}
-		if ranked[i].target.PodName != ranked[j].target.PodName {
-			return ranked[i].target.PodName < ranked[j].target.PodName
-		}
-		return ranked[i].target.Container.Name < ranked[j].target.Container.Name
-	})
-
+	ranked := rankTargets(pods, selection)
 	total := len(ranked)
 	if total == 0 {
 		return nil, 0
@@ -93,6 +57,42 @@ func SelectTargets(
 		selected = append(selected, target.target)
 	}
 	return selected, total
+}
+
+type rankedTarget struct {
+	target SelectedTarget
+	rank   int
+}
+
+// rankTargets lists every selected container, best log candidates first.
+func rankTargets(pods []*corev1.Pod, selection ScopeSelection) []rankedTarget {
+	var ranked []rankedTarget
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		rank := rankPodForLogs(pod)
+		for _, container := range EnumerateContainers(pod, selection) {
+			ranked = append(ranked, rankedTarget{
+				target: SelectedTarget{Namespace: pod.Namespace, PodName: pod.Name, Container: container},
+				rank:   rank,
+			})
+		}
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		return lessRankedTarget(ranked[i], ranked[j])
+	})
+	return ranked
+}
+
+func lessRankedTarget(left, right rankedTarget) bool {
+	if left.rank != right.rank {
+		return left.rank < right.rank
+	}
+	if left.target.PodName != right.target.PodName {
+		return left.target.PodName < right.target.PodName
+	}
+	return left.target.Container.Name < right.target.Container.Name
 }
 
 func BuildTargetLimitWarnings(selectedCount, totalCount, limit int) []string {

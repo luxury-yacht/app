@@ -3,6 +3,9 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as containerlogs$0 from "../../internal/containerlogs/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as resourcemodel$0 from "../../resourcemodel/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -273,24 +276,10 @@ export interface ContainerLogsEntry {
  */
 export interface ContainerLogsFetchRequest {
     "scope"?: string;
-    "podFilter"?: string;
-    "podInclude"?: string;
-    "podExclude"?: string;
     "selectedFilters"?: string[] | null;
     "matchNone"?: boolean;
-
-    /**
-     * empty means all containers
-     */
-    "container"?: string;
-    "includeInit"?: boolean | null;
-    "includeEphemeral"?: boolean | null;
-    "containerState"?: string;
-    "include"?: string;
-    "exclude"?: string;
     "previous": boolean;
     "tailLines": number;
-    "sinceSeconds"?: number;
 }
 
 /**
@@ -299,6 +288,16 @@ export interface ContainerLogsFetchRequest {
 export interface ContainerLogsFetchResponse {
     "entries": ContainerLogsEntry[] | null;
     "warnings"?: string[] | null;
+
+    /**
+     * Issues lists each container whose logs could not be read.
+     */
+    "issues"?: containerlogs$0.TargetIssue[] | null;
+
+    /**
+     * Error is set when the request failed as a whole, including when no
+     * container could be read.
+     */
     "error"?: string;
 }
 

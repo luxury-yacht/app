@@ -211,7 +211,6 @@ class ContainerLogsStreamConnection {
     const streamParams = getContainerLogsStreamScopeParams(this.scope);
     this.socket.send({
       scope: this.scope,
-      container: streamParams?.container ?? '',
       selectedFilters: streamParams?.selectedFilters ?? [],
       matchNone: streamParams?.matchNone ?? false,
     });

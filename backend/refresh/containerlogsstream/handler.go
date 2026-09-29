@@ -153,10 +153,10 @@ func (s *containerLogsStream) serve(ctx context.Context) {
 		defer limiterSession.Release()
 	}
 	initial, ok := s.loadInitial(ctx, limiterSession)
-	if !ok || s.writeInitial(initial) != nil {
+	if !ok {
 		return
 	}
-	s.forward(ctx, initial, limiterSession)
+	s.run(ctx, initial, limiterSession)
 }
 
 func (s *containerLogsStream) recordConnect() {
@@ -198,19 +198,15 @@ func (s *containerLogsStream) startLimiterSession() *TargetSession {
 }
 
 type containerLogsInitial struct {
-	entries        []Entry
-	states         map[string]*containerState
 	pods           []*corev1.Pod
-	selector       string
+	watch          *containerlogs.PodWatch
 	warnings       []string
 	skippedTargets int
 	skipReason     string
 }
 
 func (s *containerLogsStream) loadInitial(ctx context.Context, limiterSession *TargetSession) (containerLogsInitial, bool) {
-	initial, err := s.handler.streamer.tail(
-		ctx, s.options, limiterSession,
-	)
+	initial, err := s.handler.streamer.prepare(ctx, s.options, limiterSession)
 	if err != nil {
 		s.handleInitialError(err)
 		return containerLogsInitial{}, false
@@ -223,20 +219,8 @@ func (s *containerLogsStream) loadInitial(ctx context.Context, limiterSession *T
 
 func (s *containerLogsStream) handleInitialError(err error) {
 	s.recordError(err)
-	s.handler.streamer.logger.Warn(fmt.Sprintf("containerlogsstream: initial tail failed: %v", err), logsources.ContainerLogsStream)
+	s.handler.streamer.logger.Warn(fmt.Sprintf("containerlogsstream: initial resolve failed: %v", err), logsources.ContainerLogsStream)
 	_ = s.writePayload(EventPayload{Error: err.Error(), ErrorDetails: permissionDeniedStatus(err)})
-}
-
-func (s *containerLogsStream) writeInitial(initial containerLogsInitial) error {
-	event := EventPayload{Reset: true, Entries: initial.entries, Warnings: warningPayload(initial.warnings, false)}
-	if err := s.writePayload(event); err != nil {
-		s.recordError(err)
-		return err
-	}
-	if s.handler.telemetry != nil && len(initial.entries) > 0 {
-		s.handler.telemetry.RecordStreamDeliveryForLeaf(s.stream, telemetry.TargetLeaf(s.target), len(initial.entries), 0)
-	}
-	return nil
 }
 
 func (s *containerLogsStream) recordError(err error) {
@@ -245,129 +229,139 @@ func (s *containerLogsStream) recordError(err error) {
 	}
 }
 
-type containerLogsStreamChannels struct {
-	entries  chan Entry
-	drops    chan int
-	errors   chan error
-	warnings chan []string
-}
-
-func newContainerLogsStreamChannels() containerLogsStreamChannels {
-	return containerLogsStreamChannels{
-		entries: make(chan Entry, 256), drops: make(chan int, 1024),
-		errors: make(chan error, 1), warnings: make(chan []string, 8),
+// run starts the session's followers and sends what they read: one snapshot of
+// the containers' history, then live batches.
+func (s *containerLogsStream) run(ctx context.Context, initial containerLogsInitial, limiterSession *TargetSession) {
+	pending := newPendingEntries(config.ContainerLogsStreamPendingMaxEntries, config.ContainerLogsStreamPendingMaxBytes)
+	snapshot := newSnapshotWait()
+	errs := make(chan error, 1)
+	warnings := make(chan []string, 8)
+	runnerDone := s.startRunner(ctx, initial, containerLogRunConfig{
+		opts: s.options, limiterSession: limiterSession,
+		initialWarnings: initial.warnings, sink: pending, snapshot: snapshot, warningsCh: warnings, errCh: errs,
+	})
+	delivery := newContainerLogsDelivery(s, pending, initial.warnings)
+	if !delivery.sendSnapshot(ctx, snapshot.done, runnerDone, warnings) {
+		return
 	}
+	delivery.forward(ctx, runnerDone, errs, warnings)
 }
 
-func (s *containerLogsStream) forward(ctx context.Context, initial containerLogsInitial, limiterSession *TargetSession) {
-	channels := newContainerLogsStreamChannels()
-	s.startRunner(ctx, initial, limiterSession, channels)
-	heartbeat := time.NewTicker(config.StreamHeartbeatInterval)
-	defer heartbeat.Stop()
-	delivery := newContainerLogsDelivery(s, initial.warnings)
-	defer delivery.stopBatchTimer()
-	for {
-		event := delivery.await(ctx, channels, heartbeat.C)
-		if delivery.handle(event) {
-			return
-		}
-	}
-}
-
-func (s *containerLogsStream) startRunner(
-	ctx context.Context,
-	initial containerLogsInitial,
-	limiterSession *TargetSession,
-	channels containerLogsStreamChannels,
-) {
+func (s *containerLogsStream) startRunner(ctx context.Context, initial containerLogsInitial, config containerLogRunConfig) <-chan struct{} {
+	done := make(chan struct{})
 	go func() {
-		defer s.finishRunner(channels)
-		s.handler.streamer.run(
-			ctx, initial.pods, initial.selector, containerLogRunConfig{opts: s.options, states: initial.states, limiterSession: limiterSession, initialWarnings: initial.warnings, entriesCh: channels.entries, warningsCh: channels.warnings, errCh: channels.errors, dropCh: channels.drops})
-
+		defer close(done)
+		defer s.recoverRunner()
+		s.handler.streamer.run(ctx, initial.pods, initial.watch, config)
 	}()
+	return done
 }
 
-func (s *containerLogsStream) finishRunner(channels containerLogsStreamChannels) {
+func (s *containerLogsStream) recoverRunner() {
 	if recovered := recover(); recovered != nil {
 		applog.ReportPanic(s.handler.streamer.logger, recovered, "containerlogsstream: panic in stream handler", logsources.ContainerLogsStream)
 		s.recordError(fmt.Errorf("panic: %v", recovered))
 	}
-	close(channels.entries)
-	close(channels.drops)
-	close(channels.warnings)
 }
 
-type containerLogsDeliveryEventKind uint8
-
-const (
-	containerLogsDeliveryCancelled containerLogsDeliveryEventKind = iota
-	containerLogsDeliveryError
-	containerLogsDeliveryWarnings
-	containerLogsDeliveryWarningsClosed
-	containerLogsDeliveryEntry
-	containerLogsDeliveryEntriesClosed
-	containerLogsDeliveryHeartbeat
-	containerLogsDeliveryBatch
-	containerLogsDeliveryDrop
-	containerLogsDeliveryDropClosed
-)
-
-type containerLogsDeliveryEvent struct {
-	kind     containerLogsDeliveryEventKind
-	err      error
-	warnings []string
-	entry    Entry
-	drop     int
-}
-
+// containerLogsDelivery sends a session's pending entries, errors and warning
+// updates to the client.
 type containerLogsDelivery struct {
 	request               *containerLogsStream
-	batch                 []Entry
+	pending               *pendingEntries
 	batchTimer            *time.Timer
-	pendingDropped        int
 	selectionWarnings     []string
 	emittedWarnings       []string
 	transportDropObserved bool
-	lastDelivery          time.Time
 }
 
-func newContainerLogsDelivery(request *containerLogsStream, warnings []string) *containerLogsDelivery {
+func newContainerLogsDelivery(request *containerLogsStream, pending *pendingEntries, warnings []string) *containerLogsDelivery {
 	return &containerLogsDelivery{
-		request: request, selectionWarnings: append([]string(nil), warnings...),
-		emittedWarnings: append([]string(nil), warnings...), lastDelivery: time.Now(),
+		request: request, pending: pending, selectionWarnings: append([]string(nil), warnings...),
+		emittedWarnings: append([]string(nil), warnings...),
 	}
 }
 
-func (d *containerLogsDelivery) await(
-	ctx context.Context,
-	channels containerLogsStreamChannels,
-	heartbeat <-chan time.Time,
-) containerLogsDeliveryEvent {
+// sendSnapshot waits until the initial followers have delivered their history,
+// or the snapshot deadline passes, and sends it as the reset frame.
+func (d *containerLogsDelivery) sendSnapshot(ctx context.Context, ready, runnerDone <-chan struct{}, warnings <-chan []string) bool {
+	deadline := time.NewTimer(config.ContainerLogsStreamSnapshotDeadline)
+	defer deadline.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case next := <-warnings:
+			d.selectionWarnings = append(d.selectionWarnings[:0], next...)
+		case <-ready:
+			return d.writeSnapshot()
+		case <-deadline.C:
+			return d.writeSnapshot()
+		case <-runnerDone:
+			return d.writeSnapshot()
+		}
+	}
+}
+
+func (d *containerLogsDelivery) writeSnapshot() bool {
+	entries, dropped := d.pending.take()
+	containerlogs.SortByTimestamp(entries, entryTimestamp)
+	if dropped > 0 {
+		d.transportDropObserved = true
+	}
+	warnings := composeStreamWarnings(d.selectionWarnings, d.transportDropObserved)
+	if err := d.request.writePayload(EventPayload{Reset: true, Entries: entries, Warnings: warningPayload(warnings, false)}); err != nil {
+		d.request.recordError(err)
+		return false
+	}
+	d.emittedWarnings = append(d.emittedWarnings[:0], warnings...)
+	d.recordDelivery(len(entries), dropped)
+	return true
+}
+
+func (d *containerLogsDelivery) forward(ctx context.Context, runnerDone <-chan struct{}, errs <-chan error, warnings <-chan []string) {
+	defer d.stopBatchTimer()
+	if d.pending.size() > 0 {
+		d.armBatch()
+	}
+	for !d.step(ctx, runnerDone, errs, warnings) {
+	}
+}
+
+// step handles one event and reports whether the session is over.
+func (d *containerLogsDelivery) step(ctx context.Context, runnerDone <-chan struct{}, errs <-chan error, warnings <-chan []string) bool {
 	select {
 	case <-ctx.Done():
-		return containerLogsDeliveryEvent{kind: containerLogsDeliveryCancelled}
-	case err := <-channels.errors:
-		return containerLogsDeliveryEvent{kind: containerLogsDeliveryError, err: err}
-	case warnings, ok := <-channels.warnings:
-		if !ok {
-			return containerLogsDeliveryEvent{kind: containerLogsDeliveryWarningsClosed}
-		}
-		return containerLogsDeliveryEvent{kind: containerLogsDeliveryWarnings, warnings: warnings}
-	case entry, ok := <-channels.entries:
-		if !ok {
-			return containerLogsDeliveryEvent{kind: containerLogsDeliveryEntriesClosed}
-		}
-		return containerLogsDeliveryEvent{kind: containerLogsDeliveryEntry, entry: entry}
-	case <-heartbeat:
-		return containerLogsDeliveryEvent{kind: containerLogsDeliveryHeartbeat}
+		d.flush()
+		return true
+	case <-runnerDone:
+		d.flush()
+		return true
+	case err := <-errs:
+		return d.handleError(err)
+	case next := <-warnings:
+		return d.handleWarnings(next)
+	case <-d.pending.notify:
+		return d.onPending()
 	case <-d.batchChannel():
-		return containerLogsDeliveryEvent{kind: containerLogsDeliveryBatch}
-	case drop, ok := <-channels.drops:
-		if !ok {
-			return containerLogsDeliveryEvent{kind: containerLogsDeliveryDropClosed}
-		}
-		return containerLogsDeliveryEvent{kind: containerLogsDeliveryDrop, drop: drop}
+		d.batchTimer = nil
+		return d.flush()
+	}
+}
+
+// onPending sends a full batch at once and otherwise waits one batch window
+// so nearby lines share a frame.
+func (d *containerLogsDelivery) onPending() bool {
+	if d.pending.size() >= config.ContainerLogsStreamBatchMaxSize {
+		return d.flush()
+	}
+	d.armBatch()
+	return false
+}
+
+func (d *containerLogsDelivery) armBatch() {
+	if d.batchTimer == nil {
+		d.batchTimer = time.NewTimer(config.ContainerLogsStreamBatchWindow)
 	}
 }
 
@@ -376,32 +370,6 @@ func (d *containerLogsDelivery) batchChannel() <-chan time.Time {
 		return nil
 	}
 	return d.batchTimer.C
-}
-
-func (d *containerLogsDelivery) handle(event containerLogsDeliveryEvent) bool {
-	switch event.kind {
-	case containerLogsDeliveryCancelled:
-		d.flushBatch()
-		return true
-	case containerLogsDeliveryError:
-		return d.handleError(event.err)
-	case containerLogsDeliveryWarnings:
-		return d.handleWarnings(event.warnings)
-	case containerLogsDeliveryEntry:
-		return d.handleEntry(event.entry)
-	case containerLogsDeliveryEntriesClosed:
-		return d.handleEntriesClosed()
-	case containerLogsDeliveryHeartbeat:
-		d.handleHeartbeat()
-		return false
-	case containerLogsDeliveryBatch:
-		d.batchTimer = nil
-		return d.flushBatch()
-	case containerLogsDeliveryDrop:
-		return d.handleDrop(event.drop)
-	default:
-		return false
-	}
 }
 
 func (d *containerLogsDelivery) handleError(err error) bool {
@@ -422,56 +390,6 @@ func (d *containerLogsDelivery) handleWarnings(warnings []string) bool {
 	return d.emitWarningUpdate()
 }
 
-func (d *containerLogsDelivery) handleEntriesClosed() bool {
-	d.flushBatch()
-	if d.request.handler.telemetry != nil && d.pendingDropped > 0 {
-		d.request.handler.telemetry.RecordStreamDeliveryForLeaf(d.request.stream, telemetry.TargetLeaf(d.request.target), 0, d.pendingDropped)
-	}
-	return true
-}
-
-func (d *containerLogsDelivery) handleEntry(entry Entry) bool {
-	d.lastDelivery = time.Now()
-	if d.batch == nil {
-		d.batch = make([]Entry, 0, config.ContainerLogsStreamBatchMaxSize)
-	}
-	d.batch = append(d.batch, entry)
-	if len(d.batch) >= config.ContainerLogsStreamBatchMaxSize {
-		stop := d.flushBatch()
-		d.stopBatchTimer()
-		return stop
-	}
-	if d.batchTimer == nil {
-		d.batchTimer = time.NewTimer(config.ContainerLogsStreamBatchWindow)
-	}
-	return false
-}
-
-func (d *containerLogsDelivery) handleHeartbeat() {
-	if !shouldRecordHeartbeatTimeout(d.request.options.MatchNone, d.lastDelivery, time.Now()) {
-		return
-	}
-	d.request.recordError(fmt.Errorf("containerlogsstream heartbeat timeout"))
-	d.lastDelivery = time.Now()
-}
-
-func (d *containerLogsDelivery) handleDrop(drop int) bool {
-	d.pendingDropped += drop
-	if d.pendingDropped > 0 && !d.transportDropObserved && len(d.batch) == 0 {
-		d.transportDropObserved = true
-		if d.emitWarningUpdate() {
-			return true
-		}
-	}
-	if d.request.handler.telemetry != nil && len(d.batch) == 0 {
-		d.request.handler.telemetry.RecordStreamDeliveryForLeaf(
-			d.request.stream, telemetry.TargetLeaf(d.request.target), 0, d.pendingDropped,
-		)
-		d.pendingDropped = 0
-	}
-	return false
-}
-
 func (d *containerLogsDelivery) emitWarningUpdate() bool {
 	nextWarnings := composeStreamWarnings(d.selectionWarnings, d.transportDropObserved)
 	if slices.Equal(d.emittedWarnings, nextWarnings) {
@@ -485,33 +403,32 @@ func (d *containerLogsDelivery) emitWarningUpdate() bool {
 	return false
 }
 
-func (d *containerLogsDelivery) flushBatch() bool {
-	delivered := len(d.batch)
-	if delivered == 0 && d.pendingDropped == 0 {
-		return false
-	}
-	if delivered > 0 {
-		entries := d.batch
-		d.batch = nil
-		if err := d.request.writePayload(EventPayload{Entries: entries}); err != nil {
+// flush sends every pending entry in frames of at most the batch size. It
+// returns true when the client can no longer be written to.
+func (d *containerLogsDelivery) flush() bool {
+	d.stopBatchTimer()
+	entries, dropped := d.pending.take()
+	for start := 0; start < len(entries); start += config.ContainerLogsStreamBatchMaxSize {
+		end := min(start+config.ContainerLogsStreamBatchMaxSize, len(entries))
+		if err := d.request.writePayload(EventPayload{Entries: entries[start:end]}); err != nil {
 			d.request.recordError(err)
 			return true
 		}
 	}
-	if d.request.handler.telemetry != nil {
+	d.recordDelivery(len(entries), dropped)
+	if dropped > 0 && !d.transportDropObserved {
+		d.transportDropObserved = true
+		return d.emitWarningUpdate()
+	}
+	return false
+}
+
+func (d *containerLogsDelivery) recordDelivery(delivered, dropped int) {
+	if d.request.handler.telemetry != nil && (delivered > 0 || dropped > 0) {
 		d.request.handler.telemetry.RecordStreamDeliveryForLeaf(
-			d.request.stream, telemetry.TargetLeaf(d.request.target), delivered, d.pendingDropped,
+			d.request.stream, telemetry.TargetLeaf(d.request.target), delivered, dropped,
 		)
 	}
-	if d.pendingDropped > 0 && !d.transportDropObserved {
-		d.transportDropObserved = true
-		if d.emitWarningUpdate() {
-			return true
-		}
-	}
-	d.pendingDropped = 0
-	d.lastDelivery = time.Now()
-	return false
 }
 
 func (d *containerLogsDelivery) stopBatchTimer() {
@@ -519,10 +436,6 @@ func (d *containerLogsDelivery) stopBatchTimer() {
 		d.batchTimer.Stop()
 		d.batchTimer = nil
 	}
-}
-
-func shouldRecordHeartbeatTimeout(matchNone bool, lastDelivery, now time.Time) bool {
-	return !matchNone && now.Sub(lastDelivery) > config.StreamHeartbeatTimeout
 }
 
 func composeStreamWarnings(selectionWarnings []string, transportDropObserved bool) []string {
@@ -546,108 +459,36 @@ func warningPayload(warnings []string, includeEmpty bool) *[]string {
 // logTargetLabel identifies the object a log stream is tailing, so container-logs
 // telemetry can be attributed per stream (one diagnostics row per open viewer).
 func logTargetLabel(opts Options) string {
-	target := opts.Namespace + "/" + opts.Name
-	if opts.Container != "" {
-		target += "/" + opts.Container
-	}
-	return target
+	return opts.Namespace + "/" + opts.Name
 }
 
 func parseRequest(request Request) (Options, error) {
 	rawScope := strings.TrimSpace(request.Scope)
-	if rawScope == "" {
-		return Options{}, errors.New("scope is required")
+	identity, err := containerlogs.ParseTargetScope(rawScope)
+	if err != nil {
+		return Options{}, err
 	}
 	clusterIDs, _ := refresh.SplitClusterScopeList(rawScope)
 	if len(clusterIDs) != 1 {
 		return Options{}, errors.New("log scope requires a single cluster scope")
 	}
-
-	identity, err := refresh.ParseObjectScope(rawScope)
-	if err != nil {
-		return Options{}, err
-	}
-	if strings.TrimSpace(identity.GVK.Version) == "" {
-		return Options{}, errors.New("log scope must include apiVersion")
-	}
-	if identity.Namespace == "" {
-		return Options{}, errors.New("log scope must reference a namespaced object")
-	}
-	if err := containerlogs.ValidateTargetGVK(identity.GVK); err != nil {
-		return Options{}, err
-	}
-	podFilter := strings.TrimSpace(request.Pod)
-	podInclude := strings.TrimSpace(request.PodInclude)
-	podExclude := strings.TrimSpace(request.PodExclude)
-	selectedFilters := trimQueryValues(request.SelectedFilters)
-	container := strings.TrimSpace(request.Container)
-	includeInit := true
-	if request.IncludeInit != nil {
-		includeInit = *request.IncludeInit
-	}
-	includeEphemeral := true
-	if request.IncludeEphemeral != nil {
-		includeEphemeral = *request.IncludeEphemeral
-	}
-	containerState, err := containerlogs.ParseContainerStateFilter(strings.TrimSpace(request.ContainerState))
-	if err != nil {
-		return Options{}, fmt.Errorf("invalid container state filter: %w", err)
-	}
-	include := strings.TrimSpace(request.Include)
-	exclude := strings.TrimSpace(request.Exclude)
 	tail := config.ContainerLogsStreamDefaultTailLines
 	if request.TailLines > 0 {
 		tail = min(request.TailLines, config.ContainerLogsStreamMaxTailLines)
 	}
-	lineFilter, err := containerlogs.NewLineFilter(include, exclude)
-	if err != nil {
-		return Options{}, fmt.Errorf("invalid log filter: %w", err)
-	}
-	podNameFilter, err := containerlogs.NewPodNameFilter(podInclude, podExclude)
-	if err != nil {
-		return Options{}, fmt.Errorf("invalid pod filter: %w", err)
-	}
-	selection := containerlogs.ParseScopeSelection(selectedFilters)
 	return Options{
-		ClusterID:        clusterIDs[0],
-		Namespace:        identity.Namespace,
-		Group:            strings.TrimSpace(identity.GVK.Group),
-		Version:          strings.TrimSpace(identity.GVK.Version),
-		Kind:             strings.ToLower(strings.TrimSpace(identity.GVK.Kind)),
-		Name:             strings.TrimSpace(identity.Name),
-		PodFilter:        podFilter,
-		PodInclude:       podInclude,
-		PodExclude:       podExclude,
-		SelectedFilters:  selectedFilters,
-		MatchNone:        request.MatchNone,
-		Selection:        selection,
-		Container:        container,
-		IncludeInit:      includeInit,
-		IncludeEphemeral: includeEphemeral,
-		ContainerState:   containerState,
-		Include:          include,
-		Exclude:          exclude,
-		PodNameFilter:    podNameFilter,
-		LineFilter:       lineFilter,
-		TailLines:        tail,
+		ClusterID: clusterIDs[0],
+		Namespace: identity.Namespace,
+		Group:     identity.GVK.Group,
+		Version:   identity.GVK.Version,
+		Kind:      strings.ToLower(identity.GVK.Kind),
+		Name:      identity.Name,
+		MatchNone: request.MatchNone,
+		Selection: containerlogs.ParseScopeSelection(request.SelectedFilters),
+		TailLines: tail,
 		// Keep the original scope for client-side keying.
 		ScopeString: rawScope,
 	}, nil
-}
-
-func trimQueryValues(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-	trimmed := make([]string, 0, len(values))
-	for _, value := range values {
-		next := strings.TrimSpace(value)
-		if next == "" {
-			continue
-		}
-		trimmed = append(trimmed, next)
-	}
-	return trimmed
 }
 
 // permissionDeniedStatus translates forbidden log errors into Status-like payloads.

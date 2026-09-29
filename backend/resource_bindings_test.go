@@ -218,7 +218,7 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 func TestFetchContainerLogsRejectsInvalidScopeCluster(t *testing.T) {
 	app := wrapperResourceGatewayFixture(t)
 
-	resp := app.gateway.FetchContainerLogs("cluster-a", ContainerLogsFetchRequest{Container: "app"})
+	resp := app.gateway.FetchContainerLogs("cluster-a", ContainerLogsFetchRequest{SelectedFilters: []string{"container:app"}})
 	if !strings.Contains(resp.Error, "container logs scope is required") {
 		t.Fatalf("expected missing scope error, got %q", resp.Error)
 	}

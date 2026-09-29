@@ -611,7 +611,6 @@ describe('ContainerLogsStreamManager', () => {
 
     const logScope = 'cluster-a|default:apps/v1:deployment:web';
     setContainerLogsStreamScopeParams(logScope, {
-      container: 'app',
       selectedFilters: ['pod:web-2', 'container:app'],
     });
 
@@ -627,7 +626,6 @@ describe('ContainerLogsStreamManager', () => {
     ).toEqual([
       {
         scope: logScope,
-        container: 'app',
         selectedFilters: ['pod:web-2', 'container:app'],
         matchNone: false,
       },
@@ -668,7 +666,6 @@ describe('ContainerLogsStreamManager', () => {
     ).toEqual([
       {
         scope: logScope,
-        container: '',
         selectedFilters: [],
         matchNone: true,
       },

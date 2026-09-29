@@ -1,11 +1,10 @@
 package containerlogsstream
 
 import (
-	"time"
-
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // Logger represents the minimal logging interface required by the container
@@ -14,47 +13,35 @@ type Logger = applog.Logger
 
 // Options captures the parameters for a container logs streaming session.
 type Options struct {
-	ClusterID        string
-	Namespace        string
-	Group            string
-	Version          string
-	Kind             string
-	Name             string
-	PodFilter        string
-	PodInclude       string
-	PodExclude       string
-	SelectedFilters  []string
-	MatchNone        bool
-	Selection        containerlogs.ScopeSelection
-	Container        string
-	IncludeInit      bool
-	IncludeEphemeral bool
-	ContainerState   containerlogs.ContainerStateFilter
-	Include          string
-	Exclude          string
-	PodNameFilter    containerlogs.PodNameFilter
-	LineFilter       containerlogs.LineFilter
-	TailLines        int
-	ScopeString      string
+	ClusterID   string
+	Namespace   string
+	Group       string
+	Version     string
+	Kind        string
+	Name        string
+	MatchNone   bool
+	Selection   containerlogs.ScopeSelection
+	TailLines   int
+	ScopeString string
+}
+
+// target is the complete identity of the pod or workload the session reads.
+func (o Options) target() refresh.ObjectScopeIdentity {
+	return refresh.ObjectScopeIdentity{
+		Namespace: o.Namespace,
+		GVK:       schema.GroupVersionKind{Group: o.Group, Version: o.Version, Kind: o.Kind},
+		Name:      o.Name,
+	}
 }
 
 // Request is the first client frame for a container-logs named stream.
 // Scope carries complete cluster and Kubernetes object identity; the remaining
-// fields preserve the existing container and filter controls.
+// fields carry the pod/container source selection and the history size.
 type Request struct {
-	Scope            string   `json:"scope"`
-	Container        string   `json:"container,omitempty"`
-	SelectedFilters  []string `json:"selectedFilters,omitempty"`
-	MatchNone        bool     `json:"matchNone,omitempty"`
-	Pod              string   `json:"pod,omitempty"`
-	PodInclude       string   `json:"podInclude,omitempty"`
-	PodExclude       string   `json:"podExclude,omitempty"`
-	Include          string   `json:"include,omitempty"`
-	Exclude          string   `json:"exclude,omitempty"`
-	ContainerState   string   `json:"containerState,omitempty"`
-	TailLines        int      `json:"tailLines,omitempty"`
-	IncludeInit      *bool    `json:"includeInit,omitempty"`
-	IncludeEphemeral *bool    `json:"includeEphemeral,omitempty"`
+	Scope           string   `json:"scope"`
+	SelectedFilters []string `json:"selectedFilters,omitempty"`
+	MatchNone       bool     `json:"matchNone,omitempty"`
+	TailLines       int      `json:"tailLines,omitempty"`
 }
 
 // Entry mirrors the log line payload sent to clients.
@@ -78,15 +65,4 @@ type EventPayload struct {
 	Warnings     *[]string                       `json:"warnings,omitempty"`
 	Error        string                          `json:"error,omitempty"`
 	ErrorDetails *refresh.PermissionDeniedStatus `json:"errorDetails,omitempty"`
-}
-
-// containerState keeps track of lines delivered at the last timestamp to avoid duplicates.
-// When multiple log lines share the same timestamp (common in Java apps), we track all of them
-// so that on stream reconnection (using SinceTime which is inclusive), we can skip all
-// previously seen lines at that timestamp.
-type containerState struct {
-	lastTimestamp time.Time
-	// linesAtTimestamp tracks all lines seen at lastTimestamp to handle deduplication
-	// when multiple lines share the same timestamp.
-	linesAtTimestamp map[string]struct{}
 }
