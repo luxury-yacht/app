@@ -16,6 +16,9 @@ object panel. They are snapshot/fetch based, not container log streaming.
   viewer shell ([overview.md](overview.md#shared-viewer-shell)); source
   selection and transport stay node-log specific. Node Logs has no timestamp or
   previous-log shortcuts.
+- Loading, error and empty states look like Container Logs', but show under the
+  toolbar instead of replacing the tab: the toolbar holds the source picker,
+  which must stay usable when a source cannot be read.
 
 ## Ownership
 

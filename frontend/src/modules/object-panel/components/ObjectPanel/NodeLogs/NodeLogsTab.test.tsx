@@ -685,7 +685,11 @@ describe('NodeLogsTab', () => {
     await renderTab();
     await selectSource('kubelet');
 
-    expect(container.textContent).toContain('node log access denied');
+    expect(container.textContent).toContain('Error: node log access denied');
+    // Another source must stay selectable when this one cannot be read.
+    expect(
+      container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger')
+    ).not.toBeNull();
     expect(handleInlineMock).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'node log access denied' }),
       {
@@ -892,7 +896,7 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain('Loading logs…');
+    expect(container.textContent).toContain('Loading logs...');
     expect(container.textContent).not.toContain('content for journal/kubelet');
 
     await act(async () => {
@@ -942,7 +946,7 @@ describe('NodeLogsTab', () => {
       });
 
       expect(container.querySelector('.logs-viewer-text')?.textContent).toContain('line one');
-      expect(container.textContent).not.toContain('Loading logs…');
+      expect(container.textContent).not.toContain('Loading logs...');
 
       await act(async () => {
         refreshResolve?.({
@@ -1037,10 +1041,54 @@ describe('NodeLogsTab', () => {
       });
 
       expect(container.querySelector('.logs-viewer-text')?.textContent).toContain('line two');
-      expect(container.textContent).not.toContain('Loading logs…');
+      expect(container.textContent).not.toContain('Loading logs...');
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('keeps the lines and reports a failed background refresh above them', async () => {
+    vi.useFakeTimers();
+    mockFetchNodeLogs.mockResolvedValueOnce({
+      status: 'executed',
+      data: { source: sources[0], sourcePath: sources[0].path, content: 'line one\nline two' },
+    });
+    mockFetchNodeLogs.mockResolvedValue({
+      status: 'executed',
+      data: { source: sources[0], sourcePath: sources[0].path, error: 'kubelet unreachable' },
+    });
+
+    try {
+      await renderTab();
+      await selectSource('kubelet');
+      await act(async () => {
+        vi.advanceTimersByTime(5000);
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(container.querySelector('.logs-viewer-text')?.textContent).toContain('line two');
+      expect(container.querySelector('[aria-label="Log warnings"]')?.textContent).toContain(
+        'kubelet unreachable'
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('says so when a source returns no logs', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      status: 'executed',
+      data: { source: sources[0], sourcePath: sources[0].path, content: '' },
+    });
+
+    await renderTab();
+    await selectSource('kubelet');
+
+    expect(container.querySelector('.logs-viewer-text')?.textContent).toBe(
+      'No logs returned for this source.'
+    );
   });
 
   describe('keyboard shortcuts', () => {

@@ -1,6 +1,7 @@
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar from '@shared/components/IconBar/IconBar';
+import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
@@ -13,6 +14,7 @@ import {
   useState,
 } from 'react';
 import { containsAnsi } from '../Logs/ansi';
+import { LogErrorState, LogWarningBar } from '../Logs/LogStatus';
 import {
   initialLogOptionsState,
   logOptionsReducer,
@@ -414,13 +416,7 @@ const NodeLogsAvailability = ({
   if (availability.pending) {
     return (
       <div className="object-panel-tab-content">
-        <div className="logs-viewer-display">
-          <div className="logs-viewer-content">
-            <div className="logs-viewer-display-loading">
-              Checking if logs are available for this node...
-            </div>
-          </div>
-        </div>
+        <LoadingSpinner message="Checking if logs are available for this node..." />
       </div>
     );
   }
@@ -447,17 +443,62 @@ const NodeLogsAvailability = ({
   );
 };
 
-type NodeLogContentProps = {
-  error: string | null;
+// The message shown as the log's only line when there is nothing else to show,
+// as Container Logs shows its empty states.
+const nodeLogStatusMessage = ({
+  hasSelectedSource,
+  hasContent,
+  hasInvalidRegex,
+  hasFilteredLines,
+}: {
   hasSelectedSource: boolean;
-  loading: boolean;
-  hasLoadedContent: boolean;
+  hasContent: boolean;
   hasInvalidRegex: boolean;
   hasFilteredLines: boolean;
+}): string | null => {
+  if (!hasSelectedSource) {
+    return 'Select a log source to view logs.';
+  }
+  if (!hasContent) {
+    return 'No logs returned for this source.';
+  }
+  if (hasInvalidRegex) {
+    return 'Enter a valid regular expression.';
+  }
+  return hasFilteredLines ? null : 'No log lines match the current filter.';
+};
+
+const nodeLogWarnings = ({
+  truncated,
+  error,
+  hasContent,
+}: {
+  truncated: boolean;
+  error: string | null;
   hasContent: boolean;
-  isParsedView: boolean;
-  canParseLogs: boolean;
-  renderedDisplayRows: RenderedLogRow[];
+}): string[] => {
+  const warnings: string[] = [];
+  if (truncated && !error) {
+    warnings.push(
+      `Showing only the most recent ${Math.floor(NODE_LOG_TAIL_BYTES / 1024)} KB for responsiveness.`
+    );
+  }
+  // A failed refresh keeps the lines already shown and reports above them.
+  if (error && hasContent) {
+    warnings.push(`Could not refresh logs: ${error}`);
+  }
+  return warnings;
+};
+
+// Loading and failure without lines show in the log region like Container
+// Logs' states, but under the toolbar: it holds the source picker, which must
+// stay usable when a source cannot be read.
+type NodeLogContentProps = {
+  loading: boolean;
+  error: string | null;
+  hasContent: boolean;
+  showTable: boolean;
+  displayRows: RenderedLogRow[];
   logsContentRef: React.RefObject<HTMLElement | null>;
   wrapText: boolean;
   renderMessageContent: (message: string, keyPrefix: string) => React.ReactNode;
@@ -468,16 +509,11 @@ type NodeLogContentProps = {
 };
 
 const NodeLogContent = ({
-  error,
-  hasSelectedSource,
   loading,
-  hasLoadedContent,
-  hasInvalidRegex,
-  hasFilteredLines,
+  error,
   hasContent,
-  isParsedView,
-  canParseLogs,
-  renderedDisplayRows,
+  showTable,
+  displayRows,
   logsContentRef,
   wrapText,
   renderMessageContent,
@@ -486,53 +522,32 @@ const NodeLogContent = ({
   expandedRows,
   onToggleParsedRow,
 }: NodeLogContentProps) => {
-  if (error) {
+  if (loading && !hasContent) {
+    return <LoadingSpinner message="Loading logs..." />;
+  }
+  if (error && !hasContent) {
+    return <LogErrorState message={error} />;
+  }
+  if (showTable) {
     return (
-      <div className="logs-viewer-display-error">
-        <ErrorSurface kind="reported" message={error} />
-      </div>
-    );
-  }
-  if (!hasSelectedSource) {
-    return <div className="logs-viewer-display-loading">Select a log source to view logs.</div>;
-  }
-  if (loading && !hasLoadedContent) {
-    return <div className="logs-viewer-display-loading">Loading logs…</div>;
-  }
-  if (hasInvalidRegex) {
-    return <div className="logs-viewer-display-error">Enter a valid regular expression.</div>;
-  }
-  if (!hasFilteredLines) {
-    const message = hasContent
-      ? 'No log lines match the current filter.'
-      : 'No logs returned for this source.';
-    return <div className="logs-viewer-display-loading">{message}</div>;
-  }
-  if (!isParsedView) {
-    return (
-      <RawLogViewer
-        rows={renderedDisplayRows}
-        scrollContainerRef={logsContentRef}
-        wrapText={wrapText}
-        renderRow={(row, index) => (
-          <div className="log-viewer-line">
-            {renderMessageContent(row.line, `node-log-line-${index}`)}
-          </div>
-        )}
+      <ParsedLogTable
+        rows={parsedLogs}
+        columns={tableColumns}
+        expandedRows={expandedRows}
+        onToggleRow={onToggleParsedRow}
       />
     );
   }
-  if (!canParseLogs) {
-    return (
-      <div className="logs-viewer-display-loading">No JSON log lines match the current filter.</div>
-    );
-  }
   return (
-    <ParsedLogTable
-      rows={parsedLogs}
-      columns={tableColumns}
-      expandedRows={expandedRows}
-      onToggleRow={onToggleParsedRow}
+    <RawLogViewer
+      rows={displayRows}
+      scrollContainerRef={logsContentRef}
+      wrapText={wrapText}
+      renderRow={(row, index) => (
+        <div className="log-viewer-line">
+          {renderMessageContent(row.line, `node-log-line-${index}`)}
+        </div>
+      )}
     />
   );
 };
@@ -638,11 +653,24 @@ const NodeLogsTab = ({
     [displayMode, filteredLines, showAnsiColors]
   );
 
+  const hasContent = content.length > 0;
+  const statusMessage = nodeLogStatusMessage({
+    hasSelectedSource: Boolean(selectedSource),
+    hasContent,
+    hasInvalidRegex,
+    hasFilteredLines: filteredLines.length > 0,
+  });
   const renderedDisplayRows = useMemo<RenderedLogRow[]>(
     () =>
-      splitDisplayRows(displayLines, (index) => `${selectedSource?.path ?? 'node-log'}-${index}`),
-    [displayLines, selectedSource?.path]
+      statusMessage
+        ? [{ key: 'status', line: statusMessage }]
+        : splitDisplayRows(
+            displayLines,
+            (index) => `${selectedSource?.path ?? 'node-log'}-${index}`
+          ),
+    [displayLines, selectedSource?.path, statusMessage]
   );
+  const logWarnings = nodeLogWarnings({ truncated, error, hasContent });
 
   const displayedText = useMemo(
     () => logCopyText(displayMode, displayLines, parsedCsv),
@@ -652,7 +680,6 @@ const NodeLogsTab = ({
     () => filteredLines.some((line) => containsAnsi(line)),
     [filteredLines]
   );
-  const hasLoadedContent = content.length > 0;
   const hasCopyableContent = displayedText.length > 0;
   const displayedLogCount = isParsedView
     ? parsedRows.length
@@ -768,12 +795,7 @@ const NodeLogsTab = ({
           </div>
         </div>
 
-        {truncated && !error && (
-          <div className="logs-viewer-warning-bar">
-            Showing only the most recent {Math.floor(NODE_LOG_TAIL_BYTES / 1024)} KB for
-            responsiveness.
-          </div>
-        )}
+        <LogWarningBar warnings={logWarnings} />
 
         <ScrollableRegion
           ref={logsContentRef}
@@ -782,16 +804,11 @@ const NodeLogsTab = ({
           tabIndex={isParsedView ? -1 : 0}
         >
           <NodeLogContent
-            error={error}
-            hasSelectedSource={Boolean(selectedSource)}
             loading={loading}
-            hasLoadedContent={hasLoadedContent}
-            hasInvalidRegex={hasInvalidRegex}
-            hasFilteredLines={filteredLines.length > 0}
-            hasContent={content.length > 0}
-            isParsedView={isParsedView}
-            canParseLogs={canParseLogs}
-            renderedDisplayRows={renderedDisplayRows}
+            error={error}
+            hasContent={hasContent}
+            showTable={isParsedView && !statusMessage}
+            displayRows={renderedDisplayRows}
             logsContentRef={logsContentRef}
             wrapText={wrapText}
             renderMessageContent={renderMessageContent}

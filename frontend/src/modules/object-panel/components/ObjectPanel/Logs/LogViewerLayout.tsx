@@ -10,7 +10,6 @@ import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { normalizeDropdownValue } from '@shared/components/dropdowns/dropdownValue';
 import { multiSelectFilterTriggerLabel } from '@shared/components/dropdowns/multiSelectFilterSelection';
-import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
@@ -19,8 +18,8 @@ import Tooltip from '@shared/components/Tooltip';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
 import type React from 'react';
-import { RETRY_HINT } from './containerLogNotices';
 import type { ContainerLogRow } from './containerLogRows';
+import { LogErrorState, LogWarningBar } from './LogStatus';
 import {
   logFilterSelectionFromDropdownValues,
   logFilterSelectionToDropdownValues,
@@ -109,12 +108,7 @@ export const renderLogViewerBlockingState = ({
   if (displayError && !hasEntries) {
     return (
       <div className="object-panel-tab-content">
-        <div className="logs-viewer-display-error">
-          <div className="error-message">
-            Error: <ErrorSurface kind="reported" message={displayError} />
-          </div>
-          {retryHint ? <div className="logs-viewer-retry-hint">{RETRY_HINT}</div> : null}
-        </div>
+        <LogErrorState message={displayError} retryHint={retryHint} />
       </div>
     );
   }
@@ -238,11 +232,7 @@ export const LogViewerReadyView = ({
           onClearAll={clearAllFilters}
           className="logs-viewer-active-filters"
         />
-        {visibleLogWarnings.length > 0 && (
-          <div className="logs-viewer-warning-bar" role="status" aria-label="Log warnings">
-            {visibleLogWarnings.join(' ')}
-          </div>
-        )}
+        <LogWarningBar warnings={visibleLogWarnings} />
         <div className="logs-viewer-content-frame">
           <ScrollableRegion
             className="logs-viewer-content selectable"
