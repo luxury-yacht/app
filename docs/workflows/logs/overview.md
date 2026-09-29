@@ -41,7 +41,8 @@ keeps its own source selection and transport.
   Container Logs builds its rows from the entries, so the pod, container and
   timestamp a row shows come from the entry and never from its message text. `useRawViewFallback` returns the JSON views to raw only when lines are
   shown and none is JSON; an empty log keeps the view.
-- `logToolbar.tsx`: the text filter box (`LogTextFilter`) and the icon bar.
+- `logToolbar.tsx`: the text filter box (`LogTextFilter`), the icon bar, and
+  the match count (`LogMatchCount`), shown only while a filter narrows the logs.
   Timestamps, previous logs and settings are optional icon bar features; Node
   Logs passes none of them.
 - `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts. `T` (timestamps) and

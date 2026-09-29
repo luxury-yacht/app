@@ -7,6 +7,7 @@
 - Container logs load faster: each container's history and live output come from one request, the first view appears within about 2 seconds, and a slow container no longer holds back the others.
 - The Logs tab now says why logs are missing: containers that cannot be read or have not started are listed, and dropped or trimmed lines are reported instead of disappearing silently.
 - When live logs stop for good (for example, the workload was deleted or you may not list pods), the Logs tab shows the reason and turns auto-refresh off; turning it back on retries.
+- Node logs now work like container logs: the same loading, error and empty states, the same Logs buffer limit, and the same warning icon beside the toolbar when older lines were dropped. The match count now reads "n matching logs".
 
 ### Fixed
 

@@ -23,7 +23,7 @@ import {
   logFilterSelectionToDropdownValues,
 } from './logFilterSelection';
 import type { ParsedLogEntry } from './logOptionsReducer';
-import { LogTextFilter } from './logToolbar';
+import { LogMatchCount, LogTextFilter } from './logToolbar';
 import type { LogViewerAction } from './logViewerReducer';
 import ParsedLogTable from './ParsedLogTable';
 import RawLogViewer from './RawLogViewer';
@@ -122,8 +122,8 @@ type LogViewerControlsProps = {
   textFilter: string;
   iconItems: IconBarItem[];
   hasActiveResultFilter: boolean;
-  countLabel: string;
-  bufferFull: string | null;
+  matchCount: number;
+  bufferFullShown: number | null;
   dispatch: React.Dispatch<LogViewerAction>;
 };
 
@@ -136,8 +136,8 @@ export const LogViewerControls = ({
   textFilter,
   iconItems,
   hasActiveResultFilter,
-  countLabel,
-  bufferFull,
+  matchCount,
+  bufferFullShown,
   dispatch,
 }: LogViewerControlsProps) => (
   <div
@@ -175,8 +175,8 @@ export const LogViewerControls = ({
         title="Filter logs by text (searches in log lines, pods, and containers)"
       />
       <IconBar items={iconItems} />
-      <LogBufferFullIndicator message={bufferFull} />
-      {!!hasActiveResultFilter && <span className="logs-viewer-count">{countLabel}</span>}
+      <LogBufferFullIndicator shown={bufferFullShown} />
+      <LogMatchCount count={matchCount} filtered={hasActiveResultFilter} />
     </div>
   </div>
 );

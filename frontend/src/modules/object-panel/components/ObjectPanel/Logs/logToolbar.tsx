@@ -2,7 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/logToolbar.tsx
  *
  * The toolbar controls shared by Container Logs and Node Logs: the text filter
- * box and the icon bar. Timestamps, previous logs and settings are optional
+ * box, the icon bar and the match count. Timestamps, previous logs and settings are optional
  * icon bar features a viewer passes when it has them.
  */
 
@@ -260,3 +260,11 @@ export const LogTextFilter = ({
     )}
   </div>
 );
+
+/** How many logs match; shown only while a filter narrows the logs. */
+export const LogMatchCount = ({ count, filtered }: { count: number; filtered: boolean }) =>
+  filtered ? (
+    <span className="logs-viewer-count">
+      {count} matching {count === 1 ? 'log' : 'logs'}
+    </span>
+  ) : null;

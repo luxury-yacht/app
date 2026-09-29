@@ -3,6 +3,7 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eventBus } from '@/core/events';
 import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 import { requireValue } from '@/test-utils/requireValue';
 import { useKeyboardContext } from '@/ui/shortcuts/context';
@@ -327,6 +328,29 @@ describe('NodeLogsTab', () => {
     expect(container.querySelector('.logs-viewer-text')?.textContent).toBe(
       'error failed to reconcile'
     );
+  });
+
+  // As in Container Logs, the count shows only while a filter narrows the logs.
+  it('shows the match count only while a text filter is applied', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'info boot complete\nerror failed to reconcile',
+      },
+    });
+
+    await renderTab();
+    expect(container.querySelector('.logs-viewer-count')).toBeNull();
+    await selectSource('kubelet');
+    expect(container.querySelector('.logs-viewer-count')).toBeNull();
+
+    await setFilterValue('error');
+    expect(container.querySelector('.logs-viewer-count')?.textContent).toBe('1 matching log');
+
+    await setFilterValue('  ');
+    expect(container.querySelector('.logs-viewer-count')).toBeNull();
   });
 
   it('clears the text filter from the filter box and shows every line again', async () => {
@@ -687,7 +711,7 @@ describe('NodeLogsTab', () => {
         vi.advanceTimersByTime(250);
       });
       expect(document.body.querySelector('.tooltip')?.textContent).toBe(
-        'Log buffer is full. Only showing the most recent 256 KB.'
+        'Log buffer is full. Only showing the most recent 1 log.'
       );
     } finally {
       vi.useRealTimers();
@@ -1067,6 +1091,115 @@ describe('NodeLogsTab', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // Node Logs keep as many lines as the Object Panel Logs buffer setting allows
+  // and say so the same way Container Logs do.
+  describe('log buffer', () => {
+    const numberedLines = (from: number, to: number) =>
+      Array.from({ length: to - from + 1 }, (_, index) => `line ${from + index}`).join('\n');
+    const countLabel = () => container.querySelector('.logs-viewer-count')?.textContent;
+    const bufferFullMessage = async (): Promise<string | null | undefined> => {
+      const indicator = container.querySelector<HTMLElement>(
+        '.logs-viewer-controls [aria-label="Log buffer is full"]'
+      );
+      if (!indicator) {
+        return null;
+      }
+      vi.useFakeTimers();
+      try {
+        await act(async () => {
+          indicator.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+        });
+        await act(async () => {
+          vi.advanceTimersByTime(250);
+        });
+        const message = document.body.querySelector('.tooltip')?.textContent;
+        await act(async () => {
+          indicator.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+          vi.advanceTimersByTime(250);
+        });
+        return message;
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+
+    it('keeps only as many lines as the buffer setting allows', async () => {
+      mockFetchNodeLogs.mockResolvedValue({
+        status: 'executed',
+        data: { source: sources[0], sourcePath: sources[0].path, content: numberedLines(1, 1200) },
+      });
+
+      await renderTab();
+      await selectSource('kubelet');
+      await setFilterValue('line');
+
+      expect(countLabel()).toBe('1000 matching logs');
+      expect(await bufferFullMessage()).toBe(
+        'Log buffer is full. Only showing the most recent 1000 logs.'
+      );
+    });
+
+    it('trims to the newest lines at once when the buffer setting shrinks', async () => {
+      mockFetchNodeLogs.mockResolvedValue({
+        status: 'executed',
+        data: { source: sources[0], sourcePath: sources[0].path, content: numberedLines(1, 150) },
+      });
+
+      await renderTab();
+      await selectSource('kubelet');
+      expect(await bufferFullMessage()).toBeNull();
+
+      await act(async () => {
+        eventBus.emit('settings:obj-panel-logs-buffer-size', 100);
+      });
+
+      const rows = Array.from(
+        container.querySelectorAll('.log-viewer-line'),
+        (row) => row.textContent
+      );
+      expect(rows[0]).toBe('line 51');
+      expect(rows[rows.length - 1]).toBe('line 150');
+      expect(await bufferFullMessage()).toBe(
+        'Log buffer is full. Only showing the most recent 100 logs.'
+      );
+    });
+
+    it('still says the buffer is full after a refresh appends lines', async () => {
+      vi.useFakeTimers();
+      mockFetchNodeLogs.mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          source: sources[0],
+          sourcePath: sources[0].path,
+          content: 'line 1\nline 2',
+          truncated: true,
+        },
+      });
+      mockFetchNodeLogs.mockResolvedValue({
+        status: 'executed',
+        data: { source: sources[0], sourcePath: sources[0].path, content: 'line 3' },
+      });
+      try {
+        await renderTab();
+        await selectSource('kubelet');
+        await act(async () => {
+          vi.advanceTimersByTime(5000);
+          await Promise.resolve();
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+      await setFilterValue('line');
+
+      expect(countLabel()).toBe('3 matching logs');
+      expect(await bufferFullMessage()).toBe(
+        'Log buffer is full. Only showing the most recent 3 logs.'
+      );
+    });
   });
 
   it('keeps the lines and reports a failed background refresh above them', async () => {

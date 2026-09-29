@@ -22,7 +22,7 @@ import {
 } from '../Logs/logOptionsReducer';
 import { findLogOverlap } from '../Logs/logOverlap';
 import { buildLogSearchRegex } from '../Logs/logSearch';
-import { buildLogToolbarItems, LogTextFilter } from '../Logs/logToolbar';
+import { buildLogToolbarItems, LogMatchCount, LogTextFilter } from '../Logs/logToolbar';
 import {
   getLogViewerScrollPosition,
   setLogViewerScrollPosition,
@@ -33,6 +33,8 @@ import { fetchNodeLogs, type NodeLogFetchResponse, type NodeLogSource } from './
 import '../Logs/LogViewer.css';
 import './NodeLogsTab.css';
 import { errorHandler } from '@utils/errorHandler';
+import { eventBus } from '@/core/events';
+import { getObjPanelLogsBufferMaxSize } from '@/core/settings/appPreferences';
 import { useLogCopyAction, useLogSelectionCopy } from '../Logs/hooks/useLogCopyAction';
 import { useLogKeyboardShortcuts } from '../Logs/hooks/useLogKeyboardShortcuts';
 import { useLogMessageRenderer } from '../Logs/hooks/useLogMessageRenderer';
@@ -94,6 +96,29 @@ const appendNodeLogContent = (existingContent: string, incomingContent: string):
   }
 
   return `${existingContent}\n${remainingLines.join('\n')}`;
+};
+
+// A trailing newline ends the last line rather than starting another.
+const nodeLogLineCount = (content: string): number => {
+  if (!content) {
+    return 0;
+  }
+  const lines = content.split('\n').length;
+  return content.endsWith('\n') ? lines - 1 : lines;
+};
+
+// Keeps the newest `maxLines` lines, as Container Logs keeps its newest entries.
+const keepRecentNodeLogLines = (
+  content: string,
+  maxLines: number
+): { content: string; dropped: boolean } => {
+  const lineCount = nodeLogLineCount(content);
+  if (lineCount <= maxLines) {
+    return { content, dropped: false };
+  }
+  const lines = content.split('\n');
+  const keep = maxLines + (lines.length - lineCount);
+  return { content: lines.slice(-keep).join('\n'), dropped: true };
 };
 
 const getExecutedNodeLogResponse = (
@@ -240,10 +265,13 @@ const nodeLogResponseError = (response: NodeLogFetchResponse, clusterId: string)
   }).message;
 };
 
+// `truncated` means lines of this source were dropped: by the node's size
+// limit or by the buffer. Once dropped they stay dropped, so appends carry it.
 const resolveNodeLogBatch = (
   batch: NodeLogFetchBatch,
-  existingContent: string,
-  clusterId: string
+  existing: { content: string; truncated: boolean },
+  clusterId: string,
+  maxLines: number
 ): NodeLogBatchResolution | null => {
   if (!batch.response) {
     return null;
@@ -253,14 +281,16 @@ const resolveNodeLogBatch = (
     return { status: 'error', message: responseError };
   }
   const incomingContent = batch.response.content ?? '';
-  const content =
-    batch.appendMode && existingContent
-      ? appendNodeLogContent(existingContent, incomingContent)
-      : incomingContent;
+  const appending = batch.appendMode && existing.content.length > 0;
+  const kept = keepRecentNodeLogLines(
+    appending ? appendNodeLogContent(existing.content, incomingContent) : incomingContent,
+    maxLines
+  );
   return {
     status: 'success',
-    content,
-    truncated: Boolean(batch.response.truncated),
+    content: kept.content,
+    truncated:
+      Boolean(batch.response.truncated) || kept.dropped || (appending && existing.truncated),
   };
 };
 
@@ -283,13 +313,28 @@ const useNodeLogRequest = ({
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [truncated, setTruncated] = useState(false);
   const contentRef = useRef('');
+  const truncatedRef = useRef(false);
   const loadedSourcePathRef = useRef<string | null>(null);
   const lastSuccessfulFetchAtRef = useRef<string | null>(null);
   const previousSourcePathRef = useRef<string | null>(null);
 
   useEffect(() => {
     contentRef.current = content;
-  }, [content]);
+    truncatedRef.current = truncated;
+  }, [content, truncated]);
+
+  // Shrinking the buffer setting trims at once; growing applies as lines arrive.
+  useEffect(
+    () =>
+      eventBus.on('settings:obj-panel-logs-buffer-size', (maxLines) => {
+        const kept = keepRecentNodeLogLines(contentRef.current, maxLines);
+        if (kept.dropped) {
+          setContent(kept.content);
+          setTruncated(true);
+        }
+      }),
+    []
+  );
 
   useEffect(() => {
     const plan = buildNodeLogFetchPlan({
@@ -318,14 +363,18 @@ const useNodeLogRequest = ({
         if (cancelled) {
           return;
         }
-        const resolution = resolveNodeLogBatch(batch, contentRef.current, clusterId);
+        const resolution = resolveNodeLogBatch(
+          batch,
+          { content: contentRef.current, truncated: truncatedRef.current },
+          clusterId,
+          getObjPanelLogsBufferMaxSize()
+        );
         if (!resolution) {
           return;
         }
         if (resolution.status === 'error') {
           setError(resolution.message);
           setContent((current) => (plan.sourceChanged ? '' : current));
-          setTruncated(false);
           return;
         }
         loadedSourcePathRef.current = plan.activeSourcePath;
@@ -348,7 +397,6 @@ const useNodeLogRequest = ({
         if (plan.sourceChanged) {
           setContent('');
         }
-        setTruncated(false);
       })
       .finally(() => {
         if (!cancelled) {
@@ -384,14 +432,6 @@ const useNodeLogRequest = ({
   }, []);
 
   return { content, error, loading, truncated, resetSourceTracking };
-};
-
-const getNodeLogCountLabel = (hasSelectedSource: boolean, displayedLogCount: number): string => {
-  if (!hasSelectedSource) {
-    return 'Select a log source';
-  }
-  const suffix = displayedLogCount === 1 ? '' : 's';
-  return `${displayedLogCount} matching log${suffix}`;
 };
 
 const getNodeLogRowCount = (
@@ -468,23 +508,19 @@ const nodeLogStatusMessage = ({
   return hasFilteredLines ? null : 'No log lines match the current filter.';
 };
 
-const NODE_LOG_BUFFER_FULL_NOTICE = `Log buffer is full. Only showing the most recent ${Math.floor(
-  NODE_LOG_TAIL_BYTES / 1024
-)} KB.`;
-
-// A truncated response shows as the buffer-full indicator beside the toolbar;
-// a failed refresh keeps the lines already shown and reports above them.
+// Dropped lines show as the buffer-full indicator beside the toolbar, as in
+// Container Logs; a failed refresh keeps the lines shown and reports above them.
 const nodeLogNotices = ({
+  content,
   truncated,
   error,
-  hasContent,
 }: {
+  content: string;
   truncated: boolean;
   error: string | null;
-  hasContent: boolean;
-}): { warnings: string[]; bufferFull: string | null } => ({
-  warnings: error && hasContent ? [`Could not refresh logs: ${error}`] : [],
-  bufferFull: truncated && !error ? NODE_LOG_BUFFER_FULL_NOTICE : null,
+}): { warnings: string[]; bufferFullShown: number | null } => ({
+  warnings: error && content ? [`Could not refresh logs: ${error}`] : [],
+  bufferFullShown: truncated ? nodeLogLineCount(content) : null,
 });
 
 // Loading and failure without lines show in the log region like Container
@@ -667,7 +703,7 @@ const NodeLogsTab = ({
           ),
     [displayLines, selectedSource?.path, statusMessage]
   );
-  const notices = nodeLogNotices({ truncated, error, hasContent });
+  const notices = nodeLogNotices({ content, truncated, error });
 
   const displayedText = useMemo(
     () => logCopyText(displayMode, displayLines, parsedCsv),
@@ -681,7 +717,6 @@ const NodeLogsTab = ({
   const displayedLogCount = isParsedView
     ? parsedRows.length
     : filteredLines.filter((line) => line.length > 0).length;
-  const countLabel = getNodeLogCountLabel(Boolean(selectedSource), displayedLogCount);
   const rowCount = getNodeLogRowCount(
     content,
     isParsedView,
@@ -780,16 +815,9 @@ const NodeLogsTab = ({
             />
 
             <IconBar items={iconItems} />
-            <LogBufferFullIndicator message={notices.bufferFull} />
+            <LogBufferFullIndicator shown={notices.bufferFullShown} />
 
-            <span
-              className="logs-viewer-count"
-              role="status"
-              aria-label="Selected node log source"
-              title={selectedSource?.path || '/'}
-            >
-              {countLabel}
-            </span>
+            <LogMatchCount count={displayedLogCount} filtered={textFilter.trim().length > 0} />
           </div>
         </div>
 

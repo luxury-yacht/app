@@ -55,7 +55,6 @@ import {
   toPodFilterValue,
 } from './containerLogFilters';
 import {
-  bufferFullNotice,
   buildContainerLogNotices,
   LIVE_LOGS_UNAVAILABLE_MESSAGE,
   onlyUnavailableIssues,
@@ -242,8 +241,9 @@ type LogViewerSource = {
   entries: ContainerLogsEntry[];
   issues: ContainerLogsTargetIssue[];
   notices: string[];
-  // Shown as a tooltip beside the toolbar rather than above the lines.
-  bufferFullNotice: string | null;
+  // Logs shown once the buffer has dropped some (null while it has room); the
+  // buffer-full indicator beside the toolbar says so.
+  bufferFullShown: number | null;
   displayError: string | null;
   // The live failure, when that is what stopped the view.
   liveFailure: string | null;
@@ -277,7 +277,7 @@ const resolveLogViewerSource = ({
         // A container without a previous run is the empty state, not a problem.
         issues: previous.issues.filter((issue) => issue.state !== 'unavailable'),
       }),
-      bufferFullNotice: null,
+      bufferFullShown: null,
       displayError: previous.error,
       liveFailure: null,
       isPending: !hasScope || (previous.loading && previous.entries.length === 0),
@@ -290,7 +290,7 @@ const resolveLogViewerSource = ({
     entries: live.entries,
     issues: live.issues,
     notices: buildContainerLogNotices(live),
-    bufferFullNotice: bufferFullNotice(live.truncation),
+    bufferFullShown: live.truncation?.shown ?? null,
     displayError: liveFailure,
     liveFailure,
     isPending: !hasScope || isAwaitingLiveLogs(live, streamExpected),
@@ -372,11 +372,6 @@ const hasActiveLogResultFilter = (
   selectedFilters: Parameters<typeof isNarrowingFilterSelection>[0],
   textFilter: string
 ): boolean => isNarrowingFilterSelection(selectedFilters) || textFilter.trim().length > 0;
-
-const getContainerLogCountLabel = (displayedLogCount: number): string => {
-  const suffix = displayedLogCount === 1 ? '' : 's';
-  return `${displayedLogCount} matching log${suffix}`;
-};
 
 const LogViewerInner: React.FC<LogViewerProps> = ({
   resourceKind,
@@ -912,8 +907,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [rawLogEntries]
   );
   const hasActiveResultFilter = hasActiveLogResultFilter(selectedFilters, textFilter);
-  const displayedLogCount = filteredEntries.length;
-  const countLabel = getContainerLogCountLabel(displayedLogCount);
 
   useRawViewFallback({
     displayMode,
@@ -1065,8 +1058,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       textFilter={textFilter}
       iconItems={iconItems}
       hasActiveResultFilter={hasActiveResultFilter}
-      countLabel={countLabel}
-      bufferFull={source.bufferFullNotice}
+      matchCount={filteredEntries.length}
+      bufferFullShown={source.bufferFullShown}
       dispatch={dispatch}
     />
   );

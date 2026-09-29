@@ -22,6 +22,10 @@ object panel. They are snapshot/fetch based, not container log streaming.
 - Loading, error and empty states look like Container Logs', but show under the
   toolbar instead of replacing the tab: the toolbar holds the source picker,
   which must stay usable when a source cannot be read.
+- The Object Panel Logs buffer setting limits Node Logs as it limits Container
+  Logs: the newest lines are kept, shrinking the setting trims at once, and the
+  buffer-full indicator shows once lines have been dropped (by the node's
+  256 KB fetch limit or by the buffer) until another source is selected.
 
 ## Ownership
 

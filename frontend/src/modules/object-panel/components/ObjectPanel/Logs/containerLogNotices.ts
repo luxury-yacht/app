@@ -105,17 +105,6 @@ export const buildContainerLogNotices = ({
     droppedNotice(warnings),
   ].filter((notice): notice is string => notice !== null);
 
-/**
- * The buffer-full notice, shown as a tooltip beside the toolbar. Only the
- * buffer size is known; the container's full log may be larger.
- */
-export const bufferFullNotice = (
-  truncation: { shown: number; received: number } | null
-): string | null =>
-  truncation
-    ? `Log buffer is full. Only showing the most recent ${truncation.shown} ${plural(truncation.shown, 'log', 'logs')}.`
-    : null;
-
 /** True when every target reported that it has no readable log yet. */
 export const onlyUnavailableIssues = (issues: ContainerLogsTargetIssue[]): boolean =>
   issues.length > 0 && issues.every((issue) => issue.state === 'unavailable');

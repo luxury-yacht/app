@@ -29,14 +29,18 @@ export const LogWarningBar = ({ warnings }: { warnings: string[] }) =>
   ) : null;
 
 /**
- * A warning icon beside the toolbar while the buffer is full; its tooltip says
- * which logs are shown. It keeps the log area free of a warning line.
+ * A warning icon beside the toolbar once the buffer has dropped logs; its
+ * tooltip says how many are shown. Only the buffer size is known, so the full
+ * log may be larger. `shown` is null while nothing has been dropped.
  */
-export const LogBufferFullIndicator = ({ message }: { message: string | null }) =>
-  message ? (
-    <Tooltip content={message} triggerLabel="Log buffer is full">
+export const LogBufferFullIndicator = ({ shown }: { shown: number | null }) =>
+  shown === null ? null : (
+    <Tooltip
+      content={`Log buffer is full. Only showing the most recent ${shown} ${shown === 1 ? 'log' : 'logs'}.`}
+      triggerLabel="Log buffer is full"
+    >
       <span className="logs-viewer-buffer-full">
         <WarningIcon width={16} height={16} />
       </span>
     </Tooltip>
-  ) : null;
+  );
