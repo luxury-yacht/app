@@ -48,9 +48,11 @@ keeps its own source selection and transport.
   `V` (previous logs) exist only when the viewer passes those features.
 - `hooks/useLogCopyAction.ts`: the copy action and selection copy; clipboard
   failures are reported, never swallowed.
-- `LogStatus.tsx`: the error block and the warning bar. Both viewers show
-  loading with the shared spinner and their empty messages as the log's only
-  line; a failure that leaves lines keeps them and reports in the warning bar.
+- `LogStatus.tsx`: the error block, the warning bar and the buffer-full
+  indicator (a warning icon beside the icon bar whose tooltip says which logs
+  are shown). Both viewers show loading with the shared spinner and their empty
+  messages as the log's only line; a failure that leaves lines keeps them and
+  reports in the warning bar.
 
 Add a new control to the shared piece when both viewers can support it, and as
 an optional feature otherwise.

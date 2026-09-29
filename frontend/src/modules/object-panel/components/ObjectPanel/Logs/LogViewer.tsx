@@ -375,7 +375,7 @@ const hasActiveLogResultFilter = (
 
 const getContainerLogCountLabel = (displayedLogCount: number): string => {
   const suffix = displayedLogCount === 1 ? '' : 's';
-  return `${displayedLogCount} matching log${suffix} in current buffer`;
+  return `${displayedLogCount} matching log${suffix}`;
 };
 
 const LogViewerInner: React.FC<LogViewerProps> = ({
@@ -914,7 +914,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const hasActiveResultFilter = hasActiveLogResultFilter(selectedFilters, textFilter);
   const displayedLogCount = filteredEntries.length;
   const countLabel = getContainerLogCountLabel(displayedLogCount);
-  const countTitle = `${countLabel}. Filtering and copy actions apply only to the current log buffer.`;
 
   useRawViewFallback({
     displayMode,
@@ -1066,7 +1065,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       textFilter={textFilter}
       iconItems={iconItems}
       hasActiveResultFilter={hasActiveResultFilter}
-      countTitle={countTitle}
       countLabel={countLabel}
       bufferFull={source.bufferFullNotice}
       dispatch={dispatch}

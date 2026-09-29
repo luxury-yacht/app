@@ -11,15 +11,13 @@ import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Drop
 import { normalizeDropdownValue } from '@shared/components/dropdowns/dropdownValue';
 import { multiSelectFilterTriggerLabel } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
-import Tooltip from '@shared/components/Tooltip';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
 import type React from 'react';
 import type { ContainerLogRow } from './containerLogRows';
-import { LogErrorState, LogWarningBar } from './LogStatus';
+import { LogBufferFullIndicator, LogErrorState, LogWarningBar } from './LogStatus';
 import {
   logFilterSelectionFromDropdownValues,
   logFilterSelectionToDropdownValues,
@@ -124,7 +122,6 @@ type LogViewerControlsProps = {
   textFilter: string;
   iconItems: IconBarItem[];
   hasActiveResultFilter: boolean;
-  countTitle: string;
   countLabel: string;
   bufferFull: string | null;
   dispatch: React.Dispatch<LogViewerAction>;
@@ -139,7 +136,6 @@ export const LogViewerControls = ({
   textFilter,
   iconItems,
   hasActiveResultFilter,
-  countTitle,
   countLabel,
   bufferFull,
   dispatch,
@@ -179,18 +175,8 @@ export const LogViewerControls = ({
         title="Filter logs by text (searches in log lines, pods, and containers)"
       />
       <IconBar items={iconItems} />
-      {bufferFull ? (
-        <Tooltip content={bufferFull} triggerLabel="Log buffer is full">
-          <span className="logs-viewer-buffer-full">
-            <WarningIcon width={16} height={16} />
-          </span>
-        </Tooltip>
-      ) : null}
-      {!!hasActiveResultFilter && (
-        <span className="logs-viewer-count" title={countTitle}>
-          {countLabel}
-        </span>
-      )}
+      <LogBufferFullIndicator message={bufferFull} />
+      {!!hasActiveResultFilter && <span className="logs-viewer-count">{countLabel}</span>}
     </div>
   </div>
 );

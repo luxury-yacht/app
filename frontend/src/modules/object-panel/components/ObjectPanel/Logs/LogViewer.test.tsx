@@ -1058,10 +1058,7 @@ describe('LogViewer active pod synchronisation', () => {
       'Text: unmatched'
     );
     expect(container.querySelector('.logs-viewer-count')?.textContent?.trim()).toBe(
-      '0 matching logs in current buffer'
-    );
-    expect(container.querySelector('.logs-viewer-count')?.getAttribute('title')).toContain(
-      'current log buffer'
+      '0 matching logs'
     );
   });
 

@@ -14,7 +14,7 @@ import {
   useState,
 } from 'react';
 import { containsAnsi } from '../Logs/ansi';
-import { LogErrorState, LogWarningBar } from '../Logs/LogStatus';
+import { LogBufferFullIndicator, LogErrorState, LogWarningBar } from '../Logs/LogStatus';
 import {
   initialLogOptionsState,
   logOptionsReducer,
@@ -468,7 +468,13 @@ const nodeLogStatusMessage = ({
   return hasFilteredLines ? null : 'No log lines match the current filter.';
 };
 
-const nodeLogWarnings = ({
+const NODE_LOG_BUFFER_FULL_NOTICE = `Log buffer is full. Only showing the most recent ${Math.floor(
+  NODE_LOG_TAIL_BYTES / 1024
+)} KB.`;
+
+// A truncated response shows as the buffer-full indicator beside the toolbar;
+// a failed refresh keeps the lines already shown and reports above them.
+const nodeLogNotices = ({
   truncated,
   error,
   hasContent,
@@ -476,19 +482,10 @@ const nodeLogWarnings = ({
   truncated: boolean;
   error: string | null;
   hasContent: boolean;
-}): string[] => {
-  const warnings: string[] = [];
-  if (truncated && !error) {
-    warnings.push(
-      `Showing only the most recent ${Math.floor(NODE_LOG_TAIL_BYTES / 1024)} KB for responsiveness.`
-    );
-  }
-  // A failed refresh keeps the lines already shown and reports above them.
-  if (error && hasContent) {
-    warnings.push(`Could not refresh logs: ${error}`);
-  }
-  return warnings;
-};
+}): { warnings: string[]; bufferFull: string | null } => ({
+  warnings: error && hasContent ? [`Could not refresh logs: ${error}`] : [],
+  bufferFull: truncated && !error ? NODE_LOG_BUFFER_FULL_NOTICE : null,
+});
 
 // Loading and failure without lines show in the log region like Container
 // Logs' states, but under the toolbar: it holds the source picker, which must
@@ -670,7 +667,7 @@ const NodeLogsTab = ({
           ),
     [displayLines, selectedSource?.path, statusMessage]
   );
-  const logWarnings = nodeLogWarnings({ truncated, error, hasContent });
+  const notices = nodeLogNotices({ truncated, error, hasContent });
 
   const displayedText = useMemo(
     () => logCopyText(displayMode, displayLines, parsedCsv),
@@ -783,6 +780,7 @@ const NodeLogsTab = ({
             />
 
             <IconBar items={iconItems} />
+            <LogBufferFullIndicator message={notices.bufferFull} />
 
             <span
               className="logs-viewer-count"
@@ -795,7 +793,7 @@ const NodeLogsTab = ({
           </div>
         </div>
 
-        <LogWarningBar warnings={logWarnings} />
+        <LogWarningBar warnings={notices.warnings} />
 
         <ScrollableRegion
           ref={logsContentRef}

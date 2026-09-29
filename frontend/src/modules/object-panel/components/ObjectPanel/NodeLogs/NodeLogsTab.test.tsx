@@ -655,7 +655,9 @@ describe('NodeLogsTab', () => {
     expect(row?.classList.contains('parsed-row-expanded')).toBe(false);
   });
 
-  it('shows a truncation notice when the backend returns a truncated response', async () => {
+  // Same indicator as Container Logs: a warning icon beside the toolbar whose
+  // tooltip says what is shown, instead of a bar above the lines.
+  it('shows a truncated response as the buffer-full indicator beside the toolbar', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       status: 'executed',
       data: {
@@ -669,7 +671,27 @@ describe('NodeLogsTab', () => {
     await renderTab();
     await selectSource('kubelet');
 
-    expect(container.textContent).toContain('Showing only the most recent 256 KB');
+    expect(container.querySelector('.logs-viewer-warning-bar')).toBeNull();
+    const indicator = requireValue(
+      container.querySelector<HTMLElement>(
+        '.logs-viewer-controls [aria-label="Log buffer is full"]'
+      ),
+      'buffer-full indicator'
+    );
+    vi.useFakeTimers();
+    try {
+      await act(async () => {
+        indicator.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(document.body.querySelector('.tooltip')?.textContent).toBe(
+        'Log buffer is full. Only showing the most recent 256 KB.'
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('reports a node-log failure displayed inline', async () => {
