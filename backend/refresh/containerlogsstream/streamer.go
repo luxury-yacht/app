@@ -87,7 +87,7 @@ func (s *Streamer) prepare(ctx context.Context, opts Options, limiterSession *Ta
 
 type logTargetSelection struct {
 	targets    []containerTarget
-	warnings   []string
+	warnings   []containerlogs.Warning
 	skipped    int
 	skipReason string
 }
@@ -95,7 +95,7 @@ type logTargetSelection struct {
 func selectLogTargets(pods []*corev1.Pod, opts Options, limiterSession *TargetSession, limit int) logTargetSelection {
 	targets, total := selectRuntimeTargets(pods, opts.Selection, limit)
 	selection := logTargetSelection{
-		targets: targets, warnings: containerlogs.BuildTargetLimitWarnings(len(targets), total, limit),
+		targets: targets, warnings: containerlogs.TargetLimitWarnings(containerlogs.LimitPerTab, len(targets), total, containerlogs.ClampPerScopeTargetLimit(limit)),
 		skipped: total - len(targets),
 	}
 	if selection.skipped > 0 {
@@ -111,8 +111,8 @@ func applyGlobalTargetLimit(selection *logTargetSelection, session *TargetSessio
 	before := len(selection.targets)
 	allowedKeys, globalSkipped := session.UpdateDesired(targetKeys(selection.targets))
 	selection.targets = filterTargetsByKeys(selection.targets, allowedKeys)
-	selection.warnings = append(selection.warnings, buildGlobalTargetLimitWarnings(
-		len(selection.targets), before, targetSessionGlobalLimit(session),
+	selection.warnings = append(selection.warnings, containerlogs.TargetLimitWarnings(
+		containerlogs.LimitGlobal, len(selection.targets), before, targetSessionGlobalLimit(session),
 	)...)
 	if globalSkipped > 0 {
 		selection.skipped += globalSkipped
@@ -180,8 +180,9 @@ type containerLogRun struct {
 	limiterNotify  <-chan struct{}
 	sink           entrySink
 	snapshot       *snapshotWait
-	warningsCh     chan<- []string
-	errCh          chan<- error
+	warningsCh     chan<- []containerlogs.Warning
+	issues         *issueSet
+	fatal          chan<- error
 	// followerExited wakes the run loop so a target waiting on its previous
 	// follower, or a restarted container, is started.
 	followerExited chan struct{}
@@ -197,17 +198,19 @@ type containerLogRun struct {
 	// ended on its own; only a new instance starts that target again.
 	finished        map[string]string
 	cursors         map[string]containerlogs.ResumeCursor
-	currentWarnings []string
+	currentWarnings []containerlogs.Warning
 }
 
 type containerLogRunConfig struct {
 	opts            Options
 	limiterSession  *TargetSession
-	initialWarnings []string
+	initialWarnings []containerlogs.Warning
 	sink            entrySink
 	snapshot        *snapshotWait
-	warningsCh      chan<- []string
-	errCh           chan<- error
+	warningsCh      chan<- []containerlogs.Warning
+	issues          *issueSet
+	// fatal receives a failure that ends the session.
+	fatal chan<- error
 }
 
 func sealSnapshot(snapshot *snapshotWait) {
@@ -219,11 +222,11 @@ func sealSnapshot(snapshot *snapshotWait) {
 func newContainerLogRun(streamer *Streamer, config containerLogRunConfig, podWatch *containerlogs.PodWatch) *containerLogRun {
 	run := &containerLogRun{
 		streamer: streamer, opts: config.opts, podWatch: podWatch, limiterSession: config.limiterSession,
-		sink: config.sink, snapshot: config.snapshot, warningsCh: config.warningsCh, errCh: config.errCh,
-		followerExited: make(chan struct{}, 1),
-		currentPods:    map[string]*corev1.Pod{}, followers: map[string]context.CancelFunc{},
+		sink: config.sink, snapshot: config.snapshot, warningsCh: config.warningsCh, issues: config.issues,
+		fatal: config.fatal, followerExited: make(chan struct{}, 1),
+		currentPods: map[string]*corev1.Pod{}, followers: map[string]context.CancelFunc{},
 		finished: map[string]string{}, cursors: map[string]containerlogs.ResumeCursor{},
-		currentWarnings: append([]string(nil), config.initialWarnings...),
+		currentWarnings: append([]containerlogs.Warning(nil), config.initialWarnings...),
 	}
 	if config.limiterSession != nil {
 		run.limiterNotify = config.limiterSession.Notify()
@@ -290,8 +293,8 @@ func (r *containerLogRun) followTarget(ctx context.Context, target containerTarg
 	cursor := target.cursor
 	defer func() { r.finishTarget(ctx, target, cursor) }()
 	defer r.recoverFollower()
-	cursor = r.streamer.followContainer(ctx, target, r.sink, r.errCh, followOptions{
-		tailLines: r.opts.TailLines, caughtUp: caughtUp,
+	cursor = r.streamer.followContainer(ctx, target, r.sink, followOptions{
+		tailLines: r.opts.MaxEntries, caughtUp: caughtUp, issues: r.issues,
 		running: func() bool { return r.containerRunning(target) },
 	})
 }
@@ -321,6 +324,10 @@ func (r *containerLogRun) finishTarget(ctx context.Context, target containerTarg
 		}
 	}
 	r.mu.Unlock()
+	if ctx.Err() != nil {
+		// A stopped target's problem no longer applies.
+		r.issues.clear(key)
+	}
 	if cancel != nil {
 		cancel()
 	}
@@ -354,6 +361,10 @@ func (r *containerLogRun) reconcileTargets(ctx context.Context) {
 	selection := selectLogTargets(pods, r.opts, r.limiterSession, r.streamer.perScopeLimit)
 	desiredTargets := indexLogTargets(selection.targets)
 	emitWarningsIfChanged(r.warningsCh, &r.currentWarnings, selection.warnings)
+	r.issues.retain(func(key string) bool {
+		_, desired := desiredTargets[key]
+		return desired
+	})
 	for _, key := range followingKeys {
 		if _, desired := desiredTargets[key]; !desired {
 			r.stopTarget(key)
@@ -441,9 +452,9 @@ func podFromInformerObject(obj any) *corev1.Pod {
 	return pod
 }
 
-// handleWatchError reports a permission failure once. The reflector retries
-// every error itself, and an expired watch is routine, so nothing else is
-// surfaced.
+// handleWatchError ends the session when the user may not list or watch pods.
+// The reflector retries every other error itself, and an expired watch is
+// routine, so nothing else is surfaced.
 func (r *containerLogRun) handleWatchError(err error) {
 	if !apierrors.IsForbidden(err) {
 		r.streamer.logger.Debug(fmt.Sprintf("containerlogsstream: pod watch interrupted: %v", err), logsources.ContainerLogsStream)
@@ -451,7 +462,7 @@ func (r *containerLogRun) handleWatchError(err error) {
 	}
 	r.forbiddenOnce.Do(func() {
 		select {
-		case r.errCh <- fmt.Errorf("containerlogsstream: watch pods: %w", err):
+		case r.fatal <- err:
 		default:
 		}
 	})
@@ -502,7 +513,7 @@ func (r *containerLogRun) removePod(ctx context.Context, name string) {
 	}
 }
 
-func emitWarningsIfChanged(ch chan<- []string, current *[]string, next []string) {
+func emitWarningsIfChanged(ch chan<- []containerlogs.Warning, current *[]containerlogs.Warning, next []containerlogs.Warning) {
 	if ch == nil {
 		*current = append((*current)[:0], next...)
 		return
@@ -510,7 +521,7 @@ func emitWarningsIfChanged(ch chan<- []string, current *[]string, next []string)
 	if slices.Equal(*current, next) {
 		return
 	}
-	copied := append([]string(nil), next...)
+	copied := append([]containerlogs.Warning(nil), next...)
 	*current = copied
 	select {
 	case ch <- copied:
@@ -527,11 +538,13 @@ type followOptions struct {
 	// running reports whether the container instance is still running; the
 	// follower reopens an ended or failed stream only while it is.
 	running func() bool
+	// issues records why the container's logs cannot be read, if they cannot.
+	issues *issueSet
 }
 
 // followContainer streams one container until it stops or ctx ends, and
 // returns the resume cursor at the point it stopped.
-func (s *Streamer) followContainer(ctx context.Context, target containerTarget, sink entrySink, errCh chan<- error, options followOptions) containerlogs.ResumeCursor {
+func (s *Streamer) followContainer(ctx context.Context, target containerTarget, sink entrySink, options followOptions) containerlogs.ResumeCursor {
 	caughtUp, running := options.caughtUp, options.running
 	if caughtUp == nil {
 		caughtUp = func() {}
@@ -541,7 +554,7 @@ func (s *Streamer) followContainer(ctx context.Context, target containerTarget, 
 	}
 	session := containerFollowSession{
 		streamer: s, target: target, cursor: target.cursor.Clone(),
-		sink: sink, errCh: errCh, tailLines: options.tailLines, caughtUp: caughtUp, running: running,
+		sink: sink, issues: options.issues, tailLines: options.tailLines, caughtUp: caughtUp, running: running,
 		backoff: config.ContainerLogsStreamBackoffInitial,
 	}
 	session.run(ctx)
@@ -553,7 +566,7 @@ type containerFollowSession struct {
 	target    containerTarget
 	cursor    containerlogs.ResumeCursor
 	sink      entrySink
-	errCh     chan<- error
+	issues    *issueSet
 	tailLines int
 	caughtUp  func()
 	running   func() bool
@@ -569,6 +582,7 @@ func (s *containerFollowSession) run(ctx context.Context) {
 			}
 			continue
 		}
+		s.issues.clear(s.target.key())
 		if !s.consume(ctx, stream) {
 			return
 		}
@@ -628,29 +642,23 @@ func (s *containerFollowSession) logOptions() *corev1.PodLogOptions {
 func (s *containerFollowSession) handleOpenFailure(ctx context.Context, err error) bool {
 	// Nothing more will arrive for the snapshot from this attempt.
 	s.caughtUp()
+	// A pod that is gone is removed by the watch; it is not an issue.
 	if ctx.Err() != nil || apierrors.IsNotFound(err) {
 		return false
 	}
-	if !containerlogs.IsUnavailable(err) {
-		s.reportOpenFailure(err)
-	}
+	s.reportOpenFailure(err)
 	return s.shouldRetry(ctx)
 }
 
 func (s *containerFollowSession) reportOpenFailure(err error) {
-	message := fmt.Sprintf(
-		"containerlogsstream: follow failed for %s/%s/%s: %v",
-		s.target.namespace, s.target.pod, s.target.container, err,
-	)
-	s.streamer.logger.Warn(message, logsources.ContainerLogsStream)
-	streamErr := fmt.Errorf(
-		"containerlogsstream: follow failed for %s/%s/%s: %w",
-		s.target.namespace, s.target.pod, s.target.container, err,
-	)
-	select {
-	case s.errCh <- streamErr:
-	default:
+	issue := containerlogs.NewTargetIssue(s.target.pod, s.target.ref(), err)
+	if issue.State != containerlogs.IssueUnavailable {
+		s.streamer.logger.Warn(fmt.Sprintf(
+			"containerlogsstream: follow failed for %s/%s/%s: %v",
+			s.target.namespace, s.target.pod, s.target.container, err,
+		), logsources.ContainerLogsStream)
 	}
+	s.issues.set(s.target.key(), issue)
 }
 
 // consume reads one opened stream through a resume tracker. Lines are read on a

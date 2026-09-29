@@ -111,16 +111,6 @@ func TestGlobalTargetLimiterNotifyOnRebalance(t *testing.T) {
 	}
 }
 
-func TestBuildGlobalTargetLimitWarnings(t *testing.T) {
-	warnings := buildGlobalTargetLimitWarnings(2, 4, 72)
-	if len(warnings) != 1 {
-		t.Fatalf("expected one warning, got %d", len(warnings))
-	}
-	if warnings[0] != "Logs are hidden for 2 containers because the global limit of 72 was reached. Using filters to reduce the number of containers may clear this message." {
-		t.Fatalf("unexpected warning: %q", warnings[0])
-	}
-}
-
 func drainNotify(ch <-chan struct{}) {
 	if ch == nil {
 		return

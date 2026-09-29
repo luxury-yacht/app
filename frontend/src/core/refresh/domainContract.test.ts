@@ -29,7 +29,6 @@ const streamManagerMocks = vi.hoisted(() => ({
   resourceRefreshOnce: vi.fn(),
   containerStart: vi.fn(),
   containerStop: vi.fn(),
-  containerRefreshOnce: vi.fn(),
 }));
 
 vi.mock('./RefreshManager', () => ({
@@ -52,7 +51,6 @@ vi.mock('./streaming/containerLogsStreamManager', () => ({
   containerLogsStreamManager: {
     startStream: streamManagerMocks.containerStart,
     stop: streamManagerMocks.containerStop,
-    refreshOnce: streamManagerMocks.containerRefreshOnce,
   },
 }));
 
@@ -427,7 +425,8 @@ describe('refresh domain contract', () => {
     const logs = registeredDomains().get('container-logs')?.streaming;
     await logs?.start?.('cluster-a|pod:default/demo:container:app');
     logs?.stop?.('cluster-a|pod:default/demo:container:app', { reset: true });
-    await logs?.refreshOnce?.('cluster-a|pod:default/demo:container:app');
+    // Container logs have no one-shot mode: the stream is their only source.
+    expect(logs?.refreshOnce).toBeUndefined();
 
     expect(streamManagerMocks.containerStart).toHaveBeenCalledWith(
       'cluster-a|pod:default/demo:container:app'
@@ -435,9 +434,6 @@ describe('refresh domain contract', () => {
     expect(streamManagerMocks.containerStop).toHaveBeenCalledWith(
       'cluster-a|pod:default/demo:container:app',
       true
-    );
-    expect(streamManagerMocks.containerRefreshOnce).toHaveBeenCalledWith(
-      'cluster-a|pod:default/demo:container:app'
     );
   });
 

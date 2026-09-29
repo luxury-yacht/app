@@ -158,7 +158,6 @@ vi.mock('./client', () => ({
 const containerLogsStreamMocks = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),
-  refreshOnce: vi.fn(),
 }));
 
 vi.mock('./streaming/containerLogsStreamManager', () => ({
@@ -2815,6 +2814,40 @@ describe('refreshOrchestrator', () => {
     expect(resourceStreamMocks.start).toHaveBeenCalledWith(scope);
   });
 
+  // The global pause freezes an open Logs tab: its stream stops without
+  // clearing the buffer and starts again when auto-refresh returns.
+  it('stops and resumes the container-logs stream when auto-refresh is toggled', async () => {
+    containerLogsStreamMocks.start.mockClear();
+    containerLogsStreamMocks.stop.mockClear();
+    refreshOrchestrator.registerDomain({
+      domain: 'container-logs',
+      refresherName: SYSTEM_REFRESHERS.containerLogs,
+      category: 'system',
+      streaming: {
+        snapshotless: true,
+        start: (streamScope: string) => containerLogsStreamMocks.start(streamScope),
+        stop: (streamScope: string, options?: { reset?: boolean }) =>
+          containerLogsStreamMocks.stop(streamScope, options?.reset ?? false),
+      },
+      scheduled: false,
+    });
+    const scope = buildClusterScope('cluster-a', 'team-a:/v1:Pod:web-0');
+    refreshOrchestrator.setScopedDomainEnabled('container-logs', scope, true, {
+      preserveState: true,
+    });
+    await Promise.resolve();
+    expect(containerLogsStreamMocks.start).toHaveBeenCalledWith(scope);
+
+    containerLogsStreamMocks.start.mockClear();
+    setAutoRefreshEnabled(false);
+    await Promise.resolve();
+    expect(containerLogsStreamMocks.stop).toHaveBeenCalledWith(scope, false);
+
+    setAutoRefreshEnabled(true);
+    await Promise.resolve();
+    expect(containerLogsStreamMocks.start).toHaveBeenCalledWith(scope);
+  });
+
   it('restarts streaming when the active scope changes', async () => {
     const cleanup = vi.fn();
     catalogStreamMocks.start.mockImplementation((_scope) => cleanup);
@@ -3003,7 +3036,6 @@ describe('refreshOrchestrator', () => {
   it('starts and stops streaming managers for scoped domains', async () => {
     containerLogsStreamMocks.start.mockClear();
     containerLogsStreamMocks.stop.mockClear();
-    containerLogsStreamMocks.refreshOnce.mockClear();
     eventStreamMocks.startNamespace.mockClear();
     eventStreamMocks.stopNamespace.mockClear();
     eventStreamMocks.refreshNamespace.mockClear();
@@ -3017,15 +3049,17 @@ describe('refreshOrchestrator', () => {
         start: (scope: string) => containerLogsStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
           containerLogsStreamMocks.stop(scope, options?.reset ?? false),
-        refreshOnce: (scope: string) => containerLogsStreamMocks.refreshOnce(scope),
       },
     });
 
     await refreshOrchestrator.setScopedDomainEnabled?.('container-logs', 'team-a', true);
     expect(containerLogsStreamMocks.start).toHaveBeenCalledWith('team-a');
 
+    // Without a one-shot callback, a one-shot refresh restarts the stream.
+    containerLogsStreamMocks.start.mockClear();
     await refreshOrchestrator.refreshStreamingDomainOnce('container-logs', 'team-a');
-    expect(containerLogsStreamMocks.refreshOnce).toHaveBeenCalledWith('team-a');
+    expect(containerLogsStreamMocks.stop).toHaveBeenCalledWith('team-a', false);
+    expect(containerLogsStreamMocks.start).toHaveBeenCalledWith('team-a');
 
     await refreshOrchestrator.setScopedDomainEnabled?.('container-logs', 'team-a', false);
     expect(containerLogsStreamMocks.stop).toHaveBeenCalledWith('team-a', true);
@@ -3086,7 +3120,6 @@ describe('refreshOrchestrator', () => {
   it('handles concurrent namespace streams without leaking state', async () => {
     containerLogsStreamMocks.start.mockClear();
     containerLogsStreamMocks.stop.mockClear();
-    containerLogsStreamMocks.refreshOnce.mockClear();
     eventStreamMocks.startNamespace.mockClear();
     eventStreamMocks.stopNamespace.mockClear();
     eventStreamMocks.refreshNamespace?.mockClear?.();
@@ -3100,7 +3133,6 @@ describe('refreshOrchestrator', () => {
         start: (scope: string) => containerLogsStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
           containerLogsStreamMocks.stop(scope, options?.reset ?? false),
-        refreshOnce: (scope: string) => containerLogsStreamMocks.refreshOnce(scope),
       },
     });
 
@@ -3284,7 +3316,6 @@ describe('refreshOrchestrator', () => {
         start: (scope: string) => containerLogsStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
           containerLogsStreamMocks.stop(scope, options?.reset ?? false),
-        refreshOnce: (scope: string) => containerLogsStreamMocks.refreshOnce(scope),
       },
     });
 

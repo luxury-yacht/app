@@ -1,7 +1,7 @@
 /** Container-log metadata columns; transport and filter state stay in LogViewer. */
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import type React from 'react';
-import type { ParsedLogEntry } from './logViewerReducer';
+import type { ParsedLogEntry } from './logOptionsReducer';
 import {
   PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH,
   PARSED_TIMESTAMP_MIN_WIDTH,

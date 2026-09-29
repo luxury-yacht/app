@@ -439,6 +439,23 @@ func TestMatchRules_ResourceNames(t *testing.T) {
 	}
 }
 
+// A role granting logs for named pods only answers a named pods/log query, so
+// the Logs tab gate must ask about the specific pod (F23).
+func TestMatchRules_NameRestrictedPodLogsNeedANamedQuery(t *testing.T) {
+	rules := []authorizationv1.ResourceRule{
+		{
+			Verbs: []string{"get"}, APIGroups: []string{""}, Resources: []string{"pods/log"},
+			ResourceNames: []string{"web-0"},
+		},
+	}
+	if !MatchRules(rules, "", "pods", "get", "log", "web-0") {
+		t.Error("the named pod's logs should be allowed")
+	}
+	if MatchRules(rules, "", "pods", "get", "log", "") {
+		t.Error("an unnamed pods/log query must not match a name-restricted rule")
+	}
+}
+
 func TestMatchRules_ResourceNamesEmpty(t *testing.T) {
 	rules := []authorizationv1.ResourceRule{
 		{Verbs: []string{"patch"}, APIGroups: []string{""}, Resources: []string{"nodes"}},

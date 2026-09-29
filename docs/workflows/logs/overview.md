@@ -21,6 +21,31 @@ settings separate.
 - Document whether a new control filters existing frontend data or changes the
   backend target/query.
 
+## Shared viewer shell
+
+Container and Node Logs share one viewer shell under
+`frontend/src/modules/object-panel/components/ObjectPanel/Logs`. Each viewer
+keeps its own source selection and transport.
+
+- `logOptionsReducer.ts`: search (text, highlight, invert, case, regex),
+  display (wrap, ANSI, raw/pretty/parsed), parsed rows, row expansion, copy
+  feedback and auto-refresh. The container reducer composes it with its source
+  fields. Highlighting is off while the filter is inverted; case sensitivity is
+  off in regex mode.
+- `hooks/useLogPresentation.ts`: the deferred text filter (a viewer supplies the
+  texts an entry matches; container search also matches pod and container
+  names), JSON detection cached per line, parsed candidates, display rows and
+  copy text.
+- `logToolbar.tsx`: the icon bar. Timestamps, previous logs and settings are
+  optional features; Node Logs passes none of them.
+- `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts. `T` (timestamps) and
+  `V` (previous logs) exist only when the viewer passes those features.
+- `hooks/useLogCopyAction.ts`: the copy action and selection copy; clipboard
+  failures are reported, never swallowed.
+
+Add a new control to the shared piece when both viewers can support it, and as
+an optional feature otherwise.
+
 ## Shared raw-log layout
 
 Container and Node Logs use

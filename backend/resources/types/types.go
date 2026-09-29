@@ -169,8 +169,8 @@ type ContainerLogsFetchRequest struct {
 
 // ContainerLogsFetchResponse represents the response from FetchContainerLogs
 type ContainerLogsFetchResponse struct {
-	Entries  []ContainerLogsEntry `json:"entries"`
-	Warnings []string             `json:"warnings,omitempty"`
+	Entries  []ContainerLogsEntry    `json:"entries"`
+	Warnings []containerlogs.Warning `json:"warnings,omitempty"`
 	// Issues lists each container whose logs could not be read.
 	Issues []containerlogs.TargetIssue `json:"issues,omitempty"`
 	// Error is set when the request failed as a whole, including when no

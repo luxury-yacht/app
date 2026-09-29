@@ -5,6 +5,7 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 import { requireValue } from '@/test-utils/requireValue';
+import { useKeyboardContext } from '@/ui/shortcuts/context';
 import { resetLogViewerPrefsCacheForTesting } from '../Logs/logViewerPrefsCache';
 import NodeLogsTab from './NodeLogsTab';
 import type { fetchNodeLogs, NodeLogFetchResult } from './nodeLogsApi';
@@ -16,10 +17,13 @@ vi.mock('./nodeLogsApi', () => ({
   fetchNodeLogs: (...args: Parameters<typeof fetchNodeLogs>) => mockFetchNodeLogs(...args),
 }));
 
+const reportOperationalErrorMock = vi.hoisted(() => vi.fn());
+
 vi.mock('@utils/errorHandler', () => ({
   errorHandler: {
     handleInline: (...args: unknown[]) => handleInlineMock(...args),
   },
+  reportOperationalError: (...args: unknown[]) => reportOperationalErrorMock(...args),
 }));
 
 vi.mock('@core/contexts/ZoomContext', () => ({
@@ -168,7 +172,9 @@ describe('NodeLogsTab', () => {
     ).toBe('Select log source');
   });
 
-  it('tabs into raw output and leaves its scrolling keys available', async () => {
+  // Arrow and page keys stay native on the focused output; Home and End are the
+  // shared log shortcuts, which scroll the output to the top and bottom.
+  it('tabs into raw output and keeps its scrolling keys working', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       status: 'executed',
       data: {
@@ -192,20 +198,23 @@ describe('NodeLogsTab', () => {
       )
     );
     expect(document.activeElement).toBe(output);
-    for (const key of [
-      'ArrowUp',
-      'ArrowDown',
-      'ArrowLeft',
-      'ArrowRight',
-      'PageUp',
-      'PageDown',
-      'Home',
-      'End',
-    ]) {
+    for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown']) {
       const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
       await act(async () => output.dispatchEvent(event));
       expect(event.defaultPrevented, key).toBe(false);
     }
+    const scrollTo = vi.fn();
+    output.scrollTo = scrollTo;
+    Object.defineProperty(output, 'scrollHeight', { configurable: true, value: 480 });
+    for (const key of ['Home', 'End']) {
+      await act(async () =>
+        output.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+      );
+    }
+    expect(scrollTo.mock.calls).toEqual([
+      [{ top: 0, behavior: 'auto' }],
+      [{ top: 480, behavior: 'auto' }],
+    ]);
     await act(async () =>
       output.dispatchEvent(
         new KeyboardEvent('keydown', {
@@ -1004,5 +1013,147 @@ describe('NodeLogsTab', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe('keyboard shortcuts', () => {
+    const shortcutHelp: {
+      current: ReturnType<typeof useKeyboardContext>['getAvailableShortcuts'] | null;
+    } = {
+      current: null,
+    };
+    const nativeAction: {
+      current: ReturnType<typeof useKeyboardContext>['dispatchNativeAction'] | null;
+    } = { current: null };
+    const ShortcutHelpProbe = () => {
+      const keyboard = useKeyboardContext();
+      shortcutHelp.current = keyboard.getAvailableShortcuts;
+      nativeAction.current = keyboard.dispatchNativeAction;
+      return null;
+    };
+
+    const renderWithProbe = async (isActive = true) => {
+      await act(async () => {
+        root.render(
+          <PanelLayoutTestProvider>
+            <KeyboardProvider>
+              <ShortcutHelpProbe />
+              <NodeLogsTab
+                panelId="panel-1"
+                nodeName="node-a"
+                clusterId="alpha:ctx"
+                isActive={isActive}
+                availability={{ allowed: true, pending: false }}
+                sources={sources}
+              />
+            </KeyboardProvider>
+          </PanelLayoutTestProvider>
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    };
+
+    const press = async (key: string, shiftKey = false) => {
+      await act(async () => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key, shiftKey, bubbles: true }));
+        await Promise.resolve();
+      });
+    };
+
+    const pressed = (label: string) =>
+      container.querySelector(`button[aria-label="${label}"]`)?.getAttribute('aria-pressed');
+
+    beforeEach(() => {
+      reportOperationalErrorMock.mockReset();
+      mockFetchNodeLogs.mockResolvedValue({
+        status: 'executed',
+        data: {
+          source: sources[0],
+          sourcePath: sources[0].path,
+          content: 'info boot complete\nerror failed to reconcile',
+        },
+      });
+    });
+
+    it('toggles search and display options and copies the shown logs', async () => {
+      await renderWithProbe();
+      await selectSource('kubelet');
+      await setFilterValue('error');
+
+      await press('i');
+      expect(container.querySelector('.logs-viewer-text')?.textContent).toBe('info boot complete');
+      expect(pressed('Wrap text')).toBe('true');
+      await press('w');
+      expect(pressed('Wrap text')).toBe('false');
+
+      await press('c', true);
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('info boot complete');
+    });
+
+    it('offers no timestamp or previous-log shortcuts', async () => {
+      await renderWithProbe();
+      await selectSource('kubelet');
+
+      const logs = shortcutHelp.current?.().find(({ category }) => category === 'Logs');
+      const keys = logs?.shortcuts.map(({ key }) => key) ?? [];
+      expect(keys).toEqual(expect.arrayContaining(['r', 'h', 'i', 'x', 'w', 'Home', 'End']));
+      expect(keys).not.toContain('t');
+      expect(keys).not.toContain('v');
+    });
+
+    it('ignores shortcuts while the tab is inactive', async () => {
+      await renderWithProbe(false);
+
+      await press('w');
+
+      expect(pressed('Wrap text')).toBe('true');
+      expect(shortcutHelp.current?.().some(({ category }) => category === 'Logs')).toBe(false);
+    });
+
+    it('selects and copies only log text, and reports a failed selection copy', async () => {
+      await renderWithProbe();
+      await selectSource('kubelet');
+      const output = requireValue(
+        container.querySelector<HTMLElement>('.logs-viewer-content'),
+        'node log output'
+      );
+      await act(async () => output.focus());
+      window.getSelection()?.removeAllRanges();
+
+      expect(nativeAction.current?.('selectAll')).toBe(true);
+      const selected = window.getSelection();
+      expect(selected?.rangeCount).toBe(1);
+      expect(output.contains(selected?.getRangeAt(0).commonAncestorContainer ?? null)).toBe(true);
+
+      expect(nativeAction.current?.('copy')).toBe(true);
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        expect.stringContaining('info boot complete')
+      );
+
+      const failure = new Error('clipboard denied');
+      (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockRejectedValue(failure);
+      await act(async () => {
+        nativeAction.current?.('copy');
+        await Promise.resolve();
+      });
+      expect(reportOperationalErrorMock).toHaveBeenCalledWith(
+        failure,
+        expect.objectContaining({ action: 'copySelectedLogText' })
+      );
+    });
+
+    it('reports a copy that fails instead of hiding it', async () => {
+      const failure = new Error('clipboard denied');
+      (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockRejectedValue(failure);
+      await renderWithProbe();
+      await selectSource('kubelet');
+
+      await press('c', true);
+
+      expect(reportOperationalErrorMock).toHaveBeenCalledWith(
+        failure,
+        expect.objectContaining({ action: 'copyLogs' })
+      );
+    });
   });
 });

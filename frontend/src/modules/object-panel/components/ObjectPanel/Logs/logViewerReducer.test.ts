@@ -1,10 +1,8 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/logViewerReducer.test.ts
  *
- * Locks the LogViewer view-mode contract after F3: the live / fallback / previous
- * modes are a discriminated union, so the previously-representable contradictions
- * (fallback while showing previous logs; "loading previous" while previous is
- * hidden) are unrepresentable. Also covers the prefs round-trip.
+ * Locks the LogViewer view-mode contract (live or previous logs), the
+ * auto-refresh setter used when a stream fails, and the prefs round-trip.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -27,50 +25,29 @@ describe('logViewerReducer view mode', () => {
     expect(initialLogViewerState.mode).toEqual({ kind: 'live' });
   });
 
-  it('activates and deactivates the fallback mode', () => {
-    const active = logViewerReducer(base(), { type: 'SET_FALLBACK_ACTIVE', payload: true });
-    expect(active.mode).toEqual({ kind: 'fallback' });
-
-    const inactive = logViewerReducer(active, { type: 'SET_FALLBACK_ACTIVE', payload: false });
-    expect(inactive.mode).toEqual(LIVE_MODE);
-  });
-
-  it('does not let fallback interrupt the previous-logs view', () => {
+  it('enters previous logs on start and returns to live on stop', () => {
     const previous = logViewerReducer(base(), { type: 'START_PREVIOUS_LOGS' });
-    expect(previous.mode).toEqual({ kind: 'previous', loading: true });
+    expect(previous.mode).toEqual({ kind: 'previous' });
 
-    const stillPrevious = logViewerReducer(previous, {
-      type: 'SET_FALLBACK_ACTIVE',
-      payload: true,
-    });
-    expect(stillPrevious.mode).toEqual({ kind: 'previous', loading: true });
-  });
-
-  it('enters previous-logs loading on start and returns to live on stop', () => {
-    const previous = logViewerReducer(base(), { type: 'START_PREVIOUS_LOGS' });
-    expect(previous.mode).toEqual({ kind: 'previous', loading: true });
-
-    const loaded = logViewerReducer(previous, {
-      type: 'SET_IS_LOADING_PREVIOUS_LOGS',
-      payload: false,
-    });
-    expect(loaded.mode).toEqual({ kind: 'previous', loading: false });
-
-    const stopped = logViewerReducer(loaded, { type: 'STOP_PREVIOUS_LOGS' });
+    const stopped = logViewerReducer(previous, { type: 'STOP_PREVIOUS_LOGS' });
     expect(stopped.mode).toEqual(LIVE_MODE);
   });
 
-  it('ignores a previous-logs loading toggle outside the previous mode', () => {
-    const next = logViewerReducer(base(), { type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: true });
-    expect(next.mode).toEqual(LIVE_MODE);
-  });
-
-  it('toggles the previous view via SET_SHOW_PREVIOUS_LOGS without leaking loading state', () => {
+  it('toggles the previous view via SET_SHOW_PREVIOUS_LOGS', () => {
     const shown = logViewerReducer(base(), { type: 'SET_SHOW_PREVIOUS_LOGS', payload: true });
-    expect(shown.mode).toEqual({ kind: 'previous', loading: false });
+    expect(shown.mode).toEqual({ kind: 'previous' });
 
     const hidden = logViewerReducer(shown, { type: 'SET_SHOW_PREVIOUS_LOGS', payload: false });
     expect(hidden.mode).toEqual(LIVE_MODE);
+  });
+
+  it('sets auto-refresh explicitly, so a failed stream can turn it off', () => {
+    const off = logViewerReducer(base(), { type: 'SET_AUTO_REFRESH', payload: false });
+    expect(off.autoRefresh).toBe(false);
+    expect(logViewerReducer(off, { type: 'SET_AUTO_REFRESH', payload: false })).toBe(off);
+    expect(logViewerReducer(off, { type: 'SET_AUTO_REFRESH', payload: true }).autoRefresh).toBe(
+      true
+    );
   });
 
   it('resets to the live mode for a new scope', () => {
@@ -82,13 +59,13 @@ describe('logViewerReducer view mode', () => {
     expect(reset.textFilter).toBe('');
   });
 
-  it('persists and rehydrates the previous-logs mode through prefs (loading drops)', () => {
+  it('persists and rehydrates the previous-logs mode through prefs', () => {
     const previous = logViewerReducer(base(), { type: 'START_PREVIOUS_LOGS' });
     const prefs = extractLogViewerPrefs(previous);
     expect(prefs.showPreviousContainerLogs).toBe(true);
 
     const rehydrated = applyLogViewerPrefs(initialLogViewerState, prefs);
-    expect(rehydrated.mode).toEqual({ kind: 'previous', loading: false });
+    expect(rehydrated.mode).toEqual({ kind: 'previous' });
   });
 
   it('persists the live mode as showPreviousContainerLogs=false', () => {
@@ -159,8 +136,8 @@ describe('logViewerReducer state transitions', () => {
     expect(expanded.expandedRows.has('row-1')).toBe(true);
     expect(collapsed.expandedRows.has('row-1')).toBe(false);
     expect(raw.displayMode).toBe('raw');
-    expect(raw.parsedContainerLogs).toEqual([]);
-    expect(logViewerReducer(shown, { type: 'TOGGLE_PARSED_VIEW' }).parsedContainerLogs).toEqual([]);
+    expect(raw.parsedLogs).toEqual([]);
+    expect(logViewerReducer(shown, { type: 'TOGGLE_PARSED_VIEW' }).parsedLogs).toEqual([]);
   });
 
   it('updates copy feedback and clears filtering and display mode on scope resets', () => {
@@ -180,7 +157,6 @@ describe('logViewerReducer state transitions', () => {
 
   it('keeps state unchanged for redundant mode changes and unknown actions', () => {
     const live = base();
-    expect(logViewerReducer(live, { type: 'SET_FALLBACK_ACTIVE', payload: false })).toBe(live);
     expect(logViewerReducer(live, { type: 'SET_SHOW_PREVIOUS_LOGS', payload: false })).toBe(live);
     expect(logViewerReducer(live, { type: 'UNKNOWN' } as never)).toBe(live);
   });

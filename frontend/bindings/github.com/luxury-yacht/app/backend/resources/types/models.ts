@@ -287,7 +287,7 @@ export interface ContainerLogsFetchRequest {
  */
 export interface ContainerLogsFetchResponse {
     "entries": ContainerLogsEntry[] | null;
-    "warnings"?: string[] | null;
+    "warnings"?: containerlogs$0.Warning[] | null;
 
     /**
      * Issues lists each container whose logs could not be read.

@@ -1,7 +1,6 @@
 package containerlogs
 
 import (
-	"fmt"
 	"sort"
 
 	corev1 "k8s.io/api/core/v1"
@@ -95,19 +94,43 @@ func lessRankedTarget(left, right rankedTarget) bool {
 	return left.target.Container.Name < right.target.Container.Name
 }
 
-func BuildTargetLimitWarnings(selectedCount, totalCount, limit int) []string {
-	if totalCount <= selectedCount || selectedCount <= 0 {
+// WarningKind names a typed notice about logs the viewer is not showing.
+type WarningKind string
+
+const (
+	// WarningTargetLimit means a target limit hid some containers.
+	WarningTargetLimit WarningKind = "targetLimit"
+	// WarningDropped means entries were lost because the client fell behind.
+	WarningDropped WarningKind = "dropped"
+)
+
+// LimitScope says which target limit hid containers.
+type LimitScope string
+
+const (
+	// LimitPerTab is the per-scope (per-tab) target limit.
+	LimitPerTab LimitScope = "perTab"
+	// LimitGlobal is the limit shared by every open log stream.
+	LimitGlobal LimitScope = "global"
+)
+
+// Warning is a typed notice about logs the viewer is not showing. Scope,
+// Hidden and Limit describe a target limit; Count is the number of dropped
+// entries.
+type Warning struct {
+	Kind   WarningKind `json:"kind"`
+	Scope  LimitScope  `json:"scope,omitempty"`
+	Hidden int         `json:"hidden,omitempty"`
+	Limit  int         `json:"limit,omitempty"`
+	Count  int         `json:"count,omitempty"`
+}
+
+// TargetLimitWarnings reports the containers a target limit hid, if any.
+func TargetLimitWarnings(scope LimitScope, selectedCount, totalCount, limit int) []Warning {
+	if totalCount <= selectedCount {
 		return nil
 	}
-	limit = ClampPerScopeTargetLimit(limit)
-	hiddenCount := totalCount - selectedCount
-	return []string{
-		fmt.Sprintf(
-			"Logs are hidden for %d containers because the per-tab limit of %d was reached. Using filters to reduce the number of containers may clear this message.",
-			hiddenCount,
-			limit,
-		),
-	}
+	return []Warning{{Kind: WarningTargetLimit, Scope: scope, Hidden: totalCount - selectedCount, Limit: limit}}
 }
 
 func rankPodForLogs(pod *corev1.Pod) int {

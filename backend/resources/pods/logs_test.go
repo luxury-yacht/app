@@ -730,16 +730,10 @@ func TestFetchContainerLogsWarnsWhenTargetLimitExceeded(t *testing.T) {
 	resp := service.FetchContainerLogs(context.Background(), types.ContainerLogsFetchRequest{Scope: podLogScope("default", "demo")})
 	require.Empty(t, resp.Error)
 	require.Len(t, resp.Entries, containerlogs.DefaultPerScopeTargetLimit)
-	require.Len(t, resp.Warnings, 1)
-	require.Contains(
-		t,
-		resp.Warnings[0],
-		fmt.Sprintf(
-			"Logs are hidden for %d containers because the per-tab limit of %d was reached.",
-			containerCount-containerlogs.DefaultPerScopeTargetLimit,
-			containerlogs.DefaultPerScopeTargetLimit,
-		),
-	)
+	require.Equal(t, []containerlogs.Warning{{
+		Kind: containerlogs.WarningTargetLimit, Scope: containerlogs.LimitPerTab,
+		Hidden: containerCount - containerlogs.DefaultPerScopeTargetLimit, Limit: containerlogs.DefaultPerScopeTargetLimit,
+	}}, resp.Warnings)
 }
 
 func TestFetchContainerLogsSortsWhenTimestampMissing(t *testing.T) {
@@ -836,16 +830,10 @@ func TestFetchContainerLogsUsesSharedCappedTargetSelection(t *testing.T) {
 
 	// Targets are read in parallel, so only the set of reads is fixed.
 	require.ElementsMatch(t, expectedKeys, requestedKeys)
-	require.Len(t, resp.Warnings, 1)
-	require.Contains(
-		t,
-		resp.Warnings[0],
-		fmt.Sprintf(
-			"Logs are hidden for %d containers because the per-tab limit of %d was reached.",
-			podCount-containerlogs.DefaultPerScopeTargetLimit,
-			containerlogs.DefaultPerScopeTargetLimit,
-		),
-	)
+	require.Equal(t, []containerlogs.Warning{{
+		Kind: containerlogs.WarningTargetLimit, Scope: containerlogs.LimitPerTab,
+		Hidden: podCount - containerlogs.DefaultPerScopeTargetLimit, Limit: containerlogs.DefaultPerScopeTargetLimit,
+	}}, resp.Warnings)
 }
 
 func TestFetchContainerLogsAppliesSelectedFiltersBeforeTargetLimit(t *testing.T) {

@@ -158,7 +158,7 @@ export interface LogScrollPosition {
  * (logViewerPrefsCache) keyed by panelId, evicted by
  * ObjectPanelStateContext when the panel actually closes.
  *
- * Pure-derived state (containers, parsedContainerLogs, fallbackError, etc.) is
+ * Pure-derived state (containers, parsed rows, etc.) is
  * NOT included — those get recomputed from the cached log entries on
  * remount. expandedRows is stored as an array because the in-memory Set
  * is rebuilt by applyLogViewerPrefs on rehydrate; using an array keeps

@@ -12,6 +12,8 @@ export * from './types.generated';
 import type {
   BackendDomainPayloadMap,
   CanonicalResourceRef,
+  ContainerLogsTargetIssue,
+  ContainerLogsWarning,
   ContainerLogsWireEntry,
   RefreshPermissionDeniedDetails,
   RefreshPermissionDeniedStatus,
@@ -42,12 +44,27 @@ export interface ContainerLogsEntry extends ContainerLogsWireEntry {
   _seq?: number;
 }
 
+// Where a container-logs stream is in its lifecycle. `attempt` counts
+// reconnects since the last delivered snapshot.
+export type ContainerLogsStreamPhase =
+  | { status: 'connecting' }
+  | { status: 'awaiting-snapshot' }
+  | { status: 'live' }
+  | { status: 'reconnecting'; attempt: number; reason: string }
+  | { status: 'failed'; reason: string; permissionDenied: boolean; retryable: boolean }
+  | { status: 'stopping' };
+
 export interface ContainerLogsSnapshotPayload {
   entries: ContainerLogsEntry[];
   sequence: number;
   generatedAt: number;
   resetCount: number;
   error?: string | null;
+  phase: ContainerLogsStreamPhase;
+  warnings: ContainerLogsWarning[];
+  issues: ContainerLogsTargetIssue[];
+  // Set once the buffer has left out entries it received: `shown` of `total`.
+  truncation: { shown: number; total: number } | null;
 }
 
 export type DomainPayloadMap = BackendDomainPayloadMap & {

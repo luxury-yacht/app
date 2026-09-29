@@ -294,7 +294,13 @@
 }
 
 .logs-viewer-display-error {
+  flex-direction: column;
+  gap: 0.5rem;
   color: var(--color-error, #dc3545);
+}
+
+.logs-viewer-retry-hint {
+  color: var(--color-text-secondary);
 }
 
 /* Parsed logs table */

@@ -1,6 +1,6 @@
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import { stripAnsi } from './ansi';
-import type { ParsedLogEntry } from './logViewerReducer';
+import type { ParsedLogEntry } from './logOptionsReducer';
 
 export const formatParsedValue = (value: unknown): string => {
   if (value === undefined || value === null) {

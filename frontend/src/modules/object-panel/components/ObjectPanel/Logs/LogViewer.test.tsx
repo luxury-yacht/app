@@ -1,8 +1,9 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.test.tsx
  *
- * Verifies object-panel log viewing behavior: stream/fallback reads, filtering,
- * parsing, container selection, lifecycle cleanup, and persisted viewer prefs.
+ * Verifies object-panel log viewing behavior: live stream state, previous logs,
+ * filtering, parsing, container selection, lifecycle cleanup, and persisted
+ * viewer prefs.
  */
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
@@ -18,7 +19,12 @@ import {
   resetScopedDomainState,
   setScopedDomainState,
 } from '@/core/refresh/store';
-import type { ContainerLogsEntry } from '@/core/refresh/types';
+import type {
+  ContainerLogsEntry,
+  ContainerLogsStreamPhase,
+  ContainerLogsTargetIssue,
+  ContainerLogsWarning,
+} from '@/core/refresh/types';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
@@ -29,12 +35,12 @@ import {
   resetContainerLogsStreamScopeParamsCacheForTesting,
 } from './containerLogsStreamScopeParamsCache';
 import LogViewer from './LogViewer';
+import type { ParsedLogEntry } from './logOptionsReducer';
 import {
   getLogViewerPrefs,
   resetLogViewerPrefsCacheForTesting,
   setLogViewerPrefs,
 } from './logViewerPrefsCache';
-import type { ParsedLogEntry } from './logViewerReducer';
 
 const flushAsync = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 type ViMock = ReturnType<typeof vi.fn>;
@@ -100,14 +106,7 @@ const mockModules = vi.hoisted(() => {
     updateContext: vi.fn(),
   };
 
-  const fallbackManager = {
-    register: vi.fn(),
-    unregister: vi.fn(),
-    update: vi.fn(),
-    refreshNow: vi.fn(),
-  };
-
-  return { orchestrator, fallbackManager };
+  return { orchestrator };
 });
 
 const autoRefreshLoadingState = vi.hoisted(() => ({
@@ -127,10 +126,6 @@ vi.mock('@/core/refresh/orchestrator', () => ({
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
   useAutoRefreshLoadingState: () => autoRefreshLoadingState,
-}));
-
-vi.mock('@/core/refresh/fallbacks/containerLogsFallbackManager', () => ({
-  containerLogsFallbackManager: mockModules.fallbackManager,
 }));
 
 const shortcutMocks = vi.hoisted(() => ({
@@ -288,20 +283,30 @@ const seedLogSnapshot = (
   overrides: Partial<{
     status: 'ready' | 'loading' | 'updating' | 'error' | 'initialising' | 'idle';
     error: string | null;
-    isManual: boolean;
+    phase: ContainerLogsStreamPhase;
+    warnings: ContainerLogsWarning[];
+    issues: ContainerLogsTargetIssue[];
+    truncation: { shown: number; total: number } | null;
     generatedAt: number;
   }> = {}
 ) => {
   activeScope = scope;
   const generatedAt = overrides.generatedAt ?? Date.now();
+  const phase = overrides.phase ?? { status: 'live' };
+  // A stream that is still connecting has not delivered a snapshot yet.
+  const snapshotDelivered = phase.status !== 'connecting' && phase.status !== 'awaiting-snapshot';
   setScopedDomainState('container-logs', scope, () => ({
     status: overrides.status ?? 'ready',
     data: {
       entries,
       sequence: 1,
       generatedAt,
-      resetCount: 0,
+      resetCount: snapshotDelivered ? 1 : 0,
       error: overrides.error ?? null,
+      phase,
+      warnings: overrides.warnings ?? [],
+      issues: overrides.issues ?? [],
+      truncation: overrides.truncation ?? null,
     },
     stats: null,
     error: overrides.error ?? null,
@@ -310,8 +315,62 @@ const seedLogSnapshot = (
     lastUpdated: generatedAt,
     lastAutoRefresh: generatedAt,
     lastManualRefresh: undefined,
-    isManual: overrides.isManual ?? false,
+    isManual: false,
   }));
+};
+
+type FakeLogStream = {
+  send: ReturnType<typeof vi.fn>;
+  close: ReturnType<typeof vi.fn>;
+  onopen: ((event: Event) => void) | null;
+  onmessage: ((event: MessageEvent<unknown>) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onclose: ((event: Event) => void) | null;
+};
+
+// Opens a stream through the real container-logs manager so its frames reach
+// the real store; the orchestrator is mocked, so the viewer never starts one.
+const openManagedStream = async (scope: string) => {
+  const streams: FakeLogStream[] = [];
+  (
+    globalThis as typeof globalThis & { __wailsJSONStreamFactory?: (name: string) => unknown }
+  ).__wailsJSONStreamFactory = () => {
+    const stream: FakeLogStream = {
+      send: vi.fn(),
+      close: vi.fn(),
+      onopen: null,
+      onmessage: null,
+      onerror: null,
+      onclose: null,
+    };
+    streams.push(stream);
+    queueMicrotask(() => stream.onopen?.(new Event('open')));
+    return stream;
+  };
+  const { containerLogsStreamManager } = await import(
+    '@/core/refresh/streaming/containerLogsStreamManager'
+  );
+  await act(async () => {
+    await containerLogsStreamManager.startStream(scope);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const send = async (payload: Record<string, unknown>) => {
+    await act(async () => {
+      streams[streams.length - 1]?.onmessage?.({
+        data: { domain: 'container-logs', scope, sequence: 1, generatedAt: 1, ...payload },
+      } as MessageEvent<unknown>);
+      await Promise.resolve();
+    });
+  };
+  const close = async () => {
+    await act(async () => {
+      containerLogsStreamManager.stop(scope, true);
+      Reflect.deleteProperty(globalThis, '__wailsJSONStreamFactory');
+      await Promise.resolve();
+    });
+  };
+  return { send, close };
 };
 
 describe('LogViewer active pod synchronisation', () => {
@@ -419,30 +478,51 @@ describe('LogViewer active pod synchronisation', () => {
     return undefined;
   };
 
-  it('filters log entries when the active pod list shrinks', async () => {
+  it('hides lines of pods the workload no longer has', async () => {
     await renderViewer({ activePodNames: ['web-1', 'web-2'] });
     await renderViewer({ activePodNames: ['web-2'] });
 
-    const snapshot = getScopedDomainState('container-logs', activeScope);
-    expect(snapshot.data?.entries).toEqual([
-      expect.objectContaining({ pod: 'web-2', line: 'second' }),
-    ]);
+    expect(container.textContent).not.toContain('first');
+    expect(container.textContent).toContain('second');
   });
 
-  it('ignores updates when the active pod list is null', async () => {
+  it('shows every line while the active pod list is unknown', async () => {
     await renderViewer({ activePodNames: ['web-1', 'web-2'] });
     await renderViewer({ activePodNames: null });
 
-    const snapshot = getScopedDomainState('container-logs', activeScope);
-    expect(snapshot.data?.entries).toHaveLength(2);
+    expect(container.textContent).toContain('first');
+    expect(container.textContent).toContain('second');
   });
 
-  it('clears entries when the workload no longer has active pods', async () => {
+  it('hides every line once the workload has no pods left', async () => {
     await renderViewer({ activePodNames: ['web-1', 'web-2'] });
     await renderViewer({ activePodNames: [] });
 
-    const snapshot = getScopedDomainState('container-logs', activeScope);
-    expect(snapshot.data?.entries).toEqual([]);
+    expect(container.textContent).not.toContain('first');
+    expect(container.textContent).not.toContain('second');
+  });
+
+  // Hiding a deleted pod's lines is a view filter: the stream manager's buffer
+  // is untouched, so later batches cannot bring hidden lines back.
+  it('keeps a deleted pod hidden when new lines arrive', async () => {
+    await renderViewer({ activePodNames: ['web-2'] });
+    await act(async () => {
+      seedLogSnapshot([
+        ...(getScopedDomainState('container-logs', activeScope).data?.entries ?? []),
+        {
+          pod: 'web-2',
+          container: 'app',
+          line: 'third',
+          timestamp: '2024-05-01T10:00:02Z',
+          isInit: false,
+        },
+      ]);
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain('first');
+    expect(container.textContent).toContain('third');
+    expect(getScopedDomainState('container-logs', activeScope).data?.entries).toHaveLength(3);
   });
 
   it('registers log tab shortcuts with appropriate availability', async () => {
@@ -660,306 +740,241 @@ describe('LogViewer active pod synchronisation', () => {
     expectDisabledShortcut('p');
   });
 
-  it('triggers fallback fetcher when streaming is unavailable', async () => {
+  // F1 / AC1: a fatal failure with no lines used to leave "Loading logs..." up
+  // forever while auto-refresh was on.
+  it('shows a failed stream instead of loading forever', async () => {
+    resetScopedDomainState('container-logs', activeScope);
+    const stream = await openManagedStream(defaultScope);
+    try {
+      await renderViewer({ activePodNames: ['web-1'] });
+      await stream.send({
+        error: 'pods is forbidden: User "viewer" cannot list resource "pods"',
+        retryable: false,
+      });
+
+      expect(container.textContent).toContain(
+        'pods is forbidden: User "viewer" cannot list resource "pods"'
+      );
+      expect(container.textContent).not.toContain('Loading logs');
+    } finally {
+      await stream.close();
+    }
+  });
+
+  // AC13: a failure that cannot be retried stops the stream, keeps the lines,
+  // explains itself, and turns auto-refresh off so one toggle retries.
+  it('turns auto-refresh off after a permanent failure and retries on one toggle', async () => {
+    const panelId = 'obj:test:failed-stream';
+    resetScopedDomainState('container-logs', activeScope);
+    const stream = await openManagedStream(defaultScope);
+    try {
+      await stream.send({
+        reset: true,
+        snapshotComplete: true,
+        entries: [
+          {
+            pod: 'web-1',
+            container: 'app',
+            line: 'kept line',
+            timestamp: '2024-05-01T10:00:00Z',
+            isInit: false,
+          },
+        ],
+      });
+      await renderViewer({ activePodNames: ['web-1'], panelId });
+      await stream.send({ error: 'deployments.apps "api" not found', retryable: false });
+      await flushAsync();
+
+      expect(container.textContent).toContain('kept line');
+      expect(container.querySelector('[aria-label="Log warnings"]')?.textContent).toContain(
+        'deployments.apps "api" not found'
+      );
+      expect(getLogViewerPrefs(panelId)?.autoRefresh).toBe(false);
+
+      mockModules.orchestrator.setScopedDomainEnabled.mockClear();
+      act(() => {
+        getLatestShortcut('r')?.handler();
+      });
+      await flushAsync();
+      expect(getLogViewerPrefs(panelId)?.autoRefresh).toBe(true);
+      expect(mockModules.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+        'container-logs',
+        defaultScope,
+        true,
+        expect.anything()
+      );
+    } finally {
+      await stream.close();
+    }
+  });
+
+  // The tab's auto-refresh toggle freezes the view: the stream stops without
+  // clearing the buffer and starts again when the toggle is turned back on.
+  it('freezes and resumes the stream with the tab auto-refresh toggle', async () => {
+    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+    mockModules.orchestrator.stopStreamingDomain.mockClear();
+    mockModules.orchestrator.setScopedDomainEnabled.mockClear();
+
+    act(() => {
+      getLatestShortcut('r')?.handler();
+    });
+    expect(mockModules.orchestrator.stopStreamingDomain).toHaveBeenCalledWith(
+      'container-logs',
+      defaultScope,
+      {
+        reset: false,
+      }
+    );
+    expect(mockModules.orchestrator.setScopedDomainEnabled).toHaveBeenLastCalledWith(
+      'container-logs',
+      defaultScope,
+      false,
+      {
+        preserveState: true,
+      }
+    );
+    expect(container.textContent).toContain('first');
+
+    act(() => {
+      getLatestShortcut('r')?.handler();
+    });
+    expect(mockModules.orchestrator.setScopedDomainEnabled).toHaveBeenLastCalledWith(
+      'container-logs',
+      defaultScope,
+      true,
+      {
+        preserveState: true,
+      }
+    );
+  });
+
+  // A cluster switch unmounts and remounts the panel; the buffered lines stay.
+  it('keeps the lines across a cluster-switch remount', async () => {
+    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+    act(() => {
+      root.unmount();
+    });
+    expect(mockModules.orchestrator.stopStreamingDomain).toHaveBeenLastCalledWith(
+      'container-logs',
+      defaultScope,
+      {
+        reset: false,
+      }
+    );
+
+    root = ReactDOM.createRoot(container);
+    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+
+    expect(container.textContent).toContain('first');
+    expect(container.textContent).toContain('second');
+    expect(container.textContent).not.toContain('Loading logs');
+  });
+
+  // F10 / AC10: live logs come only from the stream.
+  it('does not fetch logs when a live tab opens', async () => {
+    seedLogSnapshot([], defaultScope, {
+      status: 'loading',
+      phase: { status: 'awaiting-snapshot' },
+    });
+
+    await renderViewer({ activePodNames: ['web-1'] });
+    await flushAsync();
+
+    expect(FetchContainerLogs).not.toHaveBeenCalled();
+  });
+
+  // F12 / AC12: lost lines and a full buffer are both visible.
+  it('shows dropped-entry and truncation notices', async () => {
     seedLogSnapshot(
       [
         {
           pod: 'web-1',
           container: 'app',
-          line: 'existing log',
+          line: 'line 1',
           timestamp: '2024-05-01T10:00:00Z',
           isInit: false,
         },
       ],
       defaultScope,
-      { status: 'error', error: 'stream disconnected' }
-    );
-    (FetchContainerLogs as unknown as ViMock).mockResolvedValue({ entries: [] });
-
-    await renderViewer({ activePodNames: ['web-1'] });
-    await flushAsync();
-
-    expect(mockModules.fallbackManager.register).toHaveBeenCalledWith(
-      defaultScope,
-      expect.any(Function),
-      true
+      { warnings: [{ kind: 'dropped', count: 3 }], truncation: { shown: 1, total: 40 } }
     );
 
-    const registerCalls = mockModules.fallbackManager.register.mock.calls;
-    const registerCall =
-      registerCalls.length > 0 ? registerCalls[registerCalls.length - 1] : undefined;
-    expect(registerCall).toBeTruthy();
-    const fallbackFetcher = registerCall?.[1] as
-      | ((isManual?: boolean) => Promise<void>)
-      | undefined;
-    expect(typeof fallbackFetcher).toBe('function');
+    await renderViewer({ activePodNames: ['web-1'], isActive: false });
 
-    (FetchContainerLogs as unknown as ViMock).mockClear();
-    mockModules.orchestrator.restartStreamingDomain.mockClear();
-
-    await act(async () => {
-      await fallbackFetcher?.(true);
-    });
-    await waitForMockCalls(FetchContainerLogs as unknown as ViMock, 1);
-
-    expect(FetchContainerLogs).toHaveBeenCalledTimes(1);
-    expect((FetchContainerLogs as unknown as ViMock).mock.calls[0][1]).toMatchObject({
-      scope: defaultScope,
-    });
-    expect(mockModules.orchestrator.restartStreamingDomain).not.toHaveBeenCalled();
+    const notices = container.querySelector('[aria-label="Log warnings"]')?.textContent ?? '';
+    expect(notices).toContain('Dropped 3 log entries');
+    expect(notices).toContain('Showing most recent 1 of 40 log entries');
   });
 
-  it('surfaces target-cap warnings from fallback/manual log responses', async () => {
+  it('merges per-tab and global target-limit warnings into one message', async () => {
     seedLogSnapshot(
       [
         {
           pod: 'web-1',
           container: 'app',
-          line: 'existing log',
+          line: 'line 1',
           timestamp: '2024-05-01T10:00:00Z',
           isInit: false,
         },
       ],
       defaultScope,
-      { status: 'error', error: 'stream disconnected' }
+      {
+        warnings: [
+          { kind: 'targetLimit', scope: 'perTab', hidden: 2, limit: 10 },
+          { kind: 'targetLimit', scope: 'global', hidden: 1, limit: 15 },
+        ],
+      }
     );
-    (FetchContainerLogs as unknown as ViMock).mockResolvedValue({
-      entries: [
+
+    await renderViewer({ activePodNames: ['web-1'], isActive: false });
+
+    expect(container.querySelector('[aria-label="Log warnings"]')?.textContent).toContain(
+      'Logs are hidden for 3 containers because the per-tab limit of 10 and global limit of 15 were reached.'
+    );
+  });
+
+  it('lists containers whose logs cannot be read', async () => {
+    seedLogSnapshot(
+      [
         {
           pod: 'web-1',
           container: 'app',
-          line: 'fallback line',
-          timestamp: '2024-05-01T10:00:01Z',
+          line: 'line 1',
+          timestamp: '2024-05-01T10:00:00Z',
           isInit: false,
         },
       ],
-      warnings: [
-        'Logs are hidden for 1 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message.',
+      defaultScope,
+      {
+        issues: [
+          { pod: 'web-1', container: 'sidecar', state: 'failed', reason: 'connection refused' },
+        ],
+      }
+    );
+
+    await renderViewer({ activePodNames: ['web-1'], isActive: false });
+
+    expect(container.querySelector('[aria-label="Log warnings"]')?.textContent).toContain(
+      'web-1/sidecar: connection refused'
+    );
+  });
+
+  it('says when no container has logs yet', async () => {
+    seedLogSnapshot([], defaultScope, {
+      issues: [
+        { pod: 'web-1', container: 'app', state: 'unavailable', reason: 'waiting to start' },
       ],
     });
-
-    await renderViewer({ activePodNames: ['web-1'] });
-    await flushAsync();
-
-    const registerCalls = mockModules.fallbackManager.register.mock.calls;
-    const fallbackFetcher = registerCalls[registerCalls.length - 1]?.[1] as
-      | ((isManual?: boolean) => Promise<void>)
-      | undefined;
-
-    await act(async () => {
-      await fallbackFetcher?.(true);
-    });
-    await flushAsync();
-
-    expect(container.querySelector('[aria-label="Log warnings"]')?.textContent).toContain(
-      'Logs are hidden for 1 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message.'
-    );
-  });
-
-  it('surfaces target-cap warnings from the scoped log snapshot', async () => {
-    const generatedAt = Date.now();
-    setScopedDomainState('container-logs', defaultScope, () => ({
-      status: 'ready',
-      data: {
-        entries: [
-          {
-            pod: 'web-1',
-            container: 'app',
-            line: 'line 1',
-            timestamp: '2024-05-01T10:00:00Z',
-            isInit: false,
-          },
-        ],
-        sequence: 2,
-        generatedAt,
-        resetCount: 0,
-        error: null,
-      },
-      stats: {
-        itemCount: 1,
-        buildDurationMs: 0,
-        warnings: [
-          'Logs are hidden for 28 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message.',
-        ],
-      },
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: defaultScope,
-      lastUpdated: generatedAt,
-      lastAutoRefresh: generatedAt,
-      lastManualRefresh: undefined,
-      isManual: false,
-    }));
-
-    await renderViewer({ activePodNames: ['web-1'], isActive: false });
-    await flushAsync();
-
-    expect(container.querySelector('[aria-label="Log warnings"]')?.textContent).toContain(
-      'Logs are hidden for 28 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message.'
-    );
-  });
-
-  it('merges per-tab and global target-cap warnings into a single message', async () => {
-    const generatedAt = Date.now();
-    setScopedDomainState('container-logs', defaultScope, () => ({
-      status: 'ready',
-      data: {
-        entries: [
-          {
-            pod: 'web-1',
-            container: 'app',
-            line: 'line 1',
-            timestamp: '2024-05-01T10:00:00Z',
-            isInit: false,
-          },
-        ],
-        sequence: 2,
-        generatedAt,
-        resetCount: 0,
-        error: null,
-      },
-      stats: {
-        itemCount: 1,
-        buildDurationMs: 0,
-        warnings: [
-          'Logs are hidden for 2 containers because the per-tab limit of 10 was reached. Using filters to reduce the number of containers may clear this message.',
-          'Logs are hidden for 1 containers because the global limit of 15 was reached. Using filters to reduce the number of containers may clear this message.',
-        ],
-      },
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: defaultScope,
-      lastUpdated: generatedAt,
-      lastAutoRefresh: generatedAt,
-      lastManualRefresh: undefined,
-      isManual: false,
-    }));
-
-    await renderViewer({ activePodNames: ['web-1'], isActive: false });
-    await flushAsync();
-
-    expect(container.querySelector('[aria-label="Log warnings"]')?.textContent).toContain(
-      'Logs are hidden for 3 containers because the per-tab limit of 10 and global limit of 15 were reached. Using filters to reduce the number of containers may clear this message.'
-    );
-  });
-
-  it('does not render transport-drop warnings as banners', async () => {
-    const panelId = 'obj:test:deployment:team-a:api';
-    setLogViewerPrefs(panelId, {
-      selectedFilters: [],
-      autoRefresh: true,
-      timestampMode: 'default',
-      showTimestamps: true,
-      wrapText: false,
-      textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
-      caseSensitiveMatches: false,
-      regexMatches: false,
-      displayMode: 'raw',
-      isParsedView: false,
-      expandedRows: [],
-      showPreviousContainerLogs: false,
-    });
-
-    const generatedAt = Date.now();
-    setScopedDomainState('container-logs', defaultScope, () => ({
-      status: 'ready',
-      data: {
-        entries: [],
-        sequence: 2,
-        generatedAt,
-        resetCount: 0,
-        error: null,
-      },
-      stats: {
-        itemCount: 0,
-        buildDurationMs: 0,
-        warnings: [
-          'Live container logs stream dropped one or more log entries due to client backlog. These lines were not intentionally filtered.',
-        ],
-      },
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: defaultScope,
-      lastUpdated: generatedAt,
-      lastAutoRefresh: generatedAt,
-      lastManualRefresh: undefined,
-      isManual: false,
-    }));
-
-    await renderViewer({ activePodNames: ['web-1'], isActive: false, panelId });
-    await flushAsync();
-
-    expect(container.textContent).not.toContain(
-      'Live container logs stream dropped one or more log entries due to client backlog. These lines were not intentionally filtered.'
-    );
-  });
-
-  it('renders a distinct unavailable-yet message when the snapshot carries that warning', async () => {
-    const generatedAt = Date.now();
-    setScopedDomainState('container-logs', defaultScope, () => ({
-      status: 'ready',
-      data: {
-        entries: [],
-        sequence: 2,
-        generatedAt,
-        resetCount: 0,
-        error: null,
-      },
-      stats: {
-        itemCount: 0,
-        buildDurationMs: 0,
-        warnings: ['Logs are not available yet for the selected pod or container'],
-      },
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: defaultScope,
-      lastUpdated: generatedAt,
-      lastAutoRefresh: generatedAt,
-      lastManualRefresh: undefined,
-      isManual: false,
-    }));
 
     await renderViewer({ activePodNames: ['web-1'], isActive: false });
     await waitForText(container, 'Logs are not available yet for the selected pod or container');
-
-    expect(container.textContent).toContain(
-      'Logs are not available yet for the selected pod or container'
-    );
-    expect(container.textContent).not.toContain('No logs available');
   });
 
-  it('renders a distinct no-logs-yet message when the snapshot is healthy but empty', async () => {
-    const generatedAt = Date.now();
-    setScopedDomainState('container-logs', defaultScope, () => ({
-      status: 'ready',
-      data: {
-        entries: [],
-        sequence: 2,
-        generatedAt,
-        resetCount: 0,
-        error: null,
-      },
-      stats: {
-        itemCount: 0,
-        buildDurationMs: 0,
-        warnings: [],
-      },
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: defaultScope,
-      lastUpdated: generatedAt,
-      lastAutoRefresh: generatedAt,
-      lastManualRefresh: undefined,
-      isManual: false,
-    }));
+  it('says there are no logs yet when a healthy stream is empty', async () => {
+    seedLogSnapshot([], defaultScope);
 
     await renderViewer({ activePodNames: ['web-1'], isActive: false });
     await waitForText(container, 'No logs yet');
-
-    expect(container.textContent).toContain('No logs yet');
-    expect(container.textContent).not.toContain('No logs available');
   });
 
   it('displays the empty filtered state for workload logs', async () => {
@@ -2719,21 +2734,72 @@ describe('LogViewer active pod synchronisation', () => {
     expect(highlightButton?.hasAttribute('disabled')).toBe(true);
   });
 
-  it('shows previous log message when toggled with no data', async () => {
-    seedLogSnapshot([], buildContainerLogsScope('team-a:/v1:pod:api'));
-    (FetchContainerLogs as unknown as ViMock).mockResolvedValue({ entries: [] });
-
-    await renderViewer({
-      resourceKind: 'Pod',
-      activePodNames: ['api'],
+  it('shows previous logs without touching the live buffer', async () => {
+    const podScope = buildContainerLogsScope('team-a:/v1:pod:api');
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: 'live line',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+      ],
+      podScope
+    );
+    (FetchContainerLogs as unknown as ViMock).mockResolvedValue({
+      entries: [
+        {
+          pod: 'api',
+          container: 'app',
+          line: 'before the restart',
+          timestamp: '2024-05-01T09:00:00Z',
+          isInit: false,
+        },
+      ],
     });
 
-    const previousShortcut = getLatestShortcut('v');
+    await renderViewer({ resourceKind: 'Pod', activePodNames: ['api'] });
     await act(async () => {
-      expect(previousShortcut?.handler()).toBe(true);
+      expect(getLatestShortcut('v')?.handler()).toBe(true);
       await Promise.resolve();
     });
-    await waitForText(container, 'No previous logs found');
+
+    await waitForText(container, 'before the restart');
+    expect(container.textContent).not.toContain('live line');
+    expect((FetchContainerLogs as unknown as ViMock).mock.calls[0][1]).toMatchObject({
+      scope: podScope,
+      previous: true,
+    });
+    expect(
+      getScopedDomainState('container-logs', podScope).data?.entries.map((entry) => entry.line)
+    ).toEqual(['live line']);
+  });
+
+  it('says when a container has no previous logs', async () => {
+    seedLogSnapshot([], buildContainerLogsScope('team-a:/v1:pod:api'));
+    (FetchContainerLogs as unknown as ViMock).mockResolvedValue({
+      entries: [],
+      issues: [
+        {
+          pod: 'api',
+          container: 'app',
+          state: 'unavailable',
+          reason: 'previous terminated container "app" in pod "api" not found',
+        },
+      ],
+    });
+
+    await renderViewer({ resourceKind: 'Pod', activePodNames: ['api'] });
+    await act(async () => {
+      expect(getLatestShortcut('v')?.handler()).toBe(true);
+      await Promise.resolve();
+    });
+    await waitForText(
+      container,
+      'No previous logs are available for the selected pod or container yet'
+    );
   });
 
   it('renders loading state when resource metadata is missing', async () => {
@@ -2753,24 +2819,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('shows the paused message instead of a loading spinner before logs have loaded', async () => {
     autoRefreshLoadingState.isPaused = true;
     autoRefreshLoadingState.suppressPassiveLoading = true;
-    setScopedDomainState('container-logs', activeScope, () => ({
-      status: 'loading',
-      data: {
-        entries: [],
-        sequence: 0,
-        generatedAt: Date.now(),
-        resetCount: 0,
-        error: null,
-      },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: activeScope,
-      lastUpdated: Date.now(),
-      lastAutoRefresh: undefined,
-      lastManualRefresh: undefined,
-      isManual: false,
-    }));
+    seedLogSnapshot([], activeScope, { status: 'loading', phase: { status: 'connecting' } });
 
     await renderViewer({ activePodNames: ['web-1'] });
 
@@ -2779,50 +2828,16 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('renders a real backend error instead of an empty-log state', async () => {
-    setLogViewerPrefs('obj:test:error', {
-      selectedFilters: [],
-      autoRefresh: false,
-      timestampMode: 'default',
-      showTimestamps: true,
-      wrapText: true,
-      textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
-      caseSensitiveMatches: false,
-      regexMatches: false,
-      displayMode: 'raw',
-      isParsedView: false,
-      expandedRows: [],
-      showPreviousContainerLogs: false,
-    });
-    const generatedAt = Date.now();
-    setScopedDomainState('container-logs', defaultScope, () => ({
+    seedLogSnapshot([], defaultScope, {
       status: 'error',
-      data: {
-        entries: [],
-        sequence: 2,
-        generatedAt,
-        resetCount: 0,
-        error: 'forbidden',
-      },
-      stats: null,
       error: 'forbidden',
-      droppedAutoRefreshes: 0,
-      scope: defaultScope,
-      lastUpdated: generatedAt,
-      lastAutoRefresh: generatedAt,
-      lastManualRefresh: undefined,
-      isManual: false,
-    }));
-
-    await renderViewer({
-      activePodNames: ['web-1'],
-      isActive: false,
-      panelId: 'obj:test:error',
+      phase: { status: 'failed', reason: 'forbidden', permissionDenied: true, retryable: false },
     });
+
+    await renderViewer({ activePodNames: ['web-1'], isActive: false });
 
     expect(container.textContent).toContain('Error: forbidden');
-    expect(container.textContent).not.toContain('No logs available');
+    expect(container.textContent).not.toContain('No logs yet');
   });
 
   // --- Tier 2 responsiveness: prefs cache rehydration ---
@@ -3249,109 +3264,55 @@ describe('LogViewer active pod synchronisation', () => {
     expect(chipStrip?.textContent ?? '').not.toContain('Showing previous logs');
   });
 
-  // ---------------------------------------------------------------------
-  // Acceptance test: spinner must not reappear on stream reconnect once
-  // this LogViewer instance has content to show. This is the test that
-  // would have caught the original "container logs reload every time I switch
-  // cluster tabs" bug — it exercises the full view-layer interaction with
-  // the fixed ContainerLogsStreamManager.applyPayload behavior.
-  // ---------------------------------------------------------------------
+  // A reconnect (or a cluster-switch remount) must not bring the initial-load
+  // spinner back once the view has lines to show.
 
-  it('does not re-show the initial-load spinner when the stream reconnects', async () => {
-    // Use the singleton manager so the in-memory buffers and the scoped
-    // store stay in lockstep — this is what happens in production when
-    // ContainerLogsStreamConnection.handleLogEvent calls applyPayload on the
-    // module-scoped containerLogsStreamManager instance.
-    const { containerLogsStreamManager } = await import(
-      '@/core/refresh/streaming/containerLogsStreamManager'
-    );
-
-    // Seed via applyPayload (not seedLogSnapshot) so the manager's
-    // internal buffers AND the scoped store both have the entries. Use
-    // sequence: 3 so the view already thinks it's past the initial-load
-    // threshold (hasReceivedInitialLogs needs >= 2).
-    containerLogsStreamManager.applyPayload(
-      defaultScope,
+  it('keeps lines and says so while the stream reconnects', async () => {
+    const entries: ContainerLogsEntry[] = [
       {
-        domain: 'container-logs',
-        scope: defaultScope,
-        sequence: 3,
-        generatedAt: 1_000,
-        reset: true,
-        entries: [
-          {
-            pod: 'web-1',
-            container: 'app',
-            line: 'cached entry 1',
-            timestamp: '2024-05-01T10:00:00Z',
-            isInit: false,
-          },
-          {
-            pod: 'web-1',
-            container: 'app',
-            line: 'cached entry 2',
-            timestamp: '2024-05-01T10:00:01Z',
-            isInit: false,
-          },
-        ],
+        _seq: 1,
+        pod: 'web-1',
+        container: 'app',
+        line: 'cached entry 1',
+        timestamp: '2024-05-01T10:00:00Z',
+        isInit: false,
       },
-      'stream'
-    );
-    // seedLogSnapshot's state variable needs to track the active scope
-    // so afterEach can reset it.
-    activeScope = defaultScope;
-
+      {
+        _seq: 2,
+        pod: 'web-1',
+        container: 'app',
+        line: 'cached entry 2',
+        timestamp: '2024-05-01T10:00:01Z',
+        isInit: false,
+      },
+    ];
+    seedLogSnapshot(entries);
     await renderViewer({ activePodNames: ['web-1'] });
 
-    // Baseline: entries are visible, no spinner.
-    expect(container.textContent).toContain('cached entry 1');
-    expect(container.textContent).not.toContain('Loading logs');
-
-    // Simulate the server's "new connection" handshake on stream
-    // reconnect: reset flag set, no new entries yet. With the fix in
-    // place, the buffer must be preserved and the sequence must not
-    // regress, so the view keeps showing the cached entries without
-    // flashing the initial-load spinner.
     await act(async () => {
-      containerLogsStreamManager.applyPayload(
-        defaultScope,
-        {
-          domain: 'container-logs',
-          scope: defaultScope,
-          sequence: 1,
-          generatedAt: 2_000,
-          reset: true,
-          entries: [],
+      seedLogSnapshot(entries, defaultScope, {
+        status: 'updating',
+        phase: {
+          status: 'reconnecting',
+          attempt: 1,
+          reason: 'Container logs stream connection lost',
         },
-        'stream'
-      );
+      });
       await Promise.resolve();
     });
 
     expect(container.textContent).toContain('cached entry 1');
     expect(container.textContent).toContain('cached entry 2');
     expect(container.textContent).not.toContain('Loading logs');
-
-    // And the store's sequence must still be >= 2 — the client-side
-    // counter did not regress despite the reset=true frame carrying
-    // sequence=1 from the server.
-    const finalState = getScopedDomainState('container-logs', defaultScope);
-    expect(finalState.data?.sequence).toBeGreaterThanOrEqual(2);
-
-    // Clear the manager's buffer so the next test starts from a clean
-    // slate — afterEach only resets the scoped store, not the manager.
-    await act(async () => {
-      containerLogsStreamManager.stop(defaultScope, true);
-      await Promise.resolve();
-    });
+    expect(container.querySelector('[aria-label="Log warnings"]')?.textContent).toContain(
+      'Reconnecting to live logs'
+    );
   });
 
   it('keeps unchanged Pretty rows mounted across a stream reconnect', async () => {
-    const { containerLogsStreamManager } = await import(
-      '@/core/refresh/streaming/containerLogsStreamManager'
-    );
     const panelId = 'obj:test:pretty-reconnect-identity';
-    const entries = Array.from({ length: 200 }, (_, index) => ({
+    const entries: ContainerLogsEntry[] = Array.from({ length: 200 }, (_, index) => ({
+      _seq: index + 1,
       pod: 'web-1',
       container: 'app',
       line: JSON.stringify({ message: `unchanged entry ${index + 1}` }),
@@ -3374,63 +3335,35 @@ describe('LogViewer active pod synchronisation', () => {
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
-    containerLogsStreamManager.applyPayload(
-      defaultScope,
-      {
-        domain: 'container-logs',
-        scope: defaultScope,
-        sequence: 3,
-        generatedAt: 1_000,
-        reset: true,
-        entries,
-      },
-      'stream'
-    );
-    activeScope = defaultScope;
+    seedLogSnapshot(entries);
 
-    try {
-      await renderViewer({ activePodNames: ['web-1'], panelId });
-      const rowsBeforeReconnect = Array.from(container.querySelectorAll('.log-viewer-row'));
-      expect(rowsBeforeReconnect.length).toBeGreaterThan(0);
-      expect(rowsBeforeReconnect.length).toBeLessThan(entries.length);
-      expect(
-        container.querySelector<HTMLButtonElement>('button[aria-label="Resume scrolling"]')
-      ).toBeNull();
+    await renderViewer({ activePodNames: ['web-1'], panelId });
+    const rowsBeforeReconnect = Array.from(container.querySelectorAll('.log-viewer-row'));
+    expect(rowsBeforeReconnect.length).toBeGreaterThan(0);
+    expect(rowsBeforeReconnect.length).toBeLessThan(entries.length);
 
-      await renderViewer({ activePodNames: ['web-1'], panelId, isActive: false });
-      await renderViewer({ activePodNames: ['web-1'], panelId, isActive: true });
-      expect(
-        container.querySelector<HTMLButtonElement>('button[aria-label="Resume scrolling"]')
-      ).toBeNull();
-      await act(async () => {
-        containerLogsStreamManager.applyPayload(
-          defaultScope,
-          {
-            domain: 'container-logs',
-            scope: defaultScope,
-            sequence: 1,
-            generatedAt: 2_000,
-            reset: true,
-            entries,
-          },
-          'stream'
-        );
-        await Promise.resolve();
+    await renderViewer({ activePodNames: ['web-1'], panelId, isActive: false });
+    await renderViewer({ activePodNames: ['web-1'], panelId, isActive: true });
+    // The manager keeps an unchanged reconnect snapshot's entries as they were.
+    await act(async () => {
+      seedLogSnapshot(entries, defaultScope, {
+        phase: { status: 'awaiting-snapshot' },
+        status: 'updating',
       });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      seedLogSnapshot(entries);
+      await Promise.resolve();
+    });
 
-      const rowsAfterReconnect = Array.from(container.querySelectorAll('.log-viewer-row'));
-      expect(rowsAfterReconnect).toHaveLength(rowsBeforeReconnect.length);
-      rowsAfterReconnect.forEach((row, index) => {
-        expect(row).toBe(rowsBeforeReconnect[index]);
-      });
-      expect(
-        container.querySelector<HTMLButtonElement>('button[aria-label="Resume scrolling"]')
-      ).toBeNull();
-    } finally {
-      await act(async () => {
-        containerLogsStreamManager.stop(defaultScope, true);
-        await Promise.resolve();
-      });
-    }
+    const rowsAfterReconnect = Array.from(container.querySelectorAll('.log-viewer-row'));
+    expect(rowsAfterReconnect).toHaveLength(rowsBeforeReconnect.length);
+    rowsAfterReconnect.forEach((row, index) => {
+      expect(row).toBe(rowsBeforeReconnect[index]);
+    });
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Resume scrolling"]')
+    ).toBeNull();
   });
 });

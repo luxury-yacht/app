@@ -12,8 +12,10 @@ object panel. They are snapshot/fetch based, not container log streaming.
 - Source switching should clearly reset or preserve content by policy.
 - Path-backed discovery and service-backed queries have different failure and
   filtering behavior; do not merge them accidentally.
-- Shared viewer behavior may be reused, but source selection and transport stay
-  node-log specific.
+- Search, display, toolbar, keyboard shortcuts and copy come from the shared
+  viewer shell ([overview.md](overview.md#shared-viewer-shell)); source
+  selection and transport stay node-log specific. Node Logs has no timestamp or
+  previous-log shortcuts.
 
 ## Ownership
 
@@ -36,7 +38,8 @@ When changing node logs:
 
 1. Trace Node identity and `clusterId` from object panel to backend request.
 2. Check source discovery, unsupported states, and empty directory handling.
-3. Verify source switching, refresh, search, copy, and scroll behavior.
+3. Verify source switching, refresh, search, copy, keyboard shortcuts, and
+   scroll behavior.
 4. Keep container log paths hidden from node log source lists.
 5. Test supported and unsupported source types.
 

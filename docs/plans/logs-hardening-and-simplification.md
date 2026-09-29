@@ -435,11 +435,11 @@ branch may not pass the gate.
 
 Backend:
 
-- [ ] **B1 Protocol types.** Add `retryable`, target issues, typed warnings and
+- [x] **B1 Protocol types.** Done 2026-09-28. `EventPayload` gained `snapshotComplete`, `trimmed`, `issues` (replace semantics), typed `warnings` and `retryable`; the request carries `maxEntries`/`maxBytes`. `Warning` and `TargetIssue` live in `internal/containerlogs` so both transports share them; the previous-logs fetch response uses the same types. The empty handshake frame is gone: the first frame is the snapshot's first frame. Original scope: Add `retryable`, target issues, typed warnings and
   `snapshotComplete` to `EventPayload`; replace the stream request's
   `TailLines` with `maxEntries` and `maxBytes`. Regenerate `types.generated.ts`
   via `backend/generate.go`. Update the frontend payload validator.
-- [ ] **B2 Delivery rewrite (F4).** Replace the four channels and the
+- [x] **B2 Delivery rewrite (F4).** Done 2026-09-28 (the pending buffer itself landed in A6). The snapshot is trimmed to the newest `maxEntries`/`maxBytes` and packed into frames of at most `frameBudgetBytes` (8 × the line limit, measured as the JSON-encoded entry); live flushes split by 64 entries and the same budget. Drops are one `dropped` warning with a cumulative count. Tests in `protocol_test.go`. Original scope: Replace the four channels and the
   delivery-event switch (`handler.go:248-405`) with one pending buffer (count
   and byte bounds, drop counter), a wake-up channel and the 250 ms flush timer.
   Trim the deadline snapshot to `maxEntries` and `maxBytes` and stage it in
@@ -456,7 +456,7 @@ Backend:
   arrives complete and in order; the
   budget test fails when the line limit outgrows it; drops produce one `dropped`
   warning; cancellation ends cleanly with no busy loop after the runner exits.
-- [ ] **B3 Error classification (F2, F11, F22).** Resolution failures are fatal
+- [x] **B3 Error classification (F2, F11, F22).** Done 2026-09-28. Resolution failures and a forbidden informer list/watch are fatal frames with `retryable` (false for NotFound, Forbidden, BadRequest, Invalid); permission details name the denied resource (`core/pods`) and the apiserver message names the verb. Follower failures are target issues (set on open failure, cleared on a successful open or when the target is no longer wanted) and never set `error`. Original scope: Resolution failures are fatal
   with `retryable` (NotFound, Forbidden and invalid scope are not retryable). A
   forbidden pod `list` or `watch` from the session informer is a non-retryable
   fatal error whose permission details name the verb and `pods`, rendered by
@@ -469,14 +469,14 @@ Backend:
 
 Frontend:
 
-- [ ] **B4 Protocol reducer (F14, F15).** `containerLogsStreamProtocol.ts` with
+- [x] **B4 Protocol reducer (F14, F15).** Done 2026-09-28: `containerLogsStreamProtocol.ts` (validator + reducer) and its tests; `refreshOnce`, manual mode and the registration's `refreshOnce` are deleted. Visibility suspend/resume and `kubeconfig:changing` are covered in the manager tests. Mutation check: resetting backoff on socket open fails two tests. Original scope: `containerLogsStreamProtocol.ts` with
   tests modeled on `resourceStreamProtocol.test.ts`: the handshake completes
   nothing; a staged snapshot applies atomically; backoff grows until a snapshot
   is delivered, not on socket open; a non-retryable failure is terminal; a
   retryable failure reconnects with capped backoff; visibility suspend/resume
   and `kubeconfig:changing` reset still work. Delete `refreshOnce`, manual mode,
   and the registration's `refreshOnce` (`domainRegistrations.ts:36`).
-- [ ] **B5 Sole writer (F9, F17).** The manager inserts entries in timestamp
+- [x] **B5 Sole writer (F9, F17).** Done 2026-09-28. The manager keeps entries ordered by a padded timestamp key with arrival-order ties, evicts by count and UTF-8 line bytes, and projects `phase`, `warnings`, `issues` and `truncation`. `useLogFiltering` no longer sorts. The manager tests were rewritten after the code; mutation checks (always append, ignore the byte cap) fail them. Original scope: The manager inserts entries in timestamp
   order with a stable tie-break and projects phase, typed warnings, target issues
   and truncation into `ContainerLogsSnapshotPayload`
   (`frontend/src/core/refresh/types.ts:45-51`), replacing the `sequence ≥ 2`
@@ -487,7 +487,7 @@ Frontend:
   leave room for a delayed older 25-byte entry, which is kept in order;
   stale-pod entries do
   not reappear after a live batch.
-- [ ] **B6 LogViewer (F1, F10, F12).** Remove the fallback hook usage, priming
+- [x] **B6 LogViewer (F1, F10, F12).** Done 2026-09-28. Red tests first for F1 (real manager + store), F10, F12 and AC13. New `useContainerLogsStream` (lifecycle only), `usePreviousContainerLogs` (component state) and `containerLogNotices.ts`; a permanent failure turns the tab's auto-refresh off and shows a retry hint; active pods are a display filter. Original scope: Remove the fallback hook usage, priming
   fetch, the `fallback` mode, the error-suppression and transient-error logic,
   `isLogDataUnavailable`, and the target-limit warning regex
   (`LogViewer.tsx:256-303`). Render: `failed` shows the error (permission denied
@@ -495,20 +495,20 @@ Frontend:
   status; typed warnings (limits, dropped, truncated) and a target-issue summary
   are visible. Previous logs live in component state. Active pods become a
   display filter. Red tests first for F1, F10 and F12.
-- [ ] **B7 Delete the fallback machinery (F2).** Remove
+- [x] **B7 Delete the fallback machinery (F2).** Done 2026-09-28: the fallback hook, fallback manager, their tests and the empty `core/refresh/fallbacks` directory are deleted. Original scope: Remove
   `useContainerLogsStreamFallback.ts`, `containerLogsFallbackManager.ts` and
   their tests.
-- [ ] **B8 Refresher contract (F21).** Add `"scheduled": false` to the
+- [x] **B8 Refresher contract (F21).** Done 2026-09-28: `"scheduled": false` added and regenerated (`policy_generated.go`, `types.generated.ts`). The entry's stale scope metadata was corrected too (`parseRequest`, no query parameters). Original scope: Add `"scheduled": false` to the
   `container-logs` entry in `refresh-domain-contract.json` and regenerate via
   `backend/generate.go` (open question 6). The name and timings stay because the
   generator requires them (`domain_contract.go:217-222`). No runtime change is
   expected: `scheduled` is only read by `shouldAllowRefresher`
   (`orchestrator.ts:1244-1248`), which already skips this refresher; the
   diagnostics row keeps its polling label (`DiagnosticsPanel.tsx:1078-1083`).
-- [ ] **B9 Unchanged behaviors.** Tests prove the per-tab auto-refresh toggle
+- [x] **B9 Unchanged behaviors.** Done 2026-09-28: LogViewer tests for the tab toggle and a cluster-switch remount, an orchestrator test for the global pause, and the manager test that keeps the buffer across a restart. Original scope: Tests prove the per-tab auto-refresh toggle
   and global pause still freeze and resume the stream, and a cluster-switch
   remount keeps the buffer.
-- [ ] **B10 Named Logs capability for pods (F23).** Gate the Logs tab on the
+- [x] **B10 Named Logs capability for pods (F23).** Done 2026-09-28. `hasObjPanelLogs` reads the `view-logs` descriptor; the unnamed `useUserPermission` query is deleted. Red test through the real `useCapabilities` path (`useObjectPanelLogsCapability.test.tsx`); backend rule test for a name-restricted `get pods/log`. Original scope: Gate the Logs tab on the
   existing `view-logs` capability descriptor, which is already named for pod
   targets and unnamed at Pod level for workloads
   (`useObjectPanelCapabilities.ts:170-191`), and delete the separate unnamed
@@ -523,43 +523,43 @@ Frontend:
 
 ### Phase C — Shared viewer shell and Node Logs shortcuts (R5)
 
-- [ ] **C1 Shared options reducer.** Search (text, highlight, inverse, case,
+- [x] **C1 Shared options reducer.** Done 2026-09-28: `logOptionsReducer.ts` (owns `ParsedLogEntry` and `CopyFeedback`); the container reducer composes it and `parsedContainerLogs` became `parsedLogs`; Node Logs uses it directly and gains the container's toggle interlocks. Original scope: Search (text, highlight, inverse, case,
   regex), display (wrap, ANSI, raw/pretty/parsed), expanded rows, copy feedback
   and auto-refresh. The container reducer composes it with its own fields
   (source filters, timestamps, `live | previous`, containers, pods).
-- [ ] **C2 `useLogPresentation`.** Lines plus a search-text accessor
+- [x] **C2 `useLogPresentation`.** Done 2026-09-28: `hooks/useLogPresentation.ts` (deferred filter, search-text accessor, JSON detection cached per entry object or line value, parsed candidates) plus `splitDisplayRows` and `logCopyText`. Source filters and line formatting stay per viewer. Red test: `useLogPresentation.test.tsx` with node and container fixtures. Original scope: Lines plus a search-text accessor
   (container search also matches pod and container names;
   `useLogFiltering.ts:132-151`) produce filtered lines, parsed candidates,
   display rows, CSV and copy text. Cache JSON detection per entry. Defer the text
   filter for both viewers. Red test: parsed CSV and copy text match for both
   viewers' fixtures.
-- [ ] **C3 One toolbar builder.** Optional features: timestamps, previous logs,
+- [x] **C3 One toolbar builder.** Done 2026-09-28: `logToolbar.tsx`; Node Logs passes no optional features and picks up the shared tooltips and icon sizes. Original scope: Optional features: timestamps, previous logs,
   settings. Node Logs passes none of them.
-- [ ] **C4 Shared shortcuts (approved).** Generalize `useLogKeyboardShortcuts`
+- [x] **C4 Shared shortcuts (approved).** Done 2026-09-28. Node Logs gains search, display, copy, Home/End and search focus; `T`/`V` exist only when a viewer passes those features. Red tests in `NodeLogsTab.test.tsx` (keyboard shortcuts block). Original scope: Generalize `useLogKeyboardShortcuts`
   to the shared options plus optional feature callbacks, with neutral help text.
   Node Logs adopts it and gains the search, display, copy, Home/End and
   search-focus shortcuts. Tests: Node Logs shortcuts toggle options and copy;
   T and V are not registered for Node Logs; shortcuts are inactive when the tab
   is inactive.
-- [ ] **C5 Shared copy action.** One clipboard path with feedback and
+- [x] **C5 Shared copy action.** Done 2026-09-28: `hooks/useLogCopyAction.ts` (copy with feedback, selection copy); Node Logs reports clipboard failures (red test in `NodeLogsTab.test.tsx`). Original scope: One clipboard path with feedback and
   operational error reporting; Node Logs stops swallowing failures.
-- [ ] **C6 Native check.** Exercise Node Logs and Container Logs shortcuts and
+- [ ] **C6 Native check.** Blocked 2026-09-28: needs an interactive native session of `wails3 dev`; not available to the agent in this session. Automated shortcut tests pass, but they do not prove native focus behaviour. Original scope: Exercise Node Logs and Container Logs shortcuts and
   focus in the running app (`mise exec -- wails3 dev`).
 
 ### Phase D — Docs, contracts and completion
 
-- [ ] Update [container-logs.md](../workflows/logs/container-logs.md): fallback
+- [x] Update [container-logs.md](../workflows/logs/container-logs.md): fallback
   removal, protocol frames, reconnect and error semantics, snapshot staging,
   `maxEntries`, engine ownership.
-- [ ] Update [overview.md](../workflows/logs/overview.md) (shared viewer shell)
+- [x] Update [overview.md](../workflows/logs/overview.md) (shared viewer shell)
   and [node-logs.md](../workflows/logs/node-logs.md) (shortcuts).
-- [ ] Update
+- [x] Update
   [settled-findings.md](../../.agents/skills/app-review/references/settled-findings.md):
   `LogViewMode` is now `live | previous`; the viewer shell is consolidated.
-- [ ] Check the operations-workflows and object-panel skills' entry points and
+- [x] Check the operations-workflows and object-panel skills' entry points and
   logs guidance.
-- [ ] Add user-visible changes to [pending.md](../release/pending.md).
-- [ ] Move remaining durable guidance, then delete this plan.
+- [x] Add user-visible changes to [pending.md](../release/pending.md).
+- [ ] Move remaining durable guidance, then delete this plan. Durable guidance moved 2026-09-28; the plan stays as the completion record until the blocked native and cluster checks (C6, AC5, AC6, AC14, AC17, AC18) are run.
 
 ## Acceptance criteria
 
@@ -568,25 +568,25 @@ Status values follow [completion.md](../workflows/completion.md). All start
 
 | ID | Criterion | Evidence required | Status |
 | --- | --- | --- | --- |
-| AC1 | With auto-refresh on and no entries, a fatal error is shown, not a spinner | LogViewer test with the real manager and store | pending |
-| AC2 | One failing container leaves the live view running and is listed as an issue | Backend handler test plus frontend manager test | pending |
-| AC3 | Lines after an oversized line arrive live; fetch keeps the container's other lines | Streamer and pods tests | pending |
-| AC4 | A large workload's first snapshot is capped to `maxEntries` and staged within the frame budget | Handler test plus protocol reducer test | pending |
-| AC5 | Init-container logs of a newly created pod appear | Streamer lifecycle test; manual smoke with a Job | pending |
-| AC6 | Pod-kind streams follow a recreated pod and a new debug container | Streamer lifecycle tests; manual smoke with a StatefulSet restart | pending |
-| AC7 | Same-timestamp bursts keep their order; duplicate lines are kept | Engine tests | pending |
-| AC8 | Late-admitted targets do not replay their whole log | Streamer test | pending |
-| AC9 | Only the manager writes `container-logs` state; pruned entries stay pruned | Manager plus LogViewer test | pending |
-| AC10 | Opening a Logs tab performs one backend tail | LogViewer test asserting no fetch call in live mode | pending |
-| AC11 | A slow container is reported after 20 s without delaying the 2 s first snapshot or other containers' live lines; cancellation stops every request | Streamer and engine tests | pending |
-| AC12 | Dropped-entry and truncation warnings are visible | LogViewer test | pending |
-| AC13 | Non-retryable failures stop reconnecting and show the reason (with or without retained entries), turn auto-refresh off, and retry on one toggle click; retryable ones back off | Protocol reducer tests plus LogViewer tests with the real manager | pending |
-| AC14 | Node Logs shortcuts work | NodeLogsTab tests plus native check (C6) | pending |
-| AC15 | No regression: previous logs, auto-refresh toggle, global pause, cluster-switch remount, panel-close eviction, visibility suspend/resume, permission gating, multi-cluster isolation | Existing suites plus B9 tests | pending |
-| AC16 | Gate green on the final tree; coverage and complexity reported | `qc:prerelease`, coverage tasks, [sonar.md](../frontend/sonar.md) checks | pending |
-| AC17 | Live lines stay near real time: a line written while history loads arrives once and promptly, and steady-state delivery stays within the 250 ms batching window plus transport | Streamer test; manual smoke with a chatty workload | pending |
-| AC18 | Permission combinations behave as decided in question 8: full access works; `get pods/log` + `get pods` without `list`/`watch` shows a clear live-logs permission error while previous logs load; a per-pod `resourceNames` role (including a name-restricted `get pods/log`) shows the tab and streams through the name field selector; a workload without `list` pods shows the permission error | Backend tests with forbidden reactors; B10 capability tests; manual check on a local kind cluster with matching service accounts | pending |
-| AC19 | A resume never loses an unread line, including after a tail interrupted inside a same-timestamp group; duplicates appear only when the replay is ambiguous or unmatched; replay matching never withholds a line longer than about 1 s, even on a quiet open stream | Streamer tests for the A5 examples | pending |
+| AC1 | With auto-refresh on and no entries, a fatal error is shown, not a spinner | LogViewer test with the real manager and store | passed: `LogViewer.test.tsx` "shows a failed stream instead of loading forever" (real manager and store). |
+| AC2 | One failing container leaves the live view running and is listed as an issue | Backend handler test plus frontend manager test | passed: `protocol_test.go` TestUnreachableContainerIsAnIssueWhileOthersStream; manager applies `replace-issues` (`containerLogsStreamProtocol.test.ts`); LogViewer lists issues. |
+| AC3 | Lines after an oversized line arrive live; fetch keeps the container's other lines | Streamer and pods tests | passed: `streamer_follow_test.go` TestFollowContainerDeliversLinesAfterAnOversizedLine; `logs_test.go` TestFetchContainerLogsKeepsOtherLinesAroundAnOversizedLine. |
+| AC4 | A large workload's first snapshot is capped to `maxEntries` and staged within the frame budget | Handler test plus protocol reducer test | passed: `protocol_test.go` snapshot trim and frame-budget tests; protocol reducer staging test. |
+| AC5 | Init-container logs of a newly created pod appear | Streamer lifecycle test; manual smoke with a Job | blocked: Automated: `lifecycle_test.go` TestWorkloadScopeFollowsAnInitContainerOnceItRuns passes. Manual Job smoke not run: no local cluster in this session. |
+| AC6 | Pod-kind streams follow a recreated pod and a new debug container | Streamer lifecycle tests; manual smoke with a StatefulSet restart | blocked: Automated: recreate and debug-container lifecycle tests pass. Manual StatefulSet smoke not run: no local cluster in this session. |
+| AC7 | Same-timestamp bursts keep their order; duplicate lines are kept | Engine tests | passed: `order_test.go`, `resume_test.go`, follower identical-lines test, fetch burst-order test. |
+| AC8 | Late-admitted targets do not replay their whole log | Streamer test | passed: Follower first-open tail test and TestSnapshotKeepsTheNewestEntriesTheClientCanHold (per-container tail = maxEntries). |
+| AC9 | Only the manager writes `container-logs` state; pruned entries stay pruned | Manager plus LogViewer test | passed: Manager tests; LogViewer "keeps a deleted pod hidden when new lines arrive" (store untouched). |
+| AC10 | Opening a Logs tab performs one backend tail | LogViewer test asserting no fetch call in live mode | passed: `LogViewer.test.tsx` "does not fetch logs when a live tab opens". |
+| AC11 | A slow container is reported after 20 s without delaying the 2 s first snapshot or other containers' live lines; cancellation stops every request | Streamer and engine tests | passed: Snapshot-deadline and response-timeout tests; fetch parallelism, per-container timeout and cancellation tests. |
+| AC12 | Dropped-entry and truncation warnings are visible | LogViewer test | passed: `LogViewer.test.tsx` "shows dropped-entry and truncation notices". |
+| AC13 | Non-retryable failures stop reconnecting and show the reason (with or without retained entries), turn auto-refresh off, and retry on one toggle click; retryable ones back off | Protocol reducer tests plus LogViewer tests with the real manager | passed: Protocol reducer terminal/retry tests; LogViewer "turns auto-refresh off after a permanent failure and retries on one toggle" (real manager). |
+| AC14 | Node Logs shortcuts work | NodeLogsTab tests plus native check (C6) | blocked: Automated Node Logs shortcut tests pass; native check (C6) not run. |
+| AC15 | No regression: previous logs, auto-refresh toggle, global pause, cluster-switch remount, panel-close eviction, visibility suspend/resume, permission gating, multi-cluster isolation | Existing suites plus B9 tests | passed: Full suites in the gate; B9 tests (tab toggle, global pause, remount); visibility and kubeconfig tests in the manager suite. |
+| AC16 | Gate green on the final tree; coverage and complexity reported | `qc:prerelease`, coverage tasks, [sonar.md](../frontend/sonar.md) checks | pending: Filled in by the final gate run. |
+| AC17 | Live lines stay near real time: a line written while history loads arrives once and promptly, and steady-state delivery stays within the 250 ms batching window plus transport | Streamer test; manual smoke with a chatty workload | blocked: Automated: TestHandleDeliversALiveLineOnceAndPromptly passes. Manual chatty-workload smoke not run: no local cluster. |
+| AC18 | Permission combinations behave as decided in question 8: full access works; `get pods/log` + `get pods` without `list`/`watch` shows a clear live-logs permission error while previous logs load; a per-pod `resourceNames` role (including a name-restricted `get pods/log`) shows the tab and streams through the name field selector; a workload without `list` pods shows the permission error | Backend tests with forbidden reactors; B10 capability tests; manual check on a local kind cluster with matching service accounts | blocked: Automated: forbidden list/watch tests (pod and workload), previous logs without list/watch, B10 capability tests pass. Manual kind check not run: the restricted kind cluster is not set up in this session. |
+| AC19 | A resume never loses an unread line, including after a tail interrupted inside a same-timestamp group; duplicates appear only when the replay is ambiguous or unmatched; replay matching never withholds a line longer than about 1 s, even on a quiet open stream | Streamer tests for the A5 examples | passed: `resume_test.go` A5 examples and follower resume tests. |
 
 ## Open questions
 

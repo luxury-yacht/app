@@ -4,13 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyboardProvider, useKeyboardContext } from '@/ui/shortcuts/context';
 import { useLogKeyboardShortcuts } from './useLogKeyboardShortcuts';
 
-describe('container log shortcut help', () => {
+describe('log viewer shortcuts', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   let getAvailable: ReturnType<typeof useKeyboardContext>['getAvailableShortcuts'];
   const dispatch = vi.fn();
   const copy = vi.fn();
   const previousLogs = vi.fn();
+  const timestamps = vi.fn();
   const scrollTo = vi.fn();
 
   beforeEach(() => {
@@ -32,19 +33,16 @@ describe('container log shortcut help', () => {
       getAvailable = useKeyboardContext().getAvailableShortcuts;
       useLogKeyboardShortcuts({
         isActive,
-        isParsedView,
-        displayMode: 'raw',
-        showTimestamps: false,
-        regexMatches: false,
+        options: { displayMode: isParsedView ? 'parsed' : 'raw', regexMatches: false },
         hasAnsiLogEntries: true,
         hasCopyableContent: true,
-        supportsPreviousContainerLogs: true,
-        canParseContainerLogs: true,
+        canParseLogs: true,
         dispatch,
-        handleTogglePreviousContainerLogs: previousLogs,
-        handleCopyContainerLogs: copy,
+        copyLogs: copy,
         filterInputRef,
         logsContentRef,
+        timestamps: { toggle: timestamps },
+        previousLogs: { toggle: previousLogs },
       });
       return (
         <>
@@ -82,8 +80,8 @@ describe('container log shortcut help', () => {
     const logs = getAvailable().find(({ category }) => category === 'Logs');
     expect(logs?.shortcuts.map(({ key, description }) => [key, description])).toEqual([
       ['r', 'Toggle auto-refresh'],
-      ['Home', 'Scroll container logs to top'],
-      ['End', 'Scroll container logs to bottom'],
+      ['Home', 'Scroll logs to top'],
+      ['End', 'Scroll logs to bottom'],
       ['t', 'Toggle API timestamps'],
       ['v', 'Toggle previous logs'],
       ['h', 'Toggle match highlighting'],
@@ -94,7 +92,7 @@ describe('container log shortcut help', () => {
       ['j', 'Toggle pretty JSON'],
       ['o', 'Toggle ANSI colors'],
       ['w', 'Toggle text wrap'],
-      ['c', 'Copy container logs to clipboard'],
+      ['c', 'Copy logs to clipboard'],
     ]);
 
     for (const key of ['r', 't', 'v', 'h', 'i', 'x', 'c', 'p', 'j', 'o', 'w', 'Home', 'End']) {
@@ -103,7 +101,6 @@ describe('container log shortcut help', () => {
     press('c', true);
     expect(dispatch.mock.calls.map(([action]) => action)).toEqual([
       { type: 'TOGGLE_AUTO_REFRESH' },
-      { type: 'SET_TIMESTAMP_MODE', payload: 'default' },
       { type: 'TOGGLE_HIGHLIGHT_MATCHES' },
       { type: 'TOGGLE_INVERSE_MATCHES' },
       { type: 'TOGGLE_REGEX_MATCHES' },
@@ -113,6 +110,7 @@ describe('container log shortcut help', () => {
       { type: 'TOGGLE_SHOW_ANSI_COLORS' },
       { type: 'TOGGLE_WRAP_TEXT' },
     ]);
+    expect(timestamps).toHaveBeenCalledOnce();
     expect(previousLogs).toHaveBeenCalledOnce();
     expect(copy).toHaveBeenCalledOnce();
     expect(scrollTo.mock.calls).toEqual([

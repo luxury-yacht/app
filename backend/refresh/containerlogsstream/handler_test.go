@@ -6,22 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
-	k8stesting "k8s.io/client-go/testing"
 )
 
 type nativeLogStreamConn struct {
@@ -81,7 +77,8 @@ func TestParseRequestPreservesCompleteObjectIdentityAndSelection(t *testing.T) {
 	options, err := parseRequest(Request{
 		Scope:           "cluster-a|team-a:apps/v1:Deployment:api",
 		SelectedFilters: []string{" pod:api-1 ", "", "init:setup"},
-		TailLines:       250,
+		MaxEntries:      250,
+		MaxBytes:        10,
 	})
 
 	require.NoError(t, err)
@@ -95,7 +92,20 @@ func TestParseRequestPreservesCompleteObjectIdentityAndSelection(t *testing.T) {
 	require.False(t, options.Selection.MatchPod("api-2"))
 	require.True(t, options.Selection.MatchContainer(containerlogs.ContainerRef{Name: "setup", IsInit: true}))
 	require.False(t, options.Selection.MatchContainer(containerlogs.ContainerRef{Name: "setup"}))
-	require.Equal(t, 250, options.TailLines)
+	require.Equal(t, 250, options.MaxEntries)
+	require.Equal(t, containerlogs.MaxLineBytes, options.MaxBytes, "the byte limit always holds one line")
+}
+
+func TestParseRequestBoundsTheClientBufferLimits(t *testing.T) {
+	options, err := parseRequest(Request{Scope: "cluster-a|team-a:/v1:Pod:api", MaxEntries: 1_000_000, MaxBytes: 1 << 40})
+	require.NoError(t, err)
+	require.Equal(t, config.ContainerLogsStreamMaxTailLines, options.MaxEntries)
+	require.Equal(t, config.ContainerLogsStreamMaxBytes, options.MaxBytes)
+
+	options, err = parseRequest(Request{Scope: "cluster-a|team-a:/v1:Pod:api"})
+	require.NoError(t, err)
+	require.Equal(t, config.ContainerLogsStreamDefaultTailLines, options.MaxEntries)
+	require.Equal(t, config.ContainerLogsStreamMaxBytes, options.MaxBytes)
 }
 
 func TestParseRequestRejectsMissingScopeAndMultipleClusters(t *testing.T) {
@@ -139,12 +149,12 @@ func TestHandleStreamsInitialResetAndStopsWithHandlerGeneration(t *testing.T) {
 		})
 	}()
 
-	payloads := conn.waitForPayloads(t, 2)
-	require.True(t, payloads[0].Reset)
-	require.True(t, payloads[1].Reset)
-	require.Equal(t, "cluster-a|team-a:/v1:Pod:api", payloads[0].Scope)
-	require.Equal(t, uint64(1), payloads[0].Sequence)
-	require.Equal(t, uint64(2), payloads[1].Sequence)
+	payload := conn.waitForPayloads(t, 1)[0]
+	require.True(t, payload.Reset)
+	require.True(t, payload.SnapshotComplete, "a match-none selection has an empty, complete snapshot")
+	require.Empty(t, payload.Entries)
+	require.Equal(t, "cluster-a|team-a:/v1:Pod:api", payload.Scope)
+	require.Equal(t, uint64(1), payload.Sequence)
 
 	handler.Stop()
 	require.Eventually(t, func() bool {
@@ -187,7 +197,7 @@ func TestHandleStreamsInitialSnapshotAndUpdatesWithTelemetry(t *testing.T) {
 		handler.Handle(ctx, conn, Request{Scope: "cluster-a|default:/v1:Pod:stream-pod"})
 	}()
 
-	payloads := conn.waitForPayloads(t, 3)
+	payloads := conn.waitForPayloads(t, 2)
 	cancel()
 	require.Eventually(t, func() bool {
 		select {
@@ -199,13 +209,11 @@ func TestHandleStreamsInitialSnapshotAndUpdatesWithTelemetry(t *testing.T) {
 	}, time.Second, 10*time.Millisecond)
 
 	require.True(t, payloads[0].Reset)
-	require.Empty(t, payloads[0].Entries)
-	require.True(t, payloads[1].Reset)
-	require.Equal(t, "initial", payloads[1].Entries[0].Line)
-	require.False(t, payloads[2].Reset)
-	require.Equal(t, "update", payloads[2].Entries[0].Line)
+	require.True(t, payloads[0].SnapshotComplete)
+	require.Equal(t, "initial", payloads[0].Entries[0].Line)
+	require.False(t, payloads[1].Reset)
+	require.Equal(t, "update", payloads[1].Entries[0].Line)
 	require.Equal(t, payloads[0].Sequence+1, payloads[1].Sequence)
-	require.Equal(t, payloads[1].Sequence+1, payloads[2].Sequence)
 
 	byTarget := map[string]telemetry.StreamStatus{}
 	for _, status := range recorder.SnapshotSummary().Streams {
@@ -215,30 +223,6 @@ func TestHandleStreamsInitialSnapshotAndUpdatesWithTelemetry(t *testing.T) {
 	}
 	require.Equal(t, telemetry.StreamContainerLogs, byTarget["default/stream-pod"].Name)
 	require.GreaterOrEqual(t, byTarget["default/stream-pod"].TotalMessages, uint64(2))
-}
-
-func TestHandleEmitsPermissionDeniedPayload(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, apierrors.NewForbidden(
-			schema.GroupResource{Resource: "pods"}, "", errors.New("forbidden"),
-		)
-	})
-	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
-	require.NoError(t, err)
-	conn := newNativeLogStreamConn()
-
-	handler.Handle(context.Background(), conn, Request{
-		Scope: "cluster-a|default:batch/v1:Job:my-job",
-	})
-
-	payloads := conn.waitForPayloads(t, 2)
-	require.True(t, payloads[0].Reset)
-	require.Empty(t, payloads[0].Error)
-	require.NotEmpty(t, payloads[1].Error)
-	require.NotNil(t, payloads[1].ErrorDetails)
-	require.Equal(t, containerLogsDomain, payloads[1].ErrorDetails.Details.Domain)
-	require.Equal(t, logPermissionResource, payloads[1].ErrorDetails.Details.Resource)
 }
 
 func TestHandleLimiterKeepsAllowedTargetAndWarns(t *testing.T) {
@@ -268,7 +252,7 @@ func TestHandleLimiterKeepsAllowedTargetAndWarns(t *testing.T) {
 		handler.Handle(ctx, conn, Request{Scope: "cluster-a|default:/v1:Pod:limited-pod"})
 	}()
 
-	payloads := conn.waitForPayloads(t, 2)
+	payloads := conn.waitForPayloads(t, 1)
 	cancel()
 	require.Eventually(t, func() bool {
 		select {
@@ -279,33 +263,31 @@ func TestHandleLimiterKeepsAllowedTargetAndWarns(t *testing.T) {
 		}
 	}, time.Second, 10*time.Millisecond)
 
-	require.Len(t, payloads[1].Entries, 1)
-	require.Equal(t, "allowed", payloads[1].Entries[0].Line)
-	require.NotNil(t, payloads[1].Warnings)
-	require.Contains(t, (*payloads[1].Warnings)[0], "global limit of 1")
+	require.Len(t, payloads[0].Entries, 1)
+	require.Equal(t, "allowed", payloads[0].Entries[0].Line)
+	require.NotNil(t, payloads[0].Warnings)
+	require.Equal(t, []containerlogs.Warning{{
+		Kind: containerlogs.WarningTargetLimit, Scope: containerlogs.LimitGlobal, Hidden: 1, Limit: 1,
+	}}, *payloads[0].Warnings)
 }
 
-func TestHandleStopsWhenNativeStreamRejectsHandshakeOrInitialSnapshot(t *testing.T) {
+func TestHandleStopsWhenTheClientRejectsTheSnapshot(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "write-pod"},
 		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
 	}
-	for _, failAt := range []int{1, 2} {
-		t.Run(strconv.Itoa(failAt), func(t *testing.T) {
-			handler, err := NewHandler(fake.NewClientset(pod), applog.Noop, telemetry.NewRecorder())
-			require.NoError(t, err)
-			conn := newNativeLogStreamConn()
-			conn.failAt = failAt
+	handler, err := NewHandler(fake.NewClientset(pod), applog.Noop, telemetry.NewRecorder())
+	require.NoError(t, err)
+	conn := newNativeLogStreamConn()
+	conn.failAt = 1
 
-			handler.Handle(context.Background(), conn, Request{
-				Scope: "cluster-a|default:/v1:Pod:write-pod", MatchNone: true,
-			})
+	handler.Handle(context.Background(), conn, Request{
+		Scope: "cluster-a|default:/v1:Pod:write-pod", MatchNone: true,
+	})
 
-			conn.mu.Lock()
-			defer conn.mu.Unlock()
-			require.Equal(t, failAt, conn.sends)
-		})
-	}
+	conn.mu.Lock()
+	defer conn.mu.Unlock()
+	require.Equal(t, 1, conn.sends)
 }
 
 func TestStoppedHandlerRejectsSessionsThatStartAfterTeardown(t *testing.T) {
@@ -342,7 +324,7 @@ func TestDeliveryFlushesPendingEntriesAndReportsNativeSendFailure(t *testing.T) 
 		options: Options{ScopeString: "cluster-a|team-a:/v1:Pod:api"}, sequence: 1,
 	}
 	pending := testPending()
-	delivery := newContainerLogsDelivery(request, pending, nil)
+	delivery := newContainerLogsDelivery(request, pending, newIssueSet(), nil)
 	pending.add(Entry{Pod: "api", Container: "server", Line: "ready"})
 	require.False(t, delivery.flush())
 	require.Equal(t, "ready", conn.waitForPayloads(t, 1)[0].Entries[0].Line)
@@ -354,36 +336,10 @@ func TestDeliveryFlushesPendingEntriesAndReportsNativeSendFailure(t *testing.T) 
 	require.True(t, delivery.flush())
 }
 
-// A full buffer drops new entries instead of blocking followers, and the next
-// flush tells the client lines were lost.
-func TestDeliveryReportsEntriesDroppedByAFullBuffer(t *testing.T) {
-	conn := newNativeLogStreamConn()
-	request := &containerLogsStream{
-		handler: &Handler{}, conn: conn,
-		options: Options{ScopeString: "cluster-a|team-a:/v1:Pod:api"}, sequence: 1,
-	}
-	pending := newPendingEntries(1, 1<<20)
-	delivery := newContainerLogsDelivery(request, pending, nil)
-	pending.add(Entry{Line: "kept"})
-	pending.add(Entry{Line: "dropped"})
-
-	require.False(t, delivery.flush())
-	payloads := conn.waitForPayloads(t, 2)
-	require.Equal(t, []Entry{{Line: "kept"}}, payloads[0].Entries)
-	require.NotNil(t, payloads[1].Warnings)
-	require.Equal(t, []string{transportDropWarning}, *payloads[1].Warnings)
-}
-
-func TestComposeStreamWarningsDistinguishesTransportDrops(t *testing.T) {
-	warnings := composeStreamWarnings([]string{"selection warning"}, true)
-	require.Equal(t, []string{"selection warning", transportDropWarning}, warnings)
-	require.Equal(t, []string{"selection warning"}, composeStreamWarnings([]string{"selection warning"}, false))
-}
-
 func TestWarningClearPayloadEncodesAnEmptyArray(t *testing.T) {
 	payload := EventPayload{
 		Domain: containerLogsDomain, Scope: "cluster-a|default:/v1:Pod:web",
-		Sequence: 2, GeneratedAt: 123, Warnings: warningPayload(nil, true),
+		Sequence: 2, GeneratedAt: 123, Warnings: listPayload[containerlogs.Warning](nil, true),
 	}
 	encoded, err := json.Marshal(payload)
 	require.NoError(t, err)
@@ -430,7 +386,7 @@ func TestHandleOpensOneLogRequestPerContainer(t *testing.T) {
 	})
 	defer func() { cancel(); <-done }()
 
-	snapshot := conn.waitForPayloads(t, 2)[1]
+	snapshot := conn.waitForPayloads(t, 1)[0]
 	require.True(t, snapshot.Reset)
 	lines := []string{}
 	for _, entry := range snapshot.Entries {
@@ -453,7 +409,7 @@ func TestHandleSnapshotDoesNotWaitForAHangingContainer(t *testing.T) {
 	})
 	defer func() { cancel(); <-done }()
 
-	snapshot := conn.waitForPayloads(t, 2)[1]
+	snapshot := conn.waitForPayloads(t, 1)[0]
 	require.True(t, snapshot.Reset)
 	require.Len(t, snapshot.Entries, 1)
 	require.Equal(t, "app history", snapshot.Entries[0].Line)
@@ -477,7 +433,7 @@ func TestHandleSnapshotIsOrderedAcrossContainers(t *testing.T) {
 	})
 	defer func() { cancel(); <-done }()
 
-	snapshot := conn.waitForPayloads(t, 2)[1]
+	snapshot := conn.waitForPayloads(t, 1)[0]
 	lines := make([]string, 0, len(snapshot.Entries))
 	for _, entry := range snapshot.Entries {
 		lines = append(lines, entry.Line)
@@ -506,14 +462,14 @@ func TestHandleDeliversALiveLineOnceAndPromptly(t *testing.T) {
 	_, err := io.WriteString(writer, buildContainerLogsStream(origin, []time.Duration{time.Millisecond}, []string{"history"}))
 	require.NoError(t, err)
 
-	snapshot := conn.waitForPayloads(t, 2)[1]
+	snapshot := conn.waitForPayloads(t, 1)[0]
 	require.Len(t, snapshot.Entries, 1)
 	require.Equal(t, "history", snapshot.Entries[0].Line)
 
 	written := time.Now()
 	_, err = io.WriteString(writer, buildContainerLogsStream(origin, []time.Duration{2 * time.Millisecond}, []string{"live"}))
 	require.NoError(t, err)
-	batch := conn.waitForPayloads(t, 3)[2]
+	batch := conn.waitForPayloads(t, 2)[1]
 	require.Less(t, time.Since(written), time.Second)
 	require.Equal(t, []string{"live"}, []string{batch.Entries[0].Line})
 	require.Len(t, batch.Entries, 1)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/stretchr/testify/require"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -83,7 +84,7 @@ func startRunWith(t *testing.T, setup runSetup) *runHarness {
 		defer close(harness.done)
 		streamer.run(ctx, resolution.Pods, resolution.Watch, containerLogRunConfig{
 			opts: setup.opts, limiterSession: setup.limiter, sink: channelSink(harness.entries),
-			warningsCh: make(chan []string, 8), errCh: harness.errs,
+			warningsCh: make(chan []containerlogs.Warning, 8), fatal: harness.errs,
 		})
 	}()
 	t.Cleanup(harness.stop)
@@ -154,7 +155,7 @@ func openWith(lines ...string) logResponse {
 	return logResponse{body: buildContainerLogsStream(time.Unix(1000, 0), offsets, lines), holdOpen: true}
 }
 
-var podScope = Options{Namespace: "default", Version: "v1", Kind: "pod", Name: "web-0", TailLines: 100}
+var podScope = Options{Namespace: "default", Version: "v1", Kind: "pod", Name: "web-0", MaxEntries: 100}
 
 // A StatefulSet pod keeps its name when it is recreated; a single-pod view
 // must follow the new pod instead of going quiet.
@@ -203,7 +204,7 @@ func TestWorkloadScopeFollowsAnInitContainerOnceItRuns(t *testing.T) {
 		ContainerStatuses:     []corev1.ContainerStatus{{Name: "app", State: waiting}},
 	})
 	setupRequests := 0
-	harness := startRun(t, Options{Namespace: "default", Group: "batch", Version: "v1", Kind: "job", Name: "migrate", TailLines: 100}, []*corev1.Pod{pending},
+	harness := startRun(t, Options{Namespace: "default", Group: "batch", Version: "v1", Kind: "job", Name: "migrate", MaxEntries: 100}, []*corev1.Pod{pending},
 		func(opts *corev1.PodLogOptions) logResponse {
 			if opts.Container == "setup" {
 				setupRequests++
@@ -271,7 +272,7 @@ func linesPerContainer(opts *corev1.PodLogOptions) logResponse {
 	return openWith(opts.Container + " line")
 }
 
-var jobScope = Options{Namespace: "default", Group: "batch", Version: "v1", Kind: "job", Name: "migrate", TailLines: 100}
+var jobScope = Options{Namespace: "default", Group: "batch", Version: "v1", Kind: "job", Name: "migrate", MaxEntries: 100}
 
 // A pod watch whose resource version expired is re-listed: pods created during
 // the gap are followed, pods deleted during it are stopped, and the routine
@@ -313,7 +314,7 @@ func TestCronJobScopeFollowsPodsOfAFutureJob(t *testing.T) {
 		return []metav1.OwnerReference{{Kind: "CronJob", Name: cronJob}}
 	}
 	harness := startRunWith(t, runSetup{
-		opts:    Options{Namespace: "default", Group: "batch", Version: "v1", Kind: "cronjob", Name: "nightly", TailLines: 100},
+		opts:    Options{Namespace: "default", Group: "batch", Version: "v1", Kind: "cronjob", Name: "nightly", MaxEntries: 100},
 		respond: linesPerContainer,
 	})
 	require.NoError(t, harness.client.Tracker().Add(&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "hourly-1", OwnerReferences: ownedBy("hourly")}}))

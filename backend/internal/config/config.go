@@ -289,6 +289,10 @@ const (
 	ContainerLogsStreamPendingMaxEntries = 100_000
 	ContainerLogsStreamPendingMaxBytes   = 64 * 1024 * 1024
 
+	// ContainerLogsStreamMaxBytes caps the line bytes a client log buffer
+	// holds; the first snapshot is trimmed to it.
+	ContainerLogsStreamMaxBytes = 64 * 1024 * 1024
+
 	// ContainerLogsFetchParallelism caps how many containers a one-shot log
 	// fetch (previous logs) reads at once.
 	ContainerLogsFetchParallelism = 5

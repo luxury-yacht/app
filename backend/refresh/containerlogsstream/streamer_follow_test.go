@@ -58,11 +58,10 @@ func TestFollowContainerStreamsBatches(t *testing.T) {
 	}
 
 	entriesCh := make(chan Entry, 10)
-	errCh := make(chan error, 1)
 	done := make(chan struct{})
 
 	go func() {
-		streamer.followContainer(ctx, target, channelSink(entriesCh), errCh, followOptions{running: whileRunning})
+		streamer.followContainer(ctx, target, channelSink(entriesCh), followOptions{running: whileRunning})
 		close(done)
 	}()
 
@@ -72,8 +71,6 @@ func TestFollowContainerStreamsBatches(t *testing.T) {
 		select {
 		case entry := <-entriesCh:
 			entries = append(entries, entry)
-		case err := <-errCh:
-			t.Fatalf("unexpected error from followContainer: %v", err)
 		case <-timeout:
 			t.Fatalf("timed out waiting for log entries (got %d)", len(entries))
 		}
@@ -130,19 +127,19 @@ func TestFollowContainerRetriesAfterStreamFailure(t *testing.T) {
 	}
 
 	entriesCh := make(chan Entry, 1)
-	errCh := make(chan error, 1)
+	issues := newIssueSet()
 	done := make(chan struct{})
 
 	go func() {
-		streamer.followContainer(ctx, target, channelSink(entriesCh), errCh, followOptions{running: whileRunning})
+		streamer.followContainer(ctx, target, channelSink(entriesCh), followOptions{running: whileRunning, issues: issues})
 		close(done)
 	}()
 
 	select {
-	case err := <-errCh:
-		require.Error(t, err)
+	case <-issues.notify:
+		require.Len(t, issues.list(), 1, "the failed open is listed as an issue")
 	case <-time.After(time.Second):
-		t.Fatal("expected initial error from followContainer")
+		t.Fatal("expected the failed open to be reported")
 	}
 
 	select {
@@ -151,6 +148,7 @@ func TestFollowContainerRetriesAfterStreamFailure(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("expected log entry after retry")
 	}
+	require.Empty(t, issues.list(), "the issue clears once the stream opens")
 
 	cancel()
 	select {
@@ -174,15 +172,14 @@ func TestFollowContainerStopsOnNotFoundWithoutUserFacingError(t *testing.T) {
 		}},
 	}
 	streamer := NewStreamer(client, applog.Noop, nil)
-	errCh := make(chan error, 1)
+	issues := newIssueSet()
 	done := make(chan struct{})
 	go func() {
 		streamer.followContainer(
 			context.Background(),
 			containerTarget{namespace: "default", pod: "gone", container: "app"},
 			channelSink(make(chan Entry, 1)),
-			errCh,
-			followOptions{},
+			followOptions{issues: issues},
 		)
 		close(done)
 	}()
@@ -192,11 +189,7 @@ func TestFollowContainerStopsOnNotFoundWithoutUserFacingError(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("NotFound should stop the follower without reconnect backoff")
 	}
-	select {
-	case err := <-errCh:
-		t.Fatalf("NotFound should not emit a user-facing stream error: %v", err)
-	default:
-	}
+	require.Empty(t, issues.list(), "a pod that is gone is not an issue")
 }
 
 func TestFollowContainerPreCancelledContextDoesNotOpenStream(t *testing.T) {
@@ -215,7 +208,6 @@ func TestFollowContainerPreCancelledContextDoesNotOpenStream(t *testing.T) {
 		ctx,
 		containerTarget{namespace: "default", pod: "never-opened", container: "app"},
 		channelSink(make(chan Entry)),
-		make(chan error),
 		followOptions{},
 	)
 	require.Zero(t, podsOverride.containerRequestCount("app"))
@@ -241,7 +233,6 @@ func TestFollowContainerClosesCompletedStreamExactlyOnce(t *testing.T) {
 		context.Background(),
 		containerTarget{namespace: "default", pod: "completed-pod", container: "app"},
 		channelSink(entries),
-		make(chan error, 1),
 		followOptions{},
 	)
 	require.Equal(t, 1, closeCalls)
@@ -304,11 +295,10 @@ func TestFollowContainerDeduplicatesMultipleLinesAtSameTimestamp(t *testing.T) {
 	}
 
 	entriesCh := make(chan Entry, 20)
-	errCh := make(chan error, 1)
 	done := make(chan struct{})
 
 	go func() {
-		streamer.followContainer(ctx, target, channelSink(entriesCh), errCh, followOptions{running: whileRunning})
+		streamer.followContainer(ctx, target, channelSink(entriesCh), followOptions{running: whileRunning})
 		close(done)
 	}()
 
@@ -320,8 +310,6 @@ func TestFollowContainerDeduplicatesMultipleLinesAtSameTimestamp(t *testing.T) {
 		select {
 		case entry := <-entriesCh:
 			entries = append(entries, entry)
-		case err := <-errCh:
-			t.Fatalf("unexpected error from followContainer: %v", err)
 		case <-timeout:
 			t.Fatalf("timed out waiting for log entries (got %d)", len(entries))
 		}
@@ -382,7 +370,7 @@ func TestFollowContainerStopsOnceTheContainerIsNoLongerRunning(t *testing.T) {
 	go func() {
 		defer close(done)
 		NewStreamer(client, applog.Noop, nil).followContainer(context.Background(),
-			containerTarget{namespace: "default", pod: "done-pod", container: "app"}, channelSink(entriesCh), make(chan error, 1),
+			containerTarget{namespace: "default", pod: "done-pod", container: "app"}, channelSink(entriesCh),
 			followOptions{running: func() bool { return !stopped.Load() }})
 	}()
 	require.Equal(t, "final", (<-entriesCh).Line)
@@ -588,7 +576,7 @@ func TestFollowContainerDeliversLinesAfterAnOversizedLine(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	entriesCh := make(chan Entry, 8)
-	go streamer.followContainer(ctx, containerTarget{namespace: "default", pod: "big-pod", container: "app"}, channelSink(entriesCh), make(chan error, 8), followOptions{})
+	go streamer.followContainer(ctx, containerTarget{namespace: "default", pod: "big-pod", container: "app"}, channelSink(entriesCh), followOptions{})
 
 	var lines []string
 	for len(lines) < 3 {
@@ -635,7 +623,7 @@ func followLines(t *testing.T, responses []logResponse, want int) ([]string, *lo
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		streamer.followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app"}, channelSink(entriesCh), make(chan error, 8), followOptions{running: whileRunning})
+		streamer.followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app"}, channelSink(entriesCh), followOptions{running: whileRunning})
 	}()
 	var lines []string
 	deadline := time.After(5 * time.Second)
@@ -738,7 +726,7 @@ func TestFollowContainerFirstOpenCarriesTailLines(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		NewStreamer(client, applog.Noop, nil).followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app"}, testPending(), make(chan error, 1), followOptions{tailLines: 500})
+		NewStreamer(client, applog.Noop, nil).followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app"}, testPending(), followOptions{tailLines: 500})
 	}()
 	require.Eventually(t, func() bool { return pods.requestCount("app") == 1 }, time.Second, 5*time.Millisecond)
 	stopFollower(t, cancel, done)
@@ -763,14 +751,23 @@ func TestFollowContainerRetriesARequestThatNeverResponds(t *testing.T) {
 	streamer := NewStreamer(client, applog.Noop, nil)
 	streamer.responseTimeout = 50 * time.Millisecond
 	entries := make(chan Entry, 4)
-	errs := make(chan error, 4)
+	issues := newIssueSet()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		streamer.followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app"}, channelSink(entries), errs, followOptions{running: whileRunning})
+		streamer.followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app"}, channelSink(entries), followOptions{running: whileRunning, issues: issues})
 	}()
 
+	select {
+	case <-issues.notify:
+		listed := issues.list()
+		require.Len(t, listed, 1)
+		require.Equal(t, containerlogs.IssueFailed, listed[0].State)
+		require.Contains(t, listed[0].Reason, "no response within")
+	case <-time.After(2 * time.Second):
+		t.Fatal("the unanswered request was not reported")
+	}
 	select {
 	case entry := <-entries:
 		require.Equal(t, "answered", entry.Line)
@@ -788,16 +785,16 @@ func TestFollowContainerKeepsAQuietEstablishedStreamOpen(t *testing.T) {
 	client := &stubClient{Clientset: baseClient, core: &logCore{CoreV1Interface: baseClient.CoreV1(), overrides: map[string]*logPods{"default": pods}}}
 	streamer := NewStreamer(client, applog.Noop, nil)
 	streamer.responseTimeout = 20 * time.Millisecond
-	errs := make(chan error, 4)
+	issues := newIssueSet()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		streamer.followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app"}, testPending(), errs, followOptions{})
+		streamer.followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app"}, testPending(), followOptions{issues: issues})
 	}()
 
 	time.Sleep(200 * time.Millisecond)
 	stopFollower(t, cancel, done)
 	require.Equal(t, 1, pods.requestCount("app"))
-	require.Empty(t, errs)
+	require.Empty(t, issues.list())
 }

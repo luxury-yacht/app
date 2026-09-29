@@ -1,8 +1,9 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx
  *
- * Renders the object-panel Logs tab. It coordinates container-log stream
- * lifecycle, fallback reads, filtering, parsing, keyboard shortcuts, and viewer
+ * Renders the object-panel Logs tab. It reads the live stream's state (the
+ * stream manager is its only writer), loads previous logs into component
+ * state, and owns filtering, parsing, keyboard shortcuts, and viewer
  * preference persistence.
  */
 
@@ -18,58 +19,35 @@ import {
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import {
-  AnsiColorIcon,
-  AutoRefreshIcon,
-  CopyIcon,
-  HighlightSearchIcon,
-  InverseSearchIcon,
-  ParseJsonIcon,
-  PrettyJsonIcon,
-  PreviousLogsIcon,
-  RegexSearchIcon,
-  TimestampIcon,
-  WrapTextIcon,
-} from '@shared/components/icons/LogIcons';
-import { CaseSensitiveIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { compareUtf16Strings } from '@shared/utils/sort';
 import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
-import {
-  readContainerLogs,
-  readContainerLogsScopeContainers,
-  requestData,
-  setRefreshDomainEnabled,
-} from '@/core/data-access';
-import {
-  getLogDataUnavailableMessage,
-  isLogDataUnavailable,
-  useContainerLogsStreamFallback,
-} from './hooks/useContainerLogsStreamFallback';
+import { readContainerLogsScopeContainers, requestData } from '@/core/data-access';
+import { useContainerLogsStream } from './hooks/useContainerLogsStream';
+import { useLogCopyAction, useLogSelectionCopy } from './hooks/useLogCopyAction';
 import { useLogFiltering } from './hooks/useLogFiltering';
 import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
+import { logCopyText, splitDisplayRows } from './hooks/useLogPresentation';
 import './LogViewer.css';
-import type { types } from '@core/backend-api/models';
 import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
-import { useKeyboardSurface } from '@ui/shortcuts';
 import { eventBus } from '@/core/events';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
-import {
-  type DomainSnapshotState,
-  setScopedDomainState,
-  useRefreshScopedDomain,
-} from '@/core/refresh/store';
-import type { ContainerLogsEntry, ContainerLogsSnapshotPayload } from '@/core/refresh/types';
+import { type DomainSnapshotState, useRefreshScopedDomain } from '@/core/refresh/store';
+import type {
+  ContainerLogsEntry,
+  ContainerLogsSnapshotPayload,
+  ContainerLogsStreamPhase,
+  ContainerLogsTargetIssue,
+  ContainerLogsWarning,
+} from '@/core/refresh/types';
 import {
   getObjPanelLogsApiTimestampFormat,
   getObjPanelLogsApiTimestampUseLocalTimeZone,
-  getObjPanelLogsBufferMaxSize,
 } from '@/core/settings/appPreferences';
-import { reportOperationalError } from '@/utils/errorHandler';
 import {
   DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
   formatDefaultObjPanelLogsApiTimestamp,
@@ -79,10 +57,22 @@ import { INACTIVE_SCOPE } from '../constants';
 import type { LogDisplayMode, LogTimestampMode } from '../types';
 import { containsAnsi } from './ansi';
 import { buildContainerLogMetadataColumns, containerLogExportValue } from './containerLogColumns';
+import {
+  buildContainerLogNotices,
+  LIVE_LOGS_UNAVAILABLE_MESSAGE,
+  onlyUnavailableIssues,
+  PREVIOUS_LOGS_UNAVAILABLE_MESSAGE,
+  RETRY_HINT,
+} from './containerLogNotices';
 import { setContainerLogsStreamScopeParams } from './containerLogsStreamScopeParamsCache';
 import { useAnchoredLogEntries } from './hooks/useAnchoredLogEntries';
 import { useLogMessageRenderer } from './hooks/useLogMessageRenderer';
 import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
+import {
+  type BackendLogSelection,
+  type PreviousContainerLogs,
+  usePreviousContainerLogs,
+} from './hooks/usePreviousContainerLogs';
 import { useTerminalTheme } from './hooks/useTerminalTheme';
 import {
   classifySelectedLogSources,
@@ -96,7 +86,9 @@ import {
   pruneLogFilterSelectionToOptions,
 } from './logFilterSelection';
 import { parseBracketedLogPrefix } from './logLineMetadata';
+import type { ParsedLogEntry } from './logOptionsReducer';
 import { buildLogSearchRegex, isValidRegexPattern } from './logSearch';
+import { buildLogToolbarItems } from './logToolbar';
 import {
   getLogViewerPrefs,
   getLogViewerScrollPosition,
@@ -108,14 +100,12 @@ import {
   extractLogViewerPrefs,
   initialLogViewerState,
   logViewerReducer,
-  type ParsedLogEntry,
 } from './logViewerReducer';
 import ParsedLogTable from './ParsedLogTable';
 import { buildParsedLogCsv, buildParsedLogDataColumns } from './parsedLogColumns';
 import { deriveParsedLogFieldKeys, formatRawOrPrettyJsonLine } from './parsedLogUtils';
 import { buildStablePodColorMap } from './podColors';
 import RawLogViewer, { type RenderedLogRow } from './RawLogViewer';
-import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from './textSelection';
 
 interface LogViewerProps {
   resourceKind: string;
@@ -253,54 +243,8 @@ const POD_FILTER_PREFIX = 'pod:';
 const INIT_FILTER_PREFIX = 'init:';
 const CONTAINER_FILTER_PREFIX = 'container:';
 const DEBUG_FILTER_PREFIX = 'debug:';
-const TARGET_LIMIT_WARNING_PATTERN =
-  /^Logs are hidden for (\d+) containers because the (per-tab|global) limit of (\d+) was reached\. Using filters to reduce the number of containers may clear this message\.$/;
 const WORKLOAD_RAW_LOG_PREFIX_PATTERN = /^(?:(\[[^\]]+\]\s*))?\[([^/]+)\/([^\]]+)\]\s*(.*)/;
 const EMPTY_CONTAINER_LOG_PLACEHOLDER = '[container emitted an empty log]';
-
-const mergeTargetLimitWarnings = (warnings: string[]): string[] => {
-  if (warnings.length < 2) {
-    return warnings;
-  }
-
-  const merged: string[] = [];
-  let perTabMatch: RegExpMatchArray | null = null;
-  let globalMatch: RegExpMatchArray | null = null;
-
-  for (const warning of warnings) {
-    const match = TARGET_LIMIT_WARNING_PATTERN.exec(warning);
-    if (!match) {
-      merged.push(warning);
-      continue;
-    }
-    if (match[2] === 'per-tab') {
-      perTabMatch = match;
-      continue;
-    }
-    if (match[2] === 'global') {
-      globalMatch = match;
-      continue;
-    }
-    merged.push(warning);
-  }
-
-  if (perTabMatch && globalMatch) {
-    const hiddenCount = Number.parseInt(perTabMatch[1], 10) + Number.parseInt(globalMatch[1], 10);
-    merged.unshift(
-      `Logs are hidden for ${hiddenCount} containers because the per-tab limit of ${perTabMatch[3]} and global limit of ${globalMatch[3]} were reached. Using filters to reduce the number of containers may clear this message.`
-    );
-    return merged;
-  }
-
-  if (perTabMatch) {
-    merged.unshift(perTabMatch[0]);
-  }
-  if (globalMatch) {
-    merged.unshift(globalMatch[0]);
-  }
-
-  return merged;
-};
 
 const isInitContainerDisplayName = (container: string): boolean => container.endsWith(' (init)');
 const isDebugContainerDisplayName = (container: string): boolean => container.endsWith(' (debug)');
@@ -352,135 +296,11 @@ type LogEmptyState =
   | 'no_logs_yet'
   | 'no_previous_logs'
   | 'no_filter_matches'
-  | 'unavailable';
+  | 'unavailable'
+  | 'previous_unavailable'
+  | 'auto_refresh_off';
 
 type ContainerLogsSnapshotState = DomainSnapshotState<ContainerLogsSnapshotPayload>;
-
-const buildContainerLogsSnapshotState = (
-  previous: ContainerLogsSnapshotState,
-  scope: string,
-  entries: ContainerLogsEntry[],
-  generatedAt: number,
-  isManual: boolean,
-  warnings: string[]
-): ContainerLogsSnapshotState => {
-  const previousPayload = previous.data ?? {
-    entries: [],
-    sequence: 0,
-    generatedAt,
-    resetCount: 0,
-    error: null,
-  };
-  return {
-    ...previous,
-    status: 'ready',
-    error: null,
-    stats: {
-      itemCount: entries.length,
-      buildDurationMs: 0,
-      warnings: warnings.length > 0 ? warnings : undefined,
-    },
-    data: {
-      entries,
-      // sequence >= 2 means the initial log load completed even if the
-      // payload is empty. Fallback/manual fetches honor the same contract.
-      sequence: Math.max(previousPayload.sequence, 2),
-      generatedAt,
-      resetCount: previousPayload.resetCount + (isManual ? 1 : 0),
-      error: null,
-    },
-    lastUpdated: generatedAt,
-    lastManualRefresh: isManual ? generatedAt : previous.lastManualRefresh,
-    lastAutoRefresh: isManual ? previous.lastAutoRefresh : generatedAt,
-    isManual,
-    scope,
-  };
-};
-
-type BackendLogSelection = {
-  selectedFilters: string[];
-  matchNone: boolean;
-};
-
-type ContainerLogsFetchOutcome =
-  | { kind: 'blocked' }
-  | { kind: 'loaded'; entries: ContainerLogsEntry[]; warnings: string[] }
-  | { kind: 'unavailable'; warning: string }
-  | { kind: 'error'; message: string };
-
-const buildContainerLogsFetchRequest = (
-  scope: string,
-  selection: BackendLogSelection,
-  previous: boolean
-): types.ContainerLogsFetchRequest => ({
-  scope,
-  selectedFilters: selection.selectedFilters,
-  matchNone: selection.matchNone,
-  previous,
-  tailLines: getObjPanelLogsBufferMaxSize(),
-});
-
-const mapFetchedContainerLogEntries = (
-  entries: types.ContainerLogsEntry[] | null | undefined,
-  nextSequence: () => number
-): ContainerLogsEntry[] =>
-  (entries ?? []).map((entry) => ({
-    timestamp: entry.timestamp ?? '',
-    pod: entry.pod ?? '',
-    container: entry.container ?? '',
-    line: entry.line ?? '',
-    isInit: Boolean(entry.isInit),
-    isEphemeral: Boolean(entry.isEphemeral),
-    _seq: nextSequence(),
-  }));
-
-const normalizeContainerLogWarnings = (warnings: string[] | null | undefined): string[] =>
-  (warnings ?? []).filter((warning): warning is string => typeof warning === 'string');
-
-const requestFallbackContainerLogs = async ({
-  clusterId,
-  scope,
-  selection,
-  isManual,
-  previous,
-  nextSequence,
-}: {
-  clusterId: string;
-  scope: string;
-  selection: BackendLogSelection;
-  isManual: boolean;
-  previous: boolean;
-  nextSequence: () => number;
-}): Promise<ContainerLogsFetchOutcome> => {
-  try {
-    const request = buildContainerLogsFetchRequest(scope, selection, previous);
-    const result = await requestData({
-      resource: 'container-logs-fallback',
-      reason: isManual ? 'user' : 'background',
-      adapter: 'rpc-read',
-      label: previous ? 'Previous Container Logs' : 'Container Logs Fallback',
-      scope,
-      read: () => readContainerLogs(clusterId, request),
-    });
-    if (result.status === 'blocked') {
-      return { kind: 'blocked' };
-    }
-    if (result.data?.error) {
-      throw new Error(result.data.error);
-    }
-    return {
-      kind: 'loaded',
-      entries: mapFetchedContainerLogEntries(result.data?.entries, nextSequence),
-      warnings: normalizeContainerLogWarnings(result.data?.warnings),
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (isLogDataUnavailable(message)) {
-      return { kind: 'unavailable', warning: getLogDataUnavailableMessage(previous) };
-    }
-    return { kind: 'error', message };
-  }
-};
 
 const getWorkloadPodNames = (
   entries: ContainerLogsEntry[],
@@ -490,53 +310,46 @@ const getWorkloadPodNames = (
     .slice()
     .sort(compareUtf16Strings);
 
+// Lines of pods the workload no longer has are hidden. The filter applies only
+// once the pod list is known, and an empty list hides every line only after
+// pods were seen, so the first, still-loading list does not blank the view.
 const filterEntriesForActivePods = (
   entries: ContainerLogsEntry[],
-  activePods: string[] | null,
-  previousActivePods: string[] | null
-): ContainerLogsEntry[] | null => {
-  if (activePods === null) {
-    return null;
-  }
-  if (previousActivePods === null && activePods.length === 0) {
-    return null;
-  }
-  if (activePods.length === 0) {
-    return entries.length > 0 ? [] : null;
-  }
-  const activePodSet = new Set(activePods);
-  const visibleEntries = entries.filter((entry) => activePodSet.has(entry.pod));
-  return visibleEntries.length === entries.length ? null : visibleEntries;
-};
+  activePods: Set<string> | null
+): ContainerLogsEntry[] =>
+  activePods === null ? entries : entries.filter((entry) => activePods.has(entry.pod));
 
-const buildActivePodSnapshotState = (
-  previous: ContainerLogsSnapshotState,
-  scope: string,
-  entries: ContainerLogsEntry[],
-  generatedAt: number
-): ContainerLogsSnapshotState => {
-  const previousPayload = previous.data ?? {
-    entries: [],
-    sequence: 0,
-    generatedAt,
-    resetCount: 0,
-    error: null,
-  };
-  return {
-    ...previous,
-    status: 'ready',
-    error: null,
-    data: {
-      ...previousPayload,
-      entries,
-      generatedAt,
-      resetCount: previousPayload.resetCount + 1,
-    },
-    lastUpdated: generatedAt,
-    lastAutoRefresh: generatedAt,
-    isManual: false,
-    scope,
-  };
+const NO_ACTIVE_PODS = new Set<string>();
+
+const normalizeActivePodNames = (activePodNames: string[] | null): string[] | null =>
+  activePodNames === null
+    ? null
+    : activePodNames
+        .map((name) => (typeof name === 'string' ? name.trim() : ''))
+        .filter((name) => name.length > 0);
+
+const useActivePodSet = (
+  activePodNames: string[] | null,
+  enabled: boolean,
+  scope: string | null
+): Set<string> | null => {
+  const seenPodsRef = useRef<{ scope: string | null; seen: boolean }>({ scope, seen: false });
+  // Reset during render, like syncContainerLogsScope, so a new scope never
+  // inherits the previous one's history.
+  if (seenPodsRef.current.scope !== scope) {
+    seenPodsRef.current = { scope, seen: false };
+  }
+  const names = useMemo(() => normalizeActivePodNames(activePodNames), [activePodNames]);
+  const activePods = useMemo(() => (names && names.length > 0 ? new Set(names) : null), [names]);
+  useEffect(() => {
+    if (enabled && activePods) {
+      seenPodsRef.current.seen = true;
+    }
+  }, [activePods, enabled]);
+  if (!enabled || names === null) {
+    return null;
+  }
+  return activePods ?? (seenPodsRef.current.seen ? NO_ACTIVE_PODS : null);
 };
 
 type LogViewerAction = Parameters<typeof logViewerReducer>[1];
@@ -875,16 +688,9 @@ const requestLogScopeContainers = async (clusterId: string, scope: string): Prom
   return result.status === 'executed' ? (result.data ?? []) : [];
 };
 
-const getLogViewerCopyFeedback = (copyFeedback: string): 'success' | 'error' | null => {
-  if (copyFeedback === 'copied') {
-    return 'success';
-  }
-  return copyFeedback === 'error' ? 'error' : null;
-};
-
 const renderLogViewerContent = ({
   isParsedView,
-  parsedContainerLogs,
+  parsedLogs,
   tableColumns,
   expandedRows,
   onToggleParsedRow,
@@ -896,7 +702,7 @@ const renderLogViewerContent = ({
   emptyStateMessage,
 }: {
   isParsedView: boolean;
-  parsedContainerLogs: ParsedLogEntry[];
+  parsedLogs: ParsedLogEntry[];
   tableColumns: GridColumnDefinition<ParsedLogEntry>[];
   expandedRows: Set<string>;
   onToggleParsedRow: (rowKey: string) => void;
@@ -910,7 +716,7 @@ const renderLogViewerContent = ({
   if (isParsedView) {
     return (
       <ParsedLogTable
-        rows={parsedContainerLogs}
+        rows={parsedLogs}
         columns={tableColumns}
         expandedRows={expandedRows}
         onToggleRow={onToggleParsedRow}
@@ -932,21 +738,23 @@ const renderLogViewerContent = ({
 
 const renderLogViewerBlockingState = ({
   loading,
+  loadingMessage,
   paused,
-  pendingFallback,
   displayError,
+  retryHint,
   hasEntries,
 }: {
   loading: boolean;
+  loadingMessage: string;
   paused: boolean;
-  pendingFallback: boolean;
   displayError: string | null;
+  retryHint: boolean;
   hasEntries: boolean;
 }) => {
   if (loading) {
     return (
       <div className="object-panel-tab-content">
-        <LoadingSpinner message="Loading logs..." />
+        <LoadingSpinner message={loadingMessage} />
       </div>
     );
   }
@@ -959,194 +767,19 @@ const renderLogViewerBlockingState = ({
       </div>
     );
   }
-  if (!pendingFallback && displayError && !hasEntries) {
+  if (displayError && !hasEntries) {
     return (
       <div className="object-panel-tab-content">
         <div className="logs-viewer-display-error">
           <div className="error-message">
             Error: <ErrorSurface kind="reported" message={displayError} />
           </div>
+          {retryHint ? <div className="logs-viewer-retry-hint">{RETRY_HINT}</div> : null}
         </div>
       </div>
     );
   }
   return null;
-};
-
-type LogViewerIconItemsOptions = {
-  highlightMatches: boolean;
-  inverseMatches: boolean;
-  caseSensitiveMatches: boolean;
-  regexMatches: boolean;
-  autoRefresh: boolean;
-  supportsPreviousContainerLogs: boolean;
-  showPreviousContainerLogs: boolean;
-  showTimestamps: boolean;
-  wrapText: boolean;
-  isParsedView: boolean;
-  hasAnsiLogEntries: boolean;
-  showAnsiColors: boolean;
-  canParseContainerLogs: boolean;
-  displayMode: LogDisplayMode;
-  hasCopyableContent: boolean;
-  copyIconFeedback: 'success' | 'error' | null;
-  dispatch: React.Dispatch<LogViewerAction>;
-  togglePreviousContainerLogs: () => void;
-  openSettings: () => void;
-  copyLogs: () => void;
-};
-
-const buildLogViewerIconItems = (options: LogViewerIconItemsOptions): IconBarItem[] => {
-  const items: IconBarItem[] = [
-    {
-      type: 'toggle',
-      id: 'highlightSearch',
-      icon: <HighlightSearchIcon width={16} height={16} />,
-      active: options.highlightMatches,
-      onClick: () => options.dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
-      title: 'Highlight matching text - disabled when Invert is enabled (H)',
-      ariaLabel: 'Highlight matching text - disabled when Invert is enabled',
-      disabled: options.inverseMatches,
-    },
-    {
-      type: 'toggle',
-      id: 'inverseSearch',
-      icon: <InverseSearchIcon width={18} height={18} />,
-      active: options.inverseMatches,
-      onClick: () => options.dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
-      title: 'Invert the text filter to show only non-matching logs (I)',
-      ariaLabel: 'Invert the text filter to show only non-matching logs',
-    },
-    {
-      type: 'toggle',
-      id: 'caseSensitiveSearch',
-      icon: <CaseSensitiveIcon width={18} height={18} />,
-      active: options.caseSensitiveMatches,
-      onClick: () => options.dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }),
-      title: 'Case-sensitive search - disabled when regex is enabled (C)',
-      ariaLabel: 'Case-sensitive search - disabled when regex is enabled',
-      disabled: options.regexMatches,
-    },
-    {
-      type: 'toggle',
-      id: 'regexSearch',
-      icon: <RegexSearchIcon width={16} height={16} />,
-      active: options.regexMatches,
-      onClick: () => options.dispatch({ type: 'TOGGLE_REGEX_MATCHES' }),
-      title: 'Enable regular expression support for the text filter (X)',
-      ariaLabel: 'Enable regular expression support for the text filter',
-    },
-    { type: 'separator' },
-    {
-      type: 'toggle',
-      id: 'autoRefresh',
-      icon: <AutoRefreshIcon width={18} height={18} />,
-      active: options.autoRefresh,
-      onClick: () => options.dispatch({ type: 'TOGGLE_AUTO_REFRESH' }),
-      title: 'Toggle auto-refresh (R)',
-      ariaLabel: 'Toggle auto-refresh',
-    },
-  ];
-  if (options.supportsPreviousContainerLogs) {
-    items.push({
-      type: 'toggle',
-      id: 'previousLogs',
-      icon: <PreviousLogsIcon width={18} height={18} />,
-      active: options.showPreviousContainerLogs,
-      onClick: options.togglePreviousContainerLogs,
-      title: 'Show previous logs (V)',
-      ariaLabel: 'Show previous logs (V)',
-    });
-  }
-  items.push(
-    {
-      type: 'toggle',
-      id: 'apiTimestamps',
-      icon: <TimestampIcon width={18} height={18} />,
-      active: options.showTimestamps,
-      onClick: () =>
-        options.dispatch({
-          type: 'SET_TIMESTAMP_MODE',
-          payload: options.showTimestamps ? 'hidden' : 'default',
-        }),
-      title: 'Show timestamps from the Kubernetes API (T)',
-      ariaLabel: 'Show timestamps from the Kubernetes API',
-    },
-    {
-      type: 'toggle',
-      id: 'wrapText',
-      icon: <WrapTextIcon width={20} height={20} />,
-      active: options.wrapText,
-      onClick: () => options.dispatch({ type: 'TOGGLE_WRAP_TEXT' }),
-      title: 'Wrap text (W)',
-      ariaLabel: 'Wrap text',
-      disabled: options.isParsedView,
-    }
-  );
-  if (options.hasAnsiLogEntries) {
-    items.push({
-      type: 'toggle',
-      id: 'ansiColors',
-      icon: <AnsiColorIcon width={20} height={20} />,
-      active: options.showAnsiColors,
-      onClick: () => options.dispatch({ type: 'TOGGLE_SHOW_ANSI_COLORS' }),
-      title: 'Show ANSI colors if present (O)',
-      ariaLabel: 'Show ANSI colors if present',
-      disabled: options.isParsedView,
-    });
-  }
-  if (options.canParseContainerLogs) {
-    items.push(
-      {
-        type: 'toggle',
-        id: 'prettyJson',
-        icon: <PrettyJsonIcon width={18} height={18} />,
-        active: options.displayMode === 'pretty',
-        onClick: () =>
-          options.dispatch({
-            type: 'SET_DISPLAY_MODE',
-            payload: options.displayMode === 'pretty' ? 'raw' : 'pretty',
-          }),
-        title: 'Show pretty JSON (J)',
-        ariaLabel: 'Show pretty JSON',
-      },
-      {
-        type: 'toggle',
-        id: 'parsedJson',
-        icon: <ParseJsonIcon width={16} height={16} />,
-        active: options.displayMode === 'parsed',
-        onClick: () =>
-          options.dispatch({
-            type: 'SET_DISPLAY_MODE',
-            payload: options.displayMode === 'parsed' ? 'raw' : 'parsed',
-          }),
-        title: 'Parse the JSON into a table (P)',
-        ariaLabel: 'Parse the JSON into a table',
-      }
-    );
-  }
-  items.push(
-    { type: 'separator' },
-    {
-      type: 'action',
-      id: 'logSettings',
-      icon: <SettingsIcon width={18} height={18} />,
-      onClick: options.openSettings,
-      title: 'Open log settings',
-      ariaLabel: 'Open log settings',
-    },
-    {
-      type: 'action',
-      id: 'copy',
-      icon: <CopyIcon width={18} height={18} />,
-      onClick: options.copyLogs,
-      title: 'Copy current log buffer to clipboard (Shift+C)',
-      ariaLabel: 'Copy to clipboard',
-      disabled: !options.hasCopyableContent,
-      feedback: options.copyIconFeedback,
-    }
-  );
-  return items;
 };
 
 type LogViewerControlsProps = {
@@ -1309,14 +942,10 @@ const LogViewerReadyView = ({
 const syncContainerLogsScope = ({
   scope,
   previousScopeRef,
-  hasPrimedScopeRef,
-  previousActivePodsRef,
   dispatch,
 }: {
   scope: string | null;
   previousScopeRef: { current: string | null };
-  hasPrimedScopeRef: { current: boolean };
-  previousActivePodsRef: { current: string[] | null };
   dispatch: React.Dispatch<LogViewerAction>;
 }): void => {
   if (scope === previousScopeRef.current) {
@@ -1324,115 +953,168 @@ const syncContainerLogsScope = ({
   }
   const hadPreviousScope = previousScopeRef.current !== null;
   previousScopeRef.current = scope;
-  hasPrimedScopeRef.current = false;
-  previousActivePodsRef.current = null;
   if (hadPreviousScope) {
     dispatch({ type: 'RESET_FOR_NEW_SCOPE' });
   }
 };
 
-const getScopedContainerLogSnapshot = (
+type LiveContainerLogs = {
+  entries: ContainerLogsEntry[];
+  phase: ContainerLogsStreamPhase | null;
+  warnings: ContainerLogsWarning[];
+  issues: ContainerLogsTargetIssue[];
+  truncation: ContainerLogsSnapshotPayload['truncation'];
+  // A snapshot has been delivered at least once for this scope.
+  hasSnapshot: boolean;
+};
+
+const NO_LIVE_LOGS: LiveContainerLogs = {
+  entries: EMPTY_CONTAINER_LOG_ENTRIES,
+  phase: null,
+  warnings: [],
+  issues: [],
+  truncation: null,
+  hasSnapshot: false,
+};
+
+const getLiveContainerLogs = (
   snapshot: ContainerLogsSnapshotState,
   hasScope: boolean
-) => ({
-  entries: hasScope
-    ? (snapshot.data?.entries ?? EMPTY_CONTAINER_LOG_ENTRIES)
-    : EMPTY_CONTAINER_LOG_ENTRIES,
-  status: hasScope ? snapshot.status : ('idle' as const),
-  error: hasScope ? snapshot.error : null,
-  sequence: hasScope ? (snapshot.data?.sequence ?? 0) : 0,
-  warnings: (snapshot.stats?.warnings ?? []).filter(
-    (warning) => typeof warning === 'string' && warning.trim().length > 0
-  ),
-});
-
-const getContainerLogDisplayError = (snapshotError: string | null | undefined): string | null => {
-  if (!snapshotError || isLogDataUnavailable(snapshotError)) {
-    return null;
+): LiveContainerLogs => {
+  const data = snapshot.data;
+  if (!hasScope || !data) {
+    return NO_LIVE_LOGS;
   }
-  return snapshotError;
+  return {
+    entries: data.entries,
+    phase: data.phase,
+    warnings: data.warnings,
+    issues: data.issues,
+    truncation: data.truncation,
+    hasSnapshot: data.resetCount > 0,
+  };
 };
 
-const isTransientContainerLogStreamError = (displayError: string | null): boolean => {
-  if (!displayError) {
+// The stream is still connecting and has nothing to show yet.
+const isAwaitingLiveLogs = (live: LiveContainerLogs, streamExpected: boolean): boolean => {
+  if (live.entries.length > 0) {
     return false;
   }
-  const normalizedError = displayError.toLowerCase();
-  return [
-    'container logs stream connection lost',
-    'container logs stream disconnected',
-    'reconnecting',
-    'failed to open container logs stream',
-  ].some((term) => normalizedError.includes(term));
+  if (!live.phase) {
+    return streamExpected;
+  }
+  const status = live.phase.status;
+  return status === 'connecting' || status === 'awaiting-snapshot' || status === 'reconnecting';
 };
 
-const shouldSuppressContainerLogError = ({
-  fallbackActive,
-  showPreviousContainerLogs,
-  fallbackRecovering,
-  transientStreamError,
-  autoRefresh,
-  snapshotStatus,
-}: {
-  fallbackActive: boolean;
-  showPreviousContainerLogs: boolean;
-  fallbackRecovering: boolean;
-  transientStreamError: boolean;
-  autoRefresh: boolean;
-  snapshotStatus: string;
-}): boolean =>
-  fallbackActive ||
-  showPreviousContainerLogs ||
-  fallbackRecovering ||
-  transientStreamError ||
-  (autoRefresh && snapshotStatus === 'error');
+const liveLoadingMessage = (phase: ContainerLogsStreamPhase | null): string =>
+  phase?.status === 'reconnecting'
+    ? `Reconnecting to live logs (${phase.reason})...`
+    : 'Loading logs...';
 
-const areContainerLogsPending = ({
+type LogViewerSource = {
+  entries: ContainerLogsEntry[];
+  issues: ContainerLogsTargetIssue[];
+  notices: string[];
+  displayError: string | null;
+  // The live failure, when that is what stopped the view.
+  liveFailure: string | null;
+  isPending: boolean;
+  hasLoaded: boolean;
+  loadingMessage: string;
+};
+
+// Picks what the view shows: the live stream's buffer or the fetched previous
+// logs, with the matching notices, error and loading state.
+const resolveLogViewerSource = ({
   showPreviousContainerLogs,
-  isLoadingPreviousContainerLogs,
-  entryCount,
-  hasReceivedInitialLogs,
-  waitingForInitialPrime,
-  snapshotStatus,
-  fallbackActive,
-  pendingFallback,
+  hasScope,
+  live,
+  previous,
+  streamExpected,
 }: {
   showPreviousContainerLogs: boolean;
-  isLoadingPreviousContainerLogs: boolean;
-  entryCount: number;
-  hasReceivedInitialLogs: boolean;
-  waitingForInitialPrime: boolean;
-  snapshotStatus: string;
-  fallbackActive: boolean;
-  pendingFallback: boolean;
-}): boolean => {
+  hasScope: boolean;
+  live: LiveContainerLogs;
+  previous: PreviousContainerLogs;
+  streamExpected: boolean;
+}): LogViewerSource => {
   if (showPreviousContainerLogs) {
-    return isLoadingPreviousContainerLogs && entryCount === 0;
+    return {
+      entries: previous.entries,
+      issues: previous.issues,
+      notices: buildContainerLogNotices({
+        phase: null,
+        warnings: previous.warnings,
+        // A container without a previous run is the empty state, not a problem.
+        issues: previous.issues.filter((issue) => issue.state !== 'unavailable'),
+        truncation: null,
+      }),
+      displayError: previous.error,
+      liveFailure: null,
+      isPending: !hasScope || (previous.loading && previous.entries.length === 0),
+      hasLoaded: !previous.loading,
+      loadingMessage: 'Loading logs...',
+    };
   }
-  return (
-    entryCount === 0 &&
-    (!hasReceivedInitialLogs ||
-      waitingForInitialPrime ||
-      ['loading', 'updating', 'initialising'].includes(snapshotStatus) ||
-      fallbackActive ||
-      pendingFallback)
-  );
+  const liveFailure = live.phase?.status === 'failed' ? live.phase.reason : null;
+  return {
+    entries: live.entries,
+    issues: live.issues,
+    notices: buildContainerLogNotices(live),
+    displayError: liveFailure,
+    liveFailure,
+    isPending: !hasScope || isAwaitingLiveLogs(live, streamExpected),
+    hasLoaded: live.hasSnapshot,
+    loadingMessage: liveLoadingMessage(live.phase),
+  };
 };
 
-const findUnavailableLogMessage = (
-  filteredEntryCount: number,
-  warnings: string[]
-): string | null => {
-  if (filteredEntryCount > 0) {
-    return null;
+const resolveLogEmptyState = ({
+  isPendingLogs,
+  filteredEntryCount,
+  entryCount,
+  showPreviousContainerLogs,
+  issues,
+  hasNarrowingFilter,
+  streamExpected,
+  hasSnapshot,
+}: {
+  isPendingLogs: boolean;
+  filteredEntryCount: number;
+  entryCount: number;
+  showPreviousContainerLogs: boolean;
+  issues: ContainerLogsTargetIssue[];
+  hasNarrowingFilter: boolean;
+  streamExpected: boolean;
+  hasSnapshot: boolean;
+}): LogEmptyState => {
+  if (isPendingLogs || filteredEntryCount > 0) {
+    return 'none';
   }
-  return (
-    warnings.find(
-      (warning) =>
-        warning === getLogDataUnavailableMessage(false) ||
-        warning === getLogDataUnavailableMessage(true)
-    ) ?? null
-  );
+  if (showPreviousContainerLogs) {
+    return onlyUnavailableIssues(issues) ? 'previous_unavailable' : 'no_previous_logs';
+  }
+  if (onlyUnavailableIssues(issues)) {
+    return 'unavailable';
+  }
+  if (hasNarrowingFilter && entryCount > 0) {
+    return 'no_filter_matches';
+  }
+  if (!streamExpected && !hasSnapshot) {
+    return 'auto_refresh_off';
+  }
+  return 'no_logs_yet';
+};
+
+const EMPTY_STATE_MESSAGES: Record<LogEmptyState, string> = {
+  none: '',
+  unavailable: LIVE_LOGS_UNAVAILABLE_MESSAGE,
+  previous_unavailable: PREVIOUS_LOGS_UNAVAILABLE_MESSAGE,
+  no_previous_logs: 'No previous logs found',
+  no_filter_matches: 'No logs match the current filters',
+  auto_refresh_off: 'Auto-refresh is off for this tab. Turn it on (R) to load logs.',
+  no_logs_yet: 'No logs yet',
 };
 
 const shouldShowPausedLogEmptyState = ({
@@ -1508,16 +1190,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     inverseMatches,
     caseSensitiveMatches,
     regexMatches,
-    copyFeedback,
     displayMode,
-    parsedContainerLogs,
+    parsedLogs,
     expandedRows,
   } = state;
-  // Derived from the discriminated view mode (the single source of truth for
-  // the mutually-exclusive live / fallback / previous-logs states).
-  const fallbackActive = state.mode.kind === 'fallback';
   const showPreviousContainerLogs = state.mode.kind === 'previous';
-  const isLoadingPreviousContainerLogs = state.mode.kind === 'previous' && state.mode.loading;
   const showTimestamps = timestampMode !== 'hidden';
   const isParsedView = displayMode === 'parsed';
 
@@ -1535,17 +1212,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     setLogViewerPrefs(panelId, extractLogViewerPrefs(state));
   }, [panelId, state]);
 
-  const hasPrimedScopeRef = useRef(false);
-  const fallbackRecoveringRef = useRef(false);
-  const previousActivePodsRef = useRef<string[] | null>(null);
   const previousContainerLogsScopeRef = useRef<string | null>(null);
   const resolvedClusterId = clusterId?.trim() ?? '';
 
   // Refs
   const logsContentRef = useRef<HTMLElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
-  const seqCounterRef = useRef(0);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const terminalTheme = useTerminalTheme(logsContentRef);
 
   useEffect(
@@ -1596,15 +1268,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     },
     [selectedFilters]
   );
-  const highlightRegex = useMemo(
-    () =>
-      buildLogSearchRegex(highlightMatches && !inverseMatches ? textFilter : '', {
-        regexMode: regexMatches,
-        caseSensitive: caseSensitiveMatches,
-        global: true,
-      }),
-    [caseSensitiveMatches, highlightMatches, inverseMatches, regexMatches, textFilter]
-  );
   const backendLogSelection = useMemo<BackendLogSelection>(
     () => ({
       selectedFilters: logFilterBackendValues(selectedFilters),
@@ -1618,8 +1281,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   syncContainerLogsScope({
     scope: containerLogsScope,
     previousScopeRef: previousContainerLogsScopeRef,
-    hasPrimedScopeRef,
-    previousActivePodsRef,
     dispatch,
   });
 
@@ -1627,8 +1288,61 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     CONTAINER_LOGS_DOMAIN,
     containerLogsScope ?? INACTIVE_SCOPE
   );
-  const scopedSnapshot = getScopedContainerLogSnapshot(logSnapshot, Boolean(containerLogsScope));
-  const rawLogEntries = scopedSnapshot.entries;
+  const live = getLiveContainerLogs(logSnapshot, Boolean(containerLogsScope));
+  const previous = usePreviousContainerLogs({
+    enabled: showPreviousContainerLogs,
+    clusterId: resolvedClusterId,
+    scope: containerLogsScope,
+    selection: backendLogSelection,
+  });
+  const streamExpected =
+    Boolean(containerLogsScope) && isActive && autoRefresh && !showPreviousContainerLogs;
+  useContainerLogsStream({
+    scope: containerLogsScope,
+    isActive,
+    autoRefresh,
+    showPreviousContainerLogs,
+  });
+
+  // A failure that cannot be retried stops the stream; turning auto-refresh off
+  // makes that visible, and turning it back on retries.
+  const handledFailureRef = useRef<ContainerLogsStreamPhase | null>(null);
+  useEffect(() => {
+    if (live.phase?.status !== 'failed' || handledFailureRef.current === live.phase) {
+      return;
+    }
+    handledFailureRef.current = live.phase;
+    dispatch({ type: 'SET_AUTO_REFRESH', payload: false });
+  }, [live.phase]);
+
+  // Leaving the tab returns it to live logs.
+  useEffect(() => {
+    if (!isActive) {
+      dispatch({ type: 'SET_SHOW_PREVIOUS_LOGS', payload: false });
+    }
+  }, [isActive]);
+
+  const activePods = useActivePodSet(
+    activePodNames,
+    isWorkload && !showPreviousContainerLogs,
+    containerLogsScope
+  );
+  const activePodList = useMemo(() => (activePods ? Array.from(activePods) : null), [activePods]);
+  const source = useMemo(
+    () =>
+      resolveLogViewerSource({
+        showPreviousContainerLogs,
+        hasScope: Boolean(containerLogsScope),
+        live,
+        previous,
+        streamExpected,
+      }),
+    [containerLogsScope, live, previous, showPreviousContainerLogs, streamExpected]
+  );
+  const rawLogEntries = useMemo(
+    () => filterEntriesForActivePods(source.entries, activePods),
+    [activePods, source.entries]
+  );
 
   const anchoredLogSourceKey = useMemo(
     () =>
@@ -1648,78 +1362,24 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     ]
   );
   const logEntries = useAnchoredLogEntries(rawLogEntries, isTailFollowing, anchoredLogSourceKey);
-  const snapshotStatus = scopedSnapshot.status;
-  const snapshotError = scopedSnapshot.error;
-  // sequence 1 = connected event, sequence >= 2 = initial logs received (may be empty)
-  const snapshotSequence = scopedSnapshot.sequence;
-  const hasReceivedInitialLogs = snapshotSequence >= 2;
-  const logWarnings = scopedSnapshot.warnings;
-  const visibleLogWarnings = useMemo(
-    () =>
-      mergeTargetLimitWarnings(
-        logWarnings.filter(
-          (warning) => warning.includes('per-tab limit') || warning.includes('global limit')
-        )
-      ),
-    [logWarnings]
-  );
+  const visibleLogWarnings = source.notices;
 
-  const displayError = getContainerLogDisplayError(snapshotError);
-  const transientStreamError = isTransientContainerLogStreamError(displayError);
-  const shouldSuppressError = shouldSuppressContainerLogError({
-    fallbackActive,
-    showPreviousContainerLogs,
-    fallbackRecovering: fallbackRecoveringRef.current,
-    transientStreamError,
-    autoRefresh,
-    snapshotStatus,
-  });
-  const pendingFallback = shouldSuppressError;
-  const waitingForInitialPrime = Boolean(
-    !hasPrimedScopeRef.current && !displayError && !hasReceivedInitialLogs
-  );
-
-  const normalizedActivePods = useMemo(() => {
-    if (!isWorkload) {
-      return null;
-    }
-    if (activePodNames === null) {
-      return null;
-    }
-    const names = Array.from(
-      new Set(
-        activePodNames
-          .map((name) => (typeof name === 'string' ? name.trim() : ''))
-          .filter((name) => name.length > 0)
-      )
-    );
-    return names;
-  }, [activePodNames, isWorkload]);
   const workloadPodsForSelector = useMemo(
-    () => getWorkloadPodNames(logEntries, normalizedActivePods),
-    [logEntries, normalizedActivePods]
+    () => getWorkloadPodNames(logEntries, activePodList),
+    [logEntries, activePodList]
   );
 
-  const isPendingLogs = areContainerLogsPending({
-    showPreviousContainerLogs,
-    isLoadingPreviousContainerLogs,
-    entryCount: logEntries.length,
-    hasReceivedInitialLogs,
-    waitingForInitialPrime,
-    snapshotStatus,
-    fallbackActive,
-    pendingFallback,
-  });
+  const isPendingLogs = source.isPending;
   const logsLoadingState = applyPassiveLoadingPolicy({
     loading: isPendingLogs,
-    hasLoaded: hasReceivedInitialLogs,
+    hasLoaded: source.hasLoaded,
     hasData: logEntries.length > 0,
     isPaused,
     isManualRefreshActive: isManualRefreshActive || showPreviousContainerLogs,
   });
   const showPausedLogsState = logsLoadingState.showPausedEmptyState;
 
-  const { filteredEntries, parsedCandidates, canParseContainerLogs } = useLogFiltering({
+  const { filterText, filteredEntries, parsedCandidates, canParseContainerLogs } = useLogFiltering({
     logEntries,
     isWorkload,
     selectedFilters,
@@ -1728,210 +1388,39 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     caseSensitiveMatches,
     regexMatches,
   });
-
-  const mapEntriesToSnapshot = useCallback(
-    (
-      entries: ContainerLogsEntry[],
-      generatedAt: number,
-      isManual: boolean,
-      warnings: string[] = []
-    ) => {
-      if (!containerLogsScope) {
-        return;
-      }
-      setScopedDomainState(CONTAINER_LOGS_DOMAIN, containerLogsScope, (previous) =>
-        buildContainerLogsSnapshotState(
-          previous,
-          containerLogsScope,
-          entries,
-          generatedAt,
-          isManual,
-          warnings
-        )
-      );
-    },
-    [containerLogsScope]
+  // Highlighting follows the filter as applied, so it never runs ahead of it.
+  const highlightRegex = useMemo(
+    () =>
+      buildLogSearchRegex(highlightMatches && !inverseMatches ? filterText : '', {
+        regexMode: regexMatches,
+        caseSensitive: caseSensitiveMatches,
+        global: true,
+      }),
+    [caseSensitiveMatches, filterText, highlightMatches, inverseMatches, regexMatches]
   );
 
-  const fetchLogs = useCallback(
-    async (options: { isManual?: boolean; previous?: boolean } = {}) => {
-      if (!containerLogsScope) {
-        return;
-      }
-
-      const { isManual = false, previous = false } = options;
-      const outcome = await requestFallbackContainerLogs({
-        clusterId: resolvedClusterId,
-        scope: containerLogsScope,
-        selection: backendLogSelection,
-        isManual,
-        previous,
-        nextSequence: () => ++seqCounterRef.current,
-      });
-      if (outcome.kind === 'blocked') {
-        return;
-      }
-      if (outcome.kind === 'error') {
-        setScopedDomainState(CONTAINER_LOGS_DOMAIN, containerLogsScope, (previousState) => ({
-          ...previousState,
-          status: 'error',
-          error: outcome.message,
-          scope: containerLogsScope,
-        }));
-        return;
-      }
-      const generatedAt = Date.now();
-      const entries = outcome.kind === 'loaded' ? outcome.entries : [];
-      const warnings = outcome.kind === 'loaded' ? outcome.warnings : [outcome.warning];
-      mapEntriesToSnapshot(entries, generatedAt, isManual, warnings);
-      hasPrimedScopeRef.current = true;
-    },
-    [containerLogsScope, mapEntriesToSnapshot, backendLogSelection, resolvedClusterId]
-  );
-
-  const fetchFallbackContainerLogs = useCallback(
-    async (isManualFetch: boolean = false) => {
-      await fetchLogs({ isManual: isManualFetch });
-    },
-    [fetchLogs]
-  );
-
-  // Stream lifecycle, fallback activation, recovery, and initial log priming.
-  useContainerLogsStreamFallback({
-    containerLogsScope,
-    isActive,
-    autoRefresh,
-    showPreviousContainerLogs,
-    snapshotStatus,
-    logEntriesLength: logEntries.length,
-    fallbackActive,
-    fetchFallbackContainerLogs,
-    dispatch,
-    fallbackRecoveringRef,
-    hasPrimedScopeRef,
-  });
-
+  // A new source selection restarts the live stream; previous logs refetch on
+  // their own, and a stopped stream picks the selection up when it starts.
   useEffect(() => {
     if (!containerLogsScope) {
       return;
     }
     const changed = setContainerLogsStreamScopeParams(containerLogsScope, backendLogSelection);
-    if (!changed) {
-      return;
-    }
-    if (showPreviousContainerLogs) {
-      dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: true });
-      void fetchLogs({ previous: true, isManual: true })
-        .catch((error) => {
-          reportOperationalError(error, { source: 'LogViewer', action: 'reloadPreviousLogs' });
-        })
-        .finally(() => {
-          dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: false });
-        });
-      return;
-    }
-    if (fallbackActive) {
-      void fetchFallbackContainerLogs(false);
-      return;
-    }
-    if (!isActive || !autoRefresh) {
+    if (!changed || showPreviousContainerLogs || !isActive || !autoRefresh) {
       return;
     }
     void refreshOrchestrator.restartStreamingDomain(CONTAINER_LOGS_DOMAIN, containerLogsScope);
-  }, [
-    autoRefresh,
-    backendLogSelection,
-    fallbackActive,
-    fetchFallbackContainerLogs,
-    fetchLogs,
-    isActive,
-    containerLogsScope,
-    showPreviousContainerLogs,
-  ]);
-
-  useEffect(() => {
-    if (!isWorkload || !containerLogsScope || showPreviousContainerLogs) {
-      previousActivePodsRef.current = normalizedActivePods;
-      return;
-    }
-    const visibleEntries = filterEntriesForActivePods(
-      logEntries,
-      normalizedActivePods,
-      previousActivePodsRef.current
-    );
-    previousActivePodsRef.current = normalizedActivePods;
-    if (!visibleEntries) {
-      return;
-    }
-    const generatedAt = Date.now();
-    setScopedDomainState(CONTAINER_LOGS_DOMAIN, containerLogsScope, (previous) =>
-      buildActivePodSnapshotState(previous, containerLogsScope, visibleEntries, generatedAt)
-    );
-    hasPrimedScopeRef.current = visibleEntries.length > 0;
-  }, [isWorkload, logEntries, containerLogsScope, normalizedActivePods, showPreviousContainerLogs]);
+  }, [autoRefresh, backendLogSelection, containerLogsScope, isActive, showPreviousContainerLogs]);
 
   const handleTogglePreviousContainerLogs = useCallback(() => {
-    if (!supportsPreviousContainerLogs) {
-      return;
-    }
-    if (!containerLogsScope) {
+    if (supportsPreviousContainerLogs) {
       dispatch({ type: 'SET_SHOW_PREVIOUS_LOGS', payload: !showPreviousContainerLogs });
-      dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: false });
-      return;
     }
-
-    if (showPreviousContainerLogs) {
-      dispatch({ type: 'STOP_PREVIOUS_LOGS' });
-      hasPrimedScopeRef.current = false;
-      return;
-    }
-
-    dispatch({ type: 'START_PREVIOUS_LOGS' });
-    hasPrimedScopeRef.current = false;
-
-    refreshOrchestrator.stopStreamingDomain(CONTAINER_LOGS_DOMAIN, containerLogsScope, {
-      reset: false,
-    });
-    setRefreshDomainEnabled({
-      domain: CONTAINER_LOGS_DOMAIN,
-      scope: containerLogsScope,
-      enabled: false,
-    });
-
-    setScopedDomainState(CONTAINER_LOGS_DOMAIN, containerLogsScope, (previous) => {
-      const previousPayload = previous.data ?? {
-        entries: [],
-        sequence: 0,
-        generatedAt: Date.now(),
-        resetCount: 0,
-        error: null,
-      };
-
-      return {
-        ...previous,
-        status: 'loading',
-        error: null,
-        data: {
-          ...previousPayload,
-          entries: [],
-        },
-        scope: containerLogsScope,
-      };
-    });
-
-    void fetchLogs({ previous: true, isManual: true })
-      .catch((error) => {
-        reportOperationalError(error, { source: 'LogViewer', action: 'loadPreviousLogs' });
-      })
-      .finally(() => {
-        dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: false });
-      });
-  }, [fetchLogs, containerLogsScope, showPreviousContainerLogs, supportsPreviousContainerLogs]);
+  }, [showPreviousContainerLogs, supportsPreviousContainerLogs]);
 
   useEffect(() => {
     if (!supportsPreviousContainerLogs && showPreviousContainerLogs) {
       dispatch({ type: 'SET_SHOW_PREVIOUS_LOGS', payload: false });
-      dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: false });
     }
   }, [supportsPreviousContainerLogs, showPreviousContainerLogs]);
 
@@ -1949,10 +1438,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   useEffect(() => {
     if (isWorkload) {
-      const pods = getWorkloadPodNames(logEntries, normalizedActivePods);
-      dispatch({ type: 'SET_AVAILABLE_PODS', payload: pods });
+      dispatch({ type: 'SET_AVAILABLE_PODS', payload: workloadPodsForSelector });
     }
-  }, [isWorkload, logEntries, normalizedActivePods]);
+  }, [isWorkload, workloadPodsForSelector]);
 
   const selectorOptions = useMemo(() => {
     const options: DropdownOption[] = [];
@@ -2055,10 +1543,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       inverseMatches,
       caseSensitiveMatches,
       dispatch,
-      stopPreviousLogs: () => {
-        dispatch({ type: 'STOP_PREVIOUS_LOGS' });
-        hasPrimedScopeRef.current = false;
-      },
+      stopPreviousLogs: () => dispatch({ type: 'STOP_PREVIOUS_LOGS' }),
     });
   }, [
     caseSensitiveMatches,
@@ -2076,7 +1561,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     dispatch({ type: 'SET_SELECTED_FILTERS', payload: ALL_MULTISELECT_FILTER });
     if (showPreviousContainerLogs) {
       dispatch({ type: 'STOP_PREVIOUS_LOGS' });
-      hasPrimedScopeRef.current = false;
     }
     if (highlightMatches) {
       dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' });
@@ -2122,48 +1606,17 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
   }, [containers.length, selectedFilters, selectorOptions]);
 
-  // Helper functions
-  const unavailableLogMessage = findUnavailableLogMessage(filteredEntries.length, logWarnings);
-  const logEmptyState = useMemo<LogEmptyState>(() => {
-    if (isPendingLogs || filteredEntries.length > 0) {
-      return 'none';
-    }
-    if (unavailableLogMessage) {
-      return 'unavailable';
-    }
-    if (showPreviousContainerLogs) {
-      return 'no_previous_logs';
-    }
-    if (
-      (textFilter.trim().length > 0 || isNarrowingFilterSelection(selectedFilters)) &&
-      logEntries.length > 0
-    ) {
-      return 'no_filter_matches';
-    }
-    return 'no_logs_yet';
-  }, [
-    filteredEntries.length,
+  const logEmptyState = resolveLogEmptyState({
     isPendingLogs,
-    logEntries.length,
-    selectedFilters,
+    filteredEntryCount: filteredEntries.length,
+    entryCount: logEntries.length,
     showPreviousContainerLogs,
-    textFilter,
-    unavailableLogMessage,
-  ]);
-  const emptyStateMessage = useMemo(() => {
-    switch (logEmptyState) {
-      case 'unavailable':
-        return unavailableLogMessage ?? 'Logs are unavailable right now';
-      case 'no_previous_logs':
-        return 'No previous logs found';
-      case 'no_filter_matches':
-        return 'No logs match the current filters';
-      case 'no_logs_yet':
-        return 'No logs yet';
-      default:
-        return '';
-    }
-  }, [logEmptyState, unavailableLogMessage]);
+    issues: source.issues,
+    hasNarrowingFilter: textFilter.trim().length > 0 || isNarrowingFilterSelection(selectedFilters),
+    streamExpected,
+    hasSnapshot: live.hasSnapshot,
+  });
+  const emptyStateMessage = EMPTY_STATE_MESSAGES[logEmptyState];
   const shouldShowPausedLogsEmptyState = shouldShowPausedLogEmptyState({
     suppressPassiveLoading: logsLoadingState.suppressPassiveLoading,
     logEmptyState,
@@ -2205,22 +1658,16 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   const renderedDisplayRows = useMemo<RenderedLogRow[]>(
     () =>
-      displayLines.flatMap((line, displayIndex) => {
+      splitDisplayRows(displayLines, (displayIndex) => {
         const sourceSeq = filteredEntries[displayIndex]?._seq;
-        return line.split('\n').map((segment, segmentIndex) => ({
-          key:
-            sourceSeq !== undefined
-              ? `${sourceSeq}:${segmentIndex}`
-              : `placeholder:${displayIndex}:${segmentIndex}`,
-          line: segment,
-        }));
+        return sourceSeq !== undefined ? `${sourceSeq}` : `placeholder:${displayIndex}`;
       }),
     [displayLines, filteredEntries]
   );
 
   const hasCopyableContent = hasCopyableContainerLogs(
     isParsedView,
-    parsedContainerLogs.length,
+    parsedLogs.length,
     filteredEntries.length
   );
   const hasAnsiLogEntries = useMemo(
@@ -2309,26 +1756,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     ]
   );
 
-  // Schedule copy feedback reset, cancelling any prior pending timer
-  const scheduleCopyReset = useCallback(() => {
-    if (copyTimerRef.current) {
-      clearTimeout(copyTimerRef.current);
-    }
-    copyTimerRef.current = setTimeout(
-      () => dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'idle' }),
-      750
-    );
-  }, []);
-
-  // Clean up copy timer on unmount
-  useEffect(() => {
-    return () => {
-      if (copyTimerRef.current) {
-        clearTimeout(copyTimerRef.current);
-      }
-    };
-  }, []);
-
   // Fetch container inventory for the current log scope.
   useEffect(() => {
     // Keep the inventory recheck on pod/workload transitions.
@@ -2363,7 +1790,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     rootRef: logsContentRef,
     isActive,
     isParsedView,
-    rowCount: isParsedView ? parsedContainerLogs.length : logEntries.length,
+    rowCount: isParsedView ? parsedLogs.length : logEntries.length,
     tailFollowSignal: displayLogs,
     cacheKey: panelId,
     getScrollPosition: getLogViewerScrollPosition,
@@ -2377,10 +1804,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     resumeTailFollowing();
   }, [autoRefresh, resumeTailFollowing]);
 
-  const derivedFieldKeys = useMemo(
-    () => deriveParsedLogFieldKeys(parsedContainerLogs),
-    [parsedContainerLogs]
-  );
+  const derivedFieldKeys = useMemo(() => deriveParsedLogFieldKeys(parsedLogs), [parsedLogs]);
 
   const tableColumns = useMemo(() => {
     if (derivedFieldKeys.length === 0) {
@@ -2425,7 +1849,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     if (!isParsedView) {
       return '';
     }
-    return buildParsedLogCsv(parsedContainerLogs, tableColumns, (entry, key) =>
+    return buildParsedLogCsv(parsedLogs, tableColumns, (entry, key) =>
       containerLogExportValue(entry, key, (timestamp) =>
         formatTimestampForMode(
           timestamp,
@@ -2437,70 +1861,39 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     );
   }, [
     isParsedView,
-    parsedContainerLogs,
+    parsedLogs,
     tableColumns,
     timestampMode,
     apiTimestampFormat,
     apiTimestampUseLocalTimeZone,
   ]);
 
-  const handleCopyContainerLogs = useCallback(async () => {
-    const text = displayMode === 'parsed' ? parsedCsv : displayLogs;
-    if (!text) {
-      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
-      scheduleCopyReset();
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'copied' });
-      scheduleCopyReset();
-    } catch (err) {
-      reportOperationalError(err, { source: 'LogViewer', action: 'copyLogs' });
-      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
-      scheduleCopyReset();
-    }
-  }, [displayLogs, displayMode, parsedCsv, scheduleCopyReset]);
-
-  useKeyboardSurface({
-    kind: 'editor',
-    rootRef: logsContentRef,
-    active: isActive,
-    captureWhenActive: true,
-    onNativeAction: ({ action, selection }) => {
-      if (action === 'copy') {
-        const text = getSelectedTextWithinRoot(selection, logsContentRef.current);
-        if (!text) {
-          return false;
-        }
-        void navigator.clipboard.writeText(text).catch((err) => {
-          reportOperationalError(err, { source: 'LogViewer', action: 'copySelectedLogText' });
-        });
-        return true;
-      }
-      if (action === 'selectAll') {
-        return selectAllTextWithinRoot(selection, logsContentRef.current);
-      }
-      return false;
-    },
+  const handleCopyContainerLogs = useLogCopyAction({
+    text: logCopyText(displayMode, displayLines, parsedCsv),
+    dispatch,
+    source: 'LogViewer',
   });
+  useLogSelectionCopy({ rootRef: logsContentRef, active: isActive, source: 'LogViewer' });
 
-  // Keyboard shortcuts for Logs tab
+  const toggleTimestamps = useCallback(
+    () => dispatch({ type: 'SET_TIMESTAMP_MODE', payload: showTimestamps ? 'hidden' : 'default' }),
+    [showTimestamps]
+  );
+  const previousLogsFeature = supportsPreviousContainerLogs
+    ? { active: showPreviousContainerLogs, toggle: handleTogglePreviousContainerLogs }
+    : undefined;
   useLogKeyboardShortcuts({
     isActive,
-    isParsedView,
-    displayMode,
-    showTimestamps,
-    regexMatches,
+    options: state,
     hasAnsiLogEntries,
     hasCopyableContent,
+    canParseLogs: canParseContainerLogs,
     dispatch,
-    supportsPreviousContainerLogs,
-    canParseContainerLogs,
-    handleTogglePreviousContainerLogs,
-    handleCopyContainerLogs,
+    copyLogs: handleCopyContainerLogs,
     filterInputRef,
     logsContentRef,
+    timestamps: { toggle: toggleTimestamps },
+    previousLogs: previousLogsFeature,
   });
 
   const handleToggleParsedRow = useCallback((rowKey: string) => {
@@ -2509,19 +1902,19 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   const blockingState = renderLogViewerBlockingState({
     loading: logsLoadingState.loading,
+    loadingMessage: source.loadingMessage,
     paused: showPausedLogsState || shouldShowPausedLogsEmptyState,
-    pendingFallback,
-    displayError,
+    displayError: source.displayError,
+    retryHint: source.liveFailure !== null,
     hasEntries: logEntries.length > 0,
   });
   if (blockingState) {
     return blockingState;
   }
 
-  const copyIconFeedback = getLogViewerCopyFeedback(copyFeedback);
   const renderedLogContent = renderLogViewerContent({
     isParsedView,
-    parsedContainerLogs,
+    parsedLogs,
     tableColumns,
     expandedRows,
     onToggleParsedRow: handleToggleParsedRow,
@@ -2532,27 +1925,16 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     renderRawLogRow,
     emptyStateMessage,
   });
-  const iconItems = buildLogViewerIconItems({
-    highlightMatches,
-    inverseMatches,
-    caseSensitiveMatches,
-    regexMatches,
-    autoRefresh,
-    supportsPreviousContainerLogs,
-    showPreviousContainerLogs,
-    showTimestamps,
-    wrapText,
-    isParsedView,
-    hasAnsiLogEntries,
-    showAnsiColors,
-    canParseContainerLogs,
-    displayMode,
-    hasCopyableContent,
-    copyIconFeedback,
+  const iconItems = buildLogToolbarItems({
+    options: state,
     dispatch,
-    togglePreviousContainerLogs: handleTogglePreviousContainerLogs,
-    openSettings: () => setIsObjPanelLogsSettingsOpen(true),
+    hasAnsiLogEntries,
+    canParseLogs: canParseContainerLogs,
+    hasCopyableContent,
     copyLogs: handleCopyContainerLogs,
+    previousLogs: previousLogsFeature,
+    timestamps: { active: showTimestamps, toggle: toggleTimestamps },
+    openSettings: () => setIsObjPanelLogsSettingsOpen(true),
   });
   const controls = (
     <LogViewerControls

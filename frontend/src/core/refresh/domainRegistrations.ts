@@ -33,7 +33,6 @@ const containerLogsRegistration: OrchestratorRegistrationBuilder = (domain) => {
       return undefined;
     },
     stop: (scope, options) => containerLogsStreamManager.stop(scope, options?.reset ?? false),
-    refreshOnce: (scope) => containerLogsStreamManager.refreshOnce(scope),
   };
 };
 

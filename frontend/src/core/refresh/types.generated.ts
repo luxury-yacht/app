@@ -85,6 +85,12 @@ export const RESOURCE_STREAM_SIGNALS = ['changed', 'reset', 'error'] as const;
 
 export type ResourceStreamSignal = (typeof RESOURCE_STREAM_SIGNALS)[number];
 
+export type ContainerLogsWarningKind = 'targetLimit' | 'dropped';
+
+export type ContainerLogsLimitScope = 'perTab' | 'global';
+
+export type ContainerLogsIssueState = 'unavailable' | 'forbidden' | 'failed';
+
 export interface ArgoCDApplicationFacts {
   spec: ArgoCDApplicationSpec;
   sync?: string;
@@ -816,10 +822,31 @@ export interface ContainerLogsStreamEventPayload {
   sequence: number;
   generatedAt: number;
   reset?: boolean;
+  snapshotComplete?: boolean;
+  trimmed?: number;
   entries?: Array<ContainerLogsWireEntry>;
-  warnings?: Array<string> | null;
+  warnings?: Array<ContainerLogsWarning> | null;
+  issues?: Array<ContainerLogsTargetIssue> | null;
   error?: string;
   errorDetails?: RefreshPermissionDeniedStatus;
+  retryable?: boolean;
+}
+
+export interface ContainerLogsTargetIssue {
+  pod: string;
+  container: string;
+  isInit?: boolean;
+  isEphemeral?: boolean;
+  state: ContainerLogsIssueState;
+  reason: string;
+}
+
+export interface ContainerLogsWarning {
+  kind: ContainerLogsWarningKind;
+  scope?: ContainerLogsLimitScope;
+  hidden?: number;
+  limit?: number;
+  count?: number;
 }
 
 export interface ContainerLogsWireEntry {
@@ -2712,7 +2739,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       timing: { interval: 5000, cooldown: 1000, timeout: 10 },
       priority: null,
       registrationOrder: 11,
-      scheduled: true,
+      scheduled: false,
     },
   },
 ] as const satisfies ReadonlyArray<GeneratedRefreshDomainPolicy>;

@@ -59,7 +59,7 @@ func (s *Service) FetchContainerLogs(ctx context.Context, req types.ContainerLog
 		limit = containerlogs.DefaultPerScopeTargetLimit
 	}
 	targets, totalTargets := containerlogs.SelectTargets(pods, selection, limit)
-	warnings := containerlogs.BuildTargetLimitWarnings(len(targets), totalTargets, limit)
+	warnings := containerlogs.TargetLimitWarnings(containerlogs.LimitPerTab, len(targets), totalTargets, containerlogs.ClampPerScopeTargetLimit(limit))
 	allEntries, issues := s.fetchSelectedContainerLogs(ctx, targets, req)
 	response := types.ContainerLogsFetchResponse{Warnings: warnings, Issues: issues}
 	if len(allEntries) == 0 {

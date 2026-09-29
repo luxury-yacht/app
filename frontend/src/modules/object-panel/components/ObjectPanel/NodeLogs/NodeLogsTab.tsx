@@ -1,62 +1,60 @@
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
-import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import {
-  AnsiColorIcon,
-  AutoRefreshIcon,
-  CopyIcon,
-  HighlightSearchIcon,
-  InverseSearchIcon,
-  ParseJsonIcon,
-  PrettyJsonIcon,
-  RegexSearchIcon,
-  WrapTextIcon,
-} from '@shared/components/icons/LogIcons';
-import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
+import IconBar from '@shared/components/IconBar/IconBar';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
   startTransition,
   useCallback,
-  useDeferredValue,
   useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from 'react';
-import { containsAnsi, stripAnsi } from '../Logs/ansi';
+import { containsAnsi } from '../Logs/ansi';
+import {
+  initialLogOptionsState,
+  logOptionsReducer,
+  type ParsedLogEntry,
+} from '../Logs/logOptionsReducer';
 import { findLogOverlap } from '../Logs/logOverlap';
 import { buildLogSearchRegex } from '../Logs/logSearch';
+import { buildLogToolbarItems } from '../Logs/logToolbar';
 import {
   getLogViewerScrollPosition,
   setLogViewerScrollPosition,
 } from '../Logs/logViewerPrefsCache';
-import type { ParsedLogEntry } from '../Logs/logViewerReducer';
 import { buildParsedLogCsv, buildParsedLogDataColumns } from '../Logs/parsedLogColumns';
 import {
   deriveParsedLogFieldKeys,
   formatParsedValue,
   formatRawOrPrettyJsonLine,
-  tryParseJSONObject,
 } from '../Logs/parsedLogUtils';
-import type { CapabilityState, LogDisplayMode } from '../types';
+import type { CapabilityState } from '../types';
 import { fetchNodeLogs, type NodeLogFetchResponse, type NodeLogSource } from './nodeLogsApi';
 import '../Logs/LogViewer.css';
 import './NodeLogsTab.css';
-import { useKeyboardSurface } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
+import { useLogCopyAction, useLogSelectionCopy } from '../Logs/hooks/useLogCopyAction';
+import { useLogKeyboardShortcuts } from '../Logs/hooks/useLogKeyboardShortcuts';
 import { useLogMessageRenderer } from '../Logs/hooks/useLogMessageRenderer';
+import {
+  logCopyText,
+  splitDisplayRows,
+  useLogPresentation,
+} from '../Logs/hooks/useLogPresentation';
 import { useLogScrollRestoration } from '../Logs/hooks/useLogScrollRestoration';
 import { useTerminalTheme } from '../Logs/hooks/useTerminalTheme';
 import ParsedLogTable from '../Logs/ParsedLogTable';
 import RawLogViewer, { type RenderedLogRow } from '../Logs/RawLogViewer';
-import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from '../Logs/textSelection';
 
 const NODE_LOG_TAIL_BYTES = 256 * 1024;
+
+const nodeLogSearchTexts = (line: string): string[] => [line];
+const nodeLogLine = (line: string): string => line;
 const NODE_LOG_AUTO_REFRESH_MS = 5000;
 const NODE_LOG_APPEND_OVERLAP_MS = 5000;
-
-type CopyFeedback = 'idle' | 'copied' | 'error';
 
 const getNodeLogSourceLeafLabel = (label: string): string => {
   const segments = label.split(' / ');
@@ -410,13 +408,6 @@ const getNodeLogRowCount = (
   return isParsedView ? parsedCount : renderedCount;
 };
 
-const getCopyIconFeedback = (copyFeedback: CopyFeedback): 'success' | 'error' | null => {
-  if (copyFeedback === 'copied') {
-    return 'success';
-  }
-  return copyFeedback === 'error' ? 'error' : null;
-};
-
 const NodeLogsAvailability = ({
   availability,
   hasSources,
@@ -550,143 +541,6 @@ const NodeLogContent = ({
   );
 };
 
-type NodeLogIconItemsOptions = {
-  highlightMatches: boolean;
-  inverseMatches: boolean;
-  caseSensitiveMatches: boolean;
-  regexMatches: boolean;
-  autoRefresh: boolean;
-  wrapText: boolean;
-  hasAnsiLogEntries: boolean;
-  showAnsiColors: boolean;
-  canParseLogs: boolean;
-  displayMode: LogDisplayMode;
-  isParsedView: boolean;
-  hasCopyableContent: boolean;
-  copyIconFeedback: 'success' | 'error' | null;
-  toggleHighlightMatches: () => void;
-  toggleInverseMatches: () => void;
-  toggleCaseSensitiveMatches: () => void;
-  toggleRegexMatches: () => void;
-  toggleAutoRefresh: () => void;
-  toggleWrapText: () => void;
-  toggleAnsiColors: () => void;
-  togglePrettyJson: () => void;
-  toggleParsedJson: () => void;
-  copyLogs: () => void;
-};
-
-const buildNodeLogIconItems = (options: NodeLogIconItemsOptions): IconBarItem[] => {
-  const items: IconBarItem[] = [
-    {
-      type: 'toggle',
-      id: 'highlightSearch',
-      icon: <HighlightSearchIcon width={16} height={16} />,
-      active: options.highlightMatches,
-      onClick: options.toggleHighlightMatches,
-      title: 'Highlight matching text - disabled when Invert is enabled',
-      ariaLabel: 'Highlight matching text - disabled when Invert is enabled',
-      disabled: options.inverseMatches,
-    },
-    {
-      type: 'toggle',
-      id: 'inverseSearch',
-      icon: <InverseSearchIcon width={16} height={16} />,
-      active: options.inverseMatches,
-      onClick: options.toggleInverseMatches,
-      title: 'Invert the text filter to show only non-matching logs',
-      ariaLabel: 'Invert the text filter to show only non-matching logs',
-    },
-    {
-      type: 'toggle',
-      id: 'caseSensitiveSearch',
-      icon: <CaseSensitiveIcon width={16} height={16} />,
-      active: options.caseSensitiveMatches,
-      onClick: options.toggleCaseSensitiveMatches,
-      title: 'Case-sensitive search - disabled when regex is enabled',
-      ariaLabel: 'Case-sensitive search - disabled when regex is enabled',
-      disabled: options.regexMatches,
-    },
-    {
-      type: 'toggle',
-      id: 'regexSearch',
-      icon: <RegexSearchIcon width={16} height={16} />,
-      active: options.regexMatches,
-      onClick: options.toggleRegexMatches,
-      title: 'Enable regular expression support for the text filter',
-      ariaLabel: 'Enable regular expression support for the text filter',
-    },
-    { type: 'separator' },
-    {
-      type: 'toggle',
-      id: 'autoRefresh',
-      icon: <AutoRefreshIcon width={16} height={16} />,
-      active: options.autoRefresh,
-      onClick: options.toggleAutoRefresh,
-      title: 'Toggle auto-refresh',
-      ariaLabel: 'Toggle auto-refresh',
-    },
-    {
-      type: 'toggle',
-      id: 'wrapText',
-      icon: <WrapTextIcon />,
-      active: options.wrapText,
-      onClick: options.toggleWrapText,
-      title: 'Wrap text',
-      ariaLabel: 'Wrap text',
-      disabled: options.isParsedView,
-    },
-  ];
-  if (options.hasAnsiLogEntries) {
-    items.push({
-      type: 'toggle',
-      id: 'ansiColors',
-      icon: <AnsiColorIcon width={16} height={16} />,
-      active: options.showAnsiColors,
-      onClick: options.toggleAnsiColors,
-      title: 'Show ANSI colors if present',
-      ariaLabel: 'Show ANSI colors if present',
-      disabled: options.isParsedView,
-    });
-  }
-  if (options.canParseLogs) {
-    items.push(
-      {
-        type: 'toggle',
-        id: 'prettyJson',
-        icon: <PrettyJsonIcon width={16} height={16} />,
-        active: options.displayMode === 'pretty',
-        onClick: options.togglePrettyJson,
-        title: 'Show pretty JSON',
-        ariaLabel: 'Show pretty JSON',
-      },
-      {
-        type: 'toggle',
-        id: 'parsedJson',
-        icon: <ParseJsonIcon width={16} height={16} />,
-        active: options.isParsedView,
-        onClick: options.toggleParsedJson,
-        title: 'Parse the JSON into a table',
-        ariaLabel: 'Parse the JSON into a table',
-      }
-    );
-  }
-  items.push(
-    { type: 'separator' },
-    {
-      type: 'action',
-      id: 'copy',
-      icon: <CopyIcon width={20} height={20} />,
-      onClick: options.copyLogs,
-      title: 'Copy to clipboard',
-      ariaLabel: 'Copy to clipboard',
-      disabled: !options.hasCopyableContent,
-      feedback: options.copyIconFeedback,
-    }
-  );
-  return items;
-};
-
 interface NodeLogsTabProps {
   panelId: string;
   nodeName: string;
@@ -705,21 +559,23 @@ const NodeLogsTab = ({
   sources,
 }: NodeLogsTabProps) => {
   const [selectedSourcePath, setSelectedSourcePath] = useState('');
-  const [textFilter, setTextFilter] = useState('');
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [wrapText, setWrapText] = useState(true);
-  const [showAnsiColors, setShowAnsiColors] = useState(true);
-  const [highlightMatches, setHighlightMatches] = useState(false);
-  const [inverseMatches, setInverseMatches] = useState(false);
-  const [caseSensitiveMatches, setCaseSensitiveMatches] = useState(false);
-  const [regexMatches, setRegexMatches] = useState(false);
-  const [copyFeedback, setCopyFeedback] = useState<CopyFeedback>('idle');
-  const [displayMode, setDisplayMode] = useState<LogDisplayMode>('raw');
-  const [parsedLogs, setParsedLogs] = useState<ParsedLogEntry[]>([]);
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set<string>());
+  const [options, dispatch] = useReducer(logOptionsReducer, initialLogOptionsState);
+  const {
+    textFilter,
+    autoRefresh,
+    wrapText,
+    showAnsiColors,
+    highlightMatches,
+    inverseMatches,
+    caseSensitiveMatches,
+    regexMatches,
+    displayMode,
+    parsedLogs,
+    expandedRows,
+  } = options;
   const logsContentRef = useRef<HTMLElement>(null);
+  const filterInputRef = useRef<HTMLInputElement>(null);
   const terminalTheme = useTerminalTheme(logsContentRef);
-  const deferredTextFilter = useDeferredValue(textFilter);
   const sourceOptions = useMemo<DropdownOption[]>(
     () => buildNodeLogSourceOptions(sources),
     [sources]
@@ -748,104 +604,40 @@ const NodeLogsTab = ({
     autoRefresh,
   });
 
-  const filterRegex = useMemo(
-    () =>
-      buildLogSearchRegex(deferredTextFilter, {
-        regexMode: regexMatches,
-        caseSensitive: caseSensitiveMatches,
-      }),
-    [caseSensitiveMatches, deferredTextFilter, regexMatches]
-  );
+  const lines = useMemo(() => content.split('\n'), [content]);
+  const {
+    filterText,
+    filteredEntries: filteredLines,
+    parsedCandidates,
+    canParseLogs,
+    hasInvalidRegex,
+  } = useLogPresentation({
+    entries: lines,
+    options,
+    searchTexts: nodeLogSearchTexts,
+    lineOf: nodeLogLine,
+  });
   const highlightRegex = useMemo(
     () =>
       highlightMatches && !inverseMatches
-        ? buildLogSearchRegex(deferredTextFilter, {
+        ? buildLogSearchRegex(filterText, {
             regexMode: regexMatches,
             caseSensitive: caseSensitiveMatches,
             global: true,
           })
         : null,
-    [caseSensitiveMatches, deferredTextFilter, highlightMatches, inverseMatches, regexMatches]
+    [caseSensitiveMatches, filterText, highlightMatches, inverseMatches, regexMatches]
   );
-  const hasInvalidRegex = Boolean(regexMatches && deferredTextFilter.trim() && !filterRegex);
   const isParsedView = displayMode === 'parsed';
-
-  const filteredLines = useMemo(() => {
-    const lines = content.split('\n');
-    const trimmedFilter = deferredTextFilter.trim();
-    if (!trimmedFilter) {
-      return lines;
-    }
-    if (hasInvalidRegex) {
-      return [] as string[];
-    }
-    const normalizedFilter = caseSensitiveMatches ? trimmedFilter : trimmedFilter.toLowerCase();
-    return lines.filter((line) => {
-      const normalizedLine = stripAnsi(line);
-      const haystack = caseSensitiveMatches ? normalizedLine : normalizedLine.toLowerCase();
-      const matches = filterRegex
-        ? filterRegex.test(normalizedLine)
-        : haystack.includes(normalizedFilter);
-      if (filterRegex) {
-        filterRegex.lastIndex = 0;
-      }
-      return inverseMatches ? !matches : matches;
-    });
-  }, [
-    caseSensitiveMatches,
-    content,
-    deferredTextFilter,
-    filterRegex,
-    hasInvalidRegex,
-    inverseMatches,
-  ]);
-
-  const parsedCandidates = useMemo<ParsedLogEntry[]>(() => {
-    if (filteredLines.length === 0) {
-      return [];
-    }
-
-    return filteredLines.flatMap((line, index) => {
-      const parsedData = tryParseJSONObject(line);
-      if (!parsedData) {
-        return [];
-      }
-
-      return [
-        {
-          data: parsedData,
-          rawLine: stripAnsi(line),
-          lineNumber: index + 1,
-        },
-      ];
-    });
-  }, [filteredLines]);
-
-  const canParseLogs = parsedCandidates.length > 0;
-
-  const updateDisplayMode = useCallback((nextMode: LogDisplayMode) => {
-    setDisplayMode(nextMode);
-    setExpandedRows(new Set<string>());
-  }, []);
 
   useEffect(() => {
     if (displayMode !== 'raw' && !canParseLogs && filteredLines.length > 0) {
-      updateDisplayMode('raw');
+      dispatch({ type: 'SET_DISPLAY_MODE', payload: 'raw' });
     }
-  }, [canParseLogs, displayMode, filteredLines.length, updateDisplayMode]);
+  }, [canParseLogs, displayMode, filteredLines.length]);
 
   useEffect(() => {
-    if (!isParsedView) {
-      setParsedLogs([]);
-      return;
-    }
-
-    if (!parsedCandidates.length) {
-      setParsedLogs([]);
-      return;
-    }
-
-    setParsedLogs(parsedCandidates);
+    dispatch({ type: 'SET_PARSED_LOGS', payload: isParsedView ? parsedCandidates : [] });
   }, [isParsedView, parsedCandidates]);
 
   const derivedFieldKeys = useMemo(() => deriveParsedLogFieldKeys(parsedLogs), [parsedLogs]);
@@ -865,12 +657,7 @@ const NodeLogsTab = ({
 
   const renderedDisplayRows = useMemo<RenderedLogRow[]>(
     () =>
-      displayLines.flatMap((line, index) =>
-        line.split('\n').map((segment, segmentIndex) => ({
-          key: `${selectedSource?.path ?? 'node-log'}-${index}-${segmentIndex}`,
-          line: segment,
-        }))
-      ),
+      splitDisplayRows(displayLines, (index) => `${selectedSource?.path ?? 'node-log'}-${index}`),
     [displayLines, selectedSource?.path]
   );
 
@@ -885,8 +672,8 @@ const NodeLogsTab = ({
   );
 
   const displayedText = useMemo(
-    () => (isParsedView ? parsedCsv : displayLines.join('\n')),
-    [displayLines, isParsedView, parsedCsv]
+    () => logCopyText(displayMode, displayLines, parsedCsv),
+    [displayLines, displayMode, parsedCsv]
   );
   const hasAnsiLogEntries = useMemo(
     () => filteredLines.some((line) => containsAnsi(line)),
@@ -926,64 +713,23 @@ const NodeLogsTab = ({
   }, [resetScrollRestoration, resetSourceTracking, selectedSource?.path]);
 
   const handleToggleParsedRow = useCallback((rowKey: string) => {
-    if (!rowKey) {
-      return;
+    if (rowKey) {
+      dispatch({ type: 'TOGGLE_ROW_EXPANSION', payload: rowKey });
     }
-
-    setExpandedRows((current) => {
-      const next = new Set(current);
-      if (next.has(rowKey)) {
-        next.delete(rowKey);
-      } else {
-        next.add(rowKey);
-      }
-      return next;
-    });
   }, []);
 
-  const resetCopyFeedback = useCallback(() => {
-    window.setTimeout(() => {
-      setCopyFeedback('idle');
-    }, 1200);
-  }, []);
-
-  const handleCopyLogs = useCallback(async () => {
-    if (!displayedText) {
-      setCopyFeedback('error');
-      resetCopyFeedback();
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(displayedText);
-      setCopyFeedback('copied');
-    } catch {
-      setCopyFeedback('error');
-    }
-    resetCopyFeedback();
-  }, [displayedText, resetCopyFeedback]);
-
-  useKeyboardSurface({
-    kind: 'editor',
-    rootRef: logsContentRef,
-    active: isActive,
-    captureWhenActive: true,
-    onNativeAction: ({ action, selection }) => {
-      if (action === 'copy') {
-        const text = getSelectedTextWithinRoot(selection, logsContentRef.current);
-        if (!text) {
-          return false;
-        }
-        void navigator.clipboard.writeText(text).catch(() => {
-          /* ignore clipboard failures */
-        });
-        return true;
-      }
-      if (action === 'selectAll') {
-        return selectAllTextWithinRoot(selection, logsContentRef.current);
-      }
-      return false;
-    },
+  const handleCopyLogs = useLogCopyAction({ text: displayedText, dispatch, source: 'NodeLogsTab' });
+  useLogSelectionCopy({ rootRef: logsContentRef, active: isActive, source: 'NodeLogsTab' });
+  useLogKeyboardShortcuts({
+    isActive,
+    options,
+    hasAnsiLogEntries,
+    hasCopyableContent,
+    canParseLogs,
+    dispatch,
+    copyLogs: handleCopyLogs,
+    filterInputRef,
+    logsContentRef,
   });
 
   const renderMessageContent = useLogMessageRenderer({
@@ -997,31 +743,12 @@ const NodeLogsTab = ({
     return <NodeLogsAvailability availability={availability} hasSources={sources.length > 0} />;
   }
 
-  const copyIconFeedback = getCopyIconFeedback(copyFeedback);
-  const iconItems = buildNodeLogIconItems({
-    highlightMatches,
-    inverseMatches,
-    caseSensitiveMatches,
-    regexMatches,
-    autoRefresh,
-    wrapText,
+  const iconItems = buildLogToolbarItems({
+    options,
+    dispatch,
     hasAnsiLogEntries,
-    showAnsiColors,
     canParseLogs,
-    displayMode,
-    isParsedView,
     hasCopyableContent,
-    copyIconFeedback,
-    toggleHighlightMatches: () => setHighlightMatches((value) => (inverseMatches ? false : !value)),
-    toggleInverseMatches: () => setInverseMatches((value) => !value),
-    toggleCaseSensitiveMatches: () =>
-      setCaseSensitiveMatches((value) => (regexMatches ? false : !value)),
-    toggleRegexMatches: () => setRegexMatches((value) => !value),
-    toggleAutoRefresh: () => setAutoRefresh((value) => !value),
-    toggleWrapText: () => setWrapText((value) => !value),
-    toggleAnsiColors: () => setShowAnsiColors((value) => !value),
-    togglePrettyJson: () => updateDisplayMode(displayMode === 'pretty' ? 'raw' : 'pretty'),
-    toggleParsedJson: () => updateDisplayMode(displayMode === 'parsed' ? 'raw' : 'parsed'),
     copyLogs: handleCopyLogs,
   });
 
@@ -1050,10 +777,13 @@ const NodeLogsTab = ({
 
             <div className="logs-viewer-control-group logs-viewer-filter-group">
               <input
+                ref={filterInputRef}
                 className="logs-viewer-text-filter"
                 type="text"
                 value={textFilter}
-                onChange={(event) => setTextFilter(event.target.value)}
+                onChange={(event) =>
+                  dispatch({ type: 'SET_TEXT_FILTER', payload: event.target.value })
+                }
                 placeholder="Filter logs..."
                 aria-label="Filter node logs"
               />
@@ -1061,7 +791,7 @@ const NodeLogsTab = ({
                 <button
                   type="button"
                   className="logs-viewer-filter-clear"
-                  onClick={() => setTextFilter('')}
+                  onClick={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
                   title="Clear filter"
                   aria-label="Clear filter"
                 >

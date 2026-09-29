@@ -28,6 +28,26 @@ export enum IssueState {
 };
 
 /**
+ * LimitScope says which target limit hid containers.
+ */
+export enum LimitScope {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    /**
+     * LimitPerTab is the per-scope (per-tab) target limit.
+     */
+    LimitPerTab = "perTab",
+
+    /**
+     * LimitGlobal is the limit shared by every open log stream.
+     */
+    LimitGlobal = "global",
+};
+
+/**
  * TargetIssue describes one container whose logs could not be read.
  */
 export interface TargetIssue {
@@ -38,3 +58,36 @@ export interface TargetIssue {
     "state": IssueState;
     "reason": string;
 }
+
+/**
+ * Warning is a typed notice about logs the viewer is not showing. Scope,
+ * Hidden and Limit describe a target limit; Count is the number of dropped
+ * entries.
+ */
+export interface Warning {
+    "kind": WarningKind;
+    "scope"?: LimitScope;
+    "hidden"?: number;
+    "limit"?: number;
+    "count"?: number;
+}
+
+/**
+ * WarningKind names a typed notice about logs the viewer is not showing.
+ */
+export enum WarningKind {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    /**
+     * WarningTargetLimit means a target limit hid some containers.
+     */
+    WarningTargetLimit = "targetLimit",
+
+    /**
+     * WarningDropped means entries were lost because the client fell behind.
+     */
+    WarningDropped = "dropped",
+};

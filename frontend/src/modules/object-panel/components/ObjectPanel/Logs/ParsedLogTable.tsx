@@ -3,7 +3,7 @@ import GridTable, {
   type GridColumnDefinition,
 } from '@shared/components/tables/GridTable';
 import { useCallback } from 'react';
-import type { ParsedLogEntry } from './logViewerReducer';
+import type { ParsedLogEntry } from './logOptionsReducer';
 import { getParsedLogRowKey } from './parsedLogUtils';
 
 interface ParsedLogTableProps {

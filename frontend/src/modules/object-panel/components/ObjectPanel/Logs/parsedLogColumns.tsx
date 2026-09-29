@@ -9,7 +9,7 @@
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildCsv } from './logExport';
-import type { ParsedLogEntry } from './logViewerReducer';
+import type { ParsedLogEntry } from './logOptionsReducer';
 import { formatParsedValue } from './parsedLogUtils';
 
 // Each log source supplies its value policy; visible column order and CSV escaping are shared.

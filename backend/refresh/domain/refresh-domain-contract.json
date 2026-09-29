@@ -521,9 +521,9 @@
       "scopeContract": {
         "kind": "log-stream-selector",
         "clusterPrefix": "required",
-        "parser": "backend/refresh/containerlogsstream/handler.go:parseOptions",
+        "parser": "backend/refresh/containerlogsstream/handler.go:parseRequest",
         "frontendBuilder": "frontend/src/modules/object-panel/objectPanelRef.ts:getObjectPanelScopes",
-        "acceptedEncodings": ["<namespace>:<group>/<version>:<kind>:<name>?container=<container>&tail=<n>"]
+        "acceptedEncodings": ["<namespace>:<group>/<version>:<kind>:<name>"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/containerlogsstream",
@@ -1132,6 +1132,7 @@
         "refresherName": "container-logs",
         "orchestrator": "container-logs-stream",
         "registrationOrder": 11,
+        "scheduled": false,
         "diagnosticsStream": "container-logs",
         "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 }
       }

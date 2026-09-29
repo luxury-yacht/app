@@ -95,7 +95,7 @@ func TestMatchNoneTailAndStreamDoNotTouchKubernetes(t *testing.T) {
 			ctx,
 
 			initial.pods,
-			initial.watch, containerLogRunConfig{opts: opts, limiterSession: nil, initialWarnings: initial.warnings, sink: testPending(), warningsCh: make(chan []string), errCh: make(chan error)})
+			initial.watch, containerLogRunConfig{opts: opts, limiterSession: nil, initialWarnings: initial.warnings, sink: testPending(), warningsCh: make(chan []containerlogs.Warning)})
 
 	}()
 	cancel()
@@ -163,7 +163,7 @@ func TestStreamerRunCancellationBeforeAndAfterStartup(t *testing.T) {
 		cancel()
 		done := make(chan struct{})
 		go func() {
-			streamer.run(ctx, nil, nil, containerLogRunConfig{opts: Options{MatchNone: true}, limiterSession: nil, initialWarnings: nil, sink: testPending(), warningsCh: nil, errCh: nil})
+			streamer.run(ctx, nil, nil, containerLogRunConfig{opts: Options{MatchNone: true}, limiterSession: nil, initialWarnings: nil, sink: testPending()})
 			close(done)
 		}()
 		select {
@@ -177,7 +177,7 @@ func TestStreamerRunCancellationBeforeAndAfterStartup(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
 		go func() {
-			streamer.run(ctx, nil, nil, containerLogRunConfig{opts: Options{Kind: "pod"}, limiterSession: nil, initialWarnings: nil, sink: testPending(), warningsCh: nil, errCh: nil})
+			streamer.run(ctx, nil, nil, containerLogRunConfig{opts: Options{Kind: "pod"}, limiterSession: nil, initialWarnings: nil, sink: testPending()})
 			close(done)
 		}()
 		cancel()
