@@ -150,7 +150,7 @@ func TestPodContainersSuccess(t *testing.T) {
 
 	containers, err := service.PodContainers(context.Background(), "default", "demo")
 	require.NoError(t, err)
-	require.Equal(t, []string{"init (init)", "app"}, containers)
+	require.Equal(t, []types.PodContainer{{Name: "init", IsInit: true}, {Name: "app"}}, containers)
 }
 
 func TestPodContainersRequiresTargetIdentity(t *testing.T) {
@@ -184,10 +184,12 @@ func TestPodContainersIncludesEphemeral(t *testing.T) {
 
 	containers, err := service.PodContainers(context.Background(), "default", "demo")
 	require.NoError(t, err)
-	require.Equal(t, []string{"app", "debug-abc (debug)"}, containers)
+	require.Equal(t, []types.PodContainer{{Name: "app"}, {Name: "debug-abc", IsEphemeral: true}}, containers)
 }
 
-func TestContainerLogsScopeContainersWorkloadReturnsUniqueDisplayNames(t *testing.T) {
+// A workload's pods may name containers alike; each name and kind is listed
+// once, and an init container stays distinct from a regular one of the same name.
+func TestContainerLogsScopeContainersWorkloadReturnsUniqueContainers(t *testing.T) {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
 		Spec: appsv1.DeploymentSpec{
@@ -204,7 +206,7 @@ func TestContainerLogsScopeContainersWorkloadReturnsUniqueDisplayNames(t *testin
 	podTwo := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "web-2", Namespace: "default", Labels: map[string]string{"app": "web"}},
 		Spec: corev1.PodSpec{
-			InitContainers: []corev1.Container{{Name: "init-a"}},
+			InitContainers: []corev1.Container{{Name: "init-a"}, {Name: "sidecar"}},
 			Containers:     []corev1.Container{{Name: "app"}, {Name: "other"}},
 		},
 	}
@@ -216,7 +218,13 @@ func TestContainerLogsScopeContainersWorkloadReturnsUniqueDisplayNames(t *testin
 
 	containers, err := service.ContainerLogsScopeContainers(context.Background(), "cluster-a|default:apps/v1:deployment:web")
 	require.NoError(t, err)
-	require.Equal(t, []string{"app", "init-a (init)", "other", "sidecar"}, containers)
+	require.Equal(t, []types.PodContainer{
+		{Name: "app"},
+		{Name: "init-a", IsInit: true},
+		{Name: "other"},
+		{Name: "sidecar", IsInit: true},
+		{Name: "sidecar"},
+	}, containers)
 }
 
 // Previous logs resolve a single pod with a plain GET, so they keep working for

@@ -5,6 +5,7 @@
  * the container viewer's source fields.
  */
 
+import type { types } from '@core/backend-api/models';
 import {
   ALL_MULTISELECT_FILTER,
   type MultiSelectFilterSelection,
@@ -35,7 +36,7 @@ const TIMESTAMP_MODE_ORDER: LogTimestampMode[] = ['hidden', 'default', 'short', 
  */
 export interface LogViewerState extends LogOptionsState {
   // Containers of the scope (single pod view)
-  containers: string[];
+  containers: types.PodContainer[];
   // Pods and the pod/container source selection (workload view)
   availablePods: string[];
   selectedFilters: MultiSelectFilterSelection;
@@ -45,7 +46,7 @@ export interface LogViewerState extends LogOptionsState {
 
 export type LogViewerAction =
   | LogOptionsAction
-  | { type: 'SET_CONTAINERS'; payload: string[] }
+  | { type: 'SET_CONTAINERS'; payload: types.PodContainer[] }
   | { type: 'SET_AVAILABLE_PODS'; payload: string[] }
   | { type: 'SET_SELECTED_FILTERS'; payload: MultiSelectFilterSelection }
   | { type: 'CYCLE_TIMESTAMP_MODE' }

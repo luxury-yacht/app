@@ -77,16 +77,18 @@ describe('logViewerReducer view mode', () => {
 
 describe('logViewerReducer state transitions', () => {
   it('updates container and workload filter inventory', () => {
+    const api = { name: 'api', isInit: false, isEphemeral: false };
+    const initSidecar = { name: 'sidecar', isInit: true, isEphemeral: false };
     const selectedFilters = { mode: 'some' as const, values: ['pod:api'] };
     const actions = [
-      { type: 'SET_CONTAINERS' as const, payload: ['api', 'sidecar'] },
+      { type: 'SET_CONTAINERS' as const, payload: [api, initSidecar] },
       { type: 'SET_AVAILABLE_PODS' as const, payload: ['api-1'] },
       { type: 'SET_SELECTED_FILTERS' as const, payload: selectedFilters },
     ];
     const result = actions.reduce(logViewerReducer, base());
 
     expect(result).toMatchObject({
-      containers: ['api', 'sidecar'],
+      containers: [api, initSidecar],
       availablePods: ['api-1'],
       selectedFilters,
     });

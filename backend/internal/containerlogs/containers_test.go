@@ -1,6 +1,7 @@
 package containerlogs
 
 import (
+	"reflect"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -19,12 +20,9 @@ func TestEnumerateContainersIncludesInitRegularAndEphemeral(t *testing.T) {
 		},
 	}
 
-	containers := EnumerateContainers(pod, ScopeSelection{})
-	if len(containers) != 3 {
-		t.Fatalf("expected 3 containers, got %d", len(containers))
-	}
-	if got := []string{containers[0].DisplayName(), containers[1].DisplayName(), containers[2].DisplayName()}; got[0] != "init (init)" || got[1] != "app" || got[2] != "debug-abc (debug)" {
-		t.Fatalf("unexpected display order: %#v", got)
+	want := []ContainerRef{{Name: "init", IsInit: true}, {Name: "app"}, {Name: "debug-abc", IsEphemeral: true}}
+	if got := EnumerateContainers(pod, ScopeSelection{}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected containers: %#v", got)
 	}
 }
 

@@ -6,11 +6,11 @@ export interface RenderedLogRow {
   line: string;
 }
 
-interface RawLogViewerProps {
-  rows: RenderedLogRow[];
+interface RawLogViewerProps<R extends RenderedLogRow> {
+  rows: R[];
   scrollContainerRef: RefObject<HTMLElement | null>;
   wrapText: boolean;
-  renderRow?: (row: RenderedLogRow, index: number) => ReactNode;
+  renderRow?: (row: R, index: number) => ReactNode;
   virtualizationThreshold?: number;
   virtualizationOverscan?: number;
   estimateRowHeight?: number;
@@ -23,7 +23,7 @@ const DEFAULT_ESTIMATE_ROW_HEIGHT = 26;
 const DEFAULT_VERTICAL_PADDING_PX = 16;
 const getLogRowKey = (row: RenderedLogRow): string => row.key;
 
-const RawLogViewer = ({
+const RawLogViewer = <R extends RenderedLogRow>({
   rows,
   scrollContainerRef,
   wrapText,
@@ -32,7 +32,7 @@ const RawLogViewer = ({
   virtualizationOverscan = DEFAULT_VIRTUALIZATION_OVERSCAN,
   estimateRowHeight = DEFAULT_ESTIMATE_ROW_HEIGHT,
   verticalPaddingPx = DEFAULT_VERTICAL_PADDING_PX,
-}: RawLogViewerProps) => {
+}: RawLogViewerProps<R>) => {
   const { shouldVirtualize, visibleRows, virtualRange, totalHeight, offsetTop, measureRowRef } =
     useVirtualizedLogRows({
       rows,
@@ -44,7 +44,7 @@ const RawLogViewer = ({
     });
 
   const renderContent = useCallback(
-    (row: RenderedLogRow, index: number) =>
+    (row: R, index: number) =>
       renderRow ? renderRow(row, index) : <div className="log-viewer-line">{row.line}</div>,
     [renderRow]
   );

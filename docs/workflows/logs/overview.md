@@ -28,19 +28,22 @@ Container and Node Logs share one viewer shell under
 keeps its own source selection and transport.
 
 - `logOptionsReducer.ts`: search (text, highlight, invert, case, regex),
-  display (wrap, ANSI, raw/pretty/parsed), parsed rows, row expansion, copy
-  feedback and auto-refresh. The container reducer composes it with its source
+  display (wrap, ANSI, raw/pretty/parsed), row expansion, copy feedback and
+  auto-refresh. The container reducer composes it with its source
   fields. Highlighting is off while the filter is inverted; case sensitivity is
   off in regex mode.
 - `hooks/useLogPresentation.ts`: the deferred text filter (a viewer supplies the
   texts an entry matches; container search also matches pod and container
   names), JSON detection cached per line, the parsed JSON table (rows, columns
   and CSV; Container Logs passes pod, container and timestamp columns and its
-  CSV value formatter), display rows and copy text. Parsed rows are derived, not
-  stored. `useRawViewFallback` returns the JSON views to raw only when lines are
+  CSV value formatter), and the copy text. Parsed rows are derived, not stored.
+  Node Logs splits its plain lines into display rows with `splitDisplayRows`;
+  Container Logs builds its rows from the entries, so the pod, container and
+  timestamp a row shows come from the entry and never from its message text. `useRawViewFallback` returns the JSON views to raw only when lines are
   shown and none is JSON; an empty log keeps the view.
-- `logToolbar.tsx`: the icon bar. Timestamps, previous logs and settings are
-  optional features; Node Logs passes none of them.
+- `logToolbar.tsx`: the text filter box (`LogTextFilter`) and the icon bar.
+  Timestamps, previous logs and settings are optional icon bar features; Node
+  Logs passes none of them.
 - `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts. `T` (timestamps) and
   `V` (previous logs) exist only when the viewer passes those features.
 - `hooks/useLogCopyAction.ts`: the copy action and selection copy; clipboard
@@ -56,6 +59,8 @@ Container and Node Logs use
 and its
 [`useVirtualizedLogRows`](../../../frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useVirtualizedLogRows.ts)
 hook. DOM row refs and ResizeObserver callbacks supply measured heights.
+`RawLogViewer` is generic over its row type, so a viewer's `renderRow` receives
+the data it attached to each row.
 
 - Update the height cache immediately, but publish its React state notification
   at most once per animation frame. A measured row can expose more unmeasured

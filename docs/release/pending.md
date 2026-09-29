@@ -16,3 +16,4 @@
 - A very long log line no longer stops a container's live logs.
 - Log lines written in the same instant keep their order, and identical lines are no longer dropped.
 - The Logs tab now appears for pods whose logs you are allowed to read by name.
+- A container log line whose message starts with bracketed text, such as `[main/INFO]`, no longer shows the wrong pod or container name, and clicking the name filters to the line's own pod or container.

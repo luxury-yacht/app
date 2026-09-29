@@ -123,7 +123,8 @@ func (s *Service) fetchTargetLogs(ctx context.Context, target containerlogs.Sele
 	return targetLogs{entries: entries, err: err}
 }
 
-func (s *Service) PodContainers(ctx context.Context, namespace, podName string) ([]string, error) {
+// PodContainers returns the pod's init, regular and ephemeral containers, in that order.
+func (s *Service) PodContainers(ctx context.Context, namespace, podName string) ([]types.PodContainer, error) {
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
@@ -139,15 +140,32 @@ func (s *Service) PodContainers(ctx context.Context, namespace, podName string) 
 		return nil, fmt.Errorf("failed to get pod: %w", err)
 	}
 
-	var containers []string
+	var containers []types.PodContainer
 	for _, container := range containerlogs.EnumerateContainers(pod, containerlogs.ScopeSelection{}) {
-		containers = append(containers, container.DisplayName())
+		containers = append(containers, podContainer(container))
 	}
 	return containers, nil
 }
 
-// ContainerLogsScopeContainers returns the unique display names for all containers addressed by the scope.
-func (s *Service) ContainerLogsScopeContainers(ctx context.Context, scope string) ([]string, error) {
+func podContainer(ref containerlogs.ContainerRef) types.PodContainer {
+	return types.PodContainer{Name: ref.Name, IsInit: ref.IsInit, IsEphemeral: ref.IsEphemeral}
+}
+
+// podContainerKindOrder lists init, then regular, then ephemeral containers.
+func podContainerKindOrder(container types.PodContainer) int {
+	switch {
+	case container.IsInit:
+		return 0
+	case container.IsEphemeral:
+		return 2
+	default:
+		return 1
+	}
+}
+
+// ContainerLogsScopeContainers returns each container the scope's pods have,
+// once per name and kind, sorted by name.
+func (s *Service) ContainerLogsScopeContainers(ctx context.Context, scope string) ([]types.PodContainer, error) {
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
@@ -157,23 +175,24 @@ func (s *Service) ContainerLogsScopeContainers(ctx context.Context, scope string
 		return nil, err
 	}
 
-	seen := make(map[string]struct{})
-	containers := make([]string, 0)
+	seen := make(map[containerlogs.ContainerRef]struct{})
+	containers := make([]types.PodContainer, 0)
 	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
 		for _, container := range containerlogs.EnumerateContainers(pod, containerlogs.ScopeSelection{}) {
-			displayName := container.DisplayName()
-			if _, ok := seen[displayName]; ok {
+			if _, ok := seen[container]; ok {
 				continue
 			}
-			seen[displayName] = struct{}{}
-			containers = append(containers, displayName)
+			seen[container] = struct{}{}
+			containers = append(containers, podContainer(container))
 		}
 	}
 
-	sort.Strings(containers)
+	sort.Slice(containers, func(i, j int) bool {
+		if containers[i].Name != containers[j].Name {
+			return containers[i].Name < containers[j].Name
+		}
+		return podContainerKindOrder(containers[i]) < podContainerKindOrder(containers[j])
+	})
 	return containers, nil
 }
 

@@ -805,18 +805,12 @@ const ShellTab: React.FC<ShellTabProps> = ({
       if (lastTargetRef.current !== target) {
         return;
       }
-      const containerNames = result.status === 'executed' ? (result.data ?? []) : [];
-      const normalized = Array.from(
-        new Set(
-          containerNames
-            .map((name) => name.trim())
-            // init containers are not valid exec targets
-            .filter((name) => !name.endsWith(' (init)'))
-            .map((name) => (name.endsWith(' (debug)') ? name.replace(' (debug)', '') : name))
-            .filter((name) => name.length > 0)
-        )
-      );
-      setDiscoveredContainers(normalized);
+      const containers = result.status === 'executed' ? (result.data ?? []) : [];
+      // Init containers are not valid exec targets.
+      const execTargets = containers
+        .filter((podContainer) => !podContainer.isInit)
+        .map((podContainer) => podContainer.name);
+      setDiscoveredContainers(Array.from(new Set(execTargets)));
     } catch {
       // Keep existing fallback list from details/session if fetch fails.
     }

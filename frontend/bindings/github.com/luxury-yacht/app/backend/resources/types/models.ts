@@ -468,6 +468,16 @@ export interface NodeLogSource {
 export type ObjectRef = resourcemodel$0.ResourceRef;
 
 /**
+ * PodContainer names one of a pod's containers and says whether it is an init
+ * or an ephemeral (debug) container.
+ */
+export interface PodContainer {
+    "name": string;
+    "isInit": boolean;
+    "isEphemeral": boolean;
+}
+
+/**
  * PodDetailInfo represents comprehensive pod information for the object panel
  */
 export interface PodDetailInfo {

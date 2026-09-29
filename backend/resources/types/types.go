@@ -158,6 +158,14 @@ type ContainerLogsEntry struct {
 	IsEphemeral bool   `json:"isEphemeral,omitempty"` // Whether this is from an ephemeral/debug container
 }
 
+// PodContainer names one of a pod's containers and says whether it is an init
+// or an ephemeral (debug) container.
+type PodContainer struct {
+	Name        string `json:"name"`
+	IsInit      bool   `json:"isInit"`
+	IsEphemeral bool   `json:"isEphemeral"`
+}
+
 // ContainerLogsFetchRequest represents parameters for fetching logs
 type ContainerLogsFetchRequest struct {
 	Scope           string   `json:"scope,omitempty"`

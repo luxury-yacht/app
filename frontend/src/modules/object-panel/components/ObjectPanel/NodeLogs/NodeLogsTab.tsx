@@ -20,7 +20,7 @@ import {
 } from '../Logs/logOptionsReducer';
 import { findLogOverlap } from '../Logs/logOverlap';
 import { buildLogSearchRegex } from '../Logs/logSearch';
-import { buildLogToolbarItems } from '../Logs/logToolbar';
+import { buildLogToolbarItems, LogTextFilter } from '../Logs/logToolbar';
 import {
   getLogViewerScrollPosition,
   setLogViewerScrollPosition,
@@ -748,30 +748,12 @@ const NodeLogsTab = ({
               />
             </div>
 
-            <div className="logs-viewer-control-group logs-viewer-filter-group">
-              <input
-                ref={filterInputRef}
-                className="logs-viewer-text-filter"
-                type="text"
-                value={textFilter}
-                onChange={(event) =>
-                  dispatch({ type: 'SET_TEXT_FILTER', payload: event.target.value })
-                }
-                placeholder="Filter logs..."
-                aria-label="Filter node logs"
-              />
-              {!!textFilter && (
-                <button
-                  type="button"
-                  className="logs-viewer-filter-clear"
-                  onClick={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
-                  title="Clear filter"
-                  aria-label="Clear filter"
-                >
-                  ×
-                </button>
-              )}
-            </div>
+            <LogTextFilter
+              inputRef={filterInputRef}
+              value={textFilter}
+              dispatch={dispatch}
+              ariaLabel="Filter node logs"
+            />
 
             <IconBar items={iconItems} />
 

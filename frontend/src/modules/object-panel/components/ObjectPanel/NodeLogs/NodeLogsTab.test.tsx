@@ -329,6 +329,34 @@ describe('NodeLogsTab', () => {
     );
   });
 
+  it('clears the text filter from the filter box and shows every line again', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'info boot complete\nerror failed to reconcile',
+      },
+    });
+
+    await renderTab();
+    await selectSource('kubelet');
+    await setFilterValue('error');
+    const clearButton = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Clear filter"]'),
+      'clear filter button'
+    );
+    await act(async () => clearButton.click());
+
+    expect(
+      container.querySelector<HTMLInputElement>('input[aria-label="Filter node logs"]')?.value
+    ).toBe('');
+    expect(container.querySelector('.logs-viewer-text')?.textContent).toBe(
+      'info boot completeerror failed to reconcile'
+    );
+    expect(container.querySelector('button[aria-label="Clear filter"]')).toBeNull();
+  });
+
   it('can invert the filter from the icon bar', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       status: 'executed',

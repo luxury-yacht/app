@@ -290,6 +290,12 @@ vi.mock('@shared/components/Tooltip', () => ({
 const testClusterId = 'alpha:ctx';
 const buildContainerLogsScope = (scope: string) => buildClusterScope(testClusterId, scope);
 const defaultScope = buildContainerLogsScope('team-a:apps/v1:deployment:api');
+// A container in the list the backend returns for a log scope.
+const scopeContainer = (name: string, kind: 'regular' | 'init' | 'debug' = 'regular') => ({
+  name,
+  isInit: kind === 'init',
+  isEphemeral: kind === 'debug',
+});
 let activeScope = defaultScope;
 
 const seedLogSnapshot = (
@@ -405,7 +411,9 @@ describe('LogViewer active pod synchronisation', () => {
     contextMocks.setEnabled.mockClear();
     (FetchContainerLogs as unknown as ViMock).mockReset?.();
     (GetContainerLogsScopeContainers as unknown as ViMock).mockReset?.();
-    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
+      scopeContainer('app'),
+    ]);
     resetAppPreferencesCacheForTesting();
     resetLogViewerPrefsCacheForTesting();
     resetContainerLogsStreamScopeParamsCacheForTesting();
@@ -1286,7 +1294,10 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('colors API timestamps and container metadata only when showing all containers', async () => {
-    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app', 'sidecar']);
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
+      scopeContainer('app'),
+      scopeContainer('sidecar'),
+    ]);
     seedLogSnapshot(
       [
         {
@@ -1805,7 +1816,9 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('renders ANSI-colored segments by default and strips them when disabled', async () => {
-    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
+      scopeContainer('app'),
+    ]);
     seedLogSnapshot(
       [
         {
@@ -2025,7 +2038,9 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('auto-selects the only container for single container logs', async () => {
-    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
+      scopeContainer('app'),
+    ]);
     seedLogSnapshot(
       [
         {
@@ -2055,8 +2070,8 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('filters single container logs by selected container', async () => {
     (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
-      'app',
-      'sidecar (init)',
+      scopeContainer('app'),
+      scopeContainer('sidecar', 'init'),
     ]);
     seedLogSnapshot(
       [
@@ -2136,9 +2151,9 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('filters workload logs locally from the multi-select pod/container dropdown', async () => {
     (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
-      'app',
-      'init-db (init)',
-      'sidecar',
+      scopeContainer('app'),
+      scopeContainer('init-db', 'init'),
+      scopeContainer('sidecar'),
     ]);
     setLogViewerPrefs('obj:test:deployment:team-a:api', {
       selectedFilters: [],
@@ -2305,7 +2320,10 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('filters single-container logs when container metadata is clicked', async () => {
     const panelId = 'obj:test:pod:team-a:api';
-    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app', 'sidecar']);
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
+      scopeContainer('app'),
+      scopeContainer('sidecar'),
+    ]);
 
     seedLogSnapshot(
       [
@@ -2354,6 +2372,147 @@ describe('LogViewer active pod synchronisation', () => {
     });
     expect(container.textContent).toContain('sidecar log line');
     expect(container.textContent).not.toContain('main log line');
+  });
+
+  // A message that starts with brackets is message text, never the line's pod,
+  // container or timestamp.
+  it('keeps workload metadata links on the entry when a message starts with [a/b]', async () => {
+    const panelId = 'obj:test:deployment:team-a:api';
+    setLogViewerPrefs(panelId, {
+      selectedFilters: [],
+      autoRefresh: true,
+      timestampMode: 'hidden',
+      showTimestamps: false,
+      wrapText: true,
+      textFilter: '',
+      highlightMatches: false,
+      inverseMatches: false,
+      caseSensitiveMatches: false,
+      regexMatches: false,
+      displayMode: 'raw',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousContainerLogs: false,
+    });
+    seedLogSnapshot(
+      [
+        {
+          pod: 'web-1',
+          container: 'app',
+          line: '[main/INFO] Server started',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+      ],
+      defaultScope
+    );
+
+    await renderViewer({ activePodNames: ['web-1'], panelId });
+
+    const podButton = await waitForElement(() =>
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show only logs from pod web-1"]'
+      )
+    );
+    expect(container.querySelector('button[aria-label="Show only logs from pod main"]')).toBeNull();
+    expect(container.querySelector('.log-viewer-line')?.textContent).toBe(
+      '[web-1/app] [main/INFO] Server started'
+    );
+    await act(async () => podButton.click());
+    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
+      mode: 'some',
+      values: ['pod:web-1'],
+    });
+  });
+
+  it('keeps pod container links on the entry when an untimestamped message starts with [x]', async () => {
+    const panelId = 'obj:test:pod:team-a:api';
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
+      scopeContainer('app'),
+      scopeContainer('sidecar'),
+    ]);
+    seedLogSnapshot(
+      [
+        { pod: 'api', container: 'app', line: '[INFO] started', timestamp: '', isInit: false },
+        {
+          pod: 'api',
+          container: 'sidecar',
+          line: 'sidecar ready',
+          timestamp: '2024-05-01T12:00:01Z',
+          isInit: false,
+        },
+      ],
+      buildContainerLogsScope('team-a:/v1:pod:api')
+    );
+
+    await renderViewer({ resourceKind: 'Pod', activePodNames: ['api'], panelId });
+    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
+
+    expect(
+      container.querySelector('button[aria-label="Show only logs from container INFO"]')
+    ).toBeNull();
+    const appButton = await waitForElement(() =>
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show only logs from container app"]'
+      )
+    );
+    await act(async () => appButton.click());
+    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
+      mode: 'some',
+      values: ['container:app'],
+    });
+    expect(container.textContent).toContain('[INFO] started');
+    expect(container.textContent).not.toContain('sidecar ready');
+  });
+
+  it('shows metadata only on the first row of a pretty JSON entry and copies it once', async () => {
+    const panelId = 'obj:test:deployment:team-a:api';
+    setLogViewerPrefs(panelId, {
+      selectedFilters: [],
+      autoRefresh: true,
+      timestampMode: 'hidden',
+      showTimestamps: false,
+      wrapText: true,
+      textFilter: '',
+      highlightMatches: false,
+      inverseMatches: false,
+      caseSensitiveMatches: false,
+      regexMatches: false,
+      displayMode: 'pretty',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousContainerLogs: false,
+    });
+    seedLogSnapshot(
+      [
+        {
+          pod: 'web-1',
+          container: 'app',
+          line: '{"msg":"[a/b] ready"}',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+      ],
+      defaultScope
+    );
+    await renderViewer({ activePodNames: ['web-1'], panelId });
+
+    const rows = Array.from(container.querySelectorAll('.log-viewer-line')).map(
+      (row) => row.textContent
+    );
+    expect(rows).toEqual(['[web-1/app] {', '  "msg": "[a/b] ready"', '}']);
+    expect(
+      container.querySelectorAll('button[aria-label^="Show only logs from pod"]')
+    ).toHaveLength(1);
+    const copyButton = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Copy to clipboard"]'),
+      'copy button'
+    );
+    await act(async () => {
+      copyButton.click();
+      await Promise.resolve();
+    });
+    expect(writeTextMock).toHaveBeenCalledWith('[web-1/app] {\n  "msg": "[a/b] ready"\n}');
   });
 
   it('excludes parsed metadata from Tab while retaining its filter actions', async () => {
@@ -2410,8 +2569,8 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('labels all-containers mode to indicate debug containers are included', async () => {
     (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
-      'app',
-      'debug-abc (debug)',
+      scopeContainer('app'),
+      scopeContainer('debug-abc', 'debug'),
     ]);
     seedLogSnapshot(
       [
@@ -2453,9 +2612,9 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('shows workload containers even when they have not produced log lines yet', async () => {
     (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
-      'aws-node',
-      'aws-eks-nodeagent',
-      'aws-vpc-cni-init (init)',
+      scopeContainer('aws-node'),
+      scopeContainer('aws-eks-nodeagent'),
+      scopeContainer('aws-vpc-cni-init', 'init'),
     ]);
     seedLogSnapshot(
       [
@@ -3159,9 +3318,55 @@ describe('LogViewer active pod synchronisation', () => {
     expect(getLogViewerPrefs(panelA)?.textFilter).toBe('a-only');
   });
 
+  it('clears the text filter from the filter box and shows every line again', async () => {
+    const panelId = 'obj:test:deployment:team-a:api';
+    setLogViewerPrefs(panelId, {
+      selectedFilters: [],
+      autoRefresh: true,
+      timestampMode: 'hidden',
+      showTimestamps: false,
+      wrapText: true,
+      textFilter: 'error',
+      highlightMatches: false,
+      inverseMatches: false,
+      caseSensitiveMatches: false,
+      regexMatches: false,
+      displayMode: 'raw',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousContainerLogs: false,
+    });
+    seedLogSnapshot(
+      [
+        { pod: 'web-1', container: 'app', line: 'error one', timestamp: 't1', isInit: false },
+        { pod: 'web-1', container: 'app', line: 'info two', timestamp: 't2', isInit: false },
+      ],
+      defaultScope
+    );
+
+    await renderViewer({ activePodNames: ['web-1'], panelId });
+    expect(container.textContent).not.toContain('info two');
+
+    const clearButton = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Clear filter"]'),
+      'clear filter button'
+    );
+    await act(async () => clearButton.click());
+
+    expect(
+      container.querySelector<HTMLInputElement>('input[placeholder="Filter logs..."]')?.value
+    ).toBe('');
+    expect(getLogViewerPrefs(panelId)?.textFilter).toBe('');
+    expect(container.textContent).toContain('error one');
+    expect(container.textContent).toContain('info two');
+    expect(container.querySelector('button[aria-label="Clear filter"]')).toBeNull();
+  });
+
   it('shows active filter chips for the current filter state', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
-    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
+      scopeContainer('app'),
+    ]);
     setLogViewerPrefs(panelId, {
       selectedFilters: ['pod:web-1', 'container:app'],
       autoRefresh: true,

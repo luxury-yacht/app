@@ -230,7 +230,7 @@ export function GetClusterWorkspaceStateForWindow(windowID: string): $Cancellabl
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetClusterWorkspaceStateForWindow", windowID);
 }
 
-export function GetContainerLogsScopeContainers(clusterID: string, scope: string): $CancellablePromise<string[] | null> {
+export function GetContainerLogsScopeContainers(clusterID: string, scope: string): $CancellablePromise<$models.PodContainer[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetContainerLogsScopeContainers", clusterID, scope);
 }
 
@@ -266,7 +266,7 @@ export function GetPanelWorkspace(windowName: string, clusterID: string): $Cance
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetPanelWorkspace", windowName, clusterID);
 }
 
-export function GetPodContainers(clusterID: string, $namespace: string, podName: string): $CancellablePromise<string[] | null> {
+export function GetPodContainers(clusterID: string, $namespace: string, podName: string): $CancellablePromise<$models.PodContainer[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetPodContainers", clusterID, $namespace, podName);
 }
 

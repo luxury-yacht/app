@@ -1,8 +1,6 @@
 package containerlogs
 
 import (
-	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -10,17 +8,6 @@ type ContainerRef struct {
 	Name        string
 	IsInit      bool
 	IsEphemeral bool
-}
-
-func (c ContainerRef) DisplayName() string {
-	switch {
-	case c.IsInit:
-		return fmt.Sprintf("%s (init)", c.Name)
-	case c.IsEphemeral:
-		return fmt.Sprintf("%s (debug)", c.Name)
-	default:
-		return c.Name
-	}
 }
 
 func (c ContainerRef) SelectionValue() string {

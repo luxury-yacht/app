@@ -211,6 +211,13 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
   ),
 }));
 
+// A container in the list the backend returns for a pod.
+const podContainer = (name: string, kind: { isInit?: boolean; isEphemeral?: boolean } = {}) => ({
+  name,
+  isInit: kind.isInit ?? false,
+  isEphemeral: kind.isEphemeral ?? false,
+});
+
 const flushAsync = () => act(() => Promise.resolve());
 const getLatestTerminal = () =>
   terminalMocks.instances.length > 0
@@ -742,21 +749,23 @@ describe('ShellTab', () => {
   });
 
   it('ignores container discovery from the previous cluster', async () => {
-    let finishDiscovery!: (containers: string[]) => void;
+    let finishDiscovery!: (containers: ReturnType<typeof podContainer>[]) => void;
     wailsMocks.GetPodContainers.mockReturnValueOnce(
       new Promise((resolve) => {
         finishDiscovery = resolve;
       })
-    ).mockResolvedValue(['beta-container']);
+    ).mockResolvedValue([podContainer('beta-container')]);
     await renderShellTab();
     await renderShellTab({ clusterId: 'beta:ctx' });
-    await act(async () => finishDiscovery(['alpha-container']));
+    await act(async () => finishDiscovery([podContainer('alpha-container')]));
     const selector = container.querySelector('select') as HTMLSelectElement;
     expect(Array.from(selector.options, (option) => option.value)).toEqual(['beta-container']);
   });
 
   it('clears discovered containers and their selection when the cluster changes', async () => {
-    wailsMocks.GetPodContainers.mockResolvedValueOnce(['alpha-container']).mockResolvedValue([]);
+    wailsMocks.GetPodContainers.mockResolvedValueOnce([
+      podContainer('alpha-container'),
+    ]).mockResolvedValue([]);
     await renderShellTab();
     await renderShellTab({ clusterId: 'beta:ctx', availableContainers: ['beta-container'] });
     clickConnectButton();
@@ -1221,7 +1230,11 @@ describe('ShellTab', () => {
   });
 
   it('includes debug containers in shell dropdown from backend container discovery', async () => {
-    wailsMocks.GetPodContainers.mockResolvedValue(['init-a (init)', 'app', 'debug-abc (debug)']);
+    wailsMocks.GetPodContainers.mockResolvedValue([
+      podContainer('init-a', { isInit: true }),
+      podContainer('app'),
+      podContainer('debug-abc', { isEphemeral: true }),
+    ]);
     await renderShellTab();
     await flushAsync();
 

@@ -7,6 +7,7 @@
  * preference persistence.
  */
 
+import type { types } from '@core/backend-api/models';
 import ActiveFilterChips, { type ActiveFilterChip } from '@shared/components/ActiveFilterChips';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
@@ -31,7 +32,8 @@ import { useContainerLogsStream } from './hooks/useContainerLogsStream';
 import { useLogCopyAction, useLogSelectionCopy } from './hooks/useLogCopyAction';
 import { useLogFiltering } from './hooks/useLogFiltering';
 import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
-import { logCopyText, splitDisplayRows, useRawViewFallback } from './hooks/useLogPresentation';
+import { logCopyText, useRawViewFallback } from './hooks/useLogPresentation';
+import { LogMetadataButton } from './LogMetadataButton';
 import './LogViewer.css';
 import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
 import { eventBus } from '@/core/events';
@@ -88,10 +90,9 @@ import {
   logFilterSelectionToDropdownValues,
   pruneLogFilterSelectionToOptions,
 } from './logFilterSelection';
-import { parseBracketedLogPrefix } from './logLineMetadata';
 import type { ParsedLogEntry } from './logOptionsReducer';
 import { buildLogSearchRegex, isValidRegexPattern } from './logSearch';
-import { buildLogToolbarItems } from './logToolbar';
+import { buildLogToolbarItems, LogTextFilter } from './logToolbar';
 import {
   getLogViewerPrefs,
   getLogViewerScrollPosition,
@@ -225,33 +226,11 @@ const CONTAINER_LABEL_SUFFIX: Record<LogContainerKind, string> = {
 const formatContainerLabel = (container: string, kind: LogContainerKind): string =>
   `${container}${CONTAINER_LABEL_SUFFIX[kind]}`;
 
-const parseContainerLabel = (label: string): { name: string; kind: LogContainerKind } => {
-  if (label.endsWith(':init')) {
-    return {
-      name: label.slice(0, -':init'.length),
-      kind: 'init',
-    };
-  }
-  if (label.endsWith(' (debug)')) {
-    return {
-      name: label.slice(0, -' (debug)'.length),
-      kind: 'ephemeral',
-    };
-  }
-  return { name: label, kind: 'regular' };
-};
-
 const POD_FILTER_PREFIX = 'pod:';
 const INIT_FILTER_PREFIX = 'init:';
 const CONTAINER_FILTER_PREFIX = 'container:';
 const DEBUG_FILTER_PREFIX = 'debug:';
-const WORKLOAD_RAW_LOG_PREFIX_PATTERN = /^(?:(\[[^\]]+\]\s*))?\[([^/]+)\/([^\]]+)\]\s*(.*)/;
 const EMPTY_CONTAINER_LOG_PLACEHOLDER = '[container emitted an empty log]';
-
-const isInitContainerDisplayName = (container: string): boolean => container.endsWith(' (init)');
-const isDebugContainerDisplayName = (container: string): boolean => container.endsWith(' (debug)');
-const getActualContainerName = (displayName: string): string =>
-  displayName.replace(' (init)', '').replace(' (debug)', '');
 
 const toPodFilterValue = (pod: string): string => `${POD_FILTER_PREFIX}${pod}`;
 const toInitContainerFilterValue = (container: string): string =>
@@ -269,6 +248,21 @@ const CONTAINER_FILTER_VALUE: Record<LogContainerKind, (container: string) => st
 
 const toContainerFilterValueForKind = (container: string, kind: LogContainerKind): string =>
   CONTAINER_FILTER_VALUE[kind](container);
+
+// Init containers have their own group, so only debug containers are marked.
+const containerSelectorOptions = (
+  containers: types.PodContainer[],
+  kind: LogContainerKind,
+  group: string
+): DropdownOption[] =>
+  containers
+    .filter((container) => logContainerKind(container) === kind)
+    .map((container) => ({
+      value: toContainerFilterValueForKind(container.name, kind),
+      label: kind === 'ephemeral' ? `${container.name} (debug)` : container.name,
+      group,
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label));
 
 const formatSelectedFilterLabel = (
   filterValue: string,
@@ -480,205 +474,211 @@ const shouldDisplayPodContainerMetadata = (
   selectedContainerFilterCount !== 1 &&
   !(selectedContainerFilterCount === 0 && singlePodSelectableContainerCount === 1);
 
-const formatContainerLogDisplayLine = ({
-  entry,
-  displayMode,
-  showAnsiColors,
-  timestampMode,
-  apiTimestampFormat,
-  apiTimestampUseLocalTimeZone,
-  isWorkload,
-  showContainerMetadata,
-}: {
-  entry: ContainerLogsEntry;
+type ContainerLogFormatOptions = {
   displayMode: LogDisplayMode;
   showAnsiColors: boolean;
-  timestampMode: 'hidden' | 'default' | 'short' | 'localized';
+  timestampMode: LogTimestampMode;
   apiTimestampFormat: string;
   apiTimestampUseLocalTimeZone: boolean;
   isWorkload: boolean;
   showContainerMetadata: boolean;
-}): string => {
-  const lineContent = formatRawOrPrettyJsonLine(entry.line, displayMode, showAnsiColors);
-  const displayContent =
-    lineContent.trim().length > 0 ? lineContent : EMPTY_CONTAINER_LOG_PLACEHOLDER;
-  const timestamp = formatTimestampForMode(
-    entry.timestamp ?? '',
-    timestampMode,
-    apiTimestampFormat,
-    apiTimestampUseLocalTimeZone
-  );
-  const timestampPrefix = timestamp ? `[${timestamp}] ` : '';
-  if (isWorkload) {
-    const containerLabel = formatContainerLabel(entry.container, logContainerKind(entry));
-    return `${timestampPrefix}[${entry.pod}/${containerLabel}] ${displayContent}`;
-  }
-  if (showContainerMetadata) {
-    const containerLabel = formatContainerLabel(entry.container, logContainerKind(entry));
-    return `${timestampPrefix}[${containerLabel}] ${displayContent}`;
-  }
-  return timestampPrefix + displayContent;
 };
 
-const buildContainerLogDisplayLines = ({
+/** Where a line came from; workload views also name the pod. */
+type ContainerLogSource = { pod: string | null; container: string; kind: LogContainerKind };
+
+type ContainerLogRowMetadata = { timestamp: string; source: ContainerLogSource | null };
+
+/**
+ * A raw-view row. An entry's first row carries the entry's metadata; the
+ * continuation rows of a pretty-printed JSON line carry none.
+ */
+interface ContainerLogRow extends RenderedLogRow {
+  metadata?: ContainerLogRowMetadata;
+}
+
+type ContainerLogDisplay = {
+  rows: ContainerLogRow[];
+  /** One line per entry, as the copy action writes it. */
+  copyLines: string[];
+};
+
+const NO_CONTAINER_LOG_DISPLAY: ContainerLogDisplay = { rows: [], copyLines: [] };
+
+const containerLogRowMetadata = (
+  entry: ContainerLogsEntry,
+  options: ContainerLogFormatOptions
+): ContainerLogRowMetadata => ({
+  timestamp: formatTimestampForMode(
+    entry.timestamp ?? '',
+    options.timestampMode,
+    options.apiTimestampFormat,
+    options.apiTimestampUseLocalTimeZone
+  ),
+  source:
+    options.isWorkload || options.showContainerMetadata
+      ? {
+          pod: options.isWorkload ? entry.pod : null,
+          container: entry.container,
+          kind: logContainerKind(entry),
+        }
+      : null,
+});
+
+const containerLogMessage = (
+  entry: ContainerLogsEntry,
+  options: ContainerLogFormatOptions
+): string => {
+  const content = formatRawOrPrettyJsonLine(
+    entry.line,
+    options.displayMode,
+    options.showAnsiColors
+  );
+  return content.trim().length > 0 ? content : EMPTY_CONTAINER_LOG_PLACEHOLDER;
+};
+
+const formatContainerLogSource = (source: ContainerLogSource): string => {
+  const label = formatContainerLabel(source.container, source.kind);
+  return source.pod === null ? label : `${source.pod}/${label}`;
+};
+
+// The copied line reads like the row: `[timestamp] [pod/container] message`.
+const formatContainerLogCopyLine = (
+  { timestamp, source }: ContainerLogRowMetadata,
+  message: string
+): string =>
+  [
+    timestamp ? `[${timestamp}]` : '',
+    source ? `[${formatContainerLogSource(source)}]` : '',
+    message,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+const buildContainerLogDisplay = ({
   entries,
-  isPendingLogs,
   emptyStateMessage,
-  ...formatOptions
-}: {
+  ...options
+}: ContainerLogFormatOptions & {
   entries: ContainerLogsEntry[];
-  isPendingLogs: boolean;
   emptyStateMessage: string;
-  displayMode: LogDisplayMode;
-  showAnsiColors: boolean;
-  timestampMode: 'hidden' | 'default' | 'short' | 'localized';
-  apiTimestampFormat: string;
-  apiTimestampUseLocalTimeZone: boolean;
-  isWorkload: boolean;
-  showContainerMetadata: boolean;
-}): string[] => {
+}): ContainerLogDisplay => {
   if (entries.length === 0) {
-    if (isPendingLogs) {
-      return [];
-    }
-    return emptyStateMessage ? [emptyStateMessage] : [];
+    // The empty-state message shows as the log's only line.
+    return emptyStateMessage
+      ? { rows: [{ key: 'empty', line: emptyStateMessage }], copyLines: [emptyStateMessage] }
+      : NO_CONTAINER_LOG_DISPLAY;
   }
-  return entries.map((entry) => formatContainerLogDisplayLine({ entry, ...formatOptions }));
+  const rows: ContainerLogRow[] = [];
+  const copyLines = entries.map((entry, index) => {
+    const metadata = containerLogRowMetadata(entry, options);
+    const message = containerLogMessage(entry, options);
+    const entryKey = entry._seq ?? `entry:${index}`;
+    message.split('\n').forEach((segment, segmentIndex) => {
+      rows.push({
+        key: `${entryKey}:${segmentIndex}`,
+        line: segment,
+        metadata: segmentIndex === 0 ? metadata : undefined,
+      });
+    });
+    return formatContainerLogCopyLine(metadata, message);
+  });
+  return { rows, copyLines };
 };
 
 type RenderLogMessage = (message: string, keyPrefix: string) => React.ReactNode;
 type SelectContainerFilter = (container: string, kind: LogContainerKind) => void;
 
-const selectContainerLabel = (label: string, selectContainer: SelectContainerFilter): void => {
-  const parsedContainerLabel = parseContainerLabel(label);
-  selectContainer(parsedContainerLabel.name, parsedContainerLabel.kind);
+// Workload views color a line's metadata with its pod's color.
+const podColorStyle = (podColor: string | undefined): React.CSSProperties | undefined =>
+  podColor === undefined ? undefined : ({ '--pod-color': podColor } as React.CSSProperties);
+
+const renderContainerLogSource = ({
+  source,
+  podColor,
+  selectPod,
+  selectContainer,
+}: {
+  source: ContainerLogSource;
+  podColor: string | undefined;
+  selectPod: (pod: string) => void;
+  selectContainer: SelectContainerFilter;
+}): React.ReactNode => {
+  const { pod } = source;
+  const label = formatContainerLabel(source.container, source.kind);
+  return (
+    <span
+      className={
+        pod === null ? 'log-viewer-metadata' : 'log-viewer-metadata log-viewer-metadata--bold'
+      }
+      style={podColorStyle(podColor)}
+    >
+      {'['}
+      {pod !== null && (
+        <>
+          <LogMetadataButton
+            subject="pod"
+            name={pod}
+            podColor={podColor}
+            onSelect={() => selectPod(pod)}
+          />
+          {'/'}
+        </>
+      )}
+      <LogMetadataButton
+        subject="container"
+        name={label}
+        podColor={podColor}
+        onSelect={() => selectContainer(source.container, source.kind)}
+      />
+      {']'}
+    </span>
+  );
 };
 
-const renderWorkloadRawLogRow = ({
+const renderContainerLogRow = ({
   row,
   podColors,
   selectPod,
   selectContainer,
   renderMessage,
 }: {
-  row: RenderedLogRow;
+  row: ContainerLogRow;
   podColors: Record<string, string>;
   selectPod: (pod: string) => void;
   selectContainer: SelectContainerFilter;
   renderMessage: RenderLogMessage;
-}): React.ReactNode | null => {
-  if (!row.line.includes('[') || !row.line.includes('/')) {
-    return null;
-  }
-  const match = WORKLOAD_RAW_LOG_PREFIX_PATTERN.exec(row.line);
-  if (!match) {
-    return null;
-  }
-  const [, timestamp = '', pod = '', container = '', logLine = ''] = match;
-  const podColor = podColors[pod] || podColors.__fallback__;
+}): React.ReactNode => {
+  const message = renderMessage(row.line, `line-${row.key}`);
+  const { timestamp = '', source = null } = row.metadata ?? {};
+  const pod = source?.pod ?? null;
+  const podColor = pod === null ? undefined : podColors[pod] || podColors.__fallback__;
   return (
     <div className="log-viewer-line">
       {!!timestamp && (
-        <span
-          className="log-viewer-metadata pod-color-text"
-          style={{ '--pod-color': podColor } as React.CSSProperties}
-        >
-          {timestamp}
-        </span>
-      )}
-      <span
-        className="log-viewer-metadata log-viewer-metadata--bold"
-        style={{ '--pod-color': podColor } as React.CSSProperties}
-      >
-        {'['}
-        <button
-          type="button"
-          className="log-viewer-metadata-button pod-color-text"
-          tabIndex={-1}
-          data-focus-trap-ignore="true"
-          style={{ '--pod-color': podColor } as React.CSSProperties}
-          onClick={() => selectPod(pod)}
-          title={`Show only logs from pod ${pod}`}
-          aria-label={`Show only logs from pod ${pod}`}
-        >
-          {pod}
-        </button>
-        {'/'}
-        <button
-          type="button"
-          className="log-viewer-metadata-button pod-color-text"
-          tabIndex={-1}
-          data-focus-trap-ignore="true"
-          style={{ '--pod-color': podColor } as React.CSSProperties}
-          onClick={() => selectContainerLabel(container, selectContainer)}
-          title={`Show only logs from container ${container}`}
-          aria-label={`Show only logs from container ${container}`}
-        >
-          {container}
-        </button>
-        {']'}
-      </span>
-      <span> {renderMessage(logLine, `workload-${row.key}`)}</span>
-    </div>
-  );
-};
-
-const renderPodRawLogRow = ({
-  row,
-  showTimestamps,
-  showContainerMetadata,
-  selectContainer,
-  renderMessage,
-}: {
-  row: RenderedLogRow;
-  showTimestamps: boolean;
-  showContainerMetadata: boolean;
-  selectContainer: SelectContainerFilter;
-  renderMessage: RenderLogMessage;
-}): React.ReactNode | null => {
-  let workingLine = row.line;
-  let timestampPrefix = '';
-  if (showTimestamps) {
-    const timestampMetadata = parseBracketedLogPrefix(row.line);
-    if (timestampMetadata) {
-      timestampPrefix = timestampMetadata.prefix;
-      workingLine = timestampMetadata.remainder;
-    }
-  }
-  const containerMetadata = parseBracketedLogPrefix(workingLine);
-  const hasContainerMetadata = Boolean(containerMetadata && showContainerMetadata);
-  if (!timestampPrefix && !hasContainerMetadata) {
-    return null;
-  }
-  const containerLabel = hasContainerMetadata && containerMetadata ? containerMetadata.label : '';
-  const remainder =
-    hasContainerMetadata && containerMetadata ? containerMetadata.remainder : workingLine;
-  return (
-    <div className="log-viewer-line">
-      {!!timestampPrefix && <span className="log-viewer-metadata">{timestampPrefix}</span>}
-      {hasContainerMetadata && (
-        <span className="log-viewer-metadata">
-          {'['}
-          <button
-            type="button"
-            className="log-viewer-metadata-button"
-            tabIndex={-1}
-            data-focus-trap-ignore="true"
-            onClick={() => selectContainerLabel(containerLabel, selectContainer)}
-            title={`Show only logs from container ${containerLabel}`}
-            aria-label={`Show only logs from container ${containerLabel}`}
+        <>
+          <span
+            className={
+              podColor === undefined ? 'log-viewer-metadata' : 'log-viewer-metadata pod-color-text'
+            }
+            style={podColorStyle(podColor)}
           >
-            {containerLabel}
-          </button>
-          {']'}
-        </span>
+            [{timestamp}]
+          </span>{' '}
+        </>
       )}
-      <span> {renderMessage(remainder, `pod-${row.key}`)}</span>
+      {source ? (
+        <>{renderContainerLogSource({ source, podColor, selectPod, selectContainer })} </>
+      ) : null}
+      {message}
     </div>
   );
 };
 
-const requestLogScopeContainers = async (clusterId: string, scope: string): Promise<string[]> => {
+const requestLogScopeContainers = async (
+  clusterId: string,
+  scope: string
+): Promise<types.PodContainer[]> => {
   const result = await requestData({
     resource: 'log-scope-containers',
     reason: 'startup',
@@ -696,24 +696,20 @@ const renderLogViewerContent = ({
   tableColumns,
   expandedRows,
   onToggleParsedRow,
-  displayLogs,
-  renderedDisplayRows,
+  displayRows,
   logsContentRef,
   wrapText,
   renderRawLogRow,
-  emptyStateMessage,
 }: {
   isParsedView: boolean;
   parsedLogs: ParsedLogEntry[];
   tableColumns: GridColumnDefinition<ParsedLogEntry>[];
   expandedRows: Set<string>;
   onToggleParsedRow: (rowKey: string) => void;
-  displayLogs: string;
-  renderedDisplayRows: RenderedLogRow[];
+  displayRows: ContainerLogRow[];
   logsContentRef: React.RefObject<HTMLElement | null>;
   wrapText: boolean;
-  renderRawLogRow: (row: RenderedLogRow) => React.ReactNode;
-  emptyStateMessage: string;
+  renderRawLogRow: (row: ContainerLogRow) => React.ReactNode;
 }): React.ReactNode => {
   if (isParsedView) {
     return (
@@ -725,17 +721,17 @@ const renderLogViewerContent = ({
       />
     );
   }
-  if (displayLogs) {
-    return (
-      <RawLogViewer
-        rows={renderedDisplayRows}
-        scrollContainerRef={logsContentRef}
-        wrapText={wrapText}
-        renderRow={renderRawLogRow}
-      />
-    );
+  if (displayRows.length === 0) {
+    return null;
   }
-  return emptyStateMessage;
+  return (
+    <RawLogViewer
+      rows={displayRows}
+      scrollContainerRef={logsContentRef}
+      wrapText={wrapText}
+      renderRow={renderRawLogRow}
+    />
+  );
 };
 
 const renderLogViewerBlockingState = ({
@@ -841,30 +837,12 @@ const LogViewerControls = ({
           />
         </div>
       )}
-      <div className="logs-viewer-control-group logs-viewer-filter-group">
-        <div className="logs-viewer-filter-group">
-          <input
-            type="text"
-            ref={filterInputRef}
-            value={textFilter}
-            onChange={(event) => dispatch({ type: 'SET_TEXT_FILTER', payload: event.target.value })}
-            placeholder="Filter logs..."
-            className="logs-viewer-text-filter"
-            title="Filter logs by text (searches in log lines, pods, and containers)"
-          />
-          {!!textFilter && (
-            <button
-              type="button"
-              className="logs-viewer-filter-clear"
-              onClick={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
-              title="Clear filter"
-              aria-label="Clear filter"
-            >
-              ×
-            </button>
-          )}
-        </div>
-      </div>
+      <LogTextFilter
+        inputRef={filterInputRef}
+        value={textFilter}
+        dispatch={dispatch}
+        title="Filter logs by text (searches in log lines, pods, and containers)"
+      />
       <IconBar items={iconItems} />
       {bufferFull ? (
         <Tooltip content={bufferFull} triggerLabel="Log buffer is full">
@@ -1512,14 +1490,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       );
     }
 
-    const initContainerOptions = containers
-      .filter((container) => isInitContainerDisplayName(container))
-      .map((container) => ({
-        value: toInitContainerFilterValue(getActualContainerName(container)),
-        label: getActualContainerName(container),
-        group: 'Init Containers',
-      }))
-      .sort((left, right) => left.label.localeCompare(right.label));
+    const initContainerOptions = containerSelectorOptions(containers, 'init', 'Init Containers');
 
     if (initContainerOptions.length > 0) {
       options.push({
@@ -1531,26 +1502,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
     options.push(...initContainerOptions);
 
-    const regularContainerOptions = containers
-      .filter(
-        (container) =>
-          !isInitContainerDisplayName(container) && !isDebugContainerDisplayName(container)
-      )
-      .map((container) => ({
-        value: toContainerFilterValue(getActualContainerName(container)),
-        label: container.endsWith(' (debug)') ? container : getActualContainerName(container),
-        group: 'Containers',
-      }))
-      .sort((left, right) => left.label.localeCompare(right.label));
-
-    const debugContainerOptions = containers
-      .filter((container) => isDebugContainerDisplayName(container))
-      .map((container) => ({
-        value: toDebugContainerFilterValue(getActualContainerName(container)),
-        label: container,
-        group: 'Containers',
-      }))
-      .sort((left, right) => left.label.localeCompare(right.label));
+    const regularContainerOptions = containerSelectorOptions(containers, 'regular', 'Containers');
+    const debugContainerOptions = containerSelectorOptions(containers, 'ephemeral', 'Containers');
 
     if (isWorkload || containers.length > 0) {
       options.push({
@@ -1680,46 +1633,37 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     showPreviousContainerLogs,
   });
 
-  const displayLines = useMemo(() => {
-    return buildContainerLogDisplayLines({
-      entries: filteredEntries,
-      isPendingLogs,
-      emptyStateMessage,
+  const { rows: displayRows, copyLines: displayLines } = useMemo(
+    () =>
+      buildContainerLogDisplay({
+        entries: filteredEntries,
+        emptyStateMessage,
+        displayMode,
+        showAnsiColors,
+        timestampMode,
+        apiTimestampFormat,
+        apiTimestampUseLocalTimeZone,
+        isWorkload,
+        showContainerMetadata: shouldDisplayPodContainerMetadata(
+          selectedContainerFilterCount,
+          singlePodSelectableContainerCount
+        ),
+      }),
+    [
       displayMode,
+      filteredEntries,
+      isWorkload,
+      singlePodSelectableContainerCount,
       showAnsiColors,
+      selectedContainerFilterCount,
       timestampMode,
       apiTimestampFormat,
       apiTimestampUseLocalTimeZone,
-      isWorkload,
-      showContainerMetadata: shouldDisplayPodContainerMetadata(
-        selectedContainerFilterCount,
-        singlePodSelectableContainerCount
-      ),
-    });
-  }, [
-    displayMode,
-    filteredEntries,
-    isPendingLogs,
-    isWorkload,
-    singlePodSelectableContainerCount,
-    showAnsiColors,
-    selectedContainerFilterCount,
-    timestampMode,
-    apiTimestampFormat,
-    apiTimestampUseLocalTimeZone,
-    emptyStateMessage,
-  ]);
+      emptyStateMessage,
+    ]
+  );
 
   const displayLogs = useMemo(() => displayLines.join('\n'), [displayLines]);
-
-  const renderedDisplayRows = useMemo<RenderedLogRow[]>(
-    () =>
-      splitDisplayRows(displayLines, (displayIndex) => {
-        const sourceSeq = filteredEntries[displayIndex]?._seq;
-        return sourceSeq !== undefined ? `${sourceSeq}` : `placeholder:${displayIndex}`;
-      }),
-    [displayLines, filteredEntries]
-  );
 
   const hasCopyableContent = hasCopyableContainerLogs(
     isParsedView,
@@ -1750,48 +1694,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   });
 
   const renderRawLogRow = useCallback(
-    (row: RenderedLogRow) => {
-      if (isWorkload) {
-        const workloadRow = renderWorkloadRawLogRow({
-          row,
-          podColors,
-          selectPod: handleSelectPodFilter,
-          selectContainer: handleSelectContainerFilter,
-          renderMessage: renderMessageContent,
-        });
-        if (workloadRow) {
-          return workloadRow;
-        }
-      }
-      if (!isWorkload) {
-        const podRow = renderPodRawLogRow({
-          row,
-          showTimestamps,
-          showContainerMetadata: shouldDisplayPodContainerMetadata(
-            selectedContainerFilterCount,
-            singlePodSelectableContainerCount
-          ),
-          selectContainer: handleSelectContainerFilter,
-          renderMessage: renderMessageContent,
-        });
-        if (podRow) {
-          return podRow;
-        }
-      }
-      return (
-        <div className="log-viewer-line">{renderMessageContent(row.line, `line-${row.key}`)}</div>
-      );
-    },
-    [
-      handleSelectContainerFilter,
-      handleSelectPodFilter,
-      isWorkload,
-      podColors,
-      renderMessageContent,
-      selectedContainerFilterCount,
-      showTimestamps,
-      singlePodSelectableContainerCount,
-    ]
+    (row: ContainerLogRow) =>
+      renderContainerLogRow({
+        row,
+        podColors,
+        selectPod: handleSelectPodFilter,
+        selectContainer: handleSelectContainerFilter,
+        renderMessage: renderMessageContent,
+      }),
+    [handleSelectContainerFilter, handleSelectPodFilter, podColors, renderMessageContent]
   );
 
   // Fetch container inventory for the current log scope.
@@ -1892,12 +1803,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     tableColumns,
     expandedRows,
     onToggleParsedRow: handleToggleParsedRow,
-    displayLogs,
-    renderedDisplayRows,
+    displayRows,
     logsContentRef,
     wrapText,
     renderRawLogRow,
-    emptyStateMessage,
   });
   const iconItems = buildLogToolbarItems({
     options: state,

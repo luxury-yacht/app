@@ -1,8 +1,9 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/logToolbar.tsx
  *
- * The icon bar shared by Container Logs and Node Logs. Timestamps, previous
- * logs and settings are optional features a viewer passes when it has them.
+ * The toolbar controls shared by Container Logs and Node Logs: the text filter
+ * box and the icon bar. Timestamps, previous logs and settings are optional
+ * icon bar features a viewer passes when it has them.
  */
 
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
@@ -20,7 +21,7 @@ import {
   WrapTextIcon,
 } from '@shared/components/icons/LogIcons';
 import { CaseSensitiveIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
-import type { Dispatch } from 'react';
+import type { Dispatch, RefObject } from 'react';
 import type { CopyFeedback, LogOptionsAction, LogOptionsState } from './logOptionsReducer';
 
 type ToggleFeature = { active: boolean; toggle: () => void };
@@ -220,3 +221,42 @@ export const buildLogToolbarItems = (toolbar: LogToolbarOptions): IconBarItem[] 
   ...displayItems(toolbar),
   ...actionItems(toolbar),
 ];
+
+/** The text filter box, with a button that clears it. */
+export const LogTextFilter = ({
+  inputRef,
+  value,
+  dispatch,
+  ariaLabel,
+  title,
+}: {
+  inputRef: RefObject<HTMLInputElement | null>;
+  value: string;
+  dispatch: Dispatch<LogOptionsAction>;
+  ariaLabel?: string;
+  title?: string;
+}) => (
+  <div className="logs-viewer-control-group logs-viewer-filter-group">
+    <input
+      type="text"
+      ref={inputRef}
+      value={value}
+      onChange={(event) => dispatch({ type: 'SET_TEXT_FILTER', payload: event.target.value })}
+      placeholder="Filter logs..."
+      className="logs-viewer-text-filter"
+      aria-label={ariaLabel}
+      title={title}
+    />
+    {!!value && (
+      <button
+        type="button"
+        className="logs-viewer-filter-clear"
+        onClick={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
+        title="Clear filter"
+        aria-label="Clear filter"
+      >
+        ×
+      </button>
+    )}
+  </div>
+);
