@@ -2,8 +2,8 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/logToolbar.tsx
  *
  * The toolbar controls shared by Container Logs and Node Logs: the text filter
- * box, the icon bar and the match count. Timestamps, previous logs and settings are optional
- * icon bar features a viewer passes when it has them.
+ * box, the icon bar and the match count. Timestamps and previous logs are
+ * optional icon bar features a viewer passes when it has them.
  */
 
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
@@ -20,7 +20,7 @@ import {
   TimestampIcon,
   WrapTextIcon,
 } from '@shared/components/icons/LogIcons';
-import { CaseSensitiveIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
+import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
 import type { Dispatch, RefObject } from 'react';
 import type { CopyFeedback, LogOptionsAction, LogOptionsState } from './logOptionsReducer';
 
@@ -35,7 +35,6 @@ export type LogToolbarOptions = {
   copyLogs: () => void;
   previousLogs?: ToggleFeature;
   timestamps?: ToggleFeature;
-  openSettings?: () => void;
 };
 
 const copyIconFeedback = (feedback: CopyFeedback): 'success' | 'error' | null => {
@@ -178,19 +177,8 @@ const actionItems = ({
   options,
   hasCopyableContent,
   copyLogs,
-  openSettings,
 }: LogToolbarOptions): IconBarItem[] => {
   const items: IconBarItem[] = [{ type: 'separator' }];
-  if (openSettings) {
-    items.push({
-      type: 'action',
-      id: 'logSettings',
-      icon: <SettingsIcon width={18} height={18} />,
-      onClick: openSettings,
-      title: 'Open log settings',
-      ariaLabel: 'Open log settings',
-    });
-  }
   items.push({
     type: 'action',
     id: 'copy',

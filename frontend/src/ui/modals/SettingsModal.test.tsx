@@ -44,6 +44,11 @@ vi.mock('@ui/settings/sections/ObjectPanelSection', () => ({
   default: vi.fn(() => <div data-testid="section-object-panel" />),
 }));
 
+vi.mock('@ui/settings/sections/LogsSection', () => ({
+  __esModule: true,
+  default: vi.fn(() => <div data-testid="section-logs" />),
+}));
+
 vi.mock('@ui/settings/sections/DataManagementSection', () => ({
   __esModule: true,
   default: vi.fn(() => <div data-testid="section-data-management" />),
@@ -286,7 +291,7 @@ describe('SettingsModal', () => {
     expect(document.querySelector('[data-testid="section-kubeconfigs"]')).toBeTruthy();
   });
 
-  it('places Data Management between Object Panel and Advanced in the sidebar', () => {
+  it('places Logs after Object Panel and Data Management before Advanced in the sidebar', () => {
     const labels = Array.from(document.querySelectorAll('.modal-sidebar-item')).map((tab) =>
       tab.textContent?.trim()
     );
@@ -296,9 +301,24 @@ describe('SettingsModal', () => {
       'Kubeconfigs',
       'Display',
       'Object Panel',
+      'Logs',
       'Data Management',
       'Advanced',
     ]);
+  });
+
+  it('opens the Logs section from its sidebar category', async () => {
+    const logsTab = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('.modal-sidebar-item')
+    ).find((tab) => tab.textContent?.trim() === 'Logs');
+
+    await act(async () => {
+      requireValue(logsTab, 'expected Logs settings tab').click();
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('[data-testid="section-logs"]')).toBeTruthy();
+    expect(localStorage.getItem('app-settings-last-tab')).toBe('logs');
   });
 
   it('opens the Data Management section from its sidebar category', async () => {

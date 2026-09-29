@@ -1681,24 +1681,6 @@ describe('LogViewer active pod synchronisation', () => {
     );
   });
 
-  it('opens the log settings modal from the icon bar', async () => {
-    await renderViewer({ activePodNames: ['web-1'] });
-
-    const settingsButton = await waitForElement(() =>
-      container.querySelector<HTMLButtonElement>('button[aria-label="Open log settings"]')
-    );
-
-    await act(async () => {
-      settingsButton.click();
-      await Promise.resolve();
-    });
-
-    expect(document.body.textContent).toContain('Object Panel Logs Tab Settings');
-    expect(
-      document.querySelector<HTMLInputElement>('input[id$="-log-api-timestamp-format"]')
-    ).toBeTruthy();
-  });
-
   it('formats API timestamps in the local timezone when enabled', async () => {
     const timestamp = '2024-05-01T11:00:00.123456Z';
     const localDate = new Date(timestamp);

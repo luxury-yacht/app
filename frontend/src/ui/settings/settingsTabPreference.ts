@@ -11,6 +11,7 @@ export type SettingsTabId =
   | 'kubeconfigs'
   | 'display'
   | 'object-panel'
+  | 'logs'
   | 'data-management'
   | 'advanced';
 
@@ -20,6 +21,7 @@ const VALID_TABS: readonly SettingsTabId[] = [
   'kubeconfigs',
   'display',
   'object-panel',
+  'logs',
   'data-management',
   'advanced',
 ];

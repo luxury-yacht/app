@@ -397,7 +397,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   );
   const [apiTimestampUseLocalTimeZone, setApiTimestampUseLocalTimeZoneState] =
     React.useState<boolean>(() => getObjPanelLogsApiTimestampUseLocalTimeZone());
-  const [isObjPanelLogsSettingsOpen, setIsObjPanelLogsSettingsOpen] = React.useState(false);
   const [isTailFollowing, setIsTailFollowing] = React.useState(true);
 
   // Destructure commonly used state for readability
@@ -1046,7 +1045,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     copyLogs: handleCopyContainerLogs,
     previousLogs: previousLogsFeature,
     timestamps: { active: showTimestamps, toggle: toggleTimestamps },
-    openSettings: () => setIsObjPanelLogsSettingsOpen(true),
   });
   const controls = (
     <LogViewerControls
@@ -1074,8 +1072,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       isParsedView={isParsedView}
       isTailFollowing={isTailFollowing}
       resumeScrolling={handleResumeScrolling}
-      isSettingsOpen={isObjPanelLogsSettingsOpen}
-      closeSettings={() => setIsObjPanelLogsSettingsOpen(false)}
     />
   );
 };

@@ -14,7 +14,12 @@ import {
   DisplayIcon,
   KubeconfigsIcon,
 } from '@shared/components/icons/SettingsIcons';
-import { CategoryIcon, CloseIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
+import {
+  CategoryIcon,
+  CloseIcon,
+  LogsIcon,
+  SettingsIcon,
+} from '@shared/components/icons/SharedIcons';
 import {
   handleModalSidebarKeyDown,
   ModalSidebarNav,
@@ -28,6 +33,7 @@ import AppearanceSection from '@ui/settings/sections/AppearanceSection';
 import DataManagementSection from '@ui/settings/sections/DataManagementSection';
 import DisplaySection from '@ui/settings/sections/DisplaySection';
 import KubeconfigsSection from '@ui/settings/sections/KubeconfigsSection';
+import LogsSection from '@ui/settings/sections/LogsSection';
 import ObjectPanelSection from '@ui/settings/sections/ObjectPanelSection';
 import {
   DEFAULT_SETTINGS_TAB,
@@ -59,6 +65,7 @@ const TABS: TabDefinition[] = [
   { id: 'kubeconfigs', label: 'Kubeconfigs', icon: KubeconfigsIcon },
   { id: 'display', label: 'Display', icon: DisplayIcon },
   { id: 'object-panel', label: 'Object Panel', icon: FloatPanelIcon },
+  { id: 'logs', label: 'Logs', icon: LogsIcon },
   { id: 'data-management', label: 'Data Management', icon: CategoryIcon },
   { id: 'advanced', label: 'Advanced', icon: AdvancedIcon },
 ];
@@ -183,6 +190,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
           {activeTab === 'kubeconfigs' && <KubeconfigsSection />}
           {activeTab === 'display' && <DisplaySection />}
           {activeTab === 'object-panel' && <ObjectPanelSection />}
+          {activeTab === 'logs' && <LogsSection />}
           {activeTab === 'data-management' && <DataManagementSection />}
           {activeTab === 'advanced' && <AdvancedSection />}
         </div>

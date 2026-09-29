@@ -14,7 +14,6 @@ import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
 import type React from 'react';
 import type { ContainerLogRow } from './containerLogRows';
 import { LogBufferFullIndicator, LogErrorState, LogWarningBar } from './LogStatus';
@@ -191,8 +190,6 @@ type LogViewerReadyViewProps = {
   isParsedView: boolean;
   isTailFollowing: boolean;
   resumeScrolling: () => void;
-  isSettingsOpen: boolean;
-  closeSettings: () => void;
 };
 
 export const LogViewerReadyView = ({
@@ -205,42 +202,37 @@ export const LogViewerReadyView = ({
   isParsedView,
   isTailFollowing,
   resumeScrolling,
-  isSettingsOpen,
-  closeSettings,
 }: LogViewerReadyViewProps) => (
-  <>
-    <div className="object-panel-tab-content">
-      <div className="logs-viewer-display">
-        {controls}
-        <ActiveFilterChips
-          ariaLabel="Active log filters"
-          chips={activeFilterChips}
-          onClearAll={clearAllFilters}
-          className="logs-viewer-active-filters"
-        />
-        <LogWarningBar warnings={visibleLogWarnings} />
-        <div className="logs-viewer-content-frame">
-          <ScrollableRegion
-            className="logs-viewer-content selectable"
-            ref={logsContentRef}
-            aria-label="Log output"
-            tabIndex={isParsedView ? -1 : 0}
+  <div className="object-panel-tab-content">
+    <div className="logs-viewer-display">
+      {controls}
+      <ActiveFilterChips
+        ariaLabel="Active log filters"
+        chips={activeFilterChips}
+        onClearAll={clearAllFilters}
+        className="logs-viewer-active-filters"
+      />
+      <LogWarningBar warnings={visibleLogWarnings} />
+      <div className="logs-viewer-content-frame">
+        <ScrollableRegion
+          className="logs-viewer-content selectable"
+          ref={logsContentRef}
+          aria-label="Log output"
+          tabIndex={isParsedView ? -1 : 0}
+        >
+          {renderedLogContent}
+        </ScrollableRegion>
+        {!isTailFollowing && (
+          <button
+            type="button"
+            className="logs-viewer-resume-scrolling"
+            aria-label="Resume scrolling"
+            onClick={resumeScrolling}
           >
-            {renderedLogContent}
-          </ScrollableRegion>
-          {!isTailFollowing && (
-            <button
-              type="button"
-              className="logs-viewer-resume-scrolling"
-              aria-label="Resume scrolling"
-              onClick={resumeScrolling}
-            >
-              Resume scrolling
-            </button>
-          )}
-        </div>
+            Resume scrolling
+          </button>
+        )}
       </div>
     </div>
-    <ObjPanelLogsSettingsModal isOpen={isSettingsOpen} onClose={closeSettings} />
-  </>
+  </div>
 );

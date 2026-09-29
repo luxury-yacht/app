@@ -8,6 +8,7 @@
 - The Logs tab now says why logs are missing: containers that cannot be read or have not started are listed, and dropped or trimmed lines are reported instead of disappearing silently.
 - When live logs stop for good (for example, the workload was deleted or you may not list pods), the Logs tab shows the reason and turns auto-refresh off; turning it back on retries.
 - Node logs now work like container logs: the same loading, error and empty states, the same Logs buffer limit, and the same warning icon beside the toolbar when older lines were dropped. The match count now reads "n matching logs".
+- Log settings moved from the gear in the Logs tab to a new Logs section in Settings, and "Object Panel Logs Tab buffer size" is now "Buffer size".
 
 ### Fixed
 

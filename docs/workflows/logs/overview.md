@@ -43,8 +43,9 @@ keeps its own source selection and transport.
   shown and none is JSON; an empty log keeps the view.
 - `logToolbar.tsx`: the text filter box (`LogTextFilter`), the icon bar, and
   the match count (`LogMatchCount`), shown only while a filter narrows the logs.
-  Timestamps, previous logs and settings are optional icon bar features; Node
-  Logs passes none of them.
+  Timestamps and previous logs are optional icon bar features; Node Logs
+  passes neither. The log settings both viewers share (buffer size, container
+  limits, API timestamps) live in Settings → Logs, not in the Logs tab.
 - `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts. `T` (timestamps) and
   `V` (previous logs) exist only when the viewer passes those features.
 - `hooks/useLogCopyAction.ts`: the copy action and selection copy; clipboard

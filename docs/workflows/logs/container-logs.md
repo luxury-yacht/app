@@ -36,7 +36,7 @@ Panel. They are not Application Logs and they are not Node Logs.
 ## Stream Protocol
 
 The client's first frame carries the scope, the source selection, and the
-buffer limits `maxEntries` (the Object Panel Logs buffer setting) and
+buffer limits `maxEntries` (the Buffer size setting in Settings → Logs) and
 `maxBytes` (64 MiB of line bytes). The backend bounds each container's history
 by `maxEntries`. Container Logs records each scope's source selection in
 `core/refresh/streaming/containerLogsStreamScopeParams.ts`; the stream manager
