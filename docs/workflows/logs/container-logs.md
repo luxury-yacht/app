@@ -47,14 +47,19 @@ Server frames, generated into `types.generated.ts`:
 - **Snapshot.** One or more frames: the first carries `reset`, the last
   `snapshotComplete` and `trimmed` (history left out because the buffer could
   not hold it). The snapshot is the newest entries that fit both limits, sorted
-  by time, sent once every initial container has caught up or after 2 s. Frames
+  by time, sent once every initial container has caught up or after 2 s. While
+  history arrives the backend keeps only those newest entries, whatever order
+  the containers answer in, holding at most twice the limits
+  (`containerlogs.NewestWindow`); older history counts as `trimmed`, never
+  `dropped`. Frames
   stay within a budget of 8 × the 256 KiB line limit, measured as encoded JSON.
   The client applies a snapshot only when its last frame arrives.
 - **Live batches.** At most 64 entries and one frame budget, flushed every
   250 ms. History that arrives after the snapshot is always sent; the client
   inserts it in time order.
 - **Warnings and issues.** Typed `warnings` (`targetLimit` per tab or global,
-  `dropped` with a count) and per-container `issues` (`unavailable`,
+  `dropped` with a count of live lines lost because delivery fell behind after
+  the snapshot) and per-container `issues` (`unavailable`,
   `forbidden`, `failed`, with a reason). When present they replace the previous
   lists. A per-container problem never sets `error`.
 - **Fatal error.** `error`, optional permission `errorDetails`, and

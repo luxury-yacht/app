@@ -14,8 +14,12 @@ type entrySink interface {
 }
 
 // pendingEntries holds every follower's entries until the session sends them.
-// It is bounded; once full, new entries are dropped and counted so the client
-// can be told lines were lost.
+//
+// Until the first snapshot it collects history: it keeps only the newest
+// entries the client's buffer can hold, whatever order the containers' history
+// arrives in, and counts the rest as trimmed. After that it is bounded; once
+// full, new entries are dropped and counted so the client can be told the view
+// fell behind.
 type pendingEntries struct {
 	mu           sync.Mutex
 	entries      []Entry
@@ -24,16 +28,28 @@ type pendingEntries struct {
 	limitEntries int
 	limitBytes   int
 	notify       chan struct{}
+	history      *containerlogs.NewestWindow[Entry]
 }
 
 func newPendingEntries(limitEntries, limitBytes int) *pendingEntries {
 	return &pendingEntries{limitEntries: limitEntries, limitBytes: limitBytes, notify: make(chan struct{}, 1)}
 }
 
+// collectHistory makes the buffer collect history within the client's buffer
+// limits until takeSnapshot.
+func (p *pendingEntries) collectHistory(maxEntries, maxBytes int) *pendingEntries {
+	p.history = containerlogs.NewNewestWindow(maxEntries, maxBytes, entryTimestamp, entryLineBytes)
+	return p
+}
+
+func entryLineBytes(entry Entry) int { return len(entry.Line) }
+
 func (p *pendingEntries) add(entry Entry) {
 	size := len(entry.Line)
 	p.mu.Lock()
-	if len(p.entries) >= p.limitEntries || p.bytes+size > p.limitBytes {
+	if p.history != nil {
+		p.history.Add(entry)
+	} else if len(p.entries) >= p.limitEntries || p.bytes+size > p.limitBytes {
 		p.dropped++
 	} else {
 		p.entries = append(p.entries, entry)
@@ -44,6 +60,23 @@ func (p *pendingEntries) add(entry Entry) {
 	case p.notify <- struct{}{}:
 	default:
 	}
+}
+
+// takeSnapshot ends history collection. It returns the newest history in time
+// order, how many older entries were trimmed, and how many were dropped; later
+// entries are held for live delivery.
+func (p *pendingEntries) takeSnapshot() ([]Entry, int, int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var kept []Entry
+	trimmed := 0
+	if p.history != nil {
+		kept, trimmed = p.history.Take()
+		p.history = nil
+	}
+	dropped := p.dropped
+	p.dropped = 0
+	return kept, trimmed, dropped
 }
 
 // take returns and clears the held entries and the number dropped since the

@@ -239,7 +239,8 @@ func (s *containerLogsStream) recordError(err error) {
 // run starts the session's followers and sends what they read: one snapshot of
 // the containers' history, then live batches.
 func (s *containerLogsStream) run(ctx context.Context, initial containerLogsInitial, limiterSession *TargetSession) {
-	pending := newPendingEntries(config.ContainerLogsStreamPendingMaxEntries, config.ContainerLogsStreamPendingMaxBytes)
+	pending := newPendingEntries(config.ContainerLogsStreamPendingMaxEntries, config.ContainerLogsStreamPendingMaxBytes).
+		collectHistory(s.options.MaxEntries, s.options.MaxBytes)
 	snapshot := newSnapshotWait()
 	issues := newIssueSet()
 	warnings := make(chan []containerlogs.Warning, 8)
@@ -328,9 +329,7 @@ func (d *containerLogsDelivery) sendSnapshot(ctx context.Context, ready <-chan s
 // as frames within the frame budget. The first frame resets the client and
 // carries the warnings and issues; the last completes the snapshot.
 func (d *containerLogsDelivery) writeSnapshot() bool {
-	entries, dropped := d.pending.take()
-	containerlogs.SortByTimestamp(entries, entryTimestamp)
-	kept, trimmed := newestWithin(entries, d.request.options.MaxEntries, d.request.options.MaxBytes)
+	kept, trimmed, dropped := d.pending.takeSnapshot()
 	d.dropped += dropped
 	warnings, issues := d.currentWarnings(), d.issues.list()
 	frames := splitFrames(kept, 0)
@@ -353,21 +352,6 @@ func (d *containerLogsDelivery) writeSnapshot() bool {
 	d.emittedWarnings, d.emittedIssues = warnings, issues
 	d.recordDelivery(len(kept), dropped)
 	return true
-}
-
-// newestWithin keeps the newest entries that fit maxEntries and whose lines
-// fit maxBytes, and returns how many older entries it left out.
-func newestWithin(entries []Entry, maxEntries, maxBytes int) ([]Entry, int) {
-	start, bytes := len(entries), 0
-	for start > 0 {
-		size := len(entries[start-1].Line)
-		if len(entries)-start+1 > maxEntries || bytes+size > maxBytes {
-			break
-		}
-		bytes += size
-		start--
-	}
-	return entries[start:], start
 }
 
 // splitFrames groups entries into frames whose encoded size fits the frame

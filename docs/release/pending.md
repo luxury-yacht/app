@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- Opening logs for a workload with many containers no longer reports history as "dropped because the log view fell behind", and the first view always shows the newest lines.
 - Node logs load again on clusters where the Logs tab said "Logs are not available on this node" with a 406 error.
 - Auto-sized table columns no longer truncate their headers when the header is wider than the column's values.
 - Container logs no longer show "Loading logs..." forever after an error.
