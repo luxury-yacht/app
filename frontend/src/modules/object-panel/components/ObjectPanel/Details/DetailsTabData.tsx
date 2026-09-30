@@ -2,6 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabData.tsx
  */
 
+import { writeClipboardText } from '@core/desktop-runtime';
 import { useShortcut } from '@ui/shortcuts';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -60,8 +61,7 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
 
   // Handle copying value to clipboard
   const handleCopyValue = (key: string, value: string) => {
-    navigator.clipboard
-      .writeText(value)
+    writeClipboardText(value)
       .then(() => {
         setCopiedKey(key);
         setTimeout(() => setCopiedKey(null), 1000);

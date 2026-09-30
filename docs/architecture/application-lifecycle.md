@@ -167,7 +167,11 @@ creation. `backend.NewApplicationRuntime` does not mutate the Wails stream
 registry.
 
 Native browser, clipboard, event, environment, and window calls go through
-`frontend/src/core/desktop-runtime`. The refresh stream managers under
+`frontend/src/core/desktop-runtime`. Copy actions write with
+`writeClipboardText`: the WebView refuses browser clipboard writes that a click
+starts, so a copy button or menu item using `navigator.clipboard` fails while
+the same copy from a keyboard shortcut works. The `no-direct-clipboard-write`
+Biome plugin rejects browser clipboard writes. The refresh stream managers under
 `frontend/src/core/refresh/streaming` separately own the Wails `JSONStream`
 boundary. Do not add duplicate runtime adapters or compatibility services.
 

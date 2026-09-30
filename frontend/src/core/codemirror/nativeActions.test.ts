@@ -6,6 +6,7 @@
  */
 
 import type { EditorView } from '@codemirror/view';
+import { Clipboard } from '@wailsio/runtime';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cutCodeMirrorSelection, selectCodeMirrorContent } from './nativeActions';
 
@@ -32,9 +33,7 @@ const makeView = (doc: string, ranges: Array<{ from: number; to: number }>): Fak
 };
 
 beforeEach(() => {
-  Object.assign(navigator, {
-    clipboard: { writeText: vi.fn(() => Promise.resolve()) },
-  });
+  vi.mocked(Clipboard.SetText).mockReset().mockResolvedValue(undefined);
 });
 
 describe('selectCodeMirrorContent', () => {
@@ -62,7 +61,7 @@ describe('cutCodeMirrorSelection', () => {
     const view = makeView('kind: ConfigMap\n', [{ from: 0, to: 4 }]);
 
     expect(cutCodeMirrorSelection(view)).toBe(true);
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('kind');
+    expect(Clipboard.SetText).toHaveBeenCalledWith('kind');
     expect(view.dispatch).toHaveBeenCalledWith(
       expect.objectContaining({
         changes: [{ from: 0, to: 4, insert: '' }],
@@ -75,7 +74,7 @@ describe('cutCodeMirrorSelection', () => {
     const view = makeView('kind: ConfigMap\n', []);
 
     expect(cutCodeMirrorSelection(view)).toBe(false);
-    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+    expect(Clipboard.SetText).not.toHaveBeenCalled();
     expect(view.dispatch).not.toHaveBeenCalled();
   });
 

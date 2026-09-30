@@ -217,6 +217,11 @@
       "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/refresh/**", "!**/src/core/data-access/**"]
     },
     {
+      // Clipboard writes use the native desktop clipboard; the WebView refuses click-started browser writes.
+      "path": "./biome-plugins/no-direct-clipboard-write.grit",
+      "includes": ["**/src/**/*.{ts,tsx}", "!**/src/**/*.test.*", "!**/src/**/*.stories.*"]
+    },
+    {
       // Caught operational failures cross one boundary so the original exception is reportable.
       "path": "./biome-plugins/no-direct-console-error.grit",
       "includes": [

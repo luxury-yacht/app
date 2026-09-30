@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@core/desktop-runtime';
 import {
   type ObjectMapDebugSnapshot,
   setObjectMapDebugOverlayVisible,
@@ -227,7 +228,7 @@ const KeyboardFocusOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
   const overlayPointerInteractionRef = useRef(false);
   const [focusInfo, setFocusInfo] = useState<FocusDebugInfo>(() => describeFocusTarget(null));
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(
+    await writeClipboardText(
       focusInfoRows(focusInfo)
         .map(([label, value]) => `${label}: ${value}`)
         .join('\n')

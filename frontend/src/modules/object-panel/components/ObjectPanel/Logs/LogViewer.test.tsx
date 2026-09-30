@@ -8,6 +8,7 @@
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
+import { Clipboard } from '@wailsio/runtime';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -405,7 +406,7 @@ const openManagedStream = async (scope: string) => {
 describe('LogViewer active pod synchronisation', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-  let writeTextMock: ReturnType<typeof vi.fn>;
+  const writeTextMock = vi.mocked(Clipboard.SetText);
 
   beforeEach(() => {
     tableMockState.renderRows = false;
@@ -431,11 +432,7 @@ describe('LogViewer active pod synchronisation', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    writeTextMock = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(globalThis.navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText: writeTextMock },
-    });
+    writeTextMock.mockReset().mockResolvedValue(undefined);
 
     seedLogSnapshot([
       {

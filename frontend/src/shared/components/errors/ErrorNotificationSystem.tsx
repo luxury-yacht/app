@@ -6,6 +6,7 @@
  */
 
 import { type ErrorNotification, useErrorContext } from '@contexts/ErrorContext';
+import { writeClipboardText } from '@core/desktop-runtime';
 import { CopyIcon } from '@shared/components/icons/LogIcons';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { type ErrorSeverity, errorHandler } from '@utils/errorHandler';
@@ -57,7 +58,7 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
 
   const handleCopyError = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(formatErrorForClipboard(error));
+      await writeClipboardText(formatErrorForClipboard(error));
       setCopyFeedback('copied');
     } catch (err) {
       setCopyFeedback('error');

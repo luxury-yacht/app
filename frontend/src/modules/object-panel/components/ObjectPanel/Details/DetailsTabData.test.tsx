@@ -2,6 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabData.test.tsx
  */
 
+import { Clipboard } from '@wailsio/runtime';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -31,14 +32,10 @@ const render = async (ui: React.ReactElement) => {
 };
 
 describe('DetailsTabData', () => {
-  const writeTextMock = vi.fn();
+  const writeTextMock = vi.mocked(Clipboard.SetText);
 
   beforeEach(() => {
-    Object.assign(navigator, {
-      clipboard: {
-        writeText: writeTextMock.mockResolvedValue(undefined),
-      },
-    });
+    writeTextMock.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {

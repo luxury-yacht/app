@@ -149,8 +149,13 @@ vi.mock('@utils/errorHandler', () => ({
   },
 }));
 
+const nativeClipboardMocks = vi.hoisted(() => ({
+  writeClipboardText: vi.fn<(text: string) => Promise<void>>(),
+}));
+
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
+  writeClipboardText: nativeClipboardMocks.writeClipboardText,
   onEvent: (name: string, handler: (payload: unknown) => void) => {
     eventRegistry.handlers[name] = handler;
     return () => {
@@ -252,9 +257,9 @@ describe('ShellTab', () => {
       }
     }
     globalThis.ResizeObserver = TestResizeObserver;
+    nativeClipboardMocks.writeClipboardText.mockReset().mockResolvedValue(undefined);
     const clipboardMock = {
       readText: vi.fn().mockResolvedValue(''),
-      writeText: vi.fn().mockResolvedValue(undefined),
     };
     if (!navigator.clipboard) {
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboardMock });
@@ -403,7 +408,7 @@ describe('ShellTab', () => {
 
     const handled = terminal?.triggerKey?.(event);
 
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('kubectl get pods');
+    expect(nativeClipboardMocks.writeClipboardText).toHaveBeenCalledWith('kubectl get pods');
     expect(event.preventDefault).toHaveBeenCalled();
     expect(event.stopPropagation).toHaveBeenCalled();
     expect(handled).toBe(false);
@@ -542,7 +547,7 @@ describe('ShellTab', () => {
       await Promise.resolve();
     });
 
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('kubectl get pods');
+    expect(nativeClipboardMocks.writeClipboardText).toHaveBeenCalledWith('kubectl get pods');
   });
 
   it('sends stdin data to the backend when the session is open', async () => {

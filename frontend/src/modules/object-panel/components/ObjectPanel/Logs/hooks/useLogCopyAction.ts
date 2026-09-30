@@ -6,6 +6,7 @@
  * Failures are reported, never swallowed.
  */
 
+import { writeClipboardText } from '@core/desktop-runtime';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import { type Dispatch, type RefObject, useCallback, useEffect, useRef } from 'react';
 import { reportOperationalError } from '@/utils/errorHandler';
@@ -59,7 +60,7 @@ export function useLogCopyAction({
       return;
     }
     try {
-      await navigator.clipboard.writeText(text);
+      await writeClipboardText(text);
       showFeedback('copied');
     } catch (error) {
       reportOperationalError(error, { source, action: 'copyLogs' });
@@ -89,7 +90,7 @@ export function useLogSelectionCopy({
         if (!text) {
           return false;
         }
-        void navigator.clipboard.writeText(text).catch((error) => {
+        void writeClipboardText(text).catch((error) => {
           reportOperationalError(error, { source, action: 'copySelectedLogText' });
         });
         return true;

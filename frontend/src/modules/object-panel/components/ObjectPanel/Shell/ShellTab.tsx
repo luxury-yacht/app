@@ -14,7 +14,7 @@ import {
 import { readPodContainers, requestData } from '@/core/data-access';
 import '@xterm/xterm/css/xterm.css';
 import type { types } from '@core/backend-api/models';
-import { type DesktopEventPayload, onEvent } from '@core/desktop-runtime';
+import { type DesktopEventPayload, onEvent, writeClipboardText } from '@core/desktop-runtime';
 import {
   buildObjectActionTarget,
   runCreateDebugContainer,
@@ -178,7 +178,7 @@ function handleShellClipboardKey(
   }
   const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
   const key = event.key.toLowerCase();
-  if (key === 'c' && clipboard?.writeText && terminal.hasSelection() && copySelection()) {
+  if (key === 'c' && terminal.hasSelection() && copySelection()) {
     event.preventDefault();
     event.stopPropagation();
     return false;
@@ -295,8 +295,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
 
   const copyTerminalSelection = useCallback(() => {
     const terminal = terminalRef.current;
-    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
-    if (!terminal || !clipboard?.writeText || !terminal.hasSelection()) {
+    if (!terminal?.hasSelection()) {
       return false;
     }
 
@@ -305,7 +304,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
       return false;
     }
 
-    void clipboard.writeText(selection).catch(() => {
+    void writeClipboardText(selection).catch(() => {
       /* ignore clipboard write failures */
     });
     return true;

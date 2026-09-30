@@ -1,5 +1,6 @@
 import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { Clipboard } from '@wailsio/runtime';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -67,12 +68,7 @@ describe('NodeLogsTab', () => {
       message: error instanceof Error ? error.message : String(error),
     }));
     resetLogViewerPrefsCacheForTesting();
-    Object.defineProperty(globalThis.navigator, 'clipboard', {
-      configurable: true,
-      value: {
-        writeText: vi.fn().mockResolvedValue(undefined),
-      },
-    });
+    vi.mocked(Clipboard.SetText).mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -626,7 +622,7 @@ describe('NodeLogsTab', () => {
         'copy control'
       ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+    expect(Clipboard.SetText).toHaveBeenCalledWith(
       'level,_pod,count,enabled,extra,message\ninfo,literal,0,false,"{""value"":""x""}","boot, complete"'
     );
   });
@@ -1324,7 +1320,7 @@ describe('NodeLogsTab', () => {
       expect(pressed('Wrap text')).toBe('false');
 
       await press('c', true);
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('info boot complete');
+      expect(Clipboard.SetText).toHaveBeenCalledWith('info boot complete');
     });
 
     it('offers no timestamp or previous-log shortcuts', async () => {
@@ -1363,12 +1359,10 @@ describe('NodeLogsTab', () => {
       expect(output.contains(selected?.getRangeAt(0).commonAncestorContainer ?? null)).toBe(true);
 
       expect(nativeAction.current?.('copy')).toBe(true);
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-        expect.stringContaining('info boot complete')
-      );
+      expect(Clipboard.SetText).toHaveBeenCalledWith(expect.stringContaining('info boot complete'));
 
       const failure = new Error('clipboard denied');
-      (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockRejectedValue(failure);
+      vi.mocked(Clipboard.SetText).mockRejectedValue(failure);
       await act(async () => {
         nativeAction.current?.('copy');
         await Promise.resolve();
@@ -1381,7 +1375,7 @@ describe('NodeLogsTab', () => {
 
     it('reports a copy that fails instead of hiding it', async () => {
       const failure = new Error('clipboard denied');
-      (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockRejectedValue(failure);
+      vi.mocked(Clipboard.SetText).mockRejectedValue(failure);
       await renderWithProbe();
       await selectSource('kubelet');
 

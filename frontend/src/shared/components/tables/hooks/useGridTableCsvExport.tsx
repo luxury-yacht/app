@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@core/desktop-runtime';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CopyIcon } from '@shared/components/icons/LogIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
@@ -27,11 +28,9 @@ export function useGridTableCsvExport<T>({
   fetchAllRows,
   hasAllLocalMatches = false,
 }: UseGridTableCsvExportOptions<T>): IconBarItem {
-  const canCopyToClipboard =
-    typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function';
   const hasCopyableContent = data.length > 0 && Boolean(columns?.length);
   const operation = useMemo(() => {
-    if (!canCopyToClipboard || !columns?.length || !getTextContent) {
+    if (!columns?.length || !getTextContent) {
       return null;
     }
     return async () => {
@@ -41,10 +40,10 @@ export function useGridTableCsvExport<T>({
       if (!csvText) {
         return false;
       }
-      await navigator.clipboard.writeText(csvText);
+      await writeClipboardText(csvText);
       return true;
     };
-  }, [canCopyToClipboard, columns, data, fetchAllRows, getTextContent]);
+  }, [columns, data, fetchAllRows, getTextContent]);
   const {
     feedback: copyFeedback,
     exporting: copying,
@@ -71,9 +70,9 @@ export function useGridTableCsvExport<T>({
       },
       title,
       ariaLabel: title,
-      disabled: !canCopyToClipboard || !hasCopyableContent || copying,
+      disabled: !hasCopyableContent || copying,
       feedback: copyFeedback,
     }),
-    [canCopyToClipboard, copyFeedback, copying, handleCopyCsv, hasCopyableContent, title]
+    [copyFeedback, copying, handleCopyCsv, hasCopyableContent, title]
   );
 }

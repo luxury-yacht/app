@@ -27,9 +27,14 @@ vi.mock('@shared/components/ContextMenu', () => ({
   },
 }));
 
+const clipboardMocks = vi.hoisted(() => ({
+  writeClipboardText: vi.fn<(text: string) => Promise<void>>(() => Promise.resolve()),
+}));
+
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: vi.fn(() => () => undefined),
+  writeClipboardText: clipboardMocks.writeClipboardText,
 }));
 
 vi.mock('../context', async () => {
@@ -238,10 +243,8 @@ describe('TextContextMenu', () => {
   });
 
   it('Copy writes selected text to clipboard', () => {
-    const writeTextSpy = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, {
-      clipboard: { writeText: writeTextSpy, readText: vi.fn() },
-    });
+    const writeTextSpy = clipboardMocks.writeClipboardText;
+    writeTextSpy.mockClear();
 
     const span = document.createElement('span');
     document.body.appendChild(span);

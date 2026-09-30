@@ -10,6 +10,7 @@ import { resolve } from 'node:path';
 import type { ErrorNotification } from '@contexts/ErrorContext';
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { ErrorCategory, ErrorSeverity, errorHandler } from '@utils/errorHandler';
+import { Clipboard } from '@wailsio/runtime';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -52,17 +53,13 @@ const makeError = (overrides: Partial<ErrorNotification> = {}): ErrorNotificatio
 describe('ErrorNotificationSystem copy button', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-  let writeText: ReturnType<typeof vi.fn>;
+  const writeText = vi.mocked(Clipboard.SetText);
 
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    });
+    writeText.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
