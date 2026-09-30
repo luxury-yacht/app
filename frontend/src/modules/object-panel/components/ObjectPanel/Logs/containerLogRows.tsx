@@ -6,6 +6,7 @@
  */
 
 import type React from 'react';
+import { useMemo, useRef } from 'react';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
 import type { LogDisplayMode, LogTimestampMode } from '../types';
 import {
@@ -27,7 +28,7 @@ export const shouldDisplayPodContainerMetadata = (
   selectedContainerFilterCount !== 1 &&
   !(selectedContainerFilterCount === 0 && singlePodSelectableContainerCount === 1);
 
-type ContainerLogFormatOptions = {
+export type ContainerLogFormatOptions = {
   displayMode: LogDisplayMode;
   showAnsiColors: boolean;
   timestampMode: LogTimestampMode;
@@ -52,11 +53,13 @@ export interface ContainerLogRow extends RenderedLogRow {
 
 type ContainerLogDisplay = {
   rows: ContainerLogRow[];
-  /** One line per entry, as the copy action writes it. */
-  copyLines: string[];
+  /** The shown lines as the copy action writes them, built when asked for. */
+  copyText: () => string;
 };
 
-const NO_CONTAINER_LOG_DISPLAY: ContainerLogDisplay = { rows: [], copyLines: [] };
+type EntryDisplay = { rows: ContainerLogRow[]; copyLine: string };
+
+type JsonOf = (entry: ContainerLogsEntry) => Record<string, unknown> | null;
 
 const containerLogRowMetadata = (
   entry: ContainerLogsEntry,
@@ -78,14 +81,19 @@ const containerLogRowMetadata = (
       : null,
 });
 
+const isJsonView = (displayMode: LogDisplayMode) =>
+  displayMode === 'pretty' || displayMode === 'structured';
+
 const containerLogMessage = (
   entry: ContainerLogsEntry,
-  options: ContainerLogFormatOptions
+  options: ContainerLogFormatOptions,
+  jsonOf: JsonOf
 ): string => {
   const content = formatRawOrPrettyJsonLine(
     entry.line,
     options.displayMode,
-    options.showAnsiColors
+    options.showAnsiColors,
+    isJsonView(options.displayMode) ? jsonOf(entry) : null
   );
   return content.trim().length > 0 ? content : EMPTY_CONTAINER_LOG_PLACEHOLDER;
 };
@@ -108,36 +116,91 @@ const formatContainerLogCopyLine = (
     .filter(Boolean)
     .join(' ');
 
-export const buildContainerLogDisplay = ({
+const buildEntryDisplay = (
+  entry: ContainerLogsEntry,
+  entryKey: string | number,
+  options: ContainerLogFormatOptions,
+  jsonOf: JsonOf
+): EntryDisplay => {
+  const metadata = containerLogRowMetadata(entry, options);
+  const message = containerLogMessage(entry, options, jsonOf);
+  const rows = message.split('\n').map((segment, segmentIndex) => ({
+    key: `${entryKey}:${segmentIndex}`,
+    line: segment,
+    metadata: segmentIndex === 0 ? metadata : undefined,
+  }));
+  return { rows, copyLine: formatContainerLogCopyLine(metadata, message) };
+};
+
+const NO_ROWS: ContainerLogRow[] = [];
+
+/**
+ * The raw view's rows and copy text. Each entry is formatted once for the
+ * current options, so a stream batch formats only its new entries; the copy
+ * text is joined only when copying. `options` must keep its identity until an
+ * option changes. The table view shows no rows.
+ */
+export function useContainerLogDisplay({
   entries,
   emptyStateMessage,
-  ...options
-}: ContainerLogFormatOptions & {
+  jsonOf,
+  options,
+}: {
   entries: ContainerLogsEntry[];
   emptyStateMessage: string;
-}): ContainerLogDisplay => {
-  if (entries.length === 0) {
-    // The empty-state message shows as the log's only line.
-    return emptyStateMessage
-      ? { rows: [{ key: 'empty', line: emptyStateMessage }], copyLines: [emptyStateMessage] }
-      : NO_CONTAINER_LOG_DISPLAY;
-  }
-  const rows: ContainerLogRow[] = [];
-  const copyLines = entries.map((entry, index) => {
-    const metadata = containerLogRowMetadata(entry, options);
-    const message = containerLogMessage(entry, options);
-    const entryKey = entry._seq ?? `entry:${index}`;
-    message.split('\n').forEach((segment, segmentIndex) => {
-      rows.push({
-        key: `${entryKey}:${segmentIndex}`,
-        line: segment,
-        metadata: segmentIndex === 0 ? metadata : undefined,
-      });
-    });
-    return formatContainerLogCopyLine(metadata, message);
+  jsonOf: JsonOf;
+  options: ContainerLogFormatOptions;
+}): ContainerLogDisplay {
+  const cache = useRef<{
+    options: ContainerLogFormatOptions | null;
+    byEntry: WeakMap<ContainerLogsEntry, EntryDisplay>;
+  }>({
+    options: null,
+    byEntry: new WeakMap(),
   });
-  return { rows, copyLines };
-};
+  // Row keys outlive option changes; an entry without a sequence gets an id.
+  const ids = useRef({ byEntry: new WeakMap<ContainerLogsEntry, string>(), next: 0 });
+  return useMemo(() => {
+    if (options.displayMode === 'parsed') {
+      return { rows: NO_ROWS, copyText: () => '' };
+    }
+    if (entries.length === 0) {
+      // The empty-state message shows as the log's only line.
+      return {
+        rows: emptyStateMessage ? [{ key: 'empty', line: emptyStateMessage }] : NO_ROWS,
+        copyText: () => emptyStateMessage,
+      };
+    }
+    if (cache.current.options !== options) {
+      cache.current = { options, byEntry: new WeakMap() };
+    }
+    const { byEntry } = cache.current;
+    const keyFor = (entry: ContainerLogsEntry): string | number => {
+      if (entry._seq !== undefined) {
+        return entry._seq;
+      }
+      let id = ids.current.byEntry.get(entry);
+      if (id === undefined) {
+        id = `entry:${ids.current.next++}`;
+        ids.current.byEntry.set(entry, id);
+      }
+      return id;
+    };
+    const rows: ContainerLogRow[] = [];
+    const displays = entries.map((entry) => {
+      let display = byEntry.get(entry);
+      if (!display) {
+        display = buildEntryDisplay(entry, keyFor(entry), options, jsonOf);
+        byEntry.set(entry, display);
+      }
+      for (const row of display.rows) {
+        rows.push(row);
+      }
+      return display;
+    });
+    return { rows, copyText: () => displays.map((display) => display.copyLine).join('\n') };
+  }, [emptyStateMessage, entries, jsonOf, options]);
+}
 
 type RenderLogMessage = (message: string, keyPrefix: string) => React.ReactNode;
 type SelectContainerFilter = (container: string, kind: LogContainerKind) => void;

@@ -127,6 +127,17 @@ export const normalizeObjPanelLogsApiTimestampFormat = (
     : DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT;
 };
 
+// Log views format every line with the same format; validate it once.
+let lastFormat: string | undefined;
+let lastNormalizedFormat = DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT;
+const normalizeFormatOnce = (format: string): string => {
+  if (format !== lastFormat) {
+    lastFormat = format;
+    lastNormalizedFormat = normalizeObjPanelLogsApiTimestampFormat(format);
+  }
+  return lastNormalizedFormat;
+};
+
 export const formatObjPanelLogsApiTimestamp = (
   timestamp: string,
   format: string,
@@ -136,7 +147,7 @@ export const formatObjPanelLogsApiTimestamp = (
     return '';
   }
 
-  const normalizedFormat = normalizeObjPanelLogsApiTimestampFormat(format);
+  const normalizedFormat = normalizeFormatOnce(format);
   if (normalizedFormat === DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT && !useLocalTimeZone) {
     return truncateObjPanelLogsApiTimestampToMillis(timestamp);
   }

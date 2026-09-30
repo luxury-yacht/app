@@ -59,6 +59,13 @@ keeps its own source selection and transport.
 Add a new control to the shared piece when both viewers can support it, and as
 an optional feature otherwise.
 
+A busy stream delivers a batch up to four times a second, so work per batch
+must follow the new lines, not the buffer: Container Logs formats each entry
+once per display option set (`useContainerLogDisplay`), the JSON views reuse
+the presentation's cached parse (`jsonOf`), and copy text and table CSV are
+built only when copying. Check changes to this path with
+`mise exec -- wails3 task qc:benchmark-logs` (1,000 and 10,000 lines).
+
 ## Shared raw-log layout
 
 Container and Node Logs use

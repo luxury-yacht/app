@@ -656,7 +656,8 @@ const NodeLogsTab = ({
     hasInvalidRegex,
     parsedRows,
     tableColumns,
-    parsedCsv,
+    getParsedCsv,
+    jsonOf,
   } = useLogPresentation({
     entries: lines,
     options,
@@ -678,13 +679,13 @@ const NodeLogsTab = ({
 
   useRawViewFallback({ displayMode, hasVisibleLines, canParseLogs, dispatch });
 
-  const displayLines = useMemo(
-    () =>
-      filteredLines.map((line) => {
-        return formatRawOrPrettyJsonLine(line, displayMode, showAnsiColors);
-      }),
-    [displayMode, filteredLines, showAnsiColors]
-  );
+  const displayLines = useMemo(() => {
+    // The JSON views reuse each line's cached parse instead of parsing again.
+    const jsonView = displayMode === 'pretty' || displayMode === 'structured';
+    return filteredLines.map((line) =>
+      formatRawOrPrettyJsonLine(line, displayMode, showAnsiColors, jsonView ? jsonOf(line) : null)
+    );
+  }, [displayMode, filteredLines, jsonOf, showAnsiColors]);
 
   const hasContent = content.length > 0;
   const statusMessage = nodeLogStatusMessage({
@@ -705,15 +706,18 @@ const NodeLogsTab = ({
   );
   const notices = nodeLogNotices({ content, truncated, error });
 
-  const displayedText = useMemo(
-    () => logCopyText(displayMode, displayLines, parsedCsv),
-    [displayLines, displayMode, parsedCsv]
+  const getCopyText = useCallback(
+    () => logCopyText(displayMode, () => displayLines.join('\n'), getParsedCsv),
+    [displayLines, displayMode, getParsedCsv]
   );
   const hasAnsiLogEntries = useMemo(
     () => filteredLines.some((line) => containsAnsi(line)),
     [filteredLines]
   );
-  const hasCopyableContent = displayedText.length > 0;
+  // Whether the copy text would be non-empty, without building it.
+  const hasCopyableContent = isParsedView
+    ? parsedRows.length > 0 && tableColumns.length > 0
+    : displayLines.length > 1 || Boolean(displayLines[0]);
   const displayedLogCount = isParsedView
     ? parsedRows.length
     : filteredLines.filter((line) => line.length > 0).length;
@@ -750,7 +754,11 @@ const NodeLogsTab = ({
     }
   }, []);
 
-  const handleCopyLogs = useLogCopyAction({ text: displayedText, dispatch, source: 'NodeLogsTab' });
+  const handleCopyLogs = useLogCopyAction({
+    getText: getCopyText,
+    dispatch,
+    source: 'NodeLogsTab',
+  });
   useLogSelectionCopy({ rootRef: logsContentRef, active: isActive, source: 'NodeLogsTab' });
   useLogKeyboardShortcuts({
     isActive,

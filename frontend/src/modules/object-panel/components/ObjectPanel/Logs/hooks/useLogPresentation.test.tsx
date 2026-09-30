@@ -75,7 +75,7 @@ describe('useLogPresentation', () => {
       { level: 'error', msg: 'crash' },
     ]);
     expect(result.tableColumns.map((column) => column.key)).toEqual(['level', 'msg']);
-    expect(logCopyText('parsed', ['ignored'], result.parsedCsv)).toBe(
+    expect(logCopyText('parsed', () => 'ignored', result.getParsedCsv)).toBe(
       'level,msg\ninfo,boot\nerror,crash'
     );
   });
@@ -112,7 +112,7 @@ describe('useLogPresentation', () => {
 
     expect(result.filteredEntries).toEqual([entries[0]]);
     expect(result.tableColumns.map((column) => column.key)).toEqual(['pod', 'msg']);
-    expect(result.parsedCsv).toBe('pod,msg\nweb-1,ready');
+    expect(result.getParsedCsv()).toBe('pod,msg\nweb-1,ready');
     expect(result.parsedRows).toEqual([
       {
         data: { msg: 'ready' },
@@ -123,9 +123,13 @@ describe('useLogPresentation', () => {
         seq: 1,
       },
     ]);
-    expect(logCopyText('raw', ['[web-1/app] {"msg":"ready"}'], '')).toBe(
-      '[web-1/app] {"msg":"ready"}'
-    );
+    expect(
+      logCopyText(
+        'raw',
+        () => '[web-1/app] {"msg":"ready"}',
+        () => ''
+      )
+    ).toBe('[web-1/app] {"msg":"ready"}');
   });
 
   it('builds no table outside the table view, but still reports parseable lines', async () => {
@@ -138,7 +142,7 @@ describe('useLogPresentation', () => {
 
     expect(result.canParseLogs).toBe(true);
     expect(result.parsedRows).toEqual([]);
-    expect(result.parsedCsv).toBe('');
+    expect(result.getParsedCsv()).toBe('');
   });
 
   it('inverts, respects case, and reports an invalid regex', async () => {

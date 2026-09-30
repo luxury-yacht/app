@@ -44,10 +44,13 @@ export type LogPresentation<T> = {
   /** At least one shown line is a JSON object, so the JSON views are available. */
   canParseLogs: boolean;
   hasInvalidRegex: boolean;
-  /** The parsed JSON table: rows (only in the table view), columns and its CSV. */
+  /** The parsed JSON table, only in the table view: rows and columns. */
   parsedRows: ParsedLogEntry[];
   tableColumns: GridColumnDefinition<ParsedLogEntry>[];
-  parsedCsv: string;
+  /** The table as CSV, built when asked for (the copy action). */
+  getParsedCsv: () => string;
+  /** An entry's line parsed as a JSON object, or null; cached per line. */
+  jsonOf: (entry: T) => Record<string, unknown> | null;
 };
 
 const NO_PARSED_ROWS: ParsedLogEntry[] = [];
@@ -134,11 +137,12 @@ const detectStringLine = (
 };
 
 // JSON detection is cached per line: entry objects by identity, plain string
-// lines by value (keeping only the lines currently shown).
+// lines by value (keeping only the lines currently shown). jsonOf reads the
+// same cache, so a JSON view formats each line without parsing it again.
 const useJsonDetection = <T>(lineOf: (entry: T) => string) => {
   const objectCache = useRef(new WeakMap<object, JsonObject>());
   const stringCache = useRef(new Map<string, JsonObject>());
-  return useCallback(
+  const detectAll = useCallback(
     (entries: T[]): JsonObject[] => {
       const nextStrings = new Map<string, JsonObject>();
       const detected = entries.map((entry) =>
@@ -151,6 +155,19 @@ const useJsonDetection = <T>(lineOf: (entry: T) => string) => {
     },
     [lineOf]
   );
+  const jsonOf = useCallback(
+    (entry: T): JsonObject => {
+      if (typeof entry === 'object' && entry !== null) {
+        return detectObjectLine(objectCache.current, entry, () => lineOf(entry));
+      }
+      const line = lineOf(entry);
+      return stringCache.current.has(line)
+        ? (stringCache.current.get(line) ?? null)
+        : tryParseJSONObject(line);
+    },
+    [lineOf]
+  );
+  return { detectAll, jsonOf };
 };
 
 export function useLogPresentation<T>(source: LogPresentationSource<T>): LogPresentation<T> {
@@ -162,9 +179,13 @@ export function useLogPresentation<T>(source: LogPresentationSource<T>): LogPres
     exportValue = jsonFieldValue,
   } = source;
   const isParsedView = source.options.displayMode === 'parsed';
-  const detectJson = useJsonDetection(lineOf);
-  const parsedCandidates = useMemo<ParsedLogEntry[]>(() => {
-    const detected = detectJson(filteredEntries);
+  const { detectAll, jsonOf } = useJsonDetection(lineOf);
+  const detected = useMemo(() => detectAll(filteredEntries), [detectAll, filteredEntries]);
+  // Table rows are built only for the table view.
+  const parsedRows = useMemo<ParsedLogEntry[]>(() => {
+    if (!isParsedView) {
+      return NO_PARSED_ROWS;
+    }
     return filteredEntries.flatMap((entry, index) => {
       const data = detected[index];
       if (!data) {
@@ -179,13 +200,12 @@ export function useLogPresentation<T>(source: LogPresentationSource<T>): LogPres
         },
       ];
     });
-  }, [detectJson, filteredEntries, lineOf, parsedMetadata]);
-  const parsedRows = isParsedView ? parsedCandidates : NO_PARSED_ROWS;
+  }, [detected, filteredEntries, isParsedView, lineOf, parsedMetadata]);
   const tableColumns = useMemo(
     () => (isParsedView ? buildTableColumns(parsedRows, metadataColumns) : NO_COLUMNS),
     [isParsedView, metadataColumns, parsedRows]
   );
-  const parsedCsv = useMemo(
+  const getParsedCsv = useCallback(
     () => (isParsedView ? buildParsedLogCsv(parsedRows, tableColumns, exportValue) : ''),
     [exportValue, isParsedView, parsedRows, tableColumns]
   );
@@ -198,11 +218,12 @@ export function useLogPresentation<T>(source: LogPresentationSource<T>): LogPres
     filterText,
     filteredEntries,
     hasVisibleLines,
-    canParseLogs: parsedCandidates.length > 0,
+    canParseLogs: detected.some((json) => json !== null),
     hasInvalidRegex,
     parsedRows,
     tableColumns,
-    parsedCsv,
+    getParsedCsv,
+    jsonOf,
   };
 }
 
@@ -240,9 +261,12 @@ export const splitDisplayRows = (
     }))
   );
 
-/** The text the copy action writes: the parsed table as CSV, or the shown lines. */
+/**
+ * The text the copy action writes: the parsed table as CSV, or the shown lines.
+ * Both are built only when copying.
+ */
 export const logCopyText = (
   displayMode: LogOptionsState['displayMode'],
-  displayLines: string[],
-  parsedCsv: string
-): string => (displayMode === 'parsed' ? parsedCsv : displayLines.join('\n'));
+  lineText: () => string,
+  csv: () => string
+): string => (displayMode === 'parsed' ? csv() : lineText());

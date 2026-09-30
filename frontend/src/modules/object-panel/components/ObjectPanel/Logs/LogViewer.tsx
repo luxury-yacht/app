@@ -61,10 +61,10 @@ import {
   PREVIOUS_LOGS_UNAVAILABLE_MESSAGE,
 } from './containerLogNotices';
 import {
-  buildContainerLogDisplay,
   type ContainerLogRow,
   renderContainerLogRow,
   shouldDisplayPodContainerMetadata,
+  useContainerLogDisplay,
 } from './containerLogRows';
 import { formatTimestampForMode } from './containerLogTimestamps';
 import {
@@ -656,7 +656,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     canParseLogs: canParseContainerLogs,
     parsedRows,
     tableColumns,
-    parsedCsv,
+    getParsedCsv,
+    jsonOf,
   } = useLogFiltering({
     logEntries,
     isWorkload,
@@ -864,37 +865,37 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     showPreviousContainerLogs,
   });
 
-  const { rows: displayRows, copyLines: displayLines } = useMemo(
-    () =>
-      buildContainerLogDisplay({
-        entries: filteredEntries,
-        emptyStateMessage,
-        displayMode,
-        showAnsiColors,
-        timestampMode,
-        apiTimestampFormat,
-        apiTimestampUseLocalTimeZone,
-        isWorkload,
-        showContainerMetadata: shouldDisplayPodContainerMetadata(
-          selectedContainerFilterCount,
-          singlePodSelectableContainerCount
-        ),
-      }),
-    [
+  const showContainerMetadata = shouldDisplayPodContainerMetadata(
+    selectedContainerFilterCount,
+    singlePodSelectableContainerCount
+  );
+  // Kept stable until an option changes, so rows are formatted once per entry.
+  const displayOptions = useMemo(
+    () => ({
       displayMode,
-      filteredEntries,
-      isWorkload,
-      singlePodSelectableContainerCount,
       showAnsiColors,
-      selectedContainerFilterCount,
       timestampMode,
       apiTimestampFormat,
       apiTimestampUseLocalTimeZone,
-      emptyStateMessage,
+      isWorkload,
+      showContainerMetadata,
+    }),
+    [
+      apiTimestampFormat,
+      apiTimestampUseLocalTimeZone,
+      displayMode,
+      isWorkload,
+      showAnsiColors,
+      showContainerMetadata,
+      timestampMode,
     ]
   );
-
-  const displayLogs = useMemo(() => displayLines.join('\n'), [displayLines]);
+  const { rows: displayRows, copyText } = useContainerLogDisplay({
+    entries: filteredEntries,
+    emptyStateMessage,
+    jsonOf,
+    options: displayOptions,
+  });
 
   const hasCopyableContent = hasCopyableContainerLogs(
     isParsedView,
@@ -968,7 +969,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     isActive,
     isParsedView,
     rowCount: isParsedView ? parsedRows.length : logEntries.length,
-    tailFollowSignal: displayLogs,
+    // A new batch changes the shown rows (or the table's rows).
+    tailFollowSignal: isParsedView ? parsedRows : displayRows,
     cacheKey: panelId,
     getScrollPosition: getLogViewerScrollPosition,
     setScrollPosition: setLogViewerScrollPosition,
@@ -981,8 +983,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     resumeTailFollowing();
   }, [autoRefresh, resumeTailFollowing]);
 
+  const getCopyText = useCallback(
+    () => logCopyText(displayMode, copyText, getParsedCsv),
+    [copyText, displayMode, getParsedCsv]
+  );
   const handleCopyContainerLogs = useLogCopyAction({
-    text: logCopyText(displayMode, displayLines, parsedCsv),
+    getText: getCopyText,
     dispatch,
     source: 'LogViewer',
   });

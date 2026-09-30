@@ -14,13 +14,16 @@ import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from '../textSelec
 
 const COPY_FEEDBACK_MS = 750;
 
-/** Returns an action that copies `text` and shows success or failure on the copy icon. */
+/**
+ * Returns an action that copies the text `getText` builds and shows success or
+ * failure on the copy icon. The text is built only when copying.
+ */
 export function useLogCopyAction({
-  text,
+  getText,
   dispatch,
   source,
 }: {
-  text: string;
+  getText: () => string;
   dispatch: Dispatch<LogOptionsAction>;
   source: string;
 }): () => Promise<void> {
@@ -50,6 +53,7 @@ export function useLogCopyAction({
   );
 
   return useCallback(async () => {
+    const text = getText();
     if (!text) {
       showFeedback('error');
       return;
@@ -61,7 +65,7 @@ export function useLogCopyAction({
       reportOperationalError(error, { source, action: 'copyLogs' });
       showFeedback('error');
     }
-  }, [showFeedback, source, text]);
+  }, [getText, showFeedback, source]);
 }
 
 /** Routes the app's native copy and select-all to the text inside the log view. */
