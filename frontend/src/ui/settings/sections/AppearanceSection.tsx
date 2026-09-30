@@ -427,6 +427,7 @@ const ThemeEditor = (props: ThemeEditorProps) => {
           props.setThemeDraft((draft) => ({ ...draft, name: event.target.value }))
         }
         placeholder="Name"
+        aria-label="Theme name"
         onKeyDown={(event) => handleThemeEditorKeyDown(event, props.onSave, props.onCancel)}
       />
       <input
@@ -440,6 +441,7 @@ const ThemeEditor = (props: ThemeEditorProps) => {
           }));
         }}
         placeholder="Pattern (optional)"
+        aria-label="Cluster name pattern"
         aria-invalid={props.themePatternError ? 'true' : undefined}
         aria-describedby={props.themePatternError ? props.errorId : undefined}
         onKeyDown={(event) => handleThemeEditorKeyDown(event, props.onSave, props.onCancel)}
@@ -1115,6 +1117,7 @@ function AppearanceSection() {
         <input
           ref={paletteInputRef}
           className="palette-slider-value palette-hex-input"
+          aria-label={`${paletteFields.find((entry) => entry.field === field)?.label ?? field} value`}
           value={paletteDraft}
           onChange={(e) => setPaletteDraft(e.target.value)}
           onKeyDown={(e) => {

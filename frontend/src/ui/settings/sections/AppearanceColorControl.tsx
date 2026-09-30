@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { SettingRow } from './SettingsControls';
 
 export default function AppearanceColorControl({
@@ -16,6 +16,7 @@ export default function AppearanceColorControl({
   onChange: (value: string) => void;
   onReset: () => void;
 }>) {
+  const colorInputId = useId();
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -43,9 +44,10 @@ export default function AppearanceColorControl({
   const cancelEditing = () => setIsEditing(false);
 
   return (
-    <SettingRow title={title} help={help}>
+    <SettingRow title={title} help={help} controlId={colorInputId}>
       <div className="palette-color-field">
         <input
+          id={colorInputId}
           type="color"
           className="palette-accent-swatch"
           value={value || defaultColor}
@@ -55,6 +57,7 @@ export default function AppearanceColorControl({
           <input
             ref={inputRef}
             className="color-swatch-value palette-hex-input"
+            aria-label={`${title} hex value`}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {

@@ -88,7 +88,7 @@ function NumberSettingRow({ setting, id }: Readonly<{ setting: NumberSetting; id
   const value = usePreferenceValue(setting.read, setting.event);
   const [draft, setDraft] = useState<string | null>(null);
   return (
-    <SettingRow title={setting.title} help={setting.help}>
+    <SettingRow title={setting.title} help={setting.help} controlId={id}>
       <div className="setting-item setting-item-inline">
         <PreferenceNumberInput
           id={id}
@@ -138,6 +138,7 @@ function TimestampFormatRow({
   return (
     <SettingRow
       title="Timestamp format"
+      controlId={id}
       help={
         <>
           How Kubernetes API timestamps are written, as a Day.js pattern.{' '}

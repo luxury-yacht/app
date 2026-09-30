@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- Settings fields have names screen readers announce: each field is labelled by its setting's title (clicking the title focuses the field), and the color, tint and theme editors name their inputs.
 - Clicking a copy button or menu item copies again. Copying logs, table rows, error details, Details values, YAML, or shell text by clicking copied nothing, and the Logs tab's copy icon turned red.
 - A pod that starts while a workload's Logs tab is open is no longer hidden for up to 15 seconds while the workload's details catch up, and a CronJob whose pods could not all be listed no longer hides some of their logs.
 - A pod that starts while a Logs tab is open appears in the Pods dropdown as soon as its lines do, instead of up to several seconds later.

@@ -63,6 +63,8 @@
 }
 
 .settings-row-label-title {
+  /* A label title renders like the div one. */
+  display: block;
   font-size: var(--font-size-normal);
   font-weight: 600;
   color: var(--color-text);

@@ -9,6 +9,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import { controlName } from '@/test-utils/controlName';
 import { requireValue } from '@/test-utils/requireValue';
 import LogsSection from './LogsSection';
 
@@ -99,12 +100,14 @@ describe('LogsSection', () => {
     vi.clearAllMocks();
   });
 
+  // Inputs are found by the name they are announced with, so every lookup also
+  // checks that the row's title labels its input.
   const inputFor = (label: string) =>
     requireValue(
-      Array.from(container.querySelectorAll<HTMLElement>('.settings-row'))
-        .find((row) => row.querySelector('.settings-row-label-title')?.textContent === label)
-        ?.querySelector<HTMLInputElement>('input'),
-      `input for ${label}`
+      Array.from(container.querySelectorAll<HTMLInputElement>('input')).find(
+        (input) => controlName(input) === label
+      ),
+      `input labelled ${label}`
     );
 
   const type = async (input: HTMLInputElement, value: string) => {
@@ -120,6 +123,13 @@ describe('LogsSection', () => {
       input.blur();
     });
   };
+
+  it('gives every input a name', () => {
+    const unnamed = Array.from(container.querySelectorAll('input')).filter(
+      (input) => controlName(input) === ''
+    );
+    expect(unnamed).toEqual([]);
+  });
 
   it('saves the buffer size and container limits when each field is left', async () => {
     await type(inputFor('Buffer size'), '2500');

@@ -8,6 +8,7 @@ import type { types } from '@core/backend-api/models';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { controlName } from '@/test-utils/controlName';
 import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { requireValue } from '@/test-utils/requireValue';
 import AppearanceSection, { reorderThemeByOffset } from './AppearanceSection';
@@ -181,6 +182,47 @@ describe('AppearanceSection', () => {
     });
     container.remove();
     vi.clearAllMocks();
+  });
+
+  // The tint and color value editors and the new-theme editor appear on
+  // demand; their inputs are named too.
+  it('gives every input a name, including the value and theme editors', async () => {
+    const unnamedInputs = () =>
+      Array.from(container.querySelectorAll('input'))
+        .filter((input) => controlName(input) === '')
+        .map((input) => input.className || input.type);
+    expect(unnamedInputs()).toEqual([]);
+
+    const valueEditors = container.querySelectorAll('.palette-hex-clickable').length;
+    expect(valueEditors).toBeGreaterThan(3);
+    for (let index = 0; index < valueEditors; index += 1) {
+      await act(async () => {
+        requireValue(
+          container.querySelectorAll<HTMLButtonElement>('.palette-hex-clickable')[index],
+          `expected value button ${index}`
+        ).click();
+      });
+      const editor = requireValue(
+        container.querySelector<HTMLInputElement>('.palette-hex-input'),
+        `expected value editor ${index}`
+      );
+      expect(unnamedInputs()).toEqual([]);
+      await act(async () => {
+        editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
+    }
+
+    await act(async () => {
+      requireValue(
+        Array.from(container.querySelectorAll('button')).find(
+          (button) => button.textContent === 'Save new theme'
+        ),
+        'expected the Save new theme button'
+      ).click();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('.theme-name-input')).not.toBeNull();
+    expect(unnamedInputs()).toEqual([]);
   });
 
   it('renders styled appearance mode buttons and changes modes', async () => {
