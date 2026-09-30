@@ -67,12 +67,7 @@ import {
   useContainerLogDisplay,
 } from './containerLogRows';
 import { formatTimestampForMode } from './containerLogTimestamps';
-import {
-  filterEntriesForHiddenPods,
-  getWorkloadPodNames,
-  useActivePodSet,
-  useHiddenPods,
-} from './hooks/useActivePodSet';
+import { getWorkloadPodNames, useActivePodSet, useHiddenPods } from './hooks/useActivePodSet';
 import { useAnchoredLogEntries } from './hooks/useAnchoredLogEntries';
 import { useLogMessageRenderer } from './hooks/useLogMessageRenderer';
 import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
@@ -592,16 +587,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       showPreviousContainerLogs,
     ]
   );
-  const anchoredLogEntries = useAnchoredLogEntries(
+  const logEntries = useAnchoredLogEntries(
     source.entries,
+    hiddenPods,
     isTailFollowing,
     anchoredLogSourceKey
-  );
-  // Hidden pods are filtered after anchoring, so the rows a paused view keeps
-  // cannot hold a hidden pod's lines.
-  const logEntries = useMemo(
-    () => filterEntriesForHiddenPods(anchoredLogEntries, hiddenPods),
-    [anchoredLogEntries, hiddenPods]
   );
   const visibleLogWarnings = source.notices;
 

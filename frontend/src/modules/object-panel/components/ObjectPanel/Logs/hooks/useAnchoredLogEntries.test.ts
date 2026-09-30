@@ -43,19 +43,33 @@ describe('mergeAnchoredLogEntries', () => {
     expect(mergeAnchoredLogEntries(current, incoming)).toBe(current);
   });
 
-  // The buffer also changes in its middle: a deleted pod's lines are dropped,
-  // and a line that arrives late is inserted in time order.
-  it('drops lines the buffer removed from its middle', () => {
-    const [one, two, three, four, five, six] = [1, 2, 3, 4, 5, 6].map((n) => entry(n));
-    const current = [one, two, three, four, five];
-    const incoming = [one, three, five, six];
+  // A late line is shown after the rows already shown but sits early in the
+  // buffer, so the buffer can evict it first; the paused view keeps it.
+  it('keeps a shown late line that the buffer evicts', () => {
+    const [a, b, c, late, e, f] = [2, 3, 4, 1, 5, 6].map((n) => entry(n));
+    const current = [a, b, c, late, e];
+    const incoming = [a, b, c, e, f];
 
     expect(mergeAnchoredLogEntries(current, incoming).map(({ line }) => line)).toEqual([
-      'line 1',
+      'line 2',
       'line 3',
+      'line 4',
+      'line 1',
       'line 5',
       'line 6',
     ]);
+  });
+
+  it('drops the lines of pods the workload no longer has', () => {
+    const shown = entry(1);
+    const deleted = { ...entry(2), pod: 'web-2' };
+    const next = entry(3);
+
+    expect(
+      mergeAnchoredLogEntries([shown, deleted], [shown, deleted, next], new Set(['web-2'])).map(
+        ({ line }) => line
+      )
+    ).toEqual(['line 1', 'line 3']);
   });
 
   it('adds a line inserted into the middle of the buffer after the rows shown', () => {

@@ -46,8 +46,11 @@ Panel. They are not Application Logs and they are not Node Logs.
   scroll container during layout so unchanged content cannot visibly jump or
   expose the Resume scrolling control. While paused, rows already shown stay
   in place, including lines the buffer has since evicted; new entries follow
-  them, even ones earlier in time, and hidden or removed pods' lines leave
-  (`hooks/useAnchoredLogEntries.ts`). Resuming shows the buffer in time order.
+  them, even ones earlier in time (`hooks/useAnchoredLogEntries.ts`). A row
+  leaves only when its pod is hidden (the workload's pod list no longer has
+  it), never because the buffer no longer holds it; a pod the backend removes
+  while the pod list is unknown leaves when scrolling resumes. Resuming shows
+  the buffer in time order.
 
 ## Stream Protocol
 
@@ -126,15 +129,19 @@ turns its auto-refresh off, and one toggle (or `R`) retries.
   buffer is full, no read goes back past the oldest line it keeps (the floor),
   since an older line would be evicted on arrival. In a round of three or more
   containers, each first reads its last 2 × `maxEntries` ÷ containers lines
-  from the floor without following. When every read has arrived, or after
-  1 s, the backend finds the cut-off: the oldest line the buffer can hold
-  among the lines it already holds and everything read. A container whose read
-  came back full and whose oldest line is after the cut-off reads again, from
-  the cut-off, at most `maxEntries` lines; if that read fails, the container's
-  follow request reads from the cut-off instead. Each container then follows
-  from its newest line read, as a resume. One or two containers, and a read that fails,
-  use one follow request that carries both history and live output, from the
-  floor. Resumed containers follow from their resume points.
+  from the floor without following, keeping while it reads only the newest
+  lines within 2 × `maxBytes` ÷ containers bytes; the round keeps only each
+  line's time and size, so it holds about two buffers of history. When every
+  read has arrived, or after 1 s, the backend finds the cut-off: the oldest
+  line the buffer can hold among the lines it already holds and everything
+  read. A container whose read came back full (every line it asked for, or cut
+  short by its bytes) and whose oldest line is after the cut-off reads again,
+  from the cut-off, keeping at most `maxEntries` lines and `maxBytes` bytes; if
+  that read fails, the container's follow request reads from the cut-off
+  instead. Each container then follows from its newest line read, as a resume.
+  One or two containers, and a read that fails, use one follow request that
+  carries both history and live output, from the floor. Resumed containers
+  follow from their resume points.
 - A follow request with no response headers after 20 s becomes a `failed`
   issue and retries; an established stream that is quiet never times out. A
   plain history read must finish within 20 s.

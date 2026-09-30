@@ -380,12 +380,13 @@ func (r *containerLogRun) deliverPlannedHistory(ctx context.Context, target cont
 // from the cut-off, since the first read left out lines the buffer can hold.
 func (r *containerLogRun) readPlannedHistory(ctx context.Context, target containerTarget, round *historyRound) ([]Entry, time.Time, bool) {
 	key := target.key()
-	share, floor, ok := round.shareFor(ctx)
-	if !ok || share == 0 {
+	share, ok := round.shareFor(ctx)
+	floor := share.floor
+	if !ok || share.lines == 0 {
 		round.withdraw(key)
 		return nil, floor, false
 	}
-	read, err := r.streamer.readHistory(ctx, target, share, floor)
+	read, leftOut, err := r.streamer.readHistory(ctx, target, share.lines, share.bytes, floor)
 	if err != nil {
 		round.withdraw(key)
 		r.streamer.logger.Debug(fmt.Sprintf("containerlogsstream: history read failed for %s, following instead: %v", key, err), logsources.ContainerLogsStream)
@@ -395,10 +396,10 @@ func (r *containerLogRun) readPlannedHistory(ctx context.Context, target contain
 	if !decided {
 		return nil, floor, false
 	}
-	if !readsFurther(read, share, cutoff) {
+	if !readsFurther(read, leftOut || len(read) >= share.lines, cutoff) {
 		return read, floor, true
 	}
-	more, err := r.streamer.readHistory(ctx, target, r.opts.MaxEntries, cutoff)
+	more, _, err := r.streamer.readHistory(ctx, target, r.opts.MaxEntries, r.opts.MaxBytes, cutoff)
 	if err != nil {
 		r.streamer.logger.Debug(fmt.Sprintf("containerlogsstream: second history read failed for %s, following from the cut-off: %v", key, err), logsources.ContainerLogsStream)
 		return nil, cutoff, false

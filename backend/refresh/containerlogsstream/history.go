@@ -174,13 +174,17 @@ func (h *historyRounds) seal(round *historyRound) {
 // the group downloads about one buffer of history instead of one per
 // container.
 //
-// Each container first reads a share of the buffer, from the floor: the oldest
-// line the client's buffer keeps, when it is full. Once every share has
+// Each container first reads a share of the buffer, in lines and in bytes,
+// from the floor: the oldest line the client's buffer keeps, when it is full.
+// A read keeps only the newest lines that fit its bytes, and the round keeps
+// only each line's time and size, so a round holds about two buffers of
+// history however large the containers' logs are. Once every share has
 // arrived, or the decision time has passed, the round finds the cut-off: the
 // oldest line the client can hold among what it already holds and everything
 // read. A container can hold more of the newest lines only if its share came
-// back full and its oldest line is after the cut-off; it alone reads again,
-// from the cut-off. The cut-off comes from a subset of the client's lines, so
+// back full (every line it asked for, or cut short by its bytes) and its oldest
+// line is after the cut-off; it alone reads again, from the cut-off, keeping at
+// most one buffer. The cut-off comes from a subset of the client's lines, so
 // it is never later than the true one and every line the client can hold is
 // read.
 type historyRound struct {
@@ -192,11 +196,14 @@ type historyRound struct {
 
 	mu sync.Mutex
 	// waiting holds the members that have not reported yet.
-	waiting    map[string]struct{}
-	reads      [][]Entry
+	waiting map[string]struct{}
+	// reads holds only the time and size of each line the members read, all
+	// the cut-off needs.
+	reads      []lineRecord
 	isSealed   bool
 	isDecided  bool
 	share      int
+	byteShare  int
 	floor      time.Time
 	cutoff     time.Time
 	decideTime *time.Timer
@@ -208,9 +215,10 @@ func (p *historyRound) add(key string) {
 	p.waiting[key] = struct{}{}
 }
 
-// seal ends membership, sets the share (twice the buffer, split across the
-// members) and the floor. With fewer than three members the share is no
-// smaller than the buffer, so each member follows directly from the floor.
+// seal ends membership, sets the share (twice the buffer, in lines and in
+// bytes, split across the members) and the floor. With fewer than three
+// members the share is no smaller than the buffer, so each member follows
+// directly from the floor.
 func (p *historyRound) seal(decideAfter time.Duration) {
 	floor := p.sent.floor()
 	p.mu.Lock()
@@ -220,6 +228,7 @@ func (p *historyRound) seal(decideAfter time.Duration) {
 	if count := len(p.waiting); count > 0 {
 		if share := (2*p.maxEntries + count - 1) / count; share < p.maxEntries {
 			p.share = share
+			p.byteShare = (2*p.maxBytes + count - 1) / count
 		}
 	}
 	close(p.sealed)
@@ -230,15 +239,23 @@ func (p *historyRound) seal(decideAfter time.Duration) {
 	p.decideTime = time.AfterFunc(decideAfter, p.decide)
 }
 
-// shareFor waits for the round to be sealed and returns the member's share
-// and the floor. A zero share means the member follows directly from the
-// floor; false means the session ended first.
-func (p *historyRound) shareFor(ctx context.Context) (int, time.Time, bool) {
+// historyShare is what one member of a round reads first: at most lines lines
+// whose sizes total at most bytes, from the floor. Zero lines means the member
+// follows directly from the floor.
+type historyShare struct {
+	lines int
+	bytes int
+	floor time.Time
+}
+
+// shareFor waits for the round to be sealed and returns the member's share;
+// false means the session ended first.
+func (p *historyRound) shareFor(ctx context.Context) (historyShare, bool) {
 	select {
 	case <-p.sealed:
-		return p.share, p.floor, true
+		return historyShare{lines: p.share, bytes: p.byteShare, floor: p.floor}, true
 	case <-ctx.Done():
-		return 0, time.Time{}, false
+		return historyShare{}, false
 	}
 }
 
@@ -247,7 +264,9 @@ func (p *historyRound) shareFor(ctx context.Context) (int, time.Time, bool) {
 func (p *historyRound) report(ctx context.Context, key string, read []Entry) (time.Time, bool) {
 	p.mu.Lock()
 	if !p.isDecided {
-		p.reads = append(p.reads, read)
+		for _, entry := range read {
+			p.reads = append(p.reads, recordOf(entry))
+		}
 		p.removeLocked(key)
 	}
 	p.mu.Unlock()
@@ -296,26 +315,28 @@ func (p *historyRound) decideLocked() {
 
 // newestCutoff is the time of the oldest line the client can hold among the
 // lines it holds and the reads, or zero while it can hold them all.
-func newestCutoff(held []lineRecord, evicted int, reads [][]Entry, maxEntries, maxBytes int) time.Time {
+func newestCutoff(held []lineRecord, evicted int, reads []lineRecord, maxEntries, maxBytes int) time.Time {
 	window := newRecordWindow(maxEntries, maxBytes)
 	for _, record := range held {
 		window.Add(record)
 	}
-	for _, read := range reads {
-		for _, entry := range read {
-			window.Add(recordOf(entry))
-		}
+	for _, record := range reads {
+		window.Add(record)
 	}
 	kept, leftOut := window.Take()
 	return oldestHeld(kept, leftOut+evicted, maxEntries)
 }
 
 // readsFurther reports whether a first read may have left out lines newer than
-// the cut-off: its share came back full and its oldest line is after the
-// cut-off, or nothing was cut off.
-func readsFurther(read []Entry, share int, cutoff time.Time) bool {
-	if len(read) < share {
+// the cut-off: it came back full (its share of lines, or cut short by its share
+// of bytes) and its oldest line is after the cut-off, or nothing was cut off.
+func readsFurther(read []Entry, full bool, cutoff time.Time) bool {
+	if !full {
 		return false
+	}
+	if len(read) == 0 {
+		// A byte share smaller than the newest line kept nothing.
+		return true
 	}
 	oldest := parseLogTimestamp(read[0].Timestamp)
 	return !oldest.IsZero() && (cutoff.IsZero() || oldest.After(cutoff))
@@ -324,7 +345,7 @@ func readsFurther(read []Entry, share int, cutoff time.Time) bool {
 // readHistory reads a container's last tail lines, only those from since's
 // second on when since is set, without following. The whole read is bounded by
 // the response timeout, since a plain read that stalls would never end.
-func (s *Streamer) readHistory(ctx context.Context, target containerTarget, tail int, since time.Time) ([]Entry, error) {
+func (s *Streamer) readHistory(ctx context.Context, target containerTarget, tail, maxBytes int, since time.Time) ([]Entry, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.responseTimeout)
 	defer cancel()
 	tailLines := int64(tail)
@@ -335,19 +356,53 @@ func (s *Streamer) readHistory(ctx context.Context, target containerTarget, tail
 	}
 	stream, err := s.client.CoreV1().Pods(target.namespace).GetLogs(target.pod, options).Stream(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer func() { _ = stream.Close() }()
-	var entries []Entry
+	window := historyWindow{maxBytes: maxBytes}
 	reader := containerlogs.NewLineReader(stream)
 	for {
 		line, err := reader.Next()
 		if errors.Is(err, io.EOF) {
-			return entries, nil
+			return window.kept(), window.leftOut, nil
 		}
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		entries = append(entries, target.entry(line))
+		window.add(target.entry(line))
 	}
+}
+
+// historyWindow keeps the newest lines of a read, which arrive oldest first,
+// whose sizes fit maxBytes (no limit when it is not positive), so a read never
+// holds more of a container's history than it may deliver.
+type historyWindow struct {
+	maxBytes int
+	lines    []Entry
+	start    int
+	bytes    int
+	leftOut  bool
+}
+
+func (w *historyWindow) add(entry Entry) {
+	w.lines = append(w.lines, entry)
+	w.bytes += len(entry.Line)
+	for w.maxBytes > 0 && w.bytes > w.maxBytes && w.start < len(w.lines) {
+		w.bytes -= len(w.lines[w.start].Line)
+		w.lines[w.start] = Entry{} // releases the line's text
+		w.start++
+		w.leftOut = true
+	}
+	// Reuse the dropped front once it is half the slice, so the slice grows with
+	// the lines kept rather than the lines read.
+	if w.start > 0 && 2*w.start >= len(w.lines) {
+		kept := copy(w.lines, w.lines[w.start:])
+		clear(w.lines[kept:])
+		w.lines = w.lines[:kept]
+		w.start = 0
+	}
+}
+
+func (w *historyWindow) kept() []Entry {
+	return w.lines[w.start:]
 }

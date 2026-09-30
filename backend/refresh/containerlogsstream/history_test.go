@@ -1,6 +1,7 @@
 package containerlogsstream
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -195,6 +197,73 @@ func TestFailedSecondReadFollowsFromTheCutOff(t *testing.T) {
 	require.EqualValues(t, 8, busy[2].tail)
 	require.NotNil(t, busy[2].since)
 	require.True(t, busy[2].since.Equal(historyOrigin.Add(11*time.Second)), "follow from the cut-off, %v", busy[2].since)
+}
+
+// A history read holds no more of a container's history than its byte limit,
+// however much the container returns: it keeps the newest lines that fit and
+// says it left older ones out.
+func TestHistoryReadKeepsOnlyTheNewestLinesThatFit(t *testing.T) {
+	var body strings.Builder
+	for i := range 10 {
+		fmt.Fprintf(&body, "%s %d%s\n", historyOrigin.Add(time.Duration(i)*time.Second).Format(time.RFC3339Nano), i, strings.Repeat("x", 100_000))
+	}
+	baseClient := fake.NewClientset()
+	pods := newLogPodsWithResponses(baseClient.CoreV1().Pods("default"), "default", []logResponse{{body: body.String()}})
+	client := &stubClient{Clientset: baseClient, core: &logCore{CoreV1Interface: baseClient.CoreV1(), overrides: map[string]*logPods{"default": pods}}}
+	target := containerTarget{namespace: "default", pod: "web-0", container: "app"}
+
+	read, leftOut, err := NewStreamer(client, applog.Noop, nil).readHistory(context.Background(), target, 100, 250_000, time.Time{})
+
+	require.NoError(t, err)
+	require.True(t, leftOut)
+	require.Len(t, read, 2)
+	require.True(t, strings.HasPrefix(read[0].Line, "8"), "the newest lines, oldest first")
+	require.True(t, strings.HasPrefix(read[1].Line, "9"))
+}
+
+// A round of three or more splits twice the buffer across its members, in
+// bytes as in lines, so together they hold about two buffers of history.
+func TestHistoryRoundSharesTheBufferBytesAcrossItsMembers(t *testing.T) {
+	rounds := newHistoryRounds(100, 300_000, newSentLines(100, 300_000), time.Hour, time.Hour)
+	round := rounds.join("a")
+	rounds.join("b")
+	rounds.join("c")
+	rounds.sealFirst()
+
+	share, ok := round.shareFor(context.Background())
+
+	require.True(t, ok)
+	require.Equal(t, 67, share.lines)
+	require.Equal(t, 200_000, share.bytes)
+	for _, key := range []string{"a", "b", "c"} {
+		round.withdraw(key)
+	}
+}
+
+// A first read cut short by its share of the buffer's bytes may have left out
+// lines the buffer can hold, so it reads again: the snapshot still holds the
+// newest lines that fit.
+func TestReadCutByItsByteShareReadsAgain(t *testing.T) {
+	busy := make([]logLine, 10)
+	for i := range busy {
+		busy[i] = logLine{at: historyOrigin.Add(time.Duration(100+i) * time.Second), text: fmt.Sprintf("busy-%d-%s", i, strings.Repeat("x", 60_000))}
+	}
+	logs := map[string][]logLine{
+		"busy": busy,
+		"q0":   linesAt("q0", 0, 1),
+		"q1":   linesAt("q1", 2, 3),
+	}
+	session := startLogSession(t, sessionSetup{
+		request: Request{Scope: "cluster-a|default:/v1:Pod:web-0", MaxEntries: 100, MaxBytes: 262_144},
+		objects: []runtime.Object{runningPod("web-0", "busy", "q0", "q1")},
+		respond: kubeletLogs(logs),
+	})
+
+	var prefixes []string
+	for _, line := range entryLines(session.snapshot(t)) {
+		prefixes = append(prefixes, strings.SplitN(line, "-x", 2)[0])
+	}
+	require.Equal(t, []string{"q0-0", "q0-1", "q1-0", "q1-1", "busy-6", "busy-7", "busy-8", "busy-9"}, prefixes)
 }
 
 // Lines written between a container's history read and its follow request
