@@ -130,3 +130,22 @@ func TestNewestWindowNeverHoldsMoreThanTwiceItsLimits(t *testing.T) {
 		require.LessOrEqual(t, byBytes.Len(), 20)
 	}
 }
+
+// A session keeps a window of the lines it sent to learn what the client still
+// holds; looking must not empty it.
+func TestNewestWindowKeptLeavesTheWindowAsItWas(t *testing.T) {
+	base := time.Date(2026, 9, 29, 10, 0, 0, 0, time.UTC)
+	at := func(ms int) string { return base.Add(time.Duration(ms) * time.Millisecond).Format(time.RFC3339Nano) }
+	window := windowOf(2, 1<<20)
+	for i := range 3 {
+		window.Add(orderedLine{timestamp: at(i), text: fmt.Sprintf("line-%d", i)})
+	}
+
+	kept, leftOut := window.Kept()
+	require.Equal(t, []string{"line-1", "line-2"}, texts(kept))
+	require.Equal(t, 1, leftOut)
+	window.Add(orderedLine{timestamp: at(3), text: "line-3"})
+	kept, leftOut = window.Take()
+	require.Equal(t, []string{"line-2", "line-3"}, texts(kept))
+	require.Equal(t, 2, leftOut)
+}

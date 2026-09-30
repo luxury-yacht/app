@@ -242,14 +242,17 @@ func (s *containerLogsStream) run(ctx context.Context, initial containerLogsInit
 	pending := newPendingEntries(config.ContainerLogsStreamPendingMaxEntries, config.ContainerLogsStreamPendingMaxBytes).
 		collectHistory(s.options.MaxEntries, s.options.MaxBytes)
 	snapshot := newSnapshotWait()
+	sent := newSentLines(s.options.MaxEntries, s.options.MaxBytes)
 	issues := newIssueSet()
 	warnings := make(chan []containerlogs.Warning, 8)
 	fatal := make(chan error, 1)
 	runnerDone := s.startRunner(ctx, initial, containerLogRunConfig{
 		opts: s.options, limiterSession: limiterSession, initialWarnings: initial.warnings,
-		sink: pending, snapshot: snapshot, warningsCh: warnings, issues: issues, fatal: fatal,
+		sink: pending, snapshot: snapshot, warningsCh: warnings, issues: issues, sent: sent, fatal: fatal,
 	})
 	delivery := newContainerLogsDelivery(s, pending, issues, initial.warnings)
+	delivery.sent = sent
+	delivery.removedPods = absentResumedPods(s.options.Resume, initial.pods)
 	events := deliveryEvents{runnerDone: runnerDone, warnings: warnings, fatal: fatal}
 	if !delivery.sendSnapshot(ctx, snapshot.done, events) {
 		return
@@ -284,9 +287,14 @@ type deliveryEvents struct {
 // containerLogsDelivery sends a session's pending entries, warning and issue
 // updates, and a fatal error if one ends the session.
 type containerLogsDelivery struct {
-	request           *containerLogsStream
-	pending           *pendingEntries
-	issues            *issueSet
+	request *containerLogsStream
+	pending *pendingEntries
+	issues  *issueSet
+	// sent records every line sent, so history reads skip what the client
+	// could not keep.
+	sent *sentLines
+	// removedPods are the resumed pods that no longer exist.
+	removedPods       []string
 	batchTimer        *time.Timer
 	selectionWarnings []containerlogs.Warning
 	emittedWarnings   []containerlogs.Warning
@@ -340,6 +348,7 @@ func (d *containerLogsDelivery) writeSnapshot() bool {
 		payload := EventPayload{Entries: frame, Reset: i == 0, SnapshotComplete: i == len(frames)-1}
 		if payload.Reset {
 			payload.Resumed = len(d.request.options.Resume) > 0
+			payload.RemovedPods = d.removedPods
 			payload.Warnings, payload.Issues = listPayload(warnings, false), listPayload(issues, false)
 		}
 		if payload.SnapshotComplete {
@@ -350,6 +359,7 @@ func (d *containerLogsDelivery) writeSnapshot() bool {
 			return false
 		}
 	}
+	d.sent.add(kept)
 	d.emittedWarnings, d.emittedIssues = warnings, issues
 	d.recordDelivery(len(kept), dropped)
 	return true
@@ -488,6 +498,7 @@ func (d *containerLogsDelivery) flush() bool {
 			d.request.recordError(err)
 			return true
 		}
+		d.sent.add(frame)
 	}
 	d.recordDelivery(len(entries), dropped)
 	if dropped > 0 {
@@ -562,6 +573,26 @@ func parseRequest(request Request) (Options, error) {
 		// Keep the original scope for client-side keying.
 		ScopeString: rawScope,
 	}, nil
+}
+
+// absentResumedPods names the pods the client resumed that the session did not
+// find: they ended while the client was away. A pod recreated with the same
+// name is found and not named.
+func absentResumedPods(resume []containerTarget, pods []*corev1.Pod) []string {
+	present := make(map[string]struct{}, len(pods))
+	for _, pod := range pods {
+		if pod != nil {
+			present[pod.Name] = struct{}{}
+		}
+	}
+	var absent []string
+	for _, target := range resume {
+		if _, found := present[target.pod]; !found {
+			present[target.pod] = struct{}{}
+			absent = append(absent, target.pod)
+		}
+	}
+	return absent
 }
 
 // resumeTargets turns the client's resume points into cursors. If any point is

@@ -30,10 +30,10 @@ type Streamer struct {
 	logger        Logger
 	telemetry     *telemetry.Recorder
 	perScopeLimit int
-	// responseTimeout, caughtUpIdle and historyDecision are fields so tests can
-	// shorten them.
+	// The timings are fields so tests can shorten them.
 	responseTimeout time.Duration
 	caughtUpIdle    time.Duration
+	historyGather   time.Duration
 	historyDecision time.Duration
 }
 
@@ -50,6 +50,7 @@ func NewStreamer(client kubernetes.Interface, logger Logger, recorder *telemetry
 		client: client, logger: logger, telemetry: recorder, perScopeLimit: limit,
 		responseTimeout: config.ContainerLogsStreamResponseTimeout,
 		caughtUpIdle:    config.ContainerLogsStreamCaughtUpIdle,
+		historyGather:   config.ContainerLogsStreamHistoryGather,
 		historyDecision: config.ContainerLogsStreamHistoryDecision,
 	}
 }
@@ -64,6 +65,9 @@ type containerTarget struct {
 	// new instance means the container restarted or its pod was recreated.
 	instance string
 	cursor   containerlogs.ResumeCursor
+	// historySince is where a follower without a cursor starts reading: the
+	// oldest line the client's buffer still keeps, or zero while it has room.
+	historySince time.Time
 }
 
 func (t containerTarget) ref() containerlogs.ContainerRef {
@@ -166,7 +170,7 @@ func (s *Streamer) run(
 	defer run.shutdown()
 	run.setInitialPods(ctx, initialPods)
 	sealSnapshot(config.snapshot)
-	run.history.seal(s.historyDecision)
+	run.history.sealFirst()
 	var events <-chan podEvent
 	if podWatch != nil {
 		events = run.startPodInformer(ctx)
@@ -194,8 +198,8 @@ type containerLogRun struct {
 	limiterNotify  <-chan struct{}
 	sink           entrySink
 	snapshot       *snapshotWait
-	// history plans the first targets' history reads; nil without a snapshot.
-	history    *historyPlan
+	// history plans targets' history reads; nil without a client snapshot.
+	history    *historyRounds
 	warningsCh chan<- []containerlogs.Warning
 	issues     *issueSet
 	fatal      chan<- error
@@ -229,6 +233,8 @@ type containerLogRunConfig struct {
 	snapshot        *snapshotWait
 	warningsCh      chan<- []containerlogs.Warning
 	issues          *issueSet
+	// sent follows the lines sent to the client; nil without a client.
+	sent *sentLines
 	// fatal receives a failure that ends the session.
 	fatal chan<- error
 }
@@ -252,7 +258,7 @@ func newContainerLogRun(streamer *Streamer, config containerLogRunConfig, podWat
 		run.limiterNotify = config.limiterSession.Notify()
 	}
 	if config.snapshot != nil {
-		run.history = newHistoryPlan(config.opts.MaxEntries, config.opts.MaxBytes)
+		run.history = newHistoryRounds(config.opts.MaxEntries, config.opts.MaxBytes, config.sent, streamer.historyGather, streamer.historyDecision)
 	}
 	return run
 }
@@ -302,27 +308,29 @@ func (r *containerLogRun) startTarget(ctx context.Context, target containerTarge
 	// Only one follower per target runs at a time and it writes its cursor back
 	// before its slot is released, so the next follower resumes where it ended.
 	target.cursor = r.cursors[key].Clone()
-	// A first target without a resume point reads its history through the plan.
-	readFirst := target.cursor.IsZero() && r.history.register(key)
+	// A target without a resume point reads its history in a round with the
+	// others starting now.
+	var round *historyRound
+	if target.cursor.IsZero() {
+		round = r.history.join(key)
+	}
 	caughtUp := func() {}
 	if r.snapshot != nil {
 		caughtUp = r.snapshot.expect(key)
 	}
 	r.targetWG.Add(1)
-	go r.followTarget(targetCtx, target, caughtUp, readFirst)
+	go r.followTarget(targetCtx, target, caughtUp, round)
 }
 
-func (r *containerLogRun) followTarget(ctx context.Context, target containerTarget, caughtUp func(), readFirst bool) {
+func (r *containerLogRun) followTarget(ctx context.Context, target containerTarget, caughtUp func(), round *historyRound) {
 	defer r.targetWG.Done()
 	defer caughtUp()
 	cursor := target.cursor
 	defer func() { r.finishTarget(ctx, target, cursor) }()
 	defer r.recoverFollower()
-	if readFirst {
-		if read, ok := r.deliverPlannedHistory(ctx, target); ok {
-			target.cursor, cursor = read, read
-			caughtUp()
-		}
+	if round != nil {
+		target = r.deliverPlannedHistory(ctx, target, round, caughtUp)
+		cursor = target.cursor
 	}
 	cursor = r.streamer.followContainer(ctx, target, r.sink, followOptions{
 		tailLines: r.opts.MaxEntries, caughtUp: caughtUp, issues: r.issues,
@@ -330,45 +338,49 @@ func (r *containerLogRun) followTarget(ctx context.Context, target containerTarg
 	})
 }
 
-// deliverPlannedHistory reads the target's history through the plan, delivers
-// it, and returns the cursor at its newest line for the follower to continue
-// from. It reports false when the follow request must read the history.
-func (r *containerLogRun) deliverPlannedHistory(ctx context.Context, target containerTarget) (containerlogs.ResumeCursor, bool) {
-	history, ok := r.readPlannedHistory(ctx, target)
+// deliverPlannedHistory reads the target's history through its round and
+// delivers it. The returned target follows on from the newest line read or,
+// when its follow request reads the history, from the round's floor.
+func (r *containerLogRun) deliverPlannedHistory(ctx context.Context, target containerTarget, round *historyRound, caughtUp func()) containerTarget {
+	history, floor, ok := r.readPlannedHistory(ctx, target, round)
+	target.historySince = floor
 	if !ok {
-		return containerlogs.ResumeCursor{}, false
+		return target
 	}
-	var cursor containerlogs.ResumeCursor
 	for _, entry := range history {
 		r.sink.add(entry)
-		cursor.Observe(parseLogTimestamp(entry.Timestamp), entry.Line)
+		target.cursor.Observe(parseLogTimestamp(entry.Timestamp), entry.Line)
 	}
-	return cursor, true
+	caughtUp()
+	return target
 }
 
-func (r *containerLogRun) readPlannedHistory(ctx context.Context, target containerTarget) ([]Entry, bool) {
+// readPlannedHistory returns the target's history and the round's floor. It
+// reports false when the target reads its history by following: its round is
+// too small to share, or the read failed.
+func (r *containerLogRun) readPlannedHistory(ctx context.Context, target containerTarget, round *historyRound) ([]Entry, time.Time, bool) {
 	key := target.key()
-	share, ok := r.history.shareFor(ctx)
-	if !ok {
-		r.history.withdraw(key)
-		return nil, false
+	share, floor, ok := round.shareFor(ctx)
+	if !ok || share == 0 {
+		round.withdraw(key)
+		return nil, floor, false
 	}
-	read, err := r.streamer.readHistory(ctx, target, share, time.Time{})
+	read, err := r.streamer.readHistory(ctx, target, share, floor)
 	if err != nil {
-		r.history.withdraw(key)
+		round.withdraw(key)
 		r.streamer.logger.Debug(fmt.Sprintf("containerlogsstream: history read failed for %s, following instead: %v", key, err), logsources.ContainerLogsStream)
-		return nil, false
+		return nil, floor, false
 	}
-	cutoff, decided := r.history.report(ctx, key, read)
+	cutoff, decided := round.report(ctx, key, read)
 	if !decided {
-		return nil, false
+		return nil, floor, false
 	}
 	if readsFurther(read, share, cutoff) {
 		if more, err := r.streamer.readHistory(ctx, target, r.opts.MaxEntries, cutoff); err == nil {
 			read = more
 		}
 	}
-	return read, true
+	return read, floor, true
 }
 
 func (r *containerLogRun) recoverFollower() {
@@ -750,15 +762,24 @@ func (c *cancelOnClose) Close() error {
 // releases them, repeating lines rather than losing any.
 func (s *containerFollowSession) logOptions() *corev1.PodLogOptions {
 	options := &corev1.PodLogOptions{Container: s.target.container, Follow: true, Timestamps: true}
-	if !s.cursor.IsZero() {
-		since := metav1.NewTime(s.cursor.Since())
-		options.SinceTime = &since
+	if since := s.since(); !since.IsZero() {
+		sinceTime := metav1.NewTime(since)
+		options.SinceTime = &sinceTime
 	}
 	if s.tailLines > 0 {
 		tail := int64(s.tailLines)
 		options.TailLines = &tail
 	}
 	return options
+}
+
+// since is where the next open starts: the cursor when resuming, otherwise the
+// target's history start.
+func (s *containerFollowSession) since() time.Time {
+	if !s.cursor.IsZero() {
+		return s.cursor.Since()
+	}
+	return s.target.historySince
 }
 
 func (s *containerFollowSession) handleOpenFailure(ctx context.Context, err error) bool {

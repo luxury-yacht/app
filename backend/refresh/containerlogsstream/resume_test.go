@@ -167,3 +167,25 @@ func TestResumePointsApplyOnlyToThePodsTheSessionStartsWith(t *testing.T) {
 		}
 	}
 }
+
+// A resumed tab still holds lines of pods that ended while it was away; the
+// session names them so the client can drop them. A pod recreated with the
+// same name exists again and is not named.
+func TestResumedSessionNamesPodsThatNoLongerExist(t *testing.T) {
+	session := startLogSession(t, sessionSetup{
+		request: Request{
+			Scope: "cluster-a|default:apps/v1:Deployment:web", MaxEntries: 50,
+			Resume: []ResumePoint{
+				{Pod: "web-0", Container: "app", Timestamp: resumeAt(time.Millisecond), Lines: []string{"kept"}},
+				{Pod: "web-gone", Container: "app", Timestamp: resumeAt(time.Millisecond), Lines: []string{"gone"}},
+				{Pod: "web-gone", Container: "sidecar", Timestamp: resumeAt(time.Millisecond), Lines: []string{"gone too"}},
+			},
+		},
+		objects: []runtime.Object{webDeployment(), runningPod("web-0", "app")},
+		respond: replayFrom([]time.Duration{time.Millisecond}, []string{"kept"}),
+	})
+
+	frames := session.snapshot(t)
+	require.True(t, frames[0].Resumed)
+	require.Equal(t, []string{"web-gone"}, frames[0].RemovedPods)
+}

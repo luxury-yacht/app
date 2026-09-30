@@ -114,6 +114,17 @@ func (w *NewestWindow[T]) Take() ([]T, int) {
 	return kept, leftOut
 }
 
+// Kept returns the newest entries that fit, oldest first, and how many entries
+// have been left out so far, leaving the window as it was.
+func (w *NewestWindow[T]) Kept() ([]T, int) {
+	w.compact()
+	kept := make([]T, len(w.held))
+	for i := range w.held {
+		kept[i] = w.held[i].entry
+	}
+	return kept, w.leftOut
+}
+
 // compact sorts the held entries and keeps the newest run that fits both
 // limits, as far back as the first entry that does not fit.
 func (w *NewestWindow[T]) compact() {

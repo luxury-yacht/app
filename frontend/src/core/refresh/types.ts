@@ -67,6 +67,9 @@ export interface ContainerLogsSnapshotPayload {
   // `received` entries delivered since the last snapshot. `received` is not the
   // container's total log size.
   truncation: { shown: number; received: number } | null;
+  // The pods that have lines in the buffer; the same array until that set
+  // changes.
+  pods: string[];
 }
 
 export type DomainPayloadMap = BackendDomainPayloadMap & {

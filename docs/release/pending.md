@@ -11,10 +11,13 @@
 - Log settings moved from the gear in the Logs tab to a new Logs section in Settings, and "Object Panel Logs Tab buffer size" is now "Buffer size".
 - Container logs pick up where they left off when the app window is shown again, the connection drops, or auto-refresh is turned back on, instead of downloading every container's history again.
 - Opening container logs for a workload with many containers downloads far less: about one buffer of history in total instead of one buffer per container.
+- Pods that start while a Logs tab is open download less: they read nothing older than the tab can still show, and pods starting together share one buffer of history.
+- A Logs tab that resumes after being hidden or reconnecting drops the lines of pods that ended in the meantime, so they no longer take up room in the buffer.
 - The Logs tab's source dropdown is now two dropdowns, Pods and Containers, each with its own All and None.
 
 ### Fixed
 
+- A pod that starts while a Logs tab is open appears in the Pods dropdown as soon as its lines do, instead of up to several seconds later.
 - Scaling up a workload no longer blanks its Logs tab for a few seconds; a new pod's lines show as soon as they arrive.
 - The Logs card in the Diagnostics panel now counts lines delivered to every Logs tab; it often showed 0 or one tab's count.
 - The Logs tab stays responsive with large buffers: taking in new lines no longer slows down as the buffer grows (about ten times faster at 10,000 lines).

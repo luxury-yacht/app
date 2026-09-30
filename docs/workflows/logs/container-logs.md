@@ -30,7 +30,9 @@ Panel. They are not Application Logs and they are not Node Logs.
   Each time the workload's pod list arrives (every 5 s), the pods that already
   have lines but are not in it are hidden. A pod whose first line arrives after
   the latest list stays visible until the next one, since the list can lag a
-  newly started pod (`hooks/useActivePodSet.ts`).
+  newly started pod (`hooks/useActivePodSet.ts`). The Pods dropdown offers the
+  pod list's pods and the pods with lines in the buffer, which the stream
+  manager tracks as `pods`, less hidden pods.
 - Do not start both duplicate scoped-domain enablement and explicit stream
   startup paths for the same consumer.
 - Tail-following is explicit user intent shared by raw, Pretty, and parsed
@@ -69,7 +71,7 @@ Server frames, generated into `types.generated.ts`:
   The client applies a snapshot only when its last frame arrives. When the
   request's resume points were used, the first frame carries `resumed`: the
   snapshot holds only lines after them, plus history for containers without
-  one.
+  one, and `removedPods` names the resumed pods that no longer exist.
 - **Live batches.** At most 64 entries and one frame budget, flushed every
   250 ms. History that arrives after the snapshot is always sent; the client
   inserts it in time order.
@@ -84,7 +86,11 @@ Server frames, generated into `types.generated.ts`:
 
 A restarted stream (a reconnect, the window shown again, auto-refresh turned
 back on) resumes, and its `resumed` snapshot is merged into the buffer, as live
-lines are. Lines of pods that ended meanwhile stay, as they do while live. A
+lines are. Its first frame names, in `removedPods`, the resumed pods that no
+longer exist, and the client drops their lines; a pod recreated with the same
+name exists and keeps its lines. A pod that ends during a live session keeps its
+lines until newer ones push them out (the view hides them), since a live
+deletion may be a same-name recreation. A
 selection change, a larger buffer size, an empty buffer, or resume points the
 backend cannot use (one unusable point voids them all) read full history, and
 that snapshot replaces the buffer; an identical one keeps entry render identity
@@ -99,17 +105,22 @@ turns its auto-refresh off, and one toggle (or `R`) retries.
 
 ## Backend Behavior
 
-- A session's first containers read their history in two steps when there
-  are three or more of them, so a tab downloads about one buffer of history
-  rather than one per container (`history.go`). Each first reads its last
-  2 × `maxEntries` ÷ containers lines without following. When every read has
-  arrived, or after 1 s, the backend finds the cut-off: the oldest line the
-  buffer can hold among everything read. A container whose read came back full
-  and whose oldest line is after the cut-off reads again, from the cut-off,
-  at most `maxEntries` lines. Each container then follows from its newest line
-  read, as a resume. A read that fails falls back to one follow request that
-  carries both history and live output, which is how one or two containers,
-  containers added later, and resumed containers always read.
+- Containers read their history in rounds, so a tab downloads about one
+  buffer of history rather than one per container (`history.go`). A session's
+  first containers form the first round; containers that start later (new
+  pods, capacity freed under a target cap) are gathered for 250 ms into
+  further rounds. The backend records the lines it has sent: once the client's
+  buffer is full, no read goes back past the oldest line it keeps (the floor),
+  since an older line would be evicted on arrival. In a round of three or more
+  containers, each first reads its last 2 × `maxEntries` ÷ containers lines
+  from the floor without following. When every read has arrived, or after
+  1 s, the backend finds the cut-off: the oldest line the buffer can hold
+  among the lines it already holds and everything read. A container whose read
+  came back full and whose oldest line is after the cut-off reads again, from
+  the cut-off, at most `maxEntries` lines. Each container then follows from its
+  newest line read, as a resume. One or two containers, and a read that fails,
+  use one follow request that carries both history and live output, from the
+  floor. Resumed containers follow from their resume points.
 - A follow request with no response headers after 20 s becomes a `failed`
   issue and retries; an established stream that is quiet never times out. A
   plain history read must finish within 20 s.

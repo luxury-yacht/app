@@ -202,6 +202,62 @@ class LogBuffer {
   // The selection and size whose newest entries the buffer holds; null until a
   // snapshot arrives.
   private basis: BufferBasis | null = null;
+  // Entries held per pod, kept as entries come and go.
+  private podCounts = new Map<string, number>();
+  private podList: string[] = [];
+  private podsChanged = false;
+
+  /** The pods with lines in the buffer; the same array until that set changes. */
+  get pods(): string[] {
+    if (this.podsChanged) {
+      this.podList = Array.from(this.podCounts.keys());
+      this.podsChanged = false;
+    }
+    return this.podList;
+  }
+
+  private countPod(pod: string, delta: number): void {
+    const count = (this.podCounts.get(pod) ?? 0) + delta;
+    if (count > 0) {
+      this.podsChanged ||= !this.podCounts.has(pod);
+      this.podCounts.set(pod, count);
+    } else if (this.podCounts.delete(pod)) {
+      this.podsChanged = true;
+    }
+  }
+
+  private recountPods(): void {
+    this.podCounts = new Map();
+    this.podsChanged = true;
+    for (const entry of this.entries) {
+      this.countPod(entry.pod, 1);
+    }
+  }
+
+  /** Drops the lines of pods that no longer exist; they are not counted as received. */
+  dropPods(pods: readonly string[]): void {
+    const gone = new Set(pods.filter((pod) => this.podCounts.has(pod)));
+    if (gone.size === 0) {
+      return;
+    }
+    const entries: ContainerLogsEntry[] = [];
+    const keys: string[] = [];
+    this.entries.forEach((entry, index) => {
+      if (gone.has(entry.pod)) {
+        this.bytes -= utf8Length(entry.line);
+        this.received -= 1;
+      } else {
+        entries.push(entry);
+        keys.push(this.keys[index]);
+      }
+    });
+    this.entries = entries;
+    this.keys = keys;
+    for (const pod of gone) {
+      this.podCounts.delete(pod);
+    }
+    this.podsChanged = true;
+  }
 
   /** Records the request whose snapshot the buffer now reflects. */
   setBasis(request: ContainerLogsStreamRequest | null): void {
@@ -243,6 +299,7 @@ class LogBuffer {
     this.keys = this.entries.map((entry) => timestampKey(entry.timestamp));
     this.bytes = this.entries.reduce((sum, entry) => sum + utf8Length(entry.line), 0);
     this.received = this.entries.length + trimmed;
+    this.recountPods();
   }
 
   /**
@@ -268,6 +325,7 @@ class LogBuffer {
       entries.push(next.entry);
       keys.push(next.key);
       this.bytes += utf8Length(next.entry.line);
+      this.countPod(next.entry.pod, 1);
     }
     this.entries = entries.concat(this.entries.slice(held));
     this.keys = keys.concat(this.keys.slice(held));
@@ -292,6 +350,9 @@ class LogBuffer {
     }
     if (drop === 0) {
       return;
+    }
+    for (let index = 0; index < drop; index += 1) {
+      this.countPod(this.entries[index].pod, -1);
     }
     this.entries = this.entries.slice(drop);
     this.keys = this.keys.slice(drop);
@@ -569,6 +630,7 @@ export class ContainerLogsStreamManager {
       case 'apply-snapshot':
         if (effect.resumed) {
           buffer.continueWith(effect.entries, effect.trimmed, nextSeq);
+          buffer.dropPods(effect.removedPods);
         } else {
           buffer.replace(effect.entries, effect.trimmed, nextSeq);
         }
@@ -628,6 +690,7 @@ export class ContainerLogsStreamManager {
         warnings: buffer.warnings,
         issues: buffer.issues,
         truncation: buffer.truncation(),
+        pods: buffer.pods,
       };
       return {
         ...previous,

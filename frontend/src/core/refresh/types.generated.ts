@@ -832,6 +832,7 @@ export interface ContainerLogsStreamEventPayload {
   generatedAt: number;
   reset?: boolean;
   resumed?: boolean;
+  removedPods?: Array<string>;
   snapshotComplete?: boolean;
   trimmed?: number;
   entries?: Array<ContainerLogsWireEntry>;

@@ -190,6 +190,7 @@ type LiveContainerLogs = {
   warnings: ContainerLogsWarning[];
   issues: ContainerLogsTargetIssue[];
   truncation: ContainerLogsSnapshotPayload['truncation'];
+  pods: string[];
   // A snapshot has been delivered at least once for this scope.
   hasSnapshot: boolean;
 };
@@ -200,6 +201,7 @@ const NO_LIVE_LOGS: LiveContainerLogs = {
   warnings: [],
   issues: [],
   truncation: null,
+  pods: [],
   hasSnapshot: false,
 };
 
@@ -217,6 +219,7 @@ const getLiveContainerLogs = (
     warnings: data.warnings,
     issues: data.issues,
     truncation: data.truncation,
+    pods: data.pods,
     hasSnapshot: data.resetCount > 0,
   };
 };
@@ -240,6 +243,8 @@ const liveLoadingMessage = (phase: ContainerLogsStreamPhase | null): string =>
 
 type LogViewerSource = {
   entries: ContainerLogsEntry[];
+  // The pods that have lines in the source.
+  pods: readonly string[];
   issues: ContainerLogsTargetIssue[];
   notices: string[];
   // Logs shown once the buffer has dropped some (null while it has room); the
@@ -265,12 +270,13 @@ const resolveLogViewerSource = ({
   showPreviousContainerLogs: boolean;
   hasScope: boolean;
   live: LiveContainerLogs;
-  previous: PreviousContainerLogs;
+  previous: PreviousContainerLogs & { pods: readonly string[] };
   streamExpected: boolean;
 }): LogViewerSource => {
   if (showPreviousContainerLogs) {
     return {
       entries: previous.entries,
+      pods: previous.pods,
       issues: previous.issues,
       notices: buildContainerLogNotices({
         phase: null,
@@ -289,6 +295,7 @@ const resolveLogViewerSource = ({
   const liveFailure = live.phase?.status === 'failed' ? live.phase.reason : null;
   return {
     entries: live.entries,
+    pods: live.pods,
     issues: live.issues,
     notices: buildContainerLogNotices(live),
     bufferFullShown: live.truncation?.shown ?? null,
@@ -551,16 +558,20 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     containerLogsScope
   );
   const activePodList = useMemo(() => (activePods ? Array.from(activePods) : null), [activePods]);
+  const previousPods = useMemo(
+    () => Array.from(new Set(previous.entries.map((entry) => entry.pod))),
+    [previous.entries]
+  );
   const source = useMemo(
     () =>
       resolveLogViewerSource({
         showPreviousContainerLogs,
         hasScope: Boolean(containerLogsScope),
         live,
-        previous,
+        previous: { ...previous, pods: previousPods },
         streamExpected,
       }),
-    [containerLogsScope, live, previous, showPreviousContainerLogs, streamExpected]
+    [containerLogsScope, live, previous, previousPods, showPreviousContainerLogs, streamExpected]
   );
   const hiddenPods = useHiddenPods(source.entries, activePods);
   const rawLogEntries = useMemo(
@@ -589,8 +600,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const visibleLogWarnings = source.notices;
 
   const workloadPodsForSelector = useMemo(
-    () => getWorkloadPodNames(logEntries, activePodList),
-    [logEntries, activePodList]
+    () => getWorkloadPodNames(source.pods, activePodList, hiddenPods),
+    [source.pods, activePodList, hiddenPods]
   );
 
   const isPendingLogs = source.isPending;

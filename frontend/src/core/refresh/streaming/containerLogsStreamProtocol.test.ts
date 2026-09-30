@@ -63,6 +63,7 @@ describe('parseContainerLogsFrame', () => {
     ['a non-boolean retryable flag', { retryable: 'yes' }],
     ['a non-numeric trimmed count', { trimmed: '3' }],
     ['a non-boolean resumed flag', { resumed: 'yes' }],
+    ['a removed pod that is not a name', { removedPods: [7] }],
   ])('rejects %s', (_label, overrides) => {
     expect(parseContainerLogsFrame({ ...frame({}), ...overrides })).toBeNull();
   });
@@ -104,6 +105,7 @@ describe('transitionContainerLogsProtocol', () => {
         type: 'apply-snapshot',
         entries: [entry('a'), entry('b'), entry('c')],
         resumed: false,
+        removedPods: [],
         trimmed: 2,
         warnings: [{ kind: 'dropped', count: 4 }],
         issues: [{ pod: 'web-0', container: 'sidecar', state: 'unavailable', reason: 'waiting' }],
@@ -120,6 +122,14 @@ describe('transitionContainerLogsProtocol', () => {
         entries: [entry('a'), entry('b')],
         resumed: true,
       }),
+    ]);
+  });
+
+  it('carries the pods a resumed snapshot says no longer exist', () => {
+    const first = receive(opened(), { reset: true, resumed: true, removedPods: ['web-gone'] });
+    const transition = receive(first.state, { entries: [entry('b')], snapshotComplete: true });
+    expect(transition.effects).toEqual([
+      expect.objectContaining({ type: 'apply-snapshot', removedPods: ['web-gone'] }),
     ]);
   });
 

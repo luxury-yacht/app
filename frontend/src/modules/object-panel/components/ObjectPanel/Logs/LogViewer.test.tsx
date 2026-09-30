@@ -335,6 +335,7 @@ const seedLogSnapshot = (
       warnings: overrides.warnings ?? [],
       issues: overrides.issues ?? [],
       truncation: overrides.truncation ?? null,
+      pods: Array.from(new Set(entries.map((entry) => entry.pod))),
     },
     stats: null,
     error: overrides.error ?? null,
@@ -580,6 +581,35 @@ describe('LogViewer active pod synchronisation', () => {
     await renderViewer({ activePodNames: ['web-1', 'web-2'] });
     expect(container.textContent).not.toContain('from the new pod');
     expect(container.textContent).toContain('first');
+  });
+
+  // The pod list refreshes every few seconds; a pod that already streams must
+  // be selectable before the list names it.
+  it('lists a new pod in the Pods dropdown before its pod list names it', async () => {
+    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+    await act(async () => {
+      seedLogSnapshot([
+        ...(getScopedDomainState('container-logs', activeScope).data?.entries ?? []),
+        {
+          pod: 'web-3',
+          container: 'app',
+          line: 'from the new pod',
+          timestamp: '2024-05-01T10:00:02Z',
+          isInit: false,
+        },
+      ]);
+      await Promise.resolve();
+    });
+    await flushAsync();
+
+    const podFilter = await waitForElement(() =>
+      container.querySelector<HTMLSelectElement>('[data-testid="logs-pods-dropdown"]')
+    );
+    expect(Array.from(podFilter.options).map((option) => option.text)).toEqual([
+      'web-1',
+      'web-2',
+      'web-3',
+    ]);
   });
 
   it('registers log tab shortcuts with appropriate availability', async () => {

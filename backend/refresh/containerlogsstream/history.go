@@ -12,66 +12,192 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// historyPlan reads the history of a session's first containers in two steps,
-// so a session following many containers downloads about one buffer of
-// history instead of one buffer per container.
+// lineRecord is what a session remembers of a line it sent: enough to tell
+// which lines the client's buffer still holds.
+type lineRecord struct {
+	timestamp string
+	size      int
+}
+
+func recordOf(entry Entry) lineRecord {
+	return lineRecord{timestamp: entry.Timestamp, size: len(entry.Line)}
+}
+
+func newRecordWindow(maxEntries, maxBytes int) *containerlogs.NewestWindow[lineRecord] {
+	return containerlogs.NewNewestWindow(maxEntries, maxBytes,
+		func(record lineRecord) string { return record.timestamp },
+		func(record lineRecord) int { return record.size })
+}
+
+// oldestHeld is the time of the oldest line a full buffer keeps, or zero while
+// the buffer may still have room. A line older than it would be evicted on
+// arrival.
+func oldestHeld(kept []lineRecord, leftOut, maxEntries int) time.Time {
+	if len(kept) == 0 || (leftOut == 0 && len(kept) < maxEntries) {
+		return time.Time{}
+	}
+	return parseLogTimestamp(kept[0].timestamp)
+}
+
+// sentLines follows the newest lines a session has sent. The client's buffer
+// holds them, or newer ones and lines from before a resume, so its oldest line
+// is never older than theirs.
+type sentLines struct {
+	maxEntries int
+	mu         sync.Mutex
+	window     *containerlogs.NewestWindow[lineRecord]
+}
+
+func newSentLines(maxEntries, maxBytes int) *sentLines {
+	return &sentLines{maxEntries: maxEntries, window: newRecordWindow(maxEntries, maxBytes)}
+}
+
+func (s *sentLines) add(entries []Entry) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, entry := range entries {
+		s.window.Add(recordOf(entry))
+	}
+}
+
+// records returns the sent lines the client still holds and how many it has
+// evicted.
+func (s *sentLines) records() ([]lineRecord, int) {
+	if s == nil {
+		return nil, 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.window.Kept()
+}
+
+// floor is the time of the oldest line the client's full buffer keeps, or zero
+// while it may have room; no read needs anything older.
+func (s *sentLines) floor() time.Time {
+	if s == nil {
+		return time.Time{}
+	}
+	kept, leftOut := s.records()
+	return oldestHeld(kept, leftOut, s.maxEntries)
+}
+
+// historyRounds plans the history reads of a session's containers. The first
+// containers form the first round; containers that start later are gathered
+// into further rounds, so a burst of new pods shares one buffer of history too.
+type historyRounds struct {
+	maxEntries  int
+	maxBytes    int
+	sent        *sentLines
+	gather      time.Duration
+	decideAfter time.Duration
+	mu          sync.Mutex
+	// open is the round taking members; the first round is open from the start.
+	open *historyRound
+}
+
+func newHistoryRounds(maxEntries, maxBytes int, sent *sentLines, gather, decideAfter time.Duration) *historyRounds {
+	rounds := &historyRounds{maxEntries: maxEntries, maxBytes: maxBytes, sent: sent, gather: gather, decideAfter: decideAfter}
+	rounds.open = rounds.newRound()
+	return rounds
+}
+
+func (h *historyRounds) newRound() *historyRound {
+	return &historyRound{
+		maxEntries: h.maxEntries, maxBytes: h.maxBytes, sent: h.sent,
+		sealed: make(chan struct{}), decided: make(chan struct{}), waiting: map[string]struct{}{},
+	}
+}
+
+// join adds a container without a resume point to the round now gathering. A
+// container that starts after the first round was sealed opens a new round,
+// sealed once the gathering time has passed. A nil plan adds nothing.
+func (h *historyRounds) join(key string) *historyRound {
+	if h == nil {
+		return nil
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.open == nil {
+		round := h.newRound()
+		h.open = round
+		time.AfterFunc(h.gather, func() { h.seal(round) })
+	}
+	h.open.add(key)
+	return h.open
+}
+
+// sealFirst seals the round of the session's first containers.
+func (h *historyRounds) sealFirst() {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	round := h.open
+	h.mu.Unlock()
+	if round != nil {
+		h.seal(round)
+	}
+}
+
+func (h *historyRounds) seal(round *historyRound) {
+	h.mu.Lock()
+	if h.open == round {
+		h.open = nil
+	}
+	h.mu.Unlock()
+	round.seal(h.decideAfter)
+}
+
+// historyRound reads the history of one group of containers in two steps, so
+// the group downloads about one buffer of history instead of one per
+// container.
 //
-// Each container first reads a share of the buffer. Once every share has
-// arrived, or the decision time has passed, the plan finds the cut-off: the
-// oldest line the client can hold among everything read. A container can hold
-// more of the newest lines only if its share came back full and its oldest line
-// is after the cut-off; it alone reads again, from the cut-off. The cut-off
-// comes from a subset of the lines, so it is never later than the true one and
-// every line the client can hold is read.
-type historyPlan struct {
+// Each container first reads a share of the buffer, from the floor: the oldest
+// line the client's buffer keeps, when it is full. Once every share has
+// arrived, or the decision time has passed, the round finds the cut-off: the
+// oldest line the client can hold among what it already holds and everything
+// read. A container can hold more of the newest lines only if its share came
+// back full and its oldest line is after the cut-off; it alone reads again,
+// from the cut-off. The cut-off comes from a subset of the client's lines, so
+// it is never later than the true one and every line the client can hold is
+// read.
+type historyRound struct {
 	maxEntries int
 	maxBytes   int
+	sent       *sentLines
 	sealed     chan struct{}
 	decided    chan struct{}
 
 	mu sync.Mutex
-	// waiting holds the registered targets that have not reported yet.
+	// waiting holds the members that have not reported yet.
 	waiting    map[string]struct{}
 	reads      [][]Entry
 	isSealed   bool
 	isDecided  bool
 	share      int
+	floor      time.Time
 	cutoff     time.Time
 	decideTime *time.Timer
 }
 
-func newHistoryPlan(maxEntries, maxBytes int) *historyPlan {
-	return &historyPlan{
-		maxEntries: maxEntries, maxBytes: maxBytes,
-		sealed: make(chan struct{}), decided: make(chan struct{}), waiting: map[string]struct{}{},
-	}
-}
-
-// register adds one of the session's first targets; once the plan is sealed
-// no more are added. A nil plan registers nothing.
-func (p *historyPlan) register(key string) bool {
-	if p == nil {
-		return false
-	}
+func (p *historyRound) add(key string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.isSealed {
-		return false
-	}
 	p.waiting[key] = struct{}{}
-	return true
 }
 
-// seal ends registration and sets the share: twice the buffer, split across
-// the targets. With fewer than three targets the share is no smaller than the
-// buffer, so they read their history by following, as before.
-func (p *historyPlan) seal(decideAfter time.Duration) {
-	if p == nil {
-		return
-	}
+// seal ends membership, sets the share (twice the buffer, split across the
+// members) and the floor. With fewer than three members the share is no
+// smaller than the buffer, so each member follows directly from the floor.
+func (p *historyRound) seal(decideAfter time.Duration) {
+	floor := p.sent.floor()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.isSealed = true
+	p.floor = floor
 	if count := len(p.waiting); count > 0 {
 		if share := (2*p.maxEntries + count - 1) / count; share < p.maxEntries {
 			p.share = share
@@ -85,20 +211,21 @@ func (p *historyPlan) seal(decideAfter time.Duration) {
 	p.decideTime = time.AfterFunc(decideAfter, p.decide)
 }
 
-// shareFor waits for the plan to be sealed and returns the target's share, or
-// false when the target reads its history by following.
-func (p *historyPlan) shareFor(ctx context.Context) (int, bool) {
+// shareFor waits for the round to be sealed and returns the member's share
+// and the floor. A zero share means the member follows directly from the
+// floor; false means the session ended first.
+func (p *historyRound) shareFor(ctx context.Context) (int, time.Time, bool) {
 	select {
 	case <-p.sealed:
-		return p.share, p.share > 0
+		return p.share, p.floor, true
 	case <-ctx.Done():
-		return 0, false
+		return 0, time.Time{}, false
 	}
 }
 
-// report records a target's first read and waits for the cut-off, which is
-// zero when every line read fits the buffer.
-func (p *historyPlan) report(ctx context.Context, key string, read []Entry) (time.Time, bool) {
+// report records a member's first read and waits for the cut-off, which is
+// zero while the client's buffer can hold everything.
+func (p *historyRound) report(ctx context.Context, key string, read []Entry) (time.Time, bool) {
 	p.mu.Lock()
 	if !p.isDecided {
 		p.reads = append(p.reads, read)
@@ -113,28 +240,28 @@ func (p *historyPlan) report(ctx context.Context, key string, read []Entry) (tim
 	}
 }
 
-// withdraw removes a target that will not report, so the decision does not
+// withdraw removes a member that will not report, so the decision does not
 // wait for it.
-func (p *historyPlan) withdraw(key string) {
+func (p *historyRound) withdraw(key string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.removeLocked(key)
 }
 
-func (p *historyPlan) removeLocked(key string) {
+func (p *historyRound) removeLocked(key string) {
 	delete(p.waiting, key)
 	if p.isSealed && len(p.waiting) == 0 {
 		p.decideLocked()
 	}
 }
 
-func (p *historyPlan) decide() {
+func (p *historyRound) decide() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.decideLocked()
 }
 
-func (p *historyPlan) decideLocked() {
+func (p *historyRound) decideLocked() {
 	if p.isDecided {
 		return
 	}
@@ -142,25 +269,26 @@ func (p *historyPlan) decideLocked() {
 	if p.decideTime != nil {
 		p.decideTime.Stop()
 	}
-	p.cutoff = newestCutoff(p.reads, p.maxEntries, p.maxBytes)
+	held, evicted := p.sent.records()
+	p.cutoff = newestCutoff(held, evicted, p.reads, p.maxEntries, p.maxBytes)
 	p.reads = nil
 	close(p.decided)
 }
 
 // newestCutoff is the time of the oldest line the client can hold among the
-// reads, or zero when every line fits.
-func newestCutoff(reads [][]Entry, maxEntries, maxBytes int) time.Time {
-	window := containerlogs.NewNewestWindow(maxEntries, maxBytes, entryTimestamp, entryLineBytes)
+// lines it holds and the reads, or zero while it can hold them all.
+func newestCutoff(held []lineRecord, evicted int, reads [][]Entry, maxEntries, maxBytes int) time.Time {
+	window := newRecordWindow(maxEntries, maxBytes)
+	for _, record := range held {
+		window.Add(record)
+	}
 	for _, read := range reads {
 		for _, entry := range read {
-			window.Add(entry)
+			window.Add(recordOf(entry))
 		}
 	}
 	kept, leftOut := window.Take()
-	if leftOut == 0 || len(kept) == 0 {
-		return time.Time{}
-	}
-	return parseLogTimestamp(kept[0].Timestamp)
+	return oldestHeld(kept, leftOut+evicted, maxEntries)
 }
 
 // readsFurther reports whether a first read may have left out lines newer than

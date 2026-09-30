@@ -9,8 +9,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 type logLine struct {
@@ -237,4 +240,89 @@ func TestFailedHistoryReadFallsBackToFollowing(t *testing.T) {
 	requests := session.requestsFor("c2")
 	require.Len(t, requests, 2)
 	require.Equal(t, logRequest{follow: true, tail: 8}, requests[1])
+}
+
+// webDeployment selects the runningPod pods (label app=web).
+func webDeployment() *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web"},
+		Spec:       appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}},
+	}
+}
+
+func secondsFrom(start, count, step int) []int {
+	seconds := make([]int, count)
+	for i := range seconds {
+		seconds[i] = start + i*step
+	}
+	return seconds
+}
+
+// startFullBufferSession opens a Deployment tab whose first pod fills the
+// client's 8-line buffer with lines from 112 s to 119 s, and returns a function
+// that adds pods to the workload.
+func startFullBufferSession(t *testing.T, logs map[string][]logLine) (*logSession, func(pods ...*corev1.Pod)) {
+	t.Helper()
+	logs["a0"] = linesAt("a0", secondsFrom(100, 20, 1)...)
+	var client *fake.Clientset
+	session := startLogSession(t, sessionSetup{
+		request: Request{Scope: "cluster-a|default:apps/v1:Deployment:web", MaxEntries: 8},
+		objects: []runtime.Object{webDeployment(), runningPod("web-0", "a0")},
+		respond: kubeletLogs(logs),
+		prepare: func(c *fake.Clientset) { client = c },
+	})
+	frames := session.snapshot(t)
+	require.Len(t, entryLines(frames), 8)
+	addPods := func(pods ...*corev1.Pod) {
+		for _, pod := range pods {
+			require.NoError(t, client.Tracker().Add(pod))
+		}
+	}
+	return session, addPods
+}
+
+// A pod that joins later reads only the lines the client's full buffer can
+// still hold: nothing older than the oldest line it keeps.
+func TestLatePodReadsOnlyLinesTheBufferCanHold(t *testing.T) {
+	logs := map[string][]logLine{}
+	logs["a1"] = append(linesAt("a1", secondsFrom(50, 10, 1)...), logLine{at: historyOrigin.Add(200 * time.Second), text: "a1-new"})
+	session, addPods := startFullBufferSession(t, logs)
+
+	addPods(runningPod("web-1", "a1"))
+	session.waitForFollow(t, "a1")
+
+	requests := session.requestsFor("a1")
+	require.Len(t, requests, 1, "one pod alone follows directly")
+	require.True(t, requests[0].follow)
+	require.EqualValues(t, 8, requests[0].tail)
+	require.NotNil(t, requests[0].since, "the read starts at the oldest line the buffer keeps")
+	require.True(t, requests[0].since.Equal(historyOrigin.Add(112*time.Second)), "%v", requests[0].since)
+	lines := session.settledLines(t, 9)
+	require.Equal(t, "a1-new", lines[len(lines)-1])
+	require.NotContains(t, lines, "a1-0", "lines older than the buffer holds are not read")
+}
+
+// Pods that join together share the buffer like a tab's first pods: each
+// reads a share first, from the oldest line the buffer keeps.
+func TestPodsJoiningTogetherReadAShareEach(t *testing.T) {
+	logs := map[string][]logLine{}
+	var pods []*corev1.Pod
+	for i := 1; i <= 4; i++ {
+		container := fmt.Sprintf("b%d", i)
+		logs[container] = linesAt(container, secondsFrom(200+i, 6, 4)...)
+		pods = append(pods, runningPod(fmt.Sprintf("web-%d", i), container))
+	}
+	session, addPods := startFullBufferSession(t, logs)
+
+	addPods(pods...)
+	session.waitForFollow(t, "b1", "b2", "b3", "b4")
+
+	for i := 1; i <= 4; i++ {
+		container := fmt.Sprintf("b%d", i)
+		first := session.requestsFor(container)[0]
+		require.False(t, first.follow, container)
+		require.EqualValues(t, 4, first.tail, "%s reads a share: twice the buffer across four pods", container)
+		require.NotNil(t, first.since)
+		require.True(t, first.since.Equal(historyOrigin.Add(112*time.Second)), "%s: %v", container, first.since)
+	}
 }

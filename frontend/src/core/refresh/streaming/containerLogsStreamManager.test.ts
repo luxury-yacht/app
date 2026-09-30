@@ -426,6 +426,47 @@ describe('ContainerLogsStreamManager', () => {
     manager.stopAll(true);
   });
 
+  test('drops the lines of pods a resumed snapshot says no longer exist', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, [
+      entry('2024-01-01T00:00:01Z', 'gone-1', 'web-gone'),
+      entry('2024-01-01T00:00:02Z', 'kept-1'),
+      entry('2024-01-01T00:00:03Z', 'gone-2', 'web-gone'),
+    ]);
+
+    await manager.startStream(SCOPE);
+    await flushOpen();
+    FakeStream.latest().receive({
+      reset: true,
+      resumed: true,
+      snapshotComplete: true,
+      removedPods: ['web-gone'],
+      entries: [entry('2024-01-01T00:00:04Z', 'kept-2')],
+    });
+
+    expect(lines()).toEqual(['kept-1', 'kept-2']);
+    expect(state().data?.pods).toEqual(['web-0']);
+    // Lines of ended pods are not lines the buffer had no room for.
+    expect(state().data?.truncation).toBeNull();
+    manager.stopAll(true);
+  });
+
+  test('lists the pods that have lines in the buffer', async () => {
+    const manager = new ContainerLogsStreamManager({ maxEntries: 2 });
+    await startLive(manager, [
+      entry('2024-01-01T00:00:01Z', 'one', 'web-1'),
+      entry('2024-01-01T00:00:02Z', 'two', 'web-2'),
+    ]);
+    expect([...(state().data?.pods ?? [])].sort()).toEqual(['web-1', 'web-2']);
+
+    FakeStream.latest().receive({
+      entries: [entry('2024-01-01T00:00:03Z', 'three', 'web-3')],
+    });
+    // web-1's only line was evicted.
+    expect([...(state().data?.pods ?? [])].sort()).toEqual(['web-2', 'web-3']);
+    manager.stopAll(true);
+  });
+
   test('stopAll with reset clears every scope', async () => {
     const manager = new ContainerLogsStreamManager();
     await startLive(manager, [entry('2024-01-01T00:00:01Z', 'kept')]);

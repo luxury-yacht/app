@@ -11,13 +11,21 @@ import { compareUtf16Strings } from '@shared/utils/sort';
 import { useEffect, useMemo, useRef } from 'react';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
 
+// The pods the Pods dropdown offers: the workload's pod list and the pods with
+// lines, which stream before the list names them, less the hidden pods.
 export const getWorkloadPodNames = (
-  entries: ContainerLogsEntry[],
-  activePods: string[] | null
-): string[] =>
-  (activePods ?? Array.from(new Set(entries.map((entry) => entry.pod).filter(Boolean))))
-    .slice()
-    .sort(compareUtf16Strings);
+  sourcePods: readonly string[],
+  activePods: string[] | null,
+  hiddenPods: Set<string> | null
+): string[] => {
+  const names = new Set(activePods ?? []);
+  for (const pod of sourcePods) {
+    if (pod && !hiddenPods?.has(pod)) {
+      names.add(pod);
+    }
+  }
+  return Array.from(names).sort(compareUtf16Strings);
+};
 
 export const filterEntriesForHiddenPods = (
   entries: ContainerLogsEntry[],

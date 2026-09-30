@@ -83,7 +83,8 @@ type Entry struct {
 // left out because the client could not hold them (Trimmed). When the request's
 // resume points were used, the first frame also carries Resumed: the snapshot
 // holds only what follows them and adds to the client's buffer instead of
-// replacing it. Live batches and
+// replacing it, and RemovedPods names the resumed pods that no longer exist,
+// whose lines the client drops. Live batches and
 // warning or issue updates follow. Warnings and Issues, when present, replace
 // the previous lists. A frame with Error is fatal and the stream then closes;
 // Retryable says whether reconnecting can help.
@@ -94,6 +95,7 @@ type EventPayload struct {
 	GeneratedAt      int64                           `json:"generatedAt"`
 	Reset            bool                            `json:"reset,omitempty"`
 	Resumed          bool                            `json:"resumed,omitempty"`
+	RemovedPods      []string                        `json:"removedPods,omitempty"`
 	SnapshotComplete bool                            `json:"snapshotComplete,omitempty"`
 	Trimmed          int                             `json:"trimmed,omitempty"`
 	Entries          []Entry                         `json:"entries,omitempty"`

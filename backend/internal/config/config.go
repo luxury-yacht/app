@@ -279,6 +279,10 @@ const (
 	// back the others' history.
 	ContainerLogsStreamHistoryDecision = ContainerLogsStreamSnapshotDeadline / 2
 
+	// ContainerLogsStreamHistoryGather is how long a session gathers the
+	// containers that start during it before reading their history together.
+	ContainerLogsStreamHistoryGather = 250 * time.Millisecond
+
 	// ContainerLogsStreamCaughtUpIdle is how long an opened log stream may go
 	// without a line before its history counts as delivered. Kubelet sends
 	// history back-to-back, so a gap this long ends it.

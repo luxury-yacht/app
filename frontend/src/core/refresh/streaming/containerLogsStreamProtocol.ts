@@ -90,8 +90,11 @@ const hasValidFlags = (value: Record<string, unknown>): boolean =>
   isOptional(value.retryable, 'boolean') &&
   (value.errorDetails === undefined || isPermissionDeniedStatus(value.errorDetails));
 
+const isString = (value: unknown): value is string => typeof value === 'string';
+
 const hasValidLists = (value: Record<string, unknown>): boolean =>
   isValidList(value.entries, isValidEntry) &&
+  isValidList(value.removedPods, isString) &&
   isValidList(value.warnings, isContainerLogsWarning) &&
   isValidList(value.issues, isContainerLogsTargetIssue);
 
@@ -104,6 +107,8 @@ export const parseContainerLogsFrame = (data: unknown): ContainerLogsStreamEvent
 type StagedSnapshot = {
   // The snapshot continues the client's buffer from its resume points.
   resumed: boolean;
+  // Resumed pods that no longer exist; their lines are dropped.
+  removedPods: string[];
   entries: ContainerLogsWireEntry[];
   warnings: ContainerLogsWarning[];
   issues: ContainerLogsTargetIssue[];
@@ -129,6 +134,7 @@ export type ContainerLogsProtocolEffect =
       type: 'apply-snapshot';
       entries: ContainerLogsWireEntry[];
       resumed: boolean;
+      removedPods: string[];
       trimmed: number;
       warnings: ContainerLogsWarning[];
       issues: ContainerLogsTargetIssue[];
@@ -199,12 +205,19 @@ const stageFrame = (
   frame: ContainerLogsStreamEventPayload
 ): StagedSnapshot => ({
   resumed: frame.reset ? frame.resumed === true : staged.resumed,
+  removedPods: frame.reset ? (frame.removedPods ?? []) : staged.removedPods,
   entries: frame.entries?.length ? staged.entries.concat(frame.entries) : staged.entries,
   warnings: frame.warnings !== undefined ? (frame.warnings ?? []) : staged.warnings,
   issues: frame.issues !== undefined ? (frame.issues ?? []) : staged.issues,
 });
 
-const EMPTY_STAGE: StagedSnapshot = { resumed: false, entries: [], warnings: [], issues: [] };
+const EMPTY_STAGE: StagedSnapshot = {
+  resumed: false,
+  removedPods: [],
+  entries: [],
+  warnings: [],
+  issues: [],
+};
 
 // Snapshot frames are collected until the last one arrives, so the buffer is
 // replaced, or extended for a resumed snapshot, in one step.
@@ -223,6 +236,7 @@ const receiveSnapshotFrame = (
         type: 'apply-snapshot',
         entries: staged.entries,
         resumed: staged.resumed,
+        removedPods: staged.removedPods,
         trimmed: frame.trimmed ?? 0,
         warnings: staged.warnings,
         issues: staged.issues,
