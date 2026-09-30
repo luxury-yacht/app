@@ -101,9 +101,10 @@ const useTextFilter = <T>({
     const needle = caseSensitiveMatches ? textFilter : textFilter.toLowerCase();
     const matches = (text: string): boolean => {
       const plain = stripAnsi(text);
-      return regex
-        ? regex.test(plain)
-        : (caseSensitiveMatches ? plain : plain.toLowerCase()).includes(needle);
+      if (regex) {
+        return regex.test(plain);
+      }
+      return (caseSensitiveMatches ? plain : plain.toLowerCase()).includes(needle);
     };
     return {
       filterText: textFilter,

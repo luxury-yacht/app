@@ -90,7 +90,7 @@ const startLive = async (
   manager: ContainerLogsStreamManager,
   snapshot: ContainerLogsWireEntry[] = []
 ) => {
-  await manager.startStream(SCOPE);
+  manager.startStream(SCOPE);
   await flushOpen();
   FakeStream.latest().receive({ reset: true, snapshotComplete: true, entries: snapshot });
 };
@@ -116,7 +116,7 @@ describe('ContainerLogsStreamManager', () => {
     setContainerLogsStreamScopeParams(SCOPE, { selectedFilters: ['pod:web-2', 'container:app'] });
     const manager = new ContainerLogsStreamManager({ maxEntries: 500 });
 
-    await manager.startStream(SCOPE);
+    manager.startStream(SCOPE);
     await flushOpen();
 
     expect(FakeStream.latest().sent).toEqual([
@@ -135,7 +135,7 @@ describe('ContainerLogsStreamManager', () => {
     setContainerLogsStreamScopeParams(SCOPE, { matchNone: true });
     const manager = new ContainerLogsStreamManager();
 
-    await manager.startStream(SCOPE);
+    manager.startStream(SCOPE);
     await flushOpen();
 
     expect(FakeStream.latest().sent[0]).toMatchObject({ selectedFilters: [], matchNone: true });
@@ -144,7 +144,7 @@ describe('ContainerLogsStreamManager', () => {
 
   test('shows a staged snapshot only once all its frames have arrived', async () => {
     const manager = new ContainerLogsStreamManager();
-    await manager.startStream(SCOPE);
+    manager.startStream(SCOPE);
     await flushOpen();
     const stream = FakeStream.latest();
 
@@ -210,7 +210,7 @@ describe('ContainerLogsStreamManager', () => {
 
   test('counts history the backend left out as truncation', async () => {
     const manager = new ContainerLogsStreamManager();
-    await manager.startStream(SCOPE);
+    manager.startStream(SCOPE);
     await flushOpen();
 
     FakeStream.latest().receive({
@@ -300,7 +300,7 @@ describe('ContainerLogsStreamManager', () => {
     const before = state().data?.entries;
 
     manager.stop(SCOPE, false);
-    await manager.startStream(SCOPE);
+    manager.startStream(SCOPE);
     await flushOpen();
     expect(lines()).toEqual(['kept']);
     expect(state().status).toBe('updating');
@@ -386,7 +386,7 @@ describe('ContainerLogsStreamManager', () => {
     await startLive(manager, resumeBuffer);
 
     setContainerLogsStreamScopeParams(SCOPE, { selectedFilters: ['pod:web-0', 'pod:web-1'] });
-    await manager.startStream(SCOPE);
+    manager.startStream(SCOPE);
     await flushOpen();
 
     expect(sentResume()).toBeUndefined();
@@ -398,12 +398,12 @@ describe('ContainerLogsStreamManager', () => {
     await startLive(manager, resumeBuffer);
 
     eventBus.emit('settings:obj-panel-logs-buffer-size', 50);
-    await manager.startStream(SCOPE);
+    manager.startStream(SCOPE);
     await flushOpen();
     expect(sentResume()).toBeDefined();
 
     eventBus.emit('settings:obj-panel-logs-buffer-size', 9000);
-    await manager.startStream(SCOPE);
+    manager.startStream(SCOPE);
     await flushOpen();
     expect(sentResume()).toBeUndefined();
     manager.stopAll(true);
@@ -413,7 +413,7 @@ describe('ContainerLogsStreamManager', () => {
     const manager = new ContainerLogsStreamManager();
     await startLive(manager, resumeBuffer);
 
-    await manager.startStream(SCOPE);
+    manager.startStream(SCOPE);
     await flushOpen();
     expect(sentResume()).toBeDefined();
     FakeStream.latest().receive({
@@ -434,7 +434,7 @@ describe('ContainerLogsStreamManager', () => {
       entry('2024-01-01T00:00:03Z', 'gone-2', 'web-gone'),
     ]);
 
-    await manager.startStream(SCOPE);
+    manager.startStream(SCOPE);
     await flushOpen();
     FakeStream.latest().receive({
       reset: true,

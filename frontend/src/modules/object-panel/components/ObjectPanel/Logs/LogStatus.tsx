@@ -23,9 +23,9 @@ export const LogErrorState = ({ message, retryHint }: { message: string; retryHi
 /** Warnings about the shown logs, above them; nothing when there are none. */
 export const LogWarningBar = ({ warnings }: { warnings: string[] }) =>
   warnings.length > 0 ? (
-    <div className="logs-viewer-warning-bar" role="status" aria-label="Log warnings">
+    <output className="logs-viewer-warning-bar" aria-label="Log warnings">
       {warnings.join(' ')}
-    </div>
+    </output>
   ) : null;
 
 /**

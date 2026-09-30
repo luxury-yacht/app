@@ -59,16 +59,17 @@ const timestampKey = (timestamp: string): string => {
 const utf8Length = (text: string): number => {
   let bytes = 0;
   for (let index = 0; index < text.length; index += 1) {
-    const code = text.charCodeAt(index);
+    const code = text.codePointAt(index) ?? 0;
     if (code < 0x80) {
       bytes += 1;
     } else if (code < 0x800) {
       bytes += 2;
-    } else if (code >= 0xd800 && code <= 0xdbff) {
+    } else if (code < 0x10000) {
+      bytes += 3;
+    } else {
+      // A code point above the BMP spans two UTF-16 units.
       bytes += 4;
       index += 1;
-    } else {
-      bytes += 3;
     }
   }
   return bytes;
@@ -90,8 +91,12 @@ const upperBound = (keys: string[], key: string): number => {
   return low;
 };
 
-const compareKeys = (left: string, right: string): number =>
-  left < right ? -1 : left > right ? 1 : 0;
+const compareKeys = (left: string, right: string): number => {
+  if (left === right) {
+    return 0;
+  }
+  return left < right ? -1 : 1;
+};
 
 // A resume point sends the lines at a container's newest timestamp so the
 // backend can find its place; a suffix of them is enough, so the request stays
@@ -127,14 +132,19 @@ const extendRun = (run: ResumeRun, entry: ContainerLogsEntry, key: string): void
   run.bytes += bytes;
 };
 
-const toResumePoint = ({ newest, lines }: ResumeRun): ContainerLogsResumePoint => ({
-  pod: newest.pod,
-  container: newest.container,
-  isInit: newest.isInit,
-  isEphemeral: Boolean(newest.isEphemeral),
-  timestamp: newest.timestamp,
-  lines: lines.reverse(),
-});
+const toResumePoint = ({ newest, lines }: ResumeRun): ContainerLogsResumePoint => {
+  // Lines were collected newest first.
+  const oldestFirst = [...lines];
+  oldestFirst.reverse();
+  return {
+    pod: newest.pod,
+    container: newest.container,
+    isInit: newest.isInit,
+    isEphemeral: Boolean(newest.isEphemeral),
+    timestamp: newest.timestamp,
+    lines: oldestFirst,
+  };
+};
 
 /**
  * Where the buffer ends for each container: its newest timestamped line and
@@ -281,8 +291,7 @@ class LogBuffer {
   resumePoints(request: ContainerLogsStreamRequest): ContainerLogsResumePoint[] {
     const basis = this.basis;
     if (
-      !basis ||
-      basis.selection !== selectionKey(request) ||
+      basis?.selection !== selectionKey(request) ||
       (request.maxEntries ?? 0) > basis.maxEntries
     ) {
       return [];
@@ -546,7 +555,7 @@ export class ContainerLogsStreamManager {
     }
   }
 
-  async startStream(scope: string): Promise<void> {
+  startStream(scope: string): void {
     this.stop(scope, false);
     const connection = new ContainerLogsStreamConnection(scope, this);
     this.connections.set(scope, connection);

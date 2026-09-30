@@ -380,7 +380,7 @@ const openManagedStream = async (scope: string) => {
     '@/core/refresh/streaming/containerLogsStreamManager'
   );
   await act(async () => {
-    await containerLogsStreamManager.startStream(scope);
+    containerLogsStreamManager.startStream(scope);
     await Promise.resolve();
     await Promise.resolve();
   });

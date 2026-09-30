@@ -30,11 +30,18 @@ const targetLimitNotice = (warnings: ContainerLogsWarning[]): string | null => {
   const hidden = limits.reduce((sum, warning) => sum + (warning.hidden ?? 0), 0);
   const perTab = limits.find((warning) => warning.scope === 'perTab');
   const global = limits.find((warning) => warning.scope === 'global');
-  const reached =
-    perTab && global
-      ? `the per-tab limit of ${perTab.limit} and global limit of ${global.limit} were reached`
-      : `the ${perTab ? 'per-tab' : 'global'} limit of ${(perTab ?? global)?.limit} was reached`;
-  return `Logs are hidden for ${hidden} containers because ${reached}. Using filters to reduce the number of containers may clear this message.`;
+  return `Logs are hidden for ${hidden} containers because ${limitsReached(perTab, global)}. Using filters to reduce the number of containers may clear this message.`;
+};
+
+const limitsReached = (
+  perTab: ContainerLogsWarning | undefined,
+  global: ContainerLogsWarning | undefined
+): string => {
+  if (perTab && global) {
+    return `the per-tab limit of ${perTab.limit} and global limit of ${global.limit} were reached`;
+  }
+  const scope = perTab ? 'per-tab' : 'global';
+  return `the ${scope} limit of ${(perTab ?? global)?.limit} was reached`;
 };
 
 const droppedNotice = (warnings: ContainerLogsWarning[]): string | null => {

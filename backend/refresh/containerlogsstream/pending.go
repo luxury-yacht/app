@@ -7,9 +7,9 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 )
 
-// entrySink receives entries from followers. It never blocks: a follower must
+// entryAdder receives entries from followers. It never blocks: a follower must
 // keep reading its stream even when the client is slow.
-type entrySink interface {
+type entryAdder interface {
 	add(Entry)
 }
 
@@ -115,7 +115,9 @@ func (w *snapshotWait) expect(key string) func() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.sealed {
-		return func() {}
+		return func() {
+			// Registration is over: the snapshot does not wait for this follower.
+		}
 	}
 	w.expected[key] = struct{}{}
 	var once sync.Once

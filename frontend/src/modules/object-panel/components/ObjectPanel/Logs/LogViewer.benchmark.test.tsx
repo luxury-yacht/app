@@ -158,7 +158,7 @@ describe.runIf(process.env.LOGS_BENCHMARK === '1')('Logs tab stream-batch benchm
     });
     resetScopedDomainState('container-logs', SCOPE);
     await act(async () => {
-      await containerLogsStreamManager.startStream(SCOPE);
+      containerLogsStreamManager.startStream(SCOPE);
       await Promise.resolve();
       await Promise.resolve();
     });

@@ -198,7 +198,7 @@ type containerLogRun struct {
 	podWatch       *containerlogs.PodWatch
 	limiterSession *TargetSession
 	limiterNotify  <-chan struct{}
-	sink           entrySink
+	sink           entryAdder
 	snapshot       *snapshotWait
 	// history plans targets' history reads; nil without a client snapshot.
 	history    *historyRounds
@@ -237,7 +237,7 @@ type containerLogRunConfig struct {
 	opts            Options
 	limiterSession  *TargetSession
 	initialWarnings []containerlogs.Warning
-	sink            entrySink
+	sink            entryAdder
 	snapshot        *snapshotWait
 	warningsCh      chan<- []containerlogs.Warning
 	issues          *issueSet
@@ -330,7 +330,9 @@ func (r *containerLogRun) startTarget(ctx context.Context, target containerTarge
 	if target.cursor.IsZero() {
 		round = r.history.join(key)
 	}
-	caughtUp := func() {}
+	caughtUp := func() {
+		// Without a first snapshot, nothing waits for this follower's history.
+	}
 	if r.snapshot != nil {
 		caughtUp = r.snapshot.expect(key)
 	}
@@ -732,10 +734,12 @@ type followOptions struct {
 
 // followContainer streams one container until it stops or ctx ends, and
 // returns the resume cursor at the point it stopped.
-func (s *Streamer) followContainer(ctx context.Context, target containerTarget, sink entrySink, options followOptions) containerlogs.ResumeCursor {
+func (s *Streamer) followContainer(ctx context.Context, target containerTarget, sink entryAdder, options followOptions) containerlogs.ResumeCursor {
 	caughtUp, running := options.caughtUp, options.running
 	if caughtUp == nil {
-		caughtUp = func() {}
+		caughtUp = func() {
+			// Nothing waits for this follower's history.
+		}
 	}
 	if running == nil {
 		running = func() bool { return false }
@@ -753,7 +757,7 @@ type containerFollowSession struct {
 	streamer  *Streamer
 	target    containerTarget
 	cursor    containerlogs.ResumeCursor
-	sink      entrySink
+	sink      entryAdder
 	issues    *issueSet
 	tailLines int
 	caughtUp  func()

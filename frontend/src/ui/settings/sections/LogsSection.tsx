@@ -84,7 +84,7 @@ const CONSTRAINTS: NumberSetting[] = [
 // Shows the preference owner's value; a draft exists only while the user types,
 // so a value the owner settles on (including a rollback) shows as soon as the
 // field is left.
-function NumberSettingRow({ setting, id }: { setting: NumberSetting; id: string }) {
+function NumberSettingRow({ setting, id }: Readonly<{ setting: NumberSetting; id: string }>) {
   const value = usePreferenceValue(setting.read, setting.event);
   const [draft, setDraft] = useState<string | null>(null);
   return (
@@ -109,7 +109,10 @@ function NumberSettingRow({ setting, id }: { setting: NumberSetting; id: string 
   );
 }
 
-function TimestampFormatRow({ id, useLocalTimeZone }: { id: string; useLocalTimeZone: boolean }) {
+function TimestampFormatRow({
+  id,
+  useLocalTimeZone,
+}: Readonly<{ id: string; useLocalTimeZone: boolean }>) {
   const format = usePreferenceValue(
     getObjPanelLogsApiTimestampFormat,
     'settings:obj-panel-logs-api-timestamp-format'

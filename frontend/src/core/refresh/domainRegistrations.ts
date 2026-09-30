@@ -28,9 +28,9 @@ const containerLogsRegistration: OrchestratorRegistrationBuilder = (domain) => {
   }
   return {
     snapshotless: true,
-    start: async (scope) => {
-      await containerLogsStreamManager.startStream(scope);
-      return undefined;
+    start: (scope) => {
+      containerLogsStreamManager.startStream(scope);
+      return Promise.resolve(undefined);
     },
     stop: (scope, options) => containerLogsStreamManager.stop(scope, options?.reset ?? false),
   };
