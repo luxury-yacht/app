@@ -380,7 +380,7 @@ class RefreshOrchestrator {
         ) {
           return;
         }
-        this.startStreamingScope(domain, normalizedScope, streaming);
+        void this.startStreamingScope(domain, normalizedScope, streaming);
       })
       .catch((error) => {
         if (!this.isRuntimeCurrent(runtime)) {
@@ -690,7 +690,7 @@ class RefreshOrchestrator {
 
   startStreamingDomain(domain: RefreshDomain, scope: string): void {
     const target = this.getStreamingTarget(domain, scope);
-    this.startStreamingScope(domain, target.scope, target.streaming);
+    void this.startStreamingScope(domain, target.scope, target.streaming);
   }
 
   stopStreamingDomain(
@@ -917,7 +917,7 @@ class RefreshOrchestrator {
       if (enabledNow) {
         // A re-enable can race the cancelled start. Restart here because the
         // re-enable observed this pending promise and could not start its own.
-        this.startStreamingScope(domain, scope, streaming);
+        void this.startStreamingScope(domain, scope, streaming);
       }
       return;
     }
@@ -1274,7 +1274,7 @@ class RefreshOrchestrator {
     let streamingHealthy = false;
     if (config.streaming && this.shouldStreamScope(domain, scope)) {
       streamingExpected = true;
-      this.startStreamingScope(domain, scope, config.streaming);
+      void this.startStreamingScope(domain, scope, config.streaming);
       streamingHealthy = this.isStreamingHealthy(domain, scope);
     }
     if (!options.isManual && streamingHealthy) {
@@ -1316,7 +1316,7 @@ class RefreshOrchestrator {
       return true;
     }
     if (shouldStream && !options.isManual) {
-      this.startStreamingScope(domain, scope, streaming);
+      void this.startStreamingScope(domain, scope, streaming);
     }
 
     const decision = runtime.resolveStreamingFetchMode({
