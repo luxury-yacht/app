@@ -4,6 +4,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import { OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE } from '@/core/settings/appPreferences';
 import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 import { requireValue } from '@/test-utils/requireValue';
 import { useKeyboardContext } from '@/ui/shortcuts/context';
@@ -1126,18 +1127,23 @@ describe('NodeLogsTab', () => {
     };
 
     it('keeps only as many lines as the buffer setting allows', async () => {
+      const bufferSize = OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE;
       mockFetchNodeLogs.mockResolvedValue({
         status: 'executed',
-        data: { source: sources[0], sourcePath: sources[0].path, content: numberedLines(1, 1200) },
+        data: {
+          source: sources[0],
+          sourcePath: sources[0].path,
+          content: numberedLines(1, bufferSize + 200),
+        },
       });
 
       await renderTab();
       await selectSource('kubelet');
       await setFilterValue('line');
 
-      expect(countLabel()).toBe('1000 matching logs');
+      expect(countLabel()).toBe(`${bufferSize} matching logs`);
       expect(await bufferFullMessage()).toBe(
-        'Log buffer is full. Only showing the most recent 1000 logs.'
+        `Log buffer is full. Only showing the most recent ${bufferSize} logs.`
       );
     });
 

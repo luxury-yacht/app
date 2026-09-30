@@ -1,9 +1,5 @@
 ### Changed
 
-- Consistent styling in all dropdowns across the entire app, with clearer filter labels on multi-select dropdowns.
-- A Namespaces filter selection made in an All Namespaces view now carries over to the other All Namespaces views for that cluster.
-- Set consistent default column order across tables. Namespace now always follows Name, and Status comes after identity columns.
-
 - Container logs load faster: the first view appears within about 2 seconds, and a slow container no longer holds back the others.
 - The Logs tab now says why logs are missing: containers that cannot be read or have not started are listed, and dropped or trimmed lines are reported instead of disappearing silently.
 - When live logs stop for good (for example, the workload was deleted or you may not list pods), the Logs tab shows the reason and turns auto-refresh off; turning it back on retries.
@@ -14,6 +10,7 @@
 - Pods that start while a Logs tab is open download less: they read nothing older than the tab can still show, and pods starting together share one buffer of history.
 - The Logs tab drops the lines of pods that were deleted, whether while the tab was open or while it was hidden, so they no longer take up room in the buffer. A StatefulSet pod recreated under the same name keeps its earlier lines.
 - The Logs tab's source dropdown is now two dropdowns, Pods and Containers, each with its own All and None.
+- Logs tabs now keep 5,000 lines by default instead of 1,000. A Buffer size you have already saved in Settings → Logs is kept.
 
 ### Fixed
 
@@ -26,7 +23,6 @@
 - Live logs for a workload no longer stall when a pod is deleted just as the Logs tab opens; its replacement streams.
 - Opening logs for a workload with many containers no longer reports history as "dropped because the log view fell behind", and the first view always shows the newest lines.
 - Node logs load again on clusters where the Logs tab said "Logs are not available on this node" with a 406 error.
-- Auto-sized table columns no longer truncate their headers when the header is wider than the column's values.
 - Container logs no longer show "Loading logs..." forever after an error.
 - Live container logs now follow pods that start later, including their init containers, a pod recreated with the same name, and newly added debug containers.
 - A very long log line no longer stops a container's live logs.

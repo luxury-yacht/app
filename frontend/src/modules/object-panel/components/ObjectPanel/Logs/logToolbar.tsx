@@ -184,7 +184,7 @@ const actionItems = ({
     id: 'copy',
     icon: <CopyIcon width={18} height={18} />,
     onClick: copyLogs,
-    title: 'Copy current log buffer to clipboard (Shift+C)',
+    title: 'Copy logs to clipboard (Shift+C)',
     ariaLabel: 'Copy to clipboard',
     disabled: !hasCopyableContent,
     feedback: copyIconFeedback(options.copyFeedback),
