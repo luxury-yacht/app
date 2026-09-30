@@ -816,12 +816,22 @@ export interface ConditionFacts {
   lastTransitionTime: string | null;
 }
 
+export interface ContainerLogsResumePoint {
+  pod: string;
+  container: string;
+  isInit?: boolean;
+  isEphemeral?: boolean;
+  timestamp: string;
+  lines: Array<string> | null;
+}
+
 export interface ContainerLogsStreamEventPayload {
   domain: string;
   scope: string;
   sequence: number;
   generatedAt: number;
   reset?: boolean;
+  resumed?: boolean;
   snapshotComplete?: boolean;
   trimmed?: number;
   entries?: Array<ContainerLogsWireEntry>;
@@ -830,6 +840,15 @@ export interface ContainerLogsStreamEventPayload {
   error?: string;
   errorDetails?: RefreshPermissionDeniedStatus;
   retryable?: boolean;
+}
+
+export interface ContainerLogsStreamRequest {
+  scope: string;
+  selectedFilters?: Array<string>;
+  matchNone?: boolean;
+  maxEntries?: number;
+  maxBytes?: number;
+  resume?: Array<ContainerLogsResumePoint>;
 }
 
 export interface ContainerLogsTargetIssue {

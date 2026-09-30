@@ -83,6 +83,7 @@ const hasValidEnvelope = (value: Record<string, unknown>): boolean =>
 
 const hasValidFlags = (value: Record<string, unknown>): boolean =>
   isOptional(value.reset, 'boolean') &&
+  isOptional(value.resumed, 'boolean') &&
   isOptional(value.snapshotComplete, 'boolean') &&
   isOptional(value.trimmed, 'number') &&
   isOptional(value.error, 'string') &&
@@ -101,6 +102,8 @@ export const parseContainerLogsFrame = (data: unknown): ContainerLogsStreamEvent
     : null;
 
 type StagedSnapshot = {
+  // The snapshot continues the client's buffer from its resume points.
+  resumed: boolean;
   entries: ContainerLogsWireEntry[];
   warnings: ContainerLogsWarning[];
   issues: ContainerLogsTargetIssue[];
@@ -125,6 +128,7 @@ export type ContainerLogsProtocolEffect =
   | {
       type: 'apply-snapshot';
       entries: ContainerLogsWireEntry[];
+      resumed: boolean;
       trimmed: number;
       warnings: ContainerLogsWarning[];
       issues: ContainerLogsTargetIssue[];
@@ -194,15 +198,16 @@ const stageFrame = (
   staged: StagedSnapshot,
   frame: ContainerLogsStreamEventPayload
 ): StagedSnapshot => ({
+  resumed: frame.reset ? frame.resumed === true : staged.resumed,
   entries: frame.entries?.length ? staged.entries.concat(frame.entries) : staged.entries,
   warnings: frame.warnings !== undefined ? (frame.warnings ?? []) : staged.warnings,
   issues: frame.issues !== undefined ? (frame.issues ?? []) : staged.issues,
 });
 
-const EMPTY_STAGE: StagedSnapshot = { entries: [], warnings: [], issues: [] };
+const EMPTY_STAGE: StagedSnapshot = { resumed: false, entries: [], warnings: [], issues: [] };
 
 // Snapshot frames are collected until the last one arrives, so the buffer is
-// replaced in one step.
+// replaced, or extended for a resumed snapshot, in one step.
 const receiveSnapshotFrame = (
   state: ContainerLogsProtocolState,
   frame: ContainerLogsStreamEventPayload
@@ -217,6 +222,7 @@ const receiveSnapshotFrame = (
       {
         type: 'apply-snapshot',
         entries: staged.entries,
+        resumed: staged.resumed,
         trimmed: frame.trimmed ?? 0,
         warnings: staged.warnings,
         issues: staged.issues,

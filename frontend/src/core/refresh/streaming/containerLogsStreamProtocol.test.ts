@@ -62,6 +62,7 @@ describe('parseContainerLogsFrame', () => {
     ],
     ['a non-boolean retryable flag', { retryable: 'yes' }],
     ['a non-numeric trimmed count', { trimmed: '3' }],
+    ['a non-boolean resumed flag', { resumed: 'yes' }],
   ])('rejects %s', (_label, overrides) => {
     expect(parseContainerLogsFrame({ ...frame({}), ...overrides })).toBeNull();
   });
@@ -102,10 +103,23 @@ describe('transitionContainerLogsProtocol', () => {
       {
         type: 'apply-snapshot',
         entries: [entry('a'), entry('b'), entry('c')],
+        resumed: false,
         trimmed: 2,
         warnings: [{ kind: 'dropped', count: 4 }],
         issues: [{ pod: 'web-0', container: 'sidecar', state: 'unavailable', reason: 'waiting' }],
       },
+    ]);
+  });
+
+  it('marks a snapshot that continues the client buffer as resumed', () => {
+    const first = receive(opened(), { reset: true, resumed: true, entries: [entry('a')] });
+    const transition = receive(first.state, { entries: [entry('b')], snapshotComplete: true });
+    expect(transition.effects).toEqual([
+      expect.objectContaining({
+        type: 'apply-snapshot',
+        entries: [entry('a'), entry('b')],
+        resumed: true,
+      }),
     ]);
   });
 

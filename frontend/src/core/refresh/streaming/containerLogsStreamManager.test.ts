@@ -314,6 +314,118 @@ describe('ContainerLogsStreamManager', () => {
     manager.stopAll(true);
   });
 
+  const resumeBuffer = [
+    entry('2024-01-01T00:00:01Z', 'a-1'),
+    entry('2024-01-01T00:00:02Z', 'b-1', 'web-1'),
+    entry('2024-01-01T00:00:03Z', 'a-2'),
+    entry('2024-01-01T00:00:03.000Z', 'a-3'),
+  ];
+  const resumePoints = [
+    {
+      pod: 'web-0',
+      container: 'app',
+      isInit: false,
+      isEphemeral: false,
+      timestamp: '2024-01-01T00:00:03.000Z',
+      lines: ['a-2', 'a-3'],
+    },
+    {
+      pod: 'web-1',
+      container: 'app',
+      isInit: false,
+      isEphemeral: false,
+      timestamp: '2024-01-01T00:00:02Z',
+      lines: ['b-1'],
+    },
+  ];
+  const sentResume = () =>
+    (FakeStream.latest().sent[0] as { resume?: unknown[] } | undefined)?.resume;
+
+  test('after a reconnect, asks only for what follows the buffer and adds it', async () => {
+    vi.useFakeTimers();
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, resumeBuffer);
+
+    FakeStream.latest().lose();
+    await vi.advanceTimersByTimeAsync(1000);
+    await flushOpen();
+    expect(sentResume()).toEqual(expect.arrayContaining(resumePoints));
+    expect(sentResume()).toHaveLength(2);
+
+    FakeStream.latest().receive({
+      reset: true,
+      resumed: true,
+      snapshotComplete: true,
+      trimmed: 2,
+      entries: [
+        entry('2024-01-01T00:00:02.5Z', 'b-2', 'web-1'),
+        entry('2024-01-01T00:00:04Z', 'a-4'),
+      ],
+    });
+    expect(lines()).toEqual(['a-1', 'b-1', 'b-2', 'a-2', 'a-3', 'a-4']);
+    expect(state().data?.truncation).toEqual({ shown: 6, received: 8 });
+    manager.stopAll(true);
+  });
+
+  test('resumes from the buffer when the window is shown again', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, resumeBuffer);
+
+    eventBus.emit('app:visibility-hidden');
+    eventBus.emit('app:visibility-visible');
+    await flushOpen();
+
+    expect(FakeStream.instances).toHaveLength(2);
+    expect(sentResume()).toEqual(expect.arrayContaining(resumePoints));
+    manager.stopAll(true);
+  });
+
+  test('reads full history again after the source selection changes', async () => {
+    setContainerLogsStreamScopeParams(SCOPE, { selectedFilters: ['pod:web-0'] });
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, resumeBuffer);
+
+    setContainerLogsStreamScopeParams(SCOPE, { selectedFilters: ['pod:web-0', 'pod:web-1'] });
+    await manager.startStream(SCOPE);
+    await flushOpen();
+
+    expect(sentResume()).toBeUndefined();
+    manager.stopAll(true);
+  });
+
+  test('reads full history again after the buffer grows, but not after it shrinks', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, resumeBuffer);
+
+    eventBus.emit('settings:obj-panel-logs-buffer-size', 50);
+    await manager.startStream(SCOPE);
+    await flushOpen();
+    expect(sentResume()).toBeDefined();
+
+    eventBus.emit('settings:obj-panel-logs-buffer-size', 9000);
+    await manager.startStream(SCOPE);
+    await flushOpen();
+    expect(sentResume()).toBeUndefined();
+    manager.stopAll(true);
+  });
+
+  test('replaces the buffer when the backend sends full history instead', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, resumeBuffer);
+
+    await manager.startStream(SCOPE);
+    await flushOpen();
+    expect(sentResume()).toBeDefined();
+    FakeStream.latest().receive({
+      reset: true,
+      snapshotComplete: true,
+      entries: [entry('2024-01-01T00:00:09Z', 'fresh')],
+    });
+
+    expect(lines()).toEqual(['fresh']);
+    manager.stopAll(true);
+  });
+
   test('stopAll with reset clears every scope', async () => {
     const manager = new ContainerLogsStreamManager();
     await startLive(manager, [entry('2024-01-01T00:00:01Z', 'kept')]);

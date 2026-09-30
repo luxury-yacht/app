@@ -23,8 +23,11 @@ type Options struct {
 	Selection containerlogs.ScopeSelection
 	// MaxEntries and MaxBytes are the client buffer's limits. MaxEntries also
 	// bounds each container's history.
-	MaxEntries  int
-	MaxBytes    int
+	MaxEntries int
+	MaxBytes   int
+	// Resume holds the containers the client already has lines for, each with
+	// a cursor at the newest of them. Empty means a full history.
+	Resume      []containerTarget
 	ScopeString string
 }
 
@@ -39,14 +42,28 @@ func (o Options) target() refresh.ObjectScopeIdentity {
 
 // Request is the first client frame for a container-logs named stream.
 // Scope carries complete cluster and Kubernetes object identity; the remaining
-// fields carry the pod/container source selection and the client buffer's
-// limits, which bound each container's history and the first snapshot.
+// fields carry the pod/container source selection, the client buffer's
+// limits, which bound each container's history and the first snapshot, and
+// optionally where the client's buffer ends for each container.
 type Request struct {
-	Scope           string   `json:"scope"`
-	SelectedFilters []string `json:"selectedFilters,omitempty"`
-	MatchNone       bool     `json:"matchNone,omitempty"`
-	MaxEntries      int      `json:"maxEntries,omitempty"`
-	MaxBytes        int      `json:"maxBytes,omitempty"`
+	Scope           string        `json:"scope"`
+	SelectedFilters []string      `json:"selectedFilters,omitempty"`
+	MatchNone       bool          `json:"matchNone,omitempty"`
+	MaxEntries      int           `json:"maxEntries,omitempty"`
+	MaxBytes        int           `json:"maxBytes,omitempty"`
+	Resume          []ResumePoint `json:"resume,omitempty"`
+}
+
+// ResumePoint is where the client's buffer ends for one container: the newest
+// log timestamp it holds and the lines it holds at that timestamp, oldest
+// first. A session given resume points reads only what follows them.
+type ResumePoint struct {
+	Pod         string   `json:"pod"`
+	Container   string   `json:"container"`
+	IsInit      bool     `json:"isInit,omitempty"`
+	IsEphemeral bool     `json:"isEphemeral,omitempty"`
+	Timestamp   string   `json:"timestamp"`
+	Lines       []string `json:"lines"`
 }
 
 // Entry mirrors the log line payload sent to clients.
@@ -63,7 +80,10 @@ type Entry struct {
 //
 // A session sends its first snapshot as one or more frames: the first carries
 // Reset, the last carries SnapshotComplete and the number of history entries
-// left out because the client could not hold them (Trimmed). Live batches and
+// left out because the client could not hold them (Trimmed). When the request's
+// resume points were used, the first frame also carries Resumed: the snapshot
+// holds only what follows them and adds to the client's buffer instead of
+// replacing it. Live batches and
 // warning or issue updates follow. Warnings and Issues, when present, replace
 // the previous lists. A frame with Error is fatal and the stream then closes;
 // Retryable says whether reconnecting can help.
@@ -73,6 +93,7 @@ type EventPayload struct {
 	Sequence         uint64                          `json:"sequence"`
 	GeneratedAt      int64                           `json:"generatedAt"`
 	Reset            bool                            `json:"reset,omitempty"`
+	Resumed          bool                            `json:"resumed,omitempty"`
 	SnapshotComplete bool                            `json:"snapshotComplete,omitempty"`
 	Trimmed          int                             `json:"trimmed,omitempty"`
 	Entries          []Entry                         `json:"entries,omitempty"`

@@ -339,6 +339,7 @@ func (d *containerLogsDelivery) writeSnapshot() bool {
 	for i, frame := range frames {
 		payload := EventPayload{Entries: frame, Reset: i == 0, SnapshotComplete: i == len(frames)-1}
 		if payload.Reset {
+			payload.Resumed = len(d.request.options.Resume) > 0
 			payload.Warnings, payload.Issues = listPayload(warnings, false), listPayload(issues, false)
 		}
 		if payload.SnapshotComplete {
@@ -557,9 +558,32 @@ func parseRequest(request Request) (Options, error) {
 		Selection:  containerlogs.ParseScopeSelection(request.SelectedFilters),
 		MaxEntries: maxEntries,
 		MaxBytes:   maxBytes,
+		Resume:     resumeTargets(identity.Namespace, request.Resume),
 		// Keep the original scope for client-side keying.
 		ScopeString: rawScope,
 	}, nil
+}
+
+// resumeTargets turns the client's resume points into cursors. If any point is
+// unusable none are used: that container would read its history again and
+// duplicate lines the client keeps.
+func resumeTargets(namespace string, points []ResumePoint) []containerTarget {
+	targets := make([]containerTarget, 0, len(points))
+	for _, point := range points {
+		at, err := time.Parse(time.RFC3339Nano, point.Timestamp)
+		if err != nil || point.Pod == "" || point.Container == "" || len(point.Lines) == 0 {
+			return nil
+		}
+		target := containerTarget{
+			namespace: namespace, pod: point.Pod, container: point.Container,
+			isInit: point.IsInit, isEphemeral: point.IsEphemeral,
+		}
+		for _, line := range point.Lines {
+			target.cursor.Observe(at, line)
+		}
+		targets = append(targets, target)
+	}
+	return targets
 }
 
 // permissionDeniedStatus translates forbidden errors into Status-like payloads

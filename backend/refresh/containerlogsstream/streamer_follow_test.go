@@ -681,7 +681,6 @@ func TestFollowContainerRecoversAnInterruptedTailAfterReconnect(t *testing.T) {
 	defer pods.mu.Unlock()
 	require.GreaterOrEqual(t, len(pods.sinceTimes), 2)
 	require.NotNil(t, pods.sinceTimes[1], "the reconnect resumes from the delivered position")
-	require.Nil(t, pods.tailLines[1], "a resume must not bound the replay, or the skip count could drop unseen lines")
 }
 
 // Unmatched replay lines must not be held while an open stream stays quiet.
@@ -736,6 +735,31 @@ func TestFollowContainerFirstOpenCarriesTailLines(t *testing.T) {
 	require.NotNil(t, pods.tailLines[0])
 	require.EqualValues(t, 500, *pods.tailLines[0])
 	require.Nil(t, pods.sinceTimes[0])
+}
+
+// A resume reads no more history than a first open: the client cannot hold
+// more of one container's lines than its buffer size, and a replay after a long
+// gap must not read everything written since.
+func TestFollowContainerResumeCarriesTheTailBound(t *testing.T) {
+	baseClient := fake.NewClientset()
+	pods := newLogPodsWithResponses(baseClient.CoreV1().Pods("default"), "default", []logResponse{{holdOpen: true}})
+	client := &stubClient{Clientset: baseClient, core: &logCore{CoreV1Interface: baseClient.CoreV1(), overrides: map[string]*logPods{"default": pods}}}
+	var cursor containerlogs.ResumeCursor
+	cursor.Observe(time.Unix(1000, 0), "delivered")
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		NewStreamer(client, applog.Noop, nil).followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app", cursor: cursor}, testPending(), followOptions{tailLines: 500})
+	}()
+	require.Eventually(t, func() bool { return pods.requestCount("app") == 1 }, time.Second, 5*time.Millisecond)
+	stopFollower(t, cancel, done)
+
+	pods.mu.Lock()
+	defer pods.mu.Unlock()
+	require.NotNil(t, pods.sinceTimes[0])
+	require.NotNil(t, pods.tailLines[0])
+	require.EqualValues(t, 500, *pods.tailLines[0])
 }
 
 // A request that never returns response headers is abandoned after the

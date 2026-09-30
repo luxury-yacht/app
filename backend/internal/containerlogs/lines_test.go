@@ -1,6 +1,7 @@
 package containerlogs
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -90,5 +91,17 @@ func TestSplitTimestampParsesTheLeadingTimestamp(t *testing.T) {
 			require.Equal(t, test.timestamp, timestamp)
 			require.Equal(t, test.content, content)
 		})
+	}
+}
+
+// WireText must equal what the client receives after JSON encoding, so a line
+// the client sends back matches the line as the log stream reads it.
+func TestWireTextMatchesTheJSONEncoding(t *testing.T) {
+	for _, text := range []string{"plain", "caf\u00e9 \U0001F600", "bad \xff\xfe byte", "\xc3", "cut \xe2\x82", ""} {
+		encoded, err := json.Marshal(text)
+		require.NoError(t, err)
+		var received string
+		require.NoError(t, json.Unmarshal(encoded, &received))
+		require.Equal(t, received, WireText(text), "%q", text)
 	}
 }

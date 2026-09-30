@@ -17,8 +17,10 @@ import type { SnapshotStats } from '../client';
 import { resetScopedDomainState, setScopedDomainState } from '../store';
 import type {
   ContainerLogsEntry,
+  ContainerLogsResumePoint,
   ContainerLogsSnapshotPayload,
   ContainerLogsStreamPhase,
+  ContainerLogsStreamRequest,
   ContainerLogsTargetIssue,
   ContainerLogsWarning,
   ContainerLogsWireEntry,
@@ -88,6 +90,89 @@ const upperBound = (keys: string[], key: string): number => {
   return low;
 };
 
+const compareKeys = (left: string, right: string): number =>
+  left < right ? -1 : left > right ? 1 : 0;
+
+// A resume point sends the lines at a container's newest timestamp so the
+// backend can find its place; a suffix of them is enough, so the request stays
+// small.
+const RESUME_MAX_LINES = 64;
+const RESUME_MAX_BYTES = 64 * 1024;
+
+type ResumeRun = {
+  newest: ContainerLogsEntry;
+  key: string;
+  // Newest first while collecting.
+  lines: string[];
+  bytes: number;
+  closed: boolean;
+};
+
+const containerIdentity = (entry: ContainerLogsWireEntry): string =>
+  `${entry.pod}/${entry.container}/${entry.isInit}/${Boolean(entry.isEphemeral)}`;
+
+// Takes the container's next older line into its run while the line shares the
+// run's timestamp and fits the budget; the first line that does not ends it.
+const extendRun = (run: ResumeRun, entry: ContainerLogsEntry, key: string): void => {
+  const bytes = utf8Length(entry.line);
+  if (
+    key !== run.key ||
+    run.lines.length >= RESUME_MAX_LINES ||
+    run.bytes + bytes > RESUME_MAX_BYTES
+  ) {
+    run.closed = true;
+    return;
+  }
+  run.lines.push(entry.line);
+  run.bytes += bytes;
+};
+
+const toResumePoint = ({ newest, lines }: ResumeRun): ContainerLogsResumePoint => ({
+  pod: newest.pod,
+  container: newest.container,
+  isInit: newest.isInit,
+  isEphemeral: Boolean(newest.isEphemeral),
+  timestamp: newest.timestamp,
+  lines: lines.reverse(),
+});
+
+/**
+ * Where the buffer ends for each container: its newest timestamped line and
+ * the lines held at that timestamp, oldest first.
+ */
+const resumePointsFor = (
+  entries: ContainerLogsEntry[],
+  keys: string[]
+): ContainerLogsResumePoint[] => {
+  const runs = new Map<string, ResumeRun>();
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    const key = keys[index];
+    if (key === UNTIMED_KEY) {
+      continue;
+    }
+    const run = runs.get(containerIdentity(entry));
+    if (!run) {
+      runs.set(containerIdentity(entry), {
+        newest: entry,
+        key,
+        lines: [entry.line],
+        bytes: utf8Length(entry.line),
+        closed: false,
+      });
+    } else if (!run.closed) {
+      extendRun(run, entry, key);
+    }
+  }
+  return Array.from(runs.values(), toResumePoint);
+};
+
+const selectionKey = (request: ContainerLogsStreamRequest): string =>
+  JSON.stringify([request.selectedFilters ?? [], request.matchNone ?? false]);
+
+/** What a buffer's history was read for: resuming is valid only for the same. */
+type BufferBasis = { selection: string; maxEntries: number };
+
 const sameEntryContent = (left: ContainerLogsEntry[], right: ContainerLogsWireEntry[]): boolean =>
   left.length === right.length &&
   left.every((entry, index) => {
@@ -114,6 +199,40 @@ class LogBuffer {
   private received = 0;
   warnings: ContainerLogsWarning[] = [];
   issues: ContainerLogsTargetIssue[] = [];
+  // The selection and size whose newest entries the buffer holds; null until a
+  // snapshot arrives.
+  private basis: BufferBasis | null = null;
+
+  /** Records the request whose snapshot the buffer now reflects. */
+  setBasis(request: ContainerLogsStreamRequest | null): void {
+    this.basis = request
+      ? { selection: selectionKey(request), maxEntries: request.maxEntries ?? 0 }
+      : null;
+  }
+
+  /** A smaller buffer still holds the newest entries for its new size. */
+  limitBasis(maxEntries: number): void {
+    if (this.basis) {
+      this.basis.maxEntries = Math.min(this.basis.maxEntries, maxEntries);
+    }
+  }
+
+  /**
+   * Resume points for a request, when the buffer holds the newest entries for
+   * that same selection and size; a new selection or a larger buffer needs the
+   * history read again.
+   */
+  resumePoints(request: ContainerLogsStreamRequest): ContainerLogsResumePoint[] {
+    const basis = this.basis;
+    if (
+      !basis ||
+      basis.selection !== selectionKey(request) ||
+      (request.maxEntries ?? 0) > basis.maxEntries
+    ) {
+      return [];
+    }
+    return resumePointsFor(this.entries, this.keys);
+  }
 
   replace(incoming: ContainerLogsWireEntry[], trimmed: number, nextSeq: () => number): void {
     // An unchanged reconnect snapshot keeps its entries' identity, so the view
@@ -126,23 +245,39 @@ class LogBuffer {
     this.received = this.entries.length + trimmed;
   }
 
+  /**
+   * Merges entries in timestamp order. Held entries come before new ones with
+   * the same timestamp, and new ones keep their arrival order.
+   */
   insert(incoming: ContainerLogsWireEntry[], nextSeq: () => number): void {
     if (incoming.length === 0) {
       return;
     }
-    const entries = this.entries.slice();
-    const keys = this.keys.slice();
-    for (const wire of incoming) {
-      const key = timestampKey(wire.timestamp);
-      const position =
-        keys.length === 0 || keys[keys.length - 1] <= key ? keys.length : upperBound(keys, key);
-      entries.splice(position, 0, { ...wire, _seq: nextSeq() });
-      keys.splice(position, 0, key);
-      this.bytes += utf8Length(wire.line);
+    const added = incoming
+      .map((wire) => ({ entry: { ...wire, _seq: nextSeq() }, key: timestampKey(wire.timestamp) }))
+      .sort((left, right) => compareKeys(left.key, right.key));
+    // Live lines are usually the newest, so most held entries are copied as is.
+    let held = upperBound(this.keys, added[0].key);
+    const entries = this.entries.slice(0, held);
+    const keys = this.keys.slice(0, held);
+    for (const next of added) {
+      for (; held < this.keys.length && this.keys[held] <= next.key; held += 1) {
+        entries.push(this.entries[held]);
+        keys.push(this.keys[held]);
+      }
+      entries.push(next.entry);
+      keys.push(next.key);
+      this.bytes += utf8Length(next.entry.line);
     }
-    this.entries = entries;
-    this.keys = keys;
+    this.entries = entries.concat(this.entries.slice(held));
+    this.keys = keys.concat(this.keys.slice(held));
     this.received += incoming.length;
+  }
+
+  /** Adds a resumed snapshot, counting the history the backend left out. */
+  continueWith(incoming: ContainerLogsWireEntry[], trimmed: number, nextSeq: () => number): void {
+    this.insert(incoming, nextSeq);
+    this.received += trimmed;
   }
 
   evict(maxEntries: number, maxBytes: number): void {
@@ -178,6 +313,7 @@ class ContainerLogsStreamConnection {
   private socket: JSONSocket | null = null;
   private retryTimer: number | null = null;
   private protocol: ContainerLogsProtocolState = initialContainerLogsProtocolState();
+  private sentRequest: ContainerLogsStreamRequest | null = null;
 
   constructor(scope: string, manager: ContainerLogsStreamManager) {
     this.scope = scope;
@@ -191,6 +327,11 @@ class ContainerLogsStreamConnection {
 
   stop(): void {
     this.dispatch({ type: 'stopping' });
+  }
+
+  /** The request sent on the current socket; its snapshot answers it. */
+  get request(): ContainerLogsStreamRequest | null {
+    return this.sentRequest;
   }
 
   private get finished(): boolean {
@@ -210,7 +351,8 @@ class ContainerLogsStreamConnection {
   private applyConnectionEffect(effect: ContainerLogsProtocolEffect): void {
     switch (effect.type) {
       case 'send-request':
-        this.socket?.send(this.manager.buildRequest(this.scope));
+        this.sentRequest = this.manager.buildRequest(this.scope);
+        this.socket?.send(this.sentRequest);
         return;
       case 'close-connection':
         this.clearRetryTimer();
@@ -338,6 +480,7 @@ export class ContainerLogsStreamManager {
     this.maxEntries = size;
     for (const [scope, buffer] of this.buffers) {
       buffer.evict(this.maxEntries, this.maxBytes);
+      buffer.limitBasis(this.maxEntries);
       this.commit(scope, {});
     }
   }
@@ -376,16 +519,21 @@ export class ContainerLogsStreamManager {
     }
   }
 
-  /** The first client frame: scope, source selection and buffer limits. */
-  buildRequest(scope: string) {
+  /**
+   * The first client frame: scope, source selection and buffer limits, plus
+   * where the buffer ends for each container when the stream can resume there.
+   */
+  buildRequest(scope: string): ContainerLogsStreamRequest {
     const params = getContainerLogsStreamScopeParams(scope);
-    return {
+    const request: ContainerLogsStreamRequest = {
       scope,
       selectedFilters: params?.selectedFilters ?? [],
       matchNone: params?.matchNone ?? false,
       maxEntries: this.maxEntries,
       maxBytes: this.maxBytes,
     };
+    const resume = this.buffers.get(scope)?.resumePoints(request) ?? [];
+    return resume.length > 0 ? { ...request, resume } : request;
   }
 
   /** Applies a protocol transition's data effects and projects the result. */
@@ -402,7 +550,7 @@ export class ContainerLogsStreamManager {
     const buffer = this.bufferFor(scope);
     let snapshotApplied = false;
     for (const effect of effects) {
-      snapshotApplied = this.applyDataEffect(buffer, effect) || snapshotApplied;
+      snapshotApplied = this.applyDataEffect(buffer, effect, connection.request) || snapshotApplied;
     }
     buffer.evict(this.maxEntries, this.maxBytes);
     if (phase.status !== 'stopping') {
@@ -411,11 +559,20 @@ export class ContainerLogsStreamManager {
     this.notifyPhase(scope, phase);
   }
 
-  private applyDataEffect(buffer: LogBuffer, effect: ContainerLogsProtocolEffect): boolean {
+  private applyDataEffect(
+    buffer: LogBuffer,
+    effect: ContainerLogsProtocolEffect,
+    request: ContainerLogsStreamRequest | null
+  ): boolean {
     const nextSeq = () => ++this.seqCounter;
     switch (effect.type) {
       case 'apply-snapshot':
-        buffer.replace(effect.entries, effect.trimmed, nextSeq);
+        if (effect.resumed) {
+          buffer.continueWith(effect.entries, effect.trimmed, nextSeq);
+        } else {
+          buffer.replace(effect.entries, effect.trimmed, nextSeq);
+        }
+        buffer.setBasis(request);
         buffer.warnings = effect.warnings;
         buffer.issues = effect.issues;
         return true;

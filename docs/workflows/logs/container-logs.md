@@ -42,6 +42,12 @@ by `maxEntries`. Container Logs records each scope's source selection in
 `core/refresh/streaming/containerLogsStreamScopeParams.ts`; the stream manager
 reads it when it opens the stream, and closing the panel clears it.
 
+When the buffer already holds lines read for the same selection and for a
+buffer size at least as large, the first frame also carries `resume`: for each
+container, the newest timestamp the buffer holds and its lines at that
+timestamp, oldest first (at most 64 lines and 64 KiB; a suffix is enough to
+find the place).
+
 Server frames, generated into `types.generated.ts`:
 
 - **Snapshot.** One or more frames: the first carries `reset`, the last
@@ -53,7 +59,10 @@ Server frames, generated into `types.generated.ts`:
   (`containerlogs.NewestWindow`); older history counts as `trimmed`, never
   `dropped`. Frames
   stay within a budget of 8 × the 256 KiB line limit, measured as encoded JSON.
-  The client applies a snapshot only when its last frame arrives.
+  The client applies a snapshot only when its last frame arrives. When the
+  request's resume points were used, the first frame carries `resumed`: the
+  snapshot holds only lines after them, plus history for containers without
+  one.
 - **Live batches.** At most 64 entries and one frame budget, flushed every
   250 ms. History that arrives after the snapshot is always sent; the client
   inserts it in time order.
@@ -66,10 +75,14 @@ Server frames, generated into `types.generated.ts`:
   `retryable`; the stream then closes. Missing objects, permission denials and
   rejected requests are not retryable.
 
-A reconnect snapshot replaces the buffer; an identical snapshot keeps entry
-render identity so reconnecting does not invalidate row measurements or move
-the viewport. The buffer keeps entries in timestamp order and evicts the oldest
-by count and by UTF-8 line bytes.
+A restarted stream (a reconnect, the window shown again, auto-refresh turned
+back on) resumes, and its `resumed` snapshot is merged into the buffer, as live
+lines are. Lines of pods that ended meanwhile stay, as they do while live. A
+selection change, a larger buffer size, an empty buffer, or resume points the
+backend cannot use (one unusable point voids them all) read full history, and
+that snapshot replaces the buffer; an identical one keeps entry render identity
+so row measurements and the viewport stay. The buffer keeps entries in
+timestamp order and evicts the oldest by count and by UTF-8 line bytes.
 
 Client phases (`containerLogsStreamProtocol.ts`): `connecting`,
 `awaiting-snapshot`, `live`, `reconnecting`, `failed`, `stopping`. Reconnect
@@ -83,9 +96,14 @@ turns its auto-refresh off, and one toggle (or `R`) retries.
   request with no response headers after 20 s becomes a `failed` issue and
   retries; an established stream that is quiet never times out.
 - Lines over 256 KiB are truncated with a marker and reading continues.
-- Resuming after a stream ends uses a cursor (last timestamp plus the hashes of
-  the lines delivered at it) so no unread line is lost; duplicates appear only
-  when the replay is ambiguous or unmatched.
+- Resuming uses a cursor (last timestamp plus the hashes of the lines delivered
+  at it): a follower's own after its stream ends, or one built from the
+  client's resume point for a pod present when the session starts (a pod that
+  appears later reads its history). Every read, resumed or not, is bounded by
+  `maxEntries` lines; the client cannot hold more of one container. No unread
+  line the client could hold is lost; duplicates appear only when the replay is
+  ambiguous, unmatched, or cut by that bound. Lines are tracked in their JSON
+  wire form (each invalid UTF-8 byte as U+FFFD) so the client's text matches.
 - A per-session pod informer keeps targets current: new pods, init and debug
   containers, recreated pods with the same name, and restarts (a new container
   ID) are followed. A follower reopens only while its container is running.

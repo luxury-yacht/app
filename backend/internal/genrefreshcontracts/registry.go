@@ -221,6 +221,8 @@ var contractTypes = []typeSpec{
 	{name: "ContainerLogsWarning", typeOf: typeOf[containerlogs.Warning]()},
 	{name: "ContainerLogsTargetIssue", typeOf: typeOf[containerlogs.TargetIssue]()},
 	{name: "ContainerLogsStreamEventPayload", typeOf: typeOf[containerlogsstream.EventPayload]()},
+	{name: "ContainerLogsResumePoint", typeOf: typeOf[containerlogsstream.ResumePoint]()},
+	{name: "ContainerLogsStreamRequest", typeOf: typeOf[containerlogsstream.Request]()},
 	{name: "ResourceStreamClientMessage", typeOf: typeOf[streammux.ClientMessage]()},
 	{name: "ResourceStreamServerMessage", typeOf: typeOf[streammux.ServerMessage]()},
 	{name: "TelemetrySnapshotStatus", typeOf: typeOf[telemetry.SnapshotStatus]()},

@@ -113,7 +113,6 @@ Typed frames, generated into TypeScript through the refresh contract generator
 - Visual redesign or new controls. Node Logs picks up the shared toolbar's
   tooltips and icon sizes as a side effect of sharing the builder.
 - Changing the per-scope or global target limit settings.
-- Merging reconnect snapshots into existing history (open question 1).
 
 ## Findings ledger
 
@@ -268,6 +267,12 @@ request builders and bindings only.
   inside a same-timestamp burst and make the skip count drop unseen lines (read
   `[A, B]` at one timestamp, `C` follows, a tail-2 replay returns `[B, C]`,
   skipping two loses `C`).
+  **Revised 2026-09-29:** resumes also send `TailLines`. The run matcher below
+  replaced the skip count; a replay cut inside the run cannot match it and
+  releases the held lines (the example emits `B` again, then `C`), so a bound
+  repeats lines but never drops one. Streams restarted from the client resume
+  too (open question 1), and after a long gap an unbounded replay would read
+  everything written since.
 
   **Cursor and replay rule.** The cursor is `{lastTimestamp, run}`, where `run`
   holds 64-bit hashes of the lines this follower delivered at `lastTimestamp`,
@@ -592,7 +597,13 @@ Status values follow [completion.md](../workflows/completion.md). All start
 
 All eight were decided with the user on 2026-09-28.
 
-1. **Reconnect history. Decided 2026-09-28: keep replacing.** A reconnect
+1. **Reconnect history. Decided 2026-09-28: keep replacing. Revised
+   2026-09-29 (user): resume.** A restarted stream sends per-container resume
+   points and merges the `resumed` snapshot when the selection and buffer size
+   are unchanged; otherwise it reads full history and replaces, as before
+   ([container-logs.md](../workflows/logs/container-logs.md#stream-protocol)).
+   Reason: every hide/show, reconnect and auto-refresh toggle re-read each
+   container's full history. The original decision read: a reconnect
    snapshot replaces the buffer, as the contract documents. Active-pod pruning
    already hides deleted pods' lines, and anchoring keeps the reading position
    while tail-following is paused (`useAnchoredLogEntries.ts:36-55`). Accepted

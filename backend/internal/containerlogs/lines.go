@@ -104,3 +104,23 @@ func SplitTimestamp(line string) (string, string) {
 	}
 	return parsed.UTC().Format(time.RFC3339Nano), line[space+1:]
 }
+
+// WireText returns text as a JSON encoder sends it: each byte that is not part
+// of valid UTF-8 becomes U+FFFD.
+func WireText(text string) string {
+	if utf8.ValidString(text) {
+		return text
+	}
+	var builder strings.Builder
+	builder.Grow(len(text) + 2)
+	for i := 0; i < len(text); {
+		r, size := utf8.DecodeRuneInString(text[i:])
+		if r == utf8.RuneError && size == 1 {
+			builder.WriteRune(utf8.RuneError)
+		} else {
+			builder.WriteString(text[i : i+size])
+		}
+		i += size
+	}
+	return builder.String()
+}

@@ -409,6 +409,13 @@ func (r *containerLogRun) setInitialPods(ctx context.Context, pods []*corev1.Pod
 			r.seeded[pod.Name] = struct{}{}
 		}
 	}
+	// The client's resume points apply only to pods present now; a pod that
+	// appears later is new to the session, as after removePod.
+	for _, target := range r.opts.Resume {
+		if _, present := r.currentPods[target.pod]; present {
+			r.cursors[target.key()] = target.cursor.Clone()
+		}
+	}
 	r.mu.Unlock()
 	r.reconcileTargets(ctx)
 }
@@ -668,14 +675,16 @@ func (c *cancelOnClose) Close() error {
 	return err
 }
 
+// logOptions reads at most tailLines lines, from the cursor's second when
+// resuming. The client never holds more of one container's lines than that,
+// so a resume after a long gap reads nothing it could show. If the bound cuts
+// into the lines at the cursor timestamp, the tracker cannot match them and
+// releases them, repeating lines rather than losing any.
 func (s *containerFollowSession) logOptions() *corev1.PodLogOptions {
 	options := &corev1.PodLogOptions{Container: s.target.container, Follow: true, Timestamps: true}
 	if !s.cursor.IsZero() {
-		// A resume never carries a tail bound: the replay must start from the
-		// cursor's second so the tracker can find the delivered lines.
 		since := metav1.NewTime(s.cursor.Since())
 		options.SinceTime = &since
-		return options
 	}
 	if s.tailLines > 0 {
 		tail := int64(s.tailLines)
@@ -736,6 +745,8 @@ func (s *containerFollowSession) consume(ctx context.Context, stream io.ReadClos
 			}
 			idle.Reset(s.streamer.caughtUpIdle)
 			timestamp, content := containerlogs.SplitTimestamp(read.line)
+			// Tracked as the client receives it, so its resume points match.
+			content = containerlogs.WireText(content)
 			entry := s.logEntry(timestamp, content)
 			s.deliverAll(tracker.Offer(parseLogTimestamp(timestamp), content, entry, time.Now()))
 		}
