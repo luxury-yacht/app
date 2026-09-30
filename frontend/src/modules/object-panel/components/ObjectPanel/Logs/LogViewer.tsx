@@ -84,8 +84,8 @@ import { useTerminalTheme } from './hooks/useTerminalTheme';
 import {
   LogViewerControls,
   LogViewerReadyView,
-  renderLogViewerBlockingState,
   renderLogViewerContent,
+  renderLogViewerStatus,
 } from './LogViewerLayout';
 import {
   classifySelectedLogSources,
@@ -1013,7 +1013,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     dispatch({ type: 'TOGGLE_ROW_EXPANSION', payload: rowKey });
   }, []);
 
-  const blockingState = renderLogViewerBlockingState({
+  const status = renderLogViewerStatus({
     loading: logsLoadingState.loading,
     loadingMessage: source.loadingMessage,
     paused: showPausedLogsState || shouldShowPausedLogsEmptyState,
@@ -1021,21 +1021,19 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     retryHint: source.liveFailure !== null,
     hasEntries: logEntries.length > 0,
   });
-  if (blockingState) {
-    return blockingState;
-  }
-
-  const renderedLogContent = renderLogViewerContent({
-    isParsedView,
-    parsedLogs: parsedRows,
-    tableColumns,
-    expandedRows,
-    onToggleParsedRow: handleToggleParsedRow,
-    displayRows,
-    logsContentRef,
-    wrapText,
-    renderRawLogRow,
-  });
+  const renderedLogContent =
+    status ??
+    renderLogViewerContent({
+      isParsedView,
+      parsedLogs: parsedRows,
+      tableColumns,
+      expandedRows,
+      onToggleParsedRow: handleToggleParsedRow,
+      displayRows,
+      logsContentRef,
+      wrapText,
+      renderRawLogRow,
+    });
   const iconItems = buildLogToolbarItems({
     options: state,
     dispatch,

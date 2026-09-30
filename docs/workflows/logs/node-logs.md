@@ -19,9 +19,9 @@ object panel. They are snapshot/fetch based, not container log streaming.
   viewer shell ([overview.md](overview.md#shared-viewer-shell)); source
   selection and transport stay node-log specific. Node Logs has no timestamp or
   previous-log shortcuts.
-- Loading, error and empty states look like Container Logs', but show under the
-  toolbar instead of replacing the tab: the toolbar holds the source picker,
-  which must stay usable when a source cannot be read.
+- Loading, error and empty states look and sit as in Container Logs: in the log
+  region below the toolbar, which holds the source picker and must stay usable
+  when a source cannot be read.
 - The Buffer size setting (Settings → Logs) limits Node Logs as it limits
   Container Logs: the newest lines are kept, shrinking the setting trims at once, and the
   buffer-full indicator shows once lines have been dropped (by the node's

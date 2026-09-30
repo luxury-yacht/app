@@ -89,10 +89,14 @@ turns its auto-refresh off, and one toggle (or `R`) retries.
 - A per-session pod informer keeps targets current: new pods, init and debug
   containers, recreated pods with the same name, and restarts (a new container
   ID) are followed. A follower reopens only while its container is running.
-  An expired watch re-lists without surfacing an error.
+  An expired watch re-lists without surfacing an error. The informer's first
+  list is authoritative: a resolved pod it never reports was deleted before it
+  listed and is removed, releasing its target capacity.
 - Live logs need `list` and `watch` on pods (a single pod is watched by name);
   without them the stream fails with a non-retryable permission error that
-  names the verb. Previous logs use `get` only and still load.
+  names the verb. Previous logs use `get` only and still load, so loading,
+  paused and failure-before-lines states show in the log region below the
+  controls; Previous Logs and the auto-refresh retry stay usable.
 - The previous-logs fetch reads containers five at a time, each within 20 s, and
   returns per-container `issues`; `error` is set only when nothing could be
   read.

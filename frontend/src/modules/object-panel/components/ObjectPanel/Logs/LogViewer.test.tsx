@@ -784,6 +784,32 @@ describe('LogViewer active pod synchronisation', () => {
     }
   });
 
+  // A user who may read a pod and its logs but not list or watch pods: live
+  // logs fail, yet previous logs still load and retrying stays one click away.
+  it('keeps the log controls when live logs fail before any line arrives', async () => {
+    const podScope = buildContainerLogsScope('team-a:/v1:pod:api');
+    resetScopedDomainState('container-logs', podScope);
+    const stream = await openManagedStream(podScope);
+    try {
+      await renderViewer({
+        resourceKind: 'pod',
+        activePodNames: ['api'],
+        containerLogsScope: podScope,
+        panelId: 'obj:test:pod:team-a:api',
+      });
+      await stream.send({
+        error: 'pods is forbidden: User "viewer" cannot list resource "pods"',
+        retryable: false,
+      });
+
+      expect(container.textContent).toContain('cannot list resource "pods"');
+      expect(container.querySelector('button[aria-label="Show previous logs (V)"]')).not.toBeNull();
+      expect(container.querySelector('button[aria-label="Toggle auto-refresh"]')).not.toBeNull();
+    } finally {
+      await stream.close();
+    }
+  });
+
   // AC13: a failure that cannot be retried stops the stream, keeps the lines,
   // explains itself, and turns auto-refresh off so one toggle retries.
   it('turns auto-refresh off after a permanent failure and retries on one toggle', async () => {

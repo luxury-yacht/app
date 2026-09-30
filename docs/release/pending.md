@@ -12,6 +12,8 @@
 
 ### Fixed
 
+- When live container logs cannot start (for example, you may read a pod's logs but not list pods), the Logs tab keeps its controls, so Previous Logs and auto-refresh stay available.
+- Live logs for a workload no longer stall when a pod is deleted just as the Logs tab opens; its replacement streams.
 - Opening logs for a workload with many containers no longer reports history as "dropped because the log view fell behind", and the first view always shows the newest lines.
 - Node logs load again on clusters where the Logs tab said "Logs are not available on this node" with a 406 error.
 - Auto-sized table columns no longer truncate their headers when the header is wider than the column's values.

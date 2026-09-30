@@ -71,7 +71,10 @@ export const renderLogViewerContent = ({
   );
 };
 
-export const renderLogViewerBlockingState = ({
+// Loading, paused and a failure before any line arrives show in the log region,
+// below the controls: Previous Logs, the auto-refresh retry and the filters
+// must stay usable (a user may be allowed previous logs but not live logs).
+export const renderLogViewerStatus = ({
   loading,
   loadingMessage,
   paused,
@@ -87,27 +90,17 @@ export const renderLogViewerBlockingState = ({
   hasEntries: boolean;
 }) => {
   if (loading) {
-    return (
-      <div className="object-panel-tab-content">
-        <LoadingSpinner message={loadingMessage} />
-      </div>
-    );
+    return <LoadingSpinner message={loadingMessage} />;
   }
   if (paused) {
     return (
-      <div className="object-panel-tab-content">
-        <div className="logs-viewer-display-empty">
-          <ClusterDataPausedState />
-        </div>
+      <div className="logs-viewer-display-empty">
+        <ClusterDataPausedState />
       </div>
     );
   }
   if (displayError && !hasEntries) {
-    return (
-      <div className="object-panel-tab-content">
-        <LogErrorState message={displayError} retryHint={retryHint} />
-      </div>
-    );
+    return <LogErrorState message={displayError} retryHint={retryHint} />;
   }
   return null;
 };

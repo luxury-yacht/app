@@ -191,6 +191,10 @@ type containerLogRun struct {
 	mu          sync.Mutex
 	targetWG    sync.WaitGroup
 	currentPods map[string]*corev1.Pod
+	// seeded holds the resolved pods the informer has not reported yet. Its
+	// first list is the authority: seeds it never reports were deleted before
+	// it listed, and it will never report their deletion.
+	seeded map[string]struct{}
 	// followers holds every follower that has not exited, including stopped
 	// ones, so a target never has two followers reading at once.
 	followers map[string]context.CancelFunc
@@ -224,7 +228,7 @@ func newContainerLogRun(streamer *Streamer, config containerLogRunConfig, podWat
 		streamer: streamer, opts: config.opts, podWatch: podWatch, limiterSession: config.limiterSession,
 		sink: config.sink, snapshot: config.snapshot, warningsCh: config.warningsCh, issues: config.issues,
 		fatal: config.fatal, followerExited: make(chan struct{}, 1),
-		currentPods: map[string]*corev1.Pod{}, followers: map[string]context.CancelFunc{},
+		currentPods: map[string]*corev1.Pod{}, seeded: map[string]struct{}{}, followers: map[string]context.CancelFunc{},
 		finished: map[string]string{}, cursors: map[string]containerlogs.ResumeCursor{},
 		currentWarnings: append([]containerlogs.Warning(nil), config.initialWarnings...),
 	}
@@ -402,16 +406,19 @@ func (r *containerLogRun) setInitialPods(ctx context.Context, pods []*corev1.Pod
 	for _, pod := range pods {
 		if pod != nil {
 			r.currentPods[pod.Name] = pod
+			r.seeded[pod.Name] = struct{}{}
 		}
 	}
 	r.mu.Unlock()
 	r.reconcileTargets(ctx)
 }
 
-// podEvent is one pod change delivered by the session's informer.
+// podEvent is one pod change delivered by the session's informer, or the
+// marker that its first list has been delivered.
 type podEvent struct {
 	pod     *corev1.Pod
 	deleted bool
+	synced  bool
 }
 
 // startPodInformer keeps the session's pods current. The informer's reflector
@@ -435,13 +442,29 @@ func (r *containerLogRun) startPodInformer(ctx context.Context) <-chan podEvent 
 			}
 		}
 	}
-	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	registration, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj any) { send(obj, false) },
 		UpdateFunc: func(_, obj any) { send(obj, false) },
 		DeleteFunc: func(obj any) { send(obj, true) },
 	})
 	go informer.RunWithContext(ctx)
+	if err == nil {
+		go signalFirstListDelivered(ctx, events, registration.HasSynced)
+	}
 	return events
+}
+
+// signalFirstListDelivered sends the synced marker once the informer's first
+// list has been handed to its event handler; the marker follows those events
+// on the channel.
+func signalFirstListDelivered(ctx context.Context, events chan<- podEvent, delivered cache.InformerSynced) {
+	if !cache.WaitForCacheSync(ctx.Done(), delivered) {
+		return
+	}
+	select {
+	case events <- podEvent{synced: true}:
+	case <-ctx.Done():
+	}
 }
 
 func podFromInformerObject(obj any) *corev1.Pod {
@@ -469,6 +492,13 @@ func (r *containerLogRun) handleWatchError(err error) {
 }
 
 func (r *containerLogRun) applyPodEvent(ctx context.Context, event podEvent) {
+	if event.synced {
+		r.removeUnlistedSeeds(ctx)
+		return
+	}
+	r.mu.Lock()
+	delete(r.seeded, event.pod.Name)
+	r.mu.Unlock()
 	if event.deleted {
 		r.removePod(ctx, event.pod.Name)
 		return
@@ -488,6 +518,21 @@ func (r *containerLogRun) ownsPod(ctx context.Context, pod *corev1.Pod) bool {
 		r.streamer.logger.Debug(fmt.Sprintf("containerlogsstream: pod ownership lookup failed: %v", err), logsources.ContainerLogsStream)
 	}
 	return owned && r.opts.Selection.MatchPod(pod.Name)
+}
+
+// removeUnlistedSeeds removes the resolved pods the informer's first list did
+// not contain; they were deleted before it listed.
+func (r *containerLogRun) removeUnlistedSeeds(ctx context.Context) {
+	r.mu.Lock()
+	unlisted := make([]string, 0, len(r.seeded))
+	for name := range r.seeded {
+		unlisted = append(unlisted, name)
+	}
+	r.seeded = map[string]struct{}{}
+	r.mu.Unlock()
+	for _, name := range unlisted {
+		r.removePod(ctx, name)
+	}
 }
 
 // removePod stops the pod's followers and forgets their resume state, so a

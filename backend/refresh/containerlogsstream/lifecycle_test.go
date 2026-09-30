@@ -44,6 +44,9 @@ type runSetup struct {
 	limiter *TargetSession
 	// prepare adjusts the fake API server before the session resolves.
 	prepare func(*fake.Clientset)
+	// afterResolve changes the fake API server after the session resolved its
+	// pods and before its informer first lists them.
+	afterResolve func(*fake.Clientset)
 }
 
 func startRun(t *testing.T, opts Options, initial []*corev1.Pod, respond func(*corev1.PodLogOptions) logResponse) *runHarness {
@@ -80,6 +83,9 @@ func startRunWith(t *testing.T, setup runSetup) *runHarness {
 	harness.cancel = cancel
 	resolution, err := streamer.resolve(ctx, setup.opts)
 	require.NoError(t, err)
+	if setup.afterResolve != nil {
+		setup.afterResolve(baseClient)
+	}
 	go func() {
 		defer close(harness.done)
 		streamer.run(ctx, resolution.Pods, resolution.Watch, containerLogRunConfig{
@@ -367,4 +373,22 @@ func TestTargetHeldByTheGlobalCapStartsWhenCapacityFrees(t *testing.T) {
 
 	holder.Release()
 	harness.expectLine("app line")
+}
+
+// A pod deleted after the session resolved its pods but before the informer's
+// first list is never reported deleted by the informer, which never saw it. It
+// must still give up its capacity so a replacement pod streams.
+func TestPodDeletedBeforeTheInformerListReleasesItsCapacity(t *testing.T) {
+	limiter := NewGlobalTargetLimiter(1)
+	pods := corev1.SchemeGroupVersion.WithResource("pods")
+	harness := startRunWith(t, runSetup{
+		opts: jobScope, initial: []*corev1.Pod{jobPod("migrate-a", "migrate", "a")}, respond: linesPerContainer,
+		limiter: limiter.StartSession("cluster-a", "session"),
+		afterResolve: func(client *fake.Clientset) {
+			require.NoError(t, client.Tracker().Delete(pods, "default", "migrate-a"))
+			require.NoError(t, client.Tracker().Add(jobPod("migrate-b", "migrate", "b")))
+		},
+	})
+
+	harness.expectLine("b line")
 }
