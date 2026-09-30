@@ -41,9 +41,9 @@
 }
 
 .logs-viewer-selector-dropdown .dropdown-trigger {
-  width: 175px;
-  min-width: 175px;
-  max-width: 175px;
+  width: 130px;
+  min-width: 130px;
+  max-width: 130px;
 }
 
 .logs-viewer-selector-dropdown .dropdown-value {

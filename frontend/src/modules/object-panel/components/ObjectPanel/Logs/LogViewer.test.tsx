@@ -164,28 +164,35 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     options = [],
     multiple = false,
     renderValue,
+    ariaLabel,
   }: {
     value?: string | string[];
     onChange?: (v: string | string[]) => void;
     options?: Array<{ label?: string; value: string; disabled?: boolean }>;
     multiple?: boolean;
+    ariaLabel?: string;
     renderValue?: (
       value: string | string[],
       options: Array<{ label: string; value: string }>
     ) => React.ReactNode;
   }) => {
     const testId =
-      multiple ||
-      options?.some((opt) => opt?.label === 'All') ||
-      options?.some((opt) => typeof opt?.label === 'string' && opt.label.startsWith('All ')) ||
-      options?.some(
-        (opt) =>
-          typeof opt?.label === 'string' && opt.label.startsWith('Containers and Init Containers')
-      )
-        ? 'pod-container-dropdown'
-        : options?.some((opt) => opt?.label === 'Auto-scroll')
-          ? 'pod-options-dropdown'
-          : 'pod-filter-dropdown';
+      multiple && ariaLabel
+        ? `logs-${ariaLabel.toLowerCase()}-dropdown`
+        : multiple ||
+            options?.some((opt) => opt?.label === 'All') ||
+            options?.some(
+              (opt) => typeof opt?.label === 'string' && opt.label.startsWith('All ')
+            ) ||
+            options?.some(
+              (opt) =>
+                typeof opt?.label === 'string' &&
+                opt.label.startsWith('Containers and Init Containers')
+            )
+          ? 'pod-container-dropdown'
+          : options?.some((opt) => opt?.label === 'Auto-scroll')
+            ? 'pod-options-dropdown'
+            : 'pod-filter-dropdown';
     return (
       <>
         <span data-testid={`${testId}-value`}>
@@ -634,7 +641,7 @@ describe('LogViewer active pod synchronisation', () => {
     });
 
     const filterInput = await waitForElement(() =>
-      container.querySelector<HTMLInputElement>('input[placeholder="Filter logs..."]')
+      container.querySelector<HTMLInputElement>('input[placeholder="Filter"]')
     );
     const nativeValueSetter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype,
@@ -1371,7 +1378,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(allMetadataSpans.some((span) => span.textContent?.trim() === '[app]')).toBe(true);
 
     const containerSelect = container.querySelector<HTMLSelectElement>(
-      '[data-testid="pod-container-dropdown"]'
+      '[data-testid="logs-containers-dropdown"]'
     );
     expect(containerSelect).not.toBeNull();
     await setMultiSelectValues(
@@ -2143,7 +2150,7 @@ describe('LogViewer active pod synchronisation', () => {
     ]);
 
     const containerSelect = container.querySelector<HTMLSelectElement>(
-      '[data-testid="pod-container-dropdown"]'
+      '[data-testid="logs-containers-dropdown"]'
     );
     expect(containerSelect).toBeTruthy();
 
@@ -2181,7 +2188,7 @@ describe('LogViewer active pod synchronisation', () => {
     );
   });
 
-  it('filters workload logs locally from the multi-select pod/container dropdown', async () => {
+  it('filters workload logs locally from the pod and container dropdowns', async () => {
     (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
       scopeContainer('app'),
       scopeContainer('init-db', 'init'),
@@ -2239,20 +2246,34 @@ describe('LogViewer active pod synchronisation', () => {
     await renderViewer({ activePodNames: ['web-1', 'web-2'] });
     await flushAsync();
 
-    const workloadFilter = await waitForElement(() =>
-      container.querySelector<HTMLSelectElement>('[data-testid="pod-container-dropdown"]')
+    const podFilter = await waitForElement(() =>
+      container.querySelector<HTMLSelectElement>('[data-testid="logs-pods-dropdown"]')
     );
-    const optionLabels = Array.from(workloadFilter.options).map((option) => option.text);
-    expect(optionLabels).toContain('Pods');
-    expect(optionLabels).toContain('Init Containers');
-    expect(optionLabels).toContain('Containers');
-    const workloadFilterLabel = () =>
-      container.querySelector('[data-testid="pod-container-dropdown-value"]')?.textContent;
-    expect(workloadFilterLabel()).toBe('Logs');
+    const containerFilter = await waitForElement(() =>
+      container.querySelector<HTMLSelectElement>('[data-testid="logs-containers-dropdown"]')
+    );
+    const optionLabels = (select: HTMLSelectElement) =>
+      Array.from(select.options).map((option) => option.text);
+    expect(optionLabels(podFilter)).toEqual(['web-1', 'web-2']);
+    expect(optionLabels(containerFilter)).toEqual([
+      'Init Containers',
+      'init-db',
+      'Containers',
+      'app',
+      'sidecar',
+    ]);
+    const filterLabel = (name: string) =>
+      container.querySelector(`[data-testid="logs-${name}-dropdown-value"]`)?.textContent;
+    expect(filterLabel('pods')).toBe('Pods');
+    expect(filterLabel('containers')).toBe('Containers');
 
-    await setMultiSelectValues(workloadFilter, ['pod:web-1', 'container:app']);
+    await setMultiSelectValues(podFilter, ['pod:web-1']);
     await flushAsync();
-    expect(workloadFilterLabel()).toBe('Logs (2)');
+    await setMultiSelectValues(containerFilter, ['container:app']);
+    await flushAsync();
+    // Each dropdown changes only its own part of the selection.
+    expect(filterLabel('pods')).toBe('Pods (1)');
+    expect(filterLabel('containers')).toBe('Containers (1)');
 
     const filteredLines = Array.from(container.querySelectorAll('.log-viewer-line')).map((el) =>
       el.textContent?.replace(/\s+/g, ' ').trim()
@@ -2267,14 +2288,19 @@ describe('LogViewer active pod synchronisation', () => {
       values: ['pod:web-1', 'container:app'],
     });
 
-    await setMultiSelectValues(workloadFilter, []);
+    await setMultiSelectValues(podFilter, []);
     await flushAsync();
 
     expect(container.querySelector('.log-viewer-line')?.textContent).toContain(
       'No logs match the current filters'
     );
-    expect(getContainerLogsStreamScopeParams(defaultScope)).toEqual({ matchNone: true });
-    expect(workloadFilterLabel()).toBe('Logs (0)');
+    // No pods reads nothing, and the container choice is kept for later.
+    expect(getContainerLogsStreamScopeParams(defaultScope)).toEqual({
+      selectedFilters: ['container:app'],
+      matchNone: true,
+    });
+    expect(filterLabel('pods')).toBe('Pods (0)');
+    expect(filterLabel('containers')).toBe('Containers (1)');
   });
 
   it('filters workload logs when pod and container metadata are clicked', async () => {
@@ -2633,12 +2659,11 @@ describe('LogViewer active pod synchronisation', () => {
     await flushAsync();
 
     const containerSelect = container.querySelector<HTMLSelectElement>(
-      '[data-testid="pod-container-dropdown"]'
+      '[data-testid="logs-containers-dropdown"]'
     );
     expect(containerSelect).toBeTruthy();
     const optionLabels = Array.from(containerSelect?.options ?? []).map((option) => option.text);
     expect(optionLabels).not.toContain('Init Containers');
-    expect(optionLabels).toContain('Containers');
     expect(optionLabels).toContain('debug-abc (debug)');
   });
 
@@ -2671,7 +2696,7 @@ describe('LogViewer active pod synchronisation', () => {
     await flushAsync();
 
     const containerSelect = container.querySelector<HTMLSelectElement>(
-      '[data-testid="pod-container-dropdown"]'
+      '[data-testid="logs-containers-dropdown"]'
     );
     expect(containerSelect).toBeTruthy();
     const optionLabels = Array.from(containerSelect?.options ?? []).map((option) => option.text);
@@ -2750,9 +2775,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer();
 
-    const filterInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Filter logs..."]'
-    );
+    const filterInput = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
     expect(filterInput).toBeTruthy();
     const nativeValueSetter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype,
@@ -2807,9 +2830,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer();
 
-    const filterInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Filter logs..."]'
-    );
+    const filterInput = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
     const caseSensitiveButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Case-sensitive search - disabled when regex is enabled"]'
     );
@@ -2887,9 +2908,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer();
 
-    const filterInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Filter logs..."]'
-    );
+    const filterInput = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
     expect(filterInput).toBeTruthy();
     const nativeValueSetter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype,
@@ -3155,9 +3174,7 @@ describe('LogViewer active pod synchronisation', () => {
     // tracked value descriptor; setting `.value` directly doesn't bump
     // it, so use the native HTMLInputElement value setter to make React
     // observe the change.
-    const filterInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Filter logs..."]'
-    );
+    const filterInput = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
     expect(filterInput).toBeTruthy();
     const nativeValueSetter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype,
@@ -3225,13 +3242,13 @@ describe('LogViewer active pod synchronisation', () => {
 
     expect(getLogViewerPrefs(panelId)?.regexMatches).toBe(true);
 
-    const workloadFilter = container.querySelector<HTMLSelectElement>(
-      '[data-testid="pod-container-dropdown"]'
+    const podFilter = container.querySelector<HTMLSelectElement>(
+      '[data-testid="logs-pods-dropdown"]'
     );
-    expect(workloadFilter).toBeTruthy();
+    expect(podFilter).toBeTruthy();
     await setMultiSelectValues(
-      requireValue(workloadFilter, 'expected test value in LogViewer.test.tsx'),
-      ['pod:web-1', 'container:app']
+      requireValue(podFilter, 'expected test value in LogViewer.test.tsx'),
+      ['pod:web-1']
     );
 
     expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
@@ -3341,9 +3358,7 @@ describe('LogViewer active pod synchronisation', () => {
     });
 
     await renderViewer({ panelId: panelB });
-    const filterInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Filter logs..."]'
-    );
+    const filterInput = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
     expect(filterInput?.value).toBe('b-only');
 
     // Panel A's prefs untouched.
@@ -3385,9 +3400,9 @@ describe('LogViewer active pod synchronisation', () => {
     );
     await act(async () => clearButton.click());
 
-    expect(
-      container.querySelector<HTMLInputElement>('input[placeholder="Filter logs..."]')?.value
-    ).toBe('');
+    expect(container.querySelector<HTMLInputElement>('input[placeholder="Filter"]')?.value).toBe(
+      ''
+    );
     expect(getLogViewerPrefs(panelId)?.textFilter).toBe('');
     expect(container.textContent).toContain('error one');
     expect(container.textContent).toContain('info two');

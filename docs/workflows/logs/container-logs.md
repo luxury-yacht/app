@@ -16,7 +16,10 @@ Panel. They are not Application Logs and they are not Node Logs.
 - Pod/container source selection uses explicit `all`, `some`, and `none`
   states. `none` must produce an empty frontend result and carry
   `matchNone=true` through both the live stream and the previous-logs fetch
-  without dropping the cluster-prefixed object/log scope.
+  without dropping the cluster-prefixed object/log scope. The Pods dropdown
+  (workloads only) and the Containers dropdown each choose one group of that
+  single selection; changing one keeps the other's choice, and no pods or no
+  containers reads nothing (`logFilterSelection.ts`).
 - Previous logs, history size, follow, timestamps, and target caps are backend
   log query concerns.
 - Live logs come only from the stream; there is no fetch fallback and no

@@ -804,13 +804,11 @@ const NodeLogsTab = ({
                 onChange={(value) =>
                   setSelectedSourcePath(Array.isArray(value) ? (value[0] ?? '') : value)
                 }
-                placeholder={loading ? 'Loading logs…' : 'Select log source'}
+                placeholder={loading ? 'Loading logs…' : 'Select source'}
                 className="logs-viewer-selector-dropdown"
                 ariaLabel="Node log source"
                 renderValue={() =>
-                  selectedSource
-                    ? getNodeLogSourceLeafLabel(selectedSource.label)
-                    : 'Select log source'
+                  selectedSource ? getNodeLogSourceLeafLabel(selectedSource.label) : 'Select source'
                 }
               />
             </div>

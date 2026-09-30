@@ -710,47 +710,43 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
   }, [isWorkload, workloadPodsForSelector]);
 
-  const selectorOptions = useMemo(() => {
-    const options: DropdownOption[] = [];
-
-    if (isWorkload) {
-      options.push(
-        { value: '_pods_header', label: 'Pods', disabled: true, group: 'header' },
-        ...workloadPodsForSelector.map((pod) => ({
-          value: toPodFilterValue(pod),
-          label: pod,
-          group: 'Pods',
-        }))
-      );
+  const podOptions = useMemo<DropdownOption[]>(
+    () =>
+      isWorkload
+        ? workloadPodsForSelector.map((pod) => ({
+            value: toPodFilterValue(pod),
+            label: pod,
+            group: 'Pods',
+          }))
+        : [],
+    [isWorkload, workloadPodsForSelector]
+  );
+  // Init and regular containers get their own headings only when both exist.
+  const containerOptions = useMemo<DropdownOption[]>(() => {
+    const initOptions = containerSelectorOptions(containers, 'init', 'Init Containers');
+    const regularOptions = [
+      ...containerSelectorOptions(containers, 'regular', 'Containers'),
+      ...containerSelectorOptions(containers, 'ephemeral', 'Containers'),
+    ];
+    if (initOptions.length === 0) {
+      return regularOptions;
     }
-
-    const initContainerOptions = containerSelectorOptions(containers, 'init', 'Init Containers');
-
-    if (initContainerOptions.length > 0) {
-      options.push({
+    return [
+      {
         value: '_init_containers_header',
         label: 'Init Containers',
         disabled: true,
         group: 'header',
-      });
-    }
-    options.push(...initContainerOptions);
-
-    const regularContainerOptions = containerSelectorOptions(containers, 'regular', 'Containers');
-    const debugContainerOptions = containerSelectorOptions(containers, 'ephemeral', 'Containers');
-
-    if (isWorkload || containers.length > 0) {
-      options.push({
-        value: '_containers_header',
-        label: 'Containers',
-        disabled: true,
-        group: 'header',
-      });
-    }
-    options.push(...regularContainerOptions, ...debugContainerOptions);
-
-    return options;
-  }, [containers, isWorkload, workloadPodsForSelector]);
+      },
+      ...initOptions,
+      { value: '_containers_header', label: 'Containers', disabled: true, group: 'header' },
+      ...regularOptions,
+    ];
+  }, [containers]);
+  const selectorOptions = useMemo(
+    () => [...podOptions, ...containerOptions],
+    [podOptions, containerOptions]
+  );
   const singlePodSelectableContainerCount = useMemo(
     () =>
       selectorOptions.filter(
@@ -1055,9 +1051,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const controls = (
     <LogViewerControls
       activeFilterChips={activeFilterChips}
-      selectorOptions={selectorOptions}
+      podOptions={podOptions}
+      containerOptions={containerOptions}
       selectedFilters={selectedFilters}
-      isPendingLogs={isPendingLogs}
       filterInputRef={filterInputRef}
       textFilter={textFilter}
       iconItems={iconItems}

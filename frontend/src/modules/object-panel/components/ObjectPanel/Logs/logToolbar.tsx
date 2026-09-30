@@ -230,7 +230,7 @@ export const LogTextFilter = ({
       ref={inputRef}
       value={value}
       onChange={(event) => dispatch({ type: 'SET_TEXT_FILTER', payload: event.target.value })}
-      placeholder="Filter logs..."
+      placeholder="Filter"
       className="logs-viewer-text-filter"
       aria-label={ariaLabel}
       title={title}

@@ -170,7 +170,7 @@ describe('NodeLogsTab', () => {
     expect(container.textContent).toContain('Select a log source to view logs.');
     expect(
       container.querySelector('.logs-viewer-selector-dropdown .dropdown-value')?.textContent
-    ).toBe('Select log source');
+    ).toBe('Select source');
   });
 
   // Arrow and page keys stay native on the focused output; Home and End are the
@@ -291,7 +291,7 @@ describe('NodeLogsTab', () => {
     expect(trigger).toBeTruthy();
     expect(
       container.querySelector('.logs-viewer-selector-dropdown .dropdown-value')?.textContent
-    ).toBe('Select log source');
+    ).toBe('Select source');
 
     await act(async () => {
       requireValue(trigger, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(

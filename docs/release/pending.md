@@ -11,6 +11,7 @@
 - Log settings moved from the gear in the Logs tab to a new Logs section in Settings, and "Object Panel Logs Tab buffer size" is now "Buffer size".
 - Container logs pick up where they left off when the app window is shown again, the connection drops, or auto-refresh is turned back on, instead of downloading every container's history again.
 - Opening container logs for a workload with many containers downloads far less: about one buffer of history in total instead of one buffer per container.
+- The Logs tab's source dropdown is now two dropdowns, Pods and Containers, each with its own All and None.
 
 ### Fixed
 

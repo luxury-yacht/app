@@ -9,7 +9,7 @@ import ActiveFilterChips, { type ActiveFilterChip } from '@shared/components/Act
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { normalizeDropdownValue } from '@shared/components/dropdowns/dropdownValue';
-import { multiSelectFilterTriggerLabel } from '@shared/components/dropdowns/multiSelectFilterSelection';
+import type { MultiSelectFilterSelection } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
@@ -18,8 +18,10 @@ import type React from 'react';
 import type { ContainerLogRow } from './containerLogRows';
 import { LogBufferFullIndicator, LogErrorState, LogWarningBar } from './LogStatus';
 import {
-  logFilterSelectionFromDropdownValues,
-  logFilterSelectionToDropdownValues,
+  type LogSourceGroup,
+  logFilterSelectionWithGroupValues,
+  logSourceGroupLabel,
+  logSourceGroupValues,
 } from './logFilterSelection';
 import type { ParsedLogEntry } from './logOptionsReducer';
 import { LogMatchCount, LogTextFilter } from './logToolbar';
@@ -105,11 +107,56 @@ export const renderLogViewerStatus = ({
   return null;
 };
 
+type LogSourceDropdownProps = {
+  label: string;
+  group: LogSourceGroup;
+  // The group's own options, shown in this dropdown.
+  options: DropdownOption[];
+  // Both groups' options, which the selection is encoded against.
+  allOptions: DropdownOption[];
+  selectedFilters: MultiSelectFilterSelection;
+  dispatch: React.Dispatch<LogViewerAction>;
+};
+
+// One group of log sources, Pods or Containers; changing it keeps the other
+// group's choice.
+const LogSourceDropdown = ({
+  label,
+  group,
+  options,
+  allOptions,
+  selectedFilters,
+  dispatch,
+}: LogSourceDropdownProps) => (
+  <Dropdown
+    options={options}
+    value={logSourceGroupValues(selectedFilters, allOptions, group)}
+    onChange={(value) =>
+      dispatch({
+        type: 'SET_SELECTED_FILTERS',
+        payload: logFilterSelectionWithGroupValues(
+          selectedFilters,
+          allOptions,
+          group,
+          normalizeDropdownValue(value)
+        ),
+      })
+    }
+    multiple
+    showBulkActions
+    ariaLabel={label}
+    renderValue={(value) =>
+      logSourceGroupLabel(label, selectedFilters, group, normalizeDropdownValue(value))
+    }
+    className="logs-viewer-selector-dropdown"
+  />
+);
+
 type LogViewerControlsProps = {
   activeFilterChips: ActiveFilterChip[];
-  selectorOptions: DropdownOption[];
-  selectedFilters: Parameters<typeof logFilterSelectionToDropdownValues>[0];
-  isPendingLogs: boolean;
+  podOptions: DropdownOption[];
+  containerOptions: DropdownOption[];
+  selectedFilters: MultiSelectFilterSelection;
   filterInputRef: React.RefObject<HTMLInputElement | null>;
   textFilter: string;
   iconItems: IconBarItem[];
@@ -121,9 +168,9 @@ type LogViewerControlsProps = {
 
 export const LogViewerControls = ({
   activeFilterChips,
-  selectorOptions,
+  podOptions,
+  containerOptions,
   selectedFilters,
-  isPendingLogs,
   filterInputRef,
   textFilter,
   iconItems,
@@ -131,47 +178,50 @@ export const LogViewerControls = ({
   matchCount,
   bufferFullShown,
   dispatch,
-}: LogViewerControlsProps) => (
-  <div
-    className={`logs-viewer-controls${activeFilterChips.length > 0 ? ' logs-viewer-controls--with-active-filters' : ''}`}
-  >
-    <div className="logs-viewer-controls-left">
-      {selectorOptions.length > 0 && (
-        <div className="logs-viewer-control-group">
-          <Dropdown
-            options={selectorOptions}
-            value={logFilterSelectionToDropdownValues(selectedFilters, selectorOptions)}
-            onChange={(value) =>
-              dispatch({
-                type: 'SET_SELECTED_FILTERS',
-                payload: logFilterSelectionFromDropdownValues(
-                  normalizeDropdownValue(value),
-                  selectorOptions
-                ),
-              })
-            }
-            multiple
-            showBulkActions
-            placeholder={isPendingLogs ? 'Loading logs…' : 'All Logs'}
-            renderValue={(value) =>
-              multiSelectFilterTriggerLabel('Logs', selectedFilters, normalizeDropdownValue(value))
-            }
-            className="logs-viewer-selector-dropdown"
-          />
-        </div>
-      )}
-      <LogTextFilter
-        inputRef={filterInputRef}
-        value={textFilter}
-        dispatch={dispatch}
-        title="Filter logs by text (searches in log lines, pods, and containers)"
-      />
-      <IconBar items={iconItems} />
-      <LogBufferFullIndicator shown={bufferFullShown} />
-      <LogMatchCount count={matchCount} filtered={hasActiveResultFilter} />
+}: LogViewerControlsProps) => {
+  const allOptions = [...podOptions, ...containerOptions];
+  return (
+    <div
+      className={`logs-viewer-controls${activeFilterChips.length > 0 ? ' logs-viewer-controls--with-active-filters' : ''}`}
+    >
+      <div className="logs-viewer-controls-left">
+        {(podOptions.length > 0 || containerOptions.length > 0) && (
+          <div className="logs-viewer-control-group">
+            {podOptions.length > 0 && (
+              <LogSourceDropdown
+                label="Pods"
+                group="pods"
+                options={podOptions}
+                allOptions={allOptions}
+                selectedFilters={selectedFilters}
+                dispatch={dispatch}
+              />
+            )}
+            {containerOptions.length > 0 && (
+              <LogSourceDropdown
+                label="Containers"
+                group="containers"
+                options={containerOptions}
+                allOptions={allOptions}
+                selectedFilters={selectedFilters}
+                dispatch={dispatch}
+              />
+            )}
+          </div>
+        )}
+        <LogTextFilter
+          inputRef={filterInputRef}
+          value={textFilter}
+          dispatch={dispatch}
+          title="Filter logs by text (searches in log lines, pods, and containers)"
+        />
+        <IconBar items={iconItems} />
+        <LogBufferFullIndicator shown={bufferFullShown} />
+        <LogMatchCount count={matchCount} filtered={hasActiveResultFilter} />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 type LogViewerReadyViewProps = {
   controls: React.ReactNode;
