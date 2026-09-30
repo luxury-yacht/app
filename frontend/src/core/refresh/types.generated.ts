@@ -2062,6 +2062,12 @@ export interface TelemetryCatalogStatus {
   failedResourceCount?: number;
 }
 
+export interface TelemetryClusterMetricsStatus {
+  clusterId: string;
+  clusterName?: string;
+  metrics: TelemetryMetricsStatus;
+}
+
 export interface TelemetryConnectionStats {
   retryAttempts: number;
   retrySuccesses: number;
@@ -2133,7 +2139,7 @@ export interface TelemetryStreamStatus {
 
 export interface TelemetrySummary {
   snapshots: Array<TelemetrySnapshotStatus> | null;
-  metrics: TelemetryMetricsStatus;
+  clusterMetrics: Array<TelemetryClusterMetricsStatus> | null;
   streams: Array<TelemetryStreamStatus> | null;
   catalog?: TelemetryCatalogStatus;
   connection: TelemetryConnectionStats;
@@ -2920,15 +2926,19 @@ const telemetrySummarySchema: RefreshContractSchema = { kind: 'object', fields: 
     timeToFirstBatchMs: { optional: true, schema: { kind: 'number' } },
     maxInformerSyncWaitMs: { optional: true, schema: { kind: 'number' } },
   } }, nullable: true } },
-  metrics: { optional: false, schema: { kind: 'object', fields: {
-    lastCollected: { optional: false, schema: { kind: 'number' } },
-    lastDurationMs: { optional: false, schema: { kind: 'number' } },
-    consecutiveFailures: { optional: false, schema: { kind: 'number' } },
-    lastError: { optional: true, schema: { kind: 'string' } },
-    successCount: { optional: false, schema: { kind: 'number' } },
-    failureCount: { optional: false, schema: { kind: 'number' } },
-    active: { optional: false, schema: { kind: 'boolean' } },
-  } } },
+  clusterMetrics: { optional: false, schema: { kind: 'array', items: { kind: 'object', fields: {
+    clusterId: { optional: false, schema: { kind: 'string' } },
+    clusterName: { optional: true, schema: { kind: 'string' } },
+    metrics: { optional: false, schema: { kind: 'object', fields: {
+      lastCollected: { optional: false, schema: { kind: 'number' } },
+      lastDurationMs: { optional: false, schema: { kind: 'number' } },
+      consecutiveFailures: { optional: false, schema: { kind: 'number' } },
+      lastError: { optional: true, schema: { kind: 'string' } },
+      successCount: { optional: false, schema: { kind: 'number' } },
+      failureCount: { optional: false, schema: { kind: 'number' } },
+      active: { optional: false, schema: { kind: 'boolean' } },
+    } } },
+  } }, nullable: true } },
   streams: { optional: false, schema: { kind: 'array', items: { kind: 'object', fields: {
     name: { optional: false, schema: { kind: 'string' } },
     leaf: { optional: true, schema: { kind: 'string' } },

@@ -124,6 +124,12 @@ backpressure, cancellation, manager replacement, and shutdown behavior. Keep
 those contracts on their framework-owned transports rather than recreating an
 application transport between them.
 
+The telemetry summary reports every open cluster's streams, snapshots and
+metrics polling status, each tagged with its cluster. The Diagnostics summary
+cards describe the active cluster only, combining a stream's socket entry with
+its delivery entries (catalog domain, log targets, event scopes); the
+Connections tab lists each cluster's rows with a Cluster column.
+
 - Signal-driven refetch keys only on the declared `signalVersions`. Snapshot
   responses also update validators and must not echo into another refetch.
 - Signal versions are opaque equality tokens. Sequence and Kubernetes

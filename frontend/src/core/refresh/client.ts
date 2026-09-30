@@ -18,8 +18,12 @@ import {
 
 export type Snapshot<TPayload> = RefreshSnapshot<TPayload>;
 export type { SnapshotStats } from './types';
-export type NormalizedTelemetrySummary = Omit<TelemetrySummary, 'snapshots' | 'streams'> & {
+export type NormalizedTelemetrySummary = Omit<
+  TelemetrySummary,
+  'snapshots' | 'clusterMetrics' | 'streams'
+> & {
   snapshots: NonNullable<TelemetrySummary['snapshots']>;
+  clusterMetrics: NonNullable<TelemetrySummary['clusterMetrics']>;
   streams: NonNullable<TelemetrySummary['streams']>;
 };
 
@@ -283,6 +287,7 @@ export async function fetchTelemetrySummary(): Promise<NormalizedTelemetrySummar
   return {
     ...summary,
     snapshots: summary.snapshots ?? [],
+    clusterMetrics: summary.clusterMetrics ?? [],
     streams: summary.streams ?? [],
   };
 }

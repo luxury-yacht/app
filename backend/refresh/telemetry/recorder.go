@@ -62,20 +62,29 @@ type MetricsStatus struct {
 	Active              bool   `json:"active"`
 }
 
+// ClusterMetricsStatus is one cluster's metrics polling status.
+type ClusterMetricsStatus struct {
+	ClusterID   string        `json:"clusterId"`
+	ClusterName string        `json:"clusterName,omitempty"`
+	Metrics     MetricsStatus `json:"metrics"`
+}
+
 // Summary aggregates the telemetry story for diagnostics.
 type Summary struct {
-	Snapshots  []SnapshotStatus `json:"snapshots"`
-	Metrics    MetricsStatus    `json:"metrics"`
-	Streams    []StreamStatus   `json:"streams"`
-	Catalog    *CatalogStatus   `json:"catalog,omitempty"`
-	Connection ConnectionStats  `json:"connection"`
+	Snapshots []SnapshotStatus `json:"snapshots"`
+	// ClusterMetrics holds each cluster's metrics polling status.
+	ClusterMetrics []ClusterMetricsStatus `json:"clusterMetrics"`
+	Streams        []StreamStatus         `json:"streams"`
+	Catalog        *CatalogStatus         `json:"catalog,omitempty"`
+	Connection     ConnectionStats        `json:"connection"`
 }
 
 // EmptySummary returns the valid zero-observation wire shape.
 func EmptySummary() Summary {
 	return Summary{
-		Snapshots: []SnapshotStatus{},
-		Streams:   []StreamStatus{},
+		Snapshots:      []SnapshotStatus{},
+		ClusterMetrics: []ClusterMetricsStatus{},
+		Streams:        []StreamStatus{},
 	}
 }
 
@@ -447,7 +456,7 @@ func (r *Recorder) SnapshotSummary() Summary {
 	defer r.mu.RUnlock()
 
 	out := EmptySummary()
-	out.Metrics = r.metrics
+	out.ClusterMetrics = []ClusterMetricsStatus{{ClusterID: r.clusterID, ClusterName: r.clusterName, Metrics: r.metrics}}
 	out.Connection = r.connection
 	out.Snapshots = make([]SnapshotStatus, 0, len(r.snapshots))
 	out.Streams = make([]StreamStatus, 0, len(r.streams))

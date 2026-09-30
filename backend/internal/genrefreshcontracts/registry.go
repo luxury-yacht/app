@@ -227,6 +227,7 @@ var contractTypes = []typeSpec{
 	{name: "ResourceStreamServerMessage", typeOf: typeOf[streammux.ServerMessage]()},
 	{name: "TelemetrySnapshotStatus", typeOf: typeOf[telemetry.SnapshotStatus]()},
 	{name: "TelemetryMetricsStatus", typeOf: typeOf[telemetry.MetricsStatus]()},
+	{name: "TelemetryClusterMetricsStatus", typeOf: typeOf[telemetry.ClusterMetricsStatus]()},
 	{name: "TelemetryStreamStatus", typeOf: typeOf[telemetry.StreamStatus]()},
 	{name: "TelemetryCatalogStatus", typeOf: typeOf[telemetry.CatalogStatus]()},
 	{name: "TelemetryConnectionStats", typeOf: typeOf[telemetry.ConnectionStats]()},

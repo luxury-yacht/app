@@ -12,6 +12,7 @@ import type {
   PodSnapshotEntry,
   PodSnapshotPayload,
   ResourceQueryCapabilities,
+  TelemetryClusterMetricsStatus,
   TelemetrySummary,
 } from './types';
 
@@ -278,22 +279,28 @@ export const makeNamespaceWorkloadSummary = (
   };
 };
 
-type TelemetrySummaryOverrides = Omit<Partial<TelemetrySummary>, 'metrics' | 'connection'> & {
-  metrics?: Partial<TelemetrySummary['metrics']>;
+type TelemetrySummaryOverrides = Omit<
+  Partial<TelemetrySummary>,
+  'clusterMetrics' | 'connection'
+> & {
+  // One cluster's metrics polling status, reported under metricsClusterId.
+  metrics?: Partial<TelemetryClusterMetricsStatus['metrics']>;
+  metricsClusterId?: string;
   connection?: Partial<TelemetrySummary['connection']>;
 };
 
 export const makeTelemetrySummary = (
   overrides: TelemetrySummaryOverrides = {}
 ): TelemetrySummary => {
-  const metrics: TelemetrySummary['metrics'] = {
+  const { metrics: metricsOverride, metricsClusterId = '', ...summaryOverrides } = overrides;
+  const metrics: TelemetryClusterMetricsStatus['metrics'] = {
     lastCollected: 0,
     lastDurationMs: 0,
     consecutiveFailures: 0,
     successCount: 0,
     failureCount: 0,
     active: false,
-    ...overrides.metrics,
+    ...metricsOverride,
   };
   const connection: TelemetrySummary['connection'] = {
     retryAttempts: 0,
@@ -305,8 +312,8 @@ export const makeTelemetrySummary = (
   return {
     snapshots: [],
     streams: [],
-    ...overrides,
-    metrics,
+    ...summaryOverrides,
+    clusterMetrics: [{ clusterId: metricsClusterId, metrics }],
     connection,
   };
 };

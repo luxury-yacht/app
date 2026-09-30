@@ -1,7 +1,9 @@
 package backend
 
 import (
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -51,4 +53,32 @@ func TestAggregateTelemetryEmptyReturnsNonNilSlices(t *testing.T) {
 	summary := agg.SnapshotSummary()
 	require.NotNil(t, summary.Streams)
 	require.NotNil(t, summary.Snapshots)
+}
+
+// Each cluster's metrics polling status is reported, tagged with its cluster, so
+// the diagnostics Metrics card can show the active cluster's instead of
+// whichever cluster is first.
+func TestAggregateTelemetryReportsEachClustersMetrics(t *testing.T) {
+	rec1 := telemetry.NewRecorder()
+	rec1.SetClusterMeta("cluster-1", "One")
+	rec1.RecordMetrics(20*time.Millisecond, time.Now(), nil, 0, true)
+
+	rec2 := telemetry.NewRecorder()
+	rec2.SetClusterMeta("cluster-2", "Two")
+	rec2.RecordMetrics(30*time.Millisecond, time.Now(), errors.New("metrics API unavailable"), 3, false)
+
+	agg := newAggregateTelemetry([]string{"cluster-1", "cluster-2"}, map[string]*system.Subsystem{
+		"cluster-1": {Telemetry: rec1},
+		"cluster-2": {Telemetry: rec2},
+	})
+
+	byCluster := map[string]telemetry.ClusterMetricsStatus{}
+	for _, status := range agg.SnapshotSummary().ClusterMetrics {
+		byCluster[status.ClusterID] = status
+	}
+	require.Len(t, byCluster, 2)
+	require.Equal(t, "One", byCluster["cluster-1"].ClusterName)
+	require.Equal(t, uint64(1), byCluster["cluster-1"].Metrics.SuccessCount)
+	require.Equal(t, 3, byCluster["cluster-2"].Metrics.ConsecutiveFailures)
+	require.Equal(t, "metrics API unavailable", byCluster["cluster-2"].Metrics.LastError)
 }

@@ -21,6 +21,7 @@ import type { KubernetesAPIClientDiagnostics, SelectionDiagnostics } from '../..
 import type { DomainSnapshotState } from '../../store';
 import type {
   CatalogSnapshotPayload,
+  TelemetryClusterMetricsStatus,
   TelemetryMetricsStatus,
   TelemetrySnapshotStatus,
   TelemetryStreamStatus,
@@ -189,32 +190,69 @@ const combineSocketAndLeafTelemetry = (
   };
 };
 
+// Combines one cluster's entries for a stream: its socket entries and the leaf
+// entries that carry its deliveries.
+const selectClusterStreamTelemetry = (
+  streams: TelemetryStreamStatus[] | null | undefined,
+  clusterId: string,
+  identity: Pick<TelemetryStreamStatus, 'name' | 'leafKind' | 'leaf'>,
+  isDeliveryLeaf: (entry: TelemetryStreamStatus) => boolean
+): TelemetryStreamStatus | undefined => {
+  const entries = (streams ?? []).filter(
+    (entry) => entry.name === identity.name && (entry.clusterId ?? '') === clusterId
+  );
+  return combineSocketAndLeafTelemetry(
+    identity,
+    entries.filter((entry) => !entry.leafKind),
+    entries.filter(isDeliveryLeaf)
+  );
+};
+
 // Catalog is a domain on the unified resources socket. Present its domain
 // deliveries together with the owning socket's session/connect state so the
 // summary cannot drift back to the retired standalone catalog stream.
 export const selectCatalogStreamTelemetry = (
-  streams: TelemetryStreamStatus[] | null | undefined
-): TelemetryStreamStatus | undefined => {
-  const resourceEntries = (streams ?? []).filter((entry) => entry.name === 'resources');
-  return combineSocketAndLeafTelemetry(
+  streams: TelemetryStreamStatus[] | null | undefined,
+  clusterId: string
+): TelemetryStreamStatus | undefined =>
+  selectClusterStreamTelemetry(
+    streams,
+    clusterId,
     { name: 'resources', leafKind: 'domain', leaf: 'catalog' },
-    resourceEntries.filter((entry) => !entry.leafKind),
-    resourceEntries.filter((entry) => entry.leafKind === 'domain' && entry.leaf === 'catalog')
+    (entry) => entry.leafKind === 'domain' && entry.leaf === 'catalog'
   );
-};
 
 // Container logs record sessions on the socket and deliveries per log target
-// (the pod or workload a Logs tab reads), each its own entry.
+// (the pod or workload a Logs tab reads).
 export const selectContainerLogsStreamTelemetry = (
-  streams: TelemetryStreamStatus[] | null | undefined
-): TelemetryStreamStatus | undefined => {
-  const logEntries = (streams ?? []).filter((entry) => entry.name === 'container-logs');
-  return combineSocketAndLeafTelemetry(
+  streams: TelemetryStreamStatus[] | null | undefined,
+  clusterId: string
+): TelemetryStreamStatus | undefined =>
+  selectClusterStreamTelemetry(
+    streams,
+    clusterId,
     { name: 'container-logs', leafKind: 'target' },
-    logEntries.filter((entry) => !entry.leafKind),
-    logEntries.filter((entry) => entry.leafKind === 'target')
+    (entry) => entry.leafKind === 'target'
   );
-};
+
+// Events record sessions on the socket and deliveries per event scope.
+export const selectEventStreamTelemetry = (
+  streams: TelemetryStreamStatus[] | null | undefined,
+  clusterId: string
+): TelemetryStreamStatus | undefined =>
+  selectClusterStreamTelemetry(
+    streams,
+    clusterId,
+    { name: 'events', leafKind: 'scope' },
+    (entry) => entry.leafKind === 'scope'
+  );
+
+/** The cluster's metrics polling status. */
+export const selectClusterMetrics = (
+  clusterMetrics: TelemetryClusterMetricsStatus[] | null | undefined,
+  clusterId: string
+): TelemetryMetricsStatus | undefined =>
+  (clusterMetrics ?? []).find((entry) => entry.clusterId === clusterId)?.metrics;
 
 const formatQPS = (value: number): string => {
   if (!Number.isFinite(value) || value <= 0) {

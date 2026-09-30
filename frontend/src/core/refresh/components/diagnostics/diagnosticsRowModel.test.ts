@@ -23,8 +23,11 @@ import {
   buildOrchestratorSummary,
   buildPermissionRows,
   dedupeDiagnosticsRows,
+  selectCatalogStreamTelemetry,
+  selectClusterMetrics,
   selectContainerLogsStreamTelemetry,
   selectDomainStreamTelemetry,
+  selectEventStreamTelemetry,
 } from './diagnosticsRowModel';
 
 const telemetry = (streams: TelemetrySummary['streams']): TelemetrySummary =>
@@ -154,6 +157,7 @@ describe('diagnosticsRowModel', () => {
   test('combines the container-logs socket and every log target for the Logs card', () => {
     const base = {
       name: 'container-logs',
+      clusterId: 'cluster-a',
       activeSessions: 0,
       totalMessages: 0,
       droppedMessages: 0,
@@ -181,10 +185,18 @@ describe('diagnosticsRowModel', () => {
         lastEvent: 200,
       },
       { ...base, name: 'resources', activeSessions: 9, totalMessages: 99 },
+      { ...base, clusterId: 'cluster-b', activeSessions: 4, lastConnect: 900 },
+      {
+        ...base,
+        clusterId: 'cluster-b',
+        leafKind: 'target' as const,
+        leaf: 'x/y',
+        totalMessages: 40,
+      },
     ];
 
     for (const order of [streams, [...streams].reverse()]) {
-      expect(selectContainerLogsStreamTelemetry(order)).toMatchObject({
+      expect(selectContainerLogsStreamTelemetry(order, 'cluster-a')).toMatchObject({
         activeSessions: 2,
         totalMessages: 12,
         droppedMessages: 1,
@@ -194,7 +206,87 @@ describe('diagnosticsRowModel', () => {
         lastEvent: 300,
       });
     }
-    expect(selectContainerLogsStreamTelemetry([streams[3]])).toBeUndefined();
+    expect(selectContainerLogsStreamTelemetry([streams[3]], 'cluster-a')).toBeUndefined();
+  });
+
+  // Each summary card shows the active cluster only, whatever other clusters
+  // are open.
+  test('counts only the active cluster in the Catalog and Events cards', () => {
+    const base = {
+      activeSessions: 0,
+      totalMessages: 0,
+      droppedMessages: 0,
+      skippedTargets: 0,
+      errorCount: 0,
+      lastConnect: 0,
+      lastEvent: 0,
+    };
+    const streams = [
+      { ...base, name: 'resources', clusterId: 'cluster-a', activeSessions: 1 },
+      {
+        ...base,
+        name: 'resources',
+        clusterId: 'cluster-a',
+        leafKind: 'domain' as const,
+        leaf: 'catalog',
+        totalMessages: 20,
+      },
+      {
+        ...base,
+        name: 'resources',
+        clusterId: 'cluster-b',
+        leafKind: 'domain' as const,
+        leaf: 'catalog',
+        totalMessages: 500,
+      },
+      // Events count sessions on the socket and deliveries per scope.
+      { ...base, name: 'events', clusterId: 'cluster-b', activeSessions: 7, totalMessages: 0 },
+      { ...base, name: 'events', clusterId: 'cluster-a', activeSessions: 2, lastConnect: 50 },
+      {
+        ...base,
+        name: 'events',
+        clusterId: 'cluster-a',
+        leafKind: 'scope' as const,
+        leaf: 'cluster',
+        totalMessages: 3,
+      },
+      {
+        ...base,
+        name: 'events',
+        clusterId: 'cluster-a',
+        leafKind: 'scope' as const,
+        leaf: 'namespace:team-a',
+        totalMessages: 4,
+      },
+    ];
+
+    expect(selectCatalogStreamTelemetry(streams, 'cluster-a')).toMatchObject({
+      activeSessions: 1,
+      totalMessages: 20,
+    });
+    expect(selectEventStreamTelemetry(streams, 'cluster-a')).toMatchObject({
+      activeSessions: 2,
+      totalMessages: 7,
+      lastConnect: 50,
+    });
+    expect(selectEventStreamTelemetry(streams, 'cluster-c')).toBeUndefined();
+  });
+
+  test('picks the active cluster metrics', () => {
+    const metrics = (successCount: number) => ({
+      lastCollected: 0,
+      lastDurationMs: 0,
+      consecutiveFailures: 0,
+      successCount,
+      failureCount: 0,
+      active: true,
+    });
+    const clusterMetrics = [
+      { clusterId: 'cluster-a', metrics: metrics(1) },
+      { clusterId: 'cluster-b', metrics: metrics(2) },
+    ];
+    expect(selectClusterMetrics(clusterMetrics, 'cluster-b')?.successCount).toBe(2);
+    expect(selectClusterMetrics(clusterMetrics, 'cluster-c')).toBeUndefined();
   });
 
   test('builds Kubernetes API client rows and summary', () => {

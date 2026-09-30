@@ -167,13 +167,13 @@ func TestRecordMetrics(t *testing.T) {
 	rec.RecordMetrics(250*time.Millisecond, ts, errors.New("oops"), 2, false)
 	rec.RecordMetrics(120*time.Millisecond, ts, nil, 0, true)
 
-	summary := rec.SnapshotSummary()
-	require.Equal(t, int64(120), summary.Metrics.LastDurationMs)
-	require.Equal(t, ts.UnixMilli(), summary.Metrics.LastCollected)
-	require.Equal(t, 0, summary.Metrics.ConsecutiveFailures)
-	require.Equal(t, uint64(1), summary.Metrics.SuccessCount)
-	require.Equal(t, uint64(1), summary.Metrics.FailureCount)
-	require.Equal(t, "", summary.Metrics.LastError)
+	metrics := rec.SnapshotSummary().ClusterMetrics[0].Metrics
+	require.Equal(t, int64(120), metrics.LastDurationMs)
+	require.Equal(t, ts.UnixMilli(), metrics.LastCollected)
+	require.Equal(t, 0, metrics.ConsecutiveFailures)
+	require.Equal(t, uint64(1), metrics.SuccessCount)
+	require.Equal(t, uint64(1), metrics.FailureCount)
+	require.Equal(t, "", metrics.LastError)
 }
 
 func TestStreamTelemetry(t *testing.T) {

@@ -20,7 +20,7 @@
 - A pod that starts while a workload's Logs tab is open is no longer hidden for up to 15 seconds while the workload's details catch up, and a CronJob whose pods could not all be listed no longer hides some of their logs.
 - A pod that starts while a Logs tab is open appears in the Pods dropdown as soon as its lines do, instead of up to several seconds later.
 - Scaling up a workload no longer blanks its Logs tab for a few seconds; a new pod's lines show as soon as they arrive.
-- The Logs card in the Diagnostics panel now counts lines delivered to every Logs tab; it often showed 0 or one tab's count.
+- The Diagnostics panel's summary cards describe the active cluster only. The Logs and Events cards often showed 0 or a single tab's or scope's count, and the Events and Metrics cards showed the first open cluster instead of the one you were viewing.
 - The Logs tab stays responsive with large buffers: taking in new lines no longer slows down as the buffer grows (about ten times faster at 10,000 lines).
 - When live container logs cannot start (for example, you may read a pod's logs but not list pods), the Logs tab keeps its controls, so Previous Logs and auto-refresh stay available.
 - Live logs for a workload no longer stall when a pod is deleted just as the Logs tab opens; its replacement streams.
