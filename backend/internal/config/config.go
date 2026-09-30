@@ -273,6 +273,12 @@ const (
 	// arrives as ordinary batches.
 	ContainerLogsStreamSnapshotDeadline = 2 * time.Second
 
+	// ContainerLogsStreamHistoryDecision is the longest a session waits for
+	// every container's first history read before choosing which containers
+	// read again. It is half the snapshot deadline, so a slow read cannot hold
+	// back the others' history.
+	ContainerLogsStreamHistoryDecision = ContainerLogsStreamSnapshotDeadline / 2
+
 	// ContainerLogsStreamCaughtUpIdle is how long an opened log stream may go
 	// without a line before its history counts as delivered. Kubelet sends
 	// history back-to-back, so a gap this long ends it.

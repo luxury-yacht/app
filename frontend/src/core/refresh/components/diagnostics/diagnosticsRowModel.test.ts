@@ -23,6 +23,7 @@ import {
   buildOrchestratorSummary,
   buildPermissionRows,
   dedupeDiagnosticsRows,
+  selectContainerLogsStreamTelemetry,
   selectDomainStreamTelemetry,
 } from './diagnosticsRowModel';
 
@@ -145,6 +146,55 @@ describe('diagnosticsRowModel', () => {
     expect(
       selectDomainStreamTelemetry([forClusterB, forClusterA], 'resources', 'catalog', 'cluster-a')
     ).toBe(forClusterA);
+  });
+
+  // Container logs record sessions on the socket and deliveries per log
+  // target, all under one stream name; the Logs card must count every target
+  // whatever order the backend lists them in.
+  test('combines the container-logs socket and every log target for the Logs card', () => {
+    const base = {
+      name: 'container-logs',
+      activeSessions: 0,
+      totalMessages: 0,
+      droppedMessages: 0,
+      skippedTargets: 0,
+      errorCount: 0,
+      lastConnect: 0,
+      lastEvent: 0,
+    };
+    const streams = [
+      { ...base, activeSessions: 2, lastConnect: 100, skippedTargets: 1 },
+      {
+        ...base,
+        leafKind: 'target' as const,
+        leaf: 'team-a/web',
+        totalMessages: 5,
+        lastEvent: 300,
+      },
+      {
+        ...base,
+        leafKind: 'target' as const,
+        leaf: 'team-a/api',
+        totalMessages: 7,
+        droppedMessages: 1,
+        errorCount: 1,
+        lastEvent: 200,
+      },
+      { ...base, name: 'resources', activeSessions: 9, totalMessages: 99 },
+    ];
+
+    for (const order of [streams, [...streams].reverse()]) {
+      expect(selectContainerLogsStreamTelemetry(order)).toMatchObject({
+        activeSessions: 2,
+        totalMessages: 12,
+        droppedMessages: 1,
+        skippedTargets: 1,
+        errorCount: 1,
+        lastConnect: 100,
+        lastEvent: 300,
+      });
+    }
+    expect(selectContainerLogsStreamTelemetry([streams[3]])).toBeUndefined();
   });
 
   test('builds Kubernetes API client rows and summary', () => {

@@ -4,15 +4,17 @@
 - A Namespaces filter selection made in an All Namespaces view now carries over to the other All Namespaces views for that cluster.
 - Set consistent default column order across tables. Namespace now always follows Name, and Status comes after identity columns.
 
-- Container logs load faster: each container's history and live output come from one request, the first view appears within about 2 seconds, and a slow container no longer holds back the others.
+- Container logs load faster: the first view appears within about 2 seconds, and a slow container no longer holds back the others.
 - The Logs tab now says why logs are missing: containers that cannot be read or have not started are listed, and dropped or trimmed lines are reported instead of disappearing silently.
 - When live logs stop for good (for example, the workload was deleted or you may not list pods), the Logs tab shows the reason and turns auto-refresh off; turning it back on retries.
 - Node logs now work like container logs: the same loading, error and empty states, the same Logs buffer limit, and the same warning icon beside the toolbar when older lines were dropped. The match count now reads "n matching logs".
 - Log settings moved from the gear in the Logs tab to a new Logs section in Settings, and "Object Panel Logs Tab buffer size" is now "Buffer size".
 - Container logs pick up where they left off when the app window is shown again, the connection drops, or auto-refresh is turned back on, instead of downloading every container's history again.
+- Opening container logs for a workload with many containers downloads far less: about one buffer of history in total instead of one buffer per container.
 
 ### Fixed
 
+- The Logs card in the Diagnostics panel now counts lines delivered to every Logs tab; it often showed 0 or one tab's count.
 - The Logs tab stays responsive with large buffers: taking in new lines no longer slows down as the buffer grows (about ten times faster at 10,000 lines).
 - When live container logs cannot start (for example, you may read a pod's logs but not list pods), the Logs tab keeps its controls, so Previous Logs and auto-refresh stay available.
 - Live logs for a workload no longer stall when a pod is deleted just as the Logs tab opens; its replacement streams.

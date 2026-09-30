@@ -92,9 +92,20 @@ turns its auto-refresh off, and one toggle (or `R`) retries.
 
 ## Backend Behavior
 
-- One follow request per container carries both history and live output. A
-  request with no response headers after 20 s becomes a `failed` issue and
-  retries; an established stream that is quiet never times out.
+- A session's first containers read their history in two steps when there
+  are three or more of them, so a tab downloads about one buffer of history
+  rather than one per container (`history.go`). Each first reads its last
+  2 × `maxEntries` ÷ containers lines without following. When every read has
+  arrived, or after 1 s, the backend finds the cut-off: the oldest line the
+  buffer can hold among everything read. A container whose read came back full
+  and whose oldest line is after the cut-off reads again, from the cut-off,
+  at most `maxEntries` lines. Each container then follows from its newest line
+  read, as a resume. A read that fails falls back to one follow request that
+  carries both history and live output, which is how one or two containers,
+  containers added later, and resumed containers always read.
+- A follow request with no response headers after 20 s becomes a `failed`
+  issue and retries; an established stream that is quiet never times out. A
+  plain history read must finish within 20 s.
 - Lines over 256 KiB are truncated with a marker and reading continues.
 - Resuming uses a cursor (last timestamp plus the hashes of the lines delivered
   at it): a follower's own after its stream ends, or one built from the

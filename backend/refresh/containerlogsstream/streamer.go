@@ -30,9 +30,11 @@ type Streamer struct {
 	logger        Logger
 	telemetry     *telemetry.Recorder
 	perScopeLimit int
-	// responseTimeout and caughtUpIdle are fields so tests can shorten them.
+	// responseTimeout, caughtUpIdle and historyDecision are fields so tests can
+	// shorten them.
 	responseTimeout time.Duration
 	caughtUpIdle    time.Duration
+	historyDecision time.Duration
 }
 
 // NewStreamer constructs a Streamer.
@@ -48,6 +50,7 @@ func NewStreamer(client kubernetes.Interface, logger Logger, recorder *telemetry
 		client: client, logger: logger, telemetry: recorder, perScopeLimit: limit,
 		responseTimeout: config.ContainerLogsStreamResponseTimeout,
 		caughtUpIdle:    config.ContainerLogsStreamCaughtUpIdle,
+		historyDecision: config.ContainerLogsStreamHistoryDecision,
 	}
 }
 
@@ -69,6 +72,16 @@ func (t containerTarget) ref() containerlogs.ContainerRef {
 
 func (t containerTarget) key() string {
 	return t.namespace + "/" + t.pod + "/" + t.ref().SelectionValue()
+}
+
+// entry turns one timestamped log line into an entry. The text is kept as
+// the JSON wire gives it to the client, so resume points match it.
+func (t containerTarget) entry(line string) Entry {
+	timestamp, content := containerlogs.SplitTimestamp(line)
+	return Entry{
+		Timestamp: timestamp, Pod: t.pod, Container: t.container, Line: containerlogs.WireText(content),
+		IsInit: t.isInit, IsEphemeral: t.isEphemeral,
+	}
 }
 
 // prepare resolves the session's pods and initial target selection without
@@ -153,6 +166,7 @@ func (s *Streamer) run(
 	defer run.shutdown()
 	run.setInitialPods(ctx, initialPods)
 	sealSnapshot(config.snapshot)
+	run.history.seal(s.historyDecision)
 	var events <-chan podEvent
 	if podWatch != nil {
 		events = run.startPodInformer(ctx)
@@ -180,9 +194,11 @@ type containerLogRun struct {
 	limiterNotify  <-chan struct{}
 	sink           entrySink
 	snapshot       *snapshotWait
-	warningsCh     chan<- []containerlogs.Warning
-	issues         *issueSet
-	fatal          chan<- error
+	// history plans the first targets' history reads; nil without a snapshot.
+	history    *historyPlan
+	warningsCh chan<- []containerlogs.Warning
+	issues     *issueSet
+	fatal      chan<- error
 	// followerExited wakes the run loop so a target waiting on its previous
 	// follower, or a restarted container, is started.
 	followerExited chan struct{}
@@ -235,6 +251,9 @@ func newContainerLogRun(streamer *Streamer, config containerLogRunConfig, podWat
 	if config.limiterSession != nil {
 		run.limiterNotify = config.limiterSession.Notify()
 	}
+	if config.snapshot != nil {
+		run.history = newHistoryPlan(config.opts.MaxEntries, config.opts.MaxBytes)
+	}
 	return run
 }
 
@@ -283,24 +302,73 @@ func (r *containerLogRun) startTarget(ctx context.Context, target containerTarge
 	// Only one follower per target runs at a time and it writes its cursor back
 	// before its slot is released, so the next follower resumes where it ended.
 	target.cursor = r.cursors[key].Clone()
+	// A first target without a resume point reads its history through the plan.
+	readFirst := target.cursor.IsZero() && r.history.register(key)
 	caughtUp := func() {}
 	if r.snapshot != nil {
 		caughtUp = r.snapshot.expect(key)
 	}
 	r.targetWG.Add(1)
-	go r.followTarget(targetCtx, target, caughtUp)
+	go r.followTarget(targetCtx, target, caughtUp, readFirst)
 }
 
-func (r *containerLogRun) followTarget(ctx context.Context, target containerTarget, caughtUp func()) {
+func (r *containerLogRun) followTarget(ctx context.Context, target containerTarget, caughtUp func(), readFirst bool) {
 	defer r.targetWG.Done()
 	defer caughtUp()
 	cursor := target.cursor
 	defer func() { r.finishTarget(ctx, target, cursor) }()
 	defer r.recoverFollower()
+	if readFirst {
+		if read, ok := r.deliverPlannedHistory(ctx, target); ok {
+			target.cursor, cursor = read, read
+			caughtUp()
+		}
+	}
 	cursor = r.streamer.followContainer(ctx, target, r.sink, followOptions{
 		tailLines: r.opts.MaxEntries, caughtUp: caughtUp, issues: r.issues,
 		running: func() bool { return r.containerRunning(target) },
 	})
+}
+
+// deliverPlannedHistory reads the target's history through the plan, delivers
+// it, and returns the cursor at its newest line for the follower to continue
+// from. It reports false when the follow request must read the history.
+func (r *containerLogRun) deliverPlannedHistory(ctx context.Context, target containerTarget) (containerlogs.ResumeCursor, bool) {
+	history, ok := r.readPlannedHistory(ctx, target)
+	if !ok {
+		return containerlogs.ResumeCursor{}, false
+	}
+	var cursor containerlogs.ResumeCursor
+	for _, entry := range history {
+		r.sink.add(entry)
+		cursor.Observe(parseLogTimestamp(entry.Timestamp), entry.Line)
+	}
+	return cursor, true
+}
+
+func (r *containerLogRun) readPlannedHistory(ctx context.Context, target containerTarget) ([]Entry, bool) {
+	key := target.key()
+	share, ok := r.history.shareFor(ctx)
+	if !ok {
+		r.history.withdraw(key)
+		return nil, false
+	}
+	read, err := r.streamer.readHistory(ctx, target, share, time.Time{})
+	if err != nil {
+		r.history.withdraw(key)
+		r.streamer.logger.Debug(fmt.Sprintf("containerlogsstream: history read failed for %s, following instead: %v", key, err), logsources.ContainerLogsStream)
+		return nil, false
+	}
+	cutoff, decided := r.history.report(ctx, key, read)
+	if !decided {
+		return nil, false
+	}
+	if readsFurther(read, share, cutoff) {
+		if more, err := r.streamer.readHistory(ctx, target, r.opts.MaxEntries, cutoff); err == nil {
+			read = more
+		}
+	}
+	return read, true
 }
 
 func (r *containerLogRun) recoverFollower() {
@@ -744,11 +812,8 @@ func (s *containerFollowSession) consume(ctx context.Context, stream io.ReadClos
 				return s.finishStream(ctx, stream, tracker, read.err)
 			}
 			idle.Reset(s.streamer.caughtUpIdle)
-			timestamp, content := containerlogs.SplitTimestamp(read.line)
-			// Tracked as the client receives it, so its resume points match.
-			content = containerlogs.WireText(content)
-			entry := s.logEntry(timestamp, content)
-			s.deliverAll(tracker.Offer(parseLogTimestamp(timestamp), content, entry, time.Now()))
+			entry := s.target.entry(read.line)
+			s.deliverAll(tracker.Offer(parseLogTimestamp(entry.Timestamp), entry.Line, entry, time.Now()))
 		}
 	}
 }
@@ -798,13 +863,6 @@ func armReplayDeadline(timer *time.Timer, tracker *containerlogs.LineTracker[Ent
 func (s *containerFollowSession) deliverAll(entries []Entry) {
 	for _, entry := range entries {
 		s.sink.add(entry)
-	}
-}
-
-func (s *containerFollowSession) logEntry(timestamp, content string) Entry {
-	return Entry{
-		Timestamp: timestamp, Pod: s.target.pod, Container: s.target.container, Line: content,
-		IsInit: s.target.isInit, IsEphemeral: s.target.isEphemeral,
 	}
 }
 

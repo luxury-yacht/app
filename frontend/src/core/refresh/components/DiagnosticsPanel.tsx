@@ -64,6 +64,7 @@ import {
   STREAM_MODE_BY_NAME,
   STREAM_ONLY_DOMAINS,
   selectCatalogStreamTelemetry,
+  selectContainerLogsStreamTelemetry,
   selectDomainSnapshotTelemetry,
   selectDomainStreamTelemetry,
   selectStreamSocketTelemetry,
@@ -1597,8 +1598,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const telemetryMetrics = telemetrySummary?.metrics;
   const eventStreamTelemetry = telemetrySummary?.streams.find((entry) => entry.name === 'events');
   const catalogStreamTelemetry = selectCatalogStreamTelemetry(telemetrySummary?.streams);
-  const containerLogsStreamTelemetry = telemetrySummary?.streams.find(
-    (entry) => entry.name === 'container-logs'
+  const containerLogsStreamTelemetry = selectContainerLogsStreamTelemetry(
+    telemetrySummary?.streams
   );
   const orchestratorSummary = useMemo(() => {
     return buildOrchestratorSummary({

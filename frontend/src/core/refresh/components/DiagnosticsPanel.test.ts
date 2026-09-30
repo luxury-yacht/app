@@ -1334,13 +1334,38 @@ describe('DiagnosticsPanel component', () => {
         {
           name: 'container-logs',
           activeSessions: 1,
-          totalMessages: 9,
-          droppedMessages: 2,
+          totalMessages: 0,
+          droppedMessages: 0,
           skippedTargets: 5,
           errorCount: 0,
           lastConnect: now - 8000,
-          lastEvent: now - 1000,
+          lastEvent: now - 8000,
           lastSkipReason: 'per-scope target cap',
+        },
+        // Container logs count deliveries per log target, never on the socket.
+        {
+          name: 'container-logs',
+          leafKind: 'target',
+          leaf: 'default/web',
+          activeSessions: 0,
+          totalMessages: 4,
+          droppedMessages: 2,
+          skippedTargets: 0,
+          errorCount: 0,
+          lastConnect: 0,
+          lastEvent: now - 1000,
+        },
+        {
+          name: 'container-logs',
+          leafKind: 'target',
+          leaf: 'default/api',
+          activeSessions: 0,
+          totalMessages: 5,
+          droppedMessages: 0,
+          skippedTargets: 0,
+          errorCount: 0,
+          lastConnect: 0,
+          lastEvent: now - 2000,
         },
       ],
     });
@@ -1452,8 +1477,8 @@ describe('DiagnosticsPanel component', () => {
     });
     await flushAsync();
 
-    // Connections lists one socket row per (stream, cluster). The fixture has no
-    // leaf-keyed entries, so every row here is a socket.
+    // Connections lists one socket row per (stream, cluster) and one row per
+    // log target.
     const connectionsSection = rendered.container.querySelector('.diagnostics-section');
     expect(connectionsSection?.textContent).toContain('3 sockets');
     expect(connectionsSection?.textContent).toContain('Resources');
@@ -1461,7 +1486,7 @@ describe('DiagnosticsPanel component', () => {
       connectionsSection
         ?.querySelector('.diagnostics-table-wrapper')
         ?.querySelectorAll('tbody tr') ?? [];
-    expect(connectionRows).toHaveLength(3);
+    expect(connectionRows).toHaveLength(5);
     const resourcesRow = Array.from(connectionRows).find((row) =>
       row.textContent?.includes('Resources')
     );

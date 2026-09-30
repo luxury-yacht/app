@@ -641,6 +641,14 @@ All eight were decided with the user on 2026-09-28.
    is merely quiet never times out (A6). The 250 ms batching window stays. Previous-logs fetches use a
    parallelism limit of 5 (A8). Confirm the numbers with a large-workload smoke
    test.
+   **Revised 2026-09-29 (user): two-step history for three or more
+   containers.** Each first reads a share of the buffer without following, the
+   session finds the cut-off of the newest lines the buffer can hold, and only
+   containers that may hold more read again from it; each then follows from its
+   newest line. One or two containers keep the single follow request. Reason:
+   opening a many-container workload downloaded one buffer per container.
+   The decision waits at most 1 s, so a slow read still cannot hold back the
+   others ([container-logs.md](../workflows/logs/container-logs.md#backend-behavior)).
 5. **Frame budget. Decided 2026-09-28: 2 MiB, derived from the line limit.**
    The budget is defined in code as at least 6 × the line limit (Go's
    `json.Marshal` escapes `<`, `>`, `&` and control characters as 6-byte

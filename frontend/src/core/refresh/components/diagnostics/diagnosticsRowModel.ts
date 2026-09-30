@@ -159,6 +159,36 @@ export const selectDomainSnapshotTelemetry = (
       (entry.scope ?? '') === scope
   );
 
+// Combines a socket's own entries (sessions and connects) with the leaf
+// entries that carry its deliveries, into one status for a summary card.
+const combineSocketAndLeafTelemetry = (
+  identity: Pick<TelemetryStreamStatus, 'name' | 'leafKind' | 'leaf'>,
+  socketEntries: TelemetryStreamStatus[],
+  leafEntries: TelemetryStreamStatus[]
+): TelemetryStreamStatus | undefined => {
+  if (socketEntries.length === 0 && leafEntries.length === 0) {
+    return undefined;
+  }
+  const allEntries = [...socketEntries, ...leafEntries];
+  const error = mostRecentError(allEntries);
+  const latestSkip = allEntries
+    .filter((entry) => entry.lastSkipReason)
+    .sort((left, right) => right.lastEvent - left.lastEvent)[0]?.lastSkipReason;
+  return {
+    ...identity,
+    activeSessions: sumStreamValue(socketEntries, (entry) => entry.activeSessions),
+    totalMessages: sumStreamValue(leafEntries, (entry) => entry.totalMessages),
+    droppedMessages: sumStreamValue(allEntries, (entry) => entry.droppedMessages),
+    skippedTargets: sumStreamValue(allEntries, (entry) => entry.skippedTargets),
+    errorCount: sumStreamValue(allEntries, (entry) => entry.errorCount),
+    lastConnect: maxStreamValue(socketEntries, (entry) => entry.lastConnect),
+    lastEvent: maxStreamValue(leafEntries, (entry) => entry.lastEvent),
+    ...(error.message !== '—' ? { lastError: error.message } : {}),
+    ...(error.at !== undefined ? { lastErrorAt: error.at } : {}),
+    ...(latestSkip ? { lastSkipReason: latestSkip } : {}),
+  };
+};
+
 // Catalog is a domain on the unified resources socket. Present its domain
 // deliveries together with the owning socket's session/connect state so the
 // summary cannot drift back to the retired standalone catalog stream.
@@ -166,39 +196,24 @@ export const selectCatalogStreamTelemetry = (
   streams: TelemetryStreamStatus[] | null | undefined
 ): TelemetryStreamStatus | undefined => {
   const resourceEntries = (streams ?? []).filter((entry) => entry.name === 'resources');
-  const socketEntries = resourceEntries.filter((entry) => !entry.leafKind);
-  const catalogEntries = resourceEntries.filter(
-    (entry) => entry.leafKind === 'domain' && entry.leaf === 'catalog'
+  return combineSocketAndLeafTelemetry(
+    { name: 'resources', leafKind: 'domain', leaf: 'catalog' },
+    resourceEntries.filter((entry) => !entry.leafKind),
+    resourceEntries.filter((entry) => entry.leafKind === 'domain' && entry.leaf === 'catalog')
   );
-  if (socketEntries.length === 0 && catalogEntries.length === 0) {
-    return undefined;
-  }
+};
 
-  const error = mostRecentError([...socketEntries, ...catalogEntries]);
-  const latestSkip = [...socketEntries, ...catalogEntries]
-    .filter((entry) => entry.lastSkipReason)
-    .sort((left, right) => right.lastEvent - left.lastEvent)[0]?.lastSkipReason;
-  return {
-    name: 'resources',
-    leafKind: 'domain',
-    leaf: 'catalog',
-    activeSessions: sumStreamValue(socketEntries, (entry) => entry.activeSessions),
-    totalMessages: sumStreamValue(catalogEntries, (entry) => entry.totalMessages),
-    droppedMessages:
-      sumStreamValue(socketEntries, (entry) => entry.droppedMessages) +
-      sumStreamValue(catalogEntries, (entry) => entry.droppedMessages),
-    skippedTargets:
-      sumStreamValue(socketEntries, (entry) => entry.skippedTargets) +
-      sumStreamValue(catalogEntries, (entry) => entry.skippedTargets),
-    errorCount:
-      sumStreamValue(socketEntries, (entry) => entry.errorCount) +
-      sumStreamValue(catalogEntries, (entry) => entry.errorCount),
-    lastConnect: maxStreamValue(socketEntries, (entry) => entry.lastConnect),
-    lastEvent: maxStreamValue(catalogEntries, (entry) => entry.lastEvent),
-    ...(error.message !== '—' ? { lastError: error.message } : {}),
-    ...(error.at !== undefined ? { lastErrorAt: error.at } : {}),
-    ...(latestSkip ? { lastSkipReason: latestSkip } : {}),
-  };
+// Container logs record sessions on the socket and deliveries per log target
+// (the pod or workload a Logs tab reads), each its own entry.
+export const selectContainerLogsStreamTelemetry = (
+  streams: TelemetryStreamStatus[] | null | undefined
+): TelemetryStreamStatus | undefined => {
+  const logEntries = (streams ?? []).filter((entry) => entry.name === 'container-logs');
+  return combineSocketAndLeafTelemetry(
+    { name: 'container-logs', leafKind: 'target' },
+    logEntries.filter((entry) => !entry.leafKind),
+    logEntries.filter((entry) => entry.leafKind === 'target')
+  );
 };
 
 const formatQPS = (value: number): string => {

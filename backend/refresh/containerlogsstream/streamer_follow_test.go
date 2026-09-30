@@ -438,6 +438,7 @@ type logPods struct {
 	streams    []logResponse
 	sinceTimes []*metav1.Time
 	tailLines  []*int64
+	follows    []bool
 	containers []string
 	// responder, when set, scripts the response per request instead of streams.
 	responder func(*corev1.PodLogOptions) logResponse
@@ -472,6 +473,7 @@ func (p *logPods) GetLogs(name string, opts *corev1.PodLogOptions) *restclient.R
 	if opts != nil {
 		p.containers = append(p.containers, opts.Container)
 		p.tailLines = append(p.tailLines, opts.TailLines)
+		p.follows = append(p.follows, opts.Follow)
 	}
 
 	resp := logResponse{status: http.StatusOK}
@@ -503,7 +505,8 @@ func (p *logPods) GetLogs(name string, opts *corev1.PodLogOptions) *restclient.R
 				reader = resp.reader
 			}
 			onClose := resp.onClose
-			if resp.holdOpen {
+			// Only a follow request stays open; a plain read always ends.
+			if resp.holdOpen && (opts == nil || opts.Follow) {
 				open := &openReader{closed: make(chan struct{})}
 				reader = io.MultiReader(reader, open)
 				previous := onClose
