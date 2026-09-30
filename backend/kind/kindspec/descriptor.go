@@ -115,6 +115,10 @@ type Descriptor struct {
 	// cached detail/YAML/Helm responses. The factory is implied by the kind's group.
 	DetailCacheable bool
 
+	// DetailListsPods marks kinds whose cached details embed their pods, so a
+	// pod change in the namespace evicts them.
+	DetailListsPods bool
+
 	// IngestOwned marks a kind cut over to the owned-reflector ingestion path: its
 	// objects are projected at intake by an ingest reflector and the shared informer
 	// factory no longer caches it as a typed object. Every subsystem that would

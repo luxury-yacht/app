@@ -11,6 +11,7 @@ var Descriptor = kindspec.Descriptor{
 	IngestOwned:     true,
 	CatalogSource:   kindspec.CatalogShared,
 	DetailCacheable: true,
+	DetailListsPods: true,
 	Collector:       &ObjectMapNode,
 	Edges:           ObjectMapEdges,
 	Binding:         &DetailBinding,

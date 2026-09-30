@@ -86,7 +86,7 @@ func TestObjectDetailProviderHelmContentCacheAndClusterIsolation(t *testing.T) {
 				return provider.FetchHelmValues(ctx, "default", "demo")
 			}
 			cacheKey := objectDetailCacheKey(kind, "default", "demo")
-			gateway.responseCacheStore("cluster-a", cacheKey, 123) // A stale entry with the wrong payload type must be replaced.
+			gateway.seedResponseCache("cluster-a", cacheKey, 123) // A stale entry with the wrong payload type must be replaced.
 			content, revision, err := read("cluster-a")
 			require.NoError(t, err)
 			require.Equal(t, 7, revision)

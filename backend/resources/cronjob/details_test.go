@@ -8,6 +8,7 @@ package cronjob_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -15,8 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	cgofake "k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -80,6 +83,35 @@ func TestCronJobServiceCollectsPods(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, detail.TimeUntilNextSchedule)
 	require.Contains(t, detail.Details, "Schedule: "+cron.Spec.Schedule)
+}
+
+// When one Job's pods cannot be listed, the pod list is left empty rather than
+// partial: the Logs tab hides the lines of pods missing from a non-empty list.
+func TestCronJobServiceLeavesPodsEmptyWhenAJobsPodsCannotBeListed(t *testing.T) {
+	cron := testsupport.CronJobFixture("default", "nightly")
+	cron.UID = types.UID("cron-nightly")
+	owner := []metav1.OwnerReference{{APIVersion: "batch/v1", Kind: "CronJob", Name: cron.Name, UID: cron.UID, Controller: ptrTo(true)}}
+	objects := []runtime.Object{cron.DeepCopy()}
+	for _, name := range []string{"nightly-001", "nightly-002"} {
+		job := testsupport.JobFixture("default", name)
+		job.OwnerReferences = owner
+		pod := testsupport.PodFixture("default", name+"-abc",
+			testsupport.PodWithOwner("Job", job.Name, true),
+			testsupport.PodWithLabels(job.Spec.Selector.MatchLabels))
+		pod.OwnerReferences[0].UID = job.UID
+		objects = append(objects, job, pod)
+	}
+	client := cgofake.NewClientset(objects...)
+	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if action.(k8stesting.ListAction).GetListRestrictions().Labels.String() == "job=nightly-002" {
+			return true, nil, errors.New("apiserver unavailable")
+		}
+		return false, nil, nil
+	})
+
+	detail, err := cronjob.NewService(newDeps(t, client)).CronJob(context.Background(), "default", "nightly")
+	require.NoError(t, err)
+	require.Empty(t, detail.Pods)
 }
 
 func TestCronJobServiceComputesNextScheduleBeforeFirstRun(t *testing.T) {

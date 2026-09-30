@@ -303,6 +303,14 @@ Cache invalidation advances a domain generation as well as deleting cache entrie
 New requests cannot join pre-invalidation builds, and those builds cannot populate
 the new generation's cache after completion.
 
+The resource gateway's response cache (object details, header metadata, Helm
+content) follows the same rule per entry: a fetch stores its result only if the
+entry was not evicted after the fetch began (`backend/response_cache.go`). A kind
+whose details embed its pods sets `DetailListsPods`; any pod change in a
+namespace evicts those kinds' cached details there, since a pod row does not name
+its workload. A stale pod list would otherwise hide a new pod's lines in the Logs
+tab.
+
 Cooled mmap stores belong to the exact subsystem generation. Replacement publishes
 new aggregate routes before retiring old snapshot serving; retirement rejects late
 reads and drains active builders before releasing mappings. Failed rewarm retains

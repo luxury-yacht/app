@@ -17,6 +17,7 @@
 
 ### Fixed
 
+- A pod that starts while a workload's Logs tab is open is no longer hidden for up to 15 seconds while the workload's details catch up, and a CronJob whose pods could not all be listed no longer hides some of their logs.
 - A pod that starts while a Logs tab is open appears in the Pods dropdown as soon as its lines do, instead of up to several seconds later.
 - Scaling up a workload no longer blanks its Logs tab for a few seconds; a new pod's lines show as soon as they arrive.
 - The Logs card in the Diagnostics panel now counts lines delivered to every Logs tab; it often showed 0 or one tab's count.

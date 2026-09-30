@@ -614,8 +614,8 @@ func TestSetSelectedKubeconfigsKeepsResponseCacheClusterScopedDuringChurn(t *tes
 	}
 
 	const cacheKey = "pod-detailed:default:nginx"
-	app.Resources.responseCacheStore(clusterA, cacheKey, "cluster-a-value")
-	app.Resources.responseCacheStore(clusterB, cacheKey, "cluster-b-value")
+	app.Resources.seedResponseCache(clusterA, cacheKey, "cluster-a-value")
+	app.Resources.seedResponseCache(clusterB, cacheKey, "cluster-b-value")
 
 	require.NoError(t, app.Workspace.SetSelectedKubeconfigs([]string{selectionB.String()}))
 

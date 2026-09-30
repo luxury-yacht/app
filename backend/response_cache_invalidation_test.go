@@ -36,7 +36,7 @@ func TestInvalidateResponseCacheForObjectEvictsDetailAndYAML(t *testing.T) {
 	}
 
 	detailKey := objectDetailCacheKey("ConfigMap", "default", "demo")
-	gateway.responseCacheStore(selectionKey, detailKey, "detail")
+	gateway.seedResponseCache(selectionKey, detailKey, "detail")
 
 	gateway.invalidateResponseCacheForObjectEvent(
 		selectionKey, configMapCacheIdentity, configMap,
@@ -62,8 +62,8 @@ func TestInvalidateResponseCacheEvictsHeaderMetadata(t *testing.T) {
 	detailKey := objectDetailCacheKeyForGVK(gvk, "default", "demo")
 	headerKey := objectHeaderMetadataCacheKey(gvk, "default", "demo")
 
-	gateway.responseCacheStore(selectionKey, detailKey, "detail")
-	gateway.responseCacheStore(selectionKey, headerKey, "header")
+	gateway.seedResponseCache(selectionKey, detailKey, "detail")
+	gateway.seedResponseCache(selectionKey, headerKey, "header")
 
 	// The ingest Catalog sink evicts by kind/namespace/name on every object change.
 	gateway.invalidateResponseCacheForResource(selectionKey, resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "demo", UID: ""}))
@@ -93,9 +93,9 @@ func TestInvalidateResponseCacheForObjectEvictsHelmCaches(t *testing.T) {
 	manifestKey := objectDetailCacheKey("HelmManifest", "default", "demo")
 	valuesKey := objectDetailCacheKey("HelmValues", "default", "demo")
 
-	gateway.responseCacheStore(selectionKey, releaseKey, "details")
-	gateway.responseCacheStore(selectionKey, manifestKey, "manifest")
-	gateway.responseCacheStore(selectionKey, valuesKey, "values")
+	gateway.seedResponseCache(selectionKey, releaseKey, "details")
+	gateway.seedResponseCache(selectionKey, manifestKey, "manifest")
+	gateway.seedResponseCache(selectionKey, valuesKey, "values")
 
 	gateway.invalidateResponseCacheForObjectEvent(
 		selectionKey, secretCacheIdentity, secret,
@@ -120,8 +120,8 @@ func TestRegisterHelmCacheInvalidationEvictsViaHelmStorageInformer(t *testing.T)
 
 	releaseKey := objectDetailCacheKey("HelmRelease", "default", "demo")
 	manifestKey := objectDetailCacheKey("HelmManifest", "default", "demo")
-	gateway.responseCacheStore(selectionKey, releaseKey, "details")
-	gateway.responseCacheStore(selectionKey, manifestKey, "manifest")
+	gateway.seedResponseCache(selectionKey, releaseKey, "details")
+	gateway.seedResponseCache(selectionKey, manifestKey, "manifest")
 
 	// Build the production helm-storage source from a fake client and register the
 	// Helm cache eviction on it, proving the cut-config path (no shared configmap/
@@ -181,7 +181,7 @@ func TestInvalidateResponseCacheSkipsWarmupAddsForOldObjects(t *testing.T) {
 	}
 
 	detailKey := objectDetailCacheKey("ConfigMap", "default", "demo")
-	gateway.responseCacheStore(selectionKey, detailKey, "detail")
+	gateway.seedResponseCache(selectionKey, detailKey, "detail")
 
 	guard := responseCacheInvalidationGuard{
 		hasSynced: func() bool { return false },
@@ -213,7 +213,7 @@ func TestInvalidateResponseCacheEvictsPodDetailsOnUpdate(t *testing.T) {
 	}
 
 	detailKey := objectDetailCacheKey("Pod", "default", "demo")
-	gateway.responseCacheStore(selectionKey, detailKey, "detail")
+	gateway.seedResponseCache(selectionKey, detailKey, "detail")
 
 	guard := responseCacheInvalidationGuard{
 		hasSynced: func() bool { return true },
@@ -243,9 +243,9 @@ func TestInvalidateResponseCacheForGVKEvictsExactAndLegacyKindKeys(t *testing.T)
 	coreGVKKey := objectDetailCacheKeyForGVK(coreGVK, "default", "demo")
 	coreKindKey := objectDetailCacheKey("ConfigMap", "default", "demo")
 
-	gateway.responseCacheStore(selectionKey, customKey, "custom")
-	gateway.responseCacheStore(selectionKey, coreGVKKey, "core-gvk")
-	gateway.responseCacheStore(selectionKey, coreKindKey, "core-kind")
+	gateway.seedResponseCache(selectionKey, customKey, "custom")
+	gateway.seedResponseCache(selectionKey, coreGVKKey, "core-gvk")
+	gateway.seedResponseCache(selectionKey, coreKindKey, "core-kind")
 
 	gateway.invalidateResponseCacheForGVK(selectionKey, customGVK, "default", "demo")
 
@@ -269,8 +269,8 @@ func TestInvalidateResponseCacheForGVKEvictsBuiltinLegacyAndGVKKeys(t *testing.T
 	gvkKey := objectDetailCacheKeyForGVK(gvk, "default", "demo")
 	kindKey := objectDetailCacheKey("Deployment", "default", "demo")
 
-	gateway.responseCacheStore(selectionKey, gvkKey, "gvk")
-	gateway.responseCacheStore(selectionKey, kindKey, "kind")
+	gateway.seedResponseCache(selectionKey, gvkKey, "gvk")
+	gateway.seedResponseCache(selectionKey, kindKey, "kind")
 
 	gateway.invalidateResponseCacheForGVK(selectionKey, gvk, "default", "demo")
 
@@ -295,16 +295,57 @@ func TestIngestResponseCacheSinkEvictsOnUpsertAndDelete(t *testing.T) {
 	sink := gateway.ingestResponseCacheSink(selectionKey)
 
 	upsertKey := objectDetailCacheKey("ResourceQuota", "default", "rq-a")
-	gateway.responseCacheStore(selectionKey, upsertKey, "detail")
+	gateway.seedResponseCache(selectionKey, upsertKey, "detail")
 	sink.Upsert(objectcatalog.Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "ResourceQuota", Resource: "resourcequotas", Namespace: "default", Name: "rq-a"}})
 	if _, ok := gateway.responseCacheLookup(selectionKey, upsertKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted on ingest Upsert")
 	}
 
 	deleteKey := objectDetailCacheKey("LimitRange", "default", "lr-b")
-	gateway.responseCacheStore(selectionKey, deleteKey, "detail")
+	gateway.seedResponseCache(selectionKey, deleteKey, "detail")
 	sink.Delete(objectcatalog.Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "LimitRange", Resource: "limitranges", Namespace: "default", Name: "lr-b"}})
 	if _, ok := gateway.responseCacheLookup(selectionKey, deleteKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted on ingest Delete")
+	}
+}
+
+// Workload details embed their pods, so a pod change clears the cached details
+// of every kind that lists pods in the pod's namespace, and nothing else. A
+// stale pod list would hide a new pod's log lines.
+func TestPodChangeClearsCachedDetailsThatListPods(t *testing.T) {
+	gateway := newResourceGatewayFixture().gateway
+	gateway.responseCache = newResponseCache(time.Minute, 50)
+	selectionKey := "cluster-a"
+	sink := gateway.ingestResponseCacheSink(selectionKey)
+	deployment := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
+	cleared := []string{
+		objectDetailCacheKeyForGVK(deployment, "team-a", "web"),
+		objectDetailCacheKeyForGVK(schema.GroupVersionKind{Group: "batch", Version: "v1", Kind: "CronJob"}, "team-a", "backup"),
+		objectDetailCacheKey("Job", "team-a", "migrate"),
+	}
+	kept := []string{
+		objectDetailCacheKeyForGVK(deployment, "team-b", "web"),
+		objectDetailCacheKeyForGVK(schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}, "team-a", "settings"),
+	}
+	seed := func() {
+		for _, key := range append(append([]string{}, cleared...), kept...) {
+			gateway.seedResponseCache(selectionKey, key, "detail")
+		}
+	}
+	pod := objectcatalog.Summary{Ref: resourcemodel.ResourceRef{ClusterID: selectionKey, Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "team-a", Name: "web-abc"}}
+
+	for name, change := range map[string]func(interface{}){"upsert": sink.Upsert, "delete": sink.Delete} {
+		seed()
+		change(pod)
+		for _, key := range cleared {
+			if _, ok := gateway.responseCacheLookup(selectionKey, key); ok {
+				t.Fatalf("%s: expected %s to be cleared by a pod change in its namespace", name, key)
+			}
+		}
+		for _, key := range kept {
+			if _, ok := gateway.responseCacheLookup(selectionKey, key); !ok {
+				t.Fatalf("%s: expected %s to stay cached", name, key)
+			}
+		}
 	}
 }

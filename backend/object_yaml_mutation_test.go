@@ -329,8 +329,8 @@ spec:
 	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
 	gvkKey := objectDetailCacheKeyForGVK(gvk, "default", "demo")
 	kindKey := objectDetailCacheKey("Deployment", "default", "demo")
-	app.responseCacheStore(clusterID, gvkKey, "stale-gvk")
-	app.responseCacheStore(clusterID, kindKey, "stale-kind")
+	app.seedResponseCache(clusterID, gvkKey, "stale-gvk")
+	app.seedResponseCache(clusterID, kindKey, "stale-kind")
 
 	response, err := app.ApplyObjectYaml(clusterID, request)
 	if err != nil {

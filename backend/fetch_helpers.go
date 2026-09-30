@@ -54,7 +54,8 @@ var contextSleep = timeutil.SleepWithContext
 type resourceFetchBoundary interface {
 	CtxOrBackground() context.Context
 	responseCacheLookup(string, string) (any, bool)
-	responseCacheStore(string, string, any)
+	responseCacheGeneration() uint64
+	responseCacheStore(string, string, any, uint64)
 	responseCacheDelete(string, string)
 	emitEvent(string, ...interface{})
 	resourceRetryDependencies() resourceRetryDependencies
@@ -86,6 +87,11 @@ func FetchResourceWithSelection[T any](
 	if cached, ok := cachedResource[T](boundary, selectionKey, cacheKey); ok {
 		return cached, nil
 	}
+	// Read after the lookup, which may itself evict a wrong-typed entry.
+	var since uint64
+	if boundary != nil {
+		since = boundary.responseCacheGeneration()
+	}
 	ctx, cancel := resourceFetchContext(boundary)
 	if cancel != nil {
 		defer cancel()
@@ -116,7 +122,7 @@ func FetchResourceWithSelection[T any](
 	}
 
 	if boundary != nil {
-		boundary.responseCacheStore(selectionKey, cacheKey, result)
+		boundary.responseCacheStore(selectionKey, cacheKey, result, since)
 	}
 	return result, nil
 }

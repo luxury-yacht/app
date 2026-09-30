@@ -247,8 +247,10 @@ func (s *Service) podsOwnedByCronJob(ctx context.Context, namespace string, cron
 		}
 		podList, err := client.CoreV1().Pods(namespace).List(ctx, cronJobPodListOptions(job))
 		if err != nil {
+			// A partial list would read as the CronJob's full pod list, and the
+			// Logs tab hides lines of pods missing from it; leave it empty.
 			s.deps.Logger.Debug(fmt.Sprintf("Failed to list pods for job %s/%s: %v", namespace, job.Name, err), logsources.ResourceLoader)
-			continue
+			return nil
 		}
 		appendUniqueJobPods(&collected, seen, podList.Items, job.UID)
 	}
