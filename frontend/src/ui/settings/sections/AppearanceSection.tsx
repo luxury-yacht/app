@@ -871,7 +871,7 @@ function AppearanceSection() {
       setActiveThemeId(theme.id);
       return;
     }
-    handleApplyTheme(theme.id);
+    void handleApplyTheme(theme.id);
   };
 
   // Commit the active theme's edits (palette + name/pattern from themeDraft).

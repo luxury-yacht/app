@@ -52,7 +52,7 @@ function AdvancedSection() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const prefs = await hydrateAppPreferences({ force: true });
         if (!cancelled) {
