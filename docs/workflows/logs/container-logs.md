@@ -145,7 +145,9 @@ turns its auto-refresh off, and one toggle (or `R`) retries.
 - A follow request with no response headers after 20 s becomes a `failed`
   issue and retries; an established stream that is quiet never times out. A
   plain history read must finish within 20 s.
-- Lines over 256 KiB are truncated with a marker and reading continues.
+- Lines over 256 KiB are truncated with a marker and reading continues. A
+  line cut off by a broken connection is not delivered; the resumed stream
+  reads it whole.
 - Resuming uses a cursor (last timestamp plus the hashes of the lines delivered
   at it): a follower's own after its stream ends, or one built from the
   client's resume point for a pod present when the session starts (a pod that
@@ -162,9 +164,13 @@ turns its auto-refresh off, and one toggle (or `R`) retries.
   listed and is removed, releasing its target capacity.
 - Live logs need `list` and `watch` on pods (a single pod is watched by name);
   without them the stream fails with a non-retryable permission error that
-  names the verb. Previous logs use `get` only and still load, so loading,
-  paused and failure-before-lines states show in the log region below the
-  controls; Previous Logs and the auto-refresh retry stay usable.
+  names the verb. Previous logs need no `watch`: a pod's need `get` on the
+  pod; a Deployment's, ReplicaSet's, DaemonSet's or StatefulSet's need `get`
+  on the workload and `list` on pods; a Job's need `list` on pods; and a
+  CronJob's need `list` on jobs and pods (`containerlogs.Resolve`). So
+  previous logs can load when live logs cannot, and loading, paused and
+  failure-before-lines states show in the log region below the controls;
+  Previous Logs and the auto-refresh retry stay usable.
 - The previous-logs fetch reads containers five at a time, each within 20 s
   (the whole fetch has no limit, so a slow first batch cannot fail the rest), and
   returns per-container `issues`; `error` is set only when nothing could be

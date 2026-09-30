@@ -202,10 +202,10 @@ type containerLogRun struct {
 	sink           entryAdder
 	snapshot       *snapshotWait
 	// history plans targets' history reads; nil without a client snapshot.
-	history    *historyRounds
-	warningsCh chan<- []containerlogs.Warning
-	issues     *issueSet
-	fatal      chan<- error
+	history  *historyRounds
+	warnings *warningUpdates
+	issues   *issueSet
+	fatal    chan<- error
 	// followerExited wakes the run loop so a target waiting on its previous
 	// follower, or a restarted container, is started.
 	followerExited chan struct{}
@@ -240,7 +240,7 @@ type containerLogRunConfig struct {
 	initialWarnings []containerlogs.Warning
 	sink            entryAdder
 	snapshot        *snapshotWait
-	warningsCh      chan<- []containerlogs.Warning
+	warnings        *warningUpdates
 	issues          *issueSet
 	// sent follows the lines sent to the client; nil without a client.
 	sent *sentLines
@@ -259,7 +259,7 @@ func sealSnapshot(snapshot *snapshotWait) {
 func newContainerLogRun(streamer *Streamer, config containerLogRunConfig, podWatch *containerlogs.PodWatch) *containerLogRun {
 	run := &containerLogRun{
 		streamer: streamer, opts: config.opts, podWatch: podWatch, limiterSession: config.limiterSession,
-		sink: config.sink, snapshot: config.snapshot, warningsCh: config.warningsCh, issues: config.issues,
+		sink: config.sink, snapshot: config.snapshot, warnings: config.warnings, issues: config.issues,
 		fatal: config.fatal, followerExited: make(chan struct{}, 1),
 		removed: config.removed, removals: map[string]*time.Timer{}, removalDue: make(chan string, 16),
 		currentPods: map[string]*corev1.Pod{}, seeded: map[string]struct{}{}, followers: map[string]context.CancelFunc{},
@@ -468,7 +468,7 @@ func (r *containerLogRun) reconcileTargets(ctx context.Context) {
 	pods, followingKeys := r.snapshotInventory()
 	selection := selectLogTargets(pods, r.opts, r.limiterSession, r.streamer.perScopeLimit)
 	desiredTargets := indexLogTargets(selection.targets)
-	emitWarningsIfChanged(r.warningsCh, &r.currentWarnings, selection.warnings)
+	emitWarningsIfChanged(r.warnings, &r.currentWarnings, selection.warnings)
 	r.issues.retain(func(key string) bool {
 		_, desired := desiredTargets[key]
 		return desired
@@ -709,20 +709,12 @@ func (r *containerLogRun) reportRemoval(ctx context.Context, name string) {
 	}
 }
 
-func emitWarningsIfChanged(ch chan<- []containerlogs.Warning, current *[]containerlogs.Warning, next []containerlogs.Warning) {
-	if ch == nil {
-		*current = append((*current)[:0], next...)
-		return
-	}
+func emitWarningsIfChanged(updates *warningUpdates, current *[]containerlogs.Warning, next []containerlogs.Warning) {
 	if slices.Equal(*current, next) {
 		return
 	}
-	copied := append([]containerlogs.Warning(nil), next...)
-	*current = copied
-	select {
-	case ch <- copied:
-	default:
-	}
+	*current = append([]containerlogs.Warning(nil), next...)
+	updates.set(*current)
 }
 
 // followOptions carries what a follower needs from its session.

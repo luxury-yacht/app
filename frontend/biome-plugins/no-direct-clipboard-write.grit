@@ -6,7 +6,10 @@ language js(typescript, jsx)
 // that use the browser API fail while keyboard shortcuts still work.
 or {
   `$receiver.writeText($...)`,
-  `$receiver.clipboard.write($...)`
+  `$receiver?.writeText($...)`,
+  `$receiver.clipboard.write($...)`,
+  `$receiver.clipboard?.write($...)`,
+  `$receiver?.clipboard?.write($...)`
 } as $call where {
   register_diagnostic(
     span = $call,

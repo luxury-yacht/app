@@ -244,12 +244,12 @@ func (s *containerLogsStream) run(ctx context.Context, initial containerLogsInit
 	snapshot := newSnapshotWait()
 	sent := newSentLines(s.options.MaxEntries, s.options.MaxBytes)
 	issues := newIssueSet()
-	warnings := make(chan []containerlogs.Warning, 8)
+	warnings := newWarningUpdates()
 	removed := make(chan string, 16)
 	fatal := make(chan error, 1)
 	runnerDone := s.startRunner(ctx, initial, containerLogRunConfig{
 		opts: s.options, limiterSession: limiterSession, initialWarnings: initial.warnings,
-		sink: pending, snapshot: snapshot, warningsCh: warnings, issues: issues, sent: sent, removed: removed, fatal: fatal,
+		sink: pending, snapshot: snapshot, warnings: warnings, issues: issues, sent: sent, removed: removed, fatal: fatal,
 	})
 	delivery := newContainerLogsDelivery(s, pending, issues, initial.warnings)
 	delivery.sent = sent
@@ -281,7 +281,7 @@ func (s *containerLogsStream) recoverRunner() {
 // deliveryEvents are the runner's signals to the delivery loop.
 type deliveryEvents struct {
 	runnerDone <-chan struct{}
-	warnings   <-chan []containerlogs.Warning
+	warnings   *warningUpdates
 	removed    <-chan string
 	fatal      <-chan error
 }
@@ -320,8 +320,8 @@ func (d *containerLogsDelivery) sendSnapshot(ctx context.Context, ready <-chan s
 		select {
 		case <-ctx.Done():
 			return false
-		case next := <-events.warnings:
-			d.selectionWarnings = append(d.selectionWarnings[:0], next...)
+		case <-events.warnings.notify:
+			d.selectionWarnings = append(d.selectionWarnings[:0], events.warnings.take()...)
 		case err := <-events.fatal:
 			d.request.writeFatal(err)
 			return false
@@ -418,8 +418,8 @@ func (d *containerLogsDelivery) step(ctx context.Context, events deliveryEvents)
 		d.flush()
 		d.request.writeFatal(err)
 		return true
-	case next := <-events.warnings:
-		d.selectionWarnings = append(d.selectionWarnings[:0], next...)
+	case <-events.warnings.notify:
+		d.selectionWarnings = append(d.selectionWarnings[:0], events.warnings.take()...)
 		return d.emitWarningUpdate()
 	case name := <-events.removed:
 		return d.emitRemoval(name)

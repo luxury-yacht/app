@@ -95,7 +95,7 @@ func TestMatchNoneTailAndStreamDoNotTouchKubernetes(t *testing.T) {
 			ctx,
 
 			initial.pods,
-			initial.watch, containerLogRunConfig{opts: opts, limiterSession: nil, initialWarnings: initial.warnings, sink: testPending(), warningsCh: make(chan []containerlogs.Warning)})
+			initial.watch, containerLogRunConfig{opts: opts, limiterSession: nil, initialWarnings: initial.warnings, sink: testPending()})
 
 	}()
 	cancel()

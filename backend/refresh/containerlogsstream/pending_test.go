@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,4 +44,17 @@ func TestLiveOverflowAfterTheSnapshotIsDropped(t *testing.T) {
 	entries, dropped := pending.take()
 	require.Equal(t, []string{"live-0", "live-1"}, entryLines([]EventPayload{{Entries: entries}}))
 	require.Equal(t, 1, dropped)
+}
+
+// A delivery loop that falls behind still sends the newest target-limit
+// warning: a newer list replaces one it has not taken yet.
+func TestWarningUpdatesKeepTheNewestWhileDeliveryIsBehind(t *testing.T) {
+	updates := newWarningUpdates()
+	var current []containerlogs.Warning
+	for hidden := 1; hidden <= 9; hidden++ {
+		emitWarningsIfChanged(updates, &current, []containerlogs.Warning{{Kind: containerlogs.WarningTargetLimit, Hidden: hidden}})
+	}
+
+	<-updates.notify
+	require.Equal(t, 9, updates.take()[0].Hidden)
 }

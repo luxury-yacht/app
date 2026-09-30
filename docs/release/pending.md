@@ -10,6 +10,7 @@
 - Pods that start while a Logs tab is open download less: they read nothing older than the tab can still show, and pods starting together share one buffer of history.
 - The Logs tab drops the lines of pods that were deleted, whether while the tab was open or while it was hidden, so they no longer take up room in the buffer. A StatefulSet pod recreated under the same name keeps its earlier lines.
 - The Logs tab's source dropdown is now two dropdowns, Pods and Containers, each with its own All and None.
+- A ReplicaSet's Logs tab now works like a Deployment's: its Pods dropdown lists all of the ReplicaSet's pods, and lines of pods it no longer has are hidden.
 - Logs tabs now keep 5,000 lines by default instead of 1,000. A Buffer size you have already saved in Settings → Logs is kept.
 
 ### Fixed

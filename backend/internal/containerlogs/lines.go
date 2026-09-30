@@ -29,8 +29,9 @@ func NewLineReader(r io.Reader) *LineReader {
 }
 
 // Next returns the next line without its line ending. A final line with no
-// newline is still returned; the stream's error (io.EOF at the end) comes on
-// the following call.
+// newline is still returned at the end of the stream, and io.EOF comes on the
+// following call. A stream that fails mid-line returns the error instead of the
+// partial line, which a resumed stream reads whole.
 func (l *LineReader) Next() (string, error) {
 	if l.err != nil {
 		return "", l.err
@@ -48,13 +49,20 @@ func (l *LineReader) Next() (string, error) {
 			continue
 		}
 		if err != nil {
-			l.err = err
-			if len(kept) == 0 && dropped == 0 {
-				return "", err
-			}
+			return l.end(kept, dropped, err)
 		}
 		return finishLine(kept, dropped), nil
 	}
+}
+
+// end records the stream's error and returns the line read so far only when
+// the stream ended normally.
+func (l *LineReader) end(kept []byte, dropped int, err error) (string, error) {
+	l.err = err
+	if !errors.Is(err, io.EOF) || (len(kept) == 0 && dropped == 0) {
+		return "", err
+	}
+	return finishLine(kept, dropped), nil
 }
 
 func appendWithinLimit(kept []byte, dropped int, chunk []byte) ([]byte, int) {

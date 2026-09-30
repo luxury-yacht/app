@@ -373,6 +373,38 @@ func TestPodStreamWithoutPodListFailsWithAPermissionError(t *testing.T) {
 	requirePodPermissionFailure(t, payloads[len(payloads)-1], "list")
 }
 
+// A pod that starts during the session raises the number of containers the
+// target limit hides, and the tab's warning follows.
+func TestTargetLimitWarningFollowsANewPod(t *testing.T) {
+	selector := &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}
+	objects := []runtime.Object{&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web"}, Spec: appsv1.DeploymentSpec{Selector: selector}}}
+	for i := range containerlogs.DefaultPerScopeTargetLimit + 2 {
+		objects = append(objects, runningPod(fmt.Sprintf("web-%03d", i), "app"))
+	}
+	var client *fake.Clientset
+	session := startLogSession(t, sessionSetup{
+		request: Request{Scope: "cluster-a|default:apps/v1:Deployment:web"},
+		objects: objects,
+		respond: func(*corev1.PodLogOptions) logResponse { return logResponse{holdOpen: true} },
+		prepare: func(c *fake.Clientset) { client = c },
+	})
+	session.snapshot(t)
+
+	_, err := client.CoreV1().Pods("default").Create(context.Background(), runningPod("web-new", "app"), metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		session.conn.mu.Lock()
+		defer session.conn.mu.Unlock()
+		for _, payload := range session.conn.payloads {
+			if payload.Warnings != nil && len(*payload.Warnings) == 1 && (*payload.Warnings)[0].Hidden == 3 {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, 10*time.Millisecond)
+}
+
 func TestDeploymentStreamReportsTheTargetLimitAsATypedWarning(t *testing.T) {
 	selector := &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}
 	objects := []runtime.Object{&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web"}, Spec: appsv1.DeploymentSpec{Selector: selector}}}

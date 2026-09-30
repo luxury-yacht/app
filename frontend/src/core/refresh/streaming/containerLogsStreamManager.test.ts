@@ -425,6 +425,29 @@ describe('ContainerLogsStreamManager', () => {
     manager.stopAll(true);
   });
 
+  // The snapshot was asked for with the larger size but the buffer kept only
+  // the smaller one, so growing back needs the history read again.
+  test('reads full history after growing back from a shrink made while a snapshot was on its way', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, resumeBuffer);
+    manager.startStream(SCOPE);
+    await flushOpen();
+
+    eventBus.emit('settings:obj-panel-logs-buffer-size', 100);
+    FakeStream.latest().receive({
+      reset: true,
+      resumed: true,
+      snapshotComplete: true,
+      entries: [],
+    });
+    eventBus.emit('settings:obj-panel-logs-buffer-size', 5000);
+    manager.startStream(SCOPE);
+    await flushOpen();
+
+    expect(sentResume()).toBeUndefined();
+    manager.stopAll(true);
+  });
+
   test('replaces the buffer when the backend sends full history instead', async () => {
     const manager = new ContainerLogsStreamManager();
     await startLive(manager, resumeBuffer);

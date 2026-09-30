@@ -82,6 +82,9 @@ describe('Biome architectural boundary plugins', () => {
     ['no-direct-clipboard-write', 'navigator.clipboard.writeText(text);', 'writeClipboardText'],
     ['no-direct-clipboard-write', 'clipboard.writeText(text);', 'writeClipboardText'],
     ['no-direct-clipboard-write', 'navigator.clipboard.write([item]);', 'writeClipboardText'],
+    ['no-direct-clipboard-write', 'navigator.clipboard?.writeText(text);', 'writeClipboardText'],
+    ['no-direct-clipboard-write', 'navigator?.clipboard?.writeText(text);', 'writeClipboardText'],
+    ['no-direct-clipboard-write', 'navigator.clipboard?.write([item]);', 'writeClipboardText'],
     [
       'no-inline-error-text',
       'const loadError = "failed"; const View = () => <div>{loadError}</div>;',

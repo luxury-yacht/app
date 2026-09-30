@@ -224,3 +224,37 @@ func (s *issueSet) signal() {
 	default:
 	}
 }
+
+// warningUpdates holds the newest selection warnings for the delivery loop and
+// signals notify when they change. A newer list replaces one the loop has not
+// taken yet, so a loop that falls behind still sends the latest. A nil value
+// ignores updates.
+type warningUpdates struct {
+	mu     sync.Mutex
+	latest []containerlogs.Warning
+	notify chan struct{}
+}
+
+func newWarningUpdates() *warningUpdates {
+	return &warningUpdates{notify: make(chan struct{}, 1)}
+}
+
+func (u *warningUpdates) set(warnings []containerlogs.Warning) {
+	if u == nil {
+		return
+	}
+	u.mu.Lock()
+	u.latest = append([]containerlogs.Warning(nil), warnings...)
+	u.mu.Unlock()
+	select {
+	case u.notify <- struct{}{}:
+	default:
+	}
+}
+
+// take returns the newest warnings.
+func (u *warningUpdates) take() []containerlogs.Warning {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.latest
+}

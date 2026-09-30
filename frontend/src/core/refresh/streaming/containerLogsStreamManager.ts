@@ -644,6 +644,8 @@ export class ContainerLogsStreamManager {
           buffer.replace(effect.entries, effect.trimmed, nextSeq);
         }
         buffer.setBasis(request);
+        // The buffer may have shrunk while the snapshot was on its way.
+        buffer.limitBasis(this.maxEntries);
         buffer.warnings = effect.warnings;
         buffer.issues = effect.issues;
         return true;

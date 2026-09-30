@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
-	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/stretchr/testify/require"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -90,7 +89,7 @@ func startRunWith(t *testing.T, setup runSetup) *runHarness {
 		defer close(harness.done)
 		streamer.run(ctx, resolution.Pods, resolution.Watch, containerLogRunConfig{
 			opts: setup.opts, limiterSession: setup.limiter, sink: channelSink(harness.entries),
-			warningsCh: make(chan []containerlogs.Warning, 8), fatal: harness.errs,
+			warnings: newWarningUpdates(), fatal: harness.errs,
 		})
 	}()
 	t.Cleanup(harness.stop)

@@ -62,10 +62,18 @@ func TestLineReaderMatchesLineScanningEdges(t *testing.T) {
 	require.Equal(t, []string{"windows", "", "last without newline"}, lines)
 }
 
-func TestLineReaderReturnsReadErrorsAfterBufferedLines(t *testing.T) {
+// A stream that breaks mid-line never delivers the half it received: the
+// resumed stream reads the whole line, and a half line would not match it.
+func TestLineReaderDropsALineCutOffByAReadError(t *testing.T) {
 	failure := errors.New("connection reset")
-	lines, err := readAllLines(t, io.MultiReader(strings.NewReader("one\ntwo"), failingReader{err: failure}))
+	lines, err := readAllLines(t, io.MultiReader(strings.NewReader("one\ntw"), failingReader{err: failure}))
 	require.ErrorIs(t, err, failure)
+	require.Equal(t, []string{"one"}, lines)
+}
+
+func TestLineReaderReturnsAFinalLineWithoutANewline(t *testing.T) {
+	lines, err := readAllLines(t, strings.NewReader("one\ntwo"))
+	require.NoError(t, err)
 	require.Equal(t, []string{"one", "two"}, lines)
 }
 

@@ -2,6 +2,7 @@ package containerlogsstream
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -507,7 +508,7 @@ func (p *logPods) GetLogs(name string, opts *corev1.PodLogOptions) *restclient.R
 			onClose := resp.onClose
 			// Only a follow request stays open; a plain read always ends.
 			if resp.holdOpen && (opts == nil || opts.Follow) {
-				open := &openReader{closed: make(chan struct{})}
+				open := &openReader{closed: make(chan struct{}), request: request.Context()}
 				reader = io.MultiReader(reader, open)
 				previous := onClose
 				onClose = func() {
@@ -598,14 +599,20 @@ func TestFollowContainerDeliversLinesAfterAnOversizedLine(t *testing.T) {
 }
 
 // openReader blocks reads until closed, then reports the end of the stream.
+// Like a real response body, it fails once its request is cancelled.
 type openReader struct {
-	closed chan struct{}
-	once   sync.Once
+	closed  chan struct{}
+	once    sync.Once
+	request context.Context
 }
 
 func (r *openReader) Read([]byte) (int, error) {
-	<-r.closed
-	return 0, io.EOF
+	select {
+	case <-r.closed:
+		return 0, io.EOF
+	case <-r.request.Done():
+		return 0, r.request.Err()
+	}
 }
 
 func (r *openReader) close() { r.once.Do(func() { close(r.closed) }) }
@@ -685,6 +692,25 @@ func TestFollowContainerRecoversAnInterruptedTailAfterReconnect(t *testing.T) {
 	require.GreaterOrEqual(t, len(pods.sinceTimes), 2)
 	require.NotNil(t, pods.sinceTimes[1], "the reconnect resumes from the delivered position")
 }
+
+// A stream that breaks mid-line delivers none of that line; the resumed stream
+// delivers it whole, and each line once.
+func TestFollowContainerDeliversALineCutOffByADroppedConnectionOnce(t *testing.T) {
+	origin := time.Unix(1000, 0)
+	group := []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond, 2 * time.Millisecond}
+	full := buildContainerLogsStream(origin, group, []string{"a", "b", "hello world", "next"})
+	cut := full[:strings.Index(full, "hello world")+len("hello wo")]
+	lines, _ := followLines(t, []logResponse{
+		{reader: io.MultiReader(strings.NewReader(cut), brokenConnection{})},
+		{body: full, holdOpen: true},
+	}, 4)
+	require.Equal(t, []string{"a", "b", "hello world", "next"}, lines)
+}
+
+// brokenConnection fails every read, like a reset connection.
+type brokenConnection struct{}
+
+func (brokenConnection) Read([]byte) (int, error) { return 0, errors.New("connection reset by peer") }
 
 // Unmatched replay lines must not be held while an open stream stays quiet.
 func TestFollowContainerReleasesUnmatchedReplayOnAQuietStream(t *testing.T) {
@@ -807,8 +833,9 @@ func TestFollowContainerRetriesARequestThatNeverResponds(t *testing.T) {
 
 // Once a stream is established, silence is normal: it never times out.
 func TestFollowContainerKeepsAQuietEstablishedStreamOpen(t *testing.T) {
+	var closed atomic.Bool
 	baseClient := fake.NewClientset()
-	pods := newLogPodsWithResponses(baseClient.CoreV1().Pods("default"), "default", []logResponse{{holdOpen: true}})
+	pods := newLogPodsWithResponses(baseClient.CoreV1().Pods("default"), "default", []logResponse{{holdOpen: true, onClose: func() { closed.Store(true) }}})
 	client := &stubClient{Clientset: baseClient, core: &logCore{CoreV1Interface: baseClient.CoreV1(), overrides: map[string]*logPods{"default": pods}}}
 	streamer := NewStreamer(client, applog.Noop, nil)
 	streamer.responseTimeout = 20 * time.Millisecond
@@ -817,10 +844,11 @@ func TestFollowContainerKeepsAQuietEstablishedStreamOpen(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		streamer.followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app"}, testPending(), followOptions{issues: issues})
+		streamer.followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app"}, testPending(), followOptions{running: whileRunning, issues: issues})
 	}()
 
 	time.Sleep(200 * time.Millisecond)
+	require.False(t, closed.Load(), "the response timeout cut the quiet stream")
 	stopFollower(t, cancel, done)
 	require.Equal(t, 1, pods.requestCount("app"))
 	require.Empty(t, issues.list())
