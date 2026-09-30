@@ -19,7 +19,9 @@ Panel. They are not Application Logs and they are not Node Logs.
   without dropping the cluster-prefixed object/log scope. The Pods dropdown
   (workloads only) and the Containers dropdown each choose one group of that
   single selection; changing one keeps the other's choice, and no pods or no
-  containers reads nothing (`logFilterSelection.ts`).
+  containers reads nothing (`logFilterSelection.ts`). A dropdown with no
+  options has not listed its sources yet (no pod list and no lines, or no
+  container inventory) and keeps its choice.
 - Previous logs, history size, follow, timestamps, and target caps are backend
   log query concerns.
 - Live logs come only from the stream; there is no fetch fallback and no
@@ -28,7 +30,9 @@ Panel. They are not Application Logs and they are not Node Logs.
 - `containerLogsStreamManager` is the only writer of `container-logs` scoped
   state. The Logs tab reads it; hiding deleted pods' lines is a view filter.
   Each time the workload's pod list arrives (every 5 s), the pods that already
-  have lines but are not in it are hidden. A pod whose first line arrives after
+  have lines but are not in it are hidden; an empty list hides every pod's
+  lines, and a list the backend could not read (`pods: null`) hides nothing.
+  A pod whose first line arrives after
   the latest list stays visible until the next one, since the list can lag a
   newly started pod (`hooks/useActivePodSet.ts`). The Pods dropdown offers the
   pod list's pods and the pods with lines in the buffer, which the stream
@@ -40,7 +44,10 @@ Panel. They are not Application Logs and they are not Node Logs.
   reconnects, tab visibility, row measurement, and programmatic scroll events
   preserve the current intent. Reactivating the Logs tab positions the active
   scroll container during layout so unchanged content cannot visibly jump or
-  expose the Resume scrolling control.
+  expose the Resume scrolling control. While paused, rows already shown stay
+  in place, including lines the buffer has since evicted; new entries follow
+  them, even ones earlier in time, and hidden or removed pods' lines leave
+  (`hooks/useAnchoredLogEntries.ts`). Resuming shows the buffer in time order.
 
 ## Stream Protocol
 
@@ -49,7 +56,9 @@ buffer limits `maxEntries` (the Buffer size setting in Settings → Logs) and
 `maxBytes` (64 MiB of line bytes). The backend bounds each container's history
 by `maxEntries`. Container Logs records each scope's source selection in
 `core/refresh/streaming/containerLogsStreamScopeParams.ts`; the stream manager
-reads it when it opens the stream, and closing the panel clears it.
+reads it when it opens the stream, and closing the panel clears it. Closing
+the panel also resets the scope, which drops the manager's buffer, so a
+reopened panel reads full history.
 
 When the buffer already holds lines read for the same selection and for a
 buffer size at least as large, the first frame also carries `resume`: for each
@@ -84,7 +93,8 @@ Server frames, generated into `types.generated.ts`:
   lists. A per-container problem never sets `error`.
 - **Fatal error.** `error`, optional permission `errorDetails`, and
   `retryable`; the stream then closes. Missing objects, permission denials and
-  rejected requests are not retryable.
+  rejected requests are not retryable. A stream that arrives while the refresh
+  subsystem or its cluster's handler is being republished is told to retry.
 
 A restarted stream (a reconnect, the window shown again, auto-refresh turned
 back on) resumes, and its `resumed` snapshot is merged into the buffer, as live
@@ -120,8 +130,9 @@ turns its auto-refresh off, and one toggle (or `R`) retries.
   1 s, the backend finds the cut-off: the oldest line the buffer can hold
   among the lines it already holds and everything read. A container whose read
   came back full and whose oldest line is after the cut-off reads again, from
-  the cut-off, at most `maxEntries` lines. Each container then follows from its
-  newest line read, as a resume. One or two containers, and a read that fails,
+  the cut-off, at most `maxEntries` lines; if that read fails, the container's
+  follow request reads from the cut-off instead. Each container then follows
+  from its newest line read, as a resume. One or two containers, and a read that fails,
   use one follow request that carries both history and live output, from the
   floor. Resumed containers follow from their resume points.
 - A follow request with no response headers after 20 s becomes a `failed`
@@ -147,7 +158,8 @@ turns its auto-refresh off, and one toggle (or `R`) retries.
   names the verb. Previous logs use `get` only and still load, so loading,
   paused and failure-before-lines states show in the log region below the
   controls; Previous Logs and the auto-refresh retry stay usable.
-- The previous-logs fetch reads containers five at a time, each within 20 s, and
+- The previous-logs fetch reads containers five at a time, each within 20 s
+  (the whole fetch has no limit, so a slow first batch cannot fail the rest), and
   returns per-container `issues`; `error` is set only when nothing could be
   read.
 

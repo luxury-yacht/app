@@ -68,7 +68,8 @@ type containerTarget struct {
 	instance string
 	cursor   containerlogs.ResumeCursor
 	// historySince is where a follower without a cursor starts reading: the
-	// oldest line the client's buffer still keeps, or zero while it has room.
+	// oldest line the client's buffer still keeps (or its history round's
+	// cut-off after a failed second read), or zero while it has room.
 	historySince time.Time
 }
 
@@ -358,10 +359,10 @@ func (r *containerLogRun) followTarget(ctx context.Context, target containerTarg
 
 // deliverPlannedHistory reads the target's history through its round and
 // delivers it. The returned target follows on from the newest line read or,
-// when its follow request reads the history, from the round's floor.
+// when its follow request reads the history, from where readPlannedHistory says.
 func (r *containerLogRun) deliverPlannedHistory(ctx context.Context, target containerTarget, round *historyRound, caughtUp func()) containerTarget {
-	history, floor, ok := r.readPlannedHistory(ctx, target, round)
-	target.historySince = floor
+	history, since, ok := r.readPlannedHistory(ctx, target, round)
+	target.historySince = since
 	if !ok {
 		return target
 	}
@@ -373,9 +374,10 @@ func (r *containerLogRun) deliverPlannedHistory(ctx context.Context, target cont
 	return target
 }
 
-// readPlannedHistory returns the target's history and the round's floor. It
-// reports false when the target reads its history by following: its round is
-// too small to share, or the read failed.
+// readPlannedHistory returns the target's history and where its follow request
+// starts when it reads the history itself. It reports false in that case: its
+// round is too small to share, or a read failed. A failed second read follows
+// from the cut-off, since the first read left out lines the buffer can hold.
 func (r *containerLogRun) readPlannedHistory(ctx context.Context, target containerTarget, round *historyRound) ([]Entry, time.Time, bool) {
 	key := target.key()
 	share, floor, ok := round.shareFor(ctx)
@@ -393,12 +395,15 @@ func (r *containerLogRun) readPlannedHistory(ctx context.Context, target contain
 	if !decided {
 		return nil, floor, false
 	}
-	if readsFurther(read, share, cutoff) {
-		if more, err := r.streamer.readHistory(ctx, target, r.opts.MaxEntries, cutoff); err == nil {
-			read = more
-		}
+	if !readsFurther(read, share, cutoff) {
+		return read, floor, true
 	}
-	return read, floor, true
+	more, err := r.streamer.readHistory(ctx, target, r.opts.MaxEntries, cutoff)
+	if err != nil {
+		r.streamer.logger.Debug(fmt.Sprintf("containerlogsstream: second history read failed for %s, following from the cut-off: %v", key, err), logsources.ContainerLogsStream)
+		return nil, cutoff, false
+	}
+	return more, floor, true
 }
 
 func (r *containerLogRun) recoverFollower() {

@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -9,6 +10,10 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
+
+// errContainerLogsClusterNotActive reports a cluster whose handler is not
+// published, as while its refresh subsystem is rebuilt; a retry can succeed.
+var errContainerLogsClusterNotActive = errors.New("not active")
 
 // aggregateContainerLogsStreamHandler routes container logs stream requests to the requested cluster.
 type aggregateContainerLogsStreamHandler struct {
@@ -44,7 +49,7 @@ func (h *aggregateContainerLogsStreamHandler) Handle(
 	handler := h.handlers[targetID]
 	h.mu.RUnlock()
 	if handler == nil {
-		return fmt.Errorf("cluster %s not active", targetID)
+		return fmt.Errorf("cluster %s %w", targetID, errContainerLogsClusterNotActive)
 	}
 	handler.Handle(ctx, conn, request)
 	return nil

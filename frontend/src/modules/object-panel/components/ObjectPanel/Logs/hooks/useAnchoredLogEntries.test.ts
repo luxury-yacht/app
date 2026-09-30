@@ -42,4 +42,32 @@ describe('mergeAnchoredLogEntries', () => {
 
     expect(mergeAnchoredLogEntries(current, incoming)).toBe(current);
   });
+
+  // The buffer also changes in its middle: a deleted pod's lines are dropped,
+  // and a line that arrives late is inserted in time order.
+  it('drops lines the buffer removed from its middle', () => {
+    const [one, two, three, four, five, six] = [1, 2, 3, 4, 5, 6].map((n) => entry(n));
+    const current = [one, two, three, four, five];
+    const incoming = [one, three, five, six];
+
+    expect(mergeAnchoredLogEntries(current, incoming).map(({ line }) => line)).toEqual([
+      'line 1',
+      'line 3',
+      'line 5',
+      'line 6',
+    ]);
+  });
+
+  it('adds a line inserted into the middle of the buffer after the rows shown', () => {
+    const [one, two, three, five] = [1, 2, 3, 5].map((n) => entry(n));
+    const current = [one, three, five];
+    const incoming = [one, two, three, five];
+
+    expect(mergeAnchoredLogEntries(current, incoming).map(({ line }) => line)).toEqual([
+      'line 1',
+      'line 3',
+      'line 5',
+      'line 2',
+    ]);
+  });
 });

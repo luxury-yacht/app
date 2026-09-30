@@ -665,6 +665,14 @@ class RefreshOrchestrator {
     if (!normalizedScope) {
       return;
     }
+    // A stream owner can keep a stopped scope's data for a remount and would
+    // publish it again; resetting a scope nobody streams resets the owner too.
+    // A scope still in use keeps its stream.
+    const streaming = this.configs.get(domain)?.streaming;
+    if (streaming && !this.isScopedDomainEnabledInternal(domain, normalizedScope)) {
+      this.stopStreamingScope(domain, normalizedScope, streaming, true);
+      return;
+    }
     resetScopedDomainState(domain, normalizedScope);
   }
 

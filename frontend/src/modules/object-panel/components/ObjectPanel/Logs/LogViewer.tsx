@@ -574,10 +574,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [containerLogsScope, live, previous, previousPods, showPreviousContainerLogs, streamExpected]
   );
   const hiddenPods = useHiddenPods(source.entries, activePods);
-  const rawLogEntries = useMemo(
-    () => filterEntriesForHiddenPods(source.entries, hiddenPods),
-    [hiddenPods, source.entries]
-  );
 
   const anchoredLogSourceKey = useMemo(
     () =>
@@ -596,7 +592,17 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       showPreviousContainerLogs,
     ]
   );
-  const logEntries = useAnchoredLogEntries(rawLogEntries, isTailFollowing, anchoredLogSourceKey);
+  const anchoredLogEntries = useAnchoredLogEntries(
+    source.entries,
+    isTailFollowing,
+    anchoredLogSourceKey
+  );
+  // Hidden pods are filtered after anchoring, so the rows a paused view keeps
+  // cannot hold a hidden pod's lines.
+  const logEntries = useMemo(
+    () => filterEntriesForHiddenPods(anchoredLogEntries, hiddenPods),
+    [anchoredLogEntries, hiddenPods]
+  );
   const visibleLogWarnings = source.notices;
 
   const workloadPodsForSelector = useMemo(
@@ -833,28 +839,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   ]);
 
   useEffect(() => {
-    if (selectedFilters.mode !== 'some') {
-      return;
-    }
-    const hasSelectedContainerFilters = selectedFilters.values.some(
-      (filterValue) =>
-        filterValue.startsWith(INIT_FILTER_PREFIX) ||
-        filterValue.startsWith(CONTAINER_FILTER_PREFIX)
-    );
-    if (hasSelectedContainerFilters && containers.length === 0) {
-      return;
-    }
-    const validFilterValues = new Set(
-      selectorOptions.filter((option) => option.group !== 'header').map((option) => option.value)
-    );
-    if (validFilterValues.size === 0) {
-      return;
-    }
     const nextSelection = pruneLogFilterSelectionToOptions(selectedFilters, selectorOptions);
     if (nextSelection !== selectedFilters) {
       dispatch({ type: 'SET_SELECTED_FILTERS', payload: nextSelection });
     }
-  }, [containers.length, selectedFilters, selectorOptions]);
+  }, [selectedFilters, selectorOptions]);
 
   const logEmptyState = resolveLogEmptyState({
     isPendingLogs,
@@ -912,8 +901,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     filteredEntries.length
   );
   const hasAnsiLogEntries = useMemo(
-    () => rawLogEntries.some((entry) => containsAnsi(entry.line)),
-    [rawLogEntries]
+    () => logEntries.some((entry) => containsAnsi(entry.line)),
+    [logEntries]
   );
   const hasActiveResultFilter = hasActiveLogResultFilter(selectedFilters, textFilter);
 

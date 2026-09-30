@@ -60,8 +60,8 @@ export interface JobDetails {
     "conditions"?: string[] | null;
 
     /**
-     * Related pods
+     * The workload's pods: empty when it has none, null when they could not be listed.
      */
-    "pods"?: types$0.PodSimpleInfo[] | null;
+    "pods": types$0.PodSimpleInfo[] | null;
     "podMetricsSummary"?: types$0.PodMetricsSummary | null;
 }

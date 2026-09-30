@@ -25,11 +25,9 @@ func (g *ResourceGateway) FetchContainerLogs(clusterID string, req ContainerLogs
 		return ContainerLogsFetchResponse{Error: err.Error()}
 	}
 	service := pods.NewService(deps)
-	ctx, cancel := resourceFetchContext(g)
-	if cancel != nil {
-		defer cancel()
-	}
-	return service.FetchContainerLogs(ctx, req)
+	// No budget for the whole call: each container's read has its own timeout,
+	// and a shared one would fail the containers read last.
+	return service.FetchContainerLogs(g.CtxOrBackground(), req)
 }
 func (g *ResourceGateway) GetPodContainers(clusterID, namespace, podName string) ([]PodContainer, error) {
 	if err := requirePodObject(namespace, podName); err != nil {

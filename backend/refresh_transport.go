@@ -1,6 +1,8 @@
 package backend
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -62,24 +64,38 @@ func (c *RefreshCoordinator) HandleResourceStream(conn *application.StreamConn) 
 // HandleContainerLogsStream serves the container-logs named stream registered
 // by application composition.
 func (c *RefreshCoordinator) HandleContainerLogsStream(conn *application.StreamConn) {
+	c.serveContainerLogsStream(conn)
+}
+
+// containerLogsStreamConn is the part of a Wails stream connection the
+// container-logs stream uses.
+type containerLogsStreamConn interface {
+	containerlogsstream.JSONSender
+	ReceiveJSON(v any) error
+	Context() context.Context
+}
+
+func (c *RefreshCoordinator) serveContainerLogsStream(conn containerLogsStreamConn) {
 	var request containerlogsstream.Request
 	if err := conn.ReceiveJSON(&request); err != nil {
-		sendContainerLogsStreamError(conn, request.Scope, fmt.Sprintf("invalid container logs stream request: %v", err))
+		sendContainerLogsStreamError(conn, request.Scope, fmt.Sprintf("invalid container logs stream request: %v", err), false)
 		return
 	}
+	// The refresh subsystem and its cluster handlers are republished during
+	// recovery and cluster rebuilds, so a stream that arrives meanwhile retries.
 	aggregates := c.refreshAggregates.Load()
 	if aggregates == nil || aggregates.containerLogs == nil {
-		sendContainerLogsStreamError(conn, request.Scope, refreshSubsystemUnavailableMessage)
+		sendContainerLogsStreamError(conn, request.Scope, refreshSubsystemUnavailableMessage, true)
 		return
 	}
 	if err := aggregates.containerLogs.Handle(conn.Context(), conn, request); err != nil {
-		sendContainerLogsStreamError(conn, request.Scope, err.Error())
+		sendContainerLogsStreamError(conn, request.Scope, err.Error(), errors.Is(err, errContainerLogsClusterNotActive))
 	}
 }
 
-func sendContainerLogsStreamError(conn *application.StreamConn, scope, message string) {
+func sendContainerLogsStreamError(conn containerlogsstream.JSONSender, scope, message string, retryable bool) {
 	_ = conn.SendJSON(containerlogsstream.EventPayload{
 		Domain: "container-logs", Scope: strings.TrimSpace(scope), Sequence: 1,
-		GeneratedAt: time.Now().UnixMilli(), Error: message,
+		GeneratedAt: time.Now().UnixMilli(), Error: message, Retryable: retryable,
 	})
 }

@@ -1377,6 +1377,69 @@ describe('LogViewer active pod synchronisation', () => {
     }
   });
 
+  // Reading paused (scrolled up) during a rollout: the pod list drops a pod,
+  // whose lines leave the view, and every other line stays shown once.
+  it('hides a deleted pod while paused without repeating other lines', async () => {
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollHeight'
+    );
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientHeight'
+    );
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return this.classList.contains('logs-viewer-content') ? 400 : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return this.classList.contains('logs-viewer-content') ? 100 : 0;
+      },
+    });
+    const entry = (sequence: number, pod: string): ContainerLogsEntry => ({
+      _seq: sequence,
+      pod,
+      container: 'app',
+      line: `line ${sequence} from ${pod}`,
+      timestamp: `2024-05-01T10:00:0${sequence}Z`,
+      isInit: false,
+    });
+
+    try {
+      seedLogSnapshot([entry(1, 'web-2'), entry(2, 'web-1'), entry(3, 'web-2'), entry(4, 'web-1')]);
+      await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+      await flushAsync();
+      const content = await waitForElement(() =>
+        container.querySelector<HTMLDivElement>('.logs-viewer-content')
+      );
+      act(() => {
+        content.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+        content.scrollTop = 100;
+      });
+
+      await renderViewer({ activePodNames: ['web-1'] });
+      await flushAsync();
+
+      const shown = Array.from(container.querySelectorAll('.log-viewer-line')).map(
+        (line) => line.textContent ?? ''
+      );
+      expect(shown.filter((line) => line.includes('web-2'))).toEqual([]);
+      expect(shown.filter((line) => line.includes('line 2 from web-1'))).toHaveLength(1);
+      expect(shown.filter((line) => line.includes('line 4 from web-1'))).toHaveLength(1);
+    } finally {
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+      }
+      if (originalClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
+      }
+    }
+  });
+
   it('colors API timestamps and container metadata only when showing all containers', async () => {
     (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
       scopeContainer('app'),
@@ -2328,6 +2391,38 @@ describe('LogViewer active pod synchronisation', () => {
     });
     expect(filterLabel('pods')).toBe('Pods (0)');
     expect(filterLabel('containers')).toBe('Containers (1)');
+  });
+
+  // Without a pod list, the Pods dropdown offers the pods with lines. Choosing
+  // no pods empties the buffer and so the dropdown's options; the choice stays
+  // instead of reverting to every pod and reading them all again.
+  it('keeps no pods chosen once the buffer has no pods to offer', async () => {
+    seedLogSnapshot(
+      [
+        {
+          pod: 'web-1',
+          container: 'app',
+          line: 'first',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+      ],
+      defaultScope
+    );
+    await renderViewer({ activePodNames: null });
+    await flushAsync();
+    const podFilter = await waitForElement(() =>
+      container.querySelector<HTMLSelectElement>('[data-testid="logs-pods-dropdown"]')
+    );
+
+    await setMultiSelectValues(podFilter, []);
+    await flushAsync();
+    await act(async () => {
+      seedLogSnapshot([], defaultScope);
+    });
+    await flushAsync();
+
+    expect(getContainerLogsStreamScopeParams(defaultScope)?.matchNone).toBe(true);
   });
 
   it('filters workload logs when pod and container metadata are clicked', async () => {

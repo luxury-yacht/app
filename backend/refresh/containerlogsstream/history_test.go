@@ -160,6 +160,43 @@ func TestFirstSnapshotReadsABusyContainerAgain(t *testing.T) {
 	}
 }
 
+// A busy container whose second read fails still delivers every line the
+// buffer can hold: its follow request reads from the cut-off instead.
+func TestFailedSecondReadFollowsFromTheCutOff(t *testing.T) {
+	busySeconds := make([]int, 20)
+	for i := range busySeconds {
+		busySeconds[i] = 100 + i
+	}
+	logs := map[string][]logLine{
+		"busy": linesAt("busy", busySeconds...),
+		"q0":   linesAt("q0", 0, 1, 2, 3, 4),
+		"q1":   linesAt("q1", 5, 6, 7, 8, 9),
+		"q2":   linesAt("q2", 10, 11, 12, 13, 14),
+	}
+	respond := kubeletLogs(logs)
+	session := startLogSession(t, sessionSetup{
+		request: Request{Scope: "cluster-a|default:/v1:Pod:web-0", MaxEntries: 8},
+		objects: []runtime.Object{runningPod("web-0", "busy", "q0", "q1", "q2")},
+		respond: func(opts *corev1.PodLogOptions) logResponse {
+			if opts.Container == "busy" && !opts.Follow && opts.SinceTime != nil {
+				return logResponse{status: http.StatusInternalServerError, body: "boom"}
+			}
+			return respond(opts)
+		},
+	})
+
+	newest := []string{"busy-12", "busy-13", "busy-14", "busy-15", "busy-16", "busy-17", "busy-18", "busy-19"}
+	require.Equal(t, newest, entryLines(session.snapshot(t)), "the snapshot holds the newest lines overall")
+	require.Equal(t, newest, session.settledLines(t, 8), "each line arrives once")
+	session.waitForFollow(t, "busy")
+	busy := session.requestsFor("busy")
+	require.Len(t, busy, 3)
+	require.True(t, busy[2].follow)
+	require.EqualValues(t, 8, busy[2].tail)
+	require.NotNil(t, busy[2].since)
+	require.True(t, busy[2].since.Equal(historyOrigin.Add(11*time.Second)), "follow from the cut-off, %v", busy[2].since)
+}
+
 // Lines written between a container's history read and its follow request
 // arrive once.
 func TestFollowAfterAHistoryReadDeliversEachLineOnce(t *testing.T) {

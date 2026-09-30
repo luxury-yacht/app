@@ -67,6 +67,33 @@ describe('logFilterSelection', () => {
     expect(logFilterSelectionLabel(selection.values[0])).toBe('No containers');
   });
 
+  // A group without options has not listed its sources yet (a ReplicaSet's
+  // pods before any line arrives, containers before the inventory loads), so
+  // its choice is kept instead of reverting to all.
+  it('keeps a group choice while that group has no options', () => {
+    const containerOptions = options.filter((option) => option.group === 'Containers');
+    const podOptions = options.filter((option) => option.group === 'Pods');
+    const noPods = logFilterSelectionFromDropdownValues(
+      ['container:app', 'container:sidecar'],
+      options
+    );
+    const onePod = { mode: 'some' as const, values: ['pod:web-1'] };
+    const debugContainer = { mode: 'some' as const, values: ['debug:shell'] };
+
+    expect(pruneLogFilterSelectionToOptions(noPods, containerOptions)).toEqual(noPods);
+    expect(pruneLogFilterSelectionToOptions(onePod, containerOptions)).toEqual(onePod);
+    expect(pruneLogFilterSelectionToOptions(debugContainer, podOptions)).toEqual(debugContainer);
+  });
+
+  it('drops a chosen pod that the listed pods no longer include', () => {
+    const selection = { mode: 'some' as const, values: ['pod:web-3', 'container:app'] };
+
+    expect(pruneLogFilterSelectionToOptions(selection, options)).toEqual({
+      mode: 'some',
+      values: ['container:app'],
+    });
+  });
+
   it('replaces an empty pod group when selecting only one pod', () => {
     const selection = logFilterSelectionFromDropdownValues(
       ['container:app', 'container:sidecar'],

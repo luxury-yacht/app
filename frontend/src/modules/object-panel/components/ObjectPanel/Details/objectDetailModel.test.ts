@@ -132,6 +132,30 @@ describe('objectDetailModel', () => {
     expect(model.desiredScaleReplicas).toBe(0);
   });
 
+  // The Logs tab hides lines of pods missing from a known pod list, and hides
+  // nothing while the list is unknown.
+  it('keeps a workload with no pods apart from one whose pods could not be listed', () => {
+    const scaledToZero = buildObjectDetailModel(null, 'deployment', {
+      pods: [],
+    } as unknown as deployment.DeploymentDetails);
+    const unlisted = buildObjectDetailModel(null, 'cronjob', {
+      pods: null,
+    } as unknown as cronjob.CronJobDetails);
+    const loading = buildObjectDetailModel(null, 'deployment', null);
+
+    expect(scaledToZero.activePodNames).toEqual([]);
+    expect(unlisted.activePodNames).toBeNull();
+    expect(loading.activePodNames).toBeNull();
+  });
+
+  it('lists the pods of a ReplicaSet', () => {
+    const model = buildObjectDetailModel(null, 'replicaset', {
+      pods: [{ name: 'web-abc12' }],
+    } as unknown as replicaset.ReplicaSetDetails);
+
+    expect(model.activePodNames).toEqual(['web-abc12']);
+  });
+
   it('does not derive activePodNames for a Node even though NodeDetails carries pods', () => {
     const model = buildObjectDetailModel(null, 'node', {
       pods: [{ name: 'p' }],

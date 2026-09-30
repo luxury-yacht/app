@@ -153,6 +153,11 @@ states plus refresh metadata. Global metrics demand is independently reduced as
 `idle`, `requesting`, or `waiting-retry`; only the matching demand key may
 complete or schedule a retry.
 
+Disabling a scope with `preserveState` lets its stream owner keep the scope's data
+for a remount. Resetting a streaming scope that no consumer has enabled therefore
+also resets its owner (`stop(scope, { reset: true })`), so a closed panel's data is
+released; an enabled scope keeps its stream and only its store state is reset.
+
 One-shot broker reads hold independent scope leases through completion. Overlapping
 reads coalesce without aborting their owners; a caller that arrives during a read
 waits for the trailing snapshot before releasing its lease. Explicit manual refresh

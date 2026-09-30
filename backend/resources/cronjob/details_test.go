@@ -8,6 +8,7 @@ package cronjob_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -85,9 +86,9 @@ func TestCronJobServiceCollectsPods(t *testing.T) {
 	require.Contains(t, detail.Details, "Schedule: "+cron.Spec.Schedule)
 }
 
-// When one Job's pods cannot be listed, the pod list is left empty rather than
-// partial: the Logs tab hides the lines of pods missing from a non-empty list.
-func TestCronJobServiceLeavesPodsEmptyWhenAJobsPodsCannotBeListed(t *testing.T) {
+// When one Job's pods cannot be listed, the pod list is sent as unknown rather
+// than partial: the Logs tab hides the lines of pods missing from a known list.
+func TestCronJobServiceSendsNoPodListWhenAJobsPodsCannotBeListed(t *testing.T) {
 	cron := testsupport.CronJobFixture("default", "nightly")
 	cron.UID = types.UID("cron-nightly")
 	owner := []metav1.OwnerReference{{APIVersion: "batch/v1", Kind: "CronJob", Name: cron.Name, UID: cron.UID, Controller: ptrTo(true)}}
@@ -111,7 +112,25 @@ func TestCronJobServiceLeavesPodsEmptyWhenAJobsPodsCannotBeListed(t *testing.T) 
 
 	detail, err := cronjob.NewService(newDeps(t, client)).CronJob(context.Background(), "default", "nightly")
 	require.NoError(t, err)
-	require.Empty(t, detail.Pods)
+	raw, err := json.Marshal(detail)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"pods":null`)
+}
+
+// A CronJob whose Jobs have no pods says so, so the Logs tab hides the lines
+// of the pods it had.
+func TestCronJobServiceListsNoPodsWhenItsJobsHaveNone(t *testing.T) {
+	cron := testsupport.CronJobFixture("default", "nightly")
+	cron.UID = types.UID("cron-nightly")
+	job := testsupport.JobFixture("default", "nightly-001")
+	job.OwnerReferences = []metav1.OwnerReference{{APIVersion: "batch/v1", Kind: "CronJob", Name: cron.Name, UID: cron.UID, Controller: ptrTo(true)}}
+	client := cgofake.NewClientset(cron, job)
+
+	detail, err := cronjob.NewService(newDeps(t, client)).CronJob(context.Background(), "default", "nightly")
+	require.NoError(t, err)
+	raw, err := json.Marshal(detail)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"pods":[]`)
 }
 
 func TestCronJobServiceComputesNextScheduleBeforeFirstRun(t *testing.T) {

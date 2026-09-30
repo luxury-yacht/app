@@ -663,6 +663,59 @@ describe('refreshOrchestrator', () => {
     await vi.waitFor(() => expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(2));
   });
 
+  // Closing an object panel resets its scopes after its Logs tab stopped with
+  // its lines kept for a remount; the stream owner must drop them too, or a
+  // reopened panel shows the old lines.
+  it('resets the stream owner when a scope nobody streams is reset', () => {
+    const scope = buildClusterScope('cluster-a', 'pod:default/web/container:app');
+    refreshOrchestrator.registerDomain({
+      domain: 'container-logs',
+      refresherName: SYSTEM_REFRESHERS.containerLogs,
+      category: 'system',
+      streaming: {
+        snapshotless: true,
+        start: (streamScope) => containerLogsStreamMocks.start(streamScope),
+        stop: (streamScope, options) => containerLogsStreamMocks.stop(streamScope, options),
+      },
+    });
+    refreshOrchestrator.setScopedDomainEnabled('container-logs', scope, true, {
+      preserveState: true,
+    });
+    refreshOrchestrator.setScopedDomainEnabled('container-logs', scope, false, {
+      preserveState: true,
+    });
+    containerLogsStreamMocks.stop.mockClear();
+
+    refreshOrchestrator.resetScopedDomain('container-logs', scope);
+
+    expect(containerLogsStreamMocks.stop).toHaveBeenCalledWith(scope, { reset: true });
+  });
+
+  it('leaves a streamed scope running when its state is reset', () => {
+    const scope = buildClusterScope('cluster-a', 'pod:default/api/container:app');
+    refreshOrchestrator.registerDomain({
+      domain: 'container-logs',
+      refresherName: SYSTEM_REFRESHERS.containerLogs,
+      category: 'system',
+      streaming: {
+        snapshotless: true,
+        start: (streamScope) => containerLogsStreamMocks.start(streamScope),
+        stop: (streamScope, options) => containerLogsStreamMocks.stop(streamScope, options),
+      },
+    });
+    refreshOrchestrator.setScopedDomainEnabled('container-logs', scope, true, {
+      preserveState: true,
+    });
+    containerLogsStreamMocks.stop.mockClear();
+
+    refreshOrchestrator.resetScopedDomain('container-logs', scope);
+
+    expect(containerLogsStreamMocks.stop).not.toHaveBeenCalled();
+    refreshOrchestrator.setScopedDomainEnabled('container-logs', scope, false, {
+      preserveState: true,
+    });
+  });
+
   it('holds the stream-only domain during activation and starts it on release', async () => {
     const clusterId = 'cluster-cold';
     const scope = buildClusterScope(clusterId, 'pod:default/web/container:app');

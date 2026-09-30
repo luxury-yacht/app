@@ -58,8 +58,8 @@ type StatefulSetDetails struct {
 	// `spec.volumeClaimTemplates`.
 	VolumeClaimTemplates []VolumeClaimTemplateSummary `json:"volumeClaimTemplates,omitempty"`
 
-	// Pod information
-	Pods              []restypes.PodSimpleInfo    `json:"pods,omitempty"`
+	// The workload's pods: empty when it has none, null when they could not be listed.
+	Pods              []restypes.PodSimpleInfo    `json:"pods"`
 	PodMetricsSummary *restypes.PodMetricsSummary `json:"podMetricsSummary,omitempty"`
 
 	// Revision information

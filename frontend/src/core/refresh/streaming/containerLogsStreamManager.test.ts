@@ -314,6 +314,22 @@ describe('ContainerLogsStreamManager', () => {
     manager.stopAll(true);
   });
 
+  // A closed panel's scope is reset after its Logs tab stopped keeping its
+  // lines; reopening starts empty and reads full history.
+  test('forgets a stopped scope once it is reset', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, [entry('2024-01-01T00:00:01Z', 'old')]);
+    manager.stop(SCOPE, false);
+
+    manager.stop(SCOPE, true);
+    manager.startStream(SCOPE);
+    await flushOpen();
+
+    expect(lines()).toEqual([]);
+    expect((FakeStream.latest().sent[0] as { resume?: unknown[] }).resume).toBeUndefined();
+    manager.stopAll(true);
+  });
+
   const resumeBuffer = [
     entry('2024-01-01T00:00:01Z', 'a-1'),
     entry('2024-01-01T00:00:02Z', 'b-1', 'web-1'),

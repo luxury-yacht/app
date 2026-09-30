@@ -8,6 +8,7 @@ package deployment_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/resources/deployment"
@@ -109,4 +110,18 @@ func TestDeploymentServiceDeployment(t *testing.T) {
 	if ownerKinds["web-0"] != "Deployment" || ownerKinds["web-1"] != "Deployment" {
 		t.Fatalf("expected pods to resolve to Deployment owner, got %+v", ownerKinds)
 	}
+}
+
+// A Deployment scaled to zero says it has no pods, so the Logs tab hides the
+// lines of the pods it had.
+func TestDeploymentDetailsListNoPodsWhenScaledToZero(t *testing.T) {
+	deploy := testsupport.DeploymentFixture("default", "web", testsupport.DeploymentWithReplicas(0))
+	client := cgofake.NewClientset(deploy)
+
+	detail, err := deployment.NewService(testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(client))).
+		Deployment(context.Background(), "default", "web")
+	require.NoError(t, err)
+	raw, err := json.Marshal(detail)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"pods":[]`)
 }

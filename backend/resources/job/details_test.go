@@ -8,6 +8,8 @@ package job_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -15,8 +17,10 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	cgofake "k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -78,4 +82,31 @@ func newDeps(t testing.TB, client *cgofake.Clientset) common.Dependencies {
 		testsupport.WithDepsLogger(applog.Noop),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
+}
+
+// A Job's pod list says whether it was read: an empty list hides the lines of
+// the Job's former pods in the Logs tab, while a list that could not be read
+// hides nothing.
+func TestJobDetailsSayWhetherItsPodsCouldBeListed(t *testing.T) {
+	t.Run("no pods", func(t *testing.T) {
+		client := cgofake.NewClientset(testsupport.JobFixture("default", "report"))
+
+		detail, err := job.NewService(newDeps(t, client)).Job(context.Background(), "default", "report")
+		require.NoError(t, err)
+		raw, err := json.Marshal(detail)
+		require.NoError(t, err)
+		require.Contains(t, string(raw), `"pods":[]`)
+	})
+	t.Run("pod list fails", func(t *testing.T) {
+		client := cgofake.NewClientset(testsupport.JobFixture("default", "report"))
+		client.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errors.New("apiserver unavailable")
+		})
+
+		detail, err := job.NewService(newDeps(t, client)).Job(context.Background(), "default", "report")
+		require.NoError(t, err)
+		raw, err := json.Marshal(detail)
+		require.NoError(t, err)
+		require.Contains(t, string(raw), `"pods":null`)
+	})
 }

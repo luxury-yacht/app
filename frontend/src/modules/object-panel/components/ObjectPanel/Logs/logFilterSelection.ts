@@ -183,6 +183,14 @@ export const logFilterSelectionLabel = (value: string): string | null => {
 const sameValues = (left: readonly string[], right: readonly string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
+const sourceGroupOf = (value: string): LogSourceGroup =>
+  value === LOG_PODS_NONE_FILTER || isPodValue(value) ? 'pods' : 'containers';
+
+/**
+ * Drops chosen sources the options no longer offer. A group without options
+ * has not listed its sources yet (pods before any line or pod list, containers
+ * before the inventory), so its part of the selection is kept.
+ */
 export const pruneLogFilterSelectionToOptions = (
   selection: MultiSelectFilterSelection,
   options: readonly DropdownOption[]
@@ -193,12 +201,14 @@ export const pruneLogFilterSelectionToOptions = (
 
   const pods = selectableValues(options, isPodValue);
   const containers = selectableValues(options, isContainerValue);
+  const listed = { pods: pods.length > 0, containers: containers.length > 0 };
   const available = new Set([...pods, ...containers]);
   const values = selection.values.filter(
     (value) =>
-      available.has(value) ||
-      (value === LOG_PODS_NONE_FILTER && pods.length > 0) ||
-      (value === LOG_CONTAINERS_NONE_FILTER && containers.length > 0)
+      value === LOG_PODS_NONE_FILTER ||
+      value === LOG_CONTAINERS_NONE_FILTER ||
+      !listed[sourceGroupOf(value)] ||
+      available.has(value)
   );
 
   if (values.includes(LOG_PODS_NONE_FILTER) && values.includes(LOG_CONTAINERS_NONE_FILTER)) {
