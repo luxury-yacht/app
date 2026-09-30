@@ -12,7 +12,7 @@
 - Container logs pick up where they left off when the app window is shown again, the connection drops, or auto-refresh is turned back on, instead of downloading every container's history again.
 - Opening container logs for a workload with many containers downloads far less: about one buffer of history in total instead of one buffer per container.
 - Pods that start while a Logs tab is open download less: they read nothing older than the tab can still show, and pods starting together share one buffer of history.
-- A Logs tab that resumes after being hidden or reconnecting drops the lines of pods that ended in the meantime, so they no longer take up room in the buffer.
+- The Logs tab drops the lines of pods that were deleted, whether while the tab was open or while it was hidden, so they no longer take up room in the buffer. A StatefulSet pod recreated under the same name keeps its earlier lines.
 - The Logs tab's source dropdown is now two dropdowns, Pods and Containers, each with its own All and None.
 
 ### Fixed

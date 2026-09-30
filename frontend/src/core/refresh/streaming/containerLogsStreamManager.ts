@@ -641,6 +641,9 @@ export class ContainerLogsStreamManager {
       case 'append-entries':
         buffer.insert(effect.entries, nextSeq);
         return false;
+      case 'remove-pods':
+        buffer.dropPods(effect.pods);
+        return false;
       case 'replace-warnings':
         buffer.warnings = effect.warnings;
         return false;

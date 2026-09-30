@@ -84,7 +84,8 @@ type Entry struct {
 // resume points were used, the first frame also carries Resumed: the snapshot
 // holds only what follows them and adds to the client's buffer instead of
 // replacing it, and RemovedPods names the resumed pods that no longer exist,
-// whose lines the client drops. Live batches and
+// whose lines the client drops. A live frame names a pod deleted during the
+// session the same way, once no pod with its name has come back. Live batches and
 // warning or issue updates follow. Warnings and Issues, when present, replace
 // the previous lists. A frame with Error is fatal and the stream then closes;
 // Retryable says whether reconnecting can help.

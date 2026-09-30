@@ -245,15 +245,16 @@ func (s *containerLogsStream) run(ctx context.Context, initial containerLogsInit
 	sent := newSentLines(s.options.MaxEntries, s.options.MaxBytes)
 	issues := newIssueSet()
 	warnings := make(chan []containerlogs.Warning, 8)
+	removed := make(chan string, 16)
 	fatal := make(chan error, 1)
 	runnerDone := s.startRunner(ctx, initial, containerLogRunConfig{
 		opts: s.options, limiterSession: limiterSession, initialWarnings: initial.warnings,
-		sink: pending, snapshot: snapshot, warningsCh: warnings, issues: issues, sent: sent, fatal: fatal,
+		sink: pending, snapshot: snapshot, warningsCh: warnings, issues: issues, sent: sent, removed: removed, fatal: fatal,
 	})
 	delivery := newContainerLogsDelivery(s, pending, issues, initial.warnings)
 	delivery.sent = sent
 	delivery.removedPods = absentResumedPods(s.options.Resume, initial.pods)
-	events := deliveryEvents{runnerDone: runnerDone, warnings: warnings, fatal: fatal}
+	events := deliveryEvents{runnerDone: runnerDone, warnings: warnings, removed: removed, fatal: fatal}
 	if !delivery.sendSnapshot(ctx, snapshot.done, events) {
 		return
 	}
@@ -281,6 +282,7 @@ func (s *containerLogsStream) recoverRunner() {
 type deliveryEvents struct {
 	runnerDone <-chan struct{}
 	warnings   <-chan []containerlogs.Warning
+	removed    <-chan string
 	fatal      <-chan error
 }
 
@@ -419,6 +421,8 @@ func (d *containerLogsDelivery) step(ctx context.Context, events deliveryEvents)
 	case next := <-events.warnings:
 		d.selectionWarnings = append(d.selectionWarnings[:0], next...)
 		return d.emitWarningUpdate()
+	case name := <-events.removed:
+		return d.emitRemoval(name)
 	case <-d.issues.notify:
 		return d.emitIssueUpdate()
 	case <-d.pending.notify:
@@ -485,6 +489,20 @@ func (d *containerLogsDelivery) emitIssueUpdate() bool {
 		return true
 	}
 	d.emittedIssues = next
+	return false
+}
+
+// emitRemoval tells the client to drop a removed pod's lines, after sending
+// any of them still pending so none arrive later.
+func (d *containerLogsDelivery) emitRemoval(pod string) bool {
+	if d.flush() {
+		return true
+	}
+	if err := d.request.writePayload(EventPayload{RemovedPods: []string{pod}}); err != nil {
+		d.request.recordError(err)
+		return true
+	}
+	d.sent.dropPod(pod)
 	return false
 }
 

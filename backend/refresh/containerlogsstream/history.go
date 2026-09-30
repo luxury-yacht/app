@@ -17,10 +17,11 @@ import (
 type lineRecord struct {
 	timestamp string
 	size      int
+	pod       string
 }
 
 func recordOf(entry Entry) lineRecord {
-	return lineRecord{timestamp: entry.Timestamp, size: len(entry.Line)}
+	return lineRecord{timestamp: entry.Timestamp, size: len(entry.Line), pod: entry.Pod}
 }
 
 func newRecordWindow(maxEntries, maxBytes int) *containerlogs.NewestWindow[lineRecord] {
@@ -44,12 +45,13 @@ func oldestHeld(kept []lineRecord, leftOut, maxEntries int) time.Time {
 // is never older than theirs.
 type sentLines struct {
 	maxEntries int
+	maxBytes   int
 	mu         sync.Mutex
 	window     *containerlogs.NewestWindow[lineRecord]
 }
 
 func newSentLines(maxEntries, maxBytes int) *sentLines {
-	return &sentLines{maxEntries: maxEntries, window: newRecordWindow(maxEntries, maxBytes)}
+	return &sentLines{maxEntries: maxEntries, maxBytes: maxBytes, window: newRecordWindow(maxEntries, maxBytes)}
 }
 
 func (s *sentLines) add(entries []Entry) {
@@ -60,6 +62,23 @@ func (s *sentLines) add(entries []Entry) {
 	defer s.mu.Unlock()
 	for _, entry := range entries {
 		s.window.Add(recordOf(entry))
+	}
+}
+
+// dropPod forgets the lines of a pod the client dropped. The client then has
+// room again, so nothing counts as evicted until it fills up.
+func (s *sentLines) dropPod(pod string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	kept, _ := s.window.Kept()
+	s.window = newRecordWindow(s.maxEntries, s.maxBytes)
+	for _, record := range kept {
+		if record.pod != pod {
+			s.window.Add(record)
+		}
 	}
 }
 

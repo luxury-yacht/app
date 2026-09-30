@@ -451,6 +451,21 @@ describe('ContainerLogsStreamManager', () => {
     manager.stopAll(true);
   });
 
+  test('drops the lines of a pod that ended during the session', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, [
+      entry('2024-01-01T00:00:01Z', 'kept', 'web-0'),
+      entry('2024-01-01T00:00:02Z', 'gone', 'web-1'),
+    ]);
+
+    FakeStream.latest().receive({ removedPods: ['web-1'] });
+
+    expect(lines()).toEqual(['kept']);
+    expect(state().data?.pods).toEqual(['web-0']);
+    expect(state().data?.truncation).toBeNull();
+    manager.stopAll(true);
+  });
+
   test('lists the pods that have lines in the buffer', async () => {
     const manager = new ContainerLogsStreamManager({ maxEntries: 2 });
     await startLive(manager, [

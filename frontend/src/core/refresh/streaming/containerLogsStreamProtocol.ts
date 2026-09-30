@@ -140,6 +140,7 @@ export type ContainerLogsProtocolEffect =
       issues: ContainerLogsTargetIssue[];
     }
   | { type: 'append-entries'; entries: ContainerLogsWireEntry[] }
+  | { type: 'remove-pods'; pods: string[] }
   | { type: 'replace-warnings'; warnings: ContainerLogsWarning[] }
   | { type: 'replace-issues'; issues: ContainerLogsTargetIssue[] }
   | { type: 'schedule-reconnect'; attempt: number }
@@ -252,6 +253,9 @@ const receiveLiveFrame = (
   const effects: ContainerLogsProtocolEffect[] = [];
   if (frame.entries?.length) {
     effects.push({ type: 'append-entries', entries: frame.entries });
+  }
+  if (frame.removedPods?.length) {
+    effects.push({ type: 'remove-pods', pods: frame.removedPods });
   }
   if (frame.warnings !== undefined) {
     effects.push({ type: 'replace-warnings', warnings: frame.warnings ?? [] });

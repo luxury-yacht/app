@@ -35,6 +35,7 @@ type Streamer struct {
 	caughtUpIdle    time.Duration
 	historyGather   time.Duration
 	historyDecision time.Duration
+	removedPodGrace time.Duration
 }
 
 // NewStreamer constructs a Streamer.
@@ -52,6 +53,7 @@ func NewStreamer(client kubernetes.Interface, logger Logger, recorder *telemetry
 		caughtUpIdle:    config.ContainerLogsStreamCaughtUpIdle,
 		historyGather:   config.ContainerLogsStreamHistoryGather,
 		historyDecision: config.ContainerLogsStreamHistoryDecision,
+		removedPodGrace: config.ContainerLogsStreamRemovedPodGrace,
 	}
 }
 
@@ -206,7 +208,13 @@ type containerLogRun struct {
 	// followerExited wakes the run loop so a target waiting on its previous
 	// follower, or a restarted container, is started.
 	followerExited chan struct{}
-	forbiddenOnce  sync.Once
+	// removed names pods that ended and did not come back, so the client drops
+	// their lines; nil without a client. removals holds each deleted pod's grace
+	// timer and removalDue receives it when it fires; both belong to the run loop.
+	removed       chan<- string
+	removals      map[string]*time.Timer
+	removalDue    chan string
+	forbiddenOnce sync.Once
 
 	mu          sync.Mutex
 	targetWG    sync.WaitGroup
@@ -235,6 +243,8 @@ type containerLogRunConfig struct {
 	issues          *issueSet
 	// sent follows the lines sent to the client; nil without a client.
 	sent *sentLines
+	// removed receives pods that ended and did not come back.
+	removed chan<- string
 	// fatal receives a failure that ends the session.
 	fatal chan<- error
 }
@@ -250,6 +260,7 @@ func newContainerLogRun(streamer *Streamer, config containerLogRunConfig, podWat
 		streamer: streamer, opts: config.opts, podWatch: podWatch, limiterSession: config.limiterSession,
 		sink: config.sink, snapshot: config.snapshot, warningsCh: config.warningsCh, issues: config.issues,
 		fatal: config.fatal, followerExited: make(chan struct{}, 1),
+		removed: config.removed, removals: map[string]*time.Timer{}, removalDue: make(chan string, 16),
 		currentPods: map[string]*corev1.Pod{}, seeded: map[string]struct{}{}, followers: map[string]context.CancelFunc{},
 		finished: map[string]string{}, cursors: map[string]containerlogs.ResumeCursor{},
 		currentWarnings: append([]containerlogs.Warning(nil), config.initialWarnings...),
@@ -274,11 +285,16 @@ func (r *containerLogRun) serve(ctx context.Context, events <-chan podEvent) {
 			r.reconcileTargets(ctx)
 		case <-r.followerExited:
 			r.reconcileTargets(ctx)
+		case name := <-r.removalDue:
+			r.reportRemoval(ctx, name)
 		}
 	}
 }
 
 func (r *containerLogRun) shutdown() {
+	for _, timer := range r.removals {
+		timer.Stop()
+	}
 	r.mu.Lock()
 	cancels := make([]context.CancelFunc, 0, len(r.followers))
 	for _, cancel := range r.followers {
@@ -596,6 +612,7 @@ func (r *containerLogRun) applyPodEvent(ctx context.Context, event podEvent) {
 	r.mu.Lock()
 	r.currentPods[event.pod.Name] = event.pod
 	r.mu.Unlock()
+	r.cancelRemoval(event.pod.Name)
 	r.reconcileTargets(ctx)
 }
 
@@ -641,7 +658,46 @@ func (r *containerLogRun) removePod(ctx context.Context, name string) {
 	}
 	r.mu.Unlock()
 	if known {
+		r.scheduleRemoval(ctx, name)
 		r.reconcileTargets(ctx)
+	}
+}
+
+// scheduleRemoval names the pod to the client once the grace has passed, so it
+// drops the pod's lines. A pod recreated with the same name in the meantime (a
+// StatefulSet pod) keeps them.
+func (r *containerLogRun) scheduleRemoval(ctx context.Context, name string) {
+	if r.removed == nil {
+		return
+	}
+	r.cancelRemoval(name)
+	r.removals[name] = time.AfterFunc(r.streamer.removedPodGrace, func() {
+		select {
+		case r.removalDue <- name:
+		case <-ctx.Done():
+		}
+	})
+}
+
+func (r *containerLogRun) cancelRemoval(name string) {
+	if timer, pending := r.removals[name]; pending {
+		timer.Stop()
+		delete(r.removals, name)
+	}
+}
+
+// reportRemoval names a removed pod unless it came back after its timer fired.
+func (r *containerLogRun) reportRemoval(ctx context.Context, name string) {
+	delete(r.removals, name)
+	r.mu.Lock()
+	_, present := r.currentPods[name]
+	r.mu.Unlock()
+	if present {
+		return
+	}
+	select {
+	case r.removed <- name:
+	case <-ctx.Done():
 	}
 }
 

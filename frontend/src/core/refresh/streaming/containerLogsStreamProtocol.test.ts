@@ -133,6 +133,11 @@ describe('transitionContainerLogsProtocol', () => {
     ]);
   });
 
+  it('removes the pods a live frame says ended', () => {
+    const transition = receive(live(), { removedPods: ['web-1'] });
+    expect(transition.effects).toEqual([{ type: 'remove-pods', pods: ['web-1'] }]);
+  });
+
   it('applies live batches and replaces warnings and issues', () => {
     const transition = receive(live(), {
       entries: [entry('live')],

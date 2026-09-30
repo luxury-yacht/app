@@ -37,6 +37,8 @@ type sessionSetup struct {
 	objects []runtime.Object
 	respond func(*corev1.PodLogOptions) logResponse
 	prepare func(*fake.Clientset)
+	// tune adjusts the streamer's timings.
+	tune func(*Streamer)
 }
 
 func startLogSession(t *testing.T, setup sessionSetup) *logSession {
@@ -52,6 +54,9 @@ func startLogSession(t *testing.T, setup sessionSetup) *logSession {
 	}}
 	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
 	require.NoError(t, err)
+	if setup.tune != nil {
+		setup.tune(handler.streamer)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	session := &logSession{logs: logs, conn: newNativeLogStreamConn(), cancel: cancel, done: make(chan struct{})}
 	go func() {

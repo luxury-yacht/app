@@ -72,6 +72,8 @@ Server frames, generated into `types.generated.ts`:
   request's resume points were used, the first frame carries `resumed`: the
   snapshot holds only lines after them, plus history for containers without
   one, and `removedPods` names the resumed pods that no longer exist.
+- **Removed pods.** A live frame's `removedPods` names a pod deleted during the
+  session whose name has not come back within 10 s; the client drops its lines.
 - **Live batches.** At most 64 entries and one frame budget, flushed every
   250 ms. History that arrives after the snapshot is always sent; the client
   inserts it in time order.
@@ -88,9 +90,10 @@ A restarted stream (a reconnect, the window shown again, auto-refresh turned
 back on) resumes, and its `resumed` snapshot is merged into the buffer, as live
 lines are. Its first frame names, in `removedPods`, the resumed pods that no
 longer exist, and the client drops their lines; a pod recreated with the same
-name exists and keeps its lines. A pod that ends during a live session keeps its
-lines until newer ones push them out (the view hides them), since a live
-deletion may be a same-name recreation. A
+name exists and keeps its lines. A pod deleted during a live session is named the
+same way in a live frame once 10 s pass without a pod of that name coming back,
+so a StatefulSet pod recreated under its name keeps its earlier lines; the
+backend sends the pod's pending lines first. A
 selection change, a larger buffer size, an empty buffer, or resume points the
 backend cannot use (one unusable point voids them all) read full history, and
 that snapshot replaces the buffer; an identical one keeps entry render identity

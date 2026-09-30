@@ -283,6 +283,11 @@ const (
 	// containers that start during it before reading their history together.
 	ContainerLogsStreamHistoryGather = 250 * time.Millisecond
 
+	// ContainerLogsStreamRemovedPodGrace is how long a session waits after a
+	// pod is deleted before telling the client to drop its lines; a pod
+	// recreated with the same name in that time (a StatefulSet pod) keeps them.
+	ContainerLogsStreamRemovedPodGrace = 10 * time.Second
+
 	// ContainerLogsStreamCaughtUpIdle is how long an opened log stream may go
 	// without a line before its history counts as delivered. Kubelet sends
 	// history back-to-back, so a gap this long ends it.
