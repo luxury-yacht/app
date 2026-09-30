@@ -68,9 +68,10 @@ import {
 } from './containerLogRows';
 import { formatTimestampForMode } from './containerLogTimestamps';
 import {
-  filterEntriesForActivePods,
+  filterEntriesForHiddenPods,
   getWorkloadPodNames,
   useActivePodSet,
+  useHiddenPods,
 } from './hooks/useActivePodSet';
 import { useAnchoredLogEntries } from './hooks/useAnchoredLogEntries';
 import { useLogMessageRenderer } from './hooks/useLogMessageRenderer';
@@ -561,9 +562,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       }),
     [containerLogsScope, live, previous, showPreviousContainerLogs, streamExpected]
   );
+  const hiddenPods = useHiddenPods(source.entries, activePods);
   const rawLogEntries = useMemo(
-    () => filterEntriesForActivePods(source.entries, activePods),
-    [activePods, source.entries]
+    () => filterEntriesForHiddenPods(source.entries, hiddenPods),
+    [hiddenPods, source.entries]
   );
 
   const anchoredLogSourceKey = useMemo(

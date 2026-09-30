@@ -548,6 +548,33 @@ describe('LogViewer active pod synchronisation', () => {
     expect(getScopedDomainState('container-logs', activeScope).data?.entries).toHaveLength(3);
   });
 
+  // A scaled-up workload streams a new pod's lines before its pod list,
+  // refreshed every few seconds, names the pod.
+  it("shows a new pod's lines until a pod list leaves it out", async () => {
+    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+    await act(async () => {
+      seedLogSnapshot([
+        ...(getScopedDomainState('container-logs', activeScope).data?.entries ?? []),
+        {
+          pod: 'web-3',
+          container: 'app',
+          line: 'from the new pod',
+          timestamp: '2024-05-01T10:00:02Z',
+          isInit: false,
+        },
+      ]);
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain('from the new pod');
+
+    await renderViewer({ activePodNames: ['web-1', 'web-2', 'web-3'] });
+    expect(container.textContent).toContain('from the new pod');
+
+    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+    expect(container.textContent).not.toContain('from the new pod');
+    expect(container.textContent).toContain('first');
+  });
+
   it('registers log tab shortcuts with appropriate availability', async () => {
     await renderViewer({ activePodNames: ['web-1'], isActive: true });
     expect(getLatestShortcut('r')).toBeTruthy();

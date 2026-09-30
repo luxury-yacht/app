@@ -24,6 +24,10 @@ Panel. They are not Application Logs and they are not Node Logs.
   and never touch the live buffer.
 - `containerLogsStreamManager` is the only writer of `container-logs` scoped
   state. The Logs tab reads it; hiding deleted pods' lines is a view filter.
+  Each time the workload's pod list arrives (every 5 s), the pods that already
+  have lines but are not in it are hidden. A pod whose first line arrives after
+  the latest list stays visible until the next one, since the list can lag a
+  newly started pod (`hooks/useActivePodSet.ts`).
 - Do not start both duplicate scoped-domain enablement and explicit stream
   startup paths for the same consumer.
 - Tail-following is explicit user intent shared by raw, Pretty, and parsed

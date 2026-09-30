@@ -2,7 +2,9 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useActivePodSet.ts
  *
  * The workload pods whose lines Container Logs shows: lines of pods the workload
- * no longer has are hidden once its pod list is known.
+ * no longer has are hidden once its pod list is known. The list applies only
+ * once it is known, and an empty list hides every line only after pods were
+ * seen, so the first, still-loading list does not blank the view.
  */
 
 import { compareUtf16Strings } from '@shared/utils/sort';
@@ -17,14 +19,48 @@ export const getWorkloadPodNames = (
     .slice()
     .sort(compareUtf16Strings);
 
-// Lines of pods the workload no longer has are hidden. The filter applies only
-// once the pod list is known, and an empty list hides every line only after
-// pods were seen, so the first, still-loading list does not blank the view.
-export const filterEntriesForActivePods = (
+export const filterEntriesForHiddenPods = (
+  entries: ContainerLogsEntry[],
+  hiddenPods: Set<string> | null
+): ContainerLogsEntry[] =>
+  hiddenPods === null || hiddenPods.size === 0
+    ? entries
+    : entries.filter((entry) => !hiddenPods.has(entry.pod));
+
+const podsMissingFrom = (entries: ContainerLogsEntry[], activePods: Set<string>): Set<string> => {
+  const missing = new Set<string>();
+  for (const entry of entries) {
+    if (!activePods.has(entry.pod)) {
+      missing.add(entry.pod);
+    }
+  }
+  return missing;
+};
+
+/**
+ * The pods whose lines are hidden: those that had lines when the workload's
+ * latest pod list arrived but are not in it. The list is refreshed every few
+ * seconds and can lag a pod that just started, so a pod whose first line
+ * arrives after the list stays visible until the next list decides.
+ */
+export const useHiddenPods = (
   entries: ContainerLogsEntry[],
   activePods: Set<string> | null
-): ContainerLogsEntry[] =>
-  activePods === null ? entries : entries.filter((entry) => activePods.has(entry.pod));
+): Set<string> | null => {
+  const judgedRef = useRef<{ activePods: Set<string> | null; hidden: Set<string> | null }>({
+    activePods: null,
+    hidden: null,
+  });
+  // Judged during render only when a new list arrives, so each batch of lines
+  // does not rescan the buffer.
+  if (judgedRef.current.activePods !== activePods) {
+    judgedRef.current = {
+      activePods,
+      hidden: activePods === null ? null : podsMissingFrom(entries, activePods),
+    };
+  }
+  return judgedRef.current.hidden;
+};
 
 const NO_ACTIVE_PODS = new Set<string>();
 

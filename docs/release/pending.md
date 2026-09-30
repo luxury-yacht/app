@@ -14,6 +14,7 @@
 
 ### Fixed
 
+- Scaling up a workload no longer blanks its Logs tab for a few seconds; a new pod's lines show as soon as they arrive.
 - The Logs card in the Diagnostics panel now counts lines delivered to every Logs tab; it often showed 0 or one tab's count.
 - The Logs tab stays responsive with large buffers: taking in new lines no longer slows down as the buffer grows (about ten times faster at 10,000 lines).
 - When live container logs cannot start (for example, you may read a pod's logs but not list pods), the Logs tab keeps its controls, so Previous Logs and auto-refresh stay available.
