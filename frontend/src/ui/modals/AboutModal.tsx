@@ -75,7 +75,9 @@ const ExternalLink: React.FC<{
     data-testid={testId}
     onClick={(event) => {
       event.preventDefault();
-      openURL(href);
+      void openURL(href).catch((error) =>
+        reportOperationalError(error, { source: 'AboutModal', action: 'openExternalLink' })
+      );
     }}
   >
     {children}
@@ -90,7 +92,7 @@ const performUpdateAction = async (
   switch (action) {
     case 'recovery':
       if (url) {
-        openURL(url);
+        await openURL(url);
       }
       return null;
     case 'check':
@@ -106,6 +108,9 @@ const performUpdateAction = async (
   }
 };
 
+const reportUpdateActionFailure = (action: UpdateAction, error: unknown) =>
+  reportOperationalError(error, { source: 'AboutModal', action: updateActionNames[action] });
+
 const useApplicationUpdateAction = (
   update: backend.UpdateInfo | null,
   setUpdate: (update: backend.UpdateInfo) => void
@@ -117,7 +122,10 @@ const useApplicationUpdateAction = (
       return;
     }
     if (action === 'recovery') {
-      await performUpdateAction(action, update, url);
+      // Opening a recovery page does not mark an update action as busy.
+      await performUpdateAction(action, update, url).catch((error) =>
+        reportUpdateActionFailure(action, error)
+      );
       return;
     }
     setUpdateAction(action);
@@ -127,10 +135,7 @@ const useApplicationUpdateAction = (
         setUpdate(next);
       }
     } catch (error) {
-      reportOperationalError(error, {
-        source: 'AboutModal',
-        action: updateActionNames[action],
-      });
+      reportUpdateActionFailure(action, error);
     } finally {
       setUpdateAction(null);
     }

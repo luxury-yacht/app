@@ -22,7 +22,7 @@ function KubeconfigsSection() {
   const [kubeconfigPathsSelecting, setKubeconfigPathsSelecting] = useState(false);
 
   const loadInitialKubeconfigPaths = useEffectEvent(() => {
-    loadKubeconfigPaths();
+    void loadKubeconfigPaths();
   });
   useEffect(() => loadInitialKubeconfigPaths(), []);
 

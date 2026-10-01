@@ -208,8 +208,10 @@ const sanitizeTelemetryText = (rawValue: string): string => {
     /\b(cluster|namespace|pod|deployment|statefulset|daemonset|service|secret|configmap|job|cronjob|node)s?(?:\.[a-z0-9.-]+)?\s+["'][^"']+["']/giu,
     '$1 "[resource]"'
   );
+  // A name-shaped token holds a digit or separator after its first character. Letters
+  // run up to the first one, so the match has one path and cannot backtrack quadratically.
   value = value.replace(
-    /\b(cluster|namespace|pod|deployment|statefulset|daemonset|service|secret|configmap|job|cronjob|node)s?(?:\.[a-z0-9.-]+)?\s+(?:[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[0-9]|[a-z0-9][a-z0-9._-]*[0-9._-][a-z0-9._-]*)\b/giu,
+    /\b(cluster|namespace|pod|deployment|statefulset|daemonset|service|secret|configmap|job|cronjob|node)s?(?:\.[a-z0-9.-]+)?\s+(?:[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[0-9]|[a-z0-9][a-z]*[0-9._-][a-z0-9._-]*)\b/giu,
     '$1 [resource]'
   );
   value = value.replace(

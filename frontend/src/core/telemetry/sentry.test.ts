@@ -381,6 +381,27 @@ describe('Sentry error reporting', () => {
     );
   });
 
+  it('sanitizes a long run of separators after a resource keyword without stalling', () => {
+    initializeErrorReporting({
+      enabled: true,
+      dsn: 'https://public@example.com/1',
+      environment: 'production',
+    });
+    const options = sentryMocks.init.mock.calls[0]?.[0] as {
+      beforeSend: (event: Record<string, unknown>) => Record<string, unknown>;
+    };
+    // A dash run that never ends on a word boundary made the name-shaped
+    // redaction backtrack quadratically on the UI thread.
+    const message = `pod a${'-'.repeat(30_000)}!`;
+
+    const startedAt = performance.now();
+    const filtered = options.beforeSend({ message });
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(filtered.message).toBe(message);
+    expect(elapsedMs).toBeLessThan(250);
+  });
+
   it('keeps matching sanitized bundle identities for stack frames and source maps', () => {
     initializeErrorReporting({
       enabled: true,

@@ -598,7 +598,7 @@ class RefreshManager {
     }
     return globalThis.setInterval(() => {
       if (this.statusFor(instance) === 'idle') {
-        this.refreshSingle(name, 'automatic');
+        void this.refreshSingle(name, 'automatic');
       }
     }, instance.config.interval);
   }

@@ -236,7 +236,7 @@ export function useGridTablePersistence<T>({
         setClusterHash(hash);
       }
     };
-    computeHash();
+    void computeHash();
     return () => {
       cancelled = true;
     };

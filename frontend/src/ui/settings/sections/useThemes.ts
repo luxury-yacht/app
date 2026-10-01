@@ -40,7 +40,7 @@ export function useThemes() {
         }
       }
     };
-    loadThemes();
+    void loadThemes();
     return () => {
       mounted = false;
     };

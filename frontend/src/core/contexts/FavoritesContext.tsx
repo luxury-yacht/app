@@ -193,7 +193,8 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
   // Hydrate the favorites cache from the backend on mount.
   useEffect(() => {
     let active = true;
-    hydrateFavorites().then((favs) => {
+    // hydrateFavorites reports backend failures itself and never rejects.
+    void hydrateFavorites().then((favs) => {
       if (active) {
         setFavorites(favs);
       }
