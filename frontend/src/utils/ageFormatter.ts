@@ -1,3 +1,6 @@
+/** A timestamp accepted by the age formatters; null/undefined format as missing. */
+export type AgeTimestampInput = Date | string | number | null | undefined;
+
 const COMPACT_AGE_UNITS_IN_SECONDS: Record<string, number> = {
   y: 365 * 86400,
   mo: 30 * 86400,
@@ -45,7 +48,7 @@ export function parseCompactAgeToSeconds(age: string | null | undefined): number
  * @returns A formatted age string like "5m", "2h", "3d"
  */
 export function formatAge(
-  timestamp: Date | string | number | null | undefined,
+  timestamp: AgeTimestampInput,
   nowInput: Date | string | number = Date.now()
 ): string {
   if (!timestamp) {
@@ -98,7 +101,7 @@ export function formatAge(
 
 /** Formats a timestamp as relative past-tense text like "5m ago" or "just now". */
 export function formatAgeAgo(
-  timestamp: Date | string | number | null | undefined,
+  timestamp: AgeTimestampInput,
   nowInput: Date | string | number = Date.now()
 ): string {
   const age = formatAge(timestamp, nowInput);
@@ -110,7 +113,7 @@ export function formatAgeAgo(
  * @param timestamp - The timestamp to format
  * @returns A formatted date string
  */
-export function formatFullDate(timestamp: Date | string | number | null | undefined): string {
+export function formatFullDate(timestamp: AgeTimestampInput): string {
   if (!timestamp) {
     return '-';
   }

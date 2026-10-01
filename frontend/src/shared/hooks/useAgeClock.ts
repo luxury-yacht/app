@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-
-export type AgeTimestampInput = Date | string | number | null | undefined;
+import type { AgeTimestampInput } from '@/utils/ageFormatter';
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 type AgeClockListener = (now: number) => void;
