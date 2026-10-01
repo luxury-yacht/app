@@ -592,7 +592,7 @@
 .diagnostics-stream-name {
   font-weight: 600;
 }
-/* Connections indents its non-domain leaves (event scopes, log targets) under
+/* Connections indents its non-domain leaves (log targets) under
    their socket. This is its OWN class: sharing .diagnostics-domain-name with
    Cluster Data put two equal-specificity padding rules on the same cell, and
    source order silently decided which applied. */

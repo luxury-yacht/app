@@ -96,10 +96,11 @@ func EventTimestamp(event *corev1.Event) metav1.Time {
 	return last
 }
 
-// EventObjectDisplay renders the involved object as "Kind/Name" (or the available part).
+// EventObjectDisplay renders the involved object as "Kind/Name" (or the available
+// part), and "" when the Event names none; the frontend renders the placeholder.
 func EventObjectDisplay(event *corev1.Event) string {
 	if event == nil {
-		return "-"
+		return ""
 	}
 	kind := strings.TrimSpace(event.InvolvedObject.Kind)
 	name := strings.TrimSpace(event.InvolvedObject.Name)
@@ -112,7 +113,7 @@ func EventObjectDisplay(event *corev1.Event) string {
 	if kind != "" {
 		return kind
 	}
-	return "-"
+	return ""
 }
 
 // FormatEventSource renders the event source (component/host or reporting

@@ -194,18 +194,17 @@ type WorkloadTypeResourceUsage struct {
 // Only the fields needed to render the row and navigate to the involved
 // object are included; richer event detail lives in the Events views.
 type RecentEvent struct {
-	ClusterID        string                      `json:"clusterId,omitempty"`
-	ClusterName      string                      `json:"clusterName,omitempty"`
-	InvolvedObject   *resourcemodel.ResourceLink `json:"involvedObject,omitempty"`
-	EventUID         string                      `json:"eventUid"`
-	Reason           string                      `json:"reason"`
-	Message          string                      `json:"message"`
-	Timestamp        int64                       `json:"timestamp"`
-	ObjectKind       string                      `json:"objectKind"`
-	ObjectName       string                      `json:"objectName"`
-	ObjectNamespace  string                      `json:"objectNamespace"`
-	ObjectAPIVersion string                      `json:"objectApiVersion"`
-	ObjectUID        string                      `json:"objectUid"`
+	ClusterID       string                      `json:"clusterId,omitempty"`
+	ClusterName     string                      `json:"clusterName,omitempty"`
+	InvolvedObject  *resourcemodel.ResourceLink `json:"involvedObject,omitempty"`
+	EventUID        string                      `json:"eventUid"`
+	Reason          string                      `json:"reason"`
+	Message         string                      `json:"message"`
+	Timestamp       int64                       `json:"timestamp"`
+	ObjectKind      string                      `json:"objectKind"`
+	ObjectName      string                      `json:"objectName"`
+	ObjectNamespace string                      `json:"objectNamespace"`
+	ObjectUID       string                      `json:"objectUid"`
 }
 
 // RegisterClusterOverviewDomain wires the cluster-overview domain into the registry.
@@ -1073,18 +1072,17 @@ func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
 	for _, evt := range filtered {
 		facts := eventres.BuildFacts(meta.ClusterID, evt)
 		out = append(out, RecentEvent{
-			ClusterID:        meta.ClusterID,
-			ClusterName:      meta.ClusterName,
-			InvolvedObject:   facts.InvolvedObject,
-			EventUID:         string(evt.UID),
-			Reason:           strings.TrimSpace(evt.Reason),
-			Message:          facts.Message,
-			Timestamp:        eventres.EventTimestamp(evt).UnixMilli(),
-			ObjectKind:       evt.InvolvedObject.Kind,
-			ObjectName:       evt.InvolvedObject.Name,
-			ObjectNamespace:  evt.InvolvedObject.Namespace,
-			ObjectAPIVersion: evt.InvolvedObject.APIVersion,
-			ObjectUID:        string(evt.InvolvedObject.UID),
+			ClusterID:       meta.ClusterID,
+			ClusterName:     meta.ClusterName,
+			InvolvedObject:  facts.InvolvedObject,
+			EventUID:        string(evt.UID),
+			Reason:          strings.TrimSpace(evt.Reason),
+			Message:         facts.Message,
+			Timestamp:       eventres.EventTimestamp(evt).UnixMilli(),
+			ObjectKind:      evt.InvolvedObject.Kind,
+			ObjectName:      evt.InvolvedObject.Name,
+			ObjectNamespace: evt.InvolvedObject.Namespace,
+			ObjectUID:       string(evt.InvolvedObject.UID),
 		})
 	}
 	return out

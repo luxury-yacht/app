@@ -139,7 +139,7 @@ export const selectDomainStreamTelemetry = (
   const matchingStream = (streams ?? []).filter(
     (entry) => entry.name === streamName && (entry.clusterId ?? '') === clusterId
   );
-  // Only a `domain` leaf names a refresh domain; scope/target leaves key by
+  // Only a `domain` leaf names a refresh domain; target leaves key by
   // something else entirely and must never be matched here.
   return (
     matchingStream.find((entry) => entry.leafKind === 'domain' && entry.leaf === domain) ??

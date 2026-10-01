@@ -521,7 +521,6 @@
                 }
               },
               "object": "Node/node-wire",
-              "objectApiVersion": "v1",
               "objectKind": "Node",
               "objectName": "node-wire",
               "objectNamespace": "",
@@ -919,7 +918,6 @@
                 }
               },
               "object": "Pod/pod-wire",
-              "objectApiVersion": "v1",
               "objectKind": "Pod",
               "objectName": "pod-wire",
               "objectNamespace": "default",
@@ -1184,7 +1182,6 @@
                   "version": "v1"
                 }
               },
-              "involvedObjectApiVersion": "v1",
               "involvedObjectKind": "Pod",
               "involvedObjectName": "pod-wire",
               "involvedObjectNamespace": "default",

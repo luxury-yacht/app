@@ -150,8 +150,8 @@ export interface ClusterDataScopeRow extends ClusterDataTreeNode {
 }
 
 // ConnectionsRow is the flat Connections & Calls view. Its members genuinely
-// have no common parent - a socket, an event scope, a log target and an app
-// state read do not nest - so it is a list, not a tree.
+// have no common parent - a socket, a log target and an app state read do not
+// nest - so it is a list, not a tree.
 export type ConnectionsRow = ConnectionsSocketRow | ConnectionsLeafRow;
 
 export interface ConnectionsSocketRow {

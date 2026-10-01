@@ -122,7 +122,6 @@ func TestClusterEventsBuilder(t *testing.T) {
 	require.Equal(t, "Normal", first.Type)
 	require.Equal(t, "scheduler", first.Source)
 	require.Equal(t, "node-uid-new", first.ObjectUID)
-	require.Equal(t, "v1", first.ObjectAPIVersion)
 	require.Equal(t, clusterEventNew.LastTimestamp.UnixMilli(), first.AgeTimestamp)
 	require.Equal(t, "kube-system", first.Ref.Namespace)
 

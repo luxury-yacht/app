@@ -3321,7 +3321,6 @@ describe('refreshOrchestrator', () => {
 
             objectNamespace: 'default',
             objectUid: 'web-uid',
-            objectApiVersion: 'v1',
             type: 'Normal',
             source: 'kubelet',
             reason: 'Started',

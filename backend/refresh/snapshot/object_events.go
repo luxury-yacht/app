@@ -37,22 +37,21 @@ type ObjectEventsBuilder struct {
 
 // ObjectEventSummary captures the fields the frontend needs for object events.
 type ObjectEventSummary struct {
-	Ref                      resourcemodel.ResourceRef            `json:"ref"`
-	Metadata                 *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
-	ResourceVersion          string                               `json:"resourceVersion"`
-	EventType                string                               `json:"eventType"`
-	Reason                   string                               `json:"reason"`
-	Message                  string                               `json:"message"`
-	Count                    int32                                `json:"count"`
-	FirstTimestamp           time.Time                            `json:"firstTimestamp"`
-	LastTimestamp            time.Time                            `json:"lastTimestamp"`
-	Source                   string                               `json:"source"`
-	InvolvedObjectName       string                               `json:"involvedObjectName"`
-	InvolvedObjectKind       string                               `json:"involvedObjectKind"`
-	InvolvedObjectNamespace  string                               `json:"involvedObjectNamespace"`
-	InvolvedObjectUID        string                               `json:"involvedObjectUid"`
-	InvolvedObjectAPIVersion string                               `json:"involvedObjectApiVersion"`
-	InvolvedObject           *resourcemodel.ResourceLink          `json:"involvedObject,omitempty"`
+	Ref                     resourcemodel.ResourceRef            `json:"ref"`
+	Metadata                *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	ResourceVersion         string                               `json:"resourceVersion"`
+	EventType               string                               `json:"eventType"`
+	Reason                  string                               `json:"reason"`
+	Message                 string                               `json:"message"`
+	Count                   int32                                `json:"count"`
+	FirstTimestamp          time.Time                            `json:"firstTimestamp"`
+	LastTimestamp           time.Time                            `json:"lastTimestamp"`
+	Source                  string                               `json:"source"`
+	InvolvedObjectName      string                               `json:"involvedObjectName"`
+	InvolvedObjectKind      string                               `json:"involvedObjectKind"`
+	InvolvedObjectNamespace string                               `json:"involvedObjectNamespace"`
+	InvolvedObjectUID       string                               `json:"involvedObjectUid"`
+	InvolvedObject          *resourcemodel.ResourceLink          `json:"involvedObject,omitempty"`
 }
 
 // ObjectEventsSnapshotPayload contains the events list for the object.
@@ -357,21 +356,20 @@ func convertObjectEvent(meta ClusterMeta, evt corev1.Event) ObjectEventSummary {
 	facts := eventres.BuildFacts(meta.ClusterID, &evt)
 
 	return ObjectEventSummary{
-		Ref:                      streamrows.NewResourceRef(meta, eventres.Identity, &evt),
-		Metadata:                 streamrows.NewResourceMetadata(&evt),
-		ResourceVersion:          evt.ResourceVersion,
-		EventType:                facts.EventType,
-		Reason:                   facts.Reason,
-		Message:                  facts.Message,
-		Count:                    facts.Count,
-		FirstTimestamp:           facts.FirstTimestamp.Time,
-		LastTimestamp:            facts.LastTimestamp.Time,
-		Source:                   facts.Source,
-		InvolvedObjectName:       evt.InvolvedObject.Name,
-		InvolvedObjectKind:       evt.InvolvedObject.Kind,
-		InvolvedObjectNamespace:  evt.InvolvedObject.Namespace,
-		InvolvedObjectUID:        string(evt.InvolvedObject.UID),
-		InvolvedObjectAPIVersion: evt.InvolvedObject.APIVersion,
-		InvolvedObject:           facts.InvolvedObject,
+		Ref:                     streamrows.NewResourceRef(meta, eventres.Identity, &evt),
+		Metadata:                streamrows.NewResourceMetadata(&evt),
+		ResourceVersion:         evt.ResourceVersion,
+		EventType:               facts.EventType,
+		Reason:                  facts.Reason,
+		Message:                 facts.Message,
+		Count:                   facts.Count,
+		FirstTimestamp:          facts.FirstTimestamp.Time,
+		LastTimestamp:           facts.LastTimestamp.Time,
+		Source:                  facts.Source,
+		InvolvedObjectName:      evt.InvolvedObject.Name,
+		InvolvedObjectKind:      evt.InvolvedObject.Kind,
+		InvolvedObjectNamespace: evt.InvolvedObject.Namespace,
+		InvolvedObjectUID:       string(evt.InvolvedObject.UID),
+		InvolvedObject:          facts.InvolvedObject,
 	}
 }

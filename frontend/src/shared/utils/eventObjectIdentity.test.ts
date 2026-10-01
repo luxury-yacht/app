@@ -27,7 +27,6 @@ describe('buildEventObjectReference', () => {
     const row = {
       objectKind: 'Pod',
       objectName: 'api',
-      objectApiVersion: 'v1',
       objectNamespace: 'default',
       clusterId: 'cluster-a',
     };

@@ -44,7 +44,6 @@ export interface EventGridRow {
   message: string;
   objectNamespace?: string;
   objectUid?: string;
-  objectApiVersion?: string;
   involvedObject?: ResourceLink;
   age?: string;
   ageTimestamp?: number;

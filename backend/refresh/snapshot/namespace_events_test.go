@@ -103,7 +103,6 @@ func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {
 	require.Equal(t, eventNew.LastTimestamp.UnixMilli(), first.AgeTimestamp)
 	require.Equal(t, "Pod/api-123", first.Object)
 	require.Equal(t, "pod-uid-new", first.ObjectUID)
-	require.Equal(t, "v1", first.ObjectAPIVersion)
 
 	require.Equal(t, "event-old", second.Ref.Name)
 	require.Equal(t, eventOld.LastTimestamp.UnixMilli(), second.AgeTimestamp)

@@ -280,7 +280,6 @@ describe('NsViewEvents', () => {
       object: 'Pod/api',
       objectKind: 'Pod',
       objectName: 'api',
-      objectApiVersion: 'v1',
       // The backend's openable link for a versioned involved object.
       involvedObject: {
         ref: {
@@ -583,7 +582,6 @@ describe('NsViewEvents', () => {
       objectKind: 'Database',
       objectName: 'primary',
       objectUid: 'database-uid',
-      objectApiVersion: undefined,
       involvedObject: {
         display: { clusterId: 'alpha:ctx', kind: 'Database', name: 'primary', uid: 'database-uid' },
       },

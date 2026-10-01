@@ -27,7 +27,6 @@ export interface EventGridRowIdentity {
   objectName?: string | null;
   objectNamespace?: string | null;
   objectUid?: string | null;
-  objectApiVersion?: string | null;
   involvedObject?: ResourceLink | null;
   type?: string | null;
   source?: string | null;

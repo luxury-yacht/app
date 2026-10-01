@@ -773,6 +773,9 @@ type typedMaintainedStore[T any] struct {
 type maintainedReconcileSource[T any] struct {
 	listRows func() []T
 	owns     func(T) bool
+	// removed, when non-nil, is told about each row the sweep deleted, after the
+	// delete, so the store's doorbell can announce rows that vanished while Cold.
+	removed func(T)
 }
 
 func newTypedMaintainedStore[T any](meta ClusterMeta, schema querypage.Schema[T], adapter typedTableQueryAdapter[T]) *typedMaintainedStore[T] {
@@ -885,6 +888,7 @@ func registerMaintainedInformerHandler[T any](
 	maintained.addReconcileSourceRows(
 		func() []T { return handler.rows(informer.GetIndexer().List()) },
 		func(T) bool { return true },
+		handler.report,
 	)
 	return nil
 }
@@ -1166,9 +1170,9 @@ func (m *typedMaintainedStore[T]) addReconcileSource(desc streamspec.Descriptor,
 // (registerMaintainedInformerHandler) rather than a descriptor's StreamRow — the CRD/event
 // stores. listRows yields its currently-live rows; owns reports which existing rows it is
 // responsible for (a single-kind bespoke store passes owns == always-true to sweep its
-// whole content).
-func (m *typedMaintainedStore[T]) addReconcileSourceRows(listRows func() []T, owns func(T) bool) {
-	m.reconcileSources = append(m.reconcileSources, maintainedReconcileSource[T]{listRows: listRows, owns: owns})
+// whole content). removed (optional) is told about each row the sweep deletes.
+func (m *typedMaintainedStore[T]) addReconcileSourceRows(listRows func() []T, owns func(T) bool, removed func(T)) {
+	m.reconcileSources = append(m.reconcileSources, maintainedReconcileSource[T]{listRows: listRows, owns: owns, removed: removed})
 }
 
 // Reconcile diff-syncs the store against the live row set of every reconcile source: it
@@ -1189,19 +1193,29 @@ func (m *typedMaintainedStore[T]) Reconcile() {
 			want[m.adapter.Key(row)] = struct{}{}
 			m.store.Upsert(row)
 		}
-		for _, existing := range m.store.Snapshot() {
-			if !src.owns(existing) {
-				continue
-			}
-			key := m.adapter.Key(existing)
-			if _, keep := want[key]; !keep {
-				m.store.Delete(key)
-			}
-		}
+		m.sweepReconcileSource(src, want)
 	}
 	// Reconcile runs only on re-warm (ReconcileMaintainedStores); a refetch is always
 	// wanted then, so advance the refetch identity once.
 	m.bumpSinkVersion()
+}
+
+// sweepReconcileSource deletes every row src owns whose key is not live, then
+// reports it through src.removed.
+func (m *typedMaintainedStore[T]) sweepReconcileSource(src maintainedReconcileSource[T], want map[string]struct{}) {
+	for _, existing := range m.store.Snapshot() {
+		if !src.owns(existing) {
+			continue
+		}
+		key := m.adapter.Key(existing)
+		if _, keep := want[key]; keep {
+			continue
+		}
+		m.store.Delete(key)
+		if src.removed != nil {
+			src.removed(existing)
+		}
+	}
 }
 
 // deleteRow removes an already-projected row by its adapter key — the bespoke-projection

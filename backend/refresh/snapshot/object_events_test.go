@@ -255,8 +255,7 @@ func TestObjectEventsBuilderPayloadCarriesEventIdentityAndFullInvolvedObjectRef(
 	if event.InvolvedObjectName != "api" ||
 		event.InvolvedObjectKind != "Deployment" ||
 		event.InvolvedObjectNamespace != "default" ||
-		event.InvolvedObjectUID != "deployment-uid-1" ||
-		event.InvolvedObjectAPIVersion != "apps/v1" {
+		event.InvolvedObjectUID != "deployment-uid-1" {
 		t.Fatalf("display involved-object fields were not preserved: %+v", event)
 	}
 	if event.InvolvedObject == nil || event.InvolvedObject.Ref == nil {
@@ -360,8 +359,8 @@ func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T)
 		if len(payload.Events) != 1 {
 			t.Fatalf("expected exactly one event, got %d (events merged across CRDs?)", len(payload.Events))
 		}
-		if got := payload.Events[0].InvolvedObjectAPIVersion; got != "rds.services.k8s.aws/v1alpha1" {
-			t.Fatalf("expected ACK event, got apiVersion=%q", got)
+		if got := payload.Events[0].Ref.Name; got != "evt-ack" {
+			t.Fatalf("expected ACK event, got %q", got)
 		}
 
 		// And the kinda.rocks scope picks the OTHER CRD.
@@ -376,8 +375,8 @@ func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T)
 		if len(payload.Events) != 1 {
 			t.Fatalf("expected exactly one event, got %d", len(payload.Events))
 		}
-		if got := payload.Events[0].InvolvedObjectAPIVersion; got != "kinda.rocks/v1beta1" {
-			t.Fatalf("expected kinda.rocks event, got apiVersion=%q", got)
+		if got := payload.Events[0].Ref.Name; got != "evt-kinda" {
+			t.Fatalf("expected kinda.rocks event, got %q", got)
 		}
 	})
 
@@ -420,8 +419,8 @@ func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T)
 		if len(payload.Events) != 1 {
 			t.Fatalf("expected exactly one event, got %d (cache post-filter missed?)", len(payload.Events))
 		}
-		if got := payload.Events[0].InvolvedObjectAPIVersion; got != "rds.services.k8s.aws/v1alpha1" {
-			t.Fatalf("expected ACK event, got apiVersion=%q", got)
+		if got := payload.Events[0].Ref.Name; got != "evt-ack" {
+			t.Fatalf("expected ACK event, got %q", got)
 		}
 	})
 

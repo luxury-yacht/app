@@ -919,7 +919,6 @@ describe('ClusterOverview', () => {
             objectKind: 'Pod',
             objectName: 'api-7c8d9',
             objectNamespace: 'default',
-            objectApiVersion: '',
             objectUid: 'pod-uid-1',
             // The backend sends a display-only link when the event has no apiVersion.
             involvedObject: {
@@ -1391,7 +1390,6 @@ function setWarningEvents(ids: string[]) {
         objectKind: 'Pod',
         objectName: id,
         objectNamespace: 'default',
-        objectApiVersion: 'v1',
         objectUid: `pod-${id}`,
         involvedObject: {
           ref: {

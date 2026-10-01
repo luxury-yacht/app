@@ -17,8 +17,8 @@ import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
 type GeneratedEventRow = NonNullable<ClusterEventsSnapshotPayload['rows']>[number];
-type EventRow = Omit<GeneratedEventRow, 'objectApiVersion' | 'objectNamespace' | 'objectUid'> &
-  Partial<Pick<GeneratedEventRow, 'objectApiVersion' | 'objectNamespace' | 'objectUid'>>;
+type EventRow = Omit<GeneratedEventRow, 'objectNamespace' | 'objectUid'> &
+  Partial<Pick<GeneratedEventRow, 'objectNamespace' | 'objectUid'>>;
 type BaseGridTableProps = GridTableProps<EventRow>;
 type CapturedGridTableProps = BaseGridTableProps & {
   filters: NonNullable<BaseGridTableProps['filters']> & {
@@ -171,7 +171,6 @@ const baseEvent: EventRow = {
   object: 'Pod/foo',
   objectKind: 'Pod',
   objectName: 'foo',
-  objectApiVersion: 'v1',
   // The backend's openable link for a versioned involved object.
   involvedObject: {
     ref: {
@@ -414,7 +413,6 @@ describe('ClusterViewEvents', () => {
       objectKind: 'Database',
       objectName: 'primary',
       objectUid: 'database-uid',
-      objectApiVersion: undefined,
       involvedObject: {
         display: {
           clusterId: 'test-cluster',
@@ -465,7 +463,6 @@ describe('ClusterViewEvents', () => {
       objectKind: 'Database',
       objectName: 'primary',
       objectUid: 'database-uid',
-      objectApiVersion: undefined,
       involvedObject: {
         display: {
           clusterId: 'test-cluster',

@@ -152,6 +152,10 @@ vi.mock('@shared/components/tables/GridTable', () => ({
 
 vi.mock('./EventsTab.css', () => ({}));
 
+vi.mock('@/hooks/useShortNames', () => ({
+  useShortNames: () => false,
+}));
+
 vi.mock('@/core/cluster-workspace/useClusterWorkspace', () => ({
   useClusterNameResolver: () => (clusterId: string) =>
     clusterId === 'event-cluster' ? 'Event Cluster' : 'Parent Cluster',
@@ -191,7 +195,6 @@ function makeEvent(
     involvedObjectKind: 'Pod',
     involvedObjectNamespace: 'default',
     involvedObjectUid: 'related-pod-uid',
-    involvedObjectApiVersion: 'v1',
     // The backend sends an openable link whenever the event names a versioned
     // involved object, stamped with the event's cluster.
     involvedObject: {
@@ -453,6 +456,7 @@ describe('EventsTab', () => {
       'expected captured GridTable props in EventsTab.test.tsx'
     );
     expect(gridProps.columns.map((column) => column.header)).toEqual([
+      'Kind',
       'Type',
       'Source',
       'Object Type',
@@ -504,6 +508,52 @@ describe('EventsTab', () => {
         clusterId: PARENT_CLUSTER_ID,
         group: 'events.k8s.io',
         version: 'v1',
+        kind: 'Event',
+        namespace: 'default',
+        name: 'event-a',
+      })
+    );
+  });
+
+  // The Kind badge is how a mouse user opens the Event, as in the Cluster and
+  // Namespace Events tables; a click on the row itself opens nothing.
+  it('opens the Event itself from its Kind badge', async () => {
+    hoistedSnapshot.data = { events: [makeEvent()] };
+    hoistedSnapshot.status = 'ready';
+
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          panelId={PANEL_ID}
+          isActive={true}
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
+        />
+      );
+    });
+
+    const gridProps = requireValue(
+      gridTableState.lastProps,
+      'expected captured GridTable props in EventsTab.test.tsx'
+    );
+    const kindColumn = requireValue(
+      gridProps.columns.find((column) => column.key === 'kind'),
+      'expected the Event Kind column in EventsTab.test.tsx'
+    );
+    const kindCell = requireReactElement<{ onClick: (event: { altKey: boolean }) => void }>(
+      kindColumn.render(
+        requireValue(gridProps.data[0], 'expected Event row in EventsTab.test.tsx')
+      ),
+      'expected the interactive Event Kind badge in EventsTab.test.tsx'
+    );
+    await act(async () => {
+      kindCell.props.onClick({ altKey: false });
+      await Promise.resolve();
+    });
+
+    expect(mockOpenWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: PARENT_CLUSTER_ID,
         kind: 'Event',
         namespace: 'default',
         name: 'event-a',
@@ -665,7 +715,6 @@ describe('EventsTab', () => {
           involvedObjectName: 'display-only-name',
           involvedObjectNamespace: 'default',
           involvedObjectUid: 'display-uid',
-          involvedObjectApiVersion: 'v1',
           involvedObject: {
             ref: {
               clusterId: EVENT_CLUSTER_ID,
@@ -732,7 +781,6 @@ describe('EventsTab', () => {
           involvedObjectName: 'orders-db',
           involvedObjectNamespace: 'team-a',
           involvedObjectUid: 'orders-db-uid',
-          involvedObjectApiVersion: undefined,
           // Without an apiVersion the backend can only send a display-only link.
           involvedObject: {
             display: {

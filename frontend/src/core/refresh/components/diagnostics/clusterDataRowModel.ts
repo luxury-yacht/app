@@ -9,7 +9,7 @@
  * Broker reads that fetch a domain hang off the same row.
  *
  * Connections & Calls is deliberately flat: sockets, the stream children whose
- * keys are not refresh domains (event scopes, container-logs targets), and the
+ * keys are not refresh domains (container-logs targets), and the
  * reads that belong to no domain. Those members have no common parent, so a
  * tree would invent a hierarchy that does not exist.
  */

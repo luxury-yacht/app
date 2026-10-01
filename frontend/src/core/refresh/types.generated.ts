@@ -516,7 +516,6 @@ export interface ClusterEventEntry {
   objectName: string;
   objectNamespace: string;
   objectUid: string;
-  objectApiVersion: string;
   involvedObject?: ResourceLink;
   type: string;
   source: string;
@@ -1193,7 +1192,6 @@ export interface NamespaceEventSummary {
   objectName: string;
   objectNamespace: string;
   objectUid: string;
-  objectApiVersion: string;
   involvedObject?: ResourceLink;
   type: string;
   source: string;
@@ -1585,7 +1583,6 @@ export interface ObjectEventSummary {
   involvedObjectKind: string;
   involvedObjectNamespace: string;
   involvedObjectUid: string;
-  involvedObjectApiVersion: string;
   involvedObject?: ResourceLink;
 }
 
@@ -1856,7 +1853,6 @@ export interface RecentEventEntry {
   objectKind: string;
   objectName: string;
   objectNamespace: string;
-  objectApiVersion: string;
   objectUid: string;
 }
 

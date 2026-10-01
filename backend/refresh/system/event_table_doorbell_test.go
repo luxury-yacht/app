@@ -6,11 +6,18 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -22,15 +29,28 @@ import (
 // frontend subscribes to, and a snapshot service the signal-triggered refetch
 // reads from.
 type eventTableHarness struct {
-	client  *fake.Clientset
-	service *snapshot.Service
-	manager *resourcestream.Manager
+	client   *fake.Clientset
+	service  *snapshot.Service
+	manager  *resourcestream.Manager
+	registry *domain.Registry
 }
 
 func newEventTableHarness(t *testing.T, resync time.Duration) *eventTableHarness {
 	t.Helper()
+	return newEventTableHarnessWith(t, resync, nil, nil)
+}
+
+// newEventTableHarnessWith seeds the cluster with objects and runs beforeStart
+// (for example a spill restore) after registration but before the informers start.
+func newEventTableHarnessWith(
+	t *testing.T,
+	resync time.Duration,
+	objects []runtime.Object,
+	beforeStart func(*domain.Registry),
+) *eventTableHarness {
+	t.Helper()
 	meta := snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}
-	client := fake.NewClientset()
+	client := fake.NewClientset(objects...)
 	factory := informers.NewSharedInformerFactory(client, resync)
 	reg := domain.New()
 	clusterNotifier, err := snapshot.RegisterClusterEventsDomain(reg, factory, meta)
@@ -42,6 +62,10 @@ func newEventTableHarness(t *testing.T, resync time.Duration) *eventTableHarness
 	wireStreamObservers(manager, nil, service, nil, nil,
 		[]*snapshot.EventTableChangeNotifier{clusterNotifier, namespaceNotifier}, nil)
 
+	if beforeStart != nil {
+		beforeStart(reg)
+	}
+
 	stop := make(chan struct{})
 	t.Cleanup(func() {
 		clusterNotifier.Stop()
@@ -50,7 +74,7 @@ func newEventTableHarness(t *testing.T, resync time.Duration) *eventTableHarness
 	})
 	factory.Start(stop)
 	factory.WaitForCacheSync(stop)
-	return &eventTableHarness{client: client, service: service, manager: manager}
+	return &eventTableHarness{client: client, service: service, manager: manager, registry: reg}
 }
 
 func (h *eventTableHarness) subscribe(t *testing.T, domainName, scope string) *resourcestream.Subscription {
@@ -209,4 +233,87 @@ func TestEventTableDoorbellsIgnoreInformerResyncEchoes(t *testing.T) {
 	require.NoError(t, err)
 	requireEventDoorbell(t, prod, "namespace-events", "namespace:prod")
 	requireEventDoorbell(t, all, "namespace-events", "namespace:all")
+}
+
+// Rows restored from a spill for Events that expired while the app was closed
+// or the cluster was Cold are swept by Reconcile once the informers sync. The
+// tables must hear that removal, or the expired rows stay on screen until the
+// next real event in their scope.
+func TestEventTableDoorbellsRingWhenReconcileDropsRestoredRows(t *testing.T) {
+	spillDir := t.TempDir()
+	before := newEventTableHarnessWith(t, 0, []runtime.Object{
+		tableEvent("web.1", "prod", "Pod", "prod", "10"),
+		tableEvent("node-a.1", "default", "Node", "", "11"),
+	}, nil)
+	require.Equal(t, []string{"web.1"}, before.rowNames(t, "namespace-events", "namespace:all"))
+	require.Equal(t, []string{"node-a.1"}, before.rowNames(t, "cluster-events", ""))
+	require.NoError(t, before.registry.SpillMaintainedStores(spillDir))
+
+	// Both Events expired before the next start; only the spill still has them.
+	after := newEventTableHarnessWith(t, 0, nil, func(reg *domain.Registry) {
+		require.NoError(t, reg.RestoreMaintainedStores(spillDir))
+	})
+	prod := after.subscribe(t, "namespace-events", "namespace:prod")
+	all := after.subscribe(t, "namespace-events", "namespace:all")
+	cluster := after.subscribe(t, "cluster-events", "cluster")
+	require.Equal(t, []string{"web.1"}, after.rowNames(t, "namespace-events", "namespace:all"),
+		"the restored row is served until Reconcile runs")
+
+	after.registry.ReconcileMaintainedStores()
+
+	requireEventDoorbell(t, prod, "namespace-events", "namespace:prod")
+	requireEventDoorbell(t, all, "namespace-events", "namespace:all")
+	requireEventDoorbell(t, cluster, "cluster-events", "")
+	require.Empty(t, after.rowNames(t, "namespace-events", "namespace:all"))
+	require.Empty(t, after.rowNames(t, "cluster-events", ""))
+}
+
+// The production constructor must hand both event table notifiers to the
+// subsystem, wire them to its resource stream, and silence them on teardown;
+// otherwise the tables lose their doorbell, or a torn-down cluster keeps ringing.
+func TestSubsystemWiresAndStopsEventTableDoorbells(t *testing.T) {
+	kube := fake.NewClientset()
+	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		attrs := review.Spec.ResourceAttributes
+		review.Status.Allowed = attrs != nil && attrs.Resource == "events"
+		return true, review, nil
+	})
+	subsystem, err := NewSubsystemWithServices(Config{
+		KubernetesClient: kube, APIExtensionsClient: apiextensionsfake.NewClientset(),
+		DynamicClient: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), ClusterID: "c1",
+		Logger: applog.Noop, ObjectDetailsProvider: noopObjectDetailProvider{},
+		NodeMaintenanceStore: nodemaintenance.NewStore(5), ResyncInterval: time.Minute,
+	})
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(func() {
+		cancel()
+		subsystem.StopDoorbellNotifiers()
+		subsystem.ResourceStream.Stop()
+		subsystem.IngestManager.Stop()
+		_ = subsystem.InformerFactory.Shutdown()
+	})
+
+	domains := make([]string, 0, len(subsystem.EventTableNotifiers))
+	for _, notifier := range subsystem.EventTableNotifiers {
+		domains = append(domains, notifier.Domain())
+	}
+	require.ElementsMatch(t, []string{"cluster-events", "namespace-events"}, domains)
+
+	require.NoError(t, subsystem.InformerFactory.Start(ctx))
+	selector, err := resourcestream.ParseStreamSelector("c1", "namespace-events", "namespace:all")
+	require.NoError(t, err)
+	all, err := subsystem.ResourceStream.SubscribeSelector(selector)
+	require.NoError(t, err)
+	defer all.Cancel()
+
+	_, err = kube.CoreV1().Events("prod").Create(context.Background(), tableEvent("web.1", "prod", "Pod", "prod", "10"), metav1.CreateOptions{})
+	require.NoError(t, err)
+	requireEventDoorbell(t, all, "namespace-events", "namespace:all")
+
+	subsystem.StopDoorbellNotifiers()
+	_, err = kube.CoreV1().Events("prod").Create(context.Background(), tableEvent("web.2", "prod", "Pod", "prod", "11"), metav1.CreateOptions{})
+	require.NoError(t, err)
+	requireQuiet(t, 750*time.Millisecond, map[string]*resourcestream.Subscription{"after teardown": all})
 }

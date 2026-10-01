@@ -65,3 +65,13 @@ func TestEventTableRowsCarryTheInvolvedObjectKindAndName(t *testing.T) {
 	require.Equal(t, "Pod", namespaceRow.ObjectKind)
 	require.Equal(t, "web", namespaceRow.ObjectName)
 }
+
+// An Event that names no involved object sends an empty Object field, like
+// every other empty display field, rather than its own placeholder text.
+func TestEventTableRowsSendAnEmptyObjectWhenTheEventNamesNone(t *testing.T) {
+	row, ok := projectClusterEventEntry(ClusterMeta{ClusterID: "c1"}, untypedEvent("orphan.1", "", "", ""))
+	require.True(t, ok)
+	require.Equal(t, "", row.Object)
+	require.Equal(t, "", row.ObjectKind)
+	require.Equal(t, "", row.ObjectName)
+}

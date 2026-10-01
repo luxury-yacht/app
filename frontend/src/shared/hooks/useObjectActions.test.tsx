@@ -138,7 +138,19 @@ describe('buildObjectActionItems', () => {
         name: 'api-created',
         namespace: 'apps',
         clusterId: 'cluster-a',
+        // The Events grid passes the display text together with the backend link.
         involvedObject: 'Pod/api-123',
+        involvedObjectRef: {
+          ref: {
+            clusterId: 'cluster-a',
+            group: '',
+            version: 'v1',
+            kind: 'Pod',
+            resource: 'pods',
+            namespace: 'apps',
+            name: 'api-123',
+          },
+        },
       },
       context: 'gridtable',
       handlers: {

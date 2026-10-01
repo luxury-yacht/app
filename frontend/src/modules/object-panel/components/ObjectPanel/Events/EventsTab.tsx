@@ -14,6 +14,7 @@ import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { formatLiveAgeText, LiveAgeText } from '@shared/components/LiveAgeText';
 import {
   type ColumnSizingMap,
+  createKindColumn,
   createTextColumn,
   withColumnSizing,
 } from '@shared/components/tables/columnFactories';
@@ -42,7 +43,9 @@ import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefe
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import type { CanonicalResourceRef, ObjectEventSummary, ResourceLink } from '@/core/refresh/types';
+import { useShortNames } from '@/hooks/useShortNames';
 import { errorHandler } from '@/utils/errorHandler';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 import { CLUSTER_SCOPE, getObjectEventsRefresherName, INACTIVE_SCOPE } from '../constants';
 import { useObjectPanelScopedDomainLifecycle } from '../hooks/useObjectPanelScopedDomainLifecycle';
 import type { PanelObjectData } from '../types';
@@ -120,6 +123,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const { openWithObject } = useObjectPanel();
   const { available: navigationAvailable, navigateToView } = useNavigateToView();
+  const useShortResourceNames = useShortNames();
   const resolveClusterName = useClusterNameResolver();
   const openWithObjectRef = useRef(openWithObject);
   useEffect(() => {
@@ -258,17 +262,24 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     [buildEventObjectRefInput]
   );
 
-  const openEvent = useCallback(
-    (item: EventDisplay) => {
-      openWithObjectRef.current(
-        eventGridObjectReference(
-          { ref: item.eventRef },
-          objectData?.clusterId,
-          item.clusterName ?? objectData?.clusterName
-        )
-      );
-    },
+  const eventReference = useCallback(
+    (item: EventDisplay) =>
+      eventGridObjectReference(
+        { ref: item.eventRef },
+        objectData?.clusterId,
+        item.clusterName ?? objectData?.clusterName
+      ),
     [objectData?.clusterId, objectData?.clusterName]
+  );
+
+  const openEvent = useCallback(
+    (item: EventDisplay) => openWithObjectRef.current(eventReference(item)),
+    [eventReference]
+  );
+
+  const navigateToEvent = useCallback(
+    (item: EventDisplay) => navigateToView(eventReference(item)),
+    [eventReference, navigateToView]
   );
 
   const navigateToRelatedObject = useCallback(
@@ -283,6 +294,13 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
 
   const columns = useMemo<GridColumnDefinition<EventDisplay>[]>(() => {
     const base: GridColumnDefinition<EventDisplay>[] = [
+      // The Event's own link, as in the Cluster and Namespace Events tables.
+      createKindColumn<EventDisplay>({
+        getKind: () => 'Event',
+        getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
+        onClick: openEvent,
+        onAltClick: navigationAvailable ? navigateToEvent : undefined,
+      }),
       createEventTypeColumn<EventDisplay>(),
       createTextColumn<EventDisplay>('source', EVENT_LABELS.source, (item) => item.source || '-'),
       // Split the involved object into type/name columns for readability.
@@ -343,6 +361,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     ];
 
     const sizing: ColumnSizingMap = {
+      kind: { autoWidth: true },
       type: { width: 110, minWidth: 90 },
       source: { width: 180, minWidth: 150, autoWidth: true },
       reason: { width: 160, minWidth: 130, autoWidth: true },
@@ -352,7 +371,15 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
       age: { width: 100, minWidth: 80 },
     };
     return withColumnSizing(base, sizing);
-  }, [canOpenRelatedObject, navigateToRelatedObject, navigationAvailable, openRelatedObject]);
+  }, [
+    canOpenRelatedObject,
+    navigateToEvent,
+    navigateToRelatedObject,
+    navigationAvailable,
+    openEvent,
+    openRelatedObject,
+    useShortResourceNames,
+  ]);
 
   const { sortedData, sortConfig, handleSort } = useTableSort(events, 'age', 'desc', {
     columns,

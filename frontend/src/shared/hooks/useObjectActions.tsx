@@ -155,9 +155,9 @@ const buildInvolvedObjectItem = (
   if (object.kind !== 'Event' || !hasInvolvedObject || !handlers.onViewInvolvedObject) {
     return null;
   }
-  const involvedKind =
-    resourceLinkDisplayKind(object.involvedObjectRef) ?? object.involvedObject?.split('/')[0];
-  if (!involvedKind || involvedKind === '-') {
+  // The label names the kind from the backend's involved-object link.
+  const involvedKind = resourceLinkDisplayKind(object.involvedObjectRef);
+  if (!involvedKind) {
     return null;
   }
   return {
