@@ -634,13 +634,10 @@ export interface ClusterNodeSnapshotEntry {
   podsCapacity: string;
   podsAllocatable: string;
   restarts: number;
-  cpu: string;
-  memory: string;
   unschedulable: boolean;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
   taints?: Array<NodeTaint>;
-  podMetrics?: Array<NodePodMetric>;
 }
 
 export interface ClusterNodeSnapshotPayload {
@@ -1547,13 +1544,6 @@ export interface NodeMetricsInfo {
   consecutiveFailures?: number;
   successCount: number;
   failureCount: number;
-}
-
-export interface NodePodMetric {
-  namespace: string;
-  name: string;
-  cpuUsage: string;
-  memoryUsage: string;
 }
 
 export interface NodeTaint {

@@ -111,11 +111,9 @@
             {
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
-              "cpu": "0",
               "labels": {
                 "app": "wire-fixture"
               },
-              "memory": "0Mi",
               "pods": "",
               "podsAllocatable": "0",
               "podsCapacity": "0",

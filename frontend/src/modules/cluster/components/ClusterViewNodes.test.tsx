@@ -244,8 +244,6 @@ const baseNode: ClusterNodeRow = {
   labels: {},
   restarts: 0,
 
-  cpu: '1',
-  memory: '2Gi',
   unschedulable: false,
 
   age: '2h',

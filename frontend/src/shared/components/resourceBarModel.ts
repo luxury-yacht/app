@@ -129,7 +129,8 @@ const formatResourceBarValues = (
   formattedRequest: formatResourceValue(request, type),
   formattedLimit: formatResourceValue(limit, type),
   formattedAllocatable: formatResourceValue(allocatable, type),
-  formattedOvercommitted: limit === undefined ? '-' : formatResourceValue(overcommittedAmount, type),
+  formattedOvercommitted:
+    limit === undefined ? '-' : formatResourceValue(overcommittedAmount, type),
 });
 
 export const createResourceBarModel = (input: ResourceBarModelInput): ResourceBarModel => {

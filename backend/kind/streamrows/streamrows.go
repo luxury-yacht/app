@@ -18,7 +18,6 @@ package streamrows
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -474,13 +473,10 @@ type NodeSummary struct {
 	PodsCapacity           string            `json:"podsCapacity"`
 	PodsAllocatable        string            `json:"podsAllocatable"`
 	Restarts               int32             `json:"restarts"`
-	CPU                    string            `json:"cpu"`
-	Memory                 string            `json:"memory"`
 	Unschedulable          bool              `json:"unschedulable"`
 	Labels                 map[string]string `json:"labels,omitempty"`
 	Annotations            map[string]string `json:"annotations,omitempty"`
 	Taints                 []NodeTaint       `json:"taints,omitempty"`
-	PodMetrics             []NodePodMetric   `json:"podMetrics,omitempty"`
 }
 
 // NewResourceRef builds a row's canonical identity from the owning kind's
@@ -520,41 +516,6 @@ type NodeTaint struct {
 	Key    string `json:"key"`
 	Value  string `json:"value,omitempty"`
 	Effect string `json:"effect"`
-}
-
-// NodePodMetric is a per-pod usage entry shown in the node row.
-type NodePodMetric struct {
-	Namespace   string `json:"namespace"`
-	Name        string `json:"name"`
-	CPUUsage    string `json:"cpuUsage"`
-	MemoryUsage string `json:"memoryUsage"`
-}
-
-// MetricsNoData is the marker for a NodePodMetric usage string that has no valid
-// sample. Rendering it — never "0m"/"0Mi" — distinguishes "metrics unknown" from a
-// real zero. Numeric row usage fields express the same state as nil.
-const MetricsNoData = "-"
-
-// FormatCPUMilli renders CPU millicores for the node row's string fields.
-func FormatCPUMilli(value int64) string {
-	return fmt.Sprintf("%dm", value)
-}
-
-// FormatMemoryBytes renders a byte count for the node row's string fields.
-func FormatMemoryBytes(bytes int64) string {
-	if bytes <= 0 {
-		return "0Mi"
-	}
-	gb := float64(bytes) / (1024 * 1024 * 1024)
-	if gb >= 1 {
-		return fmt.Sprintf("%.1f GB", gb)
-	}
-	mb := float64(bytes) / (1024 * 1024)
-	if mb >= 1 {
-		return fmt.Sprintf("%.0f MB", mb)
-	}
-	kb := float64(bytes) / 1024
-	return fmt.Sprintf("%.0f KB", kb)
 }
 
 // FormatAge renders an object's age the way every streaming row displays it.

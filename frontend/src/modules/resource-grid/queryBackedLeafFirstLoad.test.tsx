@@ -361,8 +361,6 @@ const nodeRow = (name: string, age: string) => ({
   labels: {},
   annotations: {},
   restarts: 0,
-  cpu: '1',
-  memory: '2Gi',
   unschedulable: false,
   clusterId: 'cluster-a',
   clusterName: 'alpha',

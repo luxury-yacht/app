@@ -250,8 +250,6 @@ export const makeClusterNodeSnapshotEntry = (
     podsCapacity: '110',
     podsAllocatable: '100',
     restarts: 0,
-    cpu: '1200m',
-    memory: '5Gi',
     unschedulable: false,
     ...split.row,
     ref: {

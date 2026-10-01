@@ -68,9 +68,7 @@ func TestMetricsInfoCarriesStaleThreshold(t *testing.T) {
 
 func TestLatestNodeMetricsReadsUsageAndRevisionFromOneCollection(t *testing.T) {
 	provider := newRacyMetricsProvider()
-	nodeUsage, podUsage, metadata := latestNodeMetrics(provider)
+	nodeUsage, metadata := latestNodeMetrics(provider)
 	require.Equal(t, metadata.CollectedAt.Unix(), nodeUsage["node-1"].CPUUsageMilli,
 		"node usage and metadata must come from the same collection")
-	require.Equal(t, metadata.CollectedAt.Unix(), podUsage["team-a/pod-1"].CPUUsageMilli,
-		"the per-node pod usage join must come from the same collection as the metadata")
 }

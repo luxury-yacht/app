@@ -24,12 +24,12 @@ func latestPodMetrics(provider metrics.Provider) (map[string]metrics.PodUsage, m
 	return podUsageOrEmpty(sample.PodUsage), sample.Metadata
 }
 
-func latestNodeMetrics(provider metrics.Provider) (map[string]metrics.NodeUsage, map[string]metrics.PodUsage, metrics.Metadata) {
+func latestNodeMetrics(provider metrics.Provider) (map[string]metrics.NodeUsage, metrics.Metadata) {
 	if provider == nil {
-		return map[string]metrics.NodeUsage{}, map[string]metrics.PodUsage{}, metrics.Metadata{}
+		return map[string]metrics.NodeUsage{}, metrics.Metadata{}
 	}
 	sample := provider.Sample()
-	return nodeUsageOrEmpty(sample.NodeUsage), podUsageOrEmpty(sample.PodUsage), sample.Metadata
+	return nodeUsageOrEmpty(sample.NodeUsage), sample.Metadata
 }
 
 // metricRevisionFromMetadata is the metric source clock. It advances after

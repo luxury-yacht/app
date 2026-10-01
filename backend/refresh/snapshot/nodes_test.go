@@ -16,7 +16,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"k8s.io/client-go/kubernetes/fake"
 	ktesting "k8s.io/client-go/testing"
@@ -259,22 +258,7 @@ func TestNodeBuilderBuild(t *testing.T) {
 	require.Equal(t, "100", summary.PodsAllocatable)
 	require.Equal(t, int32(3), summary.Restarts)
 	require.Equal(t, "Node", summary.Ref.Kind)
-	require.Equal(t, "8", summary.CPU)
-	require.Equal(t, "32.0 GB", summary.Memory)
 	require.True(t, summary.Unschedulable)
-	require.Len(t, summary.PodMetrics, 2)
-	require.Contains(t, summary.PodMetrics, NodePodMetric{
-		Namespace:   "default",
-		Name:        "pod-a",
-		CPUUsage:    streamrows.MetricsNoData,
-		MemoryUsage: streamrows.MetricsNoData,
-	})
-	require.Contains(t, summary.PodMetrics, NodePodMetric{
-		Namespace:   "kube-system",
-		Name:        "pod-b",
-		CPUUsage:    streamrows.MetricsNoData,
-		MemoryUsage: streamrows.MetricsNoData,
-	})
 
 	require.Len(t, summary.Taints, 1)
 	require.Equal(t, NodeTaint{
@@ -321,7 +305,6 @@ func TestNodeListFallbackKeepsRowsWhenPodListForbidden(t *testing.T) {
 	require.Len(t, payload.Rows, 1)
 	require.Equal(t, "node-1", payload.Rows[0].Ref.Name)
 	require.Equal(t, ptr.To[int64](650), payload.Rows[0].CPUUsageMilli)
-	require.Empty(t, payload.Rows[0].PodMetrics)
 	require.False(t, payload.Metrics.Stale)
 	require.Equal(t, uint64(1), payload.Metrics.SuccessCount)
 }

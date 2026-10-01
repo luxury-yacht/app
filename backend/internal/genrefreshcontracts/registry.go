@@ -133,7 +133,6 @@ var contractTypes = []typeSpec{
 	{name: "NamespaceSnapshotPayload", typeOf: typeOf[snapshot.NamespaceSnapshot]()},
 	{name: "NamespaceMetric", typeOf: typeOf[snapshot.NamespaceMetric]()},
 	{name: "NamespaceMetricsSnapshotPayload", typeOf: typeOf[snapshot.NamespaceMetricsSnapshot]()},
-	{name: "NodePodMetric", typeOf: typeOf[streamrows.NodePodMetric]()},
 	{name: "DrainNodeOptionsPayload", typeOf: typeOf[restypes.DrainNodeOptions]()},
 	{name: "NodeMaintenanceDrainEvent", typeOf: typeOf[nodemaintenance.DrainEvent]()},
 	{name: "NodeMaintenanceDrainJob", typeOf: typeOf[nodemaintenance.DrainJob]()},
