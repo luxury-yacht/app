@@ -28,6 +28,14 @@ export interface MetricsBannerInfo {
   tooltip: string;
 }
 
+// metricsCollectedAtMs is the last successful collection (ms), or null when
+// there has been none. collectedAt <= 0 counts as absent: older backends
+// serialized Go's zero time as -62135596800 instead of omitting it.
+export const metricsCollectedAtMs = (metrics?: MetricsAvailability | null): number | null => {
+  const collectedAt = metrics?.collectedAt;
+  return typeof collectedAt === 'number' && collectedAt > 0 ? collectedAt * 1000 : null;
+};
+
 // metricsStaleDeadlineMs is the wall-clock instant (ms) the payload's sample
 // becomes stale, or null when the payload carries no client-evaluable
 // threshold. useMetricsBannerInfo schedules its one boundary re-render on it.
@@ -82,9 +90,7 @@ export const getMetricsBannerInfo = (
   // has failed. The cluster is healthy — we simply have not collected yet.
   // Distinct from the stale/awaiting states so a blank utilization card next
   // to a "Ready" status reads as collection-in-progress, not as a problem.
-  // collectedAt <= 0 counts as absent: older backends serialized Go's zero
-  // time as -62135596800 instead of omitting it.
-  const hasCollected = typeof metrics.collectedAt === 'number' && metrics.collectedAt > 0;
+  const hasCollected = metricsCollectedAtMs(metrics) !== null;
   if (successCount === 0 && !hasCollected && failureCount === 0 && !metrics.lastError) {
     return {
       message: 'Collecting metrics…',

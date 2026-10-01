@@ -100,18 +100,18 @@
   color: var(--status-action-text-hover);
 }
 
-.connectivity-status-message {
+.status-popover-lines {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.connectivity-status-summary {
+.status-popover-summary {
   font-weight: 600;
   color: var(--color-text);
 }
 
-.connectivity-status-detail {
+.status-popover-detail {
   color: var(--color-text-secondary);
 }
 

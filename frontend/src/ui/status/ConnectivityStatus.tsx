@@ -93,9 +93,9 @@ const ConnectivityStatus: React.FC = () => {
       status={presentation.status}
       title="Connectivity"
       message={
-        <div className="connectivity-status-message">
-          <div className="connectivity-status-summary">{presentation.summary}</div>
-          <div className="connectivity-status-detail">{presentation.detail}</div>
+        <div className="status-popover-lines">
+          <div className="status-popover-summary">{presentation.summary}</div>
+          <div className="status-popover-detail">{presentation.detail}</div>
         </div>
       }
       actions={actions}

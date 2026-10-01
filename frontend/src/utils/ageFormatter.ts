@@ -96,6 +96,15 @@ export function formatAge(
   return 'now';
 }
 
+/** Formats a timestamp as relative past-tense text like "5m ago" or "just now". */
+export function formatAgeAgo(
+  timestamp: Date | string | number | null | undefined,
+  nowInput: Date | string | number = Date.now()
+): string {
+  const age = formatAge(timestamp, nowInput);
+  return age === 'now' ? 'just now' : `${age} ago`;
+}
+
 /**
  * Formats a timestamp into a full date string
  * @param timestamp - The timestamp to format
