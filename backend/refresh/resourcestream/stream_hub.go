@@ -31,7 +31,8 @@ func (m *Manager) SubscribeSelector(selector StreamSelector) (*Subscription, err
 	if err != nil {
 		m.logWarn(err.Error())
 		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
+			// The failure belongs to the requesting domain, not the shared socket.
+			m.telemetry.RecordStreamErrorForLeaf(telemetry.StreamResources, telemetry.DomainLeaf(domain), err)
 		}
 		return nil, err
 	}

@@ -864,14 +864,18 @@ func registerMaintainedHandlers[T any](
 // an update with a new resourceVersion, or a delete. It runs on this handler's
 // own listener, so a doorbell rung from it can never reach a reader before the
 // store holds the change. Resync echoes still re-upsert but report no change.
+//
+// The returned synced reports when this handler has applied the informer's
+// initial list. The informer's own HasSynced turns true before its handlers
+// catch up, so a builder serving from the store must gate on this instead.
 func registerMaintainedInformerHandler[T any](
 	maintained *typedMaintainedStore[T],
 	informer cache.SharedIndexInformer,
 	project func(obj interface{}) (row T, source metav1.Object, ok bool),
 	changed func(row T),
-) error {
+) (cache.InformerSynced, error) {
 	handler := maintainedInformerHandler[T]{maintained: maintained, project: project, changed: changed}
-	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	registration, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) { handler.upsert(obj, true) },
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			handler.upsert(newObj, !informerUpdateIsEcho(oldObj, newObj))
@@ -879,7 +883,7 @@ func registerMaintainedInformerHandler[T any](
 		DeleteFunc: handler.remove,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// This bespoke single-kind store gets no Delete on a fresh informer for an object removed
 	// while the cluster was Cold, so a row restored from a stale spill would ghost. Register a
@@ -890,7 +894,7 @@ func registerMaintainedInformerHandler[T any](
 		func(T) bool { return true },
 		handler.report,
 	)
-	return nil
+	return registration.HasSynced, nil
 }
 
 // maintainedInformerHandler applies one informer's deliveries to its maintained

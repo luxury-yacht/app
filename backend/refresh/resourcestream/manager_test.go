@@ -23,6 +23,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
@@ -1467,4 +1468,35 @@ func TestSubscriptionCloseSerializesWithDelivery(t *testing.T) {
 		sub.close(DropReasonClosed)
 		<-done
 	}
+}
+
+// A failed subscribe belongs to the domain that asked. Recorded on the shared
+// socket instead, one domain's failure would mark every domain card that
+// summarizes this socket (Catalog, Events) as failing.
+func TestSubscribeFailuresAreAttributedToTheRequestingDomain(t *testing.T) {
+	recorder := telemetry.NewRecorder()
+	manager := NewManager(nil, nil, recorder, snapshot.ClusterMeta{ClusterID: "c1"}, nil)
+	selector, err := ParseStreamSelector("c1", domainNamespaceEvents, "namespace:prod")
+	require.NoError(t, err)
+	for i := 0; i < config.ResourceStreamMaxSubscribersPerScope; i++ {
+		_, err := manager.SubscribeSelector(selector)
+		require.NoError(t, err)
+	}
+	_, err = manager.SubscribeSelector(selector)
+	require.Error(t, err)
+
+	var socketErrors, domainErrors uint64
+	for _, status := range recorder.SnapshotSummary().Streams {
+		if status.Name != telemetry.StreamResources {
+			continue
+		}
+		switch {
+		case status.LeafKind == telemetry.StreamLeafNone:
+			socketErrors += status.ErrorCount
+		case status.LeafKind == telemetry.StreamLeafDomain && status.Leaf == domainNamespaceEvents:
+			domainErrors += status.ErrorCount
+		}
+	}
+	require.Equal(t, uint64(0), socketErrors, "the shared socket did not fail")
+	require.Equal(t, uint64(1), domainErrors, "the namespace-events subscribe failed")
 }

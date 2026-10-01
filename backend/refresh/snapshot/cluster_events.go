@@ -31,10 +31,11 @@ const (
 type ClusterEventsBuilder struct {
 	eventLister corelisters.EventLister
 	maintained  *typedMaintainedStore[ClusterEventEntry]
-	// eventsSynced reports whether the events informer finished its initial
-	// sync. Events are the highest-cardinality resource in a cluster; listing
-	// an UNSYNCED informer silently returns an empty slice, which would publish
-	// a confident "zero events" page during the post-connect window.
+	// eventsSynced reports whether the maintained store's handler has applied
+	// the Events informer's initial list (the informer's own HasSynced turns true
+	// before its handlers catch up). Events are the highest-cardinality resource
+	// in a cluster; serving an unfilled store would publish a confident "zero
+	// events" or partial page during the post-connect window.
 	eventsSynced cache.InformerSynced
 }
 
@@ -110,7 +111,7 @@ func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedI
 	notifier := newEventTableChangeNotifier(clusterEventsDomainName, "ce")
 	maintained := newTypedMaintainedStore(clusterMeta, clusterEventsQuerypageSchema(), clusterEventTableQueryAdapter())
 	reg.RegisterMaintainedStore(clusterEventsDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
-	if err := registerMaintainedInformerHandler(maintained, eventInformer.Informer(),
+	storeSynced, err := registerMaintainedInformerHandler(maintained, eventInformer.Informer(),
 		func(obj interface{}) (ClusterEventEntry, metav1.Object, bool) {
 			evt, ok := obj.(*corev1.Event)
 			if !ok {
@@ -120,14 +121,15 @@ func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedI
 			return entry, evt, keep
 		},
 		func(entry ClusterEventEntry) { notifier.changed(entry.ObjectNamespace) },
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
 
 	builder := &ClusterEventsBuilder{
 		eventLister:  eventInformer.Lister(),
 		maintained:   maintained,
-		eventsSynced: eventInformer.Informer().HasSynced,
+		eventsSynced: storeSynced,
 	}
 	if err := reg.Register(refresh.DomainConfig{
 		Name:          clusterEventsDomainName,

@@ -28,8 +28,8 @@ const namespaceEventsDomainName = "namespace-events"
 type NamespaceEventsBuilder struct {
 	eventLister corelisters.EventLister
 	maintained  *typedMaintainedStore[EventSummary]
-	// eventsSynced reports whether the events informer finished its initial
-	// sync; see ClusterEventsBuilder for why listing an unsynced cache is a lie.
+	// eventsSynced reports whether the maintained store's handler has applied the
+	// Events informer's initial list; see ClusterEventsBuilder for why.
 	eventsSynced cache.InformerSynced
 }
 
@@ -95,7 +95,7 @@ func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.Share
 	notifier := newEventTableChangeNotifier(namespaceEventsDomainName, "ne")
 	maintained := newTypedMaintainedStore(clusterMeta, namespaceEventsQuerypageSchema(), namespacedEventTableQueryAdapter())
 	reg.RegisterMaintainedStore(namespaceEventsDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
-	if err := registerMaintainedInformerHandler(maintained, eventInformer.Informer(),
+	storeSynced, err := registerMaintainedInformerHandler(maintained, eventInformer.Informer(),
 		func(obj interface{}) (EventSummary, metav1.Object, bool) {
 			evt, ok := obj.(*corev1.Event)
 			if !ok {
@@ -105,14 +105,15 @@ func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.Share
 			return summary, evt, keep
 		},
 		func(summary EventSummary) { notifier.changed(summary.ObjectNamespace) },
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
 
 	builder := &NamespaceEventsBuilder{
 		eventLister:  eventInformer.Lister(),
 		maintained:   maintained,
-		eventsSynced: eventInformer.Informer().HasSynced,
+		eventsSynced: storeSynced,
 	}
 	if err := reg.Register(refresh.DomainConfig{
 		Name:          namespaceEventsDomainName,

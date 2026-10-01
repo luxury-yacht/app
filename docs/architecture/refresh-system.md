@@ -302,7 +302,9 @@ Four rules keep the two views joinable:
 - `telemetry.StreamStatus` carries `Leaf` plus `LeafKind`. The two streams key
   their children differently — resources by refresh domain, container logs by
   pod target — so a consumer may only join leaves of the same kind and the same
-  cluster. A leaf-less row is socket level.
+  cluster. A leaf-less row is socket level, for transport-wide problems only: a
+  failure that belongs to one domain, such as a rejected subscribe, is recorded
+  on that domain's leaf.
 - A broker-read row is keyed by cluster as well as broker, resource, adapter and
   reason. A scope naming several clusters has no single owner and stays an
   app-level row.
