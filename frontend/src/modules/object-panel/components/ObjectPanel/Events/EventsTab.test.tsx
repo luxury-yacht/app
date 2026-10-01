@@ -192,6 +192,20 @@ function makeEvent(
     involvedObjectNamespace: 'default',
     involvedObjectUid: 'related-pod-uid',
     involvedObjectApiVersion: 'v1',
+    // The backend sends an openable link whenever the event names a versioned
+    // involved object, stamped with the event's cluster.
+    involvedObject: {
+      ref: {
+        clusterId: ref?.clusterId ?? PARENT_CLUSTER_ID,
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        resource: 'pods',
+        namespace: 'default',
+        name: 'related-pod',
+        uid: 'related-pod-uid',
+      },
+    },
     ...row,
   };
 }
@@ -643,73 +657,6 @@ describe('EventsTab', () => {
     expect(mockFetchScopedDomain).not.toHaveBeenCalled();
   });
 
-  it('falls back to parent panel cluster when event has no cluster identity', async () => {
-    // Event without cluster fields — should fall back to parent panel.
-    hoistedSnapshot.data = {
-      events: [makeEvent({ ref: { clusterId: undefined } })],
-    };
-    hoistedSnapshot.status = 'ready';
-
-    act(() => {
-      root.render(
-        <EventsTab
-          objectData={parentObjectData}
-          panelId={PANEL_ID}
-          isActive={true}
-          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
-        />
-      );
-    });
-
-    await clickObjectName();
-
-    expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
-    const call = mockOpenWithObject.mock.calls[0][0];
-    expect(call.clusterId).toBe(PARENT_CLUSTER_ID);
-    expect(call.clusterName).toBe(PARENT_CLUSTER_NAME);
-  });
-
-  it('threads the event involvedObject GVK to openWithObject so colliding kinds are disambiguated', async () => {
-    // Two different CRDs both define the kind "DBInstance". Without
-    // group/version on the openWithObject reference, the panel cannot
-    // tell them apart and the backend's legacy kind-only resolver picks
-    // whichever one came first in discovery — which is exactly the
-    // kind-only-objects bug.
-    hoistedSnapshot.data = {
-      events: [
-        makeEvent({
-          ref: { clusterId: EVENT_CLUSTER_ID },
-          involvedObjectKind: 'DBInstance',
-          involvedObjectName: 'orders-db',
-          involvedObjectNamespace: 'team-a',
-          involvedObjectApiVersion: 'documentdb.services.k8s.aws/v1alpha1',
-        }),
-      ],
-    };
-    hoistedSnapshot.status = 'ready';
-
-    act(() => {
-      root.render(
-        <EventsTab
-          objectData={parentObjectData}
-          panelId={PANEL_ID}
-          isActive={true}
-          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
-        />
-      );
-    });
-
-    await clickObjectName();
-
-    expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
-    const call = mockOpenWithObject.mock.calls[0][0];
-    expect(call.kind).toBe('DBInstance');
-    expect(call.name).toBe('orders-db');
-    expect(call.namespace).toBe('team-a');
-    expect(call.group).toBe('documentdb.services.k8s.aws');
-    expect(call.version).toBe('v1alpha1');
-  });
-
   it('prefers the openable involvedObject ref over display-only event object fields', async () => {
     hoistedSnapshot.data = {
       events: [
@@ -764,38 +711,6 @@ describe('EventsTab', () => {
     );
   });
 
-  it('parses core/v1 involvedObject apiVersion into an empty group + v1 version', async () => {
-    hoistedSnapshot.data = {
-      events: [
-        makeEvent({
-          involvedObjectKind: 'Pod',
-          involvedObjectName: 'web-0',
-          involvedObjectNamespace: 'default',
-          involvedObjectApiVersion: 'v1',
-        }),
-      ],
-    };
-    hoistedSnapshot.status = 'ready';
-
-    act(() => {
-      root.render(
-        <EventsTab
-          objectData={parentObjectData}
-          panelId={PANEL_ID}
-          isActive={true}
-          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
-        />
-      );
-    });
-
-    await clickObjectName();
-
-    expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
-    const call = mockOpenWithObject.mock.calls[0][0];
-    expect(call.group).toBe('');
-    expect(call.version).toBe('v1');
-  });
-
   it('resolves involved CRDs by UID when the event omits apiVersion', async () => {
     mockFindCatalogObjectByUID.mockResolvedValue({
       ref: {
@@ -818,6 +733,16 @@ describe('EventsTab', () => {
           involvedObjectNamespace: 'team-a',
           involvedObjectUid: 'orders-db-uid',
           involvedObjectApiVersion: undefined,
+          // Without an apiVersion the backend can only send a display-only link.
+          involvedObject: {
+            display: {
+              clusterId: EVENT_CLUSTER_ID,
+              kind: 'Database',
+              namespace: 'team-a',
+              name: 'orders-db',
+              uid: 'orders-db-uid',
+            },
+          },
         }),
       ],
     };

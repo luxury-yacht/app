@@ -172,6 +172,19 @@ const baseEvent: EventRow = {
   objectKind: 'Pod',
   objectName: 'foo',
   objectApiVersion: 'v1',
+  // The backend's openable link for a versioned involved object.
+  involvedObject: {
+    ref: {
+      clusterId: 'test-cluster',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      resource: 'pods',
+      namespace: 'team-a',
+      name: 'foo',
+      uid: 'pod-uid',
+    },
+  },
   message: 'Something happened',
   age: '1m',
   ageTimestamp: 123,
@@ -402,6 +415,9 @@ describe('ClusterViewEvents', () => {
       objectName: 'primary',
       objectUid: 'database-uid',
       objectApiVersion: undefined,
+      involvedObject: {
+        display: { clusterId: 'test-cluster', kind: 'Database', name: 'primary', uid: 'database-uid' },
+      },
     };
 
     await act(async () => {
@@ -445,6 +461,9 @@ describe('ClusterViewEvents', () => {
       objectName: 'primary',
       objectUid: 'database-uid',
       objectApiVersion: undefined,
+      involvedObject: {
+        display: { clusterId: 'test-cluster', kind: 'Database', name: 'primary', uid: 'database-uid' },
+      },
     };
 
     await act(async () => {

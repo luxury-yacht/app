@@ -23,7 +23,6 @@ import { createEventTypeColumn } from '@shared/events/eventColumns';
 import {
   eventGridObjectReference,
   eventGridRelatedObjectInput,
-  objectPanelEventGridRow,
 } from '@shared/events/eventGridModel';
 import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
@@ -77,7 +76,6 @@ interface EventDisplay {
   objectName: string;
   objectNamespace: string;
   objectUid?: string;
-  objectApiVersion?: string;
   involvedObject?: ResourceLink;
   // Per-event cluster identity from ObjectEventSummary (extends ClusterMeta).
   clusterId?: string;
@@ -112,7 +110,6 @@ const toEventDisplay = (
     objectName: event.involvedObjectName ?? '',
     objectNamespace: event.involvedObjectNamespace ?? panel?.namespace ?? CLUSTER_SCOPE,
     objectUid: event.involvedObjectUid,
-    objectApiVersion: event.involvedObjectApiVersion,
     involvedObject: event.involvedObject,
     clusterId: event.ref.clusterId,
     clusterName: eventClusterName(event.ref.clusterId, panel, resolveClusterName),
@@ -211,41 +208,12 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   }, [eventsScope, eventsSnapshot.data]);
 
   const buildEventObjectRefInput = useCallback(
-    (
-      event: Pick<
-        EventDisplay,
-        | 'objectKind'
-        | 'objectName'
-        | 'objectNamespace'
-        | 'objectUid'
-        | 'objectApiVersion'
-        | 'involvedObject'
-        | 'clusterId'
-        | 'clusterName'
-      >
-    ) =>
-      eventGridRelatedObjectInput(
-        objectPanelEventGridRow(
-          {
-            ...event,
-            clusterId: event.clusterId ?? objectData?.clusterId,
-            clusterName: event.clusterName ?? objectData?.clusterName,
-          },
-          CLUSTER_SCOPE
-        ),
-        {
-          fallbackKind: objectData?.kind,
-          fallbackGroup: objectData?.group,
-          fallbackVersion: objectData?.version,
-        }
-      ),
-    [
-      objectData?.clusterId,
-      objectData?.clusterName,
-      objectData?.group,
-      objectData?.kind,
-      objectData?.version,
-    ]
+    (event: Pick<EventDisplay, 'objectUid' | 'involvedObject' | 'clusterId' | 'clusterName'>) =>
+      eventGridRelatedObjectInput(event, {
+        selectedClusterId: objectData?.clusterId,
+        selectedClusterName: objectData?.clusterName,
+      }),
+    [objectData?.clusterId, objectData?.clusterName]
   );
 
   const events = useMemo<EventDisplay[]>(

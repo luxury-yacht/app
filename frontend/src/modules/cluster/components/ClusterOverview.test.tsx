@@ -75,7 +75,7 @@ const {
     browserOpenURLMock: vi.fn(),
     openWithObjectMock: vi.fn(),
     setObjectPanelActiveTabMock: vi.fn(),
-    canResolveEventObjectReferenceMock: vi.fn<(input: { objectName?: string }) => boolean>(
+    canResolveEventObjectReferenceMock: vi.fn<(input: { objectUid?: string }) => boolean>(
       () => false
     ),
     resolveEventObjectReferenceMock: vi.fn(),
@@ -921,6 +921,16 @@ describe('ClusterOverview', () => {
             objectNamespace: 'default',
             objectApiVersion: '',
             objectUid: 'pod-uid-1',
+            // The backend sends a display-only link when the event has no apiVersion.
+            involvedObject: {
+              display: {
+                clusterId: 'cluster-1',
+                kind: 'Pod',
+                namespace: 'default',
+                name: 'api-7c8d9',
+                uid: 'pod-uid-1',
+              },
+            },
           },
         ],
       },
@@ -939,12 +949,18 @@ describe('ClusterOverview', () => {
       await Promise.resolve();
     });
 
+    // The resolver gets the backend's link, never a kind to guess from.
     expect(resolveEventObjectReferenceMock).toHaveBeenCalledWith({
-      objectKind: 'Pod',
-      objectName: 'api-7c8d9',
+      involvedObject: {
+        display: {
+          clusterId: 'cluster-1',
+          kind: 'Pod',
+          namespace: 'default',
+          name: 'api-7c8d9',
+          uid: 'pod-uid-1',
+        },
+      },
       objectUid: 'pod-uid-1',
-      objectApiVersion: '',
-      objectNamespace: 'default',
       clusterId: 'cluster-1',
       clusterName: 'cluster-1',
     });
@@ -967,7 +983,7 @@ describe('ClusterOverview', () => {
   it('uses one warning-events Tab stop and arrows to focus every row', async () => {
     setWarningEvents(['first', 'unavailable', 'last']);
     canResolveEventObjectReferenceMock.mockImplementation(
-      (input) => input.objectName !== 'unavailable'
+      (input) => input.objectUid !== 'pod-unavailable'
     );
     const { container, cleanup } = renderClusterOverview(true);
     cleanupRoot = cleanup;
@@ -1024,7 +1040,7 @@ describe('ClusterOverview', () => {
     await act(async () => rows[1].click());
     expect(document.activeElement).toBe(rows[1]);
     expect(resolveEventObjectReferenceMock).toHaveBeenCalledWith(
-      expect.objectContaining({ clusterId: 'cluster-1', objectKind: 'Pod', objectName: 'last' })
+      expect.objectContaining({ clusterId: 'cluster-1', objectUid: 'pod-last' })
     );
     for (const key of ['Enter', ' ']) {
       expect((await pressOverviewKey(key)).defaultPrevented).toBe(false);
@@ -1377,6 +1393,18 @@ function setWarningEvents(ids: string[]) {
         objectNamespace: 'default',
         objectApiVersion: 'v1',
         objectUid: `pod-${id}`,
+        involvedObject: {
+          ref: {
+            clusterId: 'cluster-1',
+            group: '',
+            version: 'v1',
+            kind: 'Pod',
+            resource: 'pods',
+            namespace: 'default',
+            name: id,
+            uid: `pod-${id}`,
+          },
+        },
       })),
     },
   });

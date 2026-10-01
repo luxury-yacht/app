@@ -43,24 +43,9 @@ type EventRelatedObjectRow = Omit<EventGridRowIdentity, 'ref'> & {
   namespace?: string | null;
 };
 
-export interface ObjectPanelEventGridRow {
-  objectKind?: string | null;
-  objectName?: string | null;
-  objectNamespace?: string | null;
-  objectUid?: string | null;
-  objectApiVersion?: string | null;
-  involvedObject?: ResourceLink | null;
-  clusterId?: string | null;
-  clusterName?: string | null;
-}
-
 export interface EventRelatedObjectOptions {
   selectedClusterId?: string | null;
   selectedClusterName?: string | null;
-  defaultNamespace?: string | null;
-  fallbackKind?: string | null;
-  fallbackGroup?: string | null;
-  fallbackVersion?: string | null;
 }
 
 export const eventGridSearchText = (event: EventGridRowIdentity): string[] =>
@@ -90,26 +75,16 @@ export const eventGridObjectNamespace = (
   return defaultNamespace && defaultNamespace.length > 0 ? defaultNamespace : undefined;
 };
 
-// Grid rows carry null for absent values; the resolver input uses undefined.
-const orUndefined = <T>(value: T | null | undefined): T | undefined => value ?? undefined;
-
+// The resolver needs only the backend's involved-object link, the object UID
+// for the catalog fallback, and the cluster identity.
 export const eventGridRelatedObjectInput = (
   event: EventRelatedObjectRow,
   options: EventRelatedObjectOptions = {}
 ): EventObjectReferenceInput => ({
-  objectKind: orUndefined(event.objectKind),
-  objectName: orUndefined(event.objectName),
-  involvedObject: orUndefined(event.involvedObject),
-  objectUid: orUndefined(event.objectUid),
-  objectApiVersion: orUndefined(event.objectApiVersion),
-  objectNamespace: orUndefined(event.objectNamespace),
-  eventNamespace: orUndefined(event.ref?.namespace ?? event.namespace),
-  defaultNamespace: orUndefined(options.defaultNamespace),
-  clusterId: orUndefined(event.ref?.clusterId ?? event.clusterId ?? options.selectedClusterId),
-  clusterName: orUndefined(event.clusterName ?? options.selectedClusterName),
-  fallbackKind: orUndefined(options.fallbackKind),
-  fallbackGroup: orUndefined(options.fallbackGroup),
-  fallbackVersion: orUndefined(options.fallbackVersion),
+  involvedObject: event.involvedObject ?? undefined,
+  objectUid: event.objectUid ?? undefined,
+  clusterId: event.ref?.clusterId ?? event.clusterId ?? options.selectedClusterId ?? undefined,
+  clusterName: event.clusterName ?? options.selectedClusterName ?? undefined,
 });
 
 export const eventGridCanOpenRelatedObject = (
@@ -147,23 +122,6 @@ export const namespaceEventRowIdentity = (
   buildRequiredCanonicalObjectRowKey(eventGridObjectIdentity(event, defaultNamespace), {
     fallbackClusterId,
   });
-
-export const objectPanelEventGridRow = (
-  event: ObjectPanelEventGridRow,
-  clusterScope: string
-): EventRelatedObjectRow => ({
-  objectKind: event.objectKind ?? undefined,
-  objectName: event.objectName ?? undefined,
-  involvedObject: event.involvedObject ?? undefined,
-  objectUid: event.objectUid ?? undefined,
-  objectApiVersion: event.objectApiVersion ?? undefined,
-  objectNamespace:
-    event.objectNamespace && event.objectNamespace !== clusterScope
-      ? event.objectNamespace
-      : undefined,
-  clusterId: event.clusterId ?? undefined,
-  clusterName: event.clusterName ?? undefined,
-});
 
 const eventGridObjectIdentity = (
   event: EventGridRowIdentity,

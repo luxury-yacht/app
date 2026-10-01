@@ -291,8 +291,13 @@ func wireNamespaceEventInformer(
 	notifier.eventsExpected = true
 	notifier.eventsSynced = builder.eventsSynced
 	if _, err := eventInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(interface{}) { notifier.EventChanged() },
-		UpdateFunc: func(interface{}, interface{}) { notifier.EventChanged() },
+		AddFunc: func(interface{}) { notifier.EventChanged() },
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			// Resync echoes cannot change a warning count; skip the rollup rescan.
+			if !informerUpdateIsEcho(oldObj, newObj) {
+				notifier.EventChanged()
+			}
+		},
 		DeleteFunc: func(interface{}) { notifier.EventChanged() },
 	}); err != nil {
 		return fmt.Errorf("namespaces: register event aggregate handler: %w", err)

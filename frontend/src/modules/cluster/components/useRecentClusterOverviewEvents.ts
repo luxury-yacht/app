@@ -26,11 +26,8 @@ export const useRecentClusterOverviewEvents = ({
 }: UseRecentClusterOverviewEventsInput) => {
   const getObjectRefInput = useCallback(
     (event: RecentEventEntry) => ({
-      objectKind: event.objectKind,
-      objectName: event.objectName,
+      involvedObject: event.involvedObject,
       objectUid: event.objectUid,
-      objectApiVersion: event.objectApiVersion,
-      objectNamespace: event.objectNamespace || undefined,
       clusterId: event.clusterId ?? selectedClusterId ?? undefined,
       clusterName: event.clusterName ?? selectedClusterName ?? undefined,
     }),

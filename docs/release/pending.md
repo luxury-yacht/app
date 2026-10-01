@@ -14,5 +14,5 @@
 - The All Namespaces Events view now updates as events change; it previously stayed on its first page of results until reopened.
 - The Overview's Recent Events now include warnings that started over 24 hours ago but are still recurring, and list them by when they were last seen.
 - An object's Events tab now shows the most recent events when it has more than 500, and no longer hides events recorded against another version of the same API.
-- Involved objects of events recorded without an API version can be opened when the app can find them by UID.
+- Involved objects of events recorded without an API version now open through a lookup by UID on every Events screen; the app no longer guesses the API version from the object's kind.
 - Action buttons in the connectivity and sessions status popovers are now readable in light mode, and have stronger contrast in dark mode.

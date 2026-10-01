@@ -93,6 +93,9 @@ recent/capped windows and are visibly `Local Partial`.
   `events.k8s.io` series that keep `eventTime` at their first occurrence.
 - The object-panel window keeps the most recently observed events when it
   truncates, and matches the involved object by API group, not version.
+- Every Events surface opens an involved object only from the backend's
+  `involvedObject` link. Without an openable link, only a catalog lookup by UID
+  can open it; the group and version are never guessed from the kind.
 
 Nodes: `backend/refresh/snapshot/nodes.go` feeds a `Query Backed Dynamic`
 cluster table. Search, pagination, status filters, age sort, and CPU/memory

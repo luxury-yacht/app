@@ -52,8 +52,8 @@ export interface EventGridRow {
 
 /**
  * useEventsGridParts wires the scope-independent event grid machinery.
- * `defaultNamespace` threads the namespace view's scope into involved-object
- * resolution and the stable row key; the cluster view passes none.
+ * `defaultNamespace` threads the namespace view's scope into the stable row
+ * key; the cluster view passes none.
  */
 export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: string } = {}) {
   const { openWithObject } = useObjectPanel();
@@ -67,11 +67,8 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
   );
 
   const resolveOptions = useMemo(
-    () =>
-      defaultNamespace === undefined
-        ? { selectedClusterId, selectedClusterName }
-        : { defaultNamespace, selectedClusterId, selectedClusterName },
-    [defaultNamespace, selectedClusterId, selectedClusterName]
+    () => ({ selectedClusterId, selectedClusterName }),
+    [selectedClusterId, selectedClusterName]
   );
 
   const canOpenInvolvedObject = useCallback(
