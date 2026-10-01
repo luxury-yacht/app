@@ -64,7 +64,7 @@ interface EventsTabProps {
 }
 
 interface EventDisplay {
-  // The Event's own identity, opened by a row click.
+  // The Event's own identity, opened by Enter on the focused row.
   eventRef: CanonicalResourceRef;
   type: string;
   source: string;

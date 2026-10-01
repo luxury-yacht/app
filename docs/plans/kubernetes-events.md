@@ -62,8 +62,12 @@ contracts below move into their owning docs.
 
 - [x] Red + fix: sort by last observation before truncating.
 - [x] Red + fix: match the involved object's group, not exact `apiVersion`.
-- [x] Row click opens the Event; Object Name opens the involved object (user,
-      2026-09-30).
+- [x] Enter on the focused row opens the Event; Object Name opens the involved
+      object (user, 2026-09-30). A mouse click on a row opens nothing, as in
+      every table: GridTable sends pointer clicks only to `onRowPointerClick`.
+- [x] Cluster Events no longer opens the Event on a mouse click on the row
+      (`onRowPointerClick` and the Kind badge's row-click suppression removed;
+      user, 2026-10-01).
 - [x] Display-only links resolve only through the catalog by UID. The
       built-in kind table is not applied to them: the shared resource model
       forbids guessing group/version from `kind`.
@@ -89,9 +93,11 @@ contracts below move into their owning docs.
 | Diagnostics Events card shows event-domain deliveries | passed | `diagnosticsRowModel.test.ts` red→green |
 | Overview Recent Events uses last observation | passed | `TestBuildRecentEventsUsesTheLatestObservationOfASeries` red→green |
 | Empty type/source/message raw; untyped not shown as Normal | passed | `TestEventSurfacesSendEmptyDisplayFieldsRaw`, `eventColumns.test.tsx` red→green |
-| Events tab row opens the Event | passed | `EventsTab.test.tsx` red→green |
+| Events tab: Enter on the row opens the Event | passed | `EventsTab.test.tsx` red→green (mocked table calls the Enter callback) |
+| Cluster Events: mouse row click opens nothing | passed | `ClusterViewEvents.test.tsx` red→green; table contract `GridTable.test.tsx:747` |
 | Display-only links open via catalog UID | passed | `eventObjectIdentity.test.ts` red→green |
 | Object events truncation and group matching | passed | two `object_events_test.go` tests red→green |
 | Runtime check against a live cluster | blocked | no local cluster running; production kubeconfigs not used |
 | Focused suites, coverage, complexity | passed | see session report |
 | `qc:prerelease` | passed | exit 0, 2026-09-30: docs, fmt, bindings, vet, race, lint-fix, lint, typecheck, frontend, knip, trivy |
+| `qc:prerelease` after the row-click follow-up | passed | exit 0, 2026-10-01, same 11 steps |

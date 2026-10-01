@@ -300,7 +300,7 @@ describe('ClusterViewEvents', () => {
     );
   });
 
-  it('opens the Event object from the row and Kind badge', async () => {
+  it('opens the Event object from Enter on the row and from the Kind badge', async () => {
     await act(async () => {
       root.render(<ClusterViewEvents />);
       await Promise.resolve();
@@ -337,7 +337,9 @@ describe('ClusterViewEvents', () => {
       'data-gridtable-rowclick'?: string;
     }>(kindColumn.render(baseEvent), 'expected the cluster Event kind badge');
 
-    expect(kindCell.props['data-gridtable-rowclick']).toBe('suppress');
+    // Clicking the badge may focus its row like any other cell; the row itself
+    // opens nothing on a pointer click, so the badge needs no suppression.
+    expect(kindCell.props['data-gridtable-rowclick']).toBe('allow');
 
     act(() => {
       kindCell.props.onClick({ altKey: false });
@@ -355,31 +357,15 @@ describe('ClusterViewEvents', () => {
     );
   });
 
-  it('opens the Event object from pointer row activation', async () => {
+  // A mouse click on a row only focuses it, as in every other table; the Kind
+  // and Object Name links and Enter on the focused row open panels.
+  it('opens no panel from a pointer click on the row', async () => {
     await act(async () => {
       root.render(<ClusterViewEvents />);
       await Promise.resolve();
     });
 
-    const onRowPointerClick = requireValue(
-      gridTablePropsRef.current.onRowPointerClick,
-      'expected the cluster Event pointer row action'
-    );
-
-    act(() => {
-      onRowPointerClick(baseEvent);
-    });
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clusterId: 'test-cluster',
-        group: '',
-        version: 'v1',
-        kind: 'Event',
-        namespace: 'team-a',
-        name: 'test',
-      })
-    );
+    expect(gridTablePropsRef.current.onRowPointerClick).toBeUndefined();
   });
 
   it('passes stable event row identity into useTableSort', async () => {

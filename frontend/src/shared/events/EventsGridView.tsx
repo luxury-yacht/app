@@ -118,74 +118,63 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
     [defaultNamespace]
   );
 
-  /**
-   * Builds the shared event columns. The cluster view suppresses row clicks on
-   * the kind column; the namespace view keeps them.
-   */
-  const buildColumns = useCallback(
-    ({
-      kindAllowRowClick = true,
-    }: {
-      kindAllowRowClick?: boolean;
-    } = {}): GridColumnDefinition<EventGridRow>[] => {
-      const baseColumns: GridColumnDefinition<EventGridRow>[] = [
-        cf.createKindColumn<EventGridRow>({
-          getKind: () => 'Event',
-          getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
-          onClick: openEvent,
-          onAltClick: navigateToEvent,
-          ...(kindAllowRowClick ? {} : { allowRowClick: false }),
-        }),
-        createEventTypeColumn<EventGridRow>(),
-        cf.createTextColumn('source', EVENT_LABELS.source, (event) => event.source || '-'),
-        cf.createTextColumn<EventGridRow>(
-          'objectType',
-          EVENT_LABELS.objectType,
-          (event) => event.objectKind || '-'
-        ),
-        cf.createTextColumn<EventGridRow>(
-          'objectName',
-          EVENT_LABELS.objectName,
-          (event) => event.objectName || '-',
-          {
-            onClick: (event) => {
-              void openInvolvedObject(event);
-            },
-            onAltClick: (event) => {
-              void navigateToInvolvedObject(event);
-            },
-            getClassName: () => 'object-panel-link',
-            isInteractive: canOpenInvolvedObject,
-            allowRowClick: false,
-            hideable: false,
-          }
-        ),
-        cf.createTextColumn('reason', EVENT_LABELS.reason, (event) => event.reason || '-'),
-        cf.createTextColumn('message', EVENT_LABELS.message, (event) => event.message || '-'),
-        cf.createAgeColumn<EventGridRow>('age', EVENT_LABELS.lastSeen, (event) => event.age),
-      ];
+  /** Builds the shared event columns for both Events tables. */
+  const buildColumns = useCallback((): GridColumnDefinition<EventGridRow>[] => {
+    const baseColumns: GridColumnDefinition<EventGridRow>[] = [
+      cf.createKindColumn<EventGridRow>({
+        getKind: () => 'Event',
+        getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
+        onClick: openEvent,
+        onAltClick: navigateToEvent,
+      }),
+      createEventTypeColumn<EventGridRow>(),
+      cf.createTextColumn('source', EVENT_LABELS.source, (event) => event.source || '-'),
+      cf.createTextColumn<EventGridRow>(
+        'objectType',
+        EVENT_LABELS.objectType,
+        (event) => event.objectKind || '-'
+      ),
+      cf.createTextColumn<EventGridRow>(
+        'objectName',
+        EVENT_LABELS.objectName,
+        (event) => event.objectName || '-',
+        {
+          onClick: (event) => {
+            void openInvolvedObject(event);
+          },
+          onAltClick: (event) => {
+            void navigateToInvolvedObject(event);
+          },
+          getClassName: () => 'object-panel-link',
+          isInteractive: canOpenInvolvedObject,
+          allowRowClick: false,
+          hideable: false,
+        }
+      ),
+      cf.createTextColumn('reason', EVENT_LABELS.reason, (event) => event.reason || '-'),
+      cf.createTextColumn('message', EVENT_LABELS.message, (event) => event.message || '-'),
+      cf.createAgeColumn<EventGridRow>('age', EVENT_LABELS.lastSeen, (event) => event.age),
+    ];
 
-      const sizing: cf.ColumnSizingMap = {
-        kind: { autoWidth: true },
-        type: { autoWidth: true },
-        source: { width: 200 },
-        objectType: { autoWidth: true },
-        objectName: { width: 200 },
-        reason: { width: 200 },
-        message: { width: 250 },
-        age: { autoWidth: true },
-      };
-      return cf.withColumnSizing(baseColumns, sizing);
-    },
-    [
-      canOpenInvolvedObject,
-      navigateToEvent,
-      navigateToInvolvedObject,
-      openEvent,
-      openInvolvedObject,
-      useShortResourceNames,
-    ]
-  );
+    const sizing: cf.ColumnSizingMap = {
+      kind: { autoWidth: true },
+      type: { autoWidth: true },
+      source: { width: 200 },
+      objectType: { autoWidth: true },
+      objectName: { width: 200 },
+      reason: { width: 200 },
+      message: { width: 250 },
+      age: { autoWidth: true },
+    };
+    return cf.withColumnSizing(baseColumns, sizing);
+  }, [
+    canOpenInvolvedObject,
+    navigateToEvent,
+    navigateToInvolvedObject,
+    openEvent,
+    openInvolvedObject,
+    useShortResourceNames,
+  ]);
 
   return {
     selectedClusterId,

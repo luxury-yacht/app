@@ -5,7 +5,8 @@
 ### Changed
 
 - Exported table data is easier to import into spreadsheets. CPU and memory metrics now export as numbers only, with no unit indicators. CPU is exported in millicores, and memory is exported in KiB.
-- In an object's Events tab, clicking a row now opens the Event itself; the Object Name link still opens the involved object.
+- In an object's Events tab, pressing Enter on the selected row now opens the Event itself instead of the involved object; the Object Name link still opens the involved object.
+- Clicking a row in Cluster Events no longer opens the Event, matching every other table; use the Event link or press Enter on the selected row.
 - Events with an empty type, source, or message now show `-` everywhere, instead of `Normal`, `Unknown`, or a repeat of the reason.
 
 ### Fixed

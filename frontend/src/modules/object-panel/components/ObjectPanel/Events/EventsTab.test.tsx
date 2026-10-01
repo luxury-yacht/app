@@ -250,7 +250,8 @@ describe('EventsTab', () => {
 
   const PANEL_ID = `obj:${PARENT_CLUSTER_ID}:apps/v1/deployment:default:my-deploy`;
 
-  // The Object Name link opens the involved object; a row click opens the Event.
+  // The Object Name link opens the involved object; Enter on the focused row
+  // opens the Event.
   const clickObjectName = async (index = 0) => {
     const gridProps = requireValue(
       gridTableState.lastProps,
@@ -315,7 +316,7 @@ describe('EventsTab', () => {
         'expected object name column'
       );
       const row = requireValue(gridTableState.lastProps?.data[0], 'expected event row');
-      // The link opens the involved object while the row opens the Event, so it
+      // The link opens the involved object while Enter on the row opens the Event, so it
       // is its own action with its own Tab stop.
       expect(objectNameColumn.rowAction).not.toBe(true);
       const objectNameCell = requireReactElement<{
@@ -460,7 +461,9 @@ describe('EventsTab', () => {
     expect(typeCell.props).toMatchObject({ children: 'Warning', variant: 'warning' });
   });
 
-  it('opens the Event itself when a row is clicked', async () => {
+  // The mocked table invokes onRowClick, which GridTable calls only for Enter on
+  // the focused row; a mouse click on a row opens nothing.
+  it('opens the Event itself when the focused row is activated with Enter', async () => {
     hoistedSnapshot.data = { events: [makeEvent()] };
     hoistedSnapshot.status = 'ready';
 
