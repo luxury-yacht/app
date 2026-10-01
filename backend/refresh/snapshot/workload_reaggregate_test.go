@@ -12,6 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -138,4 +139,19 @@ func TestReaggregateWorkloadSummaryPreservesOutOfRangeReadyFallback(t *testing.T
 	if got.Ready != own.Ready {
 		t.Fatalf("ready fallback changed: got %q, want %q", got.Ready, own.Ready)
 	}
+}
+
+// A pod sampled at zero usage is a real zero, not missing metrics: the workload row
+// keeps 0 so the table and its export show 0 rather than the no-data dash.
+func TestReaggregateWorkloadSummaryKeepsSampledZeroUsage(t *testing.T) {
+	own := WorkloadSummary{Ref: resourcemodel.ResourceRef{Kind: deployment.Identity.Kind, Namespace: "team-a", Name: "idle"}}
+	pods := []streamrows.PodAggregate{{Namespace: "team-a", Name: "idle-1", Phase: string(corev1.PodRunning)}}
+
+	sampled := reaggregateWorkloadSummary(own, pods, map[string]metrics.PodUsage{"team-a/idle-1": {}})
+	require.Equal(t, ptr.To[int64](0), sampled.CPUUsageMilli)
+	require.Equal(t, ptr.To[int64](0), sampled.MemoryUsageBytes)
+
+	unsampled := reaggregateWorkloadSummary(own, pods, map[string]metrics.PodUsage{})
+	require.Nil(t, unsampled.CPUUsageMilli)
+	require.Nil(t, unsampled.MemoryUsageBytes)
 }

@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -97,4 +98,30 @@ func TestBuildStandalonePodSummaryFromRows(t *testing.T) {
 			require.Equal(t, tc.want, got, "standalone WorkloadSummary mismatch")
 		})
 	}
+}
+
+// A standalone pod's own sample decides its usage: a sample of zero stays zero, and a
+// sample predating the pod (a recreated same-name pod) reads as no data, as in the
+// Pods table.
+func TestBuildStandalonePodSummaryFromRowsDistinguishesZeroFromMissingUsage(t *testing.T) {
+	created := time.Now().Add(-time.Hour).Truncate(time.Second)
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "prod", Name: "idle", CreationTimestamp: metav1.NewTime(created)},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "c"}}},
+		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	podSummary := podres.BuildStreamSummary(ClusterMeta{}, pod, nil, nil)
+	agg := projectPodAggregate(pod, PodOwnerSources{})
+
+	zero := buildStandalonePodSummaryFromRows(podSummary, agg, map[string]metrics.PodUsage{
+		"prod/idle": {Timestamp: created.Add(time.Minute)},
+	})
+	require.Equal(t, ptr.To[int64](0), zero.CPUUsageMilli)
+	require.Equal(t, ptr.To[int64](0), zero.MemoryUsageBytes)
+
+	stale := buildStandalonePodSummaryFromRows(podSummary, agg, map[string]metrics.PodUsage{
+		"prod/idle": {CPUUsageMilli: 900, MemoryUsageBytes: 4 << 30, Timestamp: created.Add(-time.Minute)},
+	})
+	require.Nil(t, stale.CPUUsageMilli)
+	require.Nil(t, stale.MemoryUsageBytes)
 }

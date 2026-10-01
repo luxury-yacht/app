@@ -22,10 +22,10 @@ func reaggregateWorkloadSummary(own WorkloadSummary, pods []streamrows.PodAggreg
 		summary.Ready = reaggregateWorkloadReady(own.Ready, pods)
 	}
 	summary.Restarts = resources.Restarts
-	summary.CPUUsageMilli = workloadUsage(resources.CPUUsageMilli)
+	summary.CPUUsageMilli = sampledUsage(resources.CPUUsageMilli, resources.UsageSampled)
 	summary.CPURequestMilli = resources.CPURequestMilli
 	summary.CPULimitMilli = resources.CPULimitMilli
-	summary.MemoryUsageBytes = workloadUsage(resources.MemoryUsageBytes)
+	summary.MemoryUsageBytes = sampledUsage(resources.MemoryUsageBytes, resources.UsageSampled)
 	summary.MemoryRequestBytes = resources.MemoryRequestBytes
 	summary.MemoryLimitBytes = resources.MemoryLimitBytes
 	return summary

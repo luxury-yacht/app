@@ -596,12 +596,14 @@ func isUnhealthyStatusPresentation(presentation string) bool {
 //     common.HasForwardableContainerPorts produced from the typed pod;
 //   - the cpu/mem request/limit reservations are the PodAggregate's regular-container
 //     int64 sums, matching aggregateWorkloadPodResources;
-//   - cpu/mem usage are the fresh metrics sample, absent when not positive.
+//   - cpu/mem usage are the fresh metrics sample (a zero sample stays zero), absent when
+//     the pod has no valid sample under the Pods-table rule (metricSampleValid).
 //
 // The caller has already excluded Succeeded/Failed pods, so the single-pod aggregate's
 // restart total equals the PodSummary's RestartCount (BuildFacts) exactly.
 func buildStandalonePodSummaryFromRows(podSummary streamrows.PodSummary, agg streamrows.PodAggregate, usage map[string]metrics.PodUsage) WorkloadSummary {
-	sample := usage[fmt.Sprintf("%s/%s", agg.Namespace, agg.Name)]
+	sample, ok := usage[fmt.Sprintf("%s/%s", agg.Namespace, agg.Name)]
+	sampled := metricSampleValid(ok, sample.Timestamp, podSummary.AgeTimestamp)
 	return WorkloadSummary{
 		Ref:                  podSummary.Ref,
 		Metadata:             podSummary.Metadata,
@@ -613,10 +615,10 @@ func buildStandalonePodSummaryFromRows(podSummary streamrows.PodSummary, agg str
 		Restarts:             podSummary.Restarts,
 		Age:                  podSummary.Age,
 		AgeTimestamp:         podSummary.AgeTimestamp,
-		CPUUsageMilli:        workloadUsage(sample.CPUUsageMilli),
+		CPUUsageMilli:        sampledUsage(sample.CPUUsageMilli, sampled),
 		CPURequestMilli:      agg.CPURequestMilli,
 		CPULimitMilli:        agg.CPULimitMilli,
-		MemoryUsageBytes:     workloadUsage(sample.MemoryUsageBytes),
+		MemoryUsageBytes:     sampledUsage(sample.MemoryUsageBytes, sampled),
 		MemoryRequestBytes:   agg.MemRequestBytes,
 		MemoryLimitBytes:     agg.MemLimitBytes,
 		PortForwardAvailable: podSummary.PortForwardAvailable,
@@ -630,7 +632,10 @@ type resourceTotals struct {
 	MemoryRequestBytes int64
 	MemoryLimitBytes   int64
 	MemoryUsageBytes   int64
-	Restarts           int32
+	// UsageSampled reports whether any counted pod had a metrics sample, so a
+	// sampled total of zero is distinguishable from no usage data.
+	UsageSampled bool
+	Restarts     int32
 }
 
 func aggregateWorkloadPodResources(pods []streamrows.PodAggregate, usage map[string]metrics.PodUsage) resourceTotals {
@@ -651,6 +656,7 @@ func aggregateWorkloadPodResources(pods []streamrows.PodAggregate, usage map[str
 
 		key := fmt.Sprintf("%s/%s", agg.Namespace, agg.Name)
 		if usageSample, ok := usage[key]; ok {
+			totals.UsageSampled = true
 			totals.CPUUsageMilli += usageSample.CPUUsageMilli
 			totals.MemoryUsageBytes += usageSample.MemoryUsageBytes
 		}
@@ -757,10 +763,10 @@ func cloneInt32Ptr(value *int32) *int32 {
 	return &clone
 }
 
-// workloadUsage reports summed pod usage, absent when nothing positive was
-// sampled, so a workload without usage reads as no data rather than zero.
-func workloadUsage(value int64) *int64 {
-	if value <= 0 {
+// sampledUsage reports usage only when a metrics sample backs it, so no sample
+// reads as no data while a sampled zero stays zero.
+func sampledUsage(value int64, sampled bool) *int64 {
+	if !sampled {
 		return nil
 	}
 	return &value
