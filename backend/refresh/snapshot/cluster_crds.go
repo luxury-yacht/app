@@ -94,6 +94,7 @@ func RegisterClusterCRDDomain(
 			}
 			return apiextensions.BuildStreamSummary(clusterMeta, crd), crd, true
 		},
+		nil,
 	); err != nil {
 		return err
 	}

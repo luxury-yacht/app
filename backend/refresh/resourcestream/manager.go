@@ -535,15 +535,26 @@ func (m *Manager) BroadcastCatalogRefresh(version string) {
 	m.broadcastDoorbellRefresh(domainCatalog, m.subscribedScopes(domainCatalog), SourceCatalog, version)
 }
 
-func (m *Manager) BroadcastEventRefresh(domain, scope, version string) {
+// BroadcastEventTableRefresh fans a SourceEvent doorbell for an event table
+// change. Cluster events ring the cluster scope; namespace events ring each
+// changed involved-object namespace and All Namespaces, the same scopes every
+// other namespaced table rings.
+func (m *Manager) BroadcastEventTableRefresh(domain, version string, namespaces []string) {
 	if m == nil {
 		return
 	}
-	selector, err := ParseStreamSelector(m.clusterMeta.ClusterID, domain, scope)
-	if err != nil {
+	var scopes []string
+	switch domain {
+	case domainClusterEvents:
+		scopes = scopesForCluster()
+	case domainNamespaceEvents:
+		for _, namespace := range namespaces {
+			scopes = append(scopes, scopesForNamespace(namespace)...)
+		}
+	default:
 		return
 	}
-	m.broadcastDoorbellRefresh(domain, []string{selector.CanonicalScope()}, SourceEvent, version)
+	m.broadcastDoorbellRefresh(domain, scopes, SourceEvent, version)
 }
 
 // BroadcastMetricsRefresh fans a SourceMetric doorbell to every subscribed scope

@@ -263,15 +263,14 @@ func TestRecordStreamDeliveryForLeafTracksPerDomainCounters(t *testing.T) {
 	require.Equal(t, StreamResources, byDomain["nodes"].Name)
 }
 
-// TestStreamLeafKindsDoNotCollide proves the three streams key their per-leaf
-// counters by different things (a refresh domain, an event scope, a container
-// target) and that a diagnostics consumer can tell them apart. Two leaves that
-// share a key string but not a kind must stay separate entries.
+// TestStreamLeafKindsDoNotCollide proves the two streams key their per-leaf
+// counters by different things (a refresh domain, a container target) and that
+// a diagnostics consumer can tell them apart. Two leaves that share a key
+// string but not a kind must stay separate entries.
 func TestStreamLeafKindsDoNotCollide(t *testing.T) {
 	rec := NewRecorder()
 	rec.RecordStreamDeliveryForLeaf(StreamResources, DomainLeaf("pods"), 5, 0)
-	rec.RecordStreamDeliveryForLeaf(StreamEvents, ScopeLeaf("pods"), 2, 0)
-	rec.RecordStreamDeliveryForLeaf(StreamContainerLogs, TargetLeaf("ns/pods/app"), 7, 0)
+	rec.RecordStreamDeliveryForLeaf(StreamContainerLogs, TargetLeaf("pods"), 7, 0)
 
 	type leafID struct {
 		name string
@@ -284,9 +283,8 @@ func TestStreamLeafKindsDoNotCollide(t *testing.T) {
 	}
 
 	require.Equal(t, uint64(5), byLeaf[leafID{StreamResources, StreamLeafDomain, "pods"}].TotalMessages)
-	require.Equal(t, uint64(2), byLeaf[leafID{StreamEvents, StreamLeafScope, "pods"}].TotalMessages)
-	require.Equal(t, uint64(7), byLeaf[leafID{StreamContainerLogs, StreamLeafTarget, "ns/pods/app"}].TotalMessages)
-	require.Len(t, byLeaf, 3)
+	require.Equal(t, uint64(7), byLeaf[leafID{StreamContainerLogs, StreamLeafTarget, "pods"}].TotalMessages)
+	require.Len(t, byLeaf, 2)
 }
 
 // TestStreamLevelRowsCarryNoLeaf proves socket-level activity (sessions,

@@ -192,7 +192,6 @@ func TestDomainInventoryCoversAuthoredDomainsAndUsesKnownVocabulary(t *testing.T
 		"complete-resync-stream",
 		"catalog-stream",
 		"catalog-snapshot",
-		"event-stream",
 		"event-snapshot",
 		"log-stream",
 		"detail-payload",
@@ -205,7 +204,7 @@ func TestDomainInventoryCoversAuthoredDomainsAndUsesKnownVocabulary(t *testing.T
 		"optional-namespace",
 		"catalog-query",
 		"resource-stream-selector",
-		"event-stream-scope",
+		"namespace-scope",
 		"object-ref",
 		"helm-release",
 		"object-map",
@@ -222,14 +221,13 @@ func TestDomainInventoryCoversAuthoredDomainsAndUsesKnownVocabulary(t *testing.T
 		"external-catalog-cache-with-merge",
 		"stream-only",
 	)
-	streamSemantics := setOf("change-signal", "complete-resync", "append-merge", "snapshot-replace", "line-stream", "none")
+	streamSemantics := setOf("change-signal", "complete-resync", "snapshot-replace", "line-stream", "none")
 	coverageContracts := setOf(
 		"snapshot-table-payload",
 		"query-refetch-on-signal",
 		"complete-resync-only",
 		"catalog-consistency",
 		"catalog-snapshot-query",
-		"event-resume-merge",
 		"event-snapshot-payload",
 		"log-stream-lifecycle",
 		"detail-payload-shape",
@@ -327,14 +325,20 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 	require.Equal(t, []string{"snapshot-replace"}, catalogDiff.StreamSemantics)
 	require.Equal(t, "catalog-snapshot-query", catalogDiff.CoverageContract)
 
-	for _, domainID := range []string{"cluster-events", "namespace-events"} {
+	// Event tables are doorbell-refetched snapshot tables whose doorbell rides the
+	// resource stream, like cluster-identities; their payload owner is the builder
+	// that serves the maintained store the doorbell is rung from.
+	for domainID, expected := range map[string]struct{ scopeKind, owner string }{
+		"cluster-events":   {scopeKind: "cluster", owner: "backend/refresh/snapshot.ClusterEventsBuilder"},
+		"namespace-events": {scopeKind: "namespace-scope", owner: "backend/refresh/snapshot.NamespaceEventsBuilder"},
+	} {
 		events := contract.DomainInventory[domainID]
-		require.Equal(t, "event-stream", events.BehaviorClass)
-		require.Equal(t, "event-stream-scope", events.ScopeContract.Kind)
-		require.Equal(t, "backend/refresh/eventstream", events.PayloadOwner)
-		require.Equal(t, "snapshot-cache", events.CachePolicy)
-		require.Equal(t, []string{"snapshot-replace", "change-signal"}, events.StreamSemantics)
-		require.Equal(t, "query-refetch-on-signal", events.CoverageContract)
+		require.Equal(t, "snapshot-table", events.BehaviorClass, domainID)
+		require.Equal(t, expected.scopeKind, events.ScopeContract.Kind, domainID)
+		require.Equal(t, expected.owner, events.PayloadOwner, domainID)
+		require.Equal(t, "snapshot-cache", events.CachePolicy, domainID)
+		require.Equal(t, []string{"snapshot-replace", "change-signal"}, events.StreamSemantics, domainID)
+		require.Equal(t, "snapshot-table-payload", events.CoverageContract, domainID)
 	}
 
 	objectEvents := contract.DomainInventory["object-events"]
@@ -473,7 +477,7 @@ func TestStreamOnlyDomainsHaveEndpointWiring(t *testing.T) {
 	kubeClient := fake.NewClientset()
 	runtimePerms := permissions.NewChecker(kubeClient, "cluster-a", 0)
 	informerFactory := informer.New(kubeClient, nil, 0, runtimePerms)
-	containerLogsHandler, _, resourceManager, err := registerStreamHandlers(streamDeps{
+	containerLogsHandler, resourceManager, err := registerStreamHandlers(streamDeps{
 		informerFactory: informerFactory,
 		cfg: Config{
 			KubernetesClient: kubeClient,
@@ -547,7 +551,6 @@ func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 	for _, entry := range contract.Domains {
 		inventory := contract.DomainInventory[entry.Domain]
 		requiresDoorbellClock := entry.Backend.ResourceStream ||
-			inventory.BehaviorClass == "event-stream" ||
 			inventory.BehaviorClass == "catalog-stream" ||
 			entry.Frontend.Orchestrator == "doorbell-snapshot"
 		if !requiresDoorbellClock {
@@ -562,13 +565,13 @@ func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 		if entry.Frontend.Orchestrator == "doorbell-snapshot" {
 			// Doorbell-refetched snapshot domains declare exactly the one
 			// signal-only clock their doorbell rides — no projection descriptor
-			// exists: namespaces rides the object clock, object-events the
-			// event clock, and namespace-metrics/cluster-overview the metric clock
-			// (the overview's polls stay
+			// exists: namespaces rides the object clock, the three event domains
+			// the event clock, and namespace-metrics/cluster-overview the metric
+			// clock (the overview's polls stay
 			// on — metric doorbells only ring on successful collections).
 			expected := []string{"object"}
 			switch entry.Domain {
-			case "object-events":
+			case "object-events", "cluster-events", "namespace-events":
 				expected = []string{"event"}
 			case "namespace-metrics", "cluster-overview":
 				expected = []string{"metric"}
@@ -580,8 +583,6 @@ func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 		}
 
 		switch inventory.BehaviorClass {
-		case "event-stream":
-			require.ElementsMatchf(t, []string{"event"}, entry.SourceClocks, "domain %s event source clock", entry.Domain)
 		case "catalog-stream":
 			require.ElementsMatchf(t, []string{"catalog"}, entry.SourceClocks, "domain %s catalog source clock", entry.Domain)
 		default:
@@ -778,7 +779,7 @@ func enforcedCoverageProofs(t *testing.T) map[string]map[string]struct{} {
 	}{
 		{"snapshot-table-payload", setOf("snapshot-table")},
 		{"aggregate-snapshot-permission-fallback", setOf("aggregate-snapshot")},
-		{"query-refetch-on-signal", setOf("resource-stream-table", "event-stream")},
+		{"query-refetch-on-signal", setOf("resource-stream-table")},
 		{"complete-resync-only", setOf("complete-resync-stream")},
 		{"catalog-consistency", setOf("catalog-stream")},
 		{"catalog-snapshot-query", setOf("catalog-snapshot")},

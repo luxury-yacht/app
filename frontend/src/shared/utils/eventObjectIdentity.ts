@@ -13,15 +13,10 @@ import {
   validateResourceLink,
 } from '@shared/utils/resourceLinkIdentity';
 
-export interface ParsedEventObjectTarget {
-  objectType: string;
-  objectName: string;
-  isLinkable: boolean;
-}
-
 export interface EventObjectReferenceInput {
   involvedObject?: ResourceLink | null;
-  object: string | null | undefined;
+  objectKind?: string | null;
+  objectName?: string | null;
   objectUid?: string | null;
   objectApiVersion?: string | null;
   objectNamespace?: string | null;
@@ -39,57 +34,61 @@ const normalizeOptional = (value: string | null | undefined): string | undefined
   return trimmed || undefined;
 };
 
-export function splitEventObjectTarget(value?: string | null): ParsedEventObjectTarget {
-  const raw = (value ?? '').trim();
-  if (!raw || raw === '-') {
-    return { objectType: '-', objectName: '-', isLinkable: false };
-  }
+// A display-only link is the backend saying it could not identify the object.
+// It is never opened from a guessed group or version; only the catalog can
+// resolve it, by UID.
+const isDisplayOnlyLink = (input: EventObjectReferenceInput): boolean =>
+  Boolean(input.involvedObject && !input.involvedObject.ref);
 
-  const [objectType, objectName] = raw.split('/', 2);
-  if (!objectName) {
-    return { objectType: raw, objectName: '-', isLinkable: false };
-  }
-
-  // `objectName` is guaranteed non-empty here: the `if (!objectName)` guard
-  // above returned early otherwise.
-  return {
-    objectType: objectType || '-',
-    objectName,
-    isLinkable: Boolean(objectType && objectName),
-  };
-}
+const objectUid = (input: EventObjectReferenceInput): string | undefined =>
+  normalizeOptional(input.objectUid) ?? normalizeOptional(input.involvedObject?.display?.uid);
 
 export function buildEventObjectReference(
   input: EventObjectReferenceInput
 ): ResolvedObjectReference | undefined {
-  if (input.involvedObject) {
-    try {
-      return resourceLinkToObjectReference(input.involvedObject, input.clusterName);
-    } catch {
-      return undefined;
-    }
+  if (input.involvedObject?.ref) {
+    return openableLinkReference(input);
   }
+  return isDisplayOnlyLink(input) ? undefined : flatObjectReference(input);
+}
 
-  const parsed = splitEventObjectTarget(input.object);
-  if (!parsed.isLinkable) {
+const openableLinkReference = (
+  input: EventObjectReferenceInput
+): ResolvedObjectReference | undefined => {
+  try {
+    return input.involvedObject
+      ? resourceLinkToObjectReference(input.involvedObject, input.clusterName)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+// Builds the reference from the Event row's own involved-object fields when the
+// backend sent no link (the Overview's Recent Events).
+const flatObjectReference = (
+  input: EventObjectReferenceInput
+): ResolvedObjectReference | undefined => {
+  const kind = normalizeOptional(input.objectKind);
+  const name = normalizeOptional(input.objectName);
+  if (!kind || !name) {
     return undefined;
   }
 
-  const sameKindAsFallback = normalizeOptional(input.fallbackKind) === parsed.objectType;
+  const sameKindAsFallback = normalizeOptional(input.fallbackKind) === kind;
   const apiVersionParts = input.objectApiVersion
     ? parseApiVersion(input.objectApiVersion)
-    : resolveBuiltinGroupVersion(parsed.objectType);
+    : resolveBuiltinGroupVersion(kind);
   const version =
     apiVersionParts.version ?? (sameKindAsFallback ? input.fallbackVersion : undefined);
-
   if (!version) {
     return undefined;
   }
 
   try {
     return buildRequiredObjectReference({
-      kind: parsed.objectType,
-      name: parsed.objectName,
+      kind,
+      name,
       namespace:
         normalizeOptional(input.objectNamespace) ??
         normalizeOptional(input.eventNamespace) ??
@@ -103,23 +102,22 @@ export function buildEventObjectReference(
   } catch {
     return undefined;
   }
-}
+};
 
 export function canResolveEventObjectReference(input: EventObjectReferenceInput): boolean {
-  if (input.involvedObject) {
-    return Boolean(input.involvedObject.ref && validateResourceLink(input.involvedObject));
+  if (input.involvedObject?.ref) {
+    return validateResourceLink(input.involvedObject);
   }
 
   return Boolean(
-    buildEventObjectReference(input) ||
-      (normalizeOptional(input.clusterId) && normalizeOptional(input.objectUid))
+    buildEventObjectReference(input) || (normalizeOptional(input.clusterId) && objectUid(input))
   );
 }
 
 export async function resolveEventObjectReference(
   input: EventObjectReferenceInput
 ): Promise<ResolvedObjectReference | undefined> {
-  if (input.involvedObject) {
+  if (input.involvedObject?.ref) {
     return buildEventObjectReference(input);
   }
 
@@ -129,13 +127,13 @@ export async function resolveEventObjectReference(
   }
 
   const clusterId = normalizeOptional(input.clusterId);
-  const objectUid = normalizeOptional(input.objectUid);
-  if (!clusterId || !objectUid) {
+  const uid = objectUid(input);
+  if (!clusterId || !uid) {
     return undefined;
   }
 
   try {
-    return await resolveCatalogObjectByUID(clusterId, objectUid);
+    return await resolveCatalogObjectByUID(clusterId, uid);
   } catch {
     return undefined;
   }

@@ -239,24 +239,38 @@ describe('diagnosticsRowModel', () => {
         leaf: 'catalog',
         totalMessages: 500,
       },
-      // Events count sessions on the socket and deliveries per scope.
-      { ...base, name: 'events', clusterId: 'cluster-b', activeSessions: 7, totalMessages: 0 },
-      { ...base, name: 'events', clusterId: 'cluster-a', activeSessions: 2, lastConnect: 50 },
+      // The event tables' doorbells are domains on the same resources socket.
       {
         ...base,
-        name: 'events',
+        name: 'resources',
         clusterId: 'cluster-a',
-        leafKind: 'scope' as const,
-        leaf: 'cluster',
+        leafKind: 'domain' as const,
+        leaf: 'cluster-events',
         totalMessages: 3,
       },
       {
         ...base,
-        name: 'events',
+        name: 'resources',
         clusterId: 'cluster-a',
-        leafKind: 'scope' as const,
-        leaf: 'namespace:team-a',
+        leafKind: 'domain' as const,
+        leaf: 'namespace-events',
         totalMessages: 4,
+      },
+      {
+        ...base,
+        name: 'resources',
+        clusterId: 'cluster-a',
+        leafKind: 'domain' as const,
+        leaf: 'pods',
+        totalMessages: 90,
+      },
+      {
+        ...base,
+        name: 'resources',
+        clusterId: 'cluster-b',
+        leafKind: 'domain' as const,
+        leaf: 'namespace-events',
+        totalMessages: 600,
       },
     ];
 
@@ -264,10 +278,10 @@ describe('diagnosticsRowModel', () => {
       activeSessions: 1,
       totalMessages: 20,
     });
+    // Only this cluster's event-table deliveries count, with the socket's sessions.
     expect(selectEventStreamTelemetry(streams, 'cluster-a')).toMatchObject({
-      activeSessions: 2,
+      activeSessions: 1,
       totalMessages: 7,
-      lastConnect: 50,
     });
     expect(selectEventStreamTelemetry(streams, 'cluster-c')).toBeUndefined();
   });
@@ -625,7 +639,7 @@ describe('diagnosticsRowModel', () => {
     expect(
       buildEventStreamSummary({
         eventStreamTelemetry: {
-          name: 'events',
+          name: 'resources',
           activeSessions: 1,
           totalMessages: 12,
           droppedMessages: 1,

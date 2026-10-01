@@ -3,7 +3,6 @@ package system
 import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
-	"github.com/luxury-yacht/app/backend/refresh/eventstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
@@ -22,7 +21,7 @@ type streamDeps struct {
 
 // registerStreamHandlers constructs the per-cluster producers consumed by the
 // process-wide Wails named streams.
-func registerStreamHandlers(deps streamDeps) (*containerlogsstream.Handler, *eventstream.Manager, *resourcestream.Manager, error) {
+func registerStreamHandlers(deps streamDeps) (*containerlogsstream.Handler, *resourcestream.Manager, error) {
 	logger := applog.ClusterScoped(deps.cfg.Logger, deps.clusterMeta.ClusterID, deps.clusterMeta.ClusterName)
 	logHandler, err := containerlogsstream.NewHandlerWithLimits(
 		deps.cfg.KubernetesClient,
@@ -32,15 +31,8 @@ func registerStreamHandlers(deps streamDeps) (*containerlogsstream.Handler, *eve
 		deps.cfg.ContainerLogsTargetLimiter,
 	)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-
-	eventManager := eventstream.NewManager(
-		deps.informerFactory.SharedInformerFactory().Core().V1().Events(),
-		logger,
-		deps.telemetry,
-		deps.clusterMeta.ClusterID,
-	)
 
 	resourceManager := resourcestream.NewManager(
 		deps.informerFactory,
@@ -49,5 +41,5 @@ func registerStreamHandlers(deps streamDeps) (*containerlogsstream.Handler, *eve
 		deps.clusterMeta,
 		deps.ingestManager,
 	)
-	return logHandler, eventManager, resourceManager, nil
+	return logHandler, resourceManager, nil
 }

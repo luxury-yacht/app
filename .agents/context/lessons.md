@@ -48,7 +48,7 @@ sessions. Keep it short, durable, and tied to code contracts.
   add aggregate-domain exceptions for them; derive cross-cluster displays from
   multiple per-cluster entries above refresh state.
 - Backend aggregate refresh handlers are muxes, not merge engines. Snapshot,
-  manual refresh, event stream, and resource stream requests should route to
+  manual refresh and resource stream requests should route to
   exactly one scoped cluster and reject multi-cluster selectors.
 - Frontend resource stream descriptors own row identity, sorting, drift keys,
   row collections, and metric preservation. Backend support comes from each

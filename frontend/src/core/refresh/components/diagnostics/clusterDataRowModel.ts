@@ -40,7 +40,6 @@ export interface ResourceStreamRecoveryStats {
 
 const STREAM_LABELS: Record<string, string> = {
   resources: 'Resources',
-  events: 'Events',
   'container-logs': 'Container Logs',
 };
 
@@ -452,7 +451,7 @@ export const buildConnectionsRows = ({
       });
 
     forStream
-      .filter((entry) => entry.leafKind === 'scope' || entry.leafKind === 'target')
+      .filter((entry) => entry.leafKind === 'target')
       .sort((left, right) => compareStrings(left.leaf ?? '', right.leaf ?? ''))
       .forEach((entry) => {
         const eventInfo = formatLastUpdated(entry.lastEvent || undefined);
@@ -462,7 +461,7 @@ export const buildConnectionsRows = ({
           stream: streamName,
           label,
           cluster: clusterLabel(entry),
-          leafKind: entry.leafKind === 'target' ? 'target' : 'scope',
+          leafKind: 'target',
           leaf: entry.leaf ?? '',
           delivered: entry.totalMessages,
           dropped: entry.droppedMessages,

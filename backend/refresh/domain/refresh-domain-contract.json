@@ -177,20 +177,20 @@
       "coverageStatus": "enforced"
     },
     "cluster-events": {
-      "behaviorClass": "event-stream",
+      "behaviorClass": "snapshot-table",
       "scopeContract": {
-        "kind": "event-stream-scope",
+        "kind": "cluster",
         "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
+        "parser": "backend/refresh/snapshot/cluster_events.go:ClusterEventsBuilder.Build",
+        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
         "acceptedEncodings": ["", "cluster"]
       },
       "singleCluster": true,
-      "payloadOwner": "backend/refresh/eventstream",
+      "payloadOwner": "backend/refresh/snapshot.ClusterEventsBuilder",
       "refreshPayloadType": "ClusterEventsSnapshotPayload",
       "cachePolicy": "snapshot-cache",
       "streamSemantics": ["snapshot-replace", "change-signal"],
-      "coverageContract": "query-refetch-on-signal",
+      "coverageContract": "snapshot-table-payload",
       "coverageStatus": "enforced"
     },
     "cluster-rbac": {
@@ -279,20 +279,20 @@
       "coverageStatus": "enforced"
     },
     "namespace-events": {
-      "behaviorClass": "event-stream",
+      "behaviorClass": "snapshot-table",
       "scopeContract": {
-        "kind": "event-stream-scope",
+        "kind": "namespace-scope",
         "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>"]
+        "parser": "backend/refresh/snapshot/namespace_events.go:NamespaceEventsBuilder.Build",
+        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
+        "acceptedEncodings": ["namespace:<namespace>", "namespace:all"]
       },
       "singleCluster": true,
-      "payloadOwner": "backend/refresh/eventstream",
+      "payloadOwner": "backend/refresh/snapshot.NamespaceEventsBuilder",
       "refreshPayloadType": "NamespaceEventsSnapshotPayload",
       "cachePolicy": "snapshot-cache",
       "streamSemantics": ["snapshot-replace", "change-signal"],
-      "coverageContract": "query-refetch-on-signal",
+      "coverageContract": "snapshot-table-payload",
       "coverageStatus": "enforced"
     },
     "namespace-helm": {
@@ -869,9 +869,9 @@
       "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
       "frontend": {
         "refresherName": "cluster-events",
-        "orchestrator": "event-stream",
+        "orchestrator": "doorbell-snapshot",
         "registrationOrder": 15,
-        "diagnosticsStream": "events",
+        "diagnosticsStream": "resources",
         "timing": { "interval": 3000, "cooldown": 1000, "timeout": 10 }
       }
     },
@@ -948,9 +948,9 @@
       "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
       "frontend": {
         "refresherName": "events",
-        "orchestrator": "event-stream",
+        "orchestrator": "doorbell-snapshot",
         "registrationOrder": 21,
-        "diagnosticsStream": "events",
+        "diagnosticsStream": "resources",
         "timing": { "interval": 3000, "cooldown": 1000, "timeout": 10 }
       }
     },

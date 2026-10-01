@@ -273,12 +273,13 @@ describe('NsViewEvents', () => {
         }),
         ...ref,
       },
-      kind: 'Event',
       resourceVersion: '1',
       type: 'Warning',
       source: 'kubelet',
       reason: 'FailedScheduling',
       object: 'Pod/api',
+      objectKind: 'Pod',
+      objectName: 'api',
       objectApiVersion: 'v1',
       message: 'Insufficient CPU',
       objectNamespace: 'team-a',
@@ -567,6 +568,8 @@ describe('NsViewEvents', () => {
     });
     const event = baseEvent({
       object: 'Database/primary',
+      objectKind: 'Database',
+      objectName: 'primary',
       objectUid: 'database-uid',
       objectApiVersion: undefined,
     });

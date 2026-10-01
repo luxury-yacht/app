@@ -26,7 +26,6 @@ import {
 import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { splitEventObjectTarget } from '@shared/utils/eventObjectIdentity';
 import { useCallback, useMemo } from 'react';
 import { useShortNames } from '@/hooks/useShortNames';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -34,14 +33,14 @@ import { getDisplayKind } from '@/utils/kindAliasMap';
 /** The event row shape both scope views select from their snapshots. */
 export interface EventGridRow {
   ref: CanonicalResourceRef;
-  /** Involved-object kind, present on namespace Event rows. */
-  kind?: string;
   kindAlias?: string;
   resourceVersion: string;
-  type: string; // Event severity (Normal, Warning)
+  type: string; // Event severity (Normal, Warning); empty when the Event has none
   source: string;
   reason: string;
   object: string;
+  objectKind?: string;
+  objectName?: string;
   message: string;
   objectNamespace?: string;
   objectUid?: string;
@@ -139,17 +138,15 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
         }),
         createEventTypeColumn<EventGridRow>(),
         cf.createTextColumn('source', EVENT_LABELS.source, (event) => event.source || '-'),
-        cf.createTextColumn<EventGridRow>('objectType', EVENT_LABELS.objectType, (event) => {
-          const parsed = splitEventObjectTarget(event.object);
-          return parsed.objectType;
-        }),
+        cf.createTextColumn<EventGridRow>(
+          'objectType',
+          EVENT_LABELS.objectType,
+          (event) => event.objectKind || '-'
+        ),
         cf.createTextColumn<EventGridRow>(
           'objectName',
           EVENT_LABELS.objectName,
-          (event) => {
-            const parsed = splitEventObjectTarget(event.object);
-            return parsed.objectName;
-          },
+          (event) => event.objectName || '-',
           {
             onClick: (event) => {
               void openInvolvedObject(event);
@@ -243,9 +240,8 @@ export function useEventsGridActions({
 
   const getContextMenuItems = useCallback(
     (event: EventGridRow): ContextMenuItem[] => {
-      const parsed = splitEventObjectTarget(event.object);
       const involvedObjectExtras =
-        parsed.isLinkable && canOpenInvolvedObject(event)
+        event.objectKind && event.objectName && canOpenInvolvedObject(event)
           ? {
               involvedObject: event.object,
               involvedObjectRef: event.involvedObject,

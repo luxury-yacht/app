@@ -127,7 +127,8 @@ describe('eventGridModel', () => {
     expect(
       eventGridRelatedObjectInput(
         {
-          object: 'Database/primary',
+          objectKind: 'Database',
+          objectName: 'primary',
           objectUid: 'db-uid',
           namespace: 'events',
           objectNamespace: 'databases',
@@ -141,7 +142,8 @@ describe('eventGridModel', () => {
         }
       )
     ).toEqual({
-      object: 'Database/primary',
+      objectKind: 'Database',
+      objectName: 'primary',
       involvedObject: undefined,
       objectUid: 'db-uid',
       objectApiVersion: undefined,
@@ -159,7 +161,8 @@ describe('eventGridModel', () => {
   it('reports direct GVK-backed related objects as openable', () => {
     expect(
       eventGridCanOpenRelatedObject({
-        object: 'Pod/api',
+        objectKind: 'Pod',
+        objectName: 'api',
         objectApiVersion: 'v1',
         objectNamespace: 'prod',
         clusterId: 'cluster-a',
@@ -180,7 +183,8 @@ describe('eventGridModel', () => {
         '__cluster__'
       )
     ).toEqual({
-      object: 'Pod/api',
+      objectKind: 'Pod',
+      objectName: 'api',
       involvedObject: undefined,
       objectUid: undefined,
       objectApiVersion: 'v1',

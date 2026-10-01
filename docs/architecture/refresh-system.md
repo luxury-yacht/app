@@ -299,10 +299,10 @@ Four rules keep the two views joinable:
   copied onto each scope row. The backend retains only the 512 most recently
   updated snapshot identities per recorder so query scopes cannot grow
   diagnostics memory without bound.
-- `telemetry.StreamStatus` carries `Leaf` plus `LeafKind`. The three streams key
-  their children differently — resources by refresh domain, events by event
-  scope, container logs by pod target — so a consumer may only join leaves of
-  the same kind and the same cluster. A leaf-less row is socket level.
+- `telemetry.StreamStatus` carries `Leaf` plus `LeafKind`. The two streams key
+  their children differently — resources by refresh domain, container logs by
+  pod target — so a consumer may only join leaves of the same kind and the same
+  cluster. A leaf-less row is socket level.
 - A broker-read row is keyed by cluster as well as broker, resource, adapter and
   reason. A scope naming several clusters has no single owner and stays an
   app-level row.

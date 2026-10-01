@@ -115,17 +115,6 @@ func EventObjectDisplay(event *corev1.Event) string {
 	return "-"
 }
 
-// EventMessage returns the event message (falling back to the reason).
-func EventMessage(event *corev1.Event) string {
-	if event == nil {
-		return ""
-	}
-	if msg := strings.TrimSpace(event.Message); msg != "" {
-		return msg
-	}
-	return strings.TrimSpace(event.Reason)
-}
-
 // FormatEventSource renders the event source (component/host or reporting
 // controller/instance), returning empty when neither is set.
 func FormatEventSource(event corev1.Event, empty string) string {

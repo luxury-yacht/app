@@ -326,7 +326,7 @@ func namespaceEventHandler(notifier *NamespaceChangeNotifier) cache.ResourceEven
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			// Informer resyncs re-deliver every namespace with an unchanged
 			// ResourceVersion; only real updates ring the doorbell.
-			if namespaceUpdateIsEcho(oldObj, newObj) {
+			if informerUpdateIsEcho(oldObj, newObj) {
 				return
 			}
 			notifier.NamespaceChanged()
@@ -367,18 +367,6 @@ func registerNamespaceSnapshotBuilder(
 		return nil, err
 	}
 	return notifier, nil
-}
-
-// namespaceUpdateIsEcho reports whether an informer Update delivery is a resync
-// echo (unchanged ResourceVersion) rather than a real object change. Unrecognized
-// objects are treated as real updates — suppression must never lose a signal.
-func namespaceUpdateIsEcho(oldObj, newObj interface{}) bool {
-	oldNs, okOld := oldObj.(*corev1.Namespace)
-	newNs, okNew := newObj.(*corev1.Namespace)
-	if !okOld || !okNew {
-		return false
-	}
-	return oldNs.ResourceVersion != "" && oldNs.ResourceVersion == newNs.ResourceVersion
 }
 
 // namespaceNotifierSink adapts the change notifier to the ingest BundleSink (and

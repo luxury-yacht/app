@@ -5,7 +5,13 @@
 ### Changed
 
 - Exported table data is easier to import into spreadsheets. CPU and memory metrics now export as numbers only, with no unit indicators. CPU is exported in millicores, and memory is exported in KiB.
+- In an object's Events tab, clicking a row now opens the Event itself; the Object Name link still opens the involved object.
+- Events with an empty type, source, or message now show `-` everywhere, instead of `Normal`, `Unknown`, or a repeat of the reason.
 
 ### Fixed
 
+- The All Namespaces Events view now updates as events change; it previously stayed on its first page of results until reopened.
+- The Overview's Recent Events now include warnings that started over 24 hours ago but are still recurring, and list them by when they were last seen.
+- An object's Events tab now shows the most recent events when it has more than 500, and no longer hides events recorded against another version of the same API.
+- Involved objects of events recorded without an API version can be opened when the app can find them by UID.
 - Action buttons in the connectivity and sessions status popovers are now readable in light mode, and have stronger contrast in dark mode.

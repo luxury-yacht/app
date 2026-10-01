@@ -3326,6 +3326,8 @@ describe('refreshOrchestrator', () => {
             source: 'kubelet',
             reason: 'Started',
             object: 'Pod/web',
+            objectKind: 'Pod',
+            objectName: 'web',
             message: 'still here',
             age: '1m',
             ageTimestamp: 1,

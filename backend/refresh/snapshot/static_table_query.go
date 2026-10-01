@@ -24,28 +24,6 @@ func numericAgeSortValue(ageTimestamp int64) (float64, bool) {
 	return -float64(ageTimestamp), true
 }
 
-func eventObjectTypeForSort(object string) string {
-	object = strings.TrimSpace(object)
-	if object == "" {
-		return ""
-	}
-	if before, _, found := strings.Cut(object, "/"); found {
-		return before
-	}
-	return object
-}
-
-func eventObjectNameForSort(object string) string {
-	object = strings.TrimSpace(object)
-	if object == "" {
-		return ""
-	}
-	if _, after, found := strings.Cut(object, "/"); found {
-		return after
-	}
-	return ""
-}
-
 // nodePodsUsedSortValue is numeric for every node, so an unknown pod count
 // returns ok=true with a -Inf sentinel (sorts first ascending) rather than
 // ok=false, keeping the field uniformly numeric for keyset-consistent sorting.
@@ -361,20 +339,20 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 		Key:       func(row EventSummary) string { return namespacedTableKey("Event", row.Ref.Namespace, row.Ref.Name) },
 		AnchorKey: func(_, namespace, name string) string { return namespacedTableKey("Event", namespace, name) },
 		Namespace: func(row EventSummary) string { return row.ObjectNamespace },
-		Kind:      func(row EventSummary) string { return row.Kind },
+		Kind:      func(row EventSummary) string { return row.ObjectKind },
 		Facets: eventQueryFacets(
 			func(row EventSummary) string { return row.Type },
 			func(row EventSummary) string { return row.Reason },
 			func(row EventSummary) string { return row.Source },
 		),
 		SearchText: func(row EventSummary) []string {
-			return []string{row.Kind, row.Ref.Name, row.Ref.Namespace, row.ObjectNamespace, row.Type, row.Source, row.Reason, row.Object, row.Message}
+			return []string{row.ObjectKind, row.Ref.Name, row.Ref.Namespace, row.ObjectNamespace, row.Type, row.Source, row.Reason, row.Object, row.Message}
 		},
 		Predicate: func(EventSummary, string, string) bool { return true },
 		SortValue: func(row EventSummary, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.ObjectKind
 			case "namespace":
 				return row.ObjectNamespace
 			case "type":
@@ -386,9 +364,9 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 			case "object":
 				return row.Object
 			case "objecttype":
-				return eventObjectTypeForSort(row.Object)
+				return row.ObjectKind
 			case "objectname":
-				return eventObjectNameForSort(row.Object)
+				return row.ObjectName
 			case "message":
 				return row.Message
 			case "age", "agetimestamp":
@@ -439,9 +417,9 @@ func clusterEventTableQueryAdapter() typedTableQueryAdapter[ClusterEventEntry] {
 			case "object":
 				return row.Object
 			case "objecttype":
-				return eventObjectTypeForSort(row.Object)
+				return row.ObjectKind
 			case "objectname":
-				return eventObjectNameForSort(row.Object)
+				return row.ObjectName
 			case "message":
 				return row.Message
 			case "age", "agetimestamp":

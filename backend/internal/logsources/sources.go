@@ -6,7 +6,6 @@ const (
 	ContainerLogs       = "ContainerLogs"
 	ContainerLogsStream = "ContainerLogsStream"
 	ErrorCapture        = "ErrorCapture"
-	EventStream         = "EventStream"
 	Frontend            = "Frontend"
 	Heartbeat           = "Heartbeat"
 	Helm                = "Helm"

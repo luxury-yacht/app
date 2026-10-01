@@ -52,7 +52,7 @@ export type ResourceStatusSignalType =
 
 export type TelemetrySnapshotLastStatus = 'success' | 'error';
 
-export const TELEMETRY_STREAM_LEAF_KINDS = ['', 'domain', 'scope', 'target'] as const;
+export const TELEMETRY_STREAM_LEAF_KINDS = ['', 'domain', 'target'] as const;
 
 export type TelemetryStreamLeafKind = (typeof TELEMETRY_STREAM_LEAF_KINDS)[number];
 
@@ -512,6 +512,8 @@ export interface ClusterEventEntry {
   ref: CanonicalResourceRef;
   metadata?: ResourceTableMetadata;
   resourceVersion: string;
+  objectKind: string;
+  objectName: string;
   objectNamespace: string;
   objectUid: string;
   objectApiVersion: string;
@@ -1186,8 +1188,9 @@ export interface NamespaceConfigSummary {
 export interface NamespaceEventSummary {
   ref: CanonicalResourceRef;
   metadata?: ResourceTableMetadata;
-  kind: string;
   resourceVersion: string;
+  objectKind: string;
+  objectName: string;
   objectNamespace: string;
   objectUid: string;
   objectApiVersion: string;
@@ -2230,13 +2233,11 @@ export type GeneratedRefreshOrchestratorKind =
   | 'snapshot'
   | 'doorbell-snapshot'
   | 'resource-stream'
-  | 'event-stream'
   | 'catalog-stream'
   | 'container-logs-stream';
 
 export type GeneratedRefreshDiagnosticsStream =
   | 'resources'
-  | 'events'
   | 'container-logs';
 
 export interface GeneratedRefreshDomainPolicy {
@@ -2430,8 +2431,8 @@ export const REFRESH_DOMAIN_POLICIES = [
     backend: { registration: 'direct', permission: 'runtime', resourceStream: false, bypassSingleflight: false },
     frontend: {
       refresherName: 'cluster-events',
-      orchestrator: 'event-stream',
-      diagnosticsStream: 'events',
+      orchestrator: 'doorbell-snapshot',
+      diagnosticsStream: 'resources',
       timing: { interval: 3000, cooldown: 1000, timeout: 10 },
       priority: null,
       registrationOrder: 15,
@@ -2526,8 +2527,8 @@ export const REFRESH_DOMAIN_POLICIES = [
     backend: { registration: 'direct', permission: 'runtime', resourceStream: false, bypassSingleflight: false },
     frontend: {
       refresherName: 'events',
-      orchestrator: 'event-stream',
-      diagnosticsStream: 'events',
+      orchestrator: 'doorbell-snapshot',
+      diagnosticsStream: 'resources',
       timing: { interval: 3000, cooldown: 1000, timeout: 10 },
       priority: null,
       registrationOrder: 21,
@@ -2932,7 +2933,7 @@ const telemetrySummarySchema: RefreshContractSchema = { kind: 'object', fields: 
   streams: { optional: false, schema: { kind: 'array', items: { kind: 'object', fields: {
     name: { optional: false, schema: { kind: 'string' } },
     leaf: { optional: true, schema: { kind: 'string' } },
-    leafKind: { optional: true, schema: { kind: 'enum', values: ['', 'domain', 'scope', 'target'] } },
+    leafKind: { optional: true, schema: { kind: 'enum', values: ['', 'domain', 'target'] } },
     clusterId: { optional: true, schema: { kind: 'string' } },
     clusterName: { optional: true, schema: { kind: 'string' } },
     activeSessions: { optional: false, schema: { kind: 'number' } },

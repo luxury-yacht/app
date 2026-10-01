@@ -169,6 +169,8 @@ const baseEvent: EventRow = {
   source: 'kubelet',
   reason: 'Failed',
   object: 'Pod/foo',
+  objectKind: 'Pod',
+  objectName: 'foo',
   objectApiVersion: 'v1',
   message: 'Something happened',
   age: '1m',
@@ -410,6 +412,8 @@ describe('ClusterViewEvents', () => {
     const event = {
       ...baseEvent,
       object: 'Database/primary',
+      objectKind: 'Database',
+      objectName: 'primary',
       objectUid: 'database-uid',
       objectApiVersion: undefined,
     };
@@ -451,6 +455,8 @@ describe('ClusterViewEvents', () => {
     const event = {
       ...baseEvent,
       object: 'Database/primary',
+      objectKind: 'Database',
+      objectName: 'primary',
       objectUid: 'database-uid',
       objectApiVersion: undefined,
     };

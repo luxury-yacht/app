@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,11 +14,9 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
 
@@ -49,42 +46,14 @@ var clusterEventsAvailableKinds = map[string]bool{"Event": true}
 // reports ok=false to skip it. Cluster events involve cluster-scoped objects only, so an
 // event whose involved object carries a namespace is skipped — the same gate the list path
 // applies. The Event resource itself remains namespaced even when its involved object is
-// cluster-scoped, so Namespace comes from Event metadata while ObjectNamespace comes from
-// the involved object. Shared by the list path and the maintained-store handler so both
+// cluster-scoped, so Ref.Namespace comes from Event metadata while ObjectNamespace comes
+// from the involved object. Shared by the list path and the maintained-store handler so both
 // project byte-identically.
 func projectClusterEventEntry(meta ClusterMeta, evt *corev1.Event) (ClusterEventEntry, bool) {
-	if evt == nil {
+	if evt == nil || strings.TrimSpace(evt.InvolvedObject.Namespace) != "" {
 		return ClusterEventEntry{}, false
 	}
-	if strings.TrimSpace(evt.InvolvedObject.Namespace) != "" {
-		return ClusterEventEntry{}, false
-	}
-	facts := eventres.BuildFacts(meta.ClusterID, evt)
-	timestamp := eventres.EventTimestamp(evt).Time
-	eventType := facts.EventType
-	if eventType == "" {
-		eventType = "-"
-	}
-	source := facts.Source
-	if source == "" {
-		source = "-"
-	}
-	return ClusterEventEntry{
-		Ref:              streamrows.NewResourceRef(meta, eventres.Identity, evt),
-		Metadata:         streamrows.NewResourceMetadata(evt),
-		ResourceVersion:  evt.ResourceVersion,
-		ObjectNamespace:  evt.InvolvedObject.Namespace,
-		ObjectUID:        string(evt.InvolvedObject.UID),
-		ObjectAPIVersion: evt.InvolvedObject.APIVersion,
-		InvolvedObject:   facts.InvolvedObject,
-		Type:             eventType,
-		Source:           source,
-		Reason:           facts.Reason,
-		Object:           eventres.EventObjectDisplay(evt),
-		Message:          eventres.EventMessage(evt),
-		Age:              formatAge(timestamp),
-		AgeTimestamp:     timestamp.UnixMilli(),
-	}, true
+	return ClusterEventEntry(projectEventRow(meta, evt)), true
 }
 
 // ClusterEventsSnapshot is the payload returned to the UI. It embeds the
@@ -121,34 +90,24 @@ func clusterEventsQuerypageSchema() querypage.Schema[ClusterEventEntry] {
 	)
 }
 
-// ClusterEventEntry mirrors the fields consumed by the frontend grid.
-type ClusterEventEntry struct {
-	Ref              resourcemodel.ResourceRef            `json:"ref"`
-	Metadata         *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
-	ResourceVersion  string                               `json:"resourceVersion"`
-	ObjectNamespace  string                               `json:"objectNamespace"`
-	ObjectUID        string                               `json:"objectUid"`
-	ObjectAPIVersion string                               `json:"objectApiVersion"`
-	InvolvedObject   *resourcemodel.ResourceLink          `json:"involvedObject,omitempty"`
-	Type             string                               `json:"type"`
-	Source           string                               `json:"source"`
-	Reason           string                               `json:"reason"`
-	Object           string                               `json:"object"`
-	Message          string                               `json:"message"`
-	Age              string                               `json:"age"`
-	AgeTimestamp     int64                                `json:"ageTimestamp"`
-}
+// ClusterEventEntry is the Cluster Events table row: the shared Events table row
+// under the cluster family's own type.
+type ClusterEventEntry EventSummary
 
 // RegisterClusterEventsDomain registers the cluster events domain. It serves from a
 // maintained store fed by the shared Events informer (projected at intake by the same
 // projectClusterEventEntry the list path uses); the handler is registered before the
 // factory starts so the sync gate guarantees the store is populated before serve.
-func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedInformerFactory, clusterMeta ClusterMeta) error {
+//
+// The returned notifier rings the table's doorbell after the store applies each change;
+// the subsystem wires its broadcast once the resource-stream manager exists.
+func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedInformerFactory, clusterMeta ClusterMeta) (*EventTableChangeNotifier, error) {
 	if factory == nil {
-		return fmt.Errorf("shared informer factory is nil")
+		return nil, fmt.Errorf("shared informer factory is nil")
 	}
 	eventInformer := factory.Core().V1().Events()
 
+	notifier := newEventTableChangeNotifier(clusterEventsDomainName, "ce")
 	maintained := newTypedMaintainedStore(clusterMeta, clusterEventsQuerypageSchema(), clusterEventTableQueryAdapter())
 	reg.RegisterMaintainedStore(clusterEventsDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	if err := registerMaintainedInformerHandler(maintained, eventInformer.Informer(),
@@ -160,8 +119,9 @@ func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedI
 			entry, keep := projectClusterEventEntry(clusterMeta, evt)
 			return entry, evt, keep
 		},
+		func(entry ClusterEventEntry) { notifier.changed(entry.ObjectNamespace) },
 	); err != nil {
-		return err
+		return nil, err
 	}
 
 	builder := &ClusterEventsBuilder{
@@ -169,10 +129,13 @@ func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedI
 		maintained:   maintained,
 		eventsSynced: eventInformer.Informer().HasSynced,
 	}
-	return reg.Register(refresh.DomainConfig{
+	if err := reg.Register(refresh.DomainConfig{
 		Name:          clusterEventsDomainName,
 		BuildSnapshot: builder.Build,
-	})
+	}); err != nil {
+		return nil, err
+	}
+	return notifier, nil
 }
 
 // Build gathers recent cluster events.
@@ -267,25 +230,11 @@ func (b *ClusterEventsBuilder) clusterEventEntries(meta ClusterMeta) ([]ClusterE
 	return entries, version, nil
 }
 
-func eventTimestamp(evt *corev1.Event) time.Time {
-	if evt == nil {
-		return time.Time{}
-	}
-	if !evt.EventTime.IsZero() {
-		return evt.EventTime.Time
-	}
-	if !evt.LastTimestamp.IsZero() {
-		return evt.LastTimestamp.Time
-	}
-	if !evt.FirstTimestamp.IsZero() {
-		return evt.FirstTimestamp.Time
-	}
-	return evt.CreationTimestamp.Time
-}
-
+// compareEventOrder orders events most-recently-observed first, using the same
+// latest-observation time the rows display, with deterministic tie-breaks.
 func compareEventOrder(left, right *corev1.Event) int {
-	leftTimestamp := eventTimestamp(left)
-	rightTimestamp := eventTimestamp(right)
+	leftTimestamp := eventres.EventTimestamp(left).Time
+	rightTimestamp := eventres.EventTimestamp(right).Time
 	if !leftTimestamp.Equal(rightTimestamp) {
 		if leftTimestamp.After(rightTimestamp) {
 			return -1

@@ -339,8 +339,8 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 	t.Run("cluster event object columns", func(t *testing.T) {
 		query.Request.SortField = "objectType"
 		page := applyTypedTableQuery([]ClusterEventEntry{
-			{Ref: resourcemodel.ResourceRef{Name: "event-pod"}, Object: "Pod/api"},
-			{Ref: resourcemodel.ResourceRef{Name: "event-deployment"}, Object: "Deployment/web"},
+			{Ref: resourcemodel.ResourceRef{Name: "event-pod"}, Object: "Pod/api", ObjectKind: "Pod", ObjectName: "api"},
+			{Ref: resourcemodel.ResourceRef{Name: "event-deployment"}, Object: "Deployment/web", ObjectKind: "Deployment", ObjectName: "web"},
 		}, query, clusterEventTableQueryAdapter())
 		requirePageNames(t, page.Rows, []string{"event-deployment", "event-pod"}, func(row ClusterEventEntry) string {
 			return row.Ref.Name
@@ -348,8 +348,8 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 
 		query.Request.SortField = "objectName"
 		page = applyTypedTableQuery([]ClusterEventEntry{
-			{Ref: resourcemodel.ResourceRef{Name: "event-zulu"}, Object: "Pod/zulu"},
-			{Ref: resourcemodel.ResourceRef{Name: "event-alpha"}, Object: "Pod/alpha"},
+			{Ref: resourcemodel.ResourceRef{Name: "event-zulu"}, Object: "Pod/zulu", ObjectKind: "Pod", ObjectName: "zulu"},
+			{Ref: resourcemodel.ResourceRef{Name: "event-alpha"}, Object: "Pod/alpha", ObjectKind: "Pod", ObjectName: "alpha"},
 		}, query, clusterEventTableQueryAdapter())
 		requirePageNames(t, page.Rows, []string{"event-alpha", "event-zulu"}, func(row ClusterEventEntry) string {
 			return row.Ref.Name
@@ -372,8 +372,8 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 		query.BaseScope = "namespace:all"
 		query.Request.SortField = "objectType"
 		page := applyTypedTableQuery([]EventSummary{
-			{Ref: resourcemodel.ResourceRef{Name: "event-pod"}, Object: "Pod/api"},
-			{Ref: resourcemodel.ResourceRef{Name: "event-deployment"}, Object: "Deployment/web"},
+			{Ref: resourcemodel.ResourceRef{Name: "event-pod"}, Object: "Pod/api", ObjectKind: "Pod", ObjectName: "api"},
+			{Ref: resourcemodel.ResourceRef{Name: "event-deployment"}, Object: "Deployment/web", ObjectKind: "Deployment", ObjectName: "web"},
 		}, query, namespacedEventTableQueryAdapter())
 		requirePageNames(t, page.Rows, []string{"event-deployment", "event-pod"}, func(row EventSummary) string {
 			return row.Ref.Name
@@ -381,8 +381,8 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 
 		query.Request.SortField = "objectName"
 		page = applyTypedTableQuery([]EventSummary{
-			{Ref: resourcemodel.ResourceRef{Name: "event-zulu"}, Object: "Pod/zulu"},
-			{Ref: resourcemodel.ResourceRef{Name: "event-alpha"}, Object: "Pod/alpha"},
+			{Ref: resourcemodel.ResourceRef{Name: "event-zulu"}, Object: "Pod/zulu", ObjectKind: "Pod", ObjectName: "zulu"},
+			{Ref: resourcemodel.ResourceRef{Name: "event-alpha"}, Object: "Pod/alpha", ObjectKind: "Pod", ObjectName: "alpha"},
 		}, query, namespacedEventTableQueryAdapter())
 		requirePageNames(t, page.Rows, []string{"event-alpha", "event-zulu"}, func(row EventSummary) string {
 			return row.Ref.Name
@@ -650,7 +650,7 @@ func BenchmarkMigratedStaticTableQueries(b *testing.B) {
 	b.Run("namespace-events", func(b *testing.B) {
 		rows := make([]EventSummary, 10000)
 		for i := range rows {
-			rows[i] = EventSummary{Ref: resourcemodel.ResourceRef{Namespace: benchmarkNamespace(i), Name: benchmarkName("event", i)}, Kind: "Event", Type: "Normal", Source: "bench-controller", Reason: "Scheduled", Object: "Pod/" + benchmarkName("pod", i), Message: "bench event"}
+			rows[i] = EventSummary{Ref: resourcemodel.ResourceRef{Namespace: benchmarkNamespace(i), Name: benchmarkName("event", i)}, ObjectKind: "Pod", ObjectName: benchmarkName("pod", i), Type: "Normal", Source: "bench-controller", Reason: "Scheduled", Object: "Pod/" + benchmarkName("pod", i), Message: "bench event"}
 		}
 		benchmarkTypedTableQuery(b, query, rows, namespacedEventTableQueryAdapter())
 	})

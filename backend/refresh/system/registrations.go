@@ -34,7 +34,18 @@ type registrationDeps struct {
 	// noteObjectEventsNotifier is the object-events doorbell counterpart of
 	// noteNamespaceNotifier; same wiring lifecycle.
 	noteObjectEventsNotifier func(*snapshot.ObjectEventsChangeNotifier)
-	noteAttentionIndex       func(*snapshot.ClusterAttentionIndex)
+	// noteEventTableNotifier receives the cluster-events and namespace-events
+	// doorbell notifiers; same wiring lifecycle.
+	noteEventTableNotifier func(*snapshot.EventTableChangeNotifier)
+	noteAttentionIndex     func(*snapshot.ClusterAttentionIndex)
+}
+
+// noteEventTable hands a registered event table's doorbell notifier to the
+// subsystem; nil (failed registration) and unwired test deps are ignored.
+func (deps registrationDeps) noteEventTable(notifier *snapshot.EventTableChangeNotifier) {
+	if notifier != nil && deps.noteEventTableNotifier != nil {
+		deps.noteEventTableNotifier(notifier)
+	}
 }
 
 // domainRegistration describes a single domain registration entry.
@@ -401,7 +412,9 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		}),
 
 		"cluster-events": directRegistration("cluster-events", func() error {
-			return snapshot.RegisterClusterEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), clusterMeta)
+			notifier, err := snapshot.RegisterClusterEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), clusterMeta)
+			deps.noteEventTable(notifier)
+			return err
 		}),
 
 		"cluster-identities": accessListRegistration(runtimeAccess, listDomainConfig{
@@ -484,7 +497,9 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		}),
 
 		"namespace-events": directRegistration("namespace-events", func() error {
-			return snapshot.RegisterNamespaceEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), clusterMeta)
+			notifier, err := snapshot.RegisterNamespaceEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), clusterMeta)
+			deps.noteEventTable(notifier)
+			return err
 		}),
 		"namespace-helm": directRegistration("namespace-helm", func() error {
 			return snapshot.RegisterNamespaceHelmDomain(

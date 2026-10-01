@@ -514,7 +514,6 @@ type StreamStatus struct {
 
 // Stream name identifiers used across the backend/frontend telemetry contract.
 const (
-	StreamEvents        = "events"
 	StreamContainerLogs = "container-logs"
 	StreamResources     = "resources"
 )
@@ -530,9 +529,6 @@ const (
 	StreamLeafNone StreamLeafKind = ""
 	// StreamLeafDomain keys by refresh domain, e.g. "pods" (resources stream).
 	StreamLeafDomain StreamLeafKind = "domain"
-	// StreamLeafScope keys by event scope, e.g. "cluster" or
-	// "namespace:<name>" (events stream).
-	StreamLeafScope StreamLeafKind = "scope"
 	// StreamLeafTarget keys by container-logs target, e.g.
 	// "<namespace>/<pod>[/<container>]" (container-logs stream).
 	StreamLeafTarget StreamLeafKind = "target"
@@ -547,11 +543,6 @@ type StreamLeaf struct {
 // DomainLeaf attributes counters to a refresh domain.
 func DomainLeaf(domain string) StreamLeaf {
 	return StreamLeaf{Kind: StreamLeafDomain, Key: domain}
-}
-
-// ScopeLeaf attributes counters to an event scope.
-func ScopeLeaf(scope string) StreamLeaf {
-	return StreamLeaf{Kind: StreamLeafScope, Key: scope}
 }
 
 // TargetLeaf attributes counters to a container-logs target.

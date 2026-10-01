@@ -83,6 +83,17 @@ the current event set and are `Query Backed Static` for table search, filters,
 sort, counts, and cursor pagination. Object-panel events remain object-scoped
 recent/capped windows and are visibly `Local Partial`.
 
+- Both tables share one row projection (`projectEventRow` in
+  `backend/refresh/snapshot/event_rows.go`). Type, source, and message carry the
+  Event's own values, empty when it has none, and every surface renders the
+  shared empty placeholder; a blank message never repeats the reason. Object
+  Type and Object Name come from the involved object, not from the display text.
+- Every Events surface judges recency and orders by the Event's latest
+  observation (`EventTimestamp` in `backend/resources/events`), which covers
+  `events.k8s.io` series that keep `eventTime` at their first occurrence.
+- The object-panel window keeps the most recently observed events when it
+  truncates, and matches the involved object by API group, not version.
+
 Nodes: `backend/refresh/snapshot/nodes.go` feeds a `Query Backed Dynamic`
 cluster table. Search, pagination, status filters, age sort, and CPU/memory
 metric sorts are backend-owned for the current resource and metric projection

@@ -46,7 +46,6 @@ export const PAUSE_POLLING_WHEN_STREAMING_DOMAINS = new Set<RefreshDomain>(
 
 export const STREAM_MODE_BY_NAME: Record<StreamTelemetryName, 'streaming' | 'watch'> = {
   resources: 'streaming',
-  events: 'watch',
   'container-logs': 'streaming',
 };
 

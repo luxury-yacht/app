@@ -1067,3 +1067,36 @@ func TestClusterOverviewSurfacesDisabledMetricsReason(t *testing.T) {
 	require.Equal(t, "Insufficient permissions for Metrics API", payload.Metrics.LastError)
 	require.True(t, payload.Metrics.Disabled)
 }
+
+// An events/v1 series keeps EventTime at its first occurrence and records each
+// recurrence in Series.LastObservedTime. Recent Events must judge recency and
+// order by the latest observation, the same time it displays: a Warning that
+// started days ago but recurred a minute ago is the most recent warning.
+func TestBuildRecentEventsUsesTheLatestObservationOfASeries(t *testing.T) {
+	now := time.Now()
+	series := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{Name: "web.series", Namespace: "default", UID: types.UID("series")},
+		Type:       corev1.EventTypeWarning,
+		Reason:     "FailedScheduling",
+		EventTime:  metav1.NewMicroTime(now.Add(-30 * time.Hour)),
+		Series: &corev1.EventSeries{
+			Count:            40,
+			LastObservedTime: metav1.NewMicroTime(now.Add(-time.Minute)),
+		},
+	}
+	legacy := &corev1.Event{
+		ObjectMeta:    metav1.ObjectMeta{Name: "api.legacy", Namespace: "default", UID: types.UID("legacy")},
+		Type:          corev1.EventTypeWarning,
+		Reason:        "BackOff",
+		LastTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+	}
+
+	recent := buildRecentEvents([]*corev1.Event{legacy, series}, ClusterMeta{ClusterID: "c1"})
+
+	uids := make([]string, 0, len(recent))
+	for _, event := range recent {
+		uids = append(uids, event.EventUID)
+	}
+	require.Equal(t, []string{"series", "legacy"}, uids)
+	require.Equal(t, series.Series.LastObservedTime.UnixMilli(), recent[0].Timestamp)
+}

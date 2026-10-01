@@ -250,6 +250,28 @@ describe('EventsTab', () => {
 
   const PANEL_ID = `obj:${PARENT_CLUSTER_ID}:apps/v1/deployment:default:my-deploy`;
 
+  // The Object Name link opens the involved object; a row click opens the Event.
+  const clickObjectName = async (index = 0) => {
+    const gridProps = requireValue(
+      gridTableState.lastProps,
+      'expected captured GridTable props in EventsTab.test.tsx'
+    );
+    const column = requireValue(
+      gridProps.columns.find((candidate) => candidate.key === 'objectName'),
+      'expected Object Name column in EventsTab.test.tsx'
+    );
+    const cell = requireReactElement<{ onClick?: (event: { altKey: boolean }) => void }>(
+      column.render(
+        requireValue(gridProps.data[index], 'expected Event row in EventsTab.test.tsx')
+      ),
+      'expected interactive Object Name cell in EventsTab.test.tsx'
+    );
+    await act(async () => {
+      cell.props.onClick?.({ altKey: false });
+      await Promise.resolve();
+    });
+  };
+
   it('registers the events refresher under the panel-scoped name', async () => {
     // Same-kind panels must not share an events refresher: a kind-only name
     // let one panel's unmount unregister the other's refresher + subscribers.
@@ -293,7 +315,9 @@ describe('EventsTab', () => {
         'expected object name column'
       );
       const row = requireValue(gridTableState.lastProps?.data[0], 'expected event row');
-      expect(objectNameColumn.rowAction).toBe(true);
+      // The link opens the involved object while the row opens the Event, so it
+      // is its own action with its own Tab stop.
+      expect(objectNameColumn.rowAction).not.toBe(true);
       const objectNameCell = requireReactElement<{
         onClick: (event: {
           altKey: boolean;
@@ -436,6 +460,40 @@ describe('EventsTab', () => {
     expect(typeCell.props).toMatchObject({ children: 'Warning', variant: 'warning' });
   });
 
+  it('opens the Event itself when a row is clicked', async () => {
+    hoistedSnapshot.data = { events: [makeEvent()] };
+    hoistedSnapshot.status = 'ready';
+
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          panelId={PANEL_ID}
+          isActive={true}
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
+        />
+      );
+    });
+
+    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
+    await act(async () => {
+      row.click();
+      await Promise.resolve();
+    });
+
+    expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
+    expect(mockOpenWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: PARENT_CLUSTER_ID,
+        group: 'events.k8s.io',
+        version: 'v1',
+        kind: 'Event',
+        namespace: 'default',
+        name: 'event-a',
+      })
+    );
+  });
+
   it('prefers per-event clusterId over parent panel cluster when opening related objects', async () => {
     // Event has its own cluster identity distinct from the parent panel.
     hoistedSnapshot.data = {
@@ -454,13 +512,7 @@ describe('EventsTab', () => {
       );
     });
 
-    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
-    expect(row).toBeTruthy();
-
-    await act(async () => {
-      row.click();
-      await Promise.resolve();
-    });
+    await clickObjectName();
 
     expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
     const call = mockOpenWithObject.mock.calls[0][0];
@@ -606,13 +658,7 @@ describe('EventsTab', () => {
       );
     });
 
-    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
-    expect(row).toBeTruthy();
-
-    await act(async () => {
-      row.click();
-      await Promise.resolve();
-    });
+    await clickObjectName();
 
     expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
     const call = mockOpenWithObject.mock.calls[0][0];
@@ -650,13 +696,7 @@ describe('EventsTab', () => {
       );
     });
 
-    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
-    expect(row).toBeTruthy();
-
-    await act(async () => {
-      row.click();
-      await Promise.resolve();
-    });
+    await clickObjectName();
 
     expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
     const call = mockOpenWithObject.mock.calls[0][0];
@@ -704,11 +744,7 @@ describe('EventsTab', () => {
       );
     });
 
-    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
-    await act(async () => {
-      row.click();
-      await Promise.resolve();
-    });
+    await clickObjectName();
 
     expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
     expect(mockOpenWithObject).toHaveBeenCalledWith(
@@ -749,11 +785,7 @@ describe('EventsTab', () => {
       );
     });
 
-    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
-    await act(async () => {
-      row.click();
-      await Promise.resolve();
-    });
+    await clickObjectName();
 
     expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
     const call = mockOpenWithObject.mock.calls[0][0];
@@ -799,11 +831,7 @@ describe('EventsTab', () => {
       );
     });
 
-    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
-    await act(async () => {
-      row.click();
-      await Promise.resolve();
-    });
+    await clickObjectName();
 
     expect(mockFindCatalogObjectByUID).toHaveBeenCalledWith(EVENT_CLUSTER_ID, 'orders-db-uid');
     expect(mockOpenWithObject).toHaveBeenCalledWith(

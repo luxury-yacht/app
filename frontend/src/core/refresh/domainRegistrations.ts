@@ -50,7 +50,6 @@ const orchestratorRegistrationBuilders = {
   snapshot: () => undefined,
   'doorbell-snapshot': resourceStreamRegistration,
   'resource-stream': resourceStreamRegistration,
-  'event-stream': resourceStreamRegistration,
   'catalog-stream': resourceStreamRegistration,
   'container-logs-stream': containerLogsRegistration,
 } satisfies Record<RefreshOrchestratorKind, OrchestratorRegistrationBuilder>;

@@ -317,27 +317,6 @@ const (
 	ContainerLogsFetchTargetTimeout = 20 * time.Second
 )
 
-// Event stream settings.
-const (
-	// EventStreamKeepAliveInterval controls how often keepalive messages are emitted for event streams.
-	EventStreamKeepAliveInterval = 15 * time.Second
-
-	// EventStreamMaxSubscribersPerScope limits concurrent subscribers per scope to prevent memory exhaustion.
-	EventStreamMaxSubscribersPerScope = 100
-
-	// EventStreamResumeBufferSize caps stored events per scope for resume tokens.
-	EventStreamResumeBufferSize = 1000
-
-	// EventStreamSubscriberBufferSize buffers per-subscriber event stream deliveries.
-	EventStreamSubscriberBufferSize = 256
-
-	// AggregateEventStreamResumeBufferSize caps stored aggregate events per scope for resume tokens.
-	AggregateEventStreamResumeBufferSize = 2000
-
-	// AggregateEventStreamEntryBufferSize buffers aggregate events before delivery.
-	AggregateEventStreamEntryBufferSize = 256
-)
-
 // Resource stream settings.
 const (
 	// ResourceStreamMaxSubscribersPerScope limits concurrent resource stream subscribers per scope.

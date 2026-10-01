@@ -127,7 +127,7 @@ application transport between them.
 The telemetry summary reports every open cluster's streams, snapshots and
 metrics polling status, each tagged with its cluster. The Diagnostics summary
 cards describe the active cluster only, combining a stream's socket entry with
-its delivery entries (catalog domain, log targets, event scopes); the
+its delivery entries (catalog and event-table domains, log targets); the
 Connections tab lists each cluster's rows with a Cluster column.
 
 - Signal-driven refetch keys only on the declared `signalVersions`. Snapshot
@@ -141,6 +141,14 @@ Connections tab lists each cluster's rows with a Cluster column.
   count. Tests for collection-source changes or table-source migrations must
   exercise that composition with real state owners; separate mocked producer
   and consumer tests cannot establish the connection.
+- A doorbell for an informer-fed maintained store rings from that store's own
+  handler after it applies the change. client-go runs every handler on its own
+  listener goroutine, so a second handler on the same informer can ring before
+  the store holds the change. Adds, real updates, and deletes ring; resync
+  echoes (unchanged `resourceVersion`) do not. The Cluster and Namespace Events
+  tables follow this through the `changed` hook of
+  `registerMaintainedInformerHandler`; namespaced tables ring both
+  `namespace:<name>` and `namespace:all`.
 - A source must advance only the payload it owns. In particular, a metric tick
   must not advance an object clock or make an object snapshot appear changed.
 - A signal producer invalidates the affected snapshot/query cache before it

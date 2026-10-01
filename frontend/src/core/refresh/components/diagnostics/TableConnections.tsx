@@ -29,8 +29,7 @@ import { useDeferredValue, useId, useMemo, useState } from 'react';
 import type { BrokerReadRow, ConnectionsRow } from './diagnosticsPanelTypes';
 import { formatLastUpdated } from './diagnosticsPanelUtils';
 
-const LEAF_KIND_LABELS: Record<'scope' | 'target', string> = {
-  scope: 'event scope',
+const LEAF_KIND_LABELS: Record<'target', string> = {
   target: 'log target',
 };
 

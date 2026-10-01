@@ -466,10 +466,10 @@ func TestNamespaceUpdateIsEchoSkipsResyncDeliveries(t *testing.T) {
 	newer.Name = "team-a"
 	newer.ResourceVersion = "101"
 
-	require.True(t, namespaceUpdateIsEcho(older, same), "same ResourceVersion is a resync echo")
-	require.False(t, namespaceUpdateIsEcho(older, newer), "advanced ResourceVersion is a real update")
-	require.False(t, namespaceUpdateIsEcho(nil, newer), "unrecognized old object must not suppress")
-	require.False(t, namespaceUpdateIsEcho(older, nil), "unrecognized new object must not suppress")
+	require.True(t, informerUpdateIsEcho(older, same), "same ResourceVersion is a resync echo")
+	require.False(t, informerUpdateIsEcho(older, newer), "advanced ResourceVersion is a real update")
+	require.False(t, informerUpdateIsEcho(nil, newer), "unrecognized old object must not suppress")
+	require.False(t, informerUpdateIsEcho(older, nil), "unrecognized new object must not suppress")
 }
 
 // While the workload stores are SETTLING (tracker not ready) the presence

@@ -21,9 +21,10 @@ import {
 
 export interface EventGridRowIdentity {
   ref: CanonicalResourceRef;
-  kind?: string;
   clusterName?: string | null;
   object?: string | null;
+  objectKind?: string | null;
+  objectName?: string | null;
   objectNamespace?: string | null;
   objectUid?: string | null;
   objectApiVersion?: string | null;
@@ -66,7 +67,7 @@ export const eventGridSearchText = (event: EventGridRowIdentity): string[] =>
   [
     event.ref.kind,
     event.ref.name,
-    event.kind,
+    event.objectKind,
     event.ref.namespace,
     event.type,
     event.source,
@@ -89,22 +90,26 @@ export const eventGridObjectNamespace = (
   return defaultNamespace && defaultNamespace.length > 0 ? defaultNamespace : undefined;
 };
 
+// Grid rows carry null for absent values; the resolver input uses undefined.
+const orUndefined = <T>(value: T | null | undefined): T | undefined => value ?? undefined;
+
 export const eventGridRelatedObjectInput = (
   event: EventRelatedObjectRow,
   options: EventRelatedObjectOptions = {}
 ): EventObjectReferenceInput => ({
-  object: event.object ?? undefined,
-  involvedObject: event.involvedObject ?? undefined,
-  objectUid: event.objectUid ?? undefined,
-  objectApiVersion: event.objectApiVersion ?? undefined,
-  objectNamespace: event.objectNamespace ?? undefined,
-  eventNamespace: event.ref?.namespace ?? event.namespace ?? undefined,
-  defaultNamespace: options.defaultNamespace ?? undefined,
-  clusterId: event.ref?.clusterId ?? event.clusterId ?? options.selectedClusterId ?? undefined,
-  clusterName: event.clusterName ?? options.selectedClusterName ?? undefined,
-  fallbackKind: options.fallbackKind ?? undefined,
-  fallbackGroup: options.fallbackGroup ?? undefined,
-  fallbackVersion: options.fallbackVersion ?? undefined,
+  objectKind: orUndefined(event.objectKind),
+  objectName: orUndefined(event.objectName),
+  involvedObject: orUndefined(event.involvedObject),
+  objectUid: orUndefined(event.objectUid),
+  objectApiVersion: orUndefined(event.objectApiVersion),
+  objectNamespace: orUndefined(event.objectNamespace),
+  eventNamespace: orUndefined(event.ref?.namespace ?? event.namespace),
+  defaultNamespace: orUndefined(options.defaultNamespace),
+  clusterId: orUndefined(event.ref?.clusterId ?? event.clusterId ?? options.selectedClusterId),
+  clusterName: orUndefined(event.clusterName ?? options.selectedClusterName),
+  fallbackKind: orUndefined(options.fallbackKind),
+  fallbackGroup: orUndefined(options.fallbackGroup),
+  fallbackVersion: orUndefined(options.fallbackVersion),
 });
 
 export const eventGridCanOpenRelatedObject = (
@@ -147,7 +152,8 @@ export const objectPanelEventGridRow = (
   event: ObjectPanelEventGridRow,
   clusterScope: string
 ): EventRelatedObjectRow => ({
-  object: `${event.objectKind ?? ''}/${event.objectName ?? ''}`,
+  objectKind: event.objectKind ?? undefined,
+  objectName: event.objectName ?? undefined,
   involvedObject: event.involvedObject ?? undefined,
   objectUid: event.objectUid ?? undefined,
   objectApiVersion: event.objectApiVersion ?? undefined,

@@ -1299,23 +1299,13 @@ describe('DiagnosticsPanel component', () => {
         active: true,
       },
       streams: [
+        // Event-table doorbells are deliveries on the resources socket's
+        // cluster-events domain, never on the socket itself.
         {
-          name: 'events',
+          name: 'resources',
           clusterId: 'test-cluster',
-          activeSessions: 2,
-          totalMessages: 0,
-          droppedMessages: 0,
-          skippedTargets: 0,
-          errorCount: 0,
-          lastConnect: now - 6000,
-          lastEvent: now - 6000,
-        },
-        // Events count deliveries per event scope, never on the socket.
-        {
-          name: 'events',
-          clusterId: 'test-cluster',
-          leafKind: 'scope',
-          leaf: 'cluster',
+          leafKind: 'domain',
+          leaf: 'cluster-events',
           activeSessions: 0,
           totalMessages: 12,
           droppedMessages: 1,
@@ -1482,7 +1472,7 @@ describe('DiagnosticsPanel component', () => {
       '.diagnostics-summary-card:nth-of-type(3) .diagnostics-summary-primary'
     );
     expect(eventsPrimary?.textContent).toBe('12 delivered');
-    expect(eventsPrimary?.getAttribute('title')).toContain('Active 2');
+    expect(eventsPrimary?.getAttribute('title')).toContain('Active 1');
 
     const catalogPrimary = rendered.container.querySelector<HTMLSpanElement>(
       '.diagnostics-summary-card:nth-of-type(4) .diagnostics-summary-primary'
@@ -1509,15 +1499,15 @@ describe('DiagnosticsPanel component', () => {
     await flushAsync();
 
     // Connections lists one socket row per (stream, cluster) and one row per
-    // log target and event scope.
+    // log target; domain leaves (catalog, cluster-events) belong to Cluster Data.
     const connectionsSection = rendered.container.querySelector('.diagnostics-section');
-    expect(connectionsSection?.textContent).toContain('3 sockets');
+    expect(connectionsSection?.textContent).toContain('2 sockets');
     expect(connectionsSection?.textContent).toContain('Resources');
     const connectionRows =
       connectionsSection
         ?.querySelector('.diagnostics-table-wrapper')
         ?.querySelectorAll('tbody tr') ?? [];
-    expect(connectionRows).toHaveLength(6);
+    expect(connectionRows).toHaveLength(4);
     const resourcesRow = Array.from(connectionRows).find((row) =>
       row.textContent?.includes('Resources')
     );
@@ -1807,7 +1797,7 @@ describe('DiagnosticsPanel component', () => {
             lastEvent: now - 500,
           },
           {
-            name: 'events',
+            name: 'container-logs',
             activeSessions: 2,
             totalMessages: 10,
             droppedMessages: 1,
@@ -1847,7 +1837,9 @@ describe('DiagnosticsPanel component', () => {
 
     const streamRows = connectionsTable.querySelectorAll('tbody tr');
     expect(Array.from(streamRows).some((row) => row.textContent?.includes('Resources'))).toBe(true);
-    expect(Array.from(streamRows).some((row) => row.textContent?.includes('Events'))).toBe(true);
+    expect(Array.from(streamRows).some((row) => row.textContent?.includes('Container Logs'))).toBe(
+      true
+    );
 
     await rendered.unmount();
   });

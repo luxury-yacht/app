@@ -124,10 +124,12 @@ func TestManagerBroadcastsEventAndCatalogDoorbellSources(t *testing.T) {
 	require.NoError(t, err)
 	namespaceEventsSub, err := subscribeForTest(t, manager, domainNamespaceEvents, "namespace:prod")
 	require.NoError(t, err)
+	allNamespaceEventsSub, err := subscribeForTest(t, manager, domainNamespaceEvents, "namespace:all")
+	require.NoError(t, err)
 
 	manager.BroadcastCatalogRefresh("catalog-42")
-	manager.BroadcastEventRefresh(domainClusterEvents, "", "event-7")
-	manager.BroadcastEventRefresh(domainNamespaceEvents, "namespace:prod", "event-8")
+	manager.BroadcastEventTableRefresh(domainClusterEvents, "event-7", []string{""})
+	manager.BroadcastEventTableRefresh(domainNamespaceEvents, "event-8", []string{"prod"})
 
 	for _, tc := range []struct {
 		name    string
@@ -140,6 +142,7 @@ func TestManagerBroadcastsEventAndCatalogDoorbellSources(t *testing.T) {
 		{name: "catalog", sub: catalogSub, domain: domainCatalog, scope: "", source: SourceCatalog, version: "catalog-42"},
 		{name: "cluster events", sub: clusterEventsSub, domain: domainClusterEvents, scope: "", source: SourceEvent, version: "event-7"},
 		{name: "namespace events", sub: namespaceEventsSub, domain: domainNamespaceEvents, scope: "namespace:prod", source: SourceEvent, version: "event-8"},
+		{name: "all namespace events", sub: allNamespaceEventsSub, domain: domainNamespaceEvents, scope: "namespace:all", source: SourceEvent, version: "event-8"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			update := requireNextUpdate(t, tc.sub)

@@ -7,6 +7,7 @@ import {
   USAGE_HIGH_THRESHOLD_PERCENT,
 } from '@shared/components/resourceBarThresholds';
 import Tooltip from '@shared/components/Tooltip';
+import { TABLE_NO_VALUE_TEXT } from '@shared/components/tables/tableNoValue';
 import type { ResourceCalculations } from '@shared/utils/resourceCalculations';
 import { formatMemoryValue } from '@shared/utils/resourceCalculations';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
@@ -759,7 +760,7 @@ const RecentEventRow = ({
     <>
       <LiveAgeText timestamp={event.timestamp} className="recent-events__age" />
       <span className="recent-events__reason">{event.reason}</span>
-      <span className="recent-events__message">{event.message}</span>
+      <span className="recent-events__message">{event.message || TABLE_NO_VALUE_TEXT}</span>
     </>
   );
 

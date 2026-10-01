@@ -87,7 +87,6 @@ const (
 	FrontendOrchestratorSnapshot            FrontendOrchestratorKind = "snapshot"
 	FrontendOrchestratorDoorbellSnapshot    FrontendOrchestratorKind = "doorbell-snapshot"
 	FrontendOrchestratorResourceStream      FrontendOrchestratorKind = "resource-stream"
-	FrontendOrchestratorEventStream         FrontendOrchestratorKind = "event-stream"
 	FrontendOrchestratorCatalogStream       FrontendOrchestratorKind = "catalog-stream"
 	FrontendOrchestratorContainerLogsStream FrontendOrchestratorKind = "container-logs-stream"
 )
@@ -97,7 +96,6 @@ type DiagnosticsStream string
 const (
 	DiagnosticsStreamNone          DiagnosticsStream = ""
 	DiagnosticsStreamResources     DiagnosticsStream = "resources"
-	DiagnosticsStreamEvents        DiagnosticsStream = "events"
 	DiagnosticsStreamContainerLogs DiagnosticsStream = "container-logs"
 )
 

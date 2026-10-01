@@ -75,7 +75,9 @@ const {
     browserOpenURLMock: vi.fn(),
     openWithObjectMock: vi.fn(),
     setObjectPanelActiveTabMock: vi.fn(),
-    canResolveEventObjectReferenceMock: vi.fn<(input: { object?: string }) => boolean>(() => false),
+    canResolveEventObjectReferenceMock: vi.fn<(input: { objectName?: string }) => boolean>(
+      () => false
+    ),
     resolveEventObjectReferenceMock: vi.fn(),
     requestGridTableFiltersMock: vi.fn(),
   };
@@ -938,7 +940,8 @@ describe('ClusterOverview', () => {
     });
 
     expect(resolveEventObjectReferenceMock).toHaveBeenCalledWith({
-      object: 'Pod/api-7c8d9',
+      objectKind: 'Pod',
+      objectName: 'api-7c8d9',
       objectUid: 'pod-uid-1',
       objectApiVersion: '',
       objectNamespace: 'default',
@@ -964,7 +967,7 @@ describe('ClusterOverview', () => {
   it('uses one warning-events Tab stop and arrows to focus every row', async () => {
     setWarningEvents(['first', 'unavailable', 'last']);
     canResolveEventObjectReferenceMock.mockImplementation(
-      (input) => input.object !== 'Pod/unavailable'
+      (input) => input.objectName !== 'unavailable'
     );
     const { container, cleanup } = renderClusterOverview(true);
     cleanupRoot = cleanup;
@@ -1021,7 +1024,7 @@ describe('ClusterOverview', () => {
     await act(async () => rows[1].click());
     expect(document.activeElement).toBe(rows[1]);
     expect(resolveEventObjectReferenceMock).toHaveBeenCalledWith(
-      expect.objectContaining({ clusterId: 'cluster-1', object: 'Pod/last' })
+      expect.objectContaining({ clusterId: 'cluster-1', objectKind: 'Pod', objectName: 'last' })
     );
     for (const key of ['Enter', ' ']) {
       expect((await pressOverviewKey(key)).defaultPrevented).toBe(false);

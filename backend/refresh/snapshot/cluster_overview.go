@@ -1055,7 +1055,7 @@ func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
 		if !strings.EqualFold(evt.Type, corev1.EventTypeWarning) {
 			continue
 		}
-		if eventTimestamp(evt).Before(cutoff) {
+		if eventres.EventTimestamp(evt).Time.Before(cutoff) {
 			continue
 		}
 		filtered = append(filtered, evt)
@@ -1078,7 +1078,7 @@ func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
 			InvolvedObject:   facts.InvolvedObject,
 			EventUID:         string(evt.UID),
 			Reason:           strings.TrimSpace(evt.Reason),
-			Message:          eventres.EventMessage(evt),
+			Message:          facts.Message,
 			Timestamp:        eventres.EventTimestamp(evt).UnixMilli(),
 			ObjectKind:       evt.InvolvedObject.Kind,
 			ObjectName:       evt.InvolvedObject.Name,

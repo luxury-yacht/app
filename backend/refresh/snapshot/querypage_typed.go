@@ -856,24 +856,24 @@ func registerMaintainedHandlers[T any](
 // contract (events) needs this. project turns a watched object into its row + source object
 // (ok=false skips it). Handlers must be registered before the informer's factory starts so
 // the sync gate guarantees the store is populated before the first Build serves from it.
+//
+// changed, when non-nil, runs after the store has applied a real change: an add,
+// an update with a new resourceVersion, or a delete. It runs on this handler's
+// own listener, so a doorbell rung from it can never reach a reader before the
+// store holds the change. Resync echoes still re-upsert but report no change.
 func registerMaintainedInformerHandler[T any](
 	maintained *typedMaintainedStore[T],
 	informer cache.SharedIndexInformer,
 	project func(obj interface{}) (row T, source metav1.Object, ok bool),
+	changed func(row T),
 ) error {
-	record := func(obj interface{}) {
-		if row, src, ok := project(obj); ok {
-			maintained.upsertRow(row, src)
-		}
-	}
+	handler := maintainedInformerHandler[T]{maintained: maintained, project: project, changed: changed}
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    record,
-		UpdateFunc: func(_, newObj interface{}) { record(newObj) },
-		DeleteFunc: func(obj interface{}) {
-			if row, _, ok := project(maintainedUnwrap(obj)); ok {
-				maintained.deleteRow(row)
-			}
+		AddFunc: func(obj interface{}) { handler.upsert(obj, true) },
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			handler.upsert(newObj, !informerUpdateIsEcho(oldObj, newObj))
 		},
+		DeleteFunc: handler.remove,
 	})
 	if err != nil {
 		return err
@@ -883,19 +883,54 @@ func registerMaintainedInformerHandler[T any](
 	// reconcile source that re-projects the informer's live set and owns the whole store (it
 	// holds exactly this one kind), so Reconcile drops ghosts on re-warm.
 	maintained.addReconcileSourceRows(
-		func() []T {
-			objs := informer.GetIndexer().List()
-			rows := make([]T, 0, len(objs))
-			for _, obj := range objs {
-				if row, _, ok := project(obj); ok {
-					rows = append(rows, row)
-				}
-			}
-			return rows
-		},
+		func() []T { return handler.rows(informer.GetIndexer().List()) },
 		func(T) bool { return true },
 	)
 	return nil
+}
+
+// maintainedInformerHandler applies one informer's deliveries to its maintained
+// store and reports each applied change.
+type maintainedInformerHandler[T any] struct {
+	maintained *typedMaintainedStore[T]
+	project    func(obj interface{}) (row T, source metav1.Object, ok bool)
+	changed    func(row T)
+}
+
+func (h maintainedInformerHandler[T]) upsert(obj interface{}, report bool) {
+	row, src, ok := h.project(obj)
+	if !ok {
+		return
+	}
+	h.maintained.upsertRow(row, src)
+	if report {
+		h.report(row)
+	}
+}
+
+func (h maintainedInformerHandler[T]) remove(obj interface{}) {
+	row, _, ok := h.project(maintainedUnwrap(obj))
+	if !ok {
+		return
+	}
+	h.maintained.deleteRow(row)
+	h.report(row)
+}
+
+func (h maintainedInformerHandler[T]) report(row T) {
+	if h.changed != nil {
+		h.changed(row)
+	}
+}
+
+func (h maintainedInformerHandler[T]) rows(objs []interface{}) []T {
+	rows := make([]T, 0, len(objs))
+	for _, obj := range objs {
+		if row, _, ok := h.project(obj); ok {
+			rows = append(rows, row)
+		}
+	}
+	return rows
 }
 
 // feedMaintainedFromIngest wires each ingest-owned kind in the domain to feed the
