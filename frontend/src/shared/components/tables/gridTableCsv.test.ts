@@ -1,4 +1,6 @@
+import { createResourceBarColumn } from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { getTextContent as getRenderedTextContent } from '@shared/components/tables/GridTable.utils';
 import { describe, expect, it } from 'vitest';
 import { buildCsvExportFilename, buildGridTableCsv } from './gridTableCsv';
 
@@ -47,6 +49,54 @@ describe('buildGridTableCsv', () => {
     );
 
     expect(csv).toBe('Name,Note\nlegacy,-\ncanonical,-');
+  });
+
+  it('exports metric usage as plain millicores and KiB so spreadsheets can sort it', () => {
+    interface MetricRow {
+      name: string;
+      cpuUsageMilli?: number;
+      memoryUsageBytes?: number;
+      metricsError?: string;
+    }
+    const metricColumns: GridColumnDefinition<MetricRow>[] = [
+      { key: 'name', header: 'Name', render: (row) => row.name },
+      createResourceBarColumn<MetricRow>({
+        key: 'cpu',
+        header: 'CPU',
+        type: 'cpu',
+        getUsage: (row) => row.cpuUsageMilli,
+        getMetricsError: (row) => row.metricsError,
+      }),
+      createResourceBarColumn<MetricRow>({
+        key: 'memory',
+        header: 'Memory',
+        type: 'memory',
+        getUsage: (row) => row.memoryUsageBytes,
+        getMetricsError: (row) => row.metricsError,
+      }),
+    ];
+
+    const csv = buildGridTableCsv(
+      [
+        // 1.23 cores and 1560 MiB plus 123 bytes: neither rounds to a display step.
+        { name: 'busy', cpuUsageMilli: 1234, memoryUsageBytes: 1560 * 1024 * 1024 + 123 },
+        { name: 'idle', cpuUsageMilli: 0, memoryUsageBytes: 0 },
+        { name: 'unsampled' },
+        { name: 'failed', cpuUsageMilli: 5, memoryUsageBytes: 4096, metricsError: 'timeout' },
+      ],
+      metricColumns,
+      getRenderedTextContent
+    );
+
+    expect(csv).toBe(
+      [
+        'Name,CPU (m),Memory (KiB)',
+        'busy,1234,1597440',
+        'idle,0,0',
+        'unsampled,-,-',
+        'failed,-,-',
+      ].join('\n')
+    );
   });
 
   it('returns an empty string when there are no columns', () => {

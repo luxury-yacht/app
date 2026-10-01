@@ -27,6 +27,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import { calculateResourceOvercommit } from '@shared/utils/resourceCalculations';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   ClusterNodeRow,
@@ -38,12 +39,6 @@ import { useShortNames } from '@/hooks/useShortNames';
 import { parseCompactAgeToSeconds } from '@/utils/ageFormatter';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getDisplayKind } from '@/utils/kindAliasMap';
-import {
-  calculateCpuOvercommitted,
-  calculateMemoryOvercommitted,
-  parseCpuToMillicores,
-  parseMemToMB,
-} from '@/utils/resourceCalculations';
 
 // Define props for NodesViewGrid component. The table is query-backed (sourced from
 // the typed query + replay cache); only `error` is consumed, for the empty-state text.
@@ -198,7 +193,10 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         getLimit: (row) => nodeRowCpuValue(row, 'limit'),
         getAllocatable: (row) => nodeRowCpuValue(row, 'allocatable'),
         getOvercommitPercent: (row) => {
-          const value = calculateCpuOvercommitted(row.cpuLimits, row.cpuAllocatable);
+          const value = calculateResourceOvercommit(
+            row.cpuLimitsMilli ?? 0,
+            row.cpuAllocatableMilli ?? 0
+          ).overcommittedPercent;
           return value > 0 ? value : undefined;
         },
         getMetricsStale: () => Boolean(metricsInfo?.stale),
@@ -206,7 +204,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         getVariant: () => 'compact',
         getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:cpu`,
         sortable: true,
-        sortValue: (row) => parseCpuToMillicores(row.cpuUsage),
+        sortValue: (row) => row.cpuUsageMilli ?? 0,
       }),
       cf.createResourceBarColumn<ClusterNodeRow>({
         key: 'memory',
@@ -217,7 +215,10 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         getLimit: (row) => nodeRowMemoryValue(row, 'limit'),
         getAllocatable: (row) => nodeRowMemoryValue(row, 'allocatable'),
         getOvercommitPercent: (row) => {
-          const value = calculateMemoryOvercommitted(row.memLimits, row.memoryAllocatable);
+          const value = calculateResourceOvercommit(
+            row.memoryLimitsBytes ?? 0,
+            row.memoryAllocatableBytes ?? 0
+          ).overcommittedPercent;
           return value > 0 ? value : undefined;
         },
         getMetricsStale: () => Boolean(metricsInfo?.stale),
@@ -225,7 +226,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         getVariant: () => 'compact',
         getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:memory`,
         sortable: true,
-        sortValue: (row) => parseMemToMB(row.memoryUsage),
+        sortValue: (row) => row.memoryUsageBytes ?? 0,
       }),
       {
         ...(cf.createAgeColumn<ClusterNodeRow & { age?: string }>('age', 'Age', (row) => {

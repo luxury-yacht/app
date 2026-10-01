@@ -2684,8 +2684,8 @@ describe('refreshOrchestrator', () => {
             namespace: 'team-a',
             name: 'pod-a',
             status: 'Running',
-            cpuUsage: '10m',
-            memUsage: '20Mi',
+            cpuUsageMilli: 10,
+            memoryUsageBytes: 20 * 1024 ** 2,
           }),
         ],
       }),
@@ -2711,8 +2711,8 @@ describe('refreshOrchestrator', () => {
               namespace: 'team-a',
               name: 'pod-a',
               status: 'Pending',
-              cpuUsage: '15m',
-              memUsage: '25Mi',
+              cpuUsageMilli: 15,
+              memoryUsageBytes: 25 * 1024 ** 2,
             }),
           ],
         },
@@ -2730,7 +2730,7 @@ describe('refreshOrchestrator', () => {
     );
     const nextPod = getScopedDomainState('pods', scope).data?.rows?.[0];
     expect(nextPod?.status).toBe('Pending');
-    expect(nextPod?.cpuUsage).toBe('15m');
+    expect(nextPod?.cpuUsageMilli).toBe(15);
 
     resetAllScopedDomainStates('pods');
   });
@@ -3778,8 +3778,8 @@ describe('refreshOrchestrator', () => {
       namespace: 'default',
       name: 'pod-a',
       status: 'Running',
-      cpuUsage: '10m',
-      memUsage: '20Mi',
+      cpuUsageMilli: 10,
+      memoryUsageBytes: 20 * 1024 ** 2,
     });
     const podB = makePodSnapshotEntry({
       clusterId: 'cluster-b',
@@ -3787,8 +3787,8 @@ describe('refreshOrchestrator', () => {
       name: 'pod-b',
       node: 'node-b',
       status: 'Running',
-      cpuUsage: '30m',
-      memUsage: '40Mi',
+      cpuUsageMilli: 30,
+      memoryUsageBytes: 40 * 1024 ** 2,
     });
 
     setScopedDomainState('pods', scopeA, () => ({
@@ -3821,8 +3821,8 @@ describe('refreshOrchestrator', () => {
           rows: [
             {
               ...podB,
-              cpuUsage: '35m',
-              memUsage: '45Mi',
+              cpuUsageMilli: 35,
+              memoryUsageBytes: 45 * 1024 ** 2,
             },
           ],
         },
@@ -3843,8 +3843,8 @@ describe('refreshOrchestrator', () => {
     expect(getScopedDomainState('pods', scopeA).data?.rows?.[0]).toBe(podA);
     const nextPodB = getScopedDomainState('pods', scopeB).data?.rows?.[0];
     expect(nextPodB?.status).toBe('Running');
-    expect(nextPodB?.cpuUsage).toBe('35m');
-    expect(nextPodB?.memUsage).toBe('45Mi');
+    expect(nextPodB?.cpuUsageMilli).toBe(35);
+    expect(nextPodB?.memoryUsageBytes).toBe(45 * 1024 ** 2);
 
     resetAllScopedDomainStates('pods');
   });
@@ -3867,8 +3867,8 @@ describe('refreshOrchestrator', () => {
       namespace: 'default',
       name: 'pod-a',
       status: 'Running',
-      cpuUsage: '10m',
-      memUsage: '20Mi',
+      cpuUsageMilli: 10,
+      memoryUsageBytes: 20 * 1024 ** 2,
     });
     setScopedDomainState('pods', scope, () => ({
       status: 'ready',

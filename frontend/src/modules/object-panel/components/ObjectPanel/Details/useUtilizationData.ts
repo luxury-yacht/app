@@ -6,6 +6,7 @@
  */
 
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import { parseResourceQuantity } from '@shared/utils/resourceCalculations';
 import { useMemo } from 'react';
 import { useResourceMetrics } from '@/core/resource-metrics';
 import type { UtilizationData } from './detailsTabTypes';
@@ -27,6 +28,7 @@ const WORKLOAD_UTILIZATION_KINDS = new Set([
 ]);
 
 // Structural view of the utilization-bearing fields across the relevant detail DTOs.
+// Detail DTOs carry formatted quantity strings; they are parsed once here.
 interface UtilizationDetail {
   cpuUsage?: string;
   cpuRequest?: string;
@@ -72,7 +74,8 @@ type StandardMetricSource = Pick<
 
 const hasMetricValue = (values: Array<string | undefined>): boolean => values.some(Boolean);
 
-const metricOrPlaceholder = (value: string | undefined): string => value || '-';
+const cpuAmount = (value: string | undefined) => parseResourceQuantity(value, 'cpu');
+const memoryAmount = (value: string | undefined) => parseResourceQuantity(value, 'memory');
 
 const standardMetricSections = (
   source: StandardMetricSource
@@ -85,16 +88,16 @@ const standardMetricSections = (
   return {
     cpu: hasCpuData
       ? {
-          usage: source.cpuUsage || '-',
-          request: source.cpuRequest || '-',
-          limit: source.cpuLimit || '-',
+          usage: cpuAmount(source.cpuUsage),
+          request: cpuAmount(source.cpuRequest),
+          limit: cpuAmount(source.cpuLimit),
         }
       : undefined,
     memory: hasMemoryData
       ? {
-          usage: source.memUsage || '-',
-          request: source.memRequest || '-',
-          limit: source.memLimit || '-',
+          usage: memoryAmount(source.memUsage),
+          request: memoryAmount(source.memRequest),
+          limit: memoryAmount(source.memLimit),
         }
       : undefined,
   };
@@ -121,26 +124,26 @@ const deriveNodeUtilization = (detail: UtilizationDetail): UtilizationData | nul
   return {
     cpu: hasCpuData
       ? {
-          usage: metricOrPlaceholder(detail.cpuUsage),
-          capacity: metricOrPlaceholder(detail.cpuCapacity),
-          allocatable: metricOrPlaceholder(detail.cpuAllocatable),
-          request: metricOrPlaceholder(detail.cpuRequests),
-          limit: metricOrPlaceholder(detail.cpuLimits),
+          usage: cpuAmount(detail.cpuUsage),
+          capacity: cpuAmount(detail.cpuCapacity),
+          allocatable: cpuAmount(detail.cpuAllocatable),
+          request: cpuAmount(detail.cpuRequests),
+          limit: cpuAmount(detail.cpuLimits),
         }
       : undefined,
     memory: hasMemoryData
       ? {
-          usage: metricOrPlaceholder(detail.memoryUsage),
-          capacity: metricOrPlaceholder(detail.memoryCapacity),
-          allocatable: metricOrPlaceholder(detail.memoryAllocatable),
-          request: metricOrPlaceholder(detail.memRequests),
-          limit: metricOrPlaceholder(detail.memLimits),
+          usage: memoryAmount(detail.memoryUsage),
+          capacity: memoryAmount(detail.memoryCapacity),
+          allocatable: memoryAmount(detail.memoryAllocatable),
+          request: memoryAmount(detail.memRequests),
+          limit: memoryAmount(detail.memLimits),
         }
       : undefined,
     pods: {
       count: String(detail.podsCount || 0),
-      capacity: metricOrPlaceholder(detail.podsCapacity),
-      allocatable: metricOrPlaceholder(detail.podsAllocatable),
+      capacity: detail.podsCapacity || '-',
+      allocatable: detail.podsAllocatable || '-',
     },
     mode: 'nodeMetrics',
   };

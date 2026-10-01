@@ -173,16 +173,14 @@ func NewCronJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 
 func buildWorkloadOwnSummary(obj metav1.Object, model resourcemodel.ResourceModel, containers []corev1.Container) WorkloadSummary {
 	return WorkloadSummary{
-		Ref:                model.Ref,
-		Metadata:           streamrows.NewResourceMetadata(obj),
-		Status:             model.Status.Label,
-		StatusState:        model.Status.State,
-		StatusPresentation: model.Status.Presentation,
-		StatusReason:       model.Status.Reason,
-		Age:                formatAge(obj.GetCreationTimestamp().Time),
-		AgeTimestamp:       creationTimestampMillis(obj),
-		CPUUsage:           "-", CPURequest: "-", CPULimit: "-",
-		MemUsage: "-", MemRequest: "-", MemLimit: "-",
+		Ref:                  model.Ref,
+		Metadata:             streamrows.NewResourceMetadata(obj),
+		Status:               model.Status.Label,
+		StatusState:          model.Status.State,
+		StatusPresentation:   model.Status.Presentation,
+		StatusReason:         model.Status.Reason,
+		Age:                  formatAge(obj.GetCreationTimestamp().Time),
+		AgeTimestamp:         creationTimestampMillis(obj),
 		PortForwardAvailable: common.HasForwardableContainerPorts(containers),
 	}
 }

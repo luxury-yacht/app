@@ -409,36 +409,40 @@ type PodSummary struct {
 	DirectOwnerKind       string `json:"directOwnerKind,omitempty"`
 	DirectOwnerName       string `json:"directOwnerName,omitempty"`
 	DirectOwnerAPIVersion string `json:"directOwnerApiVersion,omitempty"`
-	CPURequest            string `json:"cpuRequest"`
-	CPULimit              string `json:"cpuLimit"`
-	CPUUsage              string `json:"cpuUsage"`
-	MemRequest            string `json:"memRequest"`
-	MemLimit              string `json:"memLimit"`
-	MemUsage              string `json:"memUsage"`
+	// CPU is in millicores and memory in bytes; the frontend formats both for
+	// display. A nil usage means no valid metrics sample, distinct from a real zero.
+	CPURequestMilli    int64  `json:"cpuRequestMilli,omitempty"`
+	CPULimitMilli      int64  `json:"cpuLimitMilli,omitempty"`
+	CPUUsageMilli      *int64 `json:"cpuUsageMilli,omitempty"`
+	MemoryRequestBytes int64  `json:"memoryRequestBytes,omitempty"`
+	MemoryLimitBytes   int64  `json:"memoryLimitBytes,omitempty"`
+	MemoryUsageBytes   *int64 `json:"memoryUsageBytes,omitempty"`
 }
 
 // WorkloadSummary is a Deployment/StatefulSet/DaemonSet/Job/CronJob/Pod row
 // (the namespace-workloads domain).
 type WorkloadSummary struct {
-	Ref                  resourcemodel.ResourceRef            `json:"ref"`
-	Metadata             *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
-	Ready                string                               `json:"ready"`
-	Status               string                               `json:"status"`
-	StatusState          string                               `json:"statusState,omitempty"`
-	StatusPresentation   string                               `json:"statusPresentation,omitempty"`
-	StatusReason         string                               `json:"statusReason,omitempty"`
-	Restarts             int32                                `json:"restarts"`
-	Age                  string                               `json:"age"`
-	AgeTimestamp         int64                                `json:"ageTimestamp,omitempty"`
-	CPUUsage             string                               `json:"cpuUsage,omitempty"`
-	CPURequest           string                               `json:"cpuRequest,omitempty"`
-	CPULimit             string                               `json:"cpuLimit,omitempty"`
-	MemUsage             string                               `json:"memUsage,omitempty"`
-	MemRequest           string                               `json:"memRequest,omitempty"`
-	MemLimit             string                               `json:"memLimit,omitempty"`
-	PortForwardAvailable bool                                 `json:"portForwardAvailable"`
-	DesiredReplicas      *int32                               `json:"desiredReplicas,omitempty"`
-	HPAManaged           *bool                                `json:"hpaManaged,omitempty"`
+	Ref                resourcemodel.ResourceRef            `json:"ref"`
+	Metadata           *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
+	Ready              string                               `json:"ready"`
+	Status             string                               `json:"status"`
+	StatusState        string                               `json:"statusState,omitempty"`
+	StatusPresentation string                               `json:"statusPresentation,omitempty"`
+	StatusReason       string                               `json:"statusReason,omitempty"`
+	Restarts           int32                                `json:"restarts"`
+	Age                string                               `json:"age"`
+	AgeTimestamp       int64                                `json:"ageTimestamp,omitempty"`
+	// CPU is in millicores and memory in bytes, summed over the workload's pods.
+	// A nil usage means no pod reported usage.
+	CPUUsageMilli        *int64 `json:"cpuUsageMilli,omitempty"`
+	CPURequestMilli      int64  `json:"cpuRequestMilli,omitempty"`
+	CPULimitMilli        int64  `json:"cpuLimitMilli,omitempty"`
+	MemoryUsageBytes     *int64 `json:"memoryUsageBytes,omitempty"`
+	MemoryRequestBytes   int64  `json:"memoryRequestBytes,omitempty"`
+	MemoryLimitBytes     int64  `json:"memoryLimitBytes,omitempty"`
+	PortForwardAvailable bool   `json:"portForwardAvailable"`
+	DesiredReplicas      *int32 `json:"desiredReplicas,omitempty"`
+	HPAManaged           *bool  `json:"hpaManaged,omitempty"`
 }
 
 // NodeSummary is a node row (the nodes domain).
@@ -454,27 +458,29 @@ type NodeSummary struct {
 	Version            string                    `json:"version"`
 	InternalIP         string                    `json:"internalIP,omitempty"`
 	ExternalIP         string                    `json:"externalIP,omitempty"`
-	CPUCapacity        string                    `json:"cpuCapacity"`
-	CPUAllocatable     string                    `json:"cpuAllocatable"`
-	CPURequests        string                    `json:"cpuRequests"`
-	CPULimits          string                    `json:"cpuLimits"`
-	CPUUsage           string                    `json:"cpuUsage"`
-	MemoryCapacity     string                    `json:"memoryCapacity"`
-	MemoryAllocatable  string                    `json:"memoryAllocatable"`
-	MemRequests        string                    `json:"memRequests"`
-	MemLimits          string                    `json:"memLimits"`
-	MemoryUsage        string                    `json:"memoryUsage"`
-	Pods               string                    `json:"pods"`
-	PodsCapacity       string                    `json:"podsCapacity"`
-	PodsAllocatable    string                    `json:"podsAllocatable"`
-	Restarts           int32                     `json:"restarts"`
-	CPU                string                    `json:"cpu"`
-	Memory             string                    `json:"memory"`
-	Unschedulable      bool                      `json:"unschedulable"`
-	Labels             map[string]string         `json:"labels,omitempty"`
-	Annotations        map[string]string         `json:"annotations,omitempty"`
-	Taints             []NodeTaint               `json:"taints,omitempty"`
-	PodMetrics         []NodePodMetric           `json:"podMetrics,omitempty"`
+	// CPU is in millicores and memory in bytes. A nil usage means no valid
+	// metrics sample, distinct from a real zero.
+	CPUCapacityMilli       int64             `json:"cpuCapacityMilli,omitempty"`
+	CPUAllocatableMilli    int64             `json:"cpuAllocatableMilli,omitempty"`
+	CPURequestsMilli       int64             `json:"cpuRequestsMilli,omitempty"`
+	CPULimitsMilli         int64             `json:"cpuLimitsMilli,omitempty"`
+	CPUUsageMilli          *int64            `json:"cpuUsageMilli,omitempty"`
+	MemoryCapacityBytes    int64             `json:"memoryCapacityBytes,omitempty"`
+	MemoryAllocatableBytes int64             `json:"memoryAllocatableBytes,omitempty"`
+	MemoryRequestsBytes    int64             `json:"memoryRequestsBytes,omitempty"`
+	MemoryLimitsBytes      int64             `json:"memoryLimitsBytes,omitempty"`
+	MemoryUsageBytes       *int64            `json:"memoryUsageBytes,omitempty"`
+	Pods                   string            `json:"pods"`
+	PodsCapacity           string            `json:"podsCapacity"`
+	PodsAllocatable        string            `json:"podsAllocatable"`
+	Restarts               int32             `json:"restarts"`
+	CPU                    string            `json:"cpu"`
+	Memory                 string            `json:"memory"`
+	Unschedulable          bool              `json:"unschedulable"`
+	Labels                 map[string]string `json:"labels,omitempty"`
+	Annotations            map[string]string `json:"annotations,omitempty"`
+	Taints                 []NodeTaint       `json:"taints,omitempty"`
+	PodMetrics             []NodePodMetric   `json:"podMetrics,omitempty"`
 }
 
 // NewResourceRef builds a row's canonical identity from the owning kind's
@@ -524,21 +530,17 @@ type NodePodMetric struct {
 	MemoryUsage string `json:"memoryUsage"`
 }
 
-// MetricsNoData is the marker rendered for a CPU/memory usage cell that has no
-// valid sample (no metrics-server sample for the object, or a sample that belongs
-// to a prior incarnation of a same-named object). It is the ASCII hyphen because
-// that is the no-data sentinel the frontend resource-bar parsers already
-// recognise (parseCpuToMillicores/parseMemToMB, ResourceBar.parseResource,
-// formatResourceForExport). Rendering this — never "0m"/"0Mi" — distinguishes
-// "metrics unknown" from a real zero (v2 architecture Risk #9 / §3.6).
+// MetricsNoData is the marker for a NodePodMetric usage string that has no valid
+// sample. Rendering it — never "0m"/"0Mi" — distinguishes "metrics unknown" from a
+// real zero. Numeric row usage fields express the same state as nil.
 const MetricsNoData = "-"
 
-// FormatCPUMilli renders CPU millicores as the streaming rows display them.
+// FormatCPUMilli renders CPU millicores for the node row's string fields.
 func FormatCPUMilli(value int64) string {
 	return fmt.Sprintf("%dm", value)
 }
 
-// FormatMemoryBytes renders a byte count as the streaming rows display it.
+// FormatMemoryBytes renders a byte count for the node row's string fields.
 func FormatMemoryBytes(bytes int64) string {
 	if bytes <= 0 {
 		return "0Mi"

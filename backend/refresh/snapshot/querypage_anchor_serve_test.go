@@ -6,6 +6,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"k8s.io/utils/ptr"
 )
 
 // anchorFor builds a valid same-cluster anchor ref for typed serve tests.
@@ -269,7 +270,7 @@ func TestPerBuildAnchorOnMetricSortRanksByOverlaidUsage(t *testing.T) {
 	for i := range items {
 		items[i] = PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: fmt.Sprintf("pod-%d", i)}, // Overlaid usage: descending as names ascend, so cpu order is the
 			// REVERSE of name order — an anchor rank must follow cpu, not name.
-			CPUUsage: fmt.Sprintf("%dm", (10-i)*100),
+			CPUUsageMilli: ptr.To(int64((10 - i) * 100)),
 		}
 	}
 	query := typedTableQuery{

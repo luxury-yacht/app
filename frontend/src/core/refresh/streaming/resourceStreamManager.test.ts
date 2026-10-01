@@ -243,8 +243,8 @@ describe('ResourceStreamManager', () => {
     ).ensureSubscriptions('pods', storeScope);
 
     const existing = makePodSnapshotEntry({
-      cpuUsage: '50m',
-      memUsage: '40Mi',
+      cpuUsageMilli: 50,
+      memoryUsageBytes: 40 * 1024 ** 2,
     });
 
     setScopedDomainState('pods', storeScope, () => ({
@@ -271,7 +271,7 @@ describe('ResourceStreamManager', () => {
         ref: resourceRef({ kind: 'Pod', namespace: 'default', name: 'pod-a' }),
         // The backend ships no row for signal-only pods; even if one slipped through
         // the frontend must not apply it. The query-backed table refetches instead.
-        row: { ...existing, status: 'Pending', cpuUsage: '5m', memUsage: '8Mi' },
+        row: { ...existing, status: 'Pending', cpuUsageMilli: 5, memoryUsageBytes: 8 * 1024 ** 2 },
       })
     );
 
@@ -281,7 +281,7 @@ describe('ResourceStreamManager', () => {
     expect(state.sourceVersion).toBe('object:2');
     expect(state.signalVersions?.object).toBe('object:2');
     expect(state.data?.rows?.[0]?.status).toBe('Running');
-    expect(state.data?.rows?.[0]?.cpuUsage).toBe('50m');
+    expect(state.data?.rows?.[0]?.cpuUsageMilli).toBe(50);
   });
 
   test.each([

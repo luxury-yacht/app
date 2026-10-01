@@ -1,10 +1,12 @@
 package snapshot
 
 import (
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"slices"
 	"strconv"
 	"testing"
+
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"k8s.io/utils/ptr"
 )
 
 func migratedStaticQuery() typedTableQuery {
@@ -177,9 +179,9 @@ func TestMigratedClusterStaticTableAdaptersQueryAndPage(t *testing.T) {
 
 	t.Run("nodes", func(t *testing.T) {
 		page := applyTypedTableQuery([]NodeSummary{
-			{Ref: resourcemodel.ResourceRef{Kind: "Node", Name: "alpha-a"}, CPUUsage: "100m"},
-			{Ref: resourcemodel.ResourceRef{Kind: "Node", Name: "alpha-b"}, CPUUsage: "200m"},
-			{Ref: resourcemodel.ResourceRef{Kind: "Node", Name: "charlie"}, CPUUsage: "300m"},
+			{Ref: resourcemodel.ResourceRef{Kind: "Node", Name: "alpha-a"}, CPUUsageMilli: ptr.To[int64](100)},
+			{Ref: resourcemodel.ResourceRef{Kind: "Node", Name: "alpha-b"}, CPUUsageMilli: ptr.To[int64](200)},
+			{Ref: resourcemodel.ResourceRef{Kind: "Node", Name: "charlie"}, CPUUsageMilli: ptr.To[int64](300)},
 		}, query, nodeTableQueryAdapter())
 		assertMigratedPage(t, page)
 	})
@@ -454,8 +456,8 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 		query.BaseScope = "namespace:all"
 		query.Request.SortField = "cpu"
 		page := applyTypedTableQuery([]PodSummary{
-			{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "high-cpu-pod"}, CPUUsage: "250m"},
-			{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "low-cpu-pod"}, CPUUsage: "50m"},
+			{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "high-cpu-pod"}, CPUUsageMilli: ptr.To[int64](250)},
+			{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "low-cpu-pod"}, CPUUsageMilli: ptr.To[int64](50)},
 		}, query, podTableQueryAdapter())
 		requirePageNames(t, page.Rows, []string{"low-cpu-pod", "high-cpu-pod"}, func(row PodSummary) string {
 			return row.Ref.Name
@@ -463,8 +465,8 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 
 		query.Request.SortField = "memory"
 		page = applyTypedTableQuery([]PodSummary{
-			{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "high-memory-pod"}, MemUsage: "256Mi"},
-			{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "low-memory-pod"}, MemUsage: "64Mi"},
+			{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "high-memory-pod"}, MemoryUsageBytes: ptr.To[int64](256 << 20)},
+			{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "low-memory-pod"}, MemoryUsageBytes: ptr.To[int64](64 << 20)},
 		}, query, podTableQueryAdapter())
 		requirePageNames(t, page.Rows, []string{"low-memory-pod", "high-memory-pod"}, func(row PodSummary) string {
 			return row.Ref.Name
@@ -487,8 +489,8 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 		query.BaseScope = "namespace:all"
 		query.Request.SortField = "cpu"
 		page := applyTypedTableQuery([]WorkloadSummary{
-			{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "high-cpu-workload"}, CPUUsage: "250m"},
-			{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "low-cpu-workload"}, CPUUsage: "50m"},
+			{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "high-cpu-workload"}, CPUUsageMilli: ptr.To[int64](250)},
+			{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "low-cpu-workload"}, CPUUsageMilli: ptr.To[int64](50)},
 		}, query, workloadTableQueryAdapter())
 		requirePageNames(t, page.Rows, []string{"low-cpu-workload", "high-cpu-workload"}, func(row WorkloadSummary) string {
 			return row.Ref.Name
@@ -496,8 +498,8 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 
 		query.Request.SortField = "memory"
 		page = applyTypedTableQuery([]WorkloadSummary{
-			{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "high-memory-workload"}, MemUsage: "256Mi"},
-			{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "low-memory-workload"}, MemUsage: "64Mi"},
+			{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "high-memory-workload"}, MemoryUsageBytes: ptr.To[int64](256 << 20)},
+			{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "low-memory-workload"}, MemoryUsageBytes: ptr.To[int64](64 << 20)},
 		}, query, workloadTableQueryAdapter())
 		requirePageNames(t, page.Rows, []string{"low-memory-workload", "high-memory-workload"}, func(row WorkloadSummary) string {
 			return row.Ref.Name
@@ -655,7 +657,7 @@ func BenchmarkMigratedStaticTableQueries(b *testing.B) {
 	b.Run("pods", func(b *testing.B) {
 		rows := make([]PodSummary, 10000)
 		for i := range rows {
-			rows[i] = PodSummary{Ref: resourcemodel.ResourceRef{Namespace: benchmarkNamespace(i), Name: benchmarkName("pod", i)}, Node: "node-" + strconv.Itoa(i%100), Status: "Running", Ready: "1/1", OwnerKind: "Deployment", OwnerName: "bench-api", CPUUsage: "10m", MemUsage: "64Mi"}
+			rows[i] = PodSummary{Ref: resourcemodel.ResourceRef{Namespace: benchmarkNamespace(i), Name: benchmarkName("pod", i)}, Node: "node-" + strconv.Itoa(i%100), Status: "Running", Ready: "1/1", OwnerKind: "Deployment", OwnerName: "bench-api", CPUUsageMilli: ptr.To[int64](10), MemoryUsageBytes: ptr.To[int64](64 << 20)}
 		}
 		benchmarkTypedTableQuery(b, query, rows, podTableQueryAdapter())
 	})
@@ -663,7 +665,7 @@ func BenchmarkMigratedStaticTableQueries(b *testing.B) {
 		kinds := []string{"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob", "Pod"}
 		rows := make([]WorkloadSummary, 10000)
 		for i := range rows {
-			rows[i] = WorkloadSummary{Ref: resourcemodel.ResourceRef{Kind: kinds[i%len(kinds)], Namespace: benchmarkNamespace(i), Name: benchmarkName("workload", i)}, Status: "Running", Ready: "1/1", CPUUsage: "10m", MemUsage: "64Mi"}
+			rows[i] = WorkloadSummary{Ref: resourcemodel.ResourceRef{Kind: kinds[i%len(kinds)], Namespace: benchmarkNamespace(i), Name: benchmarkName("workload", i)}, Status: "Running", Ready: "1/1", CPUUsageMilli: ptr.To[int64](10), MemoryUsageBytes: ptr.To[int64](64 << 20)}
 		}
 		benchmarkTypedTableQuery(b, query, rows, workloadTableQueryAdapter())
 	})
@@ -677,7 +679,7 @@ func BenchmarkMigratedStaticTableQueries(b *testing.B) {
 	b.Run("nodes", func(b *testing.B) {
 		rows := make([]NodeSummary, 10000)
 		for i := range rows {
-			rows[i] = NodeSummary{Ref: resourcemodel.ResourceRef{Kind: "Node", Name: benchmarkName("node", i)}, Status: "Ready", Roles: "worker", Version: "v1.32.0", InternalIP: "10.0.0." + strconv.Itoa(i%255), CPUUsage: "100m", MemoryUsage: "1Gi", Pods: "20/110"}
+			rows[i] = NodeSummary{Ref: resourcemodel.ResourceRef{Kind: "Node", Name: benchmarkName("node", i)}, Status: "Ready", Roles: "worker", Version: "v1.32.0", InternalIP: "10.0.0." + strconv.Itoa(i%255), CPUUsageMilli: ptr.To[int64](100), MemoryUsageBytes: ptr.To[int64](1 << 30), Pods: "20/110"}
 		}
 		benchmarkTypedTableQuery(b, query, rows, nodeTableQueryAdapter())
 	})

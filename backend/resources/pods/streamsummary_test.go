@@ -19,8 +19,6 @@ func TestBuildStreamSummaryCarriesCanonicalResourceRef(t *testing.T) {
 	row := BuildStreamSummaryFromRSMap(
 		streamrows.ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
 		pod,
-		0,
-		0,
 		nil,
 	)
 

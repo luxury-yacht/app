@@ -18,12 +18,13 @@ export type ResourceMetricsDomain = Extract<
   'pods' | 'namespace-workloads' | 'nodes' | 'cluster-overview'
 >;
 
+/** CPU values are millicores and memory values are bytes; undefined means no value. */
 export interface ResourceMetricValues {
-  usage?: string;
-  request?: string;
-  limit?: string;
-  capacity?: string;
-  allocatable?: string;
+  usage?: number;
+  request?: number;
+  limit?: number;
+  capacity?: number;
+  allocatable?: number;
 }
 
 export interface ResourcePodsMetricValues {

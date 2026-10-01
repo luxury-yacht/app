@@ -8,6 +8,7 @@
 import type { CapabilityState } from '@modules/object-panel/components/ObjectPanel/types';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import type { ObjectDeletionMetadata } from '@/core/refresh/types.generated';
+import type { ResourceMetricValues } from '@/core/resource-metrics';
 import type { ObjectDetailModel } from './objectDetailModel';
 
 export interface DetailsTabProps {
@@ -30,20 +31,8 @@ export interface DetailsTabProps {
 }
 
 export interface UtilizationData {
-  cpu?: {
-    usage?: string;
-    request?: string;
-    limit?: string;
-    capacity?: string;
-    allocatable?: string;
-  };
-  memory?: {
-    usage?: string;
-    request?: string;
-    limit?: string;
-    capacity?: string;
-    allocatable?: string;
-  };
+  cpu?: ResourceMetricValues;
+  memory?: ResourceMetricValues;
   pods?: {
     count?: string;
     capacity?: string;

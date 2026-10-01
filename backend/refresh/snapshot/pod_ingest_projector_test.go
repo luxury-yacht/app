@@ -81,7 +81,7 @@ func TestNewPodIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 			t.Fatalf("projector returned %T, want ingest.Bundle", raw)
 		}
 
-		wantTable := podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister, nil))
+		wantTable := podres.BuildStreamSummary(streamMeta, pod, rsLister, nil)
 		if gotTable, ok := bundle.Table.(streamrows.PodSummary); !ok || gotTable != wantTable {
 			t.Fatalf("Table half mismatch for %s/%s:\n got=%#v\nwant=%#v", pod.Namespace, pod.Name, bundle.Table, wantTable)
 		}

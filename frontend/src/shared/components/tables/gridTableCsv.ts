@@ -20,8 +20,8 @@ const escapeCsvCell = (value: string): string => {
 
 /**
  * Build a CSV string from grid rows using the table's displayed columns. The header
- * is each column's rendered header text (falling back to its key); each cell is the
- * column's rendered content as plain text.
+ * is each column's export header or rendered header text (falling back to its key);
+ * each cell is the column's rendered content as plain text.
  */
 export function buildGridTableCsv<T>(
   rows: T[],
@@ -32,7 +32,7 @@ export function buildGridTableCsv<T>(
     return '';
   }
   const headerRow = columns.map((column) =>
-    escapeCsvCell(getTextContent(column.header).trim() || column.key)
+    escapeCsvCell(column.exportHeader ?? (getTextContent(column.header).trim() || column.key))
   );
   const dataRows = rows.map((item) =>
     columns.map((column) =>

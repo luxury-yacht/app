@@ -1970,11 +1970,11 @@ it('copies the current visible table contents as CSV from the filter icon bar', 
   cleanup();
 });
 
-it('copies resource-bar columns using their displayed CPU and memory values', async () => {
+it('copies resource-bar columns as plain millicores and KiB under unit headers', async () => {
   const clipboardWriteText = runtimeMocks.writeClipboardText;
   clipboardWriteText.mockReset().mockResolvedValue(undefined);
 
-  type ResourceRow = SimpleRow & { cpu: string; memory: string };
+  type ResourceRow = SimpleRow & { cpu: number; memory: number };
   const resourceColumns: GridColumnDefinition<ResourceRow>[] = [
     {
       key: 'label',
@@ -2000,15 +2000,15 @@ it('copies resource-bar columns using their displayed CPU and memory values', as
       id: 'row-0',
       label: 'Alpha',
       name: 'Alpha',
-      cpu: '250m',
-      memory: '512Mi',
+      cpu: 250,
+      memory: 512 * 1024 * 1024,
     },
     {
       id: 'row-1',
       label: 'Beta',
       name: 'Beta',
-      cpu: '1',
-      memory: `${2 * 1024 * 1024 * 1024}`,
+      cpu: 1000,
+      memory: 2 * 1024 * 1024 * 1024,
     },
   ] as unknown as SimpleRow[];
 
@@ -2039,7 +2039,7 @@ it('copies resource-bar columns using their displayed CPU and memory values', as
   });
 
   expect(clipboardWriteText).toHaveBeenCalledWith(
-    'Label,CPU,Memory\nAlpha,250m,512Mi\nBeta,1000m,2.0Gi'
+    'Label,CPU (m),Memory (KiB)\nAlpha,250,524288\nBeta,1000,2097152'
   );
 
   cleanup();

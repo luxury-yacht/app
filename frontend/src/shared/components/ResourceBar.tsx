@@ -13,10 +13,11 @@ import Tooltip from './Tooltip';
 import './ResourceBar.css';
 
 interface ResourceBarProps {
-  usage?: string;
-  request?: string;
-  limit?: string;
-  allocatable?: string;
+  /** Millicores for CPU, bytes for memory. */
+  usage?: number;
+  request?: number;
+  limit?: number;
+  allocatable?: number;
   'data-gridtable-export-text'?: string;
   type: ResourceType;
   showTooltip?: boolean;
@@ -305,9 +306,9 @@ const ResourceBarOvercommit = ({
 };
 
 const ResourceBar: React.FC<ResourceBarProps> = ({
-  usage = '-',
-  request = '-',
-  limit = '-',
+  usage,
+  request,
+  limit,
   allocatable,
   type,
   showTooltip: enableTooltip = true,

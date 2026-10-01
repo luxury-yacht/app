@@ -1,4 +1,3 @@
-import { namespaceAggregateUsageDisplay } from '@core/resource-metrics';
 import type { NamespaceSummaryWithMetrics } from '@modules/namespace/contexts/namespaceMetrics';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { type BoundedRowsMode, boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
@@ -101,23 +100,13 @@ const createNamespaceResourceColumn = (
     type === 'cpu' ? (row.cpuRequestsMilli ?? 0) : (row.memoryRequestsBytes ?? 0);
   const limitNumber = (row: NamespaceTableRow): number =>
     type === 'cpu' ? (row.cpuLimitsMilli ?? 0) : (row.memoryLimitsBytes ?? 0);
-  const resourceDisplay = (cpuMilli: number, memoryBytes: number): string => {
-    const display = namespaceAggregateUsageDisplay(cpuMilli, memoryBytes);
-    return type === 'cpu' ? display.cpu : display.memory;
-  };
   const column = cf.createResourceBarColumn<NamespaceTableRow>({
     key: type,
     header: type === 'cpu' ? 'CPU' : 'Memory',
     type,
-    getUsage: (row) => resourceDisplay(row.cpuUsageMilli ?? 0, row.memoryUsageBytes ?? 0),
-    getRequest: (row) =>
-      requestNumber(row) > 0
-        ? resourceDisplay(row.cpuRequestsMilli ?? 0, row.memoryRequestsBytes ?? 0)
-        : undefined,
-    getLimit: (row) =>
-      limitNumber(row) > 0
-        ? resourceDisplay(row.cpuLimitsMilli ?? 0, row.memoryLimitsBytes ?? 0)
-        : undefined,
+    getUsage: usageNumber,
+    getRequest: (row) => (requestNumber(row) > 0 ? requestNumber(row) : undefined),
+    getLimit: (row) => (limitNumber(row) > 0 ? limitNumber(row) : undefined),
     getVariant: () => 'compact',
     getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:${type}`,
     sortable: true,

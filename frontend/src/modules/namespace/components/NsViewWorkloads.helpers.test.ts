@@ -32,8 +32,6 @@ describe('NsViewWorkloads helpers', () => {
       status: 'Running',
       ready: '1/1',
       restarts: 2,
-      cpuUsage: '10m',
-      memUsage: '20Mi',
       age: '5m',
       portForwardAvailable: false,
     });
@@ -44,8 +42,6 @@ describe('NsViewWorkloads helpers', () => {
     expect(tokens).toContain('Running');
     expect(tokens).toContain('1/1');
     expect(tokens).toContain('2');
-    expect(tokens).toContain('10m');
-    expect(tokens).toContain('20Mi');
     expect(tokens).toContain('5m');
   });
 });

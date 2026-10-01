@@ -1,5 +1,7 @@
 ### Changed
 
+- Copying or exporting a table with CPU or memory columns writes plain numbers: CPU in millicores and memory in KiB, with the unit in the column header. Spreadsheets can now sort and total these columns.
+- The Resource Utilization section and the Cluster Overview workload usage show CPU and memory in the same units as the tables.
 - Container logs load faster:
   - The first view appears within about 2 seconds, and a slow container no longer holds back the others.
   - Logs pick up where they left off when the connection drops, or the window is shown again.
@@ -11,6 +13,7 @@
 
 ### Fixed
 
+- Sorting pods, workloads, and nodes by memory or CPU uses exact values. Pods just under 1 GiB no longer sort above larger ones.
 - Fixed a regression that broke the Copy buttons and menu items.
 - Logs tab reliability:
   - Pods that start while the tab is open stream and appear in the Pods dropdown right away. Scaling up no longer blanks the tab.

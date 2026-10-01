@@ -13,7 +13,10 @@ import type {
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable';
 import { getKindBadgeClassName } from '@shared/utils/kindBadgeColors';
-import { formatResourceValue, parseResourceValue } from '@shared/utils/resourceCalculations';
+import {
+  formatResourceExportValue,
+  RESOURCE_EXPORT_UNITS,
+} from '@shared/utils/resourceCalculations';
 import type React from 'react';
 import { getUseShortResourceNames } from '@/core/settings/appPreferences';
 import { parseCompactAgeToSeconds } from '@/utils/ageFormatter';
@@ -63,14 +66,15 @@ export const createAgeColumn = <T extends AgeColumnRow>(
       : parseCompactAgeToSeconds(getValue(item)),
 });
 
+/** Value getters return millicores for CPU and bytes for memory. */
 export interface CreateResourceBarColumnOptions<T> extends GridColumnAlignmentOptions {
   key?: string;
   header: string;
   type: 'cpu' | 'memory';
-  getUsage: (item: T) => string | number | undefined | null;
-  getRequest?: (item: T) => string | number | undefined | null;
-  getLimit?: (item: T) => string | number | undefined | null;
-  getAllocatable?: (item: T) => string | number | undefined | null;
+  getUsage: (item: T) => number | undefined | null;
+  getRequest?: (item: T) => number | undefined | null;
+  getLimit?: (item: T) => number | undefined | null;
+  getAllocatable?: (item: T) => number | undefined | null;
   getOvercommitPercent?: (item: T) => number | undefined;
   getVariant?: (item: T) => 'default' | 'compact' | undefined;
   getShowTooltip?: (item: T) => boolean | undefined;
@@ -108,28 +112,13 @@ export function createResourceBarColumn<T>(
     sortValue,
   } = options;
 
-  const coerce = (value: string | number | undefined | null): string | undefined => {
-    if (value === undefined || value === null) {
-      return undefined;
-    }
-    if (typeof value === 'number') {
-      if (!Number.isFinite(value)) {
-        return undefined;
-      }
-      return value.toString();
-    }
-    const str = value.toString();
-    return str.length > 0 ? str : undefined;
-  };
-
-  const formatResourceForExport = (value: string | undefined): string => {
-    const parsedValue = parseResourceValue(value, type);
-    return formatResourceValue(value, parsedValue, type);
-  };
+  const coerce = (value: number | undefined | null): number | undefined =>
+    typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 
   return {
     key,
     header,
+    exportHeader: `${header} (${RESOURCE_EXPORT_UNITS[type]})`,
     className,
     alignHeader,
     alignData,
@@ -141,7 +130,7 @@ export function createResourceBarColumn<T>(
       const limit = coerce(getLimit?.(item));
       const allocatable = coerce(getAllocatable?.(item));
       const showEmptyState = getShowEmptyState?.(item);
-      const exportText = getMetricsError?.(item) ? '—' : formatResourceForExport(usage);
+      const exportText = getMetricsError?.(item) ? '-' : formatResourceExportValue(usage, type);
 
       return (
         <ResourceBar

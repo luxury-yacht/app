@@ -64,9 +64,9 @@ search remains Local Complete-only, or the large-scope table must show an
 explicit degraded/disabled state.
 
 Metric sorts run server-side on the joined usage values through the same
-keyset cursor as every other sort (`parseFormattedCPUToMilli` /
-`parseFormattedMemoryToBytes` sort keys). Cursors must not restart merely
-because a metric tick refreshed the joined values.
+keyset cursor as every other sort (`usageSortValue` over the exact millicore
+and byte fields). Cursors must not restart merely because a metric tick
+refreshed the joined values.
 
 Keyset ordering must be self-consistent. The page sort and the cursor boundary
 must be derived from one comparable value per row, so the order rows are laid out

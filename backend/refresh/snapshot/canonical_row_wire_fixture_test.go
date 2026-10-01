@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/release"
@@ -220,7 +221,8 @@ func canonicalRowWireFixtures(t *testing.T) canonicalRowWireFixtureDocument {
 		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "example/app:1"}}},
 		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
 	}
-	podRow := podres.BuildStreamSummaryFromRSMap(meta, pod, 25, 64<<20, nil)
+	podRow := podres.BuildStreamSummaryFromRSMap(meta, pod, nil)
+	podRow.CPUUsageMilli, podRow.MemoryUsageBytes = ptr.To[int64](25), ptr.To[int64](64<<20)
 
 	replicas := int32(2)
 	deployment := &appsv1.Deployment{

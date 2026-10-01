@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/utils/ptr"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
@@ -1624,8 +1625,8 @@ func TestNamespaceWorkloadsBuilderAllNamespacesOverlayAggregatesPodMetrics(t *te
 	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
 	require.Len(t, payload.Rows, 1)
 	require.Equal(t, "api", payload.Rows[0].Ref.Name)
-	require.Equal(t, "250m", payload.Rows[0].CPUUsage)
-	require.Equal(t, "128Mi", payload.Rows[0].MemUsage)
+	require.Equal(t, ptr.To[int64](250), payload.Rows[0].CPUUsageMilli)
+	require.Equal(t, ptr.To[int64](128<<20), payload.Rows[0].MemoryUsageBytes)
 }
 
 func TestNamespaceWorkloadsBuilderSingleNamespaceCapsLargeSnapshots(t *testing.T) {
@@ -1877,18 +1878,18 @@ func TestNamespaceWorkloadsBuilderAllNamespaces(t *testing.T) {
 	require.Len(t, namespaces, 2)
 	webSummary, ok := summaries["Deployment/default/web"]
 	require.True(t, ok)
-	require.Equal(t, "250m", webSummary.CPURequest)
-	require.Equal(t, "500m", webSummary.CPULimit)
-	require.Equal(t, "96Mi", webSummary.MemRequest)
-	require.Equal(t, "192Mi", webSummary.MemLimit)
+	require.Equal(t, int64(250), webSummary.CPURequestMilli)
+	require.Equal(t, int64(500), webSummary.CPULimitMilli)
+	require.Equal(t, int64(96<<20), webSummary.MemoryRequestBytes)
+	require.Equal(t, int64(192<<20), webSummary.MemoryLimitBytes)
 	require.Equal(t, "1/1", webSummary.Ready)
 	require.Equal(t, int32(0), webSummary.Restarts)
 	apiSummary, ok := summaries["Deployment/staging/api"]
 	require.True(t, ok)
-	require.Equal(t, "125m", apiSummary.CPURequest)
-	require.Equal(t, "375m", apiSummary.CPULimit)
-	require.Equal(t, "64Mi", apiSummary.MemRequest)
-	require.Equal(t, "160Mi", apiSummary.MemLimit)
+	require.Equal(t, int64(125), apiSummary.CPURequestMilli)
+	require.Equal(t, int64(375), apiSummary.CPULimitMilli)
+	require.Equal(t, int64(64<<20), apiSummary.MemoryRequestBytes)
+	require.Equal(t, int64(160<<20), apiSummary.MemoryLimitBytes)
 	require.Equal(t, "1/1", apiSummary.Ready)
 	require.Equal(t, int32(1), apiSummary.Restarts)
 }

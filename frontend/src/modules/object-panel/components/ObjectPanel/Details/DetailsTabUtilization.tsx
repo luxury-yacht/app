@@ -14,26 +14,16 @@ import {
   calculateResourceMetrics,
   formatCpuValue,
   formatMemoryValue,
+  formatResourceValue,
 } from '@shared/utils/resourceCalculations';
 import type React from 'react';
+import type { ResourceMetricValues } from '@/core/resource-metrics';
 import '../shared.css';
 import './DetailsTabUtilization.css';
 
 interface UtilizationProps {
-  cpu?: {
-    usage?: string;
-    request?: string;
-    limit?: string;
-    capacity?: string;
-    allocatable?: string;
-  };
-  memory?: {
-    usage?: string;
-    request?: string;
-    limit?: string;
-    capacity?: string;
-    allocatable?: string;
-  };
+  cpu?: ResourceMetricValues;
+  memory?: ResourceMetricValues;
   pods?: {
     count?: string;
     capacity?: string;
@@ -46,12 +36,7 @@ interface UtilizationProps {
 
 interface ResourceSectionProps {
   title: string;
-  data: {
-    usage?: string;
-    request?: string;
-    limit?: string;
-    allocatable?: string;
-  };
+  data: ResourceMetricValues;
   type: 'cpu' | 'memory';
   mode: 'podMetrics' | 'nodeMetrics' | 'nodePods';
 }
@@ -90,8 +75,11 @@ const LegendItem: React.FC<{
 };
 
 const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mode }) => {
-  const metrics = calculateResourceMetrics(data, type);
+  const metrics = calculateResourceMetrics(data);
   const formatValue = type === 'cpu' ? formatCpuValue : formatMemoryValue;
+  // An unset request or limit arrives as absent (zero is omitted on the wire).
+  const formatReservation = (value: number | undefined): string =>
+    value ? formatResourceValue(value, type) : 'not set';
 
   const isNodeMode = mode === 'nodeMetrics';
 
@@ -127,7 +115,9 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
         <h3>{title}</h3>
         {!!data.allocatable && (
           <div className="metric-legend__total">
-            <span className="metric-legend__total-value">{data.allocatable}</span>
+            <span className="metric-legend__total-value">
+              {formatResourceValue(data.allocatable, type)}
+            </span>
             <span className="metric-legend__total-label"> total</span>
           </div>
         )}
@@ -151,7 +141,7 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
             tooltip={usedTooltip}
             count={
               <>
-                {data.usage || 'not set'}
+                {formatResourceValue(data.usage, type)}
                 {metrics.usage > 0 && (metrics.request > 0 || usageSecondaryDenominator > 0) && (
                   <>
                     {' ('}
@@ -172,12 +162,12 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
             label="used"
           />
           {!!showAllocatableRow && (
-            <LegendItem count={data.allocatable as string} label="allocatable" />
+            <LegendItem count={formatResourceValue(data.allocatable, type)} label="allocatable" />
           )}
           <LegendItem
             count={
               <>
-                {data.request || 'not set'}
+                {formatReservation(data.request)}
                 {requestSuffix}
               </>
             }
@@ -186,7 +176,7 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
           <LegendItem
             count={
               <>
-                {data.limit || 'not set'}
+                {formatReservation(data.limit)}
                 {!!limitSuffix && (
                   <span className={metrics.limitPercent > 100 ? 'overcommitted-text' : ''}>
                     {limitSuffix}

@@ -331,12 +331,12 @@ const createPod = (
     ownerKind: 'Deployment',
     ownerName: 'owner',
     portForwardAvailable: true,
-    cpuUsage: '0m',
-    cpuRequest: '0m',
-    cpuLimit: '0m',
-    memUsage: '0Mi',
-    memRequest: '0Mi',
-    memLimit: '0Mi',
+    cpuUsageMilli: 0,
+    cpuRequestMilli: 0,
+    cpuLimitMilli: 0,
+    memoryUsageBytes: 0,
+    memoryRequestBytes: 0,
+    memoryLimitBytes: 0,
     ...row,
   };
 };
@@ -423,12 +423,12 @@ describe('NsViewPods', () => {
         age: '1h',
         ownerKind: 'Deployment',
         ownerName: 'api',
-        cpuUsage: '500m',
-        cpuRequest: '1000m',
-        cpuLimit: '1500m',
-        memUsage: '200Mi',
-        memRequest: '512Mi',
-        memLimit: '1Gi',
+        cpuUsageMilli: 500,
+        cpuRequestMilli: 1000,
+        cpuLimitMilli: 1500,
+        memoryUsageBytes: 200 * 1024 ** 2,
+        memoryRequestBytes: 512 * 1024 ** 2,
+        memoryLimitBytes: 1024 ** 3,
       }),
     ];
 
@@ -920,7 +920,7 @@ describe('NsViewPods', () => {
     const memoryColumn = columns.find((column) => column.key === 'memory');
     const readyColumn = columns.find((column) => column.key === 'ready');
     expect(cpuColumn?.sortValue?.(pods[0])).toBe(500);
-    expect(memoryColumn?.sortValue?.(pods[0])).toBe(200);
+    expect(memoryColumn?.sortValue?.(pods[0])).toBe(200 * 1024 ** 2);
     expect(readyColumn?.sortValue?.(pods[0])).toBe(2000002);
   });
 

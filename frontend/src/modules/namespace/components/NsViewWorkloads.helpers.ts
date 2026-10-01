@@ -7,18 +7,8 @@
 
 import type { NamespaceWorkloadSummary } from '@/core/refresh/types';
 
-export interface WorkloadData
-  extends Omit<
-    NamespaceWorkloadSummary,
-    'cpuUsage' | 'cpuRequest' | 'cpuLimit' | 'memUsage' | 'memRequest' | 'memLimit'
-  > {
+export interface WorkloadData extends NamespaceWorkloadSummary {
   kindAlias?: string;
-  cpuUsage?: number | string;
-  cpuRequest?: number | string;
-  cpuLimit?: number | string;
-  memUsage?: number | string;
-  memRequest?: number | string;
-  memLimit?: number | string;
 }
 
 const appendToken = (tokens: string[], value?: string | number | null) => {
@@ -43,11 +33,5 @@ export const appendWorkloadTokens = (tokens: string[], workload?: WorkloadData |
   appendToken(tokens, workload.status);
   appendToken(tokens, workload.ready);
   appendToken(tokens, workload.restarts);
-  appendToken(tokens, workload.cpuUsage);
-  appendToken(tokens, workload.cpuRequest);
-  appendToken(tokens, workload.cpuLimit);
-  appendToken(tokens, workload.memUsage);
-  appendToken(tokens, workload.memRequest);
-  appendToken(tokens, workload.memLimit);
   appendToken(tokens, workload.age);
 };

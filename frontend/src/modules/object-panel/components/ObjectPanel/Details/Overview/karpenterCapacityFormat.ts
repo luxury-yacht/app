@@ -8,7 +8,7 @@
 import {
   formatCpuValue,
   formatResourceValue,
-  parseResourceValue,
+  parseResourceQuantity,
 } from '@shared/utils/resourceCalculations';
 
 export type CpuUnit = 'cores' | 'millicores';
@@ -22,18 +22,21 @@ export const formatCapacityValue = (
     return '-';
   }
   if (resource === 'cpu') {
-    const millicores = parseResourceValue(value, 'cpu');
-    const formatted = formatResourceValue(value, millicores, 'cpu');
-    return cpuUnit === 'cores' && formatted !== '-' ? formatCpuValue(millicores) : formatted;
+    const millicores = parseResourceQuantity(value, 'cpu');
+    return cpuUnit === 'cores' && millicores !== undefined
+      ? formatCpuValue(millicores)
+      : formatResourceValue(millicores, 'cpu');
   }
   return resource === 'memory' || resource === 'ephemeral-storage'
-    ? formatResourceValue(value, parseResourceValue(value, 'memory'), 'memory')
+    ? formatResourceValue(parseResourceQuantity(value, 'memory'), 'memory')
     : value;
 };
 
 /** Millicores when any listed CPU quantity is not a whole number of cores. */
 export const detectCpuUnit = (values: readonly (string | undefined)[]): CpuUnit =>
-  values.some((value) => parseResourceValue(value, 'cpu') % 1000 !== 0) ? 'millicores' : 'cores';
+  values.some((value) => (parseResourceQuantity(value, 'cpu') ?? 0) % 1000 !== 0)
+    ? 'millicores'
+    : 'cores';
 
 const capacityResourceOrder = [
   'cpu',

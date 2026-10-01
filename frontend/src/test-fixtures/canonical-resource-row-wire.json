@@ -112,20 +112,10 @@
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
               "cpu": "0",
-              "cpuAllocatable": "0",
-              "cpuCapacity": "0",
-              "cpuLimits": "",
-              "cpuRequests": "",
-              "cpuUsage": "",
               "labels": {
                 "app": "wire-fixture"
               },
-              "memLimits": "",
-              "memRequests": "",
               "memory": "0Mi",
-              "memoryAllocatable": "0Mi",
-              "memoryCapacity": "0Mi",
-              "memoryUsage": "",
               "pods": "",
               "podsAllocatable": "0",
               "podsCapacity": "0",
@@ -1040,12 +1030,8 @@
             {
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
-              "cpuLimit": "0m",
-              "cpuRequest": "0m",
-              "cpuUsage": "25m",
-              "memLimit": "0Mi",
-              "memRequest": "0Mi",
-              "memUsage": "64 MB",
+              "cpuUsageMilli": 25,
+              "memoryUsageBytes": 67108864,
               "metadata": {
                 "labels": {
                   "app": "wire-fixture"
@@ -1111,13 +1097,7 @@
             {
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
-              "cpuLimit": "-",
-              "cpuRequest": "-",
-              "cpuUsage": "-",
               "desiredReplicas": 2,
-              "memLimit": "-",
-              "memRequest": "-",
-              "memUsage": "-",
               "metadata": {
                 "labels": {
                   "app": "wire-fixture"

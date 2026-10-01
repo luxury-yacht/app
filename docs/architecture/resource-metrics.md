@@ -11,6 +11,10 @@ poller. Metric timing, demand, and background behavior are governed by
   metric samples.
 - Each metric-bearing payload publishes freshness/error metadata and stamps the
   collection revision as its `metric` source clock.
+- Rows carry CPU in millicores and memory in bytes (`…Milli` / `…Bytes`
+  fields), never display strings. An absent usage field means no valid sample,
+  which is distinct from a real zero. The frontend formats every value for
+  display; table Copy/Export write plain millicores and KiB.
 - CPU/memory sorting is backend-owned and uses the joined numeric values; keyset
   cursors remain query-owned.
 - Namespace objects are the exception to the base-row join:

@@ -6,7 +6,6 @@ import type {
 } from '@/core/refresh/types';
 import type { ResourceMetricsData } from './types';
 import {
-  hasResourceMetricData,
   nodeRowResourceMetrics,
   podRowResourceMetrics,
   workloadRowResourceMetrics,
@@ -37,8 +36,7 @@ export const selectPodMetrics = (
   if (!row) {
     return null;
   }
-  const data = podRowResourceMetrics(row, payload?.metrics);
-  return hasResourceMetricData(data) ? data : null;
+  return podRowResourceMetrics(row, payload?.metrics);
 };
 
 export const selectWorkloadMetrics = (
@@ -49,8 +47,7 @@ export const selectWorkloadMetrics = (
   if (!row) {
     return null;
   }
-  const data = workloadRowResourceMetrics(row, payload?.metrics);
-  return hasResourceMetricData(data) ? data : null;
+  return workloadRowResourceMetrics(row, payload?.metrics);
 };
 
 export const selectNodeMetrics = (
@@ -61,6 +58,5 @@ export const selectNodeMetrics = (
   if (!row) {
     return null;
   }
-  const data = nodeRowResourceMetrics(row, payload?.metrics);
-  return hasResourceMetricData(data) ? data : null;
+  return nodeRowResourceMetrics(row, payload?.metrics);
 };

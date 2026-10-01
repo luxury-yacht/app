@@ -25,6 +25,7 @@ import (
 	nodepkg "github.com/luxury-yacht/app/backend/resources/nodes"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/utils/ptr"
 )
 
 // buildNodeOwnSummary builds the OWN-fields NodeSummary for one node: every field the
@@ -53,14 +54,14 @@ func buildNodeOwnSummary(meta ClusterMeta, node *corev1.Node) streamrows.NodeSum
 
 	cpuCapacity := node.Status.Capacity[corev1.ResourceCPU]
 	cpuAlloc := node.Status.Allocatable[corev1.ResourceCPU]
-	summary.CPUCapacity = cpuCapacity.String()
-	summary.CPUAllocatable = cpuAlloc.String()
+	summary.CPUCapacityMilli = cpuCapacity.MilliValue()
+	summary.CPUAllocatableMilli = cpuAlloc.MilliValue()
 	summary.CPU = cpuCapacity.String()
 
 	memCapacity := node.Status.Capacity[corev1.ResourceMemory]
 	memAlloc := node.Status.Allocatable[corev1.ResourceMemory]
-	summary.MemoryCapacity = formatMemoryBytes(memCapacity.Value())
-	summary.MemoryAllocatable = formatMemoryBytes(memAlloc.Value())
+	summary.MemoryCapacityBytes = memCapacity.Value()
+	summary.MemoryAllocatableBytes = memAlloc.Value()
 	summary.Memory = formatMemoryBytes(memCapacity.Value())
 
 	podsCapacity := node.Status.Capacity[corev1.ResourcePods]
@@ -88,10 +89,10 @@ func reaggregateNodeSummary(
 	summary := own
 
 	cpuReq, cpuLim, memReq, memLim, restarts := aggregatePodResources(pods)
-	summary.CPURequests = formatCPUMilli(cpuReq)
-	summary.CPULimits = formatCPUMilli(cpuLim)
-	summary.MemRequests = formatMemoryBytes(memReq)
-	summary.MemLimits = formatMemoryBytes(memLim)
+	summary.CPURequestsMilli = cpuReq
+	summary.CPULimitsMilli = cpuLim
+	summary.MemoryRequestsBytes = memReq
+	summary.MemoryLimitsBytes = memLim
 	summary.Restarts = restarts
 
 	if len(pods) > 0 {
@@ -104,30 +105,13 @@ func reaggregateNodeSummary(
 	}
 
 	// A node with no sample, or a sample that predates the node's creation (a recreated
-	// same-name node), renders the no-data marker rather than stale or zero numbers.
-	usage, ok := nodeMetrics[own.Ref.Name]
-	summary.CPUUsage = formatNodeMetricCPU(usage, ok, own.AgeTimestamp)
-	summary.MemoryUsage = formatNodeMetricMemory(usage, ok, own.AgeTimestamp)
+	// same-name node), carries no usage rather than stale or zero numbers.
+	if usage, ok := nodeMetrics[own.Ref.Name]; metricSampleValid(ok, usage.Timestamp, own.AgeTimestamp) {
+		summary.CPUUsageMilli = ptr.To(usage.CPUUsageMilli)
+		summary.MemoryUsageBytes = ptr.To(usage.MemoryUsageBytes)
+	}
 
 	return summary
-}
-
-// formatNodeMetricCPU and formatNodeMetricMemory render a node (or per-pod) usage
-// cell: the formatted number for a valid sample (present, and not predating the
-// object's creation — see metricSampleValid), otherwise the no-data marker (never
-// "0m"/"0Mi", so "metrics unknown" is distinguishable from a real zero).
-func formatNodeMetricCPU(usage metrics.NodeUsage, ok bool, creationMillis int64) string {
-	if !metricSampleValid(ok, usage.Timestamp, creationMillis) {
-		return streamrows.MetricsNoData
-	}
-	return formatCPUMilli(usage.CPUUsageMilli)
-}
-
-func formatNodeMetricMemory(usage metrics.NodeUsage, ok bool, creationMillis int64) string {
-	if !metricSampleValid(ok, usage.Timestamp, creationMillis) {
-		return streamrows.MetricsNoData
-	}
-	return formatMemoryBytes(usage.MemoryUsageBytes)
 }
 
 // nodePodsCapacityValue parses the own row's pods-capacity string (a canonical

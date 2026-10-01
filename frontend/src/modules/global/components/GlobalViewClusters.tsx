@@ -16,7 +16,6 @@ import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
-import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
 import React, { useCallback, useMemo } from 'react';
 import { useRefreshScopedDomainStates } from '@/core/refresh';
 import type {
@@ -45,8 +44,6 @@ interface GlobalClusterRow {
   failingPods: number | null;
   pendingPods: number | null;
   totalNamespaces: number | null;
-  cpu: string;
-  memory: string;
   metrics: string;
   overview?: ClusterOverviewPayload;
   metricsInfo?: ClusterOverviewMetrics;
@@ -133,9 +130,6 @@ const metricsLabel = (metrics: ClusterOverviewMetrics | undefined): string => {
 const ratio = (ready: number | null, total: number | null): string =>
   ready === null || total === null ? '—' : `${ready} / ${total}`;
 
-const resourceUsage = (usage: string | undefined, allocatable: string | undefined): string =>
-  usage && allocatable ? `${usage} / ${allocatable}` : '—';
-
 const createClusterResourceColumn = (
   type: 'cpu' | 'memory'
 ): GridColumnDefinition<GlobalClusterRow> => {
@@ -157,8 +151,7 @@ const createClusterResourceColumn = (
       if (!row.overview) {
         return -1;
       }
-      const usage = value(row.overview, 'usage');
-      return type === 'cpu' ? parseCpuToMillicores(usage) : parseMemToMB(usage);
+      return value(row.overview, 'usage') ?? 0;
     },
   });
 
@@ -213,8 +206,6 @@ const GlobalViewClusters: React.FC = () => {
             failingPods: overview?.failingPods ?? null,
             pendingPods: overview?.pendingPods ?? null,
             totalNamespaces: overview?.totalNamespaces ?? null,
-            cpu: resourceUsage(overview?.cpuUsage, overview?.cpuAllocatable),
-            memory: resourceUsage(overview?.memoryUsage, overview?.memoryAllocatable),
             metrics: metricsLabel(metrics),
             overview,
             metricsInfo: metrics,

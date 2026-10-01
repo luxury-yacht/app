@@ -78,8 +78,8 @@ describe('useWorkloadTableColumns', () => {
     statusPresentation: 'ready',
     ready: '1/1',
     restarts: 0,
-    cpuUsage: '10m',
-    memUsage: '20Mi',
+    cpuUsageMilli: 10,
+    memoryUsageBytes: 20 * 1024 ** 2,
     age: '5m',
     portForwardAvailable: false,
   };

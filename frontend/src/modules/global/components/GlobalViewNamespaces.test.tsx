@@ -479,9 +479,9 @@ describe('GlobalViewNamespaces', () => {
       throw new Error('expected global namespace CPU ResourceBar');
     }
     expect(cpuCell.props).toMatchObject({
-      usage: '100m',
-      request: '250m',
-      limit: '500m',
+      usage: 100,
+      request: 250,
+      limit: 500,
     });
     expect(source.completeness).toBe('partial');
     expect(source.partialLabel).toBe('Showing namespace data from 2 of 3 clusters');

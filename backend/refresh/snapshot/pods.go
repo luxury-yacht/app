@@ -14,6 +14,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
@@ -32,12 +33,6 @@ type PodBuilder struct {
 	metrics metrics.Provider
 	// Query indexes are reused while the object version and metric revision match.
 	perBuild *perBuildStoreCache[PodSummary]
-}
-
-func podSummaryWithoutMetrics(summary PodSummary) PodSummary {
-	summary.CPUUsage = streamrows.MetricsNoData
-	summary.MemUsage = streamrows.MetricsNoData
-	return summary
 }
 
 // PodSnapshot is the payload for the pods domain. Rows carry live usage joined at
@@ -240,7 +235,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		return nil, err
 	}
 	// Join the latest poller usage onto the served copies. The maintained store's
-	// rows keep the no-data marker: a metric tick changes only this serve output
+	// rows carry no usage: a metric tick changes only this serve output
 	// and the metric source clock, never the stored rows or the object version.
 	overlayPodMetrics(summaries, podUsage)
 
@@ -419,32 +414,18 @@ func metricSampleValid(ok bool, sampleTime time.Time, creationMillis int64) bool
 	return true
 }
 
-// formatPodMetricCPU and formatPodMetricMemory render a pod's usage cell: the
-// formatted number for a valid sample, otherwise the no-data marker (never "0m"/
-// "0Mi", so "metrics unknown" is distinguishable from a real zero).
-func formatPodMetricCPU(usage metrics.PodUsage, ok bool, creationMillis int64) string {
-	if !metricSampleValid(ok, usage.Timestamp, creationMillis) {
-		return streamrows.MetricsNoData
-	}
-	return streamrows.FormatCPUMilli(usage.CPUUsageMilli)
-}
-
-func formatPodMetricMemory(usage metrics.PodUsage, ok bool, creationMillis int64) string {
-	if !metricSampleValid(ok, usage.Timestamp, creationMillis) {
-		return streamrows.MetricsNoData
-	}
-	return streamrows.FormatMemoryBytes(usage.MemoryUsageBytes)
-}
-
 // overlayPodMetrics joins an explicit metrics sample onto the SERVED row copies
 // (never the stored rows). A pod with no sample, or a sample that predates the
 // row's creation (a recreated same-name pod inheriting a prior incarnation's
-// numbers), renders the no-data marker rather than stale or zero numbers.
+// numbers), carries no usage rather than stale or zero numbers.
 func overlayPodMetrics(rows []PodSummary, podUsage map[string]metrics.PodUsage) {
 	for i := range rows {
 		usage, ok := podUsage[rows[i].Ref.Namespace+"/"+rows[i].Ref.Name]
-		rows[i].CPUUsage = formatPodMetricCPU(usage, ok, rows[i].AgeTimestamp)
-		rows[i].MemUsage = formatPodMetricMemory(usage, ok, rows[i].AgeTimestamp)
+		var cpu, memory *int64
+		if metricSampleValid(ok, usage.Timestamp, rows[i].AgeTimestamp) {
+			cpu, memory = ptr.To(usage.CPUUsageMilli), ptr.To(usage.MemoryUsageBytes)
+		}
+		rows[i].CPUUsageMilli, rows[i].MemoryUsageBytes = cpu, memory
 	}
 }
 
@@ -503,10 +484,6 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 				return pod.OwnerName
 			case "node":
 				return pod.Node
-			case "cpu":
-				return pod.CPUUsage
-			case "memory":
-				return pod.MemUsage
 			case "age":
 				return pod.Age
 			default:
@@ -516,9 +493,9 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 		NumericSort: func(pod PodSummary, field string) (float64, bool) {
 			switch strings.ToLower(field) {
 			case "cpu":
-				return parseFormattedCPUToMilli(pod.CPUUsage)
+				return usageSortValue(pod.CPUUsageMilli)
 			case "memory":
-				return parseFormattedMemoryToBytes(pod.MemUsage)
+				return usageSortValue(pod.MemoryUsageBytes)
 			case "restarts":
 				return float64(pod.Restarts), true
 			case "ready":

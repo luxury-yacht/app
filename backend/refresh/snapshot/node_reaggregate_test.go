@@ -113,14 +113,13 @@ func TestBuildNodeOwnSummaryCarriesCanonicalResourceRef(t *testing.T) {
 }
 
 // TestReaggregateNodeSummaryMissingNodeMetricRendersNoData proves a node with no
-// metrics sample renders the no-data marker for CPU/mem usage, never "0m"/"0Mi"
-// (Risk #9 / §3.6).
+// metrics sample carries no CPU/mem usage, never a zero (Risk #9 / §3.6).
 func TestReaggregateNodeSummaryMissingNodeMetricRendersNoData(t *testing.T) {
 	own := streamrows.NodeSummary{Ref: resourcemodel.ResourceRef{Name: "node-x"}, AgeTimestamp: time.Now().Add(-time.Hour).UnixMilli()}
 	got := reaggregateNodeSummary(own, nil, map[string]metrics.PodUsage{}, map[string]metrics.NodeUsage{})
 
-	require.Equal(t, streamrows.MetricsNoData, got.CPUUsage)
-	require.Equal(t, streamrows.MetricsNoData, got.MemoryUsage)
+	require.Nil(t, got.CPUUsageMilli)
+	require.Nil(t, got.MemoryUsageBytes)
 }
 
 // TestReaggregateNodeSummaryDropsStaleNodeMetric proves a node sample scraped before
@@ -134,9 +133,8 @@ func TestReaggregateNodeSummaryDropsStaleNodeMetric(t *testing.T) {
 	}
 	got := reaggregateNodeSummary(own, nil, map[string]metrics.PodUsage{}, staleNodeMetrics)
 
-	require.NotEqual(t, "700m", got.CPUUsage)
-	require.Equal(t, streamrows.MetricsNoData, got.CPUUsage)
-	require.Equal(t, streamrows.MetricsNoData, got.MemoryUsage)
+	require.Nil(t, got.CPUUsageMilli)
+	require.Nil(t, got.MemoryUsageBytes)
 }
 
 // TestReaggregateNodeSummaryMissingPerPodMetricRendersNoData proves a per-pod entry

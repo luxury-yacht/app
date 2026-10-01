@@ -19,21 +19,22 @@ export const namespaceAggregateUsageDisplay = (
   memoryUsageBytes: number
 ): { cpu: string; memory: string } => ({
   cpu: formatCpuValue(cpuUsageMilli),
-  memory: formatMemoryValue(memoryUsageBytes / (1024 * 1024)),
+  memory: formatMemoryValue(memoryUsageBytes),
 });
 
+/** CPU fields are millicores and memory fields are bytes. */
 export interface WorkloadMetricRow {
   kind?: string | null;
   name?: string | null;
   namespace?: string | null;
   clusterId?: string | null;
   ready?: string | null;
-  cpuUsage?: string | number | null;
-  cpuRequest?: string | number | null;
-  cpuLimit?: string | number | null;
-  memUsage?: string | number | null;
-  memRequest?: string | number | null;
-  memLimit?: string | number | null;
+  cpuUsageMilli?: number | null;
+  cpuRequestMilli?: number | null;
+  cpuLimitMilli?: number | null;
+  memoryUsageBytes?: number | null;
+  memoryRequestBytes?: number | null;
+  memoryLimitBytes?: number | null;
 }
 
 export type ResourceMetricField = 'usage' | 'request' | 'limit' | 'capacity' | 'allocatable';
@@ -46,27 +47,22 @@ const metricString = (value: string | number | null | undefined): string | undef
   return text || undefined;
 };
 
-const hasValues = (values: Array<string | number | null | undefined>): boolean =>
-  values.some((value) => metricString(value) !== undefined);
+const metricAmount = (value: number | null | undefined): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 
 const resourceValues = (
-  usage?: string | number | null,
-  request?: string | number | null,
-  limit?: string | number | null,
-  capacity?: string | number | null,
-  allocatable?: string | number | null
-): ResourceMetricValues | undefined => {
-  if (!hasValues([usage, request, limit, capacity, allocatable])) {
-    return undefined;
-  }
-  return {
-    usage: metricString(usage),
-    request: metricString(request),
-    limit: metricString(limit),
-    capacity: metricString(capacity),
-    allocatable: metricString(allocatable),
-  };
-};
+  usage?: number | null,
+  request?: number | null,
+  limit?: number | null,
+  capacity?: number | null,
+  allocatable?: number | null
+): ResourceMetricValues => ({
+  usage: metricAmount(usage),
+  request: metricAmount(request),
+  limit: metricAmount(limit),
+  capacity: metricAmount(capacity),
+  allocatable: metricAmount(allocatable),
+});
 
 const metricFreshnessFromInfo = (
   metrics: ResourceMetricsFreshnessInput
@@ -97,16 +93,13 @@ const parseReadyPodCounts = (
   };
 };
 
-export const hasResourceMetricData = (data: ResourceMetricsData): boolean =>
-  Boolean(data.cpu || data.memory || data.pods);
-
 export const podRowResourceMetrics = (
   row: PodSnapshotEntry,
   freshness?: ResourceMetricsFreshnessInput
 ): ResourceMetricsData => ({
   source: 'pods',
-  cpu: resourceValues(row.cpuUsage, row.cpuRequest, row.cpuLimit),
-  memory: resourceValues(row.memUsage, row.memRequest, row.memLimit),
+  cpu: resourceValues(row.cpuUsageMilli, row.cpuRequestMilli, row.cpuLimitMilli),
+  memory: resourceValues(row.memoryUsageBytes, row.memoryRequestBytes, row.memoryLimitBytes),
   freshness: metricFreshnessFromInfo(freshness),
 });
 
@@ -117,8 +110,8 @@ export const workloadRowResourceMetrics = (
   const podCounts = parseReadyPodCounts(row.ready);
   return {
     source: 'namespace-workloads',
-    cpu: resourceValues(row.cpuUsage, row.cpuRequest, row.cpuLimit),
-    memory: resourceValues(row.memUsage, row.memRequest, row.memLimit),
+    cpu: resourceValues(row.cpuUsageMilli, row.cpuRequestMilli, row.cpuLimitMilli),
+    memory: resourceValues(row.memoryUsageBytes, row.memoryRequestBytes, row.memoryLimitBytes),
     podCount: podCounts?.podCount,
     readyPodCount: podCounts?.readyPodCount,
     freshness: metricFreshnessFromInfo(freshness),
@@ -128,28 +121,28 @@ export const workloadRowResourceMetrics = (
 export const workloadRowCpuValue = (
   row: NamespaceWorkloadSummary | WorkloadMetricRow,
   field: Extract<ResourceMetricField, 'usage' | 'request' | 'limit'>
-): string | undefined => {
+): number | undefined => {
   switch (field) {
     case 'usage':
-      return metricString(row.cpuUsage);
+      return metricAmount(row.cpuUsageMilli);
     case 'request':
-      return metricString(row.cpuRequest);
+      return metricAmount(row.cpuRequestMilli);
     case 'limit':
-      return metricString(row.cpuLimit);
+      return metricAmount(row.cpuLimitMilli);
   }
 };
 
 export const workloadRowMemoryValue = (
   row: NamespaceWorkloadSummary | WorkloadMetricRow,
   field: Extract<ResourceMetricField, 'usage' | 'request' | 'limit'>
-): string | undefined => {
+): number | undefined => {
   switch (field) {
     case 'usage':
-      return metricString(row.memUsage);
+      return metricAmount(row.memoryUsageBytes);
     case 'request':
-      return metricString(row.memRequest);
+      return metricAmount(row.memoryRequestBytes);
     case 'limit':
-      return metricString(row.memLimit);
+      return metricAmount(row.memoryLimitBytes);
   }
 };
 
@@ -157,11 +150,10 @@ export const nodeRowResourceMetrics = (
   row: ClusterNodeSnapshotEntry,
   freshness?: ResourceMetricsFreshnessInput
 ): ResourceMetricsData => {
-  const pods: ResourcePodsMetricValues | undefined = hasValues([
-    row.pods,
-    row.podsCapacity,
-    row.podsAllocatable,
-  ])
+  const podValues = [row.pods, row.podsCapacity, row.podsAllocatable];
+  const pods: ResourcePodsMetricValues | undefined = podValues.some(
+    (value) => metricString(value) !== undefined
+  )
     ? {
         count: metricString(row.pods),
         capacity: metricString(row.podsCapacity),
@@ -173,18 +165,18 @@ export const nodeRowResourceMetrics = (
     source: 'nodes',
     mode: 'nodeMetrics',
     cpu: resourceValues(
-      row.cpuUsage,
-      row.cpuRequests,
-      row.cpuLimits,
-      row.cpuCapacity,
-      row.cpuAllocatable
+      row.cpuUsageMilli,
+      row.cpuRequestsMilli,
+      row.cpuLimitsMilli,
+      row.cpuCapacityMilli,
+      row.cpuAllocatableMilli
     ),
     memory: resourceValues(
-      row.memoryUsage,
-      row.memRequests,
-      row.memLimits,
-      row.memoryCapacity,
-      row.memoryAllocatable
+      row.memoryUsageBytes,
+      row.memoryRequestsBytes,
+      row.memoryLimitsBytes,
+      row.memoryCapacityBytes,
+      row.memoryAllocatableBytes
     ),
     pods,
     freshness: metricFreshnessFromInfo(freshness),
@@ -194,36 +186,36 @@ export const nodeRowResourceMetrics = (
 export const nodeRowCpuValue = (
   row: ClusterNodeSnapshotEntry,
   field: ResourceMetricField
-): string | undefined => {
+): number | undefined => {
   switch (field) {
     case 'usage':
-      return metricString(row.cpuUsage);
+      return metricAmount(row.cpuUsageMilli);
     case 'request':
-      return metricString(row.cpuRequests);
+      return metricAmount(row.cpuRequestsMilli);
     case 'limit':
-      return metricString(row.cpuLimits);
+      return metricAmount(row.cpuLimitsMilli);
     case 'capacity':
-      return metricString(row.cpuCapacity);
+      return metricAmount(row.cpuCapacityMilli);
     case 'allocatable':
-      return metricString(row.cpuAllocatable);
+      return metricAmount(row.cpuAllocatableMilli);
   }
 };
 
 export const nodeRowMemoryValue = (
   row: ClusterNodeSnapshotEntry,
   field: ResourceMetricField
-): string | undefined => {
+): number | undefined => {
   switch (field) {
     case 'usage':
-      return metricString(row.memoryUsage);
+      return metricAmount(row.memoryUsageBytes);
     case 'request':
-      return metricString(row.memRequests);
+      return metricAmount(row.memoryRequestsBytes);
     case 'limit':
-      return metricString(row.memLimits);
+      return metricAmount(row.memoryLimitsBytes);
     case 'capacity':
-      return metricString(row.memoryCapacity);
+      return metricAmount(row.memoryCapacityBytes);
     case 'allocatable':
-      return metricString(row.memoryAllocatable);
+      return metricAmount(row.memoryAllocatableBytes);
   }
 };
 
@@ -233,18 +225,18 @@ export const clusterOverviewResourceMetrics = (
 ): ResourceMetricsData => ({
   source: 'cluster-overview',
   cpu: resourceValues(
-    overview.cpuUsage,
-    overview.cpuRequests,
-    overview.cpuLimits,
+    overview.cpuUsageMilli,
+    overview.cpuRequestsMilli,
+    overview.cpuLimitsMilli,
     undefined,
-    overview.cpuAllocatable
+    overview.cpuAllocatableMilli
   ),
   memory: resourceValues(
-    overview.memoryUsage,
-    overview.memoryRequests,
-    overview.memoryLimits,
+    overview.memoryUsageBytes,
+    overview.memoryRequestsBytes,
+    overview.memoryLimitsBytes,
     undefined,
-    overview.memoryAllocatable
+    overview.memoryAllocatableBytes
   ),
   freshness: metricFreshnessFromInfo(freshness),
 });
@@ -252,32 +244,32 @@ export const clusterOverviewResourceMetrics = (
 export const clusterOverviewCpuValue = (
   overview: ClusterOverviewPayload,
   field: Extract<ResourceMetricField, 'usage' | 'request' | 'limit' | 'allocatable'>
-): string | undefined => {
+): number | undefined => {
   switch (field) {
     case 'usage':
-      return metricString(overview.cpuUsage);
+      return metricAmount(overview.cpuUsageMilli);
     case 'request':
-      return metricString(overview.cpuRequests);
+      return metricAmount(overview.cpuRequestsMilli);
     case 'limit':
-      return metricString(overview.cpuLimits);
+      return metricAmount(overview.cpuLimitsMilli);
     case 'allocatable':
-      return metricString(overview.cpuAllocatable);
+      return metricAmount(overview.cpuAllocatableMilli);
   }
 };
 
 export const clusterOverviewMemoryValue = (
   overview: ClusterOverviewPayload,
   field: Extract<ResourceMetricField, 'usage' | 'request' | 'limit' | 'allocatable'>
-): string | undefined => {
+): number | undefined => {
   switch (field) {
     case 'usage':
-      return metricString(overview.memoryUsage);
+      return metricAmount(overview.memoryUsageBytes);
     case 'request':
-      return metricString(overview.memoryRequests);
+      return metricAmount(overview.memoryRequestsBytes);
     case 'limit':
-      return metricString(overview.memoryLimits);
+      return metricAmount(overview.memoryLimitsBytes);
     case 'allocatable':
-      return metricString(overview.memoryAllocatable);
+      return metricAmount(overview.memoryAllocatableBytes);
   }
 };
 
@@ -287,7 +279,7 @@ export const clusterWorkloadUsageValue = (
   usage: WorkloadResourceUsage,
   key: ClusterWorkloadUsageKey,
   type: 'cpu' | 'memory'
-): string | undefined => {
+): number | undefined => {
   const item = usage[key];
-  return type === 'cpu' ? metricString(item?.cpuUsage) : metricString(item?.memoryUsage);
+  return type === 'cpu' ? metricAmount(item?.cpuUsageMilli) : metricAmount(item?.memoryUsageBytes);
 };

@@ -15,6 +15,9 @@ import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh
 import type { UtilizationData } from './detailsTabTypes';
 import { useUtilizationData } from './useUtilizationData';
 
+const MIB = 1024 ** 2;
+const GIB = 1024 ** 3;
+
 const refreshMocks = vi.hoisted(() => ({
   acquireScopedDomainLease: vi.fn(),
   releaseScopedDomainLease: vi.fn(),
@@ -106,8 +109,8 @@ describe('useUtilizationData', () => {
     const hook = await renderUtilizationHook({ objectData, detail });
 
     expect(hook.latest.current).toMatchObject({
-      cpu: { usage: '100m' },
-      memory: { usage: '128Mi' },
+      cpu: { usage: 100 },
+      memory: { usage: 128 * MIB },
     });
 
     await act(async () => {
@@ -130,12 +133,12 @@ describe('useUtilizationData', () => {
               age: '1m',
               ownerKind: 'Deployment',
               ownerName: 'api',
-              cpuUsage: '220m',
-              cpuRequest: '75m',
-              cpuLimit: '750m',
-              memUsage: '256Mi',
-              memRequest: '96Mi',
-              memLimit: '512Mi',
+              cpuUsageMilli: 220,
+              cpuRequestMilli: 75,
+              cpuLimitMilli: 750,
+              memoryUsageBytes: 256 * MIB,
+              memoryRequestBytes: 96 * MIB,
+              memoryLimitBytes: 512 * MIB,
             }),
           ],
           metrics: { stale: false, successCount: 1, failureCount: 0 },
@@ -145,8 +148,8 @@ describe('useUtilizationData', () => {
     });
 
     expect(hook.latest.current).toMatchObject({
-      cpu: { usage: '220m', request: '75m', limit: '750m' },
-      memory: { usage: '256Mi', request: '96Mi', limit: '512Mi' },
+      cpu: { usage: 220, request: 75, limit: 750 },
+      memory: { usage: 256 * MIB, request: 96 * MIB, limit: 512 * MIB },
     });
 
     hook.cleanup();
@@ -176,7 +179,7 @@ describe('useUtilizationData', () => {
     const hook = await renderUtilizationHook({ objectData: deploymentRef, detail });
 
     expect(hook.latest.current).toMatchObject({
-      cpu: { usage: '100m' },
+      cpu: { usage: 100 },
       podCount: 1,
       readyPodCount: 1,
     });
@@ -196,12 +199,12 @@ describe('useUtilizationData', () => {
               status: 'Available',
               restarts: 0,
               age: '2m',
-              cpuUsage: '320m',
-              cpuRequest: '160m',
-              cpuLimit: '800m',
-              memUsage: '384Mi',
-              memRequest: '192Mi',
-              memLimit: '768Mi',
+              cpuUsageMilli: 320,
+              cpuRequestMilli: 160,
+              cpuLimitMilli: 800,
+              memoryUsageBytes: 384 * MIB,
+              memoryRequestBytes: 192 * MIB,
+              memoryLimitBytes: 768 * MIB,
             }),
           ],
           metrics: { stale: false, successCount: 1, failureCount: 0 },
@@ -211,8 +214,8 @@ describe('useUtilizationData', () => {
     });
 
     expect(hook.latest.current).toMatchObject({
-      cpu: { usage: '320m', request: '160m', limit: '800m' },
-      memory: { usage: '384Mi', request: '192Mi', limit: '768Mi' },
+      cpu: { usage: 320, request: 160, limit: 800 },
+      memory: { usage: 384 * MIB, request: 192 * MIB, limit: 768 * MIB },
       podCount: 3,
       readyPodCount: 2,
     });
@@ -223,7 +226,7 @@ describe('useUtilizationData', () => {
     });
 
     expect(hook.latest.current).toMatchObject({
-      cpu: { usage: '100m' },
+      cpu: { usage: 100 },
       podCount: 1,
       readyPodCount: 1,
     });
@@ -272,12 +275,12 @@ describe('useUtilizationData', () => {
                 status: 'Available',
                 restarts: 0,
                 age: '2m',
-                cpuUsage: '320m',
-                cpuRequest: '160m',
-                cpuLimit: '800m',
-                memUsage: '384Mi',
-                memRequest: '192Mi',
-                memLimit: '768Mi',
+                cpuUsageMilli: 320,
+                cpuRequestMilli: 160,
+                cpuLimitMilli: 800,
+                memoryUsageBytes: 384 * MIB,
+                memoryRequestBytes: 192 * MIB,
+                memoryLimitBytes: 768 * MIB,
               }),
             ],
             metrics: { stale: false, successCount: 1, failureCount: 0 },
@@ -287,8 +290,8 @@ describe('useUtilizationData', () => {
       });
 
       expect(hook.latest.current).toMatchObject({
-        cpu: { usage: '320m', request: '160m', limit: '800m' },
-        memory: { usage: '384Mi', request: '192Mi', limit: '768Mi' },
+        cpu: { usage: 320, request: 160, limit: 800 },
+        memory: { usage: 384 * MIB, request: 192 * MIB, limit: 768 * MIB },
         podCount: 2,
         readyPodCount: 1,
       });
@@ -339,18 +342,18 @@ describe('useUtilizationData', () => {
     expect(hook.latest.current).toMatchObject({
       mode: 'nodeMetrics',
       cpu: {
-        usage: '1200m',
-        capacity: '8',
-        allocatable: '7600m',
-        request: '2',
-        limit: '4',
+        usage: 1200,
+        capacity: 8000,
+        allocatable: 7600,
+        request: 2000,
+        limit: 4000,
       },
       memory: {
-        usage: '5Gi',
-        capacity: '32Gi',
-        allocatable: '30Gi',
-        request: '6Gi',
-        limit: '12Gi',
+        usage: 5 * GIB,
+        capacity: 32 * GIB,
+        allocatable: 30 * GIB,
+        request: 6 * GIB,
+        limit: 12 * GIB,
       },
       pods: { count: '18', capacity: '110', allocatable: '100' },
     });

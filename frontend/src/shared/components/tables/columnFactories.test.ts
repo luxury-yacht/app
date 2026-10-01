@@ -269,18 +269,18 @@ describe('columnFactories', () => {
         header: 'CPU',
         key: 'cpu',
         type: 'cpu',
-        getUsage: () => '200m',
-        getLimit: () => '500m',
+        getUsage: () => 200,
+        getLimit: () => 500,
         getVariant: () => 'compact',
       });
 
       const element = usageColumn.render({ id: 'row' });
       expect(React.isValidElement(element)).toBe(true);
       const resourceElement = element as React.ReactElement<Record<string, unknown>>;
-      expect(resourceElement.props['data-gridtable-export-text']).toBe('200m');
+      expect(resourceElement.props['data-gridtable-export-text']).toBe('200');
       expect(resourceElement.props).toMatchObject({
-        usage: '200m',
-        limit: '500m',
+        usage: 200,
+        limit: 500,
         variant: 'compact',
         type: 'cpu',
       });
@@ -298,30 +298,6 @@ describe('columnFactories', () => {
       const fallbackProps = (fallbackElement as React.ReactElement<Record<string, unknown>>).props;
       expect(fallbackProps['data-gridtable-export-text']).toBe('-');
       expect(fallbackProps.showEmptyState).toBe(false);
-    });
-
-    it('exports tebibyte memory usage with the same value shown by ResourceBar', () => {
-      const column = createResourceBarColumn<RowSample>({
-        header: 'Memory',
-        type: 'memory',
-        getUsage: () => '1.5Ti',
-      });
-
-      const element = column.render({ id: 'node' }) as React.ReactElement<Record<string, unknown>>;
-
-      expect(element.props['data-gridtable-export-text']).toBe('1.5Ti');
-    });
-
-    it('exports explicit zero memory usage instead of treating it as absent', () => {
-      const column = createResourceBarColumn<RowSample>({
-        header: 'Memory',
-        type: 'memory',
-        getUsage: () => '0Mi',
-      });
-
-      const element = column.render({ id: 'node' }) as React.ReactElement<Record<string, unknown>>;
-
-      expect(element.props['data-gridtable-export-text']).toBe('0');
     });
   });
 

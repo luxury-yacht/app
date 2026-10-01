@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
@@ -30,8 +30,8 @@ func makePodRows(n int) []PodSummary {
 	presentations := []string{"healthy", "warning", "error", "not-ready", "terminating"}
 	owners := []string{"deploy-a", "deploy-b", "None"}
 	nodes := []string{"node-1", "node-2", "node-3"}
-	cpus := []string{"0m", "100m", "245m", "1000m"}
-	mems := []string{"0Mi", "64 MB", "256 MB", "1.5 GB"}
+	cpus := []*int64{ptr.To[int64](0), ptr.To[int64](100), ptr.To[int64](245), ptr.To[int64](1000), nil}
+	mems := []*int64{ptr.To[int64](0), ptr.To[int64](64 << 20), ptr.To[int64](256 << 20), ptr.To[int64](1536 << 20), nil}
 	rows := make([]PodSummary, n)
 	for i := 0; i < n; i++ {
 		ready := i % 4
@@ -61,8 +61,8 @@ func makePodRows(n int) []PodSummary {
 			Node:               nodes[i%len(nodes)],
 			Age:                fmt.Sprintf("%dm", i%5),
 			AgeTimestamp:       int64(1_000_000 + (i%9)*1000), // ties, non-zero so NumericSort engages
-			CPUUsage:           cpus[i%len(cpus)],
-			MemUsage:           mems[i%len(mems)],
+			CPUUsageMilli:      cpus[i%len(cpus)],
+			MemoryUsageBytes:   mems[i%len(mems)],
 		}
 	}
 	return rows
@@ -350,59 +350,6 @@ func TestPodMetricSortQueryViaStoreEquivalent(t *testing.T) {
 	}
 }
 
-// TestPodMaintainedIngestOverlayMatchesProject proves that no-data metric ingest
-// into the store followed by a metrics-domain overlay yields a PodSummary
-// identical, field-for-field, to the live projection that builds the row with the
-// real cpu/mem values inline. This is the correctness precondition for keeping
-// metrics OUTSIDE the store.
-func TestPodMaintainedIngestOverlayMatchesProject(t *testing.T) {
-	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "api-0",
-			Namespace:         "default",
-			ResourceVersion:   "42",
-			CreationTimestamp: metav1.NewTime(time.Now().Add(-90 * time.Minute)),
-			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: "apps/v1",
-				Kind:       "ReplicaSet",
-				Name:       "rs-api",
-				Controller: boolPtr(true),
-			}},
-		},
-		Spec: corev1.PodSpec{
-			NodeName: "node-7",
-			Containers: []corev1.Container{{
-				Name: "c1",
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resourceQuantity("100m"),
-						corev1.ResourceMemory: resourceQuantity("128Mi"),
-					},
-				},
-			}},
-		},
-		Status: corev1.PodStatus{
-			Phase:             corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{{Name: "c1", Ready: true, RestartCount: 2}},
-		},
-	}
-	rs := testsupport.NewReplicaSetLister(t)
-
-	const cpuMilli, memBytes = int64(245), int64(256 * 1024 * 1024)
-
-	// OLD: project the row with the real metrics inline.
-	live := podres.BuildStreamSummary(meta, pod, cpuMilli, memBytes, rs, nil)
-
-	// NEW: project with no-data metrics (what the informer feeds the store), then
-	// overlay the same metrics exactly as the metrics-domain serve path does.
-	stored := podSummaryWithoutMetrics(podres.BuildStreamSummary(meta, pod, 0, 0, rs, nil))
-	stored.CPUUsage = streamrows.FormatCPUMilli(cpuMilli)
-	stored.MemUsage = streamrows.FormatMemoryBytes(memBytes)
-
-	require.Equal(t, live, stored, "no-data ingest + metrics overlay must equal live projection")
-}
-
 // TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics drives the
 // pods maintained-store serve path: a builder whose store holds no-data
 // metric rows must serve a namespace scope from RAM (no lister), overlaying the FRESH
@@ -430,7 +377,7 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 	rs := testsupport.NewReplicaSetLister(t)
 	for _, p := range []*corev1.Pod{mkPod("alpha"), mkPod("bravo")} {
 		// Ingest the no-data metric row, exactly as the informer handler does.
-		maintained.upsertRow(podSummaryWithoutMetrics(podres.BuildStreamSummary(meta, p, 0, 0, rs, nil)), p)
+		maintained.upsertRow(podres.BuildStreamSummary(meta, p, rs, nil), p)
 	}
 
 	builder := &PodBuilder{
@@ -450,10 +397,10 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 	payload := snap.Payload.(PodSnapshot)
 	require.Len(t, payload.Rows, 2)
 	rowsByName := podSummariesByName(payload.Rows)
-	require.Equal(t, "245m", rowsByName["alpha"].CPUUsage, "fresh metrics overlaid at serve")
-	require.Equal(t, "256 MB", rowsByName["alpha"].MemUsage)
-	require.Equal(t, streamrows.MetricsNoData, rowsByName["bravo"].CPUUsage, "no metrics sample -> no-data marker, never 0 (Risk #9 / §3.6)")
-	require.Equal(t, streamrows.MetricsNoData, rowsByName["bravo"].MemUsage)
+	require.Equal(t, ptr.To[int64](245), rowsByName["alpha"].CPUUsageMilli, "fresh metrics overlaid at serve")
+	require.Equal(t, ptr.To[int64](256*1024*1024), rowsByName["alpha"].MemoryUsageBytes)
+	require.Nil(t, rowsByName["bravo"].CPUUsageMilli, "no metrics sample -> no usage, never 0 (Risk #9 / §3.6)")
+	require.Nil(t, rowsByName["bravo"].MemoryUsageBytes)
 	require.Equal(t, 2, payload.Total)
 
 	// Change ONLY the metrics sample (no re-ingest) and re-serve. The new value must
@@ -468,7 +415,7 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 	require.NoError(t, err)
 	require.Equal(t, fmt.Sprintf("%d", now.Add(time.Second).UnixNano()), snap2.SourceVersions["metric"])
 	rowsByName = podSummariesByName(snap2.Payload.(PodSnapshot).Rows)
-	require.Equal(t, "999m", rowsByName["alpha"].CPUUsage, "metrics refreshed without re-ingest")
+	require.Equal(t, ptr.To[int64](999), rowsByName["alpha"].CPUUsageMilli, "metrics refreshed without re-ingest")
 }
 
 func podSummariesByName(rows []PodSummary) map[string]PodSummary {

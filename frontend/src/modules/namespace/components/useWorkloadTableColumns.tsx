@@ -15,7 +15,6 @@ import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity
 import { useMemo } from 'react';
 import { workloadRowCpuValue, workloadRowMemoryValue } from '@/core/resource-metrics';
 import { getDisplayKind } from '@/utils/kindAliasMap';
-import { parseCpuToMillicores, parseMemToMB } from '@/utils/resourceCalculations';
 
 interface UseWorkloadTableColumnsParams {
   handleWorkloadClick: (workload: WorkloadData) => void;
@@ -129,10 +128,7 @@ const useWorkloadTableColumns = ({
         getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:cpu`,
         getShowEmptyState: () => true,
         sortable: true,
-        sortValue: (row) =>
-          parseCpuToMillicores(
-            row.cpuUsage !== null && row.cpuUsage !== undefined ? String(row.cpuUsage) : undefined
-          ),
+        sortValue: (row) => row.cpuUsageMilli ?? 0,
       }),
       cf.createResourceBarColumn<WorkloadData>({
         key: 'memory',
@@ -147,10 +143,7 @@ const useWorkloadTableColumns = ({
         getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:memory`,
         getShowEmptyState: () => true,
         sortable: true,
-        sortValue: (row) =>
-          parseMemToMB(
-            row.memUsage !== null && row.memUsage !== undefined ? String(row.memUsage) : undefined
-          ),
+        sortValue: (row) => row.memoryUsageBytes ?? 0,
       }),
       cf.createAgeColumn<WorkloadData & { age?: string }>('age', 'Age', (row) => {
         return row.age ?? '—';

@@ -17,8 +17,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
@@ -45,7 +45,7 @@ func TestNodeSnapshotOverlaysLiveUsageAtServe(t *testing.T) {
 	require.NoError(t, err)
 	payload := first.Payload.(NodeSnapshot)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "650m", payload.Rows[0].CPUUsage)
+	require.Equal(t, ptr.To[int64](650), payload.Rows[0].CPUUsageMilli)
 	require.Equal(t, uint64(42), first.Version)
 	require.Equal(t, strconv.FormatInt(now.UnixNano(), 10), first.SourceVersions["metric"])
 	require.False(t, payload.Metrics.Stale)
@@ -60,7 +60,7 @@ func TestNodeSnapshotOverlaysLiveUsageAtServe(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, first.Version, second.Version)
 	require.Equal(t, strconv.FormatInt(now.Add(5*time.Second).UnixNano(), 10), second.SourceVersions["metric"])
-	require.Equal(t, "700m", second.Payload.(NodeSnapshot).Rows[0].CPUUsage)
+	require.Equal(t, ptr.To[int64](700), second.Payload.(NodeSnapshot).Rows[0].CPUUsageMilli)
 }
 
 func TestNodeSnapshotPublishesMetricMetadata(t *testing.T) {
@@ -102,9 +102,9 @@ func TestNodeSnapshotPublishesMetricMetadata(t *testing.T) {
 // ("1 GB" sorts lexically below "128 MB").
 func TestNodeQuerySortsByLiveUsage(t *testing.T) {
 	items := []NodeSummary{
-		{Ref: resourcemodel.ResourceRef{Name: "alpha"}, CPUUsage: "1000m", MemoryUsage: "128 MB"},
-		{Ref: resourcemodel.ResourceRef{Name: "beta"}, CPUUsage: "650m", MemoryUsage: "1 GB"},
-		{Ref: resourcemodel.ResourceRef{Name: "gamma"}, CPUUsage: "125m", MemoryUsage: "512 MB"},
+		{Ref: resourcemodel.ResourceRef{Name: "alpha"}, CPUUsageMilli: ptr.To[int64](1000), MemoryUsageBytes: ptr.To[int64](128 << 20)},
+		{Ref: resourcemodel.ResourceRef{Name: "beta"}, CPUUsageMilli: ptr.To[int64](650), MemoryUsageBytes: ptr.To[int64](1 << 30)},
+		{Ref: resourcemodel.ResourceRef{Name: "gamma"}, CPUUsageMilli: ptr.To[int64](125), MemoryUsageBytes: ptr.To[int64](512 << 20)},
 	}
 
 	_, cpuQuery, err := parseTypedTableQueryScope("c1", "?sort=cpu&sortDirection=desc", "nodes", "rev-1")
@@ -146,7 +146,7 @@ func TestPodSnapshotOverlaysLiveUsageAtServe(t *testing.T) {
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
 	maintained := newTypedMaintainedStore(ClusterMeta{}, podQuerypageSchema(), podTableQueryAdapter())
-	maintained.Sink().Upsert(podSummaryWithoutMetrics(podres.BuildStreamSummaryFromRSMap(ClusterMeta{}, pod, 0, 0, nil)))
+	maintained.Sink().Upsert(podres.BuildStreamSummaryFromRSMap(ClusterMeta{}, pod, nil))
 	builder := &PodBuilder{
 		maintained: maintained,
 		metrics: fakeMetricsProvider{
@@ -161,7 +161,7 @@ func TestPodSnapshotOverlaysLiveUsageAtServe(t *testing.T) {
 	require.NoError(t, err)
 	payload := first.Payload.(PodSnapshot)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "250m", payload.Rows[0].CPUUsage)
+	require.Equal(t, ptr.To[int64](250), payload.Rows[0].CPUUsageMilli)
 	require.Equal(t, strconv.FormatInt(now.UnixNano(), 10), first.SourceVersions["metric"])
 	require.False(t, payload.Metrics.Stale)
 
@@ -169,7 +169,7 @@ func TestPodSnapshotOverlaysLiveUsageAtServe(t *testing.T) {
 	// keep the no-data marker (a metric tick never re-projects stored rows).
 	stored := maintained.rows("", map[string]bool{podres.Identity.Kind: true})
 	require.Len(t, stored, 1)
-	require.Equal(t, streamrows.MetricsNoData, stored[0].CPUUsage)
+	require.Nil(t, stored[0].CPUUsageMilli)
 
 	// A metric tick advances only the metric source clock.
 	builder.metrics = fakeMetricsProvider{
@@ -181,7 +181,7 @@ func TestPodSnapshotOverlaysLiveUsageAtServe(t *testing.T) {
 	second, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	require.Equal(t, first.Version, second.Version)
-	require.Equal(t, "300m", second.Payload.(PodSnapshot).Rows[0].CPUUsage)
+	require.Equal(t, ptr.To[int64](300), second.Payload.(PodSnapshot).Rows[0].CPUUsageMilli)
 	require.Equal(t, strconv.FormatInt(now.Add(5*time.Second).UnixNano(), 10), second.SourceVersions["metric"])
 }
 
@@ -199,7 +199,7 @@ func TestPodSnapshotRejectsStaleSampleForRecreatedPod(t *testing.T) {
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
 	maintained := newTypedMaintainedStore(ClusterMeta{}, podQuerypageSchema(), podTableQueryAdapter())
-	maintained.Sink().Upsert(podSummaryWithoutMetrics(podres.BuildStreamSummaryFromRSMap(ClusterMeta{}, pod, 0, 0, nil)))
+	maintained.Sink().Upsert(podres.BuildStreamSummaryFromRSMap(ClusterMeta{}, pod, nil))
 	builder := &PodBuilder{
 		maintained: maintained,
 		metrics: fakeMetricsProvider{
@@ -214,15 +214,15 @@ func TestPodSnapshotRejectsStaleSampleForRecreatedPod(t *testing.T) {
 	require.NoError(t, err)
 	payload := snapshot.Payload.(PodSnapshot)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, streamrows.MetricsNoData, payload.Rows[0].CPUUsage)
-	require.Equal(t, streamrows.MetricsNoData, payload.Rows[0].MemUsage)
+	require.Nil(t, payload.Rows[0].CPUUsageMilli)
+	require.Nil(t, payload.Rows[0].MemoryUsageBytes)
 }
 
 func TestPodQuerySortsByLiveUsage(t *testing.T) {
 	items := []PodSummary{
-		{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "alpha"}, CPUUsage: "1000m", MemUsage: "128 MB"},
-		{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "beta"}, CPUUsage: "650m", MemUsage: "1 GB"},
-		{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "gamma"}, CPUUsage: "125m", MemUsage: "512 MB"},
+		{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "alpha"}, CPUUsageMilli: ptr.To[int64](1000), MemoryUsageBytes: ptr.To[int64](128 << 20)},
+		{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "beta"}, CPUUsageMilli: ptr.To[int64](650), MemoryUsageBytes: ptr.To[int64](1 << 30)},
+		{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "gamma"}, CPUUsageMilli: ptr.To[int64](125), MemoryUsageBytes: ptr.To[int64](512 << 20)},
 	}
 
 	_, cpuQuery, err := parseTypedTableQueryScope("c1", "namespace:default?sort=cpu&sortDirection=desc", podDomainName, "rev-1")
@@ -236,6 +236,40 @@ func TestPodQuerySortsByLiveUsage(t *testing.T) {
 	memPage := applyTypedTableQueryViaStore(items, memQuery, podTableQueryAdapter(), podQuerypageSchema())
 	require.Equal(t, []string{"beta", "gamma", "alpha"}, podSummaryNames(memPage.Rows),
 		"memory sort must be numeric live usage (1GB > 512MB > 128MB), not lexical")
+}
+
+// The served rows carry the poller's exact usage, so the memory sort orders a
+// 1023 MiB pod below a 1 GiB pod. Display-rounded strings ("1023 MB" vs "1.0 GB")
+// used to invert that pair.
+func TestPodQuerySortsServedUsageByExactBytes(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	maintained := newTypedMaintainedStore(ClusterMeta{}, podQuerypageSchema(), podTableQueryAdapter())
+	for _, name := range []string{"mebibytes", "gibibyte"} {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              name,
+				Namespace:         "default",
+				CreationTimestamp: metav1.NewTime(now.Add(-time.Hour)),
+				ResourceVersion:   "21",
+			},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning},
+		}
+		maintained.Sink().Upsert(podres.BuildStreamSummaryFromRSMap(ClusterMeta{}, pod, nil))
+	}
+	builder := &PodBuilder{
+		maintained: maintained,
+		metrics: fakeMetricsProvider{
+			podUsage: map[string]metrics.PodUsage{
+				"default/mebibytes": {MemoryUsageBytes: 1023 << 20, Timestamp: now},
+				"default/gibibyte":  {MemoryUsageBytes: 1 << 30, Timestamp: now},
+			},
+			metadata: metrics.Metadata{CollectedAt: now},
+		},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:default?sort=memory&sortDirection=desc")
+	require.NoError(t, err)
+	require.Equal(t, []string{"gibibyte", "mebibytes"}, podSummaryNames(snapshot.Payload.(PodSnapshot).Rows))
 }
 
 func TestPodQueryCapabilitiesPublishMetricSorts(t *testing.T) {
@@ -302,7 +336,7 @@ func TestWorkloadSnapshotOverlaysLiveUsageAtServe(t *testing.T) {
 	payload := first.Payload.(NamespaceWorkloadsSnapshot)
 	require.Len(t, payload.Rows, 1)
 	require.Equal(t, "web", payload.Rows[0].Ref.Name)
-	require.Equal(t, "250m", payload.Rows[0].CPUUsage)
+	require.Equal(t, ptr.To[int64](250), payload.Rows[0].CPUUsageMilli)
 	require.Equal(t, strconv.FormatInt(now.UnixNano(), 10), first.SourceVersions["metric"])
 	require.False(t, payload.Metrics.Stale)
 
@@ -316,15 +350,15 @@ func TestWorkloadSnapshotOverlaysLiveUsageAtServe(t *testing.T) {
 	second, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	require.Equal(t, first.Version, second.Version)
-	require.Equal(t, "300m", second.Payload.(NamespaceWorkloadsSnapshot).Rows[0].CPUUsage)
+	require.Equal(t, ptr.To[int64](300), second.Payload.(NamespaceWorkloadsSnapshot).Rows[0].CPUUsageMilli)
 	require.Equal(t, strconv.FormatInt(now.Add(5*time.Second).UnixNano(), 10), second.SourceVersions["metric"])
 }
 
 func TestWorkloadQuerySortsByLiveUsage(t *testing.T) {
 	items := []WorkloadSummary{
-		{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "alpha"}, CPUUsage: "1000m", MemUsage: "128 MB"},
-		{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "beta"}, CPUUsage: "650m", MemUsage: "1 GB"},
-		{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "gamma"}, CPUUsage: "125m", MemUsage: "512 MB"},
+		{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "alpha"}, CPUUsageMilli: ptr.To[int64](1000), MemoryUsageBytes: ptr.To[int64](128 << 20)},
+		{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "beta"}, CPUUsageMilli: ptr.To[int64](650), MemoryUsageBytes: ptr.To[int64](1 << 30)},
+		{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "gamma"}, CPUUsageMilli: ptr.To[int64](125), MemoryUsageBytes: ptr.To[int64](512 << 20)},
 	}
 
 	_, cpuQuery, err := parseTypedTableQueryScope("c1", "namespace:default?sort=cpu&sortDirection=desc", namespaceWorkloadsDomainName, "rev-1")

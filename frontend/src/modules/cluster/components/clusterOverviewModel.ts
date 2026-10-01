@@ -1,9 +1,5 @@
 import type { ResourceCalculations } from '@shared/utils/resourceCalculations';
-import {
-  calculateResourceMetrics,
-  formatCpuValue,
-  formatMemoryValue,
-} from '@shared/utils/resourceCalculations';
+import { formatCpuValue, formatMemoryValue } from '@shared/utils/resourceCalculations';
 import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import { shouldSuppressClusterOverviewUnavailableError } from '@/core/refresh/clusterOverviewLifecycle';
 import type { DomainStatus } from '@/core/refresh/store';
@@ -274,15 +270,17 @@ interface WorkloadUsageSource {
   key: string;
   label: string;
   variant: string;
-  cpuUsage: string;
-  memoryUsage: string;
+  /** Millicores. */
+  cpuUsage: number;
+  /** Bytes. */
+  memoryUsage: number;
 }
 
 const workloadUsageOrZero = (
   usage: ClusterOverviewPayload['workloadResourceUsage'],
   key: ClusterWorkloadUsageKey,
   type: 'cpu' | 'memory'
-): string => clusterWorkloadUsageValue(usage, key, type) ?? '0';
+): number => clusterWorkloadUsageValue(usage, key, type) ?? 0;
 
 const buildWorkloadUsageSource = (
   usage: ClusterOverviewPayload['workloadResourceUsage'],
@@ -314,13 +312,13 @@ export const buildWorkloadUsagePresentation = (
   ];
   const cpuItems = sources.map((item) => ({
     ...item,
-    usage: item.cpuUsage,
-    value: calculateResourceMetrics({ usage: item.cpuUsage }, 'cpu').usage,
+    usage: formatCpuValue(item.cpuUsage),
+    value: item.cpuUsage,
   }));
   const memoryItems = sources.map((item) => ({
     ...item,
-    usage: item.memoryUsage,
-    value: calculateResourceMetrics({ usage: item.memoryUsage }, 'memory').usage,
+    usage: formatMemoryValue(item.memoryUsage),
+    value: item.memoryUsage,
   }));
 
   return {

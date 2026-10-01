@@ -546,10 +546,6 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 				return row.Ready
 			case "restarts":
 				return strconv.Itoa(int(row.Restarts))
-			case "cpu":
-				return row.CPUUsage
-			case "memory":
-				return row.MemUsage
 			case "age":
 				return row.Age
 			default:
@@ -559,9 +555,9 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 		NumericSort: func(row WorkloadSummary, field string) (float64, bool) {
 			switch strings.ToLower(field) {
 			case "cpu":
-				return parseFormattedCPUToMilli(row.CPUUsage)
+				return usageSortValue(row.CPUUsageMilli)
 			case "memory":
-				return parseFormattedMemoryToBytes(row.MemUsage)
+				return usageSortValue(row.MemoryUsageBytes)
 			case "restarts":
 				return float64(row.Restarts), true
 			case "ready":
@@ -599,9 +595,8 @@ func isUnhealthyStatusPresentation(presentation string) bool {
 //     Table half), which carries exactly the same values BuildResourceModel/BuildFacts/
 //     common.HasForwardableContainerPorts produced from the typed pod;
 //   - the cpu/mem request/limit reservations are the PodAggregate's regular-container
-//     int64 sums, re-formatted with the WORKLOAD formatters (not the PodSummary's
-//     streamrows formatters), matching aggregateWorkloadPodResources;
-//   - cpu/mem usage are the fresh metrics sample, formatted the same way.
+//     int64 sums, matching aggregateWorkloadPodResources;
+//   - cpu/mem usage are the fresh metrics sample, absent when not positive.
 //
 // The caller has already excluded Succeeded/Failed pods, so the single-pod aggregate's
 // restart total equals the PodSummary's RestartCount (BuildFacts) exactly.
@@ -618,12 +613,12 @@ func buildStandalonePodSummaryFromRows(podSummary streamrows.PodSummary, agg str
 		Restarts:             podSummary.Restarts,
 		Age:                  podSummary.Age,
 		AgeTimestamp:         podSummary.AgeTimestamp,
-		CPUUsage:             formatWorkloadCPUMilli(sample.CPUUsageMilli),
-		CPURequest:           formatWorkloadCPUMilli(agg.CPURequestMilli),
-		CPULimit:             formatWorkloadCPUMilli(agg.CPULimitMilli),
-		MemUsage:             formatWorkloadMemory(sample.MemoryUsageBytes),
-		MemRequest:           formatWorkloadMemory(agg.MemRequestBytes),
-		MemLimit:             formatWorkloadMemory(agg.MemLimitBytes),
+		CPUUsageMilli:        workloadUsage(sample.CPUUsageMilli),
+		CPURequestMilli:      agg.CPURequestMilli,
+		CPULimitMilli:        agg.CPULimitMilli,
+		MemoryUsageBytes:     workloadUsage(sample.MemoryUsageBytes),
+		MemoryRequestBytes:   agg.MemRequestBytes,
+		MemoryLimitBytes:     agg.MemLimitBytes,
 		PortForwardAvailable: podSummary.PortForwardAvailable,
 	}
 }
@@ -762,33 +757,11 @@ func cloneInt32Ptr(value *int32) *int32 {
 	return &clone
 }
 
-func formatWorkloadCPUMilli(value int64) string {
+// workloadUsage reports summed pod usage, absent when nothing positive was
+// sampled, so a workload without usage reads as no data rather than zero.
+func workloadUsage(value int64) *int64 {
 	if value <= 0 {
-		return "-"
+		return nil
 	}
-	if value < 1000 {
-		return fmt.Sprintf("%dm", value)
-	}
-	return fmt.Sprintf("%.2f", float64(value)/1000)
-}
-
-func formatWorkloadMemory(value int64) string {
-	if value <= 0 {
-		return "-"
-	}
-	const (
-		ki = 1024
-		mi = ki * 1024
-		gi = mi * 1024
-	)
-	if value >= gi {
-		return fmt.Sprintf("%.2fGi", float64(value)/float64(gi))
-	}
-	if value >= mi {
-		return fmt.Sprintf("%.0fMi", float64(value)/float64(mi))
-	}
-	if value >= ki {
-		return fmt.Sprintf("%.0fKi", float64(value)/float64(ki))
-	}
-	return fmt.Sprintf("%d", value)
+	return &value
 }

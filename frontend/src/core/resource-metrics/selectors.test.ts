@@ -14,6 +14,9 @@ import type {
 } from '@/core/refresh/types';
 import { selectNodeMetrics, selectPodMetrics, selectWorkloadMetrics } from './selectors';
 
+const MIB = 1024 ** 2;
+const GIB = 1024 ** 3;
+
 // Base payload rows arrive with live usage joined at serve; payload.metrics
 // carries the poller freshness block for that joined usage.
 
@@ -54,23 +57,23 @@ describe('resource metric selectors', () => {
           ownerName: 'api',
           clusterId: 'cluster-b',
           node: 'node-b',
-          cpuUsage: '999m',
-          cpuRequest: '100m',
-          cpuLimit: '1',
-          memUsage: '999Mi',
-          memRequest: '100Mi',
-          memLimit: '1Gi',
+          cpuUsageMilli: 999,
+          cpuRequestMilli: 100,
+          cpuLimitMilli: 1000,
+          memoryUsageBytes: 999 * MIB,
+          memoryRequestBytes: 100 * MIB,
+          memoryLimitBytes: GIB,
         }),
         makePodSnapshotEntry({
           name: 'api',
           namespace: 'team-a',
           ownerName: 'api',
-          cpuUsage: '120m',
-          cpuRequest: '50m',
-          cpuLimit: '500m',
-          memUsage: '128Mi',
-          memRequest: '64Mi',
-          memLimit: '256Mi',
+          cpuUsageMilli: 120,
+          cpuRequestMilli: 50,
+          cpuLimitMilli: 500,
+          memoryUsageBytes: 128 * MIB,
+          memoryRequestBytes: 64 * MIB,
+          memoryLimitBytes: 256 * MIB,
         }),
       ],
       metrics: { stale: false, successCount: 2, failureCount: 0, collectedAt: 123 },
@@ -87,29 +90,27 @@ describe('resource metric selectors', () => {
       })
     ).toMatchObject({
       source: 'pods',
-      cpu: { usage: '120m', request: '50m', limit: '500m' },
-      memory: { usage: '128Mi', request: '64Mi', limit: '256Mi' },
+      cpu: { usage: 120, request: 50, limit: 500 },
+      memory: { usage: 128 * MIB, request: 64 * MIB, limit: 256 * MIB },
       freshness: { stale: false, collectedAt: 123 },
     });
   });
 
-  it('returns null when the referenced Pod row is absent or carries no metric data', () => {
+  it('returns null only when the referenced Pod row is absent', () => {
     const nullRowsPayload: PodSnapshotPayload = makePodSnapshotPayload({ rows: null });
     const emptyPayload: PodSnapshotPayload = makePodSnapshotPayload({
       rows: [],
       metrics: { stale: true, successCount: 1, failureCount: 0 },
     });
-    const noDataPayload: PodSnapshotPayload = makePodSnapshotPayload({
+    // A served row without a usage sample is still the live source: its usage is
+    // unknown, but its requests and limits are current.
+    const unsampledPayload: PodSnapshotPayload = makePodSnapshotPayload({
       rows: [
         makePodSnapshotEntry({
           name: 'api',
           namespace: 'team-a',
-          cpuUsage: '',
-          cpuRequest: '',
-          cpuLimit: '',
-          memUsage: '',
-          memRequest: '',
-          memLimit: '',
+          cpuUsageMilli: undefined,
+          memoryUsageBytes: undefined,
         }),
       ],
       metrics: { stale: true, successCount: 1, failureCount: 0 },
@@ -125,8 +126,11 @@ describe('resource metric selectors', () => {
 
     expect(selectPodMetrics(nullRowsPayload, ref)).toBeNull();
     expect(selectPodMetrics(emptyPayload, ref)).toBeNull();
-    expect(selectPodMetrics(noDataPayload, ref)).toBeNull();
     expect(selectPodMetrics(null, ref)).toBeNull();
+    const unsampled = selectPodMetrics(unsampledPayload, ref);
+    expect(unsampled?.cpu?.usage).toBeUndefined();
+    expect(unsampled?.memory?.usage).toBeUndefined();
+    expect(unsampled?.cpu?.request).toBe(10);
   });
 
   it('selects workload metrics and parses ready pod counts from namespace-workloads rows', () => {
@@ -141,8 +145,8 @@ describe('resource metric selectors', () => {
           status: 'Available',
           restarts: 0,
           age: '2m',
-          cpuUsage: '999m',
-          memUsage: '999Mi',
+          cpuUsageMilli: 999,
+          memoryUsageBytes: 999 * MIB,
         }),
         makeNamespaceWorkloadSummary({
           kind: 'Deployment',
@@ -152,12 +156,12 @@ describe('resource metric selectors', () => {
           status: 'Available',
           restarts: 0,
           age: '2m',
-          cpuUsage: '300m',
-          cpuRequest: '150m',
-          cpuLimit: '750m',
-          memUsage: '384Mi',
-          memRequest: '192Mi',
-          memLimit: '768Mi',
+          cpuUsageMilli: 300,
+          cpuRequestMilli: 150,
+          cpuLimitMilli: 750,
+          memoryUsageBytes: 384 * MIB,
+          memoryRequestBytes: 192 * MIB,
+          memoryLimitBytes: 768 * MIB,
         }),
       ],
       metrics: { stale: true, lastError: 'metrics unavailable', successCount: 1, failureCount: 1 },
@@ -174,8 +178,8 @@ describe('resource metric selectors', () => {
       })
     ).toMatchObject({
       source: 'namespace-workloads',
-      cpu: { usage: '300m', request: '150m', limit: '750m' },
-      memory: { usage: '384Mi', request: '192Mi', limit: '768Mi' },
+      cpu: { usage: 300, request: 150, limit: 750 },
+      memory: { usage: 384 * MIB, request: 192 * MIB, limit: 768 * MIB },
       podCount: 5,
       readyPodCount: 3,
       freshness: { stale: true, lastError: 'metrics unavailable' },
@@ -206,8 +210,8 @@ describe('resource metric selectors', () => {
         // Same node name in another cluster must not be picked up.
         makeClusterNodeSnapshotEntry({
           clusterId: 'cluster-b',
-          cpuUsage: '999m',
-          memoryUsage: '999Gi',
+          cpuUsageMilli: 999,
+          memoryUsageBytes: 999 * GIB,
         }),
         makeClusterNodeSnapshotEntry(),
       ],
@@ -226,18 +230,18 @@ describe('resource metric selectors', () => {
       source: 'nodes',
       mode: 'nodeMetrics',
       cpu: {
-        usage: '1200m',
-        capacity: '8',
-        allocatable: '7600m',
-        request: '2',
-        limit: '4',
+        usage: 1200,
+        capacity: 8000,
+        allocatable: 7600,
+        request: 2000,
+        limit: 4000,
       },
       memory: {
-        usage: '5Gi',
-        capacity: '32Gi',
-        allocatable: '30Gi',
-        request: '6Gi',
-        limit: '12Gi',
+        usage: 5 * GIB,
+        capacity: 32 * GIB,
+        allocatable: 30 * GIB,
+        request: 6 * GIB,
+        limit: 12 * GIB,
       },
       pods: { count: '18', capacity: '110', allocatable: '100' },
       freshness: { stale: false, collectedAt: 456 },

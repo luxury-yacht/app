@@ -500,10 +500,6 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 				return row.Roles
 			case "version":
 				return row.Version
-			case "cpu", "cpuusage":
-				return row.CPUUsage
-			case "memory", "memoryusage":
-				return row.MemoryUsage
 			case "pods":
 				return row.Pods
 			case "restarts":
@@ -517,9 +513,9 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 		NumericSort: func(row NodeSummary, field string) (float64, bool) {
 			switch strings.ToLower(field) {
 			case "cpu", "cpuusage":
-				return parseFormattedCPUToMilli(row.CPUUsage)
+				return usageSortValue(row.CPUUsageMilli)
 			case "memory", "memoryusage":
-				return parseFormattedMemoryToBytes(row.MemoryUsage)
+				return usageSortValue(row.MemoryUsageBytes)
 			case "pods":
 				return nodePodsUsedSortValue(row.Pods)
 			case "restarts":

@@ -8,8 +8,8 @@
  * projects each reflector-decoded Pod into a four-half ingest.Bundle so one intake
  * feeds every pod consumer, and the typed Pod is then dropped:
  *
- *   - Table     = the no-data-metrics PodSummary (pods.BuildStreamSummary plus
- *                 podSummaryWithoutMetrics);
+ *   - Table     = the usage-free PodSummary (pods.BuildStreamSummary); serving
+ *                 joins the current metrics sample onto copies;
  *   - Aggregate = the PodAggregate the cluster-overview/nodes/namespace-workloads
  *                 domains read (projectPodAggregate);
  *   - Catalog   = the object-catalog Summary (objectcatalog.SummaryProjector);
@@ -64,11 +64,11 @@ func NewPodIngestProjector(meta ClusterMeta, sources PodOwnerSources) ingest.Pro
 			return nil, errNotPodObject
 		}
 		var metaObj metav1.Object = pod
-		table := podSummaryWithoutMetrics(podres.BuildStreamSummary(
-			streamMeta, pod, 0, 0,
+		table := podres.BuildStreamSummary(
+			streamMeta, pod,
 			sources.ReplicaSets,
 			jobOwnerLookupAdapter(sources.JobControllerOwner),
-		))
+		)
 		aggregate := projectPodAggregateFromSummary(pod, sources, table)
 		return ingest.Bundle{
 			Table:     table,
