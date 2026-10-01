@@ -416,7 +416,12 @@ describe('ClusterViewEvents', () => {
       objectUid: 'database-uid',
       objectApiVersion: undefined,
       involvedObject: {
-        display: { clusterId: 'test-cluster', kind: 'Database', name: 'primary', uid: 'database-uid' },
+        display: {
+          clusterId: 'test-cluster',
+          kind: 'Database',
+          name: 'primary',
+          uid: 'database-uid',
+        },
       },
     };
 
@@ -462,7 +467,12 @@ describe('ClusterViewEvents', () => {
       objectUid: 'database-uid',
       objectApiVersion: undefined,
       involvedObject: {
-        display: { clusterId: 'test-cluster', kind: 'Database', name: 'primary', uid: 'database-uid' },
+        display: {
+          clusterId: 'test-cluster',
+          kind: 'Database',
+          name: 'primary',
+          uid: 'database-uid',
+        },
       },
     };
 
