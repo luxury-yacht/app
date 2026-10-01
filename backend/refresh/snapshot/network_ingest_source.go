@@ -67,7 +67,7 @@ func namespaceNetworkIngestVersion(source networkIngestSource, gvrs ...schema.Gr
 	if source == nil {
 		return 0
 	}
-	var max uint64
+	var highest uint64
 	for _, gvr := range gvrs {
 		rv := source.StoreResourceVersion(gvr)
 		if rv == "" {
@@ -77,9 +77,9 @@ func namespaceNetworkIngestVersion(source networkIngestSource, gvrs ...schema.Gr
 		if err != nil {
 			continue
 		}
-		if parsed > max {
-			max = parsed
+		if parsed > highest {
+			highest = parsed
 		}
 	}
-	return max
+	return highest
 }

@@ -35,7 +35,7 @@ export class ResourceStreamConnection {
     this.delegate = delegate;
   }
 
-  async connect(): Promise<void> {
+  connect(): void {
     if (this.closed || this.paused || typeof window === 'undefined') {
       return;
     }
@@ -68,7 +68,7 @@ export class ResourceStreamConnection {
     }
     this.paused = false;
     this.closed = false;
-    void this.connect();
+    this.connect();
   }
 
   close(): void {
@@ -118,7 +118,7 @@ export class ResourceStreamConnection {
     this.attempt += 1;
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
-      void this.connect();
+      this.connect();
     }, delay);
   }
 

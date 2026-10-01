@@ -141,8 +141,8 @@
 }
 
 .modal-close:hover {
-  background: rgb(239 68 68 / 10%);
-  color: rgb(239 68 68);
+  background: var(--color-error-bg);
+  color: var(--color-error);
   transform: scale(1.05);
 }
 

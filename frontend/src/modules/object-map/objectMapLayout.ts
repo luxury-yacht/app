@@ -41,7 +41,7 @@
  * column, which can collide.
  */
 
-import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
+import type { ObjectMapEdge, ObjectMapNode, ObjectMapStatus } from '@core/refresh/types';
 import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
 import type { ObjectMapFilteredPath, ObjectMapLayoutEdge } from './objectMapKindFilter';
 
@@ -77,7 +77,7 @@ export interface PositionedNode {
   isSeed: boolean;
   ref: ObjectMapNode['ref'];
   creationTimestamp?: string;
-  status?: ObjectMapNode['status'];
+  status?: ObjectMapStatus;
 }
 
 export interface PositionedEdge {

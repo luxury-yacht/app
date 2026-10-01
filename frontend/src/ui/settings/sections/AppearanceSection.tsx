@@ -613,12 +613,12 @@ const UnsavedDefaultThemePrompt = ({
     return null;
   }
   return (
-    <div className="themes-unsaved-default" role="status">
+    <output className="themes-unsaved-default">
       <span>There are unsaved changes. Save as default?</span>
       <button type="button" className="themes-unsaved-default-action" onClick={onSave}>
         Save
       </button>
-    </div>
+    </output>
   );
 };
 

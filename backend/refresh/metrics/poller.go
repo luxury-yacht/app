@@ -551,10 +551,10 @@ func jitterDuration(base time.Duration, factor float64) time.Duration {
 	if factor <= 0 {
 		return base
 	}
-	min := 1 - factor
-	max := 1 + factor
+	low := 1 - factor
+	high := 1 + factor
 	jitterRandMu.Lock()
-	multiplier := min + jitterRand.Float64()*(max-min)
+	multiplier := low + jitterRand.Float64()*(high-low)
 	jitterRandMu.Unlock()
 	return time.Duration(float64(base) * multiplier)
 }

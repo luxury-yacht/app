@@ -163,9 +163,8 @@ const TablePaginationControls: React.FC<TablePaginationControlsProps> = ({
         <span className="table-pagination-range">
           {rangeLabel} of {totalLabel}
         </span>
-        <span
+        <output
           className="table-pagination-progress"
-          role="status"
           aria-label={loading ? 'Page request in progress' : undefined}
           aria-hidden={loading ? undefined : true}
         />

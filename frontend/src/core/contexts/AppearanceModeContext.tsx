@@ -6,7 +6,15 @@
  * Also listens for mode changes from the frontend settings event bus.
  */
 import type React from 'react';
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { desktopRuntimeAvailable, onBroadcastEvent } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import {
@@ -109,9 +117,7 @@ export const AppearanceModeProvider: React.FC<AppearanceModeProviderProps> = ({ 
     };
   }, [applyResolvedMode]);
 
-  return (
-    <AppearanceModeContext.Provider value={{ mode, resolvedMode }}>
-      {children}
-    </AppearanceModeContext.Provider>
-  );
+  const value = useMemo(() => ({ mode, resolvedMode }), [mode, resolvedMode]);
+
+  return <AppearanceModeContext.Provider value={value}>{children}</AppearanceModeContext.Provider>;
 };

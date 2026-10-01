@@ -28,8 +28,8 @@ func (p *PreferencesService) updateClusterAttentionRules(
 	if clusterAttentionIgnoreRulesEmpty(rules) {
 		section.Attention = nil
 	} else {
-		copy := cloneClusterAttentionIgnoreRules(rules)
-		section.Attention = &copy
+		rulesCopy := cloneClusterAttentionIgnoreRules(rules)
+		section.Attention = &rulesCopy
 	}
 	if settings.Clusters == nil {
 		settings.Clusters = make(map[string]settingsClusterSection)
@@ -61,8 +61,8 @@ func (p *PreferencesService) updateGlobalAttentionRules(
 	if len(globalRules.FindingTypes) == 0 {
 		settings.Attention = nil
 	} else {
-		copy := cloneGlobalAttentionIgnoreRules(globalRules)
-		settings.Attention = &copy
+		rulesCopy := cloneGlobalAttentionIgnoreRules(globalRules)
+		settings.Attention = &rulesCopy
 	}
 	if err := p.saveSettingsFile(settings); err != nil {
 		return snapshot.AttentionIgnoreRules{}, nil, err

@@ -27,7 +27,6 @@ import {
   type ComputedCapabilities,
   createEmptyCapabilityIdMap,
   type FeatureSupport,
-  type NodeLogsState,
   type PanelObjectData,
 } from '../types';
 
@@ -42,7 +41,7 @@ export interface ObjectPanelCapabilitiesResult {
   capabilityStates: CapabilityStates;
   capabilities: ComputedCapabilities;
   capabilityReasons: CapabilityReasons;
-  nodeLogsState: NodeLogsState;
+  nodeLogsState: CapabilityState;
   nodeLogSources: NodeLogSource[];
 }
 

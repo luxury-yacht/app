@@ -53,11 +53,13 @@ const conditionVariant = (status: string): StatusChipVariant => {
   return 'warning';
 };
 
+const namespacePrefix = (namespace?: string): string => (namespace ? `${namespace}/` : '');
+
 const objectRefLabel = (ref: ObjectRef): string =>
-  `${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ''}${ref.name ?? '*'}`;
+  `${ref.kind} ${namespacePrefix(ref.namespace)}${ref.name ?? '*'}`;
 
 const displayRefLabel = (ref: DisplayRef): string =>
-  `${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ''}${ref.name || '*'}`;
+  `${ref.kind} ${namespacePrefix(ref.namespace)}${ref.name || '*'}`;
 
 const formatAttachedRoutes = (count: number): string =>
   `${count} ${count === 1 ? 'route' : 'routes'}`;

@@ -135,7 +135,7 @@ export class ResourceStreamManager {
     },
     resumeItems: () => Array.from(this.subscriptions.values()),
     resumeItem: (subscription) => {
-      void this.resyncSubscription(subscription, 'visibility resume');
+      this.resyncSubscription(subscription, 'visibility resume');
     },
   });
   private readonly streamTelemetry = new Map<string, StreamTelemetry>();
@@ -185,14 +185,14 @@ export class ResourceStreamManager {
     return this.getHealthStatus(domain, scope) === 'healthy';
   }
 
-  async start(domain: DoorbellDomain, scope: string): Promise<void> {
+  start(domain: DoorbellDomain, scope: string): void {
     if (typeof window === 'undefined') {
       return;
     }
     const subscriptions = this.ensureSubscriptions(domain, scope);
-    await Promise.all(
-      subscriptions.map((subscription) => this.resyncSubscription(subscription, 'initial'))
-    );
+    subscriptions.forEach((subscription) => {
+      this.resyncSubscription(subscription, 'initial');
+    });
   }
 
   stop(domain: DoorbellDomain, scope: string, reset = false): void {
@@ -205,16 +205,14 @@ export class ResourceStreamManager {
     });
   }
 
-  async refreshOnce(domain: DoorbellDomain, scope: string): Promise<void> {
+  refreshOnce(domain: DoorbellDomain, scope: string): void {
     if (typeof window === 'undefined') {
       return;
     }
     const subscriptions = this.ensureSubscriptions(domain, scope);
-    await Promise.all(
-      subscriptions.map((subscription) =>
-        this.resyncSubscription(subscription, 'manual refresh', true)
-      )
-    );
+    subscriptions.forEach((subscription) => {
+      this.resyncSubscription(subscription, 'manual refresh', true);
+    });
   }
 
   private parseMessage(raw: unknown): ServerMessage | null {
@@ -322,7 +320,7 @@ export class ResourceStreamManager {
         this.bumpLegacyResyncSourceVersion(subscription);
         return;
       case 'request-resync':
-        void this.resyncSubscription(subscription, effect.reason, effect.force, effect.errorReason);
+        this.resyncSubscription(subscription, effect.reason, effect.force, effect.errorReason);
         return;
       case 'permission-denied':
         eventBus.emit('refresh:resource-stream-permission-denied', {
@@ -389,7 +387,7 @@ export class ResourceStreamManager {
     }
     const connection = new ResourceStreamConnection(this);
     this.connection = connection;
-    void connection.connect();
+    connection.connect();
     return connection;
   }
 
@@ -656,12 +654,12 @@ export class ResourceStreamManager {
   }
 
   // Resync clears queued updates and refreshes the snapshot after stream gaps.
-  private async resyncSubscription(
+  private resyncSubscription(
     subscription: StreamSubscription,
     reason: string,
     force = false,
     errorReason?: string
-  ): Promise<void> {
+  ): void {
     // Skip resync work for subscriptions that are already scheduled to stop.
     if (this.subscriptions.hasPendingUnsubscribe(subscription)) {
       return;

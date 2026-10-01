@@ -7,7 +7,15 @@
 
 import { onEvent, writeClipboardText } from '@core/desktop-runtime';
 import type React from 'react';
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type {
   RegisteredShortcut,
   ShortcutDefinition,
@@ -686,18 +694,32 @@ export function KeyboardProvider({ children, disabled = false }: Readonly<Keyboa
     [shortcuts]
   );
 
-  const value: KeyboardProviderValue = {
-    registerShortcut,
-    unregisterShortcut,
-    getAvailableShortcuts,
-    isShortcutAvailable,
-    setEnabled: setIsEnabled,
-    isEnabled: isEnabled && !disabled,
-    registerSurface,
-    unregisterSurface,
-    hasActiveBlockingSurface,
-    dispatchNativeAction,
-  };
+  const value = useMemo<KeyboardProviderValue>(
+    () => ({
+      registerShortcut,
+      unregisterShortcut,
+      getAvailableShortcuts,
+      isShortcutAvailable,
+      setEnabled: setIsEnabled,
+      isEnabled: isEnabled && !disabled,
+      registerSurface,
+      unregisterSurface,
+      hasActiveBlockingSurface,
+      dispatchNativeAction,
+    }),
+    [
+      registerShortcut,
+      unregisterShortcut,
+      getAvailableShortcuts,
+      isShortcutAvailable,
+      isEnabled,
+      disabled,
+      registerSurface,
+      unregisterSurface,
+      hasActiveBlockingSurface,
+      dispatchNativeAction,
+    ]
+  );
 
   return <KeyboardContext.Provider value={value}>{children}</KeyboardContext.Provider>;
 }

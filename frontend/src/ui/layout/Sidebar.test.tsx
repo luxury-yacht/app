@@ -11,7 +11,7 @@ import { resolve } from 'node:path';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
 import { KeyboardProvider } from '@ui/shortcuts';
-import { act } from 'react';
+import { act, useSyncExternalStore } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
@@ -32,6 +32,33 @@ vi.mock('./namespaceScope', async (importOriginal) => ({
   loadNamespaceScope: async () => manualScope.names,
   saveNamespaceScope: (...args: [string, string[]]) => manualScope.save(...args),
 }));
+
+// The mocked hooks return mutable fixtures. Real contexts and stores re-render their
+// consumers when data changes, so each mocked hook subscribes to this version and
+// renderSidebar publishes a change before rendering.
+const fixtureVersion = vi.hoisted(() => {
+  let version = 0;
+  const listeners = new Set<() => void>();
+  return {
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    read: () => version,
+    publish: () => {
+      version += 1;
+      listeners.forEach((listener) => {
+        listener();
+      });
+    },
+  };
+});
+const useFixture = <T,>(fixture: T): T => {
+  useSyncExternalStore(fixtureVersion.subscribe, fixtureVersion.read);
+  return fixture;
+};
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(() => () => undefined),
@@ -69,15 +96,16 @@ vi.mock('@core/desktop-runtime', () => ({
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => kubeconfigState,
+  useKubeconfig: () => useFixture(kubeconfigState),
 }));
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
-  useAutoRefreshLoadingState: () => autoRefreshLoadingState,
+  useAutoRefreshLoadingState: () => useFixture(autoRefreshLoadingState),
 }));
 
 vi.mock('@/core/data-access', () => ({
   useRefreshDomainHandle: (options: { domain?: string; scope?: string }) => {
+    useFixture(null);
     if (options.domain === 'catalog') {
       const clusterId = options.scope?.split('|')[0] ?? '';
       return {
@@ -163,11 +191,11 @@ let viewStateMock = createViewState();
 const nativeScrollIntoView = Element.prototype.scrollIntoView;
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => namespaceState,
+  useNamespace: () => useFixture(namespaceState),
 }));
 
 vi.mock('@core/contexts/ViewStateContext', () => ({
-  useViewState: () => viewStateMock,
+  useViewState: () => useFixture(viewStateMock),
 }));
 
 describe('Sidebar', () => {
@@ -204,6 +232,7 @@ describe('Sidebar', () => {
       Object.assign(viewStateMock, viewState);
     }
     act(() => {
+      fixtureVersion.publish();
       requireValue(root, 'expected test value in Sidebar.test.tsx').render(
         <PanelLayoutTestProvider>
           <KeyboardProvider>

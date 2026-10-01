@@ -42,8 +42,8 @@ type eventDeliveryTarget struct {
 // via ringbuffer.Buffer.
 type eventBuffer = ringbuffer.Buffer[StreamEvent]
 
-func newEventBuffer(max int) *eventBuffer {
-	return ringbuffer.New(max, func(e StreamEvent) uint64 { return e.Sequence })
+func newEventBuffer(capacity int) *eventBuffer {
+	return ringbuffer.New(capacity, func(e StreamEvent) uint64 { return e.Sequence })
 }
 
 // NewManager wires the event informer into a streaming manager.

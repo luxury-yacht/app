@@ -43,7 +43,7 @@ import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
-import type { ObjectEventSummary } from '@/core/refresh/types';
+import type { ObjectEventSummary, ResourceLink } from '@/core/refresh/types';
 import { errorHandler } from '@/utils/errorHandler';
 import { CLUSTER_SCOPE, getObjectEventsRefresherName, INACTIVE_SCOPE } from '../constants';
 import { useObjectPanelScopedDomainLifecycle } from '../hooks/useObjectPanelScopedDomainLifecycle';
@@ -81,7 +81,7 @@ interface EventDisplay {
   objectNamespace: string;
   objectUid?: string;
   objectApiVersion?: string;
-  involvedObject?: ObjectEventSummary['involvedObject'];
+  involvedObject?: ResourceLink;
   // Per-event cluster identity from ObjectEventSummary (extends ClusterMeta).
   clusterId?: string;
   clusterName?: string;

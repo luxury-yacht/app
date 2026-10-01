@@ -13,6 +13,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -164,18 +165,10 @@ export const ZoomProvider: React.FC<ZoomProviderProps> = ({ children }) => {
   const canZoomIn = zoomLevel < MAX_ZOOM;
   const canZoomOut = zoomLevel > MIN_ZOOM;
 
-  return (
-    <ZoomContext.Provider
-      value={{
-        zoomLevel,
-        zoomIn,
-        zoomOut,
-        resetZoom,
-        canZoomIn,
-        canZoomOut,
-      }}
-    >
-      {children}
-    </ZoomContext.Provider>
+  const value = useMemo(
+    () => ({ zoomLevel, zoomIn, zoomOut, resetZoom, canZoomIn, canZoomOut }),
+    [zoomLevel, zoomIn, zoomOut, resetZoom, canZoomIn, canZoomOut]
   );
+
+  return <ZoomContext.Provider value={value}>{children}</ZoomContext.Provider>;
 };

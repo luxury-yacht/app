@@ -226,10 +226,10 @@ func trimBuffer(buf *bytes.Buffer, maxLen, keep int) {
 	}
 }
 
-// tailString returns the last max bytes as a string.
-func tailString(data []byte, max int) string {
-	if len(data) > max {
-		data = data[len(data)-max:]
+// tailString returns the last limit bytes as a string.
+func tailString(data []byte, limit int) string {
+	if len(data) > limit {
+		data = data[len(data)-limit:]
 	}
 	return string(data)
 }

@@ -114,8 +114,8 @@ type bufferedUpdate struct {
 type updateBuffer = ringbuffer.Buffer[bufferedUpdate]
 
 // newUpdateBuffer allocates a resume buffer capped at the requested size.
-func newUpdateBuffer(max int) *updateBuffer {
-	return ringbuffer.New(max, func(u bufferedUpdate) uint64 { return u.sequence })
+func newUpdateBuffer(capacity int) *updateBuffer {
+	return ringbuffer.New(capacity, func(u bufferedUpdate) uint64 { return u.sequence })
 }
 
 func (s *subscription) close(reason DropReason) {

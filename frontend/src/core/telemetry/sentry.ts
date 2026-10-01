@@ -206,6 +206,16 @@ const QUOTED_RESOURCE_NAME = /["'][^"']+["']/uy;
 const NAME_SHAPED_RESOURCE_NAME =
   /(?:[a-z\d][a-z\d._-]*\/[a-z\d][a-z\d._-]*|\d|[a-z\d][a-z]*[\d._-][a-z\d._-]*)\b/iuy;
 
+// A credential-like key followed by its assigned value, e.g. `token=abc` or
+// `Authorization: Bearer abc`. The key keeps capture group 1.
+const CREDENTIAL_KEY =
+  /\b(authorization|access[_-]?key|api[_-]?key|cookie|credential|password|passwd|secret|session|token)\b/iu;
+const CREDENTIAL_VALUE = /\s*(?::=|=|:)\s*(?:bearer\s+)?["']?[^\s"',;]+["']?/iu;
+const CREDENTIAL_ASSIGNMENT = new RegExp(
+  `${CREDENTIAL_KEY.source}${CREDENTIAL_VALUE.source}`,
+  'giu'
+);
+
 // Replaces `<kind> <identifier>` with `<kind> <placeholder>` where the sticky identifier
 // pattern matches right after the kind. It scans like a global replace: a failed
 // identifier resumes the search one character past the kind's start.
@@ -235,7 +245,7 @@ const sanitizeTelemetryText = (rawValue: string): string => {
   value = value.replace(/\b(?:https?|wss?):\/\/[^\s"'<>]+/giu, '[url]');
   value = value.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu, '[email]');
   value = value.replace(
-    /\b(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}\b/gu,
+    /\b(?:25[0-5]|2[0-4]\d|1?\d{1,2})(?:\.(?:25[0-5]|2[0-4]\d|1?\d{1,2})){3}\b/gu,
     '[ip]'
   );
   value = value.replace(/(?:\b[0-9a-f]{1,4}(?::[0-9a-f]{0,4}){2,7}\b|\b::1\b)/giu, '[ip]');
@@ -247,10 +257,7 @@ const sanitizeTelemetryText = (rawValue: string): string => {
   );
   value = value.replace(/(?:\/Users|\/home)\/[^\s"'<>]+/gu, '[local-path]');
   value = value.replace(/[A-Z]:\\Users\\[^\s"'<>]+/giu, '[local-path]');
-  value = value.replace(
-    /\b(authorization|access[_-]?key|api[_-]?key|cookie|credential|password|passwd|secret|session|token)\b\s*(?::=|=|:)\s*(?:bearer\s+)?["']?[^\s"',;]+["']?/giu,
-    '$1=[redacted]'
-  );
+  value = value.replace(CREDENTIAL_ASSIGNMENT, '$1=[redacted]');
   value = value.replace(/\bbearer\s+[^\s"',;]+/giu, '[redacted]');
   return value;
 };
@@ -797,11 +804,12 @@ export function setActiveViewContext(context: ActiveViewContext): void {
     ...(next.tab ? { tab: next.tab } : {}),
     objectPanelOpen: next.objectPanelOpen,
   };
+  const workspacePath = next.tab ? `${next.view}/${next.tab}` : next.view;
   Sentry.addBreadcrumb({
     type: 'navigation',
     category: 'navigation.workspace',
     level: 'info',
-    message: `Entered ${next.tab ? `${next.view}/${next.tab}` : next.view}`,
+    message: `Entered ${workspacePath}`,
     data: navigation,
   });
 }

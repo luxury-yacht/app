@@ -79,8 +79,8 @@ type localArtifactProvider struct {
 func (localArtifactProvider) Name() string { return "local-conformance" }
 
 func (provider localArtifactProvider) Check(context.Context, updater.CheckRequest) (*updater.Release, error) {
-	copy := provider.release
-	return &copy, nil
+	releaseCopy := provider.release
+	return &releaseCopy, nil
 }
 
 func (provider localArtifactProvider) Download(

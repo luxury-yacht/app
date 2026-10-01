@@ -22,7 +22,6 @@ import {
 } from './permissionSpecs';
 import type {
   PermissionEntry,
-  PermissionKey,
   PermissionMap,
   PermissionQueryDiagnostics,
   PermissionSpec,
@@ -83,7 +82,7 @@ export const getPermissionKey = (
   clusterId?: string | null,
   group?: string | null,
   version?: string | null
-): PermissionKey => {
+): string => {
   const cid = clusterId || currentClusterId || '';
   // Auto-resolve built-in GVK when the caller didn't specify one, so
   // the key shape matches on both the spec-emit path (buildBatch) and
@@ -168,10 +167,7 @@ let unsubClusterLifecycle: UnsubscribeFn | null = null;
  * source "error" maps to entry.status 'error' with error populated;
  * all other sources map to 'ready'.
  */
-export const makePermissionStatus = (
-  key: PermissionKey,
-  entry: PermissionEntry
-): PermissionStatus => {
+export const makePermissionStatus = (key: string, entry: PermissionEntry): PermissionStatus => {
   const isError = entry.source === 'error';
   return {
     id: key,
@@ -192,7 +188,7 @@ export const makePermissionStatus = (
  * Builds a loading PermissionStatus for an in-flight query.
  */
 const makePendingStatus = (
-  key: PermissionKey,
+  key: string,
   descriptor: PermissionEntry['descriptor'],
   feature: PermissionFeatureKey | null
 ): PermissionStatus => ({

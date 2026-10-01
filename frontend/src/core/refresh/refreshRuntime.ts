@@ -210,16 +210,20 @@ export type ScopedPermissionEvent =
   | { type: 'permission-denied' }
   | { type: 'permission-epoch-reset' };
 
+const SCOPED_PERMISSION_STATUS_BY_EVENT: Record<
+  ScopedPermissionEvent['type'],
+  ScopedPermissionState['status']
+> = {
+  'permission-allowed': 'allowed',
+  'permission-denied': 'denied',
+  'permission-epoch-reset': 'unknown',
+};
+
 export const transitionScopedPermissionState = (
   state: ScopedPermissionState,
   event: ScopedPermissionEvent
 ): ScopedPermissionState => {
-  const status =
-    event.type === 'permission-allowed'
-      ? 'allowed'
-      : event.type === 'permission-denied'
-        ? 'denied'
-        : 'unknown';
+  const status = SCOPED_PERMISSION_STATUS_BY_EVENT[event.type];
   return state.status === status ? state : { status };
 };
 
@@ -390,15 +394,20 @@ const receiveStreamHealth = (
 const clearStreamHealth = (state: ScopedStreamState): ScopedStreamState =>
   state.health.status === 'unknown' ? state : { ...state, health: { status: 'unknown' } };
 
+const clearAsyncConnection = (connection: StreamConnectionState): StreamConnectionState => {
+  if (connection.status === 'starting') {
+    return { status: 'inactive' };
+  }
+  if (connection.status === 'active') {
+    return { ...connection, cancellationRequested: false };
+  }
+  return connection;
+};
+
 const clearAsyncStreamState = (state: ScopedStreamState): ScopedStreamState => ({
   ...state,
   initialization: { status: 'idle' },
-  connection:
-    state.connection.status === 'starting'
-      ? { status: 'inactive' }
-      : state.connection.status === 'active'
-        ? { ...state.connection, cancellationRequested: false }
-        : state.connection,
+  connection: clearAsyncConnection(state.connection),
 });
 
 const clearAllStreamState = (

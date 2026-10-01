@@ -99,8 +99,6 @@ export type CapabilityStates = {
   removeNamespaceFinalizer: CapabilityState;
 };
 
-export type NodeLogsState = CapabilityState;
-
 export type CapabilityReasons = {
   nodeLogs?: string;
   delete?: string;

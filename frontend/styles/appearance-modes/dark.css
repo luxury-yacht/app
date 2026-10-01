@@ -365,6 +365,10 @@
   --tooltip-border: var(--color-border);
   --tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 
+  /* Status popover action buttons: text on the tooltip surface */
+  --status-action-text: #93c5fd;
+  --status-action-text-hover: #bfdbfe;
+
   /* Editor content shared tokens */
   --editor-scroll-track: rgba(0, 0, 0, 0.1);
   --editor-scroll-thumb: rgba(255, 255, 255, 0.15);

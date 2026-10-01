@@ -282,7 +282,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
         // Render non-interactive headers (e.g., permission pending state).
         if (item.header) {
           return (
-            <div key={key} className="context-menu-header" role="presentation">
+            <div key={key} className="context-menu-header">
               {item.label}
             </div>
           );

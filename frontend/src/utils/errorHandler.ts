@@ -23,8 +23,8 @@ export type ErrorSeverity = (typeof ErrorSeverity)[keyof typeof ErrorSeverity];
 // (e.g. "authorization" in "rbac.authorization.k8s.io" is not an auth error).
 const authWordPattern = /\bauth\b/;
 const authTokenPattern = /\btokens?\b/;
-const forbiddenStatusPattern =
-  /\b(?:http(?:\/\d(?:\.\d)?)?\s+403|status(?:\s+(?:code|of))?(?:\s*[:=]\s*|\s+)403)\b/;
+const httpForbiddenPattern = /\bhttp(?:\/\d(?:\.\d)?)?\s+403\b/;
+const statusForbiddenPattern = /\bstatus(?:\s+(?:code|of))?(?:\s*[:=]\s*|\s+)403\b/;
 const connectivityPattern =
   /\b(?:network|[a-z0-9_-]*fetch[a-z0-9_-]*|cors|connections?|disconnected|dial tcp|no such host|tls handshake|x509|offline|econnrefused)\b/;
 const timeoutPattern = /\b(?:timeout|timed out)\b/;
@@ -148,7 +148,8 @@ class ErrorHandler {
       lowerError.includes('forbidden') ||
       lowerError.includes('permission') ||
       lowerError.includes('access denied') ||
-      forbiddenStatusPattern.test(lowerError)
+      httpForbiddenPattern.test(lowerError) ||
+      statusForbiddenPattern.test(lowerError)
     ) {
       return ErrorCategory.PERMISSION;
     }

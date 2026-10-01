@@ -73,6 +73,7 @@
 
 /* Version footer at the bottom of the sidebar */
 .settings-modal-version {
+  display: block;
   margin-top: 1rem;
   padding: 0.5rem 0.75rem;
   font-size: var(--font-size-small);

@@ -13,10 +13,11 @@ require_commands() {
 }
 
 kubeconfig_for() {
-  case "$1" in
+  local environment="$1"
+  case "${environment}" in
     dev|stg) printf '%s/dev-stg-clusters\n' "${KUBECONFIG_DIR}" ;;
     prod) printf '%s/prod-clusters\n' "${KUBECONFIG_DIR}" ;;
-    *) echo "Unknown environment: $1" >&2; return 1 ;;
+    *) echo "Unknown environment: ${environment}" >&2; return 1 ;;
   esac
 }
 
@@ -25,6 +26,7 @@ kubectl_for() {
   local context="$2"
   shift 2
   kubectl --kubeconfig "${kubeconfig}" --context "${context}" "$@"
+  return $?
 }
 
 ensure_namespace() {
@@ -33,6 +35,7 @@ ensure_namespace() {
   local namespace="$3"
   kubectl_for "${kubeconfig}" "${context}" create namespace "${namespace}" --dry-run=client -o yaml \
     | kubectl_for "${kubeconfig}" "${context}" apply -f -
+  return $?
 }
 
 ensure_kind_cluster() {
@@ -49,6 +52,7 @@ ensure_kind_cluster() {
     echo "Creating cluster '${cluster}' from ${config##*/}..."
     kind create cluster --name "${cluster}" --config "${config}" --kubeconfig "${kubeconfig}"
   fi
+  return $?
 }
 
 delete_kind_cluster() {
@@ -62,4 +66,5 @@ delete_kind_cluster() {
   else
     echo "Cluster '${cluster}' does not exist, skipping."
   fi
+  return $?
 }

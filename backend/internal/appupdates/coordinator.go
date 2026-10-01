@@ -534,8 +534,8 @@ func (coordinator *Coordinator) finishCheckLocked(
 		coordinator.snapshot.Error = validationErr.Error()
 		return cloneSnapshot(coordinator.snapshot), validationErr
 	}
-	copy := *release
-	coordinator.pending = &copy
+	releaseCopy := *release
+	coordinator.pending = &releaseCopy
 	coordinator.snapshot = coordinator.snapshotForRelease(StatusAvailable, release)
 	return cloneSnapshot(coordinator.snapshot), nil
 }
