@@ -207,10 +207,11 @@ const NAME_SHAPED_RESOURCE_NAME =
   /(?:[a-z\d][a-z\d._-]*\/[a-z\d][a-z\d._-]*|\d|[a-z\d][a-z]*[\d._-][a-z\d._-]*)\b/iuy;
 
 // A credential-like key followed by its assigned value, e.g. `token=abc` or
-// `Authorization: Bearer abc`. The key keeps capture group 1.
+// `Authorization: Bearer abc`. The key keeps capture group 1. The value part
+// starts at the assignment operator so neither part begins with a quantifier.
 const CREDENTIAL_KEY =
-  /\b(authorization|access[_-]?key|api[_-]?key|cookie|credential|password|passwd|secret|session|token)\b/iu;
-const CREDENTIAL_VALUE = /\s*(?::=|=|:)\s*(?:bearer\s+)?["']?[^\s"',;]+["']?/iu;
+  /\b(authorization|access[_-]?key|api[_-]?key|cookie|credential|password|passwd|secret|session|token)\b\s*/iu;
+const CREDENTIAL_VALUE = /(?::=|=|:)\s*(?:bearer\s+)?["']?[^\s"',;]+["']?/iu;
 const CREDENTIAL_ASSIGNMENT = new RegExp(
   `${CREDENTIAL_KEY.source}${CREDENTIAL_VALUE.source}`,
   'giu'

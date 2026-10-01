@@ -45,7 +45,7 @@ const RGB_FUNCTION_PATTERN = /^rgba?\((.*)\)$/is;
 // Channels are separated by commas or whitespace; an optional alpha follows a
 // comma or slash, as in "1, 2, 3, 0.5" or "1 2 3 / 0.5".
 const RGB_ARGUMENTS_PATTERN =
-  /^(\d{1,3})\s*[,\s]\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})(?:\s*[,/]\s*([\d.]+))?$/;
+  /^(\d{1,3})(?:\s*,|\s)\s*(\d{1,3})(?:\s*,|\s)\s*(\d{1,3})(?:\s*[,/]\s*([\d.]+))?$/;
 
 export const containsAnsi = (text: string): boolean => ANSI_TEST_PATTERN.test(text);
 
