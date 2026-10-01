@@ -75,20 +75,49 @@ tasks:
 
   create:appimage:
     summary: Creates an AppImage
-    dir: build/linux/appimage
+    platforms: [linux]
     deps:
       - task: build
-      - task: generate:dotdesktop
+        vars:
+          ARCH: '{{.ARCH}}'
     cmds:
-      - cp "{{.APP_BINARY}}" "{{.APP_NAME}}"
-      - cp ../../appicon.png "{{.APP_NAME}}.png"
-      - wails3 generate appimage -binary "{{.APP_NAME}}" -icon {{.ICON}} -desktopfile {{.DESKTOP_FILE}} -outputdir {{.OUTPUT_DIR}} -builddir {{.ROOT_DIR}}/build/linux/appimage/build
+      - task: generate:appimage
+        vars:
+          ARCH: '{{.ARCH}}'
     vars:
-      APP_NAME: '{{.APP_NAME}}'
-      APP_BINARY: '../../../bin/{{.APP_NAME}}'
-      ICON: '{{.APP_NAME}}.png'
-      DESKTOP_FILE: '../{{.APP_NAME}}.desktop'
-      OUTPUT_DIR: '../../../bin'
+      ARCH: '{{.ARCH | default ARCH}}'
+
+  generate:appimage:
+    summary: Packages the existing Linux binary as an AppImage
+    platforms: [linux]
+    preconditions:
+      - sh: '[ "{{.ARCH}}" = "{{ARCH}}" ]'
+        msg: "AppImages must be built natively; run on a {{.ARCH}} host."
+    cmds:
+      - task: generate:appimage:bundle
+        vars:
+          ARCH: '{{.ARCH}}'
+      - mv "{{.ROOT_DIR}}/bin/{{.APP_NAME}}-{{.APPIMAGE_ARCH}}.AppImage" "{{.ROOT_DIR}}/bin/$(GOOS=linux GOARCH={{.ARCH}} RELEASE_FORMAT=appimage go run ./cmd/project release-artifact-name)"
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+      APPIMAGE_ARCH: '{{if eq .ARCH "arm64"}}aarch64{{else}}x86_64{{end}}'
+
+  generate:appimage:bundle:
+    internal: true
+    dir: build/linux/appimage/build
+    cmds:
+      - bash ../tools.sh fetch .
+      - cp "{{.ROOT_DIR}}/bin/{{.APP_NAME}}" "{{.APP_NAME}}"
+      - cp "{{.ROOT_DIR}}/build/appicon.png" "{{.APP_NAME}}.png"
+      # AppRun executes the entry's Exec relative to the AppDir, so the packaged
+      # entry must name the binary rather than the DEB/RPM install path.
+      - wails3 generate .desktop -name "{{.APP_PRODUCT_NAME}}" -exec "{{.APP_NAME}} %u" -icon "{{.APP_NAME}}" -categories "Utility;" -keywords "" -outputfile "{{.APP_NAME}}.desktop"
+      - wails3 generate appimage -binary "{{.APP_NAME}}" -icon "{{.APP_NAME}}.png" -desktopfile "{{.APP_NAME}}.desktop" -outputdir "{{.ROOT_DIR}}/bin" -builddir .
+      - bash ../tools.sh verify-apprun "{{.APP_NAME}}-{{.APPIMAGE_ARCH}}.AppDir/AppRun" "{{.ROOT_DIR}}/bin/{{.APP_NAME}}-{{.APPIMAGE_ARCH}}.AppImage"
+    vars:
+      APPIMAGE_ARCH: '{{if eq .ARCH "arm64"}}aarch64{{else}}x86_64{{end}}'
+    env:
+      LDAI_RUNTIME_FILE: '{{.ROOT_DIR}}/build/linux/appimage/build/runtime-{{.APPIMAGE_ARCH}}'
 
   create:deb:
     summary: Creates a deb package

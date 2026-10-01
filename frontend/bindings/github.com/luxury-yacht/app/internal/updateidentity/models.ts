@@ -12,6 +12,7 @@ export enum Distribution {
     DistributionLinuxPortable = "linux-portable",
     DistributionLinuxDEB = "linux-deb",
     DistributionLinuxRPM = "linux-rpm",
+    DistributionLinuxAppImage = "linux-appimage",
 };
 
 export enum EligibilityReason {
@@ -27,6 +28,7 @@ export enum EligibilityReason {
     ReasonWindowsUnverifiedInstall = "windows-unverified-install",
     ReasonLinuxPackageManaged = "linux-package-managed",
     ReasonLinuxPortableIneligible = "linux-portable-ineligible",
+    ReasonLinuxAppImageIneligible = "linux-appimage-ineligible",
     ReasonUnsupportedDistribution = "unsupported-distribution",
 };
 
@@ -40,5 +42,6 @@ export enum RecoveryTarget {
     RecoveryWindowsDownload = "windows-download",
     RecoveryLinuxPackages = "linux-packages",
     RecoveryLinuxPortableDownload = "linux-portable-download",
+    RecoveryLinuxAppImageDownload = "linux-appimage-download",
     RecoveryDownloadOptions = "download-options",
 };

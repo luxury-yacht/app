@@ -470,3 +470,41 @@ func marker(path, product, distribution, scope string) *updateidentity.MarkerCan
 		Data: []byte(`{"schemaVersion":1,"productIdentifier":"` + product + `","distribution":"` + distribution + `","scope":"` + scope + `"}`),
 	}
 }
+
+func TestResolveInstallationKeepsAppImageLaunchesNotificationOnly(t *testing.T) {
+	t.Parallel()
+
+	const mount = "/tmp/.mount_luxuryAbC123"
+	const image = "/home/alice/Applications/luxury-yacht-v2.0.0-linux-x86_64.AppImage"
+	hostPackageMarker := marker("/usr/share/luxury-yacht/install.json", "app.luxury-yacht.desktop", "deb", "system")
+
+	// The executable inside the read-only AppImage mount cannot be swapped, and a
+	// separately installed DEB must not redirect the user to the package manager.
+	appImage := updateidentity.ResolveInstallation(updateidentity.InstallationProbe{
+		Platform: updateidentity.PlatformLinux, Architecture: "amd64",
+		TargetPath:   filepath.Join(mount, "usr", "bin", "luxury-yacht"),
+		AppImagePath: image, AppImageMountPath: mount,
+		PackageMarker: hostPackageMarker,
+	})
+	require.Equal(t, updateidentity.InstallationEligibility{
+		CanCheck: true, Distribution: updateidentity.DistributionLinuxAppImage,
+		Reason:   updateidentity.ReasonLinuxAppImageIneligible,
+		Recovery: updateidentity.RecoveryLinuxAppImageDownload,
+	}, appImage)
+
+	// AppImage runtime variables leak into processes launched from another
+	// AppImage; they must not take automatic installs away from a portable copy.
+	portableExecutable := "/home/alice/.local/share/luxury-yacht/luxury-yacht"
+	portable := updateidentity.ResolveInstallation(updateidentity.InstallationProbe{
+		Platform: updateidentity.PlatformLinux, Architecture: "amd64",
+		TargetPath: portableExecutable, ParentWritable: true,
+		AppImagePath: "/home/alice/Applications/terminal.AppImage", AppImageMountPath: "/tmp/.mount_terminal",
+		Marker: marker(
+			filepath.Join(filepath.Dir(portableExecutable), updateidentity.InstallationMarkerName),
+			"app.luxury-yacht.desktop", "portable", "user",
+		),
+	})
+	require.Equal(t, updateidentity.InstallationEligibility{
+		CanCheck: true, CanInstall: true, Distribution: updateidentity.DistributionLinuxPortable,
+	}, portable)
+}

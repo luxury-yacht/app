@@ -129,6 +129,26 @@ The manual install defaults to
 `${XDG_DATA_HOME:-$HOME/.local/share}/luxury-yacht`. It is distinct from the
 developer-only unsigned install task above.
 
+## Build the Linux AppImage
+
+On a host of the target architecture, package the binary from
+`wails3 task linux:build` as an AppImage:
+
+```bash
+wails3 task linux:generate:appimage ARCH=amd64
+```
+
+The task generates the desktop entry and AppImage with the native
+`wails3 generate .desktop` and `wails3 generate appimage` commands and writes
+`bin/luxury-yacht-<version>-linux-x86_64.AppImage` (`aarch64` for ARM).
+[tools.sh](build/linux/appimage/tools.sh) seeds checksum-verified copies of the
+linuxdeploy and AppImage runtime releases that would otherwise come from moving
+`continuous` tags, and fails the build if the AppRun that Wails always downloads
+changes. Update a version and its digests together. The GTK bundling step needs
+`dpkg-architecture` on Debian-family build hosts. See
+[application updates](docs/workflows/application-updates.md#linux-distributions)
+for the AppImage's update behavior and host requirements.
+
 ## Versions
 
 The app version and development-tool versions have separate canonical sources. Scripts and workflows must read these sources rather than resolving versions dynamically.

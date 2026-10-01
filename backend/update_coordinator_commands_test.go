@@ -366,6 +366,29 @@ func TestResolveApplicationUpdateEligibilityUsesReleaseAndInstallIdentity(t *tes
 	require.Equal(t, updateidentity.BuildDisabledDevelopment, development.Status)
 }
 
+func TestResolveApplicationUpdateEligibilityChecksButNeverInstallsAppImageLaunches(t *testing.T) {
+	mount := t.TempDir()
+	executable := filepath.Join(mount, "usr", "bin", "luxury-yacht")
+	require.NoError(t, os.MkdirAll(filepath.Dir(executable), 0o755))
+	require.NoError(t, os.WriteFile(executable, []byte("binary"), 0o700))
+
+	eligibility, err := resolveApplicationUpdateEligibility(applicationUpdateRuntime{
+		Version: "v2.0.0", Now: time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC),
+		Platform: "linux", Architecture: "amd64", ExecutablePath: executable,
+		AppImagePath:      filepath.Join(t.TempDir(), "luxury-yacht-v2.0.0-linux-x86_64.AppImage"),
+		AppImageMountPath: mount,
+		PackageMarkerPath: filepath.Join(t.TempDir(), "missing-package-marker.json"),
+		UpdaterTargets:    []string{"linux/amd64"},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, updateidentity.BuildEnabled, eligibility.Status)
+	require.True(t, eligibility.CanCheck)
+	require.False(t, eligibility.CanInstall)
+	require.Equal(t, updateidentity.DistributionLinuxAppImage, eligibility.Installation.Distribution)
+	require.Equal(t, updateidentity.RecoveryLinuxAppImageDownload, eligibility.Installation.Recovery)
+}
+
 func TestNewUpdateCoordinatorDisablesOnTempSetupFailure(t *testing.T) {
 	app := newUpdateCoordinatorTestFixture(t, ApplicationUpdateOptions{
 		TempSetupError: errors.New("owned temp root unavailable"),

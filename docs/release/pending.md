@@ -1,5 +1,7 @@
 ### Added
 
+- Linux AppImage downloads for amd64 and arm64. The AppImage tells you when a new version is available and links to its download, but it cannot install updates itself. It currently needs GTK 4 and WebKitGTK 6.0 installed on a Debian or Ubuntu system.
+
 ### Changed
 
 ### Fixed

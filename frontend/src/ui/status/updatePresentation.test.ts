@@ -78,6 +78,23 @@ describe('getUpdatePresentation', () => {
     }
   );
 
+  it('sends AppImage launches to the release that carries the new AppImage', () => {
+    const presentation = getUpdatePresentation(
+      update({
+        status: appupdates.Status.StatusAvailable,
+        canInstall: false,
+        eligibilityReason: updateidentity.EligibilityReason.ReasonLinuxAppImageIneligible,
+        recoveryTarget: updateidentity.RecoveryTarget.RecoveryLinuxAppImageDownload,
+      })
+    );
+
+    expect(presentation?.primary).toMatchObject({
+      kind: 'recovery',
+      url: 'https://github.com/luxury-yacht/app/releases/tag/v2.0.0',
+    });
+    expect(presentation?.secondary?.kind).toBe('skip');
+  });
+
   it('renders no update surface for idle state', () => {
     expect(getUpdatePresentation(update({ status: appupdates.Status.StatusIdle }))).toBeNull();
   });

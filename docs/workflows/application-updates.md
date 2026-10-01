@@ -105,8 +105,8 @@ eligibility contract do not change.
 
 ### Linux distributions
 
-Each Linux architecture is built once. DEB, RPM, the portable installer, and
-the updater archive all consume that same production binary. DEB and RPM own
+Each Linux architecture is built once. DEB, RPM, the AppImage, the portable
+installer, and the updater archive all consume that same production binary. DEB and RPM own
 `/usr/share/luxury-yacht/install.json`, with `deb` or `rpm` distribution and
 `system` scope. The marker is removed with the package and never makes the
 package-owned executable replaceable by Wails.
@@ -132,6 +132,21 @@ temp root only when the full ownership marker matches and every child has an
 updater-owned staging or helper-log shape; lookalike roots and roots containing
 unknown entries are preserved. The portable runtime requires GTK 4 and WebKitGTK
 6.0; the archive README lists Debian/Ubuntu and Fedora/RHEL package names.
+
+The manual AppImage ending in `.AppImage` packages the same binary with the
+native `wails3 generate appimage`. It is notification-only: Wails replaces the
+running executable, and an AppImage's executable lives inside the read-only
+runtime mount rather than in the `.AppImage` file, so the app checks for
+releases and links to the release's AppImage but never stages an update. Wails
+recreates the AppDir from only the binary, icon, and desktop entry, so the
+AppImage carries no install marker. The runtime instead classifies a launch as
+an AppImage from the `APPIMAGE` and `APPDIR` variables the AppImage runtime
+exports, and only when the executable lies inside `APPDIR`; those variables
+leak into processes an AppImage starts, so they never reclassify a portable or
+package installation launched that way. The image bundles GTK but loads
+WebKitGTK's helper processes from the host's Debian multiarch path, so it
+requires GTK 4 and WebKitGTK 6.0 on a Debian-family host; it fails on Fedora
+and on hosts without those packages.
 
 The similarly versioned Linux archive ending in `-updater.tar.gz` is a
 single-entry tar containing only the executable. The explicit suffix prevents

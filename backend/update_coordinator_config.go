@@ -37,6 +37,8 @@ type applicationUpdateRuntime struct {
 	ExecutablePath    string
 	HomeDirectory     string
 	PackageMarkerPath string
+	AppImagePath      string
+	AppImageMountPath string
 	UpdaterTargets    []string
 }
 
@@ -267,6 +269,7 @@ func currentApplicationUpdateEligibility(now time.Time) (updateidentity.BuildEli
 		Version: Version, BetaExpiry: BetaExpiry, Now: now,
 		Server: updateidentity.CurrentBuildIsServer, Platform: runtime.GOOS, Architecture: runtime.GOARCH,
 		ExecutablePath: executablePath, HomeDirectory: homeDirectory,
+		AppImagePath: os.Getenv("APPIMAGE"), AppImageMountPath: os.Getenv("APPDIR"),
 		UpdaterTargets: UpdaterTargets,
 	})
 }
@@ -295,6 +298,7 @@ func resolveApplicationUpdateEligibility(runtimeInfo applicationUpdateRuntime) (
 		Platform: updateidentity.Platform(runtimeInfo.Platform), Architecture: runtimeInfo.Architecture,
 		ExecutablePath: runtimeInfo.ExecutablePath, HomeDirectory: runtimeInfo.HomeDirectory,
 		PackageMarkerPath: runtimeInfo.PackageMarkerPath,
+		AppImagePath:      runtimeInfo.AppImagePath, AppImageMountPath: runtimeInfo.AppImageMountPath,
 	})
 	if err != nil {
 		return disabledApplicationUpdateEligibility(), err

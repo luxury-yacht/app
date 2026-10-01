@@ -19,6 +19,10 @@ func TestResolveBuildGatesUpdaterInitializationAndInstallation(t *testing.T) {
 		CanCheck: true, Distribution: updateidentity.DistributionLinuxDEB,
 		Reason: updateidentity.ReasonLinuxPackageManaged, Recovery: updateidentity.RecoveryLinuxPackages,
 	}
+	appImage := updateidentity.InstallationEligibility{
+		CanCheck: true, Distribution: updateidentity.DistributionLinuxAppImage,
+		Reason: updateidentity.ReasonLinuxAppImageIneligible, Recovery: updateidentity.RecoveryLinuxAppImageDownload,
+	}
 
 	tests := []struct {
 		name  string
@@ -85,6 +89,18 @@ func TestResolveBuildGatesUpdaterInitializationAndInstallation(t *testing.T) {
 				Release:      updateidentity.ReleaseVersion{Version: "2.0.0-beta.3", Channel: updateidentity.ChannelBeta},
 				Installation: installable,
 				Recovery:     updateidentity.RecoveryMacDownload,
+			},
+		},
+		{
+			name: "expired AppImage beta points at the AppImage download",
+			probe: updateidentity.BuildProbe{
+				Version: "v2.0.0-beta.3", BetaExpiry: now.Add(-time.Hour), Now: now, Installation: appImage,
+			},
+			want: updateidentity.BuildEligibility{
+				Status:       updateidentity.BuildExpiredBeta,
+				Release:      updateidentity.ReleaseVersion{Version: "2.0.0-beta.3", Channel: updateidentity.ChannelBeta},
+				Installation: appImage,
+				Recovery:     updateidentity.RecoveryLinuxAppImageDownload,
 			},
 		},
 		{

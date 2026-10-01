@@ -88,6 +88,8 @@ func RecoveryForDistribution(distribution Distribution) RecoveryTarget {
 		return RecoveryWindowsDownload
 	case DistributionLinuxPortable:
 		return RecoveryLinuxPortableDownload
+	case DistributionLinuxAppImage:
+		return RecoveryLinuxAppImageDownload
 	case DistributionLinuxDEB, DistributionLinuxRPM:
 		return RecoveryLinuxPackages
 	default:

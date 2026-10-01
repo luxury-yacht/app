@@ -27,6 +27,7 @@ const (
 	DistributionLinuxPortable Distribution = "linux-portable"
 	DistributionLinuxDEB      Distribution = "linux-deb"
 	DistributionLinuxRPM      Distribution = "linux-rpm"
+	DistributionLinuxAppImage Distribution = "linux-appimage"
 )
 
 type EligibilityReason string
@@ -39,6 +40,7 @@ const (
 	ReasonWindowsUnverifiedInstall EligibilityReason = "windows-unverified-install"
 	ReasonLinuxPackageManaged      EligibilityReason = "linux-package-managed"
 	ReasonLinuxPortableIneligible  EligibilityReason = "linux-portable-ineligible"
+	ReasonLinuxAppImageIneligible  EligibilityReason = "linux-appimage-ineligible"
 	ReasonUnsupportedDistribution  EligibilityReason = "unsupported-distribution"
 )
 
@@ -49,6 +51,7 @@ const (
 	RecoveryWindowsDownload       RecoveryTarget = "windows-download"
 	RecoveryLinuxPackages         RecoveryTarget = "linux-packages"
 	RecoveryLinuxPortableDownload RecoveryTarget = "linux-portable-download"
+	RecoveryLinuxAppImageDownload RecoveryTarget = "linux-appimage-download"
 	RecoveryDownloadOptions       RecoveryTarget = "download-options"
 )
 
@@ -80,6 +83,10 @@ type InstallationProbe struct {
 	WindowsMachineRegistered bool
 	Marker                   *MarkerCandidate
 	PackageMarker            *MarkerCandidate
+	// AppImagePath and AppImageMountPath are the APPIMAGE and APPDIR values the
+	// AppImage runtime exports to the process it launches.
+	AppImagePath      string
+	AppImageMountPath string
 }
 
 // InstallationEligibility distinguishes release discovery from in-place
@@ -193,6 +200,16 @@ func resolveWindowsInstallation(probe InstallationProbe) InstallationEligibility
 }
 
 func resolveLinuxInstallation(probe InstallationProbe) InstallationEligibility {
+	if runsFromAppImageMount(probe) {
+		// The runtime mount is read-only and Wails replaces the running
+		// executable, not the .AppImage file, so AppImages can only be notified.
+		return InstallationEligibility{
+			CanCheck:     true,
+			Distribution: DistributionLinuxAppImage,
+			Reason:       ReasonLinuxAppImageIneligible,
+			Recovery:     RecoveryLinuxAppImageDownload,
+		}
+	}
 	if !probe.PackageManagedTarget {
 		if portable, ok := resolveLinuxPortableInstallation(probe); ok {
 			return portable
@@ -235,6 +252,20 @@ func resolveLinuxPortableInstallation(probe InstallationProbe) (InstallationElig
 	}
 	result.CanInstall = true
 	return result, true
+}
+
+// runsFromAppImageMount requires the target to live inside the advertised mount
+// because AppImage runtime variables are inherited by processes an AppImage
+// launches, including unrelated portable or package installations.
+func runsFromAppImageMount(probe InstallationProbe) bool {
+	image := filepath.Clean(probe.AppImagePath)
+	mount := filepath.Clean(probe.AppImageMountPath)
+	if !filepath.IsAbs(image) || !filepath.IsAbs(mount) || mount == string(filepath.Separator) {
+		return false
+	}
+	relative, err := filepath.Rel(mount, filepath.Clean(probe.TargetPath))
+	return err == nil && relative != "." && relative != ".." &&
+		!strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative)
 }
 
 func validAdjacentMarker(platform Platform, targetPath string, candidate *MarkerCandidate) (installationMarker, bool) {

@@ -664,11 +664,22 @@ func TestWailsProjectBuildsOnlyOnNativePlatformRunners(t *testing.T) {
 }
 
 func TestBuildDownloadsAreHardened(t *testing.T) {
-	appImageBuild := readTestFile(t, repositoryPath("build", "linux", "appimage", "build.sh"))
-	require.NotContains(t, appImageBuild, "wget ")
-	require.Contains(t, appImageBuild, `--proto "=https"`)
-	require.NotContains(t, appImageBuild, "/continuous/")
-	require.Contains(t, appImageBuild, "sha256sum -c -")
+	appImageTools := readTestFile(t, repositoryPath("build", "linux", "appimage", "tools.sh"))
+	require.NotContains(t, appImageTools, "wget ")
+	require.Contains(t, appImageTools, `--proto "=https"`)
+	require.NotContains(t, appImageTools, "/continuous/")
+	require.Contains(t, appImageTools, "sha256sum -c -")
+
+	// wails3 generate appimage downloads its tooling from moving release tags
+	// unless the pinned copies are seeded first and the runtime is passed through
+	// linuxdeploy; Wails' unconditional AppRun download is verified afterwards.
+	linuxTaskfile := readTestFile(t, repositoryPath("build", "linux", "Taskfile.yml"))
+	seed := "tools.sh fetch"
+	generate := "wails3 generate appimage"
+	verify := "tools.sh verify-apprun"
+	require.Contains(t, linuxTaskfile, "LDAI_RUNTIME_FILE:")
+	require.Less(t, strings.Index(linuxTaskfile, seed), strings.Index(linuxTaskfile, generate))
+	require.Less(t, strings.Index(linuxTaskfile, generate), strings.Index(linuxTaskfile, verify))
 }
 
 func TestWailsProjectGeneratesModernMacOSIconAssets(t *testing.T) {
@@ -855,7 +866,9 @@ func TestReleaseArtifactsPreserveVersionPlatformAndArchitectureIdentity(t *testi
 	require.Contains(t, workflow, "linux:generate:deb ARCH=${{ matrix.arch }}")
 	require.Contains(t, workflow, "linux:generate:rpm ARCH=${{ matrix.arch }}")
 	require.Contains(t, workflow, "linux:generate:portable ARCH=${{ matrix.arch }}")
+	require.Contains(t, workflow, "linux:generate:appimage ARCH=${{ matrix.arch }}")
 	require.Contains(t, workflow, "bin/*-linux-*.tar.gz")
+	require.Contains(t, workflow, "bin/*-linux-*.AppImage")
 
 	linuxTaskfile := readTestFile(t, repositoryPath("build", "linux", "Taskfile.yml"))
 	require.Contains(t, linuxTaskfile, "go run ./cmd/project release-artifact-name")

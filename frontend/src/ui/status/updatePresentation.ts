@@ -109,6 +109,8 @@ const recoveryActionForTarget = (
       return { kind: 'recovery', label: 'View Linux Packages', url: DOWNLOADS_URL };
     case 'linux-portable-download':
       return { kind: 'recovery', label: 'View Portable Download', url: releaseURL(update) };
+    case 'linux-appimage-download':
+      return { kind: 'recovery', label: 'View AppImage Download', url: releaseURL(update) };
     case 'download-options':
       return { kind: 'recovery', label: 'View Download Options', url: DOWNLOADS_URL };
     default:
@@ -163,6 +165,15 @@ const recoveryPresentation = (
         action: action({
           kind: 'recovery',
           label: 'View Portable Download',
+          url: releaseURL(update),
+        }),
+      };
+    case 'linux-appimage-ineligible':
+      return {
+        explanation: 'AppImages cannot replace themselves. Download the latest AppImage to update.',
+        action: action({
+          kind: 'recovery',
+          label: 'View AppImage Download',
           url: releaseURL(update),
         }),
       };

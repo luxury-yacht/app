@@ -19,6 +19,8 @@ type ProbeOptions struct {
 	ExecutablePath    string
 	HomeDirectory     string
 	PackageMarkerPath string
+	AppImagePath      string
+	AppImageMountPath string
 }
 
 // CollectInstallationProbe gathers the filesystem evidence consumed by
@@ -41,6 +43,8 @@ func CollectInstallationProbe(options ProbeOptions) (InstallationProbe, error) {
 		probe.WindowsMachineRegistered = windowsinstall.LegacyMachineInstall(probe.TargetPath)
 		return probe, nil
 	case PlatformLinux:
+		probe.AppImagePath = options.AppImagePath
+		probe.AppImageMountPath = options.AppImageMountPath
 		return collectLinuxProbe(probe, options.PackageMarkerPath)
 	default:
 		return probe, nil

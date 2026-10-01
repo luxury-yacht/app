@@ -167,6 +167,8 @@ func TestReleaseArtifactNamePreservesVersionPlatformAndArchitecture(t *testing.T
 		{goos: "darwin", arch: "arm64", format: "updater", want: "luxury-yacht-v2.0.0-darwin-arm64.zip"},
 		{goos: "windows", arch: "amd64", format: "updater", want: "luxury-yacht-v2.0.0-windows-amd64.exe"},
 		{goos: "linux", arch: "amd64", format: "portable", want: "luxury-yacht-v2.0.0-linux-amd64-portable.tar.gz"},
+		{goos: "linux", arch: "amd64", format: "appimage", want: "luxury-yacht-v2.0.0-linux-x86_64.AppImage"},
+		{goos: "linux", arch: "arm64", format: "appimage", want: "luxury-yacht-v2.0.0-linux-aarch64.AppImage"},
 		{goos: "linux", arch: "arm64", format: "updater", want: "luxury-yacht-v2.0.0-linux-arm64-updater.tar.gz"},
 	} {
 		t.Run(test.goos+"-"+test.arch+"-"+test.format, func(t *testing.T) {
@@ -193,6 +195,7 @@ func TestReleaseArtifactNameRejectsUnsupportedTargets(t *testing.T) {
 		{goos: "linux", arch: "arm64", format: "dmg"},
 		{goos: "linux", arch: "ppc64", format: "deb"},
 		{goos: "linux", arch: "ppc64", format: "rpm"},
+		{goos: "linux", arch: "ppc64", format: "appimage"},
 		{goos: "windows", arch: "arm64", format: "zip"},
 		{goos: "windows", arch: "386", format: "exe"},
 		{goos: "freebsd", arch: "amd64", format: "zip"},

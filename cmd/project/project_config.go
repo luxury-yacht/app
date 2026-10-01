@@ -28,7 +28,7 @@ const (
 	projectReleaseRepo  = "luxury-yacht/app"
 )
 
-var projectReleaseAssets = []string{".deb", ".rpm", ".dmg", ".exe", ".tar.gz", ".zip"}
+var projectReleaseAssets = []string{".deb", ".rpm", ".dmg", ".exe", ".tar.gz", ".zip", ".AppImage"}
 
 type projectMetadata struct {
 	Info struct {
@@ -221,9 +221,13 @@ func linuxReleaseArtifactName(name, version, goarch, format string) string {
 	if format == "deb" && isReleaseArchitecture(goarch) {
 		return fmt.Sprintf("%s_%s_linux_%s.deb", name, version, goarch)
 	}
-	rpmArch := map[string]string{"amd64": "x86_64", "arm64": "aarch64"}[goarch]
-	if format == "rpm" && rpmArch != "" {
-		return fmt.Sprintf("%s-%s-linux-%s.rpm", name, version, rpmArch)
+	// RPM and AppImage tooling name architectures by their kernel names.
+	machineArch := map[string]string{"amd64": "x86_64", "arm64": "aarch64"}[goarch]
+	if format == "rpm" && machineArch != "" {
+		return fmt.Sprintf("%s-%s-linux-%s.rpm", name, version, machineArch)
+	}
+	if format == "appimage" && machineArch != "" {
+		return fmt.Sprintf("%s-%s-linux-%s.AppImage", name, version, machineArch)
 	}
 	return ""
 }

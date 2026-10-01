@@ -63,6 +63,28 @@ func TestFindReleaseAssetsUsesConfiguredDirectory(t *testing.T) {
 	}
 }
 
+func TestReleaseConfigPublishesLinuxAppImages(t *testing.T) {
+	artifactDir := t.TempDir()
+	var want []string
+	for _, name := range []string{
+		"luxury-yacht-v2.0.0-linux-aarch64.AppImage",
+		"luxury-yacht-v2.0.0-linux-x86_64.AppImage",
+	} {
+		path := filepath.Join(artifactDir, "artifacts-linux", name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte("appimage"), 0o600))
+		want = append(want, path)
+	}
+
+	assets, err := findReleaseAssets(releaseConfig{
+		artifactsDir:  artifactDir,
+		releaseAssets: newReleaseConfig(projectFacts{}).releaseAssets,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, want, assets)
+}
+
 func TestFindReleaseAssetsRejectsDuplicateBasenames(t *testing.T) {
 	artifactDir := t.TempDir()
 	for _, platform := range []string{"linux-amd64", "linux-arm64"} {
