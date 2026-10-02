@@ -83,10 +83,6 @@ type InstallationProbe struct {
 	WindowsMachineRegistered bool
 	Marker                   *MarkerCandidate
 	PackageMarker            *MarkerCandidate
-	// AppImagePath and AppImageMountPath are the APPIMAGE and APPDIR values the
-	// AppImage runtime exports to the process it launches.
-	AppImagePath      string
-	AppImageMountPath string
 }
 
 // InstallationEligibility distinguishes release discovery from in-place
@@ -200,19 +196,9 @@ func resolveWindowsInstallation(probe InstallationProbe) InstallationEligibility
 }
 
 func resolveLinuxInstallation(probe InstallationProbe) InstallationEligibility {
-	if runsFromAppImageMount(probe) {
-		// The runtime mount is read-only and Wails replaces the running
-		// executable, not the .AppImage file, so AppImages can only be notified.
-		return InstallationEligibility{
-			CanCheck:     true,
-			Distribution: DistributionLinuxAppImage,
-			Reason:       ReasonLinuxAppImageIneligible,
-			Recovery:     RecoveryLinuxAppImageDownload,
-		}
-	}
 	if !probe.PackageManagedTarget {
-		if portable, ok := resolveLinuxPortableInstallation(probe); ok {
-			return portable
+		if userInstallation, ok := resolveLinuxUserInstallation(probe); ok {
+			return userInstallation
 		}
 	}
 	if probe.PackageMarker != nil {
@@ -236,36 +222,38 @@ func resolveLinuxInstallation(probe InstallationProbe) InstallationEligibility {
 	return unsupportedInstallation()
 }
 
-func resolveLinuxPortableInstallation(probe InstallationProbe) (InstallationEligibility, bool) {
+// resolveLinuxUserInstallation trusts only a user-scoped marker beside the
+// executable. Portable installations replace themselves in place. An AppImage
+// can only be notified: Wails replaces the running executable, which lives
+// inside the image rather than in the .AppImage file the user launches.
+func resolveLinuxUserInstallation(probe InstallationProbe) (InstallationEligibility, bool) {
 	marker, ok := validAdjacentMarker(probe.Platform, probe.TargetPath, probe.Marker)
-	if !ok || marker.Distribution != "portable" || marker.Scope != "user" {
+	if !ok || marker.Scope != "user" {
 		return InstallationEligibility{}, false
 	}
-	result := InstallationEligibility{
-		CanCheck:     true,
-		Distribution: DistributionLinuxPortable,
-	}
-	if !probe.ParentWritable {
-		result.Reason = ReasonLinuxPortableIneligible
-		result.Recovery = RecoveryLinuxPortableDownload
+	switch marker.Distribution {
+	case "portable":
+		result := InstallationEligibility{
+			CanCheck:     true,
+			Distribution: DistributionLinuxPortable,
+		}
+		if !probe.ParentWritable {
+			result.Reason = ReasonLinuxPortableIneligible
+			result.Recovery = RecoveryLinuxPortableDownload
+			return result, true
+		}
+		result.CanInstall = true
 		return result, true
+	case "appimage":
+		return InstallationEligibility{
+			CanCheck:     true,
+			Distribution: DistributionLinuxAppImage,
+			Reason:       ReasonLinuxAppImageIneligible,
+			Recovery:     RecoveryLinuxAppImageDownload,
+		}, true
+	default:
+		return InstallationEligibility{}, false
 	}
-	result.CanInstall = true
-	return result, true
-}
-
-// runsFromAppImageMount requires the target to live inside the advertised mount
-// because AppImage runtime variables are inherited by processes an AppImage
-// launches, including unrelated portable or package installations.
-func runsFromAppImageMount(probe InstallationProbe) bool {
-	image := filepath.Clean(probe.AppImagePath)
-	mount := filepath.Clean(probe.AppImageMountPath)
-	if !filepath.IsAbs(image) || !filepath.IsAbs(mount) || mount == string(filepath.Separator) {
-		return false
-	}
-	relative, err := filepath.Rel(mount, filepath.Clean(probe.TargetPath))
-	return err == nil && relative != "." && relative != ".." &&
-		!strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative)
 }
 
 func validAdjacentMarker(platform Platform, targetPath string, candidate *MarkerCandidate) (installationMarker, bool) {

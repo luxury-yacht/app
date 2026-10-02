@@ -664,22 +664,20 @@ func TestWailsProjectBuildsOnlyOnNativePlatformRunners(t *testing.T) {
 }
 
 func TestBuildDownloadsAreHardened(t *testing.T) {
-	appImageTools := readTestFile(t, repositoryPath("build", "linux", "appimage", "tools.sh"))
-	require.NotContains(t, appImageTools, "wget ")
-	require.Contains(t, appImageTools, `--proto "=https"`)
-	require.NotContains(t, appImageTools, "/continuous/")
-	require.Contains(t, appImageTools, "sha256sum -c -")
+	runtimeFetch := readTestFile(t, repositoryPath("build", "linux", "appimage", "fetch-runtime.sh"))
+	require.NotContains(t, runtimeFetch, "wget ")
+	require.Contains(t, runtimeFetch, `--proto "=https"`)
+	require.NotContains(t, runtimeFetch, "/continuous/")
+	require.Contains(t, runtimeFetch, "sha256sum -c -")
 
-	// wails3 generate appimage downloads its tooling from moving release tags
-	// unless the pinned copies are seeded first and the runtime is passed through
-	// linuxdeploy; Wails' unconditional AppRun download is verified afterwards.
+	// wails3 generate appimage downloads linuxdeploy and AppRun from moving
+	// release tags, so the AppImage is assembled from the pinned runtime instead.
 	linuxTaskfile := readTestFile(t, repositoryPath("build", "linux", "Taskfile.yml"))
-	seed := "tools.sh fetch"
-	generate := "wails3 generate appimage"
-	verify := "tools.sh verify-apprun"
-	require.Contains(t, linuxTaskfile, "LDAI_RUNTIME_FILE:")
-	require.Less(t, strings.Index(linuxTaskfile, seed), strings.Index(linuxTaskfile, generate))
-	require.Less(t, strings.Index(linuxTaskfile, generate), strings.Index(linuxTaskfile, verify))
+	require.NotContains(t, linuxTaskfile, "wails3 generate appimage")
+	fetch := strings.Index(linuxTaskfile, "fetch-runtime.sh")
+	create := strings.Index(linuxTaskfile, "create-linux-appimage")
+	require.NotEqual(t, -1, fetch)
+	require.Less(t, fetch, create)
 }
 
 func TestWailsProjectGeneratesModernMacOSIconAssets(t *testing.T) {
@@ -858,6 +856,21 @@ func TestReleaseWorkflowDryRunPreparesTheExactReleaseInputsWithoutPublishing(t *
 	require.NotContains(t, releaseJob, "release:prepare-updater-manifest")
 }
 
+func TestLinuxReleaseBinariesKeepTheUbuntu2404GlibcFloor(t *testing.T) {
+	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
+
+	// A binary's glibc requirement comes from the build host, so Linux releases
+	// build on pinned Ubuntu 24.04 runners and are checked before packaging.
+	require.Contains(t, workflow, "- runner: ubuntu-24.04\n            goos: linux\n            arch: amd64")
+	require.Contains(t, workflow, "- runner: ubuntu-24.04-arm\n            goos: linux\n            arch: arm64")
+	build := strings.Index(workflow, "wails3 task linux:build ARCH=${{ matrix.arch }}")
+	validate := strings.Index(workflow, "wails3 task release:validate-linux-glibc")
+	firstPackage := strings.Index(workflow, "wails3 task linux:generate:deb")
+	require.NotEqual(t, -1, build)
+	require.Less(t, build, validate)
+	require.Less(t, validate, firstPackage)
+}
+
 func TestReleaseArtifactsPreserveVersionPlatformAndArchitectureIdentity(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
 	require.Contains(t, workflow, "bin/*-macos-*.dmg")
@@ -867,6 +880,7 @@ func TestReleaseArtifactsPreserveVersionPlatformAndArchitectureIdentity(t *testi
 	require.Contains(t, workflow, "linux:generate:rpm ARCH=${{ matrix.arch }}")
 	require.Contains(t, workflow, "linux:generate:portable ARCH=${{ matrix.arch }}")
 	require.Contains(t, workflow, "linux:generate:appimage ARCH=${{ matrix.arch }}")
+	require.Contains(t, workflow, "linux:smoke:appimage ARCH=${{ matrix.arch }}")
 	require.Contains(t, workflow, "bin/*-linux-*.tar.gz")
 	require.Contains(t, workflow, "bin/*-linux-*.AppImage")
 

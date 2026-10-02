@@ -553,10 +553,10 @@ func TestPortableArchiveWritersRejectInvalidOrChangedPayloads(t *testing.T) {
 
 func TestPortableInputHelpersReportMissingFiles(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
-	require.ErrorContains(t, validatePortableArtifactInput("binary", missing), "inspect Linux portable binary")
+	require.ErrorContains(t, validateLinuxArtifactInput("portable", "binary", missing), "inspect Linux portable binary")
 
 	metadata := testInstallMetadata()
-	_, err := renderLinuxPortableInput(missing, metadata, "amd64")
+	_, err := renderLinuxArtifactInput("portable", missing, metadata, "amd64")
 	require.ErrorContains(t, err, "read Linux portable input")
 }
 

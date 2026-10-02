@@ -1,0 +1,48 @@
+#!/bin/sh
+# Starts __APP_NAME__ from the AppImage with the host's GTK 4 and WebKitGTK 6.0.
+# The environment is left unchanged so processes the app starts, such as
+# kubeconfig credential plugins, run exactly as they would outside the AppImage.
+
+set -eu
+
+appdir=$(dirname -- "$(readlink -f -- "$0")")
+binary=$appdir/usr/bin/__APP_BINARY_NAME__
+
+report_missing_libraries() {
+    message=$1
+    printf '%s\n' "$message" >&2
+    # Desktop launches have no terminal, so also try a desktop dialog.
+    if [ -t 2 ]; then
+        return 0
+    fi
+    if command -v zenity >/dev/null 2>&1 &&
+        zenity --error --title='__APP_NAME__' --text="$message" >/dev/null 2>&1; then
+        return 0
+    fi
+    if command -v kdialog >/dev/null 2>&1 &&
+        kdialog --title '__APP_NAME__' --error "$message" >/dev/null 2>&1; then
+        return 0
+    fi
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send '__APP_NAME__ cannot start' "$message" >/dev/null 2>&1 || true
+    fi
+}
+
+# Ask the glibc loader which libraries it cannot resolve before starting, so a
+# host without GTK 4 or WebKitGTK 6.0 gets install guidance instead of a loader
+# error that desktop launches never show. Only glibc honors the trace request.
+if getconf GNU_LIBC_VERSION >/dev/null 2>&1; then
+    missing=$(LD_TRACE_LOADED_OBJECTS=1 "$binary" 2>&1 | grep 'not found' || true)
+    if [ -n "$missing" ]; then
+        report_missing_libraries "__APP_NAME__ cannot start because these system libraries are missing or too old:
+$missing
+
+Install GTK 4 and WebKitGTK 6.0, then start __APP_NAME__ again:
+  Debian 13 / Ubuntu 24.04 or newer: sudo apt install libgtk-4-1 libwebkitgtk-6.0-4
+  Fedora / RHEL-family: sudo dnf install gtk4 webkitgtk6.0
+  Arch Linux: sudo pacman -S gtk4 webkitgtk-6.0"
+        exit 127
+    fi
+fi
+
+exec "$binary" "$@"

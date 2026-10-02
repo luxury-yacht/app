@@ -131,23 +131,45 @@ developer-only unsigned install task above.
 
 ## Build the Linux AppImage
 
-On a host of the target architecture, package the binary from
-`wails3 task linux:build` as an AppImage:
+Package the binary from `wails3 task linux:build` as an AppImage:
 
 ```bash
 wails3 task linux:generate:appimage ARCH=amd64
 ```
 
-The task generates the desktop entry and AppImage with the native
-`wails3 generate .desktop` and `wails3 generate appimage` commands and writes
-`bin/luxury-yacht-<version>-linux-x86_64.AppImage` (`aarch64` for ARM).
-[tools.sh](build/linux/appimage/tools.sh) seeds checksum-verified copies of the
-linuxdeploy and AppImage runtime releases that would otherwise come from moving
-`continuous` tags, and fails the build if the AppRun that Wails always downloads
-changes. Update a version and its digests together. The GTK bundling step needs
-`dpkg-architecture` on Debian-family build hosts. See
+The AppImage uses the host's GTK 4 and WebKitGTK 6.0 instead of bundling them.
+WebKitGTK starts its helper processes and bubblewrap sandbox from paths compiled
+into the library, so a bundled copy cannot find them on other distributions.
+The image holds only the binary, the portable desktop entry and icon, an
+installation marker, and an [AppRun](build/linux/appimage/AppRun) that explains
+missing libraries and otherwise leaves the environment unchanged.
+`go run ./cmd/project create-linux-appimage` appends a squashfs of those files,
+built with `squashfs-tools`, to the AppImage runtime that
+[fetch-runtime.sh](build/linux/appimage/fetch-runtime.sh) downloads and checks
+against pinned digests. Update the runtime version and its digests together.
+The task writes `bin/luxury-yacht-<version>-linux-x86_64.AppImage` (`aarch64`
+for ARM).
+
+The release workflow then runs
+[smoke-test.sh](build/linux/appimage/smoke-test.sh) through
+`wails3 task linux:smoke:appimage ARCH=amd64`. It starts the AppImage on Ubuntu,
+Debian, Fedora, and Arch Linux in privileged Docker containers and checks the
+missing-library guidance, the FUSE launch, WebKit's sandboxed helpers, and the
+app's environment. See
 [application updates](docs/workflows/application-updates.md#linux-distributions)
-for the AppImage's update behavior and host requirements.
+for the AppImage's update behavior.
+
+## Linux Release Compatibility
+
+Linux releases support Ubuntu 24.04, Debian 13, Fedora 40, and newer
+distributions that ship GTK 4 and WebKitGTK 6.0. A binary's glibc requirement
+comes from the host that built it, not from the code: a Fedora 44 build needs
+glibc 2.38 because its headers select `__isoc23_strtol`. Release binaries
+therefore build on pinned `ubuntu-24.04` runners, and
+`wails3 task release:validate-linux-glibc` fails the release when
+`bin/luxury-yacht` needs a newer glibc than Ubuntu 24.04's 2.39, naming the
+symbols responsible. Change the floor in `cmd/project/linux_glibc.go` and the
+runners together, and only when dropping Ubuntu 24.04.
 
 ## Versions
 

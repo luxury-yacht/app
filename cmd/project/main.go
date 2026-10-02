@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|create-linux-portable-artifacts|create-windows-updater-artifact|fmt|go-mod-update|go-mod-update-check|install-unsigned|prepare-release-updater-manifest|product-name|release-app|release-artifact-name|release-draft-drill|release-site|reset|validate-linux-updater|validate-macos-updater|validate-release-tag|validate-windows-updater>"
+const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|create-linux-appimage|create-linux-portable-artifacts|create-windows-updater-artifact|fmt|go-mod-update|go-mod-update-check|install-unsigned|prepare-release-updater-manifest|product-name|release-app|release-artifact-name|release-draft-drill|release-site|reset|validate-linux-glibc|validate-linux-updater|validate-macos-updater|validate-release-tag|validate-windows-updater>"
 
 var projectCommands = map[string]func() error{
 	"backend-coverage":                 runBackendCoverage,
@@ -18,6 +18,7 @@ var projectCommands = map[string]func() error{
 	"clean-build":                      func() error { return cleanBuildOutputs(defaultCleanConfig()) },
 	"clean-frontend":                   func() error { return cleanFrontendOutputs(defaultCleanConfig()) },
 	"config":                           func() error { return writeProjectConfig(os.Stdout) },
+	"create-linux-appimage":            runCreateLinuxAppImage,
 	"create-linux-portable-artifacts":  runCreateLinuxPortableArtifacts,
 	"create-windows-updater-artifact":  runCreateWindowsUpdaterArtifact,
 	"fmt":                              checkGoFormatting,
@@ -31,6 +32,7 @@ var projectCommands = map[string]func() error{
 	"release-draft-drill":              runConfiguredReleaseDraftDrill,
 	"release-site":                     publishConfiguredSiteVersion,
 	"reset":                            resetConfiguredAppState,
+	"validate-linux-glibc":             runLinuxGlibcValidation,
 	"validate-linux-updater":           runLinuxUpdaterArchiveValidation,
 	"validate-macos-updater":           runMacOSUpdaterArchiveValidation,
 	"validate-windows-updater":         runWindowsUpdaterExecutableValidation,

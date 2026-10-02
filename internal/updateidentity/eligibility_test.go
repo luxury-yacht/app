@@ -383,6 +383,14 @@ func TestResolveInstallationValidatesEveryMarkerIdentityField(t *testing.T) {
 			want: unsupported,
 		},
 		{
+			name: "Linux AppImage system scope",
+			probe: updateidentity.InstallationProbe{
+				Platform: updateidentity.PlatformLinux, Architecture: "amd64", TargetPath: linuxExecutable,
+				Marker: marker(linuxMarkerPath, "app.luxury-yacht.desktop", "appimage", "system"),
+			},
+			want: unsupported,
+		},
+		{
 			name: "Linux package missing marker",
 			probe: updateidentity.InstallationProbe{
 				Platform: updateidentity.PlatformLinux, Architecture: "amd64", TargetPath: "/usr/local/bin/luxury-yacht",
@@ -474,37 +482,24 @@ func marker(path, product, distribution, scope string) *updateidentity.MarkerCan
 func TestResolveInstallationKeepsAppImageLaunchesNotificationOnly(t *testing.T) {
 	t.Parallel()
 
-	const mount = "/tmp/.mount_luxuryAbC123"
-	const image = "/home/alice/Applications/luxury-yacht-v2.0.0-linux-x86_64.AppImage"
-	hostPackageMarker := marker("/usr/share/luxury-yacht/install.json", "app.luxury-yacht.desktop", "deb", "system")
-
-	// The executable inside the read-only AppImage mount cannot be swapped, and a
-	// separately installed DEB must not redirect the user to the package manager.
+	// Wails replaces the running executable, which for an AppImage is a copy
+	// inside the image rather than the .AppImage file. Even an extracted,
+	// writable image must only notify, and a separately installed DEB must not
+	// redirect the user to the package manager.
+	executable := "/home/alice/Applications/squashfs-root/usr/bin/luxury-yacht"
 	appImage := updateidentity.ResolveInstallation(updateidentity.InstallationProbe{
 		Platform: updateidentity.PlatformLinux, Architecture: "amd64",
-		TargetPath:   filepath.Join(mount, "usr", "bin", "luxury-yacht"),
-		AppImagePath: image, AppImageMountPath: mount,
-		PackageMarker: hostPackageMarker,
+		TargetPath: executable, ParentWritable: true,
+		Marker: marker(
+			filepath.Join(filepath.Dir(executable), updateidentity.InstallationMarkerName),
+			"app.luxury-yacht.desktop", "appimage", "user",
+		),
+		PackageMarker: marker("/usr/share/luxury-yacht/install.json", "app.luxury-yacht.desktop", "deb", "system"),
 	})
+
 	require.Equal(t, updateidentity.InstallationEligibility{
 		CanCheck: true, Distribution: updateidentity.DistributionLinuxAppImage,
 		Reason:   updateidentity.ReasonLinuxAppImageIneligible,
 		Recovery: updateidentity.RecoveryLinuxAppImageDownload,
 	}, appImage)
-
-	// AppImage runtime variables leak into processes launched from another
-	// AppImage; they must not take automatic installs away from a portable copy.
-	portableExecutable := "/home/alice/.local/share/luxury-yacht/luxury-yacht"
-	portable := updateidentity.ResolveInstallation(updateidentity.InstallationProbe{
-		Platform: updateidentity.PlatformLinux, Architecture: "amd64",
-		TargetPath: portableExecutable, ParentWritable: true,
-		AppImagePath: "/home/alice/Applications/terminal.AppImage", AppImageMountPath: "/tmp/.mount_terminal",
-		Marker: marker(
-			filepath.Join(filepath.Dir(portableExecutable), updateidentity.InstallationMarkerName),
-			"app.luxury-yacht.desktop", "portable", "user",
-		),
-	})
-	require.Equal(t, updateidentity.InstallationEligibility{
-		CanCheck: true, CanInstall: true, Distribution: updateidentity.DistributionLinuxPortable,
-	}, portable)
 }

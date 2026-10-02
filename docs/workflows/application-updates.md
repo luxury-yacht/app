@@ -133,20 +133,16 @@ updater-owned staging or helper-log shape; lookalike roots and roots containing
 unknown entries are preserved. The portable runtime requires GTK 4 and WebKitGTK
 6.0; the archive README lists Debian/Ubuntu and Fedora/RHEL package names.
 
-The manual AppImage ending in `.AppImage` packages the same binary with the
-native `wails3 generate appimage`. It is notification-only: Wails replaces the
-running executable, and an AppImage's executable lives inside the read-only
-runtime mount rather than in the `.AppImage` file, so the app checks for
-releases and links to the release's AppImage but never stages an update. Wails
-recreates the AppDir from only the binary, icon, and desktop entry, so the
-AppImage carries no install marker. The runtime instead classifies a launch as
-an AppImage from the `APPIMAGE` and `APPDIR` variables the AppImage runtime
-exports, and only when the executable lies inside `APPDIR`; those variables
-leak into processes an AppImage starts, so they never reclassify a portable or
-package installation launched that way. The image bundles GTK but loads
-WebKitGTK's helper processes from the host's Debian multiarch path, so it
-requires GTK 4 and WebKitGTK 6.0 on a Debian-family host; it fails on Fedora
-and on hosts without those packages.
+The manual AppImage ending in `.AppImage` packages the same binary and, like
+the portable installer, uses the host's GTK 4 and WebKitGTK 6.0, so it runs on
+any distribution that provides them. It carries a `luxury-yacht.install.json`
+marker beside the executable with `appimage` distribution and `user` scope. It
+is notification-only: Wails replaces the running executable, and an AppImage's
+executable lives inside the image rather than in the `.AppImage` file the user
+launches, so the app checks for releases and links to the release's AppImage
+but never stages an update, even from an extracted, writable copy. Its AppRun
+leaves the environment unchanged, so credential plugins and other processes the
+app starts never inherit AppImage library or Python paths.
 
 The similarly versioned Linux archive ending in `-updater.tar.gz` is a
 single-entry tar containing only the executable. The explicit suffix prevents

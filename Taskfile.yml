@@ -232,6 +232,11 @@ tasks:
     cmds:
       - go run ./cmd/project validate-macos-updater
 
+  release:validate-linux-glibc:
+    desc: Fails when the Linux binary needs a newer glibc than Ubuntu 24.04 provides
+    cmds:
+      - go run ./cmd/project validate-linux-glibc
+
   release:validate-linux-updater:
     desc: Validates the portable Linux updater archive through Wails extraction
     cmds:

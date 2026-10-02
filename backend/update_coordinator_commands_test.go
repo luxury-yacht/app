@@ -371,12 +371,16 @@ func TestResolveApplicationUpdateEligibilityChecksButNeverInstallsAppImageLaunch
 	executable := filepath.Join(mount, "usr", "bin", "luxury-yacht")
 	require.NoError(t, os.MkdirAll(filepath.Dir(executable), 0o755))
 	require.NoError(t, os.WriteFile(executable, []byte("binary"), 0o700))
+	// The AppImage ships this marker beside the executable inside the image.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(filepath.Dir(executable), updateidentity.InstallationMarkerName),
+		[]byte(`{"schemaVersion":1,"productIdentifier":"app.luxury-yacht.desktop","distribution":"appimage","scope":"user"}`),
+		0o644,
+	))
 
 	eligibility, err := resolveApplicationUpdateEligibility(applicationUpdateRuntime{
 		Version: "v2.0.0", Now: time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC),
 		Platform: "linux", Architecture: "amd64", ExecutablePath: executable,
-		AppImagePath:      filepath.Join(t.TempDir(), "luxury-yacht-v2.0.0-linux-x86_64.AppImage"),
-		AppImageMountPath: mount,
 		PackageMarkerPath: filepath.Join(t.TempDir(), "missing-package-marker.json"),
 		UpdaterTargets:    []string{"linux/amd64"},
 	})

@@ -12,13 +12,15 @@ runs:
       if: ${{ inputs.install-linux-deps == 'true' && runner.os == 'Linux' }}
       shell: bash
       run: |
-        # Wails v3's default Linux backend uses GTK4 and WebKitGTK 6.
+        # Wails v3's default Linux backend uses GTK4 and WebKitGTK 6. The AppImage
+        # is a squashfs image built with squashfs-tools.
         if dpkg-query -W -f='${Status}' libwebkitgtk-6.0-dev 2>/dev/null | grep -q "install ok installed" \
-          && dpkg-query -W -f='${Status}' rpm 2>/dev/null | grep -q "install ok installed"; then
+          && dpkg-query -W -f='${Status}' rpm 2>/dev/null | grep -q "install ok installed" \
+          && dpkg-query -W -f='${Status}' squashfs-tools 2>/dev/null | grep -q "install ok installed"; then
           exit 0
         fi
         sudo apt-get update
-        sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev rpm
+        sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev rpm squashfs-tools
 
     - name: Setup Mise toolchain
       uses: jdx/mise-action@v4

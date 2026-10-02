@@ -104,12 +104,12 @@ func createLinuxPortableArtifacts(config linuxPortableArtifactsConfig) (linuxPor
 		"icon": config.IconPath, "installer": config.InstallerPath,
 		"license": config.LicensePath, "marker": config.MarkerPath, "readme": config.ReadmePath,
 	} {
-		if err := validatePortableArtifactInput(label, path); err != nil {
+		if err := validateLinuxArtifactInput("portable", label, path); err != nil {
 			return linuxPortableArtifacts{}, err
 		}
 	}
 
-	desktop, err := renderLinuxPortableInput(config.DesktopPath, config.Metadata, architecture)
+	desktop, err := renderLinuxArtifactInput("portable", config.DesktopPath, config.Metadata, architecture)
 	if err != nil {
 		return linuxPortableArtifacts{}, err
 	}
@@ -119,18 +119,18 @@ func createLinuxPortableArtifacts(config linuxPortableArtifactsConfig) (linuxPor
 			portableExecutablePlaceholder,
 		)
 	}
-	installer, err := renderLinuxPortableInput(config.InstallerPath, config.Metadata, architecture)
+	installer, err := renderLinuxArtifactInput("portable", config.InstallerPath, config.Metadata, architecture)
 	if err != nil {
 		return linuxPortableArtifacts{}, err
 	}
-	marker, err := renderLinuxPortableInput(config.MarkerPath, config.Metadata, architecture)
+	marker, err := renderLinuxArtifactInput("portable", config.MarkerPath, config.Metadata, architecture)
 	if err != nil {
 		return linuxPortableArtifacts{}, err
 	}
 	if err := validateRenderedPortableMarker(marker, binaryName); err != nil {
 		return linuxPortableArtifacts{}, err
 	}
-	readme, err := renderLinuxPortableInput(config.ReadmePath, config.Metadata, architecture)
+	readme, err := renderLinuxArtifactInput("portable", config.ReadmePath, config.Metadata, architecture)
 	if err != nil {
 		return linuxPortableArtifacts{}, err
 	}
@@ -170,24 +170,26 @@ func createLinuxPortableArtifacts(config linuxPortableArtifactsConfig) (linuxPor
 	return artifacts, nil
 }
 
-func validatePortableArtifactInput(label, path string) error {
+// validateLinuxArtifactInput requires a regular file for one input of the
+// named Linux artifact ("portable" or "AppImage").
+func validateLinuxArtifactInput(artifact, label, path string) error {
 	if strings.TrimSpace(path) == "" {
-		return fmt.Errorf("linux portable %s path is required", label)
+		return fmt.Errorf("linux %s %s path is required", artifact, label)
 	}
 	info, err := os.Lstat(path)
 	if err != nil {
-		return fmt.Errorf("inspect Linux portable %s %s: %w", label, path, err)
+		return fmt.Errorf("inspect Linux %s %s %s: %w", artifact, label, path, err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return fmt.Errorf("linux portable %s must be a regular non-symlink file: %s", label, path)
+		return fmt.Errorf("linux %s %s must be a regular non-symlink file: %s", artifact, label, path)
 	}
 	return nil
 }
 
-func renderLinuxPortableInput(path string, metadata projectMetadata, architecture string) ([]byte, error) {
+func renderLinuxArtifactInput(artifact, path string, metadata projectMetadata, architecture string) ([]byte, error) {
 	contents, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read Linux portable input %s: %w", path, err)
+		return nil, fmt.Errorf("read Linux %s input %s: %w", artifact, path, err)
 	}
 	binaryName, err := projectBinaryName(metadata)
 	if err != nil {
@@ -206,8 +208,18 @@ func renderLinuxPortableInput(path string, metadata projectMetadata, architectur
 }
 
 func validateRenderedPortableMarker(marker []byte, binaryName string) error {
-	executable := filepath.Join(string(os.PathSeparator), "portable", binaryName)
-	eligibility := updateidentity.ResolveInstallation(updateidentity.InstallationProbe{
+	eligibility := resolveRenderedLinuxMarker(marker, binaryName)
+	if !eligibility.CanInstall || eligibility.Distribution != updateidentity.DistributionLinuxPortable {
+		return fmt.Errorf("rendered Linux portable marker does not satisfy runtime installation identity")
+	}
+	return nil
+}
+
+// resolveRenderedLinuxMarker resolves a rendered marker the way the runtime
+// does for an executable beside it in a writable directory.
+func resolveRenderedLinuxMarker(marker []byte, binaryName string) updateidentity.InstallationEligibility {
+	executable := filepath.Join(string(os.PathSeparator), "install", binaryName)
+	return updateidentity.ResolveInstallation(updateidentity.InstallationProbe{
 		Platform:       updateidentity.PlatformLinux,
 		Architecture:   "amd64",
 		TargetPath:     executable,
@@ -217,10 +229,6 @@ func validateRenderedPortableMarker(marker []byte, binaryName string) error {
 			Data: marker,
 		},
 	})
-	if !eligibility.CanInstall || eligibility.Distribution != updateidentity.DistributionLinuxPortable {
-		return fmt.Errorf("rendered Linux portable marker does not satisfy runtime installation identity")
-	}
-	return nil
 }
 
 func writePortableTarGz(path string, entries []portableArchiveEntry) (returnErr error) {
