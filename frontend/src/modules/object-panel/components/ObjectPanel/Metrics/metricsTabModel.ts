@@ -13,7 +13,7 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 
 export type MetricUnit = 'millicores' | 'bytes';
-export type MetricSeriesRole = 'usage' | 'request' | 'limit';
+export type MetricSeriesRole = 'usage' | 'request' | 'limit' | 'allocatable';
 
 export interface MetricSeries {
   role: MetricSeriesRole;
@@ -48,7 +48,8 @@ const LIVE_GRAPHS = [
   { id: 'memory', title: 'Memory', unit: 'bytes' },
 ] as const;
 
-const SERIES_ROLES: readonly MetricSeriesRole[] = ['usage', 'request', 'limit'];
+// Only nodes report allocatable: what the node offers to pods.
+const SERIES_ROLES: readonly MetricSeriesRole[] = ['usage', 'request', 'limit', 'allocatable'];
 
 const liveGraph = (
   { id, title, unit }: (typeof LIVE_GRAPHS)[number],
@@ -57,7 +58,8 @@ const liveGraph = (
   const series: MetricSeries[] = [];
   for (const role of SERIES_ROLES) {
     const values = samples.map((sample) => sample[id]?.[role] ?? null);
-    // Usage always draws; a reservation the object never set draws no line.
+    // Usage always draws; a value the object never reported (an unset limit, allocatable for
+    // anything but a node) draws no line.
     if (role === 'usage' || values.some((value) => value !== null)) {
       series.push({ role, values });
     }
@@ -101,9 +103,10 @@ export interface MetricGraphStats {
   peak?: number;
   request?: number;
   limit?: number;
+  allocatable?: number;
 }
 
-/** Tile numbers: the newest usage sample, the peak so far, and the newest reservations. */
+/** Tile numbers: the newest usage sample, the peak so far, and the newest reservations and allocatable. */
 export const graphStats = (graph: MetricGraph): MetricGraphStats => {
   const usage = seriesValues(graph, 'usage');
   return {
@@ -111,6 +114,7 @@ export const graphStats = (graph: MetricGraph): MetricGraphStats => {
     peak: peakValue(usage),
     request: lastValue(seriesValues(graph, 'request')),
     limit: lastValue(seriesValues(graph, 'limit')),
+    allocatable: lastValue(seriesValues(graph, 'allocatable')),
   };
 };
 

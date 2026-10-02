@@ -57,6 +57,39 @@ they are not the ongoing live source except for the ReplicaSet exception.
   metrics status.
 - Object age follows the live-age contract and never drives metric refresh.
 
+## Object panel Metrics tab
+
+The **Metrics** tab charts CPU and memory for the panel's object over the time
+the panel has been visible. It consumes `useResourceMetrics`; it is not a
+metric store.
+
+- **Availability.** `useObjectPanelTabs` offers the tab when
+  `resolveResourceMetricsScope` serves the object from a refresh domain: Pods,
+  Nodes, Deployments, StatefulSets, and DaemonSets with built-in group/version.
+  ReplicaSets, other kinds, custom resources that share a built-in kind name,
+  and Helm releases get no tab. Do not gate it with a separate kind list.
+- **Sampling.** The tab records one sample each time the payload's
+  `collectedAt` advances and keeps the last hour. A retained value from before
+  the current visit is ignored, so a revisit starts a new chart instead of
+  drawing a gap.
+- **Lifetime.** Samples live only in the tab's component state. The tab stays
+  mounted across tab switches within a visible panel, like Logs and YAML.
+  Hiding the panel (another panel active in its dock group, a cluster switch,
+  closing it) or pausing auto-refresh releases the lease and discards them.
+- **No history.** There is no stored history and no external metrics provider
+  (Prometheus or other). Both were built and removed in October 2026: per-store
+  authentication, cluster scoping, query languages, and settings turned the tab
+  into a multi-platform dashboard. On-disk storage would also have to follow
+  the pure-Go rule in [data-layer.md](data-layer.md).
+- **Values.** Usage is a solid line; requests, limits, and a Node's allocatable
+  are dashed, drawn only when the object reports them. The tile ceiling is a
+  Node's allocatable, as on the Details tab, because a Node's limit is only the
+  sum of its pods' limits; other objects show their limit. Workload values are
+  sums over pods that have not finished. A missing sample is a gap, never a
+  zero.
+- **Charts.** Recharts draws the charts with theme-token colors. `react-is` must
+  match the installed React version, as the Recharts README requires.
+
 ## Identity
 
 Metric selection and joins use `clusterId`, `group`, `version`, `kind`, and the
@@ -71,6 +104,7 @@ boundary with partial identity.
 - Serve-time joins: `backend/refresh/snapshot`
 - Namespace metric payload: `backend/refresh/snapshot/namespace_metrics.go`
 - Frontend selectors/leases: `frontend/src/core/resource-metrics`
+- Metrics tab: `frontend/src/modules/object-panel/components/ObjectPanel/Metrics`
 - Namespace composition:
   `frontend/src/modules/namespace/contexts/NamespaceContext.tsx`
 

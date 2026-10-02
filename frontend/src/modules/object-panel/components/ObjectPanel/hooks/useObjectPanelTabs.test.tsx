@@ -101,8 +101,36 @@ describe('useObjectPanelTabs', () => {
   it('returns workload tabs excluding manifest/values for non-Helm resources', async () => {
     const { availableTabs } = await renderHook();
     const labels = availableTabs.map((tab) => tab.label);
-    expect(labels).toEqual(['Details', 'Map', 'Pods', 'Logs', 'Events', 'YAML']);
+    expect(labels).toEqual(['Details', 'Map', 'Pods', 'Logs', 'Events', 'Metrics', 'YAML']);
   });
+
+  it.each([
+    { kind: 'Node', group: '', version: 'v1', namespace: undefined },
+    { kind: 'Deployment', group: 'apps', version: 'v1', namespace: 'team-a' },
+    { kind: 'StatefulSet', group: 'apps', version: 'v1', namespace: 'team-a' },
+    { kind: 'DaemonSet', group: 'apps', version: 'v1', namespace: 'team-a' },
+  ])('offers the Metrics tab for a $kind, which has live metrics', async (identity) => {
+    const { availableTabs } = await renderHook({
+      objectData: { ...identity, name: 'api', clusterId: 'cluster-a' },
+    });
+    expect(availableTabs.map((tab) => tab.label)).toContain('Metrics');
+  });
+
+  it.each([
+    { kind: 'ReplicaSet', group: 'apps', version: 'v1' },
+    { kind: 'Job', group: 'batch', version: 'v1' },
+    { kind: 'ConfigMap', group: '', version: 'v1' },
+    // A custom resource that shares a built-in kind name has no metrics-server data.
+    { kind: 'Deployment', group: 'example.com', version: 'v1alpha1' },
+  ])(
+    'omits the Metrics tab for a $kind in "$group", which has no live metrics',
+    async (identity) => {
+      const { availableTabs } = await renderHook({
+        objectData: { ...identity, name: 'api', namespace: 'team-a', clusterId: 'cluster-a' },
+      });
+      expect(availableTabs.map((tab) => tab.label)).not.toContain('Metrics');
+    }
+  );
 
   it.each(['Role', 'RoleBinding'])('offers the Map tab for %s', async (kind) => {
     const { availableTabs } = await renderHook({
@@ -288,6 +316,7 @@ describe('useObjectPanelTabs', () => {
       'Map',
       'Pods',
       'Events',
+      'Metrics',
       'YAML',
     ]);
   });
@@ -309,6 +338,7 @@ describe('useObjectPanelTabs', () => {
       'Pods',
       'Logs',
       'Events',
+      'Metrics',
       'YAML',
     ]);
   });
@@ -328,17 +358,18 @@ describe('useObjectPanelTabs', () => {
     expect(hoistedShortcuts.useShortcut).not.toHaveBeenCalled();
 
     // Tab shortcuts registered via useShortcuts (plural), keyed by position.
-    // Deployment tabs: Details, Map, Pods, Logs, Events, YAML → keys 1–6.
+    // Deployment tabs: Details, Map, Pods, Logs, Events, Metrics, YAML → keys 1–7.
     const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
       | Array<{ key: string; description: string }>
       | undefined;
-    expect(tabShortcuts?.map((s) => s.key)).toEqual(['1', '2', '3', '4', '5', '6']);
+    expect(tabShortcuts?.map((s) => s.key)).toEqual(['1', '2', '3', '4', '5', '6', '7']);
     expect(tabShortcuts?.map((s) => s.description)).toEqual([
       'Switch to Details tab',
       'Switch to Map tab',
       'Switch to Pods tab',
       'Switch to Logs tab',
       'Switch to Events tab',
+      'Switch to Metrics tab',
       'Switch to YAML tab',
     ]);
   });
@@ -363,7 +394,7 @@ describe('useObjectPanelTabs', () => {
   });
 
   it('omits shortcuts for hidden tabs instead of disabling them', async () => {
-    // Without logs capability: Details, Map, Pods, Events, YAML → 5 shortcuts, no gap.
+    // Without logs capability: Details, Map, Pods, Events, Metrics, YAML → 6 shortcuts, no gap.
     const { availableTabs } = await renderHook({
       capabilities: { ...baseCapabilities, hasObjPanelLogs: false },
     });
@@ -373,13 +404,14 @@ describe('useObjectPanelTabs', () => {
       'Map',
       'Pods',
       'Events',
+      'Metrics',
       'YAML',
     ]);
 
     const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
       | Array<{ key: string; description: string }>
       | undefined;
-    expect(tabShortcuts).toHaveLength(5);
+    expect(tabShortcuts).toHaveLength(6);
     // Key '2' now maps to Map (second visible tab), not to a disabled Logs shortcut.
     expect(tabShortcuts?.[1]?.description).toBe('Switch to Map tab');
   });

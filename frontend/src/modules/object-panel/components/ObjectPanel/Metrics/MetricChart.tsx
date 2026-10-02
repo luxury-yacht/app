@@ -1,8 +1,8 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/MetricChart.tsx
  *
- * One Metrics-tab line chart (Recharts). Usage is solid; requests and limits are dashed
- * reference lines. Charts in a panel share a crosshair through syncId. Colors are theme tokens
+ * One Metrics-tab line chart (Recharts). Usage is solid; requests, limits, and a node's allocatable
+ * are dashed reference lines. Charts in a panel share a crosshair through syncId. Colors are theme tokens
  * passed as var(--…) so light and dark need no JavaScript.
  */
 
@@ -39,6 +39,7 @@ const SERIES_STYLES: Record<MetricSeriesRole, SeriesStyle> = {
   usage: { label: 'Usage', stroke: 'var(--color-accent)' },
   request: { label: 'Request', stroke: 'var(--color-warning)', dash: '4 3' },
   limit: { label: 'Limit', stroke: 'var(--color-error)', dash: '6 3' },
+  allocatable: { label: 'Allocatable', stroke: 'var(--color-text-secondary)', dash: '2 3' },
 };
 
 const MINUTE = 60_000;

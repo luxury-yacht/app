@@ -88,6 +88,22 @@ describe('liveTimeline', () => {
     expect(memory.series).toEqual([{ role: 'usage', values: [2_048, null] }]);
   });
 
+  it("charts a node's allocatable as its ceiling", () => {
+    const timeline = liveTimeline([
+      { t: 1_000, cpu: { usage: 250, request: 900, limit: 3_000, allocatable: 1_900 } },
+      { t: 6_000, cpu: { usage: 300, request: 900, limit: 3_000, allocatable: 1_900 } },
+    ]);
+
+    const [cpu] = timeline.graphs;
+    expect(cpu.series.map((series) => series.role)).toEqual([
+      'usage',
+      'request',
+      'limit',
+      'allocatable',
+    ]);
+    expect(graphStats(cpu)).toMatchObject({ current: 300, limit: 3_000, allocatable: 1_900 });
+  });
+
   it('has no data before the first sample', () => {
     expect(liveTimeline([]).graphs.map((graph) => graph.hasData)).toEqual([false, false]);
   });

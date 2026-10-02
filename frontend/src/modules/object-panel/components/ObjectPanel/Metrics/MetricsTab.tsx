@@ -1,8 +1,8 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/MetricsTab.tsx
  *
- * The object panel's Metrics tab: CPU and memory from the metrics API, charted over the time the
- * panel has been visible. Nothing is stored — hiding the panel, switching clusters, or pausing
+ * The object panel's Metrics tab: CPU and memory from the metrics API for a Pod, Node, Deployment,
+ * StatefulSet, or DaemonSet, charted over the time the panel has been visible. Nothing is stored — hiding the panel, switching clusters, or pausing
  * auto-refresh clears the chart, and the next visit starts a new one.
  */
 
@@ -31,6 +31,16 @@ interface MetricsTabProps {
   panelId: string;
 }
 
+// The tile's ceiling: a node's allocatable, as on the Details tab; otherwise the limit, which
+// for a node is only the sum of its pods' limits.
+const tileCeiling = (graph: MetricGraph): string => {
+  const stats = graphStats(graph);
+  if (stats.allocatable !== undefined) {
+    return `allocatable ${formatMetricValue(graph.unit, stats.allocatable)}`;
+  }
+  return `limit ${stats.limit === undefined ? 'none' : formatMetricValue(graph.unit, stats.limit)}`;
+};
+
 function MetricTile({ graph }: Readonly<{ graph: MetricGraph }>) {
   const stats = graphStats(graph);
   return (
@@ -38,8 +48,7 @@ function MetricTile({ graph }: Readonly<{ graph: MetricGraph }>) {
       <span className="metrics-tile__label">{graph.title}</span>
       <span className="metrics-tile__value">{formatMetricValue(graph.unit, stats.current)}</span>
       <span className="metrics-tile__detail">
-        peak {formatMetricValue(graph.unit, stats.peak)} · limit{' '}
-        {stats.limit === undefined ? 'none' : formatMetricValue(graph.unit, stats.limit)}
+        peak {formatMetricValue(graph.unit, stats.peak)} · {tileCeiling(graph)}
       </span>
     </div>
   );

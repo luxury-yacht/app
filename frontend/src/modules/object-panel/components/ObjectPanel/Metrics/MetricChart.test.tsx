@@ -68,6 +68,8 @@ describe('MetricChart', () => {
 
   it('draws exactly the series the source returned', async () => {
     expect(await linesFor(cpu(['usage', 'request', 'limit']))).toBe(3);
+    // A node also has an allocatable ceiling.
+    expect(await linesFor(cpu(['usage', 'request', 'limit', 'allocatable']))).toBe(4);
     // No limit set: no limit line, rather than a line at zero.
     expect(await linesFor(cpu(['usage']))).toBe(1);
   });

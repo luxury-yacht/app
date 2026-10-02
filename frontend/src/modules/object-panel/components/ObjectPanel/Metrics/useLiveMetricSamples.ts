@@ -1,9 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/useLiveMetricSamples.ts
  *
- * Collects the panel object's live metrics-server samples while the Metrics tab shows live data
- * (docs/plans/metrics-history.md, "Live fallback"). Samples live only in this component's state:
- * disabling stops the metrics lease and forgets them, and the next run starts an empty chart.
+ * Collects the panel object's live metrics-server samples for the Metrics tab
+ * (docs/architecture/resource-metrics.md, "Object panel Metrics tab"). Samples live only in this
+ * component's state: disabling stops the metrics lease and forgets them, and the next run starts
+ * an empty chart.
  */
 
 import { useEffect, useMemo, useState } from 'react';

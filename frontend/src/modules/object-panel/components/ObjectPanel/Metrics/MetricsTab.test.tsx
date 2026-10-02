@@ -163,6 +163,24 @@ describe('MetricsTab', () => {
     expect(container.querySelector('[data-live-paused]')).not.toBeNull();
   });
 
+  it("shows a node's allocatable as its ceiling, not the sum of its pods' limits", async () => {
+    hoisted.live = {
+      status: 'available',
+      metrics: {
+        source: 'nodes',
+        cpu: { usage: 250, request: 900, limit: 3_000, allocatable: 1_900, capacity: 2_000 },
+        freshness: { collectedAt: T0 / 1000, stale: false },
+      },
+      resolution: { kind: 'unsupported', reason: 'unsupported-kind' },
+    };
+    await render({
+      objectData: { clusterId: pod.clusterId, group: '', version: 'v1', kind: 'Node', name: 'n1' },
+    });
+
+    expect(tile('cpu').textContent).toContain('1900m');
+    expect(tile('cpu').textContent).not.toContain('3000m');
+  });
+
   it('reports when live metrics are unavailable', async () => {
     hoisted.live = { ...noMetrics, status: 'error', error: 'metrics API not available' };
     await render();
