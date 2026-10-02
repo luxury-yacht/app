@@ -121,7 +121,7 @@ describe('resolveResourceMetricsScope', () => {
     });
   });
 
-  it('keeps ReplicaSet as a detail DTO exception instead of routing through pods workload scope', () => {
+  it('serves no metrics for a ReplicaSet, whose pods cannot be attributed to it yet', () => {
     expect(
       resolveResourceMetricsScope({
         clusterId: 'cluster-a',
@@ -131,11 +131,7 @@ describe('resolveResourceMetricsScope', () => {
         namespace: 'team-a',
         name: 'api-7c9d',
       })
-    ).toEqual({
-      kind: 'detail-exception',
-      source: 'detail-replicaset',
-      reason: 'replicaset-owner-collapse',
-    });
+    ).toEqual({ kind: 'unsupported', reason: 'unsupported-kind' });
   });
 
   it('returns an invalid resolution when clusterId is missing', () => {

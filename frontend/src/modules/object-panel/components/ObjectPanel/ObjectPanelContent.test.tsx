@@ -419,35 +419,43 @@ describe('ObjectPanelContent', () => {
       group: '',
       version: 'v1',
     };
-    await renderContent({ activeTab: 'details', objectData: pod, objectKind: 'pod' });
+    // The tab reads the panel's complete reference and its details from the details props.
+    const podDetail = { cpuUsage: '100m' };
+    const detailTabProps = {
+      ...requireValue(baseProps.detailTabProps, 'expected detail tab props'),
+      objectData: pod,
+      detailModel: buildObjectDetailModel(pod, 'pod', podDetail),
+    };
+    const podProps = { objectData: pod, objectKind: 'pod', detailTabProps };
+    await renderContent({ activeTab: 'details', ...podProps });
     expect(container.querySelector('[data-testid="metrics-tab"]')).toBeNull();
 
-    await renderContent({ activeTab: 'metrics', objectData: pod, objectKind: 'pod' });
+    await renderContent({ activeTab: 'metrics', ...podProps });
     const mountedMetrics = requireValue(
       container.querySelector<HTMLElement>('[data-testid="metrics-tab"]'),
       'expected mounted Metrics tab'
     );
     expect(hoistedRefs.metricsTabProps.current).toMatchObject({
       objectData: pod,
+      detail: podDetail,
       isPanelOpen: true,
       panelId: baseProps.panelId,
     });
 
     // Its charts survive the tab switch, and collection continues while the panel is visible.
-    await renderContent({ activeTab: 'details', objectData: pod, objectKind: 'pod' });
+    await renderContent({ activeTab: 'details', ...podProps });
     expect(mountedMetrics.isConnected).toBe(true);
     expect(mountedMetrics.closest('[aria-hidden="true"]')).not.toBeNull();
     // Live collection continues while the panel itself is visible.
     expect(hoistedRefs.metricsTabProps.current).toMatchObject({ isPanelOpen: true });
 
-    await renderContent({ activeTab: 'metrics', objectData: pod, objectKind: 'pod' });
+    await renderContent({ activeTab: 'metrics', ...podProps });
     expect(container.querySelector('[data-testid="metrics-tab"]')).toBe(mountedMetrics);
 
     // A hidden panel (dock-group switch, closed) stops it too.
     await renderContent({
       activeTab: 'metrics',
-      objectData: pod,
-      objectKind: 'pod',
+      ...podProps,
       isPanelOpen: false,
     });
     expect(hoistedRefs.metricsTabProps.current).toMatchObject({ isPanelOpen: false });

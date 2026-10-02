@@ -9,11 +9,14 @@ import type { ResourceMetricsResult } from '@/core/resource-metrics';
 import { requireValue } from '@/test-utils/requireValue';
 import MetricsTab from './MetricsTab';
 import type { MetricGraph } from './metricsTabModel';
+import type { UtilizationData } from './useUtilizationData';
 
 const hoisted = vi.hoisted(() => ({
   live: null as ResourceMetricsResult | null,
   liveEnabled: [] as boolean[],
   autoRefresh: true,
+  utilization: null as UtilizationData | null,
+  utilizationCalls: [] as Array<{ objectData: unknown; detail: unknown; enabled: boolean }>,
 }));
 
 vi.mock('@/core/resource-metrics', () => ({
@@ -25,6 +28,21 @@ vi.mock('@/core/resource-metrics', () => ({
 
 vi.mock('@/core/refresh/hooks/useRefreshPreferences', () => ({
   useAutoRefreshEnabled: () => hoisted.autoRefresh,
+}));
+
+// Its own tests cover the live and detail sources; the tab's contract is what it feeds the hook
+// and where the section goes.
+vi.mock('./useUtilizationData', () => ({
+  useUtilizationData: (params: { objectData: unknown; detail: unknown; enabled: boolean }) => {
+    hoisted.utilizationCalls.push(params);
+    return hoisted.utilization;
+  },
+}));
+
+vi.mock('./ResourceUtilization', () => ({
+  default: (props: UtilizationData) => (
+    <section data-testid="resource-utilization" data-cpu={props.cpu?.usage} />
+  ),
 }));
 
 // Recharts needs real layout; the tab's contract is which samples each card charts.
@@ -76,6 +94,8 @@ describe('MetricsTab', () => {
     hoisted.live = noMetrics;
     hoisted.liveEnabled = [];
     hoisted.autoRefresh = true;
+    hoisted.utilization = null;
+    hoisted.utilizationCalls = [];
     shownProps = {};
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(T0);
@@ -90,7 +110,9 @@ describe('MetricsTab', () => {
   const render = async (props: Partial<React.ComponentProps<typeof MetricsTab>> = {}) => {
     shownProps = props;
     await act(async () => {
-      root.render(<MetricsTab objectData={pod} isPanelOpen panelId={PANEL_ID} {...props} />);
+      root.render(
+        <MetricsTab objectData={pod} detail={null} isPanelOpen panelId={PANEL_ID} {...props} />
+      );
     });
   };
 
@@ -179,6 +201,41 @@ describe('MetricsTab', () => {
 
     expect(tile('cpu').textContent).toContain('1900m');
     expect(tile('cpu').textContent).not.toContain('3000m');
+  });
+
+  it('shows resource utilization above the live charts, even while auto-refresh is paused', async () => {
+    hoisted.utilization = { cpu: { usage: 250, request: 500 }, memory: { usage: 64 } };
+    await render();
+    await collect(T0, 10);
+
+    const utilization = requireValue(
+      container.querySelector<HTMLElement>('[data-testid="resource-utilization"]'),
+      'expected the utilization section'
+    );
+    expect(utilization.dataset.cpu).toBe('250');
+    const badge = requireValue(container.querySelector('[data-live-badge]'), 'expected badge');
+    expect(
+      utilization.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+    // The bars are the current values, not history, so pausing does not hide them.
+    hoisted.autoRefresh = false;
+    await render();
+    expect(container.querySelector('[data-testid="resource-utilization"]')).not.toBeNull();
+    expect(container.querySelector('[data-live-paused]')).not.toBeNull();
+  });
+
+  it('feeds utilization the panel object and its details, leasing metrics only while the panel is open', async () => {
+    const detail = { cpuUsage: '100m' };
+    await render({ detail });
+
+    const lastCall = () => hoisted.utilizationCalls[hoisted.utilizationCalls.length - 1];
+    expect(lastCall()).toMatchObject({ objectData: pod, detail, enabled: true });
+    // No utilization yet (no detail values, no live sample): no empty section.
+    expect(container.querySelector('[data-testid="resource-utilization"]')).toBeNull();
+
+    await render({ detail, isPanelOpen: false });
+    expect(lastCall()).toMatchObject({ enabled: false });
   });
 
   it('reports when live metrics are unavailable', async () => {

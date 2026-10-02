@@ -1,12 +1,13 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/MetricsTab.tsx
  *
- * The object panel's Metrics tab: CPU and memory from the metrics API for a Pod, Node, Deployment,
- * StatefulSet, or DaemonSet, charted over the time the panel has been visible. Nothing is stored — hiding the panel, switching clusters, or pausing
- * auto-refresh clears the chart, and the next visit starts a new one.
+ * The object panel's Metrics tab for a Pod, Node, Deployment, StatefulSet, or DaemonSet: Resource
+ * Utilization bars for the current values, then CPU and memory from the metrics API charted over
+ * the time the panel has been visible. Nothing is stored — hiding the panel, switching clusters, or
+ * pausing auto-refresh clears the charts, and the next visit starts new ones.
  */
 
-import type { PanelObjectData } from '@modules/object-panel/components/ObjectPanel/types';
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { StatusChip } from '@shared/components/StatusChip';
 import { useMemo } from 'react';
@@ -21,11 +22,15 @@ import {
   type MetricGraph,
   type MetricTimeline,
 } from './metricsTabModel';
+import ResourceUtilization from './ResourceUtilization';
 import { useLiveMetricSamples } from './useLiveMetricSamples';
+import { useUtilizationData } from './useUtilizationData';
 import './MetricsTab.css';
 
 interface MetricsTabProps {
-  objectData: PanelObjectData | null;
+  objectData: ObjectPanelRef | null;
+  /** The panel's object details: utilization values until live metrics arrive. */
+  detail: unknown;
   /** The panel is visible (any of its tabs); samples are kept only while it is. */
   isPanelOpen: boolean;
   panelId: string;
@@ -135,8 +140,32 @@ function LiveMetrics({
   );
 }
 
+// Current values, not history: shown whatever the auto-refresh state, and the lease follows the
+// panel's visibility.
+function Utilization({
+  objectData,
+  detail,
+  isPanelOpen,
+}: Readonly<Pick<MetricsTabProps, 'objectData' | 'detail' | 'isPanelOpen'>>) {
+  const utilization = useUtilizationData({ objectData, detail, enabled: isPanelOpen });
+  if (!utilization) {
+    return null;
+  }
+  return (
+    <ResourceUtilization
+      cpu={utilization.cpu}
+      memory={utilization.memory}
+      pods={utilization.pods}
+      mode={utilization.mode}
+      podCount={utilization.podCount}
+      readyPodCount={utilization.readyPodCount}
+    />
+  );
+}
+
 export default function MetricsTab({
   objectData,
+  detail,
   isPanelOpen,
   panelId,
 }: Readonly<MetricsTabProps>) {
@@ -155,13 +184,16 @@ export default function MetricsTab({
   return (
     <div className="object-panel-tab-content metrics-tab">
       {objectRef ? (
-        <LiveMetrics
-          // Another object starts a new chart.
-          key={[clusterId, group, version, kind, namespace, name].join('|')}
-          objectRef={objectRef}
-          isPanelOpen={isPanelOpen}
-          panelId={panelId}
-        />
+        <>
+          <Utilization objectData={objectData} detail={detail} isPanelOpen={isPanelOpen} />
+          <LiveMetrics
+            // Another object starts a new chart.
+            key={[clusterId, group, version, kind, namespace, name].join('|')}
+            objectRef={objectRef}
+            isPanelOpen={isPanelOpen}
+            panelId={panelId}
+          />
+        </>
       ) : null}
     </div>
   );

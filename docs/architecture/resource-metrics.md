@@ -31,13 +31,13 @@ freshness presentation, and object-panel leases. It is not a second cache.
 - Pod panels lease a `pods` namespace scope.
 - Workload panels lease a `namespace-workloads` namespace scope.
 - Node panels lease a `nodes` cluster scope.
-- ReplicaSet remains detail-backed until pod rows expose both direct and
+- ReplicaSets have no panel metrics until pod rows expose both direct and
   resolved owner identity.
 - Namespace list/table consumers use the namespace context's object/metric
   composition rather than `useResourceMetrics`.
 
 Object detail values may be initial fallback while refresh data is unavailable;
-they are not the ongoing live source except for the ReplicaSet exception.
+they are not the ongoing live source.
 
 ## Freshness presentation
 
@@ -59,15 +59,20 @@ they are not the ongoing live source except for the ReplicaSet exception.
 
 ## Object panel Metrics tab
 
-The **Metrics** tab charts CPU and memory for the panel's object over the time
-the panel has been visible. It consumes `useResourceMetrics`; it is not a
-metric store.
+The **Metrics** tab shows the panel's Resource Utilization bars, then charts CPU
+and memory over the time the panel has been visible. It consumes
+`useResourceMetrics`; it is not a metric store. The Details tab has no
+utilization section and holds no metrics lease.
 
 - **Availability.** `useObjectPanelTabs` offers the tab when
   `resolveResourceMetricsScope` serves the object from a refresh domain: Pods,
   Nodes, Deployments, StatefulSets, and DaemonSets with built-in group/version.
   ReplicaSets, other kinds, custom resources that share a built-in kind name,
   and Helm releases get no tab. Do not gate it with a separate kind list.
+- **Resource Utilization.** The bars show the current usage against requests,
+  limits, and a Node's allocatable, using the object's detail values until the
+  first live sample arrives. They stay while auto-refresh is paused, and their
+  lease is held only while the panel is visible.
 - **Sampling.** The tab records one sample each time the payload's
   `collectedAt` advances and keeps the last hour. A retained value from before
   the current visit is ignored, so a revisit starts a new chart instead of

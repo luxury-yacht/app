@@ -1,5 +1,5 @@
 /**
- * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization.tsx
+ * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/ResourceUtilization.tsx
  *
  * Per-resource utilization section. Reuses the ResourceBar housing styles
  * (.resource-group / .metric-header / .resource-bar-placeholder /
@@ -19,7 +19,7 @@ import {
 import type React from 'react';
 import type { ResourceMetricValues } from '@/core/resource-metrics';
 import '../shared.css';
-import './DetailsTabUtilization.css';
+import './ResourceUtilization.css';
 
 interface UtilizationProps {
   cpu?: ResourceMetricValues;
@@ -206,7 +206,7 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
   );
 };
 
-const Utilization: React.FC<UtilizationProps> = ({
+const ResourceUtilization: React.FC<UtilizationProps> = ({
   cpu,
   memory,
   pods,
@@ -241,4 +241,4 @@ const Utilization: React.FC<UtilizationProps> = ({
   );
 };
 
-export default Utilization;
+export default ResourceUtilization;

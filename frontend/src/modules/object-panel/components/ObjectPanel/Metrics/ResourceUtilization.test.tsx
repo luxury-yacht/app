@@ -1,11 +1,11 @@
 /**
- * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization.test.tsx
+ * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/ResourceUtilization.test.tsx
  */
 
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
-import Utilization from './DetailsTabUtilization';
+import Utilization from './ResourceUtilization';
 
 const MIB = 1024 ** 2;
 
@@ -19,7 +19,7 @@ vi.mock('@shared/components/Tooltip', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-describe('DetailsTabUtilization', () => {
+describe('ResourceUtilization', () => {
   const render = async (ui: React.ReactElement) => {
     const container = document.createElement('div');
     document.body.appendChild(container);

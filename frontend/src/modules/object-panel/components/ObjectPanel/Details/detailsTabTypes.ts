@@ -8,7 +8,6 @@
 import type { CapabilityState } from '@modules/object-panel/components/ObjectPanel/types';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import type { ObjectDeletionMetadata } from '@/core/refresh/types.generated';
-import type { ResourceMetricValues } from '@/core/resource-metrics';
 import type { ObjectDetailModel } from './objectDetailModel';
 
 export interface DetailsTabProps {
@@ -28,17 +27,4 @@ export interface DetailsTabProps {
   onAfterDelete: () => void;
   /** Called after a successful restart/scale/trigger/suspend so the panel can refetch. */
   onAfterAction: () => void;
-}
-
-export interface UtilizationData {
-  cpu?: ResourceMetricValues;
-  memory?: ResourceMetricValues;
-  pods?: {
-    count?: string;
-    capacity?: string;
-    allocatable?: string;
-  };
-  mode?: 'nodeMetrics';
-  podCount?: number;
-  readyPodCount?: number;
 }
