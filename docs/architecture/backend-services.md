@@ -42,7 +42,7 @@ license for later rewiring.
 
 `DesktopService` owns the Wails command names, generated-binding reachability,
 the `/api/v2` transport entry point, and lifecycle delegation. It does not own
-application behavior. Its twelve command interfaces each correspond to one
+application behavior. Its thirteen command interfaces each correspond to one
 focused owner; HTTP and lifecycle are separate collaborators. Backend owners are
 not independently Wails-bound and do not need `//wails:ignore` directives.
 
@@ -81,6 +81,7 @@ permission for an owner to call `DesktopService`.
 | `RefreshCoordinator` | Per-cluster refresh/catalog lifecycles, HTTP/streams, publication, governor/spill state, and global log limiter |
 | `WorkspaceCoordinator` | Peer selections, serialized selection mutations, namespace-scope rebuilds, foreground demand, and workspace assembly |
 | `ResourceGateway` | Request-shaped resource reads/actions, permission and response caches, YAML, details, and logs |
+| `MetricHistoryService` | Metrics-tab sources, each cluster's source choice and its consistency rules (persisted through a `PreferencesService` repository), and reading history from the chosen source through its cluster's Service proxy |
 | `nodemaintenance.Store` | Process-wide, cluster-keyed node-drain jobs, cancellation handles, bounded history, and its lock |
 | `OperationsCoordinator` | Shell, port-forward, drain-operation registration, active-operation registry, and cleanup |
 | `DataManagementCoordinator` | Import/export and owner-directed live factory reset |
@@ -96,7 +97,7 @@ they expose no Wails command.
 
 Dependencies point toward capabilities, never back toward the composition root:
 
-- `DesktopService` delegates to the twelve command owners, `ApplicationLifecycle`,
+- `DesktopService` delegates to the thirteen command owners, `ApplicationLifecycle`,
   and the refresh HTTP handler. No owner calls back into `DesktopService`.
 - `ApplicationLifecycle` orders owners during startup and shutdown but does not
   absorb their state.

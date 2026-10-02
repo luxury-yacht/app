@@ -125,6 +125,7 @@ func newApplicationComposition(assets fs.FS, reporter sentryreporting.Reporter, 
 		Logs:           backendRuntime.AppLogs,
 		DesktopShell:   desktopShell,
 		PanelWindows:   desktopShell,
+		MetricHistory:  backendRuntime.MetricHistory,
 		Lifecycle:      backendRuntime.Lifecycle,
 		HTTP:           backendRuntime.Refresh,
 	})

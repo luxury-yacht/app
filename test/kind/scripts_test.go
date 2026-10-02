@@ -324,10 +324,11 @@ func TestWorkloadAddonsAreOptInAndScoped(test *testing.T) {
 		{name: "argocd", flags: []string{"--argocd"}, releases: []string{"argocd"}},
 		{name: "external-secrets", flags: []string{"--external-secrets-operator"}, releases: []string{"external-secrets"}},
 		{name: "cert-manager", flags: []string{"--cert-manager"}, releases: []string{"cert-manager"}},
+		{name: "prometheus", flags: []string{"--prometheus"}, releases: []string{"kube-prometheus-stack"}},
 		{
 			name:     "combined-with-stress",
-			flags:    []string{"--cert-manager", "--stress-ng", "--argocd", "--external-secrets-operator", "--argocd"},
-			releases: []string{"argocd", "external-secrets", "cert-manager"},
+			flags:    []string{"--cert-manager", "--stress-ng", "--argocd", "--prometheus", "--external-secrets-operator", "--argocd"},
+			releases: []string{"argocd", "external-secrets", "cert-manager", "kube-prometheus-stack"},
 		},
 	} {
 		test.Run(scenario.name, func(test *testing.T) {
@@ -338,6 +339,8 @@ func TestWorkloadAddonsAreOptInAndScoped(test *testing.T) {
 				"argocd":           "argo/argo-cd",
 				"external-secrets": "external-secrets/external-secrets",
 				"cert-manager":     "jetstack/cert-manager",
+				// Metrics-history fixtures need a real Prometheus; chart defaults, like the other add-ons.
+				"kube-prometheus-stack": "prometheus-community/kube-prometheus-stack",
 			} {
 				var contexts []string
 				for _, call := range fixture.calls() {
@@ -373,7 +376,12 @@ func TestWorkloadAddonsAreOptInAndScoped(test *testing.T) {
 					repositories = append(repositories, option(call.Args, "add"))
 				}
 			}
-			for release, repository := range map[string]string{"argocd": "argo", "external-secrets": "external-secrets", "cert-manager": "jetstack"} {
+			for release, repository := range map[string]string{
+				"argocd":                "argo",
+				"external-secrets":      "external-secrets",
+				"cert-manager":          "jetstack",
+				"kube-prometheus-stack": "prometheus-community",
+			} {
 				require.Equal(test, slices.Contains(scenario.releases, release), slices.Contains(repositories, repository))
 			}
 			if slices.Contains(scenario.flags, "--stress-ng") {
@@ -392,7 +400,7 @@ func TestWorkloadAddonsAreOptInAndScoped(test *testing.T) {
 func TestWorkloadUninstallRemovesAddonReleasesBeforeNamespaces(test *testing.T) {
 	fixture := newScriptFixture(test)
 	require.NoError(test, fixture.run("workloads.sh", "uninstall", "all"))
-	for _, release := range []string{"argocd", "external-secrets", "cert-manager"} {
+	for _, release := range []string{"argocd", "external-secrets", "cert-manager", "kube-prometheus-stack"} {
 		var removedContexts []string
 		var deletedNamespaces []string
 		for _, call := range fixture.calls() {

@@ -169,6 +169,17 @@ type PanelWindowCommands interface {
 	AcknowledgeApplicationQuitPreflight(string, string, bool) error
 }
 
+// MetricHistoryCommands is the frontend command surface owned by MetricHistoryService.
+type MetricHistoryCommands interface {
+	DeleteMetricSource(string) error
+	GetMetricSourceSettings() (*MetricSourceSettings, error)
+	GetObjectMetricHistory(MetricHistoryRequest) (*MetricHistoryResponse, error)
+	ListMetricServiceCandidates(string) ([]MetricServiceCandidate, error)
+	SaveMetricSource(MetricSource) (*MetricSource, error)
+	SetClusterMetricAssignment(string, MetricClusterAssignment) error
+	TestMetricSource(MetricSource) (*MetricSourceTestResult, error)
+}
+
 // DesktopServiceLifecycle owns Wails service startup and shutdown.
 type DesktopServiceLifecycle interface {
 	ServiceStartup(context.Context, application.ServiceOptions) error
@@ -193,6 +204,7 @@ type DesktopServiceDependencies struct {
 	Logs           AppLogCommands
 	DesktopShell   DesktopShellCommands
 	PanelWindows   PanelWindowCommands
+	MetricHistory  MetricHistoryCommands
 	Lifecycle      DesktopServiceLifecycle
 	HTTP           http.Handler
 }
@@ -215,6 +227,7 @@ type DesktopService struct {
 	logs           AppLogCommands
 	desktopShell   DesktopShellCommands
 	panelWindows   PanelWindowCommands
+	metricHistory  MetricHistoryCommands
 	lifecycle      DesktopServiceLifecycle
 	http           http.Handler
 }
@@ -235,6 +248,7 @@ func NewDesktopService(dependencies DesktopServiceDependencies) *DesktopService 
 		logs:           dependencies.Logs,
 		desktopShell:   dependencies.DesktopShell,
 		panelWindows:   dependencies.PanelWindows,
+		metricHistory:  dependencies.MetricHistory,
 		lifecycle:      dependencies.Lifecycle,
 		http:           dependencies.HTTP,
 	}
@@ -753,4 +767,32 @@ func (s *DesktopService) AcknowledgeApplicationQuitPreflight(ctx context.Context
 		return err
 	}
 	return s.panelWindows.AcknowledgeApplicationQuitPreflight(callerWindowName, transactionID, allowed)
+}
+
+func (s *DesktopService) GetMetricSourceSettings() (*MetricSourceSettings, error) {
+	return s.metricHistory.GetMetricSourceSettings()
+}
+
+func (s *DesktopService) SaveMetricSource(source MetricSource) (*MetricSource, error) {
+	return s.metricHistory.SaveMetricSource(source)
+}
+
+func (s *DesktopService) DeleteMetricSource(sourceID string) error {
+	return s.metricHistory.DeleteMetricSource(sourceID)
+}
+
+func (s *DesktopService) SetClusterMetricAssignment(clusterID string, assignment MetricClusterAssignment) error {
+	return s.metricHistory.SetClusterMetricAssignment(clusterID, assignment)
+}
+
+func (s *DesktopService) ListMetricServiceCandidates(clusterID string) ([]MetricServiceCandidate, error) {
+	return s.metricHistory.ListMetricServiceCandidates(clusterID)
+}
+
+func (s *DesktopService) GetObjectMetricHistory(request MetricHistoryRequest) (*MetricHistoryResponse, error) {
+	return s.metricHistory.GetObjectMetricHistory(request)
+}
+
+func (s *DesktopService) TestMetricSource(source MetricSource) (*MetricSourceTestResult, error) {
+	return s.metricHistory.TestMetricSource(source)
 }

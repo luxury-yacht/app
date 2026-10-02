@@ -38,6 +38,7 @@ type ApplicationRuntime struct {
 	Resources             *ResourceGateway
 	Operations            *OperationsCoordinator
 	Updates               *UpdateCoordinator
+	MetricHistory         *MetricHistoryService
 }
 
 // ApplicationRuntimeOptions contains composition-time dependencies that are
@@ -145,6 +146,18 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 	})
 	attention := NewClusterAttentionService(preferences, appLogs.Logger())
 	resourceProjection := newRefreshResourceProjection()
+	metricHistory := NewMetricHistoryService(MetricHistoryServiceDependencies{
+		Repository: preferences,
+		ServiceCatalog: func(clusterID string) metricServiceCatalog {
+			// A nil *Service must stay a nil interface so "not connected" is detectable.
+			if catalog := resourceProjection.objectCatalogServiceForCluster(clusterID); catalog != nil {
+				return catalog
+			}
+			return nil
+		},
+		ResolveClusterDependencies: clusterRuntime.resolveClusterDependencies,
+		Context:                    signals.CtxOrBackground,
+	})
 	nodeMaintenanceStore := nodemaintenance.NewStore(5)
 	operations := newApplicationOperationsCoordinator(
 		clusterRuntime, resourceProjection, nodeMaintenanceStore,
@@ -231,5 +244,6 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		PermissionFetchPolicy: permissionFetchPolicy, NodeMaintenance: nodeMaintenanceStore,
 		DataManagement: dataManagement,
 		Attention:      attention, Resources: resources, Operations: operations, Updates: updates,
+		MetricHistory: metricHistory,
 	}
 }

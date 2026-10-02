@@ -74,7 +74,13 @@ type settingsFile struct {
 	Kubeconfig    settingsKubeconfig                `json:"kubeconfig"`
 	UI            settingsUI                        `json:"ui"`
 	Attention     *settingsGlobalAttentionRules     `json:"attention,omitempty"`
+	Metrics       *settingsMetrics                  `json:"metrics,omitempty"`
 	Clusters      map[string]settingsClusterSection `json:"clusters,omitempty"`
+}
+
+// settingsMetrics holds the Metrics tab's named sources (MetricHistoryService owns their rules).
+type settingsMetrics struct {
+	Sources []MetricSource `json:"sources,omitempty"`
 }
 
 type settingsTelemetry struct {
@@ -100,6 +106,8 @@ type settingsClusterSection struct {
 	// data path runs cluster-wide.
 	AllowedNamespaces []string                       `json:"allowedNamespaces,omitempty"`
 	Attention         *settingsClusterAttentionRules `json:"attention,omitempty"`
+	// Metrics is the cluster's explicit metrics-source choice; absent means "use the default".
+	Metrics *MetricClusterAssignment `json:"metrics,omitempty"`
 }
 
 // settingsPreferences captures user-configurable preferences.

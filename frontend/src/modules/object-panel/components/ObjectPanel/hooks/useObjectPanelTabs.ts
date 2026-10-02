@@ -53,6 +53,7 @@ export const useObjectPanelTabs = ({
       TABS.JOBS,
       TABS.LOGS,
       TABS.EVENTS,
+      TABS.METRICS,
       TABS.YAML,
       TABS.SHELL,
       TABS.MANIFEST,

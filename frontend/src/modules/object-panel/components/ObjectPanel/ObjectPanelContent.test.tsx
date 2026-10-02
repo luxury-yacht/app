@@ -23,6 +23,7 @@ const hoistedRefs = vi.hoisted(() => ({
   nodeLogsTabProps: { current: null as unknown },
   nodeLogsError: { current: null as Error | null },
   podsTabProps: { current: null as unknown },
+  metricsTabProps: { current: null as unknown },
   setScopedDomainEnabled: vi.fn(),
 }));
 
@@ -101,6 +102,13 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Pods/PodsTab', () => ({
   PodsTab: (props: unknown) => {
     hoistedRefs.podsTabProps.current = props;
     return <div data-testid="pods-tab" />;
+  },
+}));
+
+vi.mock('@modules/object-panel/components/ObjectPanel/Metrics/MetricsTab', () => ({
+  default: (props: unknown) => {
+    hoistedRefs.metricsTabProps.current = props;
+    return <div data-testid="metrics-tab" />;
   },
 }));
 
@@ -400,6 +408,56 @@ describe('ObjectPanelContent', () => {
 
     await renderContent({ activeTab: 'yaml' });
     expect(container.querySelector('[data-testid="yaml-tab"]')).toBe(mountedYaml);
+  });
+
+  it('keeps a visited Metrics tab mounted but inactive while another tab is shown', async () => {
+    const pod = {
+      kind: 'Pod',
+      name: 'api-1',
+      namespace: 'team-a',
+      clusterId: 'cluster-1',
+      group: '',
+      version: 'v1',
+    };
+    await renderContent({ activeTab: 'details', objectData: pod, objectKind: 'pod' });
+    expect(container.querySelector('[data-testid="metrics-tab"]')).toBeNull();
+
+    await renderContent({ activeTab: 'metrics', objectData: pod, objectKind: 'pod' });
+    const mountedMetrics = requireValue(
+      container.querySelector<HTMLElement>('[data-testid="metrics-tab"]'),
+      'expected mounted Metrics tab'
+    );
+    expect(hoistedRefs.metricsTabProps.current).toMatchObject({
+      objectData: pod,
+      isActive: true,
+      isPanelOpen: true,
+      panelId: baseProps.panelId,
+    });
+
+    // Re-queries stop while the tab is hidden, but its charts survive the tab switch.
+    await renderContent({ activeTab: 'details', objectData: pod, objectKind: 'pod' });
+    expect(mountedMetrics.isConnected).toBe(true);
+    expect(mountedMetrics.closest('[aria-hidden="true"]')).not.toBeNull();
+    // Live collection continues while the panel itself is visible.
+    expect(hoistedRefs.metricsTabProps.current).toMatchObject({
+      isActive: false,
+      isPanelOpen: true,
+    });
+
+    await renderContent({ activeTab: 'metrics', objectData: pod, objectKind: 'pod' });
+    expect(container.querySelector('[data-testid="metrics-tab"]')).toBe(mountedMetrics);
+
+    // A hidden panel (dock-group switch, closed) stops it too.
+    await renderContent({
+      activeTab: 'metrics',
+      objectData: pod,
+      objectKind: 'pod',
+      isPanelOpen: false,
+    });
+    expect(hoistedRefs.metricsTabProps.current).toMatchObject({
+      isActive: false,
+      isPanelOpen: false,
+    });
   });
 
   it('renders helm manifest and values tabs with scope', async () => {

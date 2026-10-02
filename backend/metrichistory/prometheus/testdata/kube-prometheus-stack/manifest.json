@@ -1,0 +1,164 @@
+[
+  {
+    "file": "buildinfo.json",
+    "endpoint": "/api/v1/status/buildinfo",
+    "query": "",
+    "range": ""
+  },
+  {
+    "file": "metric_names.json",
+    "endpoint": "/api/v1/label/__name__/values",
+    "query": "",
+    "range": ""
+  },
+  {
+    "file": "pod_cpu_by_container.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum by (container) (rate(container_cpu_usage_seconds_total{namespace=\"podinfo\",pod=\"podinfo-66888d8d86-5lpbr\",container!=\"\"}[2m]))",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "pod_memory_by_container.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum by (container) (container_memory_working_set_bytes{namespace=\"podinfo\",pod=\"podinfo-66888d8d86-5lpbr\",container!=\"\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "pod_requests.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum by (resource) (kube_pod_container_resource_requests{namespace=\"podinfo\",pod=\"podinfo-66888d8d86-5lpbr\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "pod_limits.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum by (resource) (kube_pod_container_resource_limits{namespace=\"podinfo\",pod=\"podinfo-66888d8d86-5lpbr\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "pod_throttling_ratio.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum(rate(container_cpu_cfs_throttled_periods_total{namespace=\"podinfo\",pod=\"podinfo-66888d8d86-5lpbr\",container!=\"\"}[2m])) / sum(rate(container_cpu_cfs_periods_total{namespace=\"podinfo\",pod=\"podinfo-66888d8d86-5lpbr\",container!=\"\"}[2m]))",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "pod_network_receive.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum(rate(container_network_receive_bytes_total{namespace=\"podinfo\",pod=\"podinfo-66888d8d86-5lpbr\"}[2m]))",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "pod_network_transmit.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum(rate(container_network_transmit_bytes_total{namespace=\"podinfo\",pod=\"podinfo-66888d8d86-5lpbr\"}[2m]))",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "pod_restarts.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum(kube_pod_container_status_restarts_total{namespace=\"podinfo\",pod=\"podinfo-66888d8d86-5lpbr\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "pod_filesystem_absent.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum(container_fs_usage_bytes{namespace=\"podinfo\",pod=\"podinfo-66888d8d86-5lpbr\",container!=\"\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "workload_cpu_owner_join.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum(rate(container_cpu_usage_seconds_total{namespace=\"podinfo\",container!=\"\"}[2m]) * on(namespace, pod) group_left() max by (namespace, pod) (kube_pod_owner{namespace=\"podinfo\",owner_kind=\"ReplicaSet\"} * on(namespace, owner_name) group_left() max by (namespace, owner_name) (label_replace(kube_replicaset_owner{namespace=\"podinfo\",owner_kind=\"Deployment\",owner_name=\"podinfo\"}, \"owner_name\", \"$1\", \"replicaset\", \"(.*)\"))))",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "workload_cpu_recording_rule.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum(rate(container_cpu_usage_seconds_total{namespace=\"podinfo\",container!=\"\"}[2m]) * on(namespace, pod) group_left() namespace_workload_pod:kube_pod_owner:relabel{namespace=\"podinfo\",workload=\"podinfo\",workload_type=\"deployment\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "workload_memory_owner_join.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum(container_memory_working_set_bytes{namespace=\"podinfo\",container!=\"\"} * on(namespace, pod) group_left() max by (namespace, pod) (kube_pod_owner{namespace=\"podinfo\",owner_kind=\"ReplicaSet\"} * on(namespace, owner_name) group_left() max by (namespace, owner_name) (label_replace(kube_replicaset_owner{namespace=\"podinfo\",owner_kind=\"Deployment\",owner_name=\"podinfo\"}, \"owner_name\", \"$1\", \"replicaset\", \"(.*)\"))))",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "workload_replicas_desired.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "kube_deployment_spec_replicas{namespace=\"podinfo\",deployment=\"podinfo\"}",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "workload_replicas_ready.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "kube_deployment_status_replicas_ready{namespace=\"podinfo\",deployment=\"podinfo\"}",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "workload_replicas_updated.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "kube_deployment_status_replicas_updated{namespace=\"podinfo\",deployment=\"podinfo\"}",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "node_cpu_used_cores.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum(rate(node_cpu_seconds_total{mode!~\"idle|iowait|steal\"}[2m]) * on(instance) group_left(nodename) node_uname_info{nodename=\"dev-cluster-worker2\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "node_memory_used_bytes.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) * on(instance) group_left(nodename) node_uname_info{nodename=\"dev-cluster-worker2\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "node_allocatable.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum by (resource) (kube_node_status_allocatable{node=\"dev-cluster-worker2\",resource=~\"cpu|memory|pods\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "node_capacity.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum by (resource) (kube_node_status_capacity{node=\"dev-cluster-worker2\",resource=~\"cpu|memory|pods\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "node_pods_running.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "count(kube_pod_info{node=\"dev-cluster-worker2\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "node_filesystem_by_mountpoint.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum by (mountpoint) ((node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\"} - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\"}) * on(instance) group_left(nodename) node_uname_info{nodename=\"dev-cluster-worker2\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "node_network_receive.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum(rate(node_network_receive_bytes_total{device!~\"lo|veth.*\"}[2m]) * on(instance) group_left(nodename) node_uname_info{nodename=\"dev-cluster-worker2\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "node_network_transmit.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum(rate(node_network_transmit_bytes_total{device!~\"lo|veth.*\"}[2m]) * on(instance) group_left(nodename) node_uname_info{nodename=\"dev-cluster-worker2\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "node_disk_read.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum(rate(node_disk_read_bytes_total[2m]) * on(instance) group_left(nodename) node_uname_info{nodename=\"dev-cluster-worker2\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  },
+  {
+    "file": "node_disk_written.json",
+    "endpoint": "/api/v1/query_range",
+    "query": "sum(rate(node_disk_written_bytes_total[2m]) * on(instance) group_left(nodename) node_uname_info{nodename=\"dev-cluster-worker2\"})",
+    "range": "start=1790894640 end=1790895240 step=30"
+  }
+]

@@ -127,6 +127,7 @@ describe('useObjectPanelTabs', () => {
       'Map',
       'Logs',
       'Events',
+      'Metrics',
       'YAML',
     ]);
   });
@@ -148,6 +149,7 @@ describe('useObjectPanelTabs', () => {
       'Map',
       'Logs',
       'Events',
+      'Metrics',
       'YAML',
       'Shell',
     ]);

@@ -1,0 +1,176 @@
+/* Settings → Metrics: source list + editor (master–detail) and the cluster assignment list. */
+
+.metrics-settings-sources {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  gap: var(--spacing-lg);
+  align-items: start;
+}
+
+.metrics-settings-sources__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.metrics-settings-sources__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.metrics-settings-sources__item--active {
+  border-color: var(--color-accent);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.metrics-settings-sources__name {
+  font-weight: 600;
+  font-size: var(--font-size-normal);
+}
+
+.metrics-settings-sources__target {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metrics-settings-sources__detail {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  min-width: 0;
+}
+
+.metrics-settings-form {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--spacing-sm) var(--spacing-md);
+}
+
+.metrics-settings-form__label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  text-align: right;
+}
+
+.metrics-settings-form__field {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.metrics-settings-form__message {
+  grid-column: 1 / -1;
+}
+
+.metrics-settings-form__footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.metrics-settings-form__confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.metrics-settings-input {
+  min-width: 18ch;
+  max-width: 100%;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-normal);
+  box-sizing: border-box;
+}
+
+[data-appearance-mode="dark"] .metrics-settings-input {
+  color-scheme: dark;
+}
+
+.metrics-settings-hint {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.metrics-settings-error {
+  color: var(--color-error-text);
+  font-size: var(--font-size-sm);
+}
+
+.metrics-settings-assignments {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.metrics-settings-assignments__filter {
+  align-self: flex-start;
+  margin-bottom: var(--spacing-sm);
+}
+
+.metrics-settings-assignments__head,
+.metrics-settings-assignments__row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 1.2fr);
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) 0;
+}
+
+.metrics-settings-assignments__head {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.metrics-settings-assignments__row + .metrics-settings-assignments__row {
+  border-top: 1px solid var(--color-border);
+}
+
+.metrics-settings-assignments__cluster {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.metrics-settings-assignments__actions {
+  display: inline-flex;
+  gap: var(--spacing-xs);
+}
+
+.metrics-settings-test {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+}

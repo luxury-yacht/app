@@ -135,6 +135,7 @@ export type ViewType =
   | 'pods'
   | 'jobs'
   | 'events'
+  | 'metrics'
   | 'yaml'
   | 'map'
   | 'manifest'

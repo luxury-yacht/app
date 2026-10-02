@@ -1,0 +1,141 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/MetricChart.tsx
+ *
+ * One Metrics-tab line chart (Recharts). Usage is solid; requests and limits are dashed
+ * reference lines. Charts in a panel share a crosshair through syncId. Colors are theme tokens
+ * passed as var(--…) so light and dark need no JavaScript.
+ */
+
+import { metrichistory } from '@core/backend-api/models';
+import { useMemo } from 'react';
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  type TooltipContentProps,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import {
+  chartRows,
+  formatAxisValue,
+  formatMetricValue,
+  formatTickTime,
+  formatTooltipTime,
+  timeTicks,
+} from './metricHistoryModel';
+
+interface SeriesStyle {
+  label: string;
+  stroke: string;
+  dash?: string;
+}
+
+const SERIES_STYLES: Record<metrichistory.SeriesRole, SeriesStyle> = {
+  [metrichistory.SeriesRole.$zero]: { label: '', stroke: 'var(--color-text-secondary)' },
+  [metrichistory.SeriesRole.RoleUsage]: { label: 'Usage', stroke: 'var(--color-accent)' },
+  [metrichistory.SeriesRole.RoleRequest]: {
+    label: 'Request',
+    stroke: 'var(--color-warning)',
+    dash: '4 3',
+  },
+  [metrichistory.SeriesRole.RoleLimit]: {
+    label: 'Limit',
+    stroke: 'var(--color-error)',
+    dash: '6 3',
+  },
+};
+
+const MINUTE = 60_000;
+
+interface MetricChartProps {
+  graph: metrichistory.Graph;
+  /** When each series value was measured (ms): grid points or live collection times. */
+  times: readonly number[];
+  /** Charts with the same syncId share the crosshair. */
+  syncId: string;
+}
+
+function MetricTooltip({
+  active,
+  payload,
+  label,
+  unit,
+  withSeconds,
+}: Readonly<
+  // Recharts injects active/payload/label when it clones this element.
+  Partial<Pick<TooltipContentProps, 'active' | 'payload' | 'label'>> & {
+    unit: metrichistory.Unit;
+    withSeconds: boolean;
+  }
+>) {
+  if (!active || !payload?.length || typeof label !== 'number') {
+    return null;
+  }
+  return (
+    <div className="metrics-chart-tooltip">
+      <div className="metrics-chart-tooltip__time">{formatTooltipTime(label, withSeconds)}</div>
+      {payload.map((entry) => (
+        <div key={String(entry.dataKey)} className="metrics-chart-tooltip__row">
+          <span>{entry.name}</span>
+          <span>
+            {formatMetricValue(unit, typeof entry.value === 'number' ? entry.value : undefined)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function MetricChart({ graph, times, syncId }: Readonly<MetricChartProps>) {
+  const startMs = times[0] ?? 0;
+  const endMs = times[times.length - 1] ?? 0;
+  const rows = useMemo(() => chartRows(times, graph), [times, graph]);
+  const ticks = useMemo(() => timeTicks(startMs, endMs), [startMs, endMs]);
+  const withSeconds = times.length < 2 || times[1] - times[0] < MINUTE;
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart
+        data={rows}
+        syncId={syncId}
+        syncMethod="value"
+        margin={{ top: 8, right: 12, bottom: 0, left: 0 }}
+      >
+        <CartesianGrid stroke="var(--color-border)" vertical={false} />
+        <XAxis
+          dataKey="t"
+          type="number"
+          domain={[startMs, endMs]}
+          ticks={ticks}
+          tickFormatter={(value: number) => formatTickTime(value, endMs - startMs)}
+          stroke="var(--color-text-secondary)"
+          tick={{ fill: 'var(--color-text-secondary)' }}
+        />
+        <YAxis
+          width={48}
+          tickFormatter={(value: number) => formatAxisValue(graph.unit, value)}
+          stroke="var(--color-text-secondary)"
+          tick={{ fill: 'var(--color-text-secondary)' }}
+        />
+        <Tooltip content={<MetricTooltip unit={graph.unit} withSeconds={withSeconds} />} />
+        {(graph.series ?? []).map((series) => {
+          const style = SERIES_STYLES[series.role] ?? SERIES_STYLES[metrichistory.SeriesRole.$zero];
+          return (
+            <Line
+              key={series.id}
+              dataKey={series.id}
+              name={style.label || series.id}
+              stroke={style.stroke}
+              strokeDasharray={style.dash}
+              // A lone first live sample has no line yet; show it as a dot.
+              dot={times.length === 1}
+              isAnimationActive={false}
+            />
+          );
+        })}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
