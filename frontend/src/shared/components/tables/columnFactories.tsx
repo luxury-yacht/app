@@ -76,8 +76,6 @@ export interface CreateResourceBarColumnOptions<T> extends GridColumnAlignmentOp
   getLimit?: (item: T) => number | undefined | null;
   getAllocatable?: (item: T) => number | undefined | null;
   getOvercommitPercent?: (item: T) => number | undefined;
-  getVariant?: (item: T) => 'default' | 'compact' | undefined;
-  getShowTooltip?: (item: T) => boolean | undefined;
   getMetricsStale?: (item: T) => boolean | undefined;
   getMetricsError?: (item: T) => string | undefined;
   getAnimationKey?: (item: T) => string | undefined;
@@ -99,8 +97,6 @@ export function createResourceBarColumn<T>(
     getLimit,
     getAllocatable,
     getOvercommitPercent,
-    getVariant,
-    getShowTooltip,
     getMetricsStale,
     getMetricsError,
     getAnimationKey,
@@ -139,8 +135,7 @@ export function createResourceBarColumn<T>(
           limit={limit}
           allocatable={allocatable}
           type={type}
-          variant={getVariant?.(item) ?? 'compact'}
-          showTooltip={getShowTooltip?.(item)}
+          variant="compact"
           overcommitPercent={getOvercommitPercent?.(item)}
           metricsStale={getMetricsStale?.(item)}
           metricsError={getMetricsError?.(item)}

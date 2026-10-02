@@ -271,7 +271,6 @@ describe('columnFactories', () => {
         type: 'cpu',
         getUsage: () => 200,
         getLimit: () => 500,
-        getVariant: () => 'compact',
       });
 
       const element = usageColumn.render({ id: 'row' });

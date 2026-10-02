@@ -20,7 +20,6 @@ interface ResourceBarProps {
   allocatable?: number;
   'data-gridtable-export-text'?: string;
   type: ResourceType;
-  showTooltip?: boolean;
   variant?: 'default' | 'compact';
   overcommitPercent?: number;
   metricsStale?: boolean;
@@ -311,7 +310,6 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
   limit,
   allocatable,
   type,
-  showTooltip: enableTooltip = true,
   variant = 'default',
   overcommitPercent,
   metricsStale = false,
@@ -351,7 +349,7 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
       placement="top"
       maxWidth={220}
       minWidth={220}
-      disabled={!enableTooltip || variant !== 'compact'}
+      disabled={variant !== 'compact'}
       inline={false}
     >
       <div className={containerClasses} data-gridtable-export-text={exportText}>

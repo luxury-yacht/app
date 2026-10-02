@@ -107,7 +107,6 @@ const createNamespaceResourceColumn = (
     getUsage: usageNumber,
     getRequest: (row) => (requestNumber(row) > 0 ? requestNumber(row) : undefined),
     getLimit: (row) => (limitNumber(row) > 0 ? limitNumber(row) : undefined),
-    getVariant: () => 'compact',
     getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:${type}`,
     sortable: true,
     sortValue: (row) => (row.metricsState === 'available' ? usageNumber(row) : undefined),
