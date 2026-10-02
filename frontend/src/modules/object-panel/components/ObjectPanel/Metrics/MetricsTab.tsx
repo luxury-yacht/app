@@ -2,9 +2,9 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/MetricsTab.tsx
  *
  * The object panel's Metrics tab for a Pod, Node, Deployment, StatefulSet, or DaemonSet: Resource
- * Utilization bars for the current values, then CPU and memory from the metrics API charted over
- * the time the panel has been visible. Nothing is stored — hiding the panel, switching clusters, or
- * pausing auto-refresh clears the charts, and the next visit starts new ones.
+ * Utilization bars for the current values, then CPU and memory from the metrics API charted from
+ * the samples the panel has collected since it opened (panelMetricSamples). Nothing is stored:
+ * closing the panel discards them.
  */
 
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
@@ -12,18 +12,18 @@ import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { StatusChip } from '@shared/components/StatusChip';
 import { useMemo } from 'react';
 import { useAutoRefreshEnabled } from '@/core/refresh/hooks/useRefreshPreferences';
-import type { KubernetesObjectReference } from '@/types/view-state';
 import { MetricChart } from './MetricChart';
 import {
   formatClockTime,
   formatMetricValue,
   graphStats,
   liveTimeline,
+  type LiveMetricSample,
   type MetricGraph,
   type MetricTimeline,
 } from './metricsTabModel';
+import { usePanelMetricSamples } from './panelMetricSamples';
 import ResourceUtilization from './ResourceUtilization';
-import { useLiveMetricSamples } from './useLiveMetricSamples';
 import { useUtilizationData } from './useUtilizationData';
 import './MetricsTab.css';
 
@@ -31,8 +31,9 @@ interface MetricsTabProps {
   objectData: ObjectPanelRef | null;
   /** The panel's object details: utilization values until live metrics arrive. */
   detail: unknown;
-  /** The panel is visible (any of its tabs); samples are kept only while it is. */
+  /** The panel is visible (any of its tabs); the utilization lease is held only while it is. */
   isPanelOpen: boolean;
+  /** Whose collected samples to chart (panelMetricSamples). */
   panelId: string;
 }
 
@@ -84,14 +85,15 @@ function LiveBody({
   paused,
   syncId,
 }: Readonly<{ timeline: MetricTimeline; error: string | null; paused: boolean; syncId: string }>) {
-  if (paused) {
-    return (
-      <div className="metrics-tab__notice" data-live-paused>
-        Live metrics stop while auto-refresh is paused.
-      </div>
-    );
-  }
+  const pausedNotice = paused ? (
+    <div className="metrics-tab__notice" data-live-paused>
+      Collection is paused while auto-refresh is off.
+    </div>
+  ) : null;
   if (timeline.times.length === 0) {
+    if (pausedNotice) {
+      return pausedNotice;
+    }
     return error ? (
       <div className="metrics-tab__notice" data-live-unavailable>
         <span>Live metrics are unavailable:</span>
@@ -105,6 +107,7 @@ function LiveBody({
   }
   return (
     <>
+      {pausedNotice}
       <div className="metrics-tab__tiles">
         {timeline.graphs.map((graph) => (
           <MetricTile key={graph.id} graph={graph} />
@@ -119,23 +122,28 @@ function LiveBody({
   );
 }
 
-function LiveMetrics({
-  objectRef,
-  isPanelOpen,
-  panelId,
-}: Readonly<{ objectRef: KubernetesObjectReference; isPanelOpen: boolean; panelId: string }>) {
+const NO_SAMPLES: readonly LiveMetricSample[] = [];
+
+// The panel's collector (ObjectPanel) records the samples; this only charts them.
+function LiveMetrics({ panelId }: Readonly<{ panelId: string }>) {
   const autoRefresh = useAutoRefreshEnabled();
-  const live = useLiveMetricSamples(objectRef, isPanelOpen && autoRefresh);
-  const timeline = useMemo(() => liveTimeline(live.samples), [live.samples]);
+  const collected = usePanelMetricSamples(panelId);
+  const samples = collected?.samples ?? NO_SAMPLES;
+  const timeline = useMemo(() => liveTimeline(samples), [samples]);
   return (
     <>
       <div className="metrics-tab__toolbar" data-live-badge>
         <StatusChip variant="info">
-          Live{live.startedAt ? ` · since ${formatClockTime(live.startedAt)}` : ''}
+          Live{collected ? ` · since ${formatClockTime(collected.startedAt)}` : ''}
         </StatusChip>
-        <span className="metrics-tab__hint">Not kept: cleared when you leave this panel.</span>
+        <span className="metrics-tab__hint">Not kept: cleared when you close this panel.</span>
       </div>
-      <LiveBody timeline={timeline} error={live.error} paused={!autoRefresh} syncId={panelId} />
+      <LiveBody
+        timeline={timeline}
+        error={collected?.error ?? null}
+        paused={!autoRefresh}
+        syncId={panelId}
+      />
     </>
   );
 }
@@ -169,30 +177,12 @@ export default function MetricsTab({
   isPanelOpen,
   panelId,
 }: Readonly<MetricsTabProps>) {
-  const clusterId = objectData?.clusterId;
-  const group = objectData?.group;
-  const version = objectData?.version;
-  const kind = objectData?.kind;
-  const namespace = objectData?.namespace;
-  const name = objectData?.name;
-  const present = Boolean(objectData);
-  // Rebuilt only when the identity changes, so the metrics lease is not re-acquired every render.
-  const objectRef = useMemo(
-    () => (present ? { clusterId, group, version, kind, namespace, name } : null),
-    [present, clusterId, group, version, kind, namespace, name]
-  );
   return (
     <div className="object-panel-tab-content metrics-tab">
-      {objectRef ? (
+      {objectData ? (
         <>
           <Utilization objectData={objectData} detail={detail} isPanelOpen={isPanelOpen} />
-          <LiveMetrics
-            // Another object starts a new chart.
-            key={[clusterId, group, version, kind, namespace, name].join('|')}
-            objectRef={objectRef}
-            isPanelOpen={isPanelOpen}
-            panelId={panelId}
-          />
+          <LiveMetrics panelId={panelId} />
         </>
       ) : null}
     </div>

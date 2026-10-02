@@ -5,25 +5,23 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ResourceMetricsResult } from '@/core/resource-metrics';
+import type { ResourceMetricValues } from '@/core/resource-metrics';
 import { requireValue } from '@/test-utils/requireValue';
 import MetricsTab from './MetricsTab';
 import type { MetricGraph } from './metricsTabModel';
+import {
+  clearPanelMetricSamples,
+  recordPanelMetricSample,
+  setPanelMetricError,
+  startPanelMetricCollection,
+  stopPanelMetricCollection,
+} from './panelMetricSamples';
 import type { UtilizationData } from './useUtilizationData';
 
 const hoisted = vi.hoisted(() => ({
-  live: null as ResourceMetricsResult | null,
-  liveEnabled: [] as boolean[],
   autoRefresh: true,
   utilization: null as UtilizationData | null,
   utilizationCalls: [] as Array<{ objectData: unknown; detail: unknown; enabled: boolean }>,
-}));
-
-vi.mock('@/core/resource-metrics', () => ({
-  useResourceMetrics: (_objectData: unknown, enabled?: boolean) => {
-    hoisted.liveEnabled.push(Boolean(enabled));
-    return hoisted.live;
-  },
 }));
 
 vi.mock('@/core/refresh/hooks/useRefreshPreferences', () => ({
@@ -63,52 +61,31 @@ const pod = {
 const PANEL_ID = 'obj:dev:dev-cluster:/v1:Pod:podinfo:podinfo-66888d8d86-5lpbr';
 const T0 = 1_800_000_000_000;
 
-const noMetrics: ResourceMetricsResult = {
-  status: 'missing',
-  metrics: null,
-  resolution: { kind: 'unsupported', reason: 'unsupported-kind' },
-};
-
-// One metrics-server collection as the Pod's `pods` scope serves it (collectedAt is unix seconds).
-const liveCollection = (collectedAtMs: number, cpu: number): ResourceMetricsResult => ({
-  status: 'available',
-  metrics: {
-    source: 'pods',
-    cpu: { usage: cpu, limit: 500 },
-    memory: { usage: 64 * 1024 * 1024 },
-    freshness: { collectedAt: collectedAtMs / 1000, stale: false },
-  },
-  resolution: { kind: 'unsupported', reason: 'unsupported-kind' },
-});
+// What the panel's collector records for one metrics-server collection.
+const collected = (t: number, cpu: ResourceMetricValues) =>
+  recordPanelMetricSample(PANEL_ID, { t, cpu, memory: { usage: 64 * 1024 * 1024 } });
 
 describe('MetricsTab', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-  let shownProps: Partial<React.ComponentProps<typeof MetricsTab>> = {};
 
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    // Before any collection the real hook reports no metrics, never a null result.
-    hoisted.live = noMetrics;
-    hoisted.liveEnabled = [];
     hoisted.autoRefresh = true;
     hoisted.utilization = null;
     hoisted.utilizationCalls = [];
-    shownProps = {};
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(T0);
+    startPanelMetricCollection(PANEL_ID, T0);
   });
 
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
-    vi.useRealTimers();
+    clearPanelMetricSamples(PANEL_ID);
   });
 
   const render = async (props: Partial<React.ComponentProps<typeof MetricsTab>> = {}) => {
-    shownProps = props;
     await act(async () => {
       root.render(
         <MetricsTab objectData={pod} detail={null} isPanelOpen panelId={PANEL_ID} {...props} />
@@ -116,13 +93,6 @@ describe('MetricsTab', () => {
     });
   };
 
-  // A new metrics-server collection arrives through the Pod's live metrics.
-  const collect = async (collectedAtMs: number, cpu: number) => {
-    hoisted.live = liveCollection(collectedAtMs, cpu);
-    await render(shownProps);
-  };
-
-  const lastLiveEnabled = () => hoisted.liveEnabled[hoisted.liveEnabled.length - 1];
   const livePoints = () =>
     container.querySelector('[data-testid="chart-cpu"]')?.getAttribute('data-points') ?? null;
   const tile = (graph: string) =>
@@ -131,14 +101,12 @@ describe('MetricsTab', () => {
       `expected the ${graph} tile`
     );
 
-  it('charts live metrics while the panel is open and says they are not kept', async () => {
+  it('opens on the samples the panel collected before the tab was shown', async () => {
+    collected(T0, { usage: 10, limit: 500 });
+    collected(T0 + 5_000, { usage: 30, limit: 500 });
+
     await render();
-    expect(container.querySelector('[data-live-collecting]')).not.toBeNull();
 
-    await collect(T0, 10);
-    await collect(T0 + 5_000, 30);
-
-    expect(lastLiveEnabled()).toBe(true);
     expect(livePoints()).toBe('2');
     expect(tile('cpu').textContent).toContain('30m');
     expect(tile('cpu').textContent).toContain('500m');
@@ -149,52 +117,29 @@ describe('MetricsTab', () => {
     expect(container.querySelector('button')).toBeNull();
   });
 
-  it('keeps live samples across a tab switch and starts over after the panel is hidden', async () => {
+  it('follows new samples while it is shown', async () => {
     await render();
-    await collect(T0, 10);
-    await collect(T0 + 5_000, 20);
-
-    // The tab stays mounted while another tab in the visible panel is shown.
-    await collect(T0 + 10_000, 25);
-    expect(livePoints()).toBe('3');
-
-    // The panel is hidden: collection stops and the samples are dropped.
-    await render({ isPanelOpen: false });
-    expect(lastLiveEnabled()).toBe(false);
-
-    // Coming back starts a new chart; the retained collection from before would be a gap.
-    vi.setSystemTime(T0 + 120_000);
-    await render({ isPanelOpen: true });
-    expect(container.querySelector('[data-testid="chart-cpu"]')).toBeNull();
     expect(container.querySelector('[data-live-collecting]')).not.toBeNull();
 
-    await collect(T0 + 125_000, 30);
+    await act(async () => collected(T0, { usage: 10 }));
     expect(livePoints()).toBe('1');
+    await act(async () => collected(T0 + 5_000, { usage: 20 }));
+    expect(livePoints()).toBe('2');
   });
 
-  it('stops and clears live collection while auto-refresh is paused', async () => {
-    await render();
-    await collect(T0, 10);
-    expect(livePoints()).toBe('1');
-
+  it('keeps the charts while auto-refresh is paused and says collection is paused', async () => {
+    collected(T0, { usage: 10 });
+    stopPanelMetricCollection(PANEL_ID);
     hoisted.autoRefresh = false;
+
     await render();
 
-    expect(lastLiveEnabled()).toBe(false);
-    expect(container.querySelector('[data-testid="chart-cpu"]')).toBeNull();
+    expect(livePoints()).toBe('1');
     expect(container.querySelector('[data-live-paused]')).not.toBeNull();
   });
 
   it("shows a node's allocatable as its ceiling, not the sum of its pods' limits", async () => {
-    hoisted.live = {
-      status: 'available',
-      metrics: {
-        source: 'nodes',
-        cpu: { usage: 250, request: 900, limit: 3_000, allocatable: 1_900, capacity: 2_000 },
-        freshness: { collectedAt: T0 / 1000, stale: false },
-      },
-      resolution: { kind: 'unsupported', reason: 'unsupported-kind' },
-    };
+    collected(T0, { usage: 250, request: 900, limit: 3_000, allocatable: 1_900, capacity: 2_000 });
     await render({
       objectData: { clusterId: pod.clusterId, group: '', version: 'v1', kind: 'Node', name: 'n1' },
     });
@@ -205,8 +150,8 @@ describe('MetricsTab', () => {
 
   it('shows resource utilization above the live charts, even while auto-refresh is paused', async () => {
     hoisted.utilization = { cpu: { usage: 250, request: 500 }, memory: { usage: 64 } };
+    collected(T0, { usage: 10 });
     await render();
-    await collect(T0, 10);
 
     const utilization = requireValue(
       container.querySelector<HTMLElement>('[data-testid="resource-utilization"]'),
@@ -239,7 +184,7 @@ describe('MetricsTab', () => {
   });
 
   it('reports when live metrics are unavailable', async () => {
-    hoisted.live = { ...noMetrics, status: 'error', error: 'metrics API not available' };
+    setPanelMetricError(PANEL_ID, 'metrics API not available');
     await render();
 
     expect(container.querySelector('[data-live-unavailable]')?.textContent).toContain(

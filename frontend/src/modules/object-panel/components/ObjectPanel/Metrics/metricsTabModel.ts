@@ -40,6 +40,8 @@ export interface LiveMetricSample {
   t: number;
   cpu?: ResourceMetricValues;
   memory?: ResourceMetricValues;
+  /** Collection paused before this sample (auto-refresh off, another cluster shown). */
+  afterGap?: boolean;
 }
 
 // The graphs the metrics API can fill, in display order.
@@ -50,6 +52,12 @@ const LIVE_GRAPHS = [
 
 // Only nodes report allocatable: what the node offers to pods.
 const SERIES_ROLES: readonly MetricSeriesRole[] = ['usage', 'request', 'limit', 'allocatable'];
+
+// A sample with no values, so the chart leaves a gap where collection paused.
+const withGapBreaks = (samples: readonly LiveMetricSample[]): LiveMetricSample[] =>
+  samples.flatMap((sample, index) =>
+    sample.afterGap && index > 0 ? [{ t: (samples[index - 1].t + sample.t) / 2 }, sample] : [sample]
+  );
 
 const liveGraph = (
   { id, title, unit }: (typeof LIVE_GRAPHS)[number],
@@ -68,10 +76,13 @@ const liveGraph = (
 };
 
 /** The CPU and memory graphs for the samples collected so far. */
-export const liveTimeline = (samples: readonly LiveMetricSample[]): MetricTimeline => ({
-  times: samples.map((sample) => sample.t),
-  graphs: LIVE_GRAPHS.map((graph) => liveGraph(graph, samples)),
-});
+export const liveTimeline = (collected: readonly LiveMetricSample[]): MetricTimeline => {
+  const samples = withGapBreaks(collected);
+  return {
+    times: samples.map((sample) => sample.t),
+    graphs: LIVE_GRAPHS.map((graph) => liveGraph(graph, samples)),
+  };
+};
 
 type Values = readonly (number | null)[];
 

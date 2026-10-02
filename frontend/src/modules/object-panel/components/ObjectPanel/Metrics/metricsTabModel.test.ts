@@ -104,6 +104,20 @@ describe('liveTimeline', () => {
     expect(graphStats(cpu)).toMatchObject({ current: 300, limit: 3_000, allocatable: 1_900 });
   });
 
+  it('breaks the lines where collection paused instead of joining across the gap', () => {
+    const timeline = liveTimeline([
+      { t: 1_000, cpu: { usage: 10 } },
+      { t: 6_000, cpu: { usage: 20 } },
+      { t: 60_000, cpu: { usage: 30 }, afterGap: true },
+    ]);
+
+    const [cpu] = timeline.graphs;
+    // A point with no values between the two runs; Recharts leaves a gap at nulls.
+    expect(timeline.times).toEqual([1_000, 6_000, 33_000, 60_000]);
+    expect(cpu.series[0].values).toEqual([10, 20, null, 30]);
+    expect(graphStats(cpu)).toMatchObject({ current: 30, peak: 30 });
+  });
+
   it('has no data before the first sample', () => {
     expect(liveTimeline([]).graphs.map((graph) => graph.hasData)).toEqual([false, false]);
   });

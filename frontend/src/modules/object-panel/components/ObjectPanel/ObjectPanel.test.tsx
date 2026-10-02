@@ -167,10 +167,25 @@ vi.mock('@ui/dockable', () => ({
   }),
 }));
 
-// Mock tabGroupState helpers
+// Mock tabGroupState helpers. By default the panel has no group (it counts as visible); a test
+// can put it behind another panel of its dock group.
+const dockGroup = vi.hoisted(() => ({ activeTab: null as string | null }));
 vi.mock('@ui/dockable/tabGroupState', () => ({
-  getGroupForPanel: () => null,
-  getGroupTabs: () => null,
+  getGroupForPanel: () => (dockGroup.activeTab ? 'right' : null),
+  getGroupTabs: () => (dockGroup.activeTab ? { tabs: [], activeTab: dockGroup.activeTab } : null),
+}));
+
+const metricsCollector = vi.hoisted(() => ({
+  calls: [] as Array<{ panelId: string; objectRef: unknown; enabled: boolean }>,
+  autoRefresh: true,
+}));
+vi.mock('@modules/object-panel/components/ObjectPanel/Metrics/usePanelMetricsCollector', () => ({
+  usePanelMetricsCollector: (panelId: string, objectRef: unknown, enabled: boolean) => {
+    metricsCollector.calls.push({ panelId, objectRef, enabled });
+  },
+}));
+vi.mock('@/core/refresh/hooks/useRefreshPreferences', () => ({
+  useAutoRefreshEnabled: () => metricsCollector.autoRefresh,
 }));
 
 // Mock CurrentObjectPanelContext from useObjectPanel
@@ -314,6 +329,9 @@ describe('ObjectPanel tab availability', () => {
     mockUseRefreshWatcher.mockClear();
     mockClosePanel.mockReset();
     tabStore.reset();
+    dockGroup.activeTab = null;
+    metricsCollector.calls = [];
+    metricsCollector.autoRefresh = true;
 
     ctx = {} as RenderContext;
     ctx.container = document.createElement('div');
@@ -375,6 +393,29 @@ describe('ObjectPanel tab availability', () => {
     Array.from(ctx.container.querySelectorAll<HTMLButtonElement>('.tab-strip .tab-item')).find(
       (button) => button.textContent?.trim() === label
     );
+
+  it('collects metrics from the moment the panel opens, whatever tab it shows', async () => {
+    await renderObjectPanel({ kind: 'Pod', name: 'api-1', namespace: 'team-a' });
+    const panelId = buildPanelId(defaultClusterId, 'Pod', 'team-a', 'api-1');
+
+    // The Details tab is showing; the Metrics tab has never been opened.
+    expect(ctx.container.textContent).not.toContain('Collecting live metrics');
+    expect(metricsCollector.calls[metricsCollector.calls.length - 1]).toMatchObject({
+      panelId,
+      objectRef: { kind: 'Pod', name: 'api-1', namespace: 'team-a', clusterId: defaultClusterId },
+      enabled: true,
+    });
+  });
+
+  it('keeps collecting behind another panel of its dock group, and pauses with auto-refresh', async () => {
+    dockGroup.activeTab = 'obj:alpha:ctx:pod:team-a:other';
+    await renderObjectPanel({ kind: 'Pod', name: 'api-1', namespace: 'team-a' });
+    expect(metricsCollector.calls[metricsCollector.calls.length - 1]?.enabled).toBe(true);
+
+    metricsCollector.autoRefresh = false;
+    await renderObjectPanel({ kind: 'Pod', name: 'api-1', namespace: 'team-a' });
+    expect(metricsCollector.calls[metricsCollector.calls.length - 1]?.enabled).toBe(false);
+  });
 
   it('hides the logs tab when log access is denied', async () => {
     capabilityStateMap = {
