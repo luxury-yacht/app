@@ -1,155 +1,171 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/panelMetricSamples.ts
  *
- * Live metric samples per object panel, kept from when the panel opens until it closes
- * (docs/architecture/resource-metrics.md, "Object panel Metrics tab").
- *
- * Module-level, like logViewerPrefsCache: the panel's collector runs whatever tab is shown, and
- * the samples must survive the panel's unmount/remount on a cluster switch. Eviction is driven
- * from ObjectPanelStateContext once this renderer no longer owns the panel; a move to another
- * window hands the samples over with exportPanelMetricSamples / importPanelMetricSamples.
+ * Client for the backend panel metrics buffer (backend/panelmetrics; docs/architecture/
+ * resource-metrics.md, "Object panel Metrics tab"). The backend keeps a panel's samples while the
+ * panel is open in any window, so its chart survives moves between windows. The window showing a
+ * panel appends each collection; the Metrics tab reads the series and keeps only what it shows.
  */
 
-import { useCallback, useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
+import { AppendPanelMetricSample, GetPanelMetricSeries } from '@/core/backend-api';
+import type { panelmetrics } from '@/core/backend-api/models';
+import type { ResourceMetricValues } from '@/core/resource-metrics';
+import { reportOperationalError } from '@/utils/errorHandler';
 import type { LiveMetricSample } from './metricsTabModel';
 
-const KEEP_MS = 60 * 60_000;
-// Starting collection paints the scope's retained data before the first new collection. A value
-// older than this at the start of a run predates the run; charting it would draw a stale point.
-const START_GRACE_MS = 30_000;
-
-export interface PanelMetricSamples {
-  /** When this panel started collecting. */
-  startedAt: number;
+export interface PanelMetricSeries {
+  /** When the panel started collecting, or null before its first sample. */
+  startedAt: number | null;
   samples: readonly LiveMetricSample[];
-  /** Why live metrics have nothing to show, when they report a reason. */
-  error: string | null;
 }
 
-/** What a panel carries to another window. */
-export interface PanelMetricHandoff {
-  startedAt: number;
-  samples: LiveMetricSample[];
-}
+const NO_SERIES: PanelMetricSeries = { startedAt: null, samples: [] };
 
-interface Entry extends PanelMetricSamples {
-  /** When the current run of collection started, or null while stopped. */
-  runStartedAt: number | null;
-  /** The next sample follows a stop, so the chart breaks before it. */
-  gapPending: boolean;
-}
+// Per panel: this window just appended, so a shown Metrics tab reads the new sample.
+const appendListeners = new Map<string, Set<() => void>>();
 
-const entries = new Map<string, Entry>();
-const listeners = new Map<string, Set<() => void>>();
+const VALUE_KEYS = ['usage', 'request', 'limit', 'capacity', 'allocatable'] as const;
 
-const publish = (panelId: string, entry: Entry | undefined): void => {
-  if (entry) {
-    entries.set(panelId, entry);
-  } else {
-    entries.delete(panelId);
+// The wire marks a value that was not reported as null or absent; keep it absent, never zero.
+const valuesFromWire = (values: panelmetrics.Values | undefined): ResourceMetricValues => {
+  const out: ResourceMetricValues = {};
+  for (const key of VALUE_KEYS) {
+    const value = values?.[key];
+    if (typeof value === 'number') {
+      out[key] = value;
+    }
   }
-  listeners.get(panelId)?.forEach((listener) => listener());
+  return out;
 };
 
-export const getPanelMetricSamples = (panelId: string): PanelMetricSamples | undefined =>
-  entries.get(panelId);
+const sampleFromWire = (sample: panelmetrics.Sample): LiveMetricSample => ({
+  t: sample.t,
+  cpu: valuesFromWire(sample.cpu),
+  memory: valuesFromWire(sample.memory),
+});
 
-/** Starts (or resumes) collection; the only call that creates a panel's entry. */
-export const startPanelMetricCollection = (panelId: string, now: number): void => {
-  const entry = entries.get(panelId);
-  publish(
-    panelId,
-    entry
-      ? { ...entry, runStartedAt: now }
-      : { startedAt: now, samples: [], error: null, runStartedAt: now, gapPending: false }
-  );
-};
-
-/** Pauses collection and keeps the samples; the next one starts after a gap. */
-export const stopPanelMetricCollection = (panelId: string): void => {
-  // A closed panel was evicted before its collector's cleanup ran; do not recreate it.
-  const entry = entries.get(panelId);
-  if (entry) {
-    publish(panelId, { ...entry, runStartedAt: null, gapPending: entry.samples.length > 0 });
-  }
-};
-
-export const recordPanelMetricSample = (panelId: string, sample: LiveMetricSample): void => {
-  const entry = entries.get(panelId);
-  const last = entry?.samples[entry.samples.length - 1];
-  if (
-    !entry ||
-    entry.runStartedAt === null ||
-    sample.t < entry.runStartedAt - START_GRACE_MS ||
-    (last && sample.t <= last.t)
-  ) {
-    return;
-  }
-  const next = entry.gapPending ? { ...sample, afterGap: true } : sample;
-  const kept = entry.samples.filter((existing) => existing.t >= sample.t - KEEP_MS);
-  publish(panelId, { ...entry, samples: [...kept, next], gapPending: false });
-};
-
-export const setPanelMetricError = (panelId: string, error: string | null): void => {
-  const entry = entries.get(panelId);
-  if (entry && entry.error !== error) {
-    publish(panelId, { ...entry, error });
-  }
-};
-
-/** Forgets a panel this renderer no longer owns (closed, or handed to another window). */
-export const clearPanelMetricSamples = (panelId: string): void => {
-  if (entries.has(panelId)) {
-    publish(panelId, undefined);
-  }
-};
-
-export const exportPanelMetricSamples = (panelId: string): PanelMetricHandoff | null => {
-  const entry = entries.get(panelId);
-  return entry && entry.samples.length > 0
-    ? { startedAt: entry.startedAt, samples: [...entry.samples] }
-    : null;
-};
-
-/**
- * Takes over samples handed from another window. They predate anything collected here, so
- * they go first, and the first sample collected here starts after a gap.
- */
-export const importPanelMetricSamples = (
+/** Sends one collection to the backend buffer, then lets this window's Metrics tab read it. */
+export const appendPanelMetricSample = async (
+  clusterId: string,
   panelId: string,
-  handoff: PanelMetricHandoff | null | undefined
-): void => {
-  if (!handoff || handoff.samples.length === 0) {
-    return;
-  }
-  const entry = entries.get(panelId);
-  const handedLast = handoff.samples[handoff.samples.length - 1].t;
-  const local = (entry?.samples ?? []).filter((sample) => sample.t > handedLast);
-  const [firstLocal, ...restLocal] = local;
-  publish(panelId, {
-    startedAt: Math.min(handoff.startedAt, entry?.startedAt ?? handoff.startedAt),
-    samples: [...handoff.samples, ...(firstLocal ? [{ ...firstLocal, afterGap: true }] : []), ...restLocal],
-    error: entry?.error ?? null,
-    runStartedAt: entry?.runStartedAt ?? null,
-    gapPending: !firstLocal,
+  sample: LiveMetricSample
+): Promise<void> => {
+  await AppendPanelMetricSample(clusterId, panelId, {
+    t: sample.t,
+    cpu: sample.cpu ?? {},
+    memory: sample.memory ?? {},
+  });
+  appendListeners.get(panelId)?.forEach((listener) => {
+    listener();
   });
 };
 
-/** The panel's samples, re-rendering when they change. */
-export const usePanelMetricSamples = (panelId: string): PanelMetricSamples | undefined => {
-  const subscribe = useCallback(
-    (listener: () => void) => {
-      const panelListeners = listeners.get(panelId) ?? new Set<() => void>();
-      panelListeners.add(listener);
-      listeners.set(panelId, panelListeners);
-      return () => {
-        panelListeners.delete(listener);
-        if (panelListeners.size === 0) {
-          listeners.delete(panelId);
-        }
-      };
-    },
-    [panelId]
-  );
-  return useSyncExternalStore(subscribe, () => entries.get(panelId));
+const subscribeAppends = (panelId: string, listener: () => void): (() => void) => {
+  const listeners = appendListeners.get(panelId) ?? new Set<() => void>();
+  listeners.add(listener);
+  appendListeners.set(panelId, listeners);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) {
+      appendListeners.delete(panelId);
+    }
+  };
 };
+
+// A full read replaces the series; a delta appends and drops what the backend no longer keeps.
+const mergeSeries = (
+  current: PanelMetricSeries,
+  response: panelmetrics.Series,
+  afterT: number
+): PanelMetricSeries => {
+  const fresh = (response.samples ?? []).map(sampleFromWire);
+  const kept = afterT === 0 ? [] : current.samples.filter((sample) => sample.t >= response.firstT);
+  return {
+    startedAt: response.startedAt > 0 ? response.startedAt : null,
+    samples: [...kept, ...fresh],
+  };
+};
+
+interface SeriesReader {
+  read: () => void;
+  cancel: () => void;
+}
+
+// Reads one at a time from the newest sample it has; a request during a read asks for one more.
+const createSeriesReader = (
+  clusterId: string,
+  panelId: string,
+  apply: (response: panelmetrics.Series, afterT: number) => void
+): SeriesReader => {
+  let lastT = 0;
+  let reading = false;
+  let readAgain = false;
+  let cancelled = false;
+
+  const readNewer = async (): Promise<void> => {
+    const afterT = lastT;
+    const response = await GetPanelMetricSeries(clusterId, panelId, afterT);
+    if (cancelled || !response) {
+      return;
+    }
+    const samples = response.samples ?? [];
+    lastT = samples.length > 0 ? samples[samples.length - 1].t : afterT;
+    apply(response, afterT);
+  };
+
+  const read = (): void => {
+    if (reading) {
+      readAgain = true;
+      return;
+    }
+    reading = true;
+    readNewer()
+      .catch((error) => {
+        reportOperationalError(error, { source: 'usePanelMetricSeries', action: 'read', panelId });
+      })
+      .finally(() => {
+        reading = false;
+        if (readAgain && !cancelled) {
+          readAgain = false;
+          read();
+        }
+      });
+  };
+
+  return {
+    read,
+    cancel: () => {
+      cancelled = true;
+    },
+  };
+};
+
+/**
+ * The panel's collected samples while enabled (the panel is visible). Showing reads the whole
+ * series; after that, each append from this window reads only what is newer.
+ */
+export function usePanelMetricSeries(
+  clusterId: string,
+  panelId: string,
+  enabled: boolean
+): PanelMetricSeries {
+  const [series, setSeries] = useState<PanelMetricSeries>(NO_SERIES);
+
+  useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+    const reader = createSeriesReader(clusterId, panelId, (response, afterT) => {
+      setSeries((current) => mergeSeries(current, response, afterT));
+    });
+    reader.read();
+    const unsubscribe = subscribeAppends(panelId, reader.read);
+    return () => {
+      reader.cancel();
+      unsubscribe();
+    };
+  }, [clusterId, enabled, panelId]);
+
+  return enabled ? series : NO_SERIES;
+}

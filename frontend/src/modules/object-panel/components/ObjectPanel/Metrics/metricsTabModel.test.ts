@@ -105,17 +105,29 @@ describe('liveTimeline', () => {
   });
 
   it('breaks the lines where collection paused instead of joining across the gap', () => {
+    // Collected every 5s, then nothing for 49s (auto-refresh paused, another cluster shown).
     const timeline = liveTimeline([
       { t: 1_000, cpu: { usage: 10 } },
       { t: 6_000, cpu: { usage: 20 } },
-      { t: 60_000, cpu: { usage: 30 }, afterGap: true },
+      { t: 11_000, cpu: { usage: 15 } },
+      { t: 60_000, cpu: { usage: 30 } },
+      { t: 65_000, cpu: { usage: 25 } },
     ]);
 
     const [cpu] = timeline.graphs;
     // A point with no values between the two runs; Recharts leaves a gap at nulls.
-    expect(timeline.times).toEqual([1_000, 6_000, 33_000, 60_000]);
-    expect(cpu.series[0].values).toEqual([10, 20, null, 30]);
-    expect(graphStats(cpu)).toMatchObject({ current: 30, peak: 30 });
+    expect(timeline.times).toEqual([1_000, 6_000, 11_000, 35_500, 60_000, 65_000]);
+    expect(cpu.series[0].values).toEqual([10, 20, 15, null, 30, 25]);
+    expect(graphStats(cpu)).toMatchObject({ current: 25, peak: 30 });
+  });
+
+  it('keeps an evenly collected series joined', () => {
+    const timeline = liveTimeline([
+      { t: 1_000, cpu: { usage: 10 } },
+      { t: 6_000, cpu: { usage: 20 } },
+      { t: 12_000, cpu: { usage: 30 } },
+    ]);
+    expect(timeline.times).toEqual([1_000, 6_000, 12_000]);
   });
 
   it('has no data before the first sample', () => {

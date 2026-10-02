@@ -40,8 +40,6 @@ export interface LiveMetricSample {
   t: number;
   cpu?: ResourceMetricValues;
   memory?: ResourceMetricValues;
-  /** Collection paused before this sample (auto-refresh off, another cluster shown). */
-  afterGap?: boolean;
 }
 
 // The graphs the metrics API can fill, in display order.
@@ -53,11 +51,31 @@ const LIVE_GRAPHS = [
 // Only nodes report allocatable: what the node offers to pods.
 const SERIES_ROLES: readonly MetricSeriesRole[] = ['usage', 'request', 'limit', 'allocatable'];
 
-// A sample with no values, so the chart leaves a gap where collection paused.
-const withGapBreaks = (samples: readonly LiveMetricSample[]): LiveMetricSample[] =>
-  samples.flatMap((sample, index) =>
-    sample.afterGap && index > 0 ? [{ t: (samples[index - 1].t + sample.t) / 2 }, sample] : [sample]
+// A spacing this many times the usual one means collection paused (auto-refresh off, another
+// cluster shown, the panel's window closed while it was kept for reclaiming).
+const GAP_FACTOR = 3;
+
+const medianSpacing = (samples: readonly LiveMetricSample[]): number => {
+  const spacings = samples
+    .slice(1)
+    .map((sample, index) => sample.t - samples[index].t)
+    .sort((left, right) => left - right);
+  return spacings[Math.floor(spacings.length / 2)];
+};
+
+// A sample with no values where collection paused, so the chart leaves a gap instead of joining
+// across it. Needs a few samples to know the usual spacing.
+const withGapBreaks = (samples: readonly LiveMetricSample[]): readonly LiveMetricSample[] => {
+  if (samples.length < 3) {
+    return samples;
+  }
+  const limit = GAP_FACTOR * medianSpacing(samples);
+  return samples.flatMap((sample, index) =>
+    index > 0 && sample.t - samples[index - 1].t > limit
+      ? [{ t: (samples[index - 1].t + sample.t) / 2 }, sample]
+      : [sample]
   );
+};
 
 const liveGraph = (
   { id, title, unit }: (typeof LIVE_GRAPHS)[number],

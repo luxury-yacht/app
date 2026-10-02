@@ -3,8 +3,8 @@
  *
  * The object panel's Metrics tab for a Pod, Node, Deployment, StatefulSet, or DaemonSet: Resource
  * Utilization bars for the current values, then CPU and memory from the metrics API charted from
- * the samples the panel has collected since it opened (panelMetricSamples). Nothing is stored:
- * closing the panel discards them.
+ * the samples the panel has collected since it opened, kept in backend memory while the panel is
+ * open in any window. Nothing is written to disk; closing the panel discards them.
  */
 
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
@@ -12,17 +12,17 @@ import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { StatusChip } from '@shared/components/StatusChip';
 import { useMemo } from 'react';
 import { useAutoRefreshEnabled } from '@/core/refresh/hooks/useRefreshPreferences';
+import { useResourceMetrics } from '@/core/resource-metrics';
 import { MetricChart } from './MetricChart';
 import {
   formatClockTime,
   formatMetricValue,
   graphStats,
   liveTimeline,
-  type LiveMetricSample,
   type MetricGraph,
   type MetricTimeline,
 } from './metricsTabModel';
-import { usePanelMetricSamples } from './panelMetricSamples';
+import { usePanelMetricSeries } from './panelMetricSamples';
 import ResourceUtilization from './ResourceUtilization';
 import { useUtilizationData } from './useUtilizationData';
 import './MetricsTab.css';
@@ -31,9 +31,9 @@ interface MetricsTabProps {
   objectData: ObjectPanelRef | null;
   /** The panel's object details: utilization values until live metrics arrive. */
   detail: unknown;
-  /** The panel is visible (any of its tabs); the utilization lease is held only while it is. */
+  /** The panel is visible (any of its tabs); the tab reads and leases only while it is. */
   isPanelOpen: boolean;
-  /** Whose collected samples to chart (panelMetricSamples). */
+  /** Whose collected samples to chart (the backend panel metrics buffer). */
   panelId: string;
 }
 
@@ -122,28 +122,27 @@ function LiveBody({
   );
 }
 
-const NO_SAMPLES: readonly LiveMetricSample[] = [];
-
-// The panel's collector (ObjectPanel) records the samples; this only charts them.
-function LiveMetrics({ panelId }: Readonly<{ panelId: string }>) {
+// The panel's collector (ObjectPanel) sends the samples to the backend buffer; this charts them.
+function LiveMetrics({
+  objectData,
+  isPanelOpen,
+  panelId,
+}: Readonly<{ objectData: ObjectPanelRef; isPanelOpen: boolean; panelId: string }>) {
   const autoRefresh = useAutoRefreshEnabled();
-  const collected = usePanelMetricSamples(panelId);
-  const samples = collected?.samples ?? NO_SAMPLES;
-  const timeline = useMemo(() => liveTimeline(samples), [samples]);
+  const series = usePanelMetricSeries(objectData.clusterId, panelId, isPanelOpen);
+  const live = useResourceMetrics(objectData, isPanelOpen);
+  const error =
+    (live.status === 'error' ? live.error : null) ?? live.metrics?.freshness?.lastError ?? null;
+  const timeline = useMemo(() => liveTimeline(series.samples), [series.samples]);
   return (
     <>
       <div className="metrics-tab__toolbar" data-live-badge>
         <StatusChip variant="info">
-          Live{collected ? ` · since ${formatClockTime(collected.startedAt)}` : ''}
+          Live{series.startedAt ? ` · since ${formatClockTime(series.startedAt)}` : ''}
         </StatusChip>
         <span className="metrics-tab__hint">Not kept: cleared when you close this panel.</span>
       </div>
-      <LiveBody
-        timeline={timeline}
-        error={collected?.error ?? null}
-        paused={!autoRefresh}
-        syncId={panelId}
-      />
+      <LiveBody timeline={timeline} error={error} paused={!autoRefresh} syncId={panelId} />
     </>
   );
 }
@@ -182,7 +181,7 @@ export default function MetricsTab({
       {objectData ? (
         <>
           <Utilization objectData={objectData} detail={detail} isPanelOpen={isPanelOpen} />
-          <LiveMetrics panelId={panelId} />
+          <LiveMetrics objectData={objectData} isPanelOpen={isPanelOpen} panelId={panelId} />
         </>
       ) : null}
     </div>

@@ -72,6 +72,25 @@ type workspacePanelKey struct {
 	panelID   string
 }
 
+// PanelKey identifies a panel across windows for owners of panel-lifetime state.
+type PanelKey struct {
+	ClusterID string
+	PanelID   string
+}
+
+// panelRemoval collects panels that left the directory and reports them after the caller
+// releases d.mu, so a handler may call back into its own locks without a cycle.
+type panelRemoval struct {
+	keys   []PanelKey
+	notify func([]PanelKey)
+}
+
+func (r *panelRemoval) report() {
+	if r.notify != nil && len(r.keys) > 0 {
+		r.notify(r.keys)
+	}
+}
+
 // WorkspaceDirectory holds the application-wide panel collection independently
 // of the lifetime of any app-window renderer.
 type WorkspaceDirectory struct {
@@ -80,6 +99,7 @@ type WorkspaceDirectory struct {
 	panels           map[workspacePanelKey]WorkspacePanel
 	unpublished      map[workspacePanelKey]struct{}
 	onClusterRemoved func(string)
+	onPanelsRemoved  func([]PanelKey)
 	reservations     map[uint64]string
 	nextReservation  uint64
 }
@@ -194,15 +214,39 @@ func (d *WorkspaceDirectory) Move(tab TabSnapshot, source, target PanelLocation)
 }
 
 func (d *WorkspaceDirectory) RemoveWindow(windowName string) {
+	removal := &panelRemoval{}
+	defer removal.report()
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	for key, panel := range d.panels {
 		if panel.Location.WindowName == windowName {
-			delete(d.panels, key)
-			delete(d.unpublished, key)
+			d.deletePanelLocked(key, removal)
 			d.revision++
 		}
 	}
+}
+
+// SetPanelRemovalHandler installs the owner of panel-lifetime state. It is told which panels
+// closed (removed from every window), never about moves between windows.
+func (d *WorkspaceDirectory) SetPanelRemovalHandler(handler func([]PanelKey)) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.onPanelsRemoved = handler
+}
+
+// HasPanel reports whether a panel is open in any window, including retained placements.
+func (d *WorkspaceDirectory) HasPanel(clusterID, panelID string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	_, ok := d.panels[workspacePanelKey{clusterID, panelID}]
+	return ok
+}
+
+func (d *WorkspaceDirectory) deletePanelLocked(key workspacePanelKey, removal *panelRemoval) {
+	delete(d.panels, key)
+	delete(d.unpublished, key)
+	removal.keys = append(removal.keys, PanelKey{ClusterID: key.clusterID, PanelID: key.panelID})
+	removal.notify = d.onPanelsRemoved
 }
 
 // TransferGroup commits an acknowledged handoff as one directory mutation.
@@ -292,6 +336,8 @@ func (d *WorkspaceDirectory) PublishWindowWithTransfers(windowName string, kind 
 	if err != nil {
 		return nil, err
 	}
+	removal := &panelRemoval{}
+	defer removal.report()
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if err := d.validateReservationsLocked(reservations); err != nil {
@@ -304,7 +350,7 @@ func (d *WorkspaceDirectory) PublishWindowWithTransfers(windowName string, kind 
 	if err := d.validatePublicationLocked(windowName, next, approved); err != nil {
 		return nil, err
 	}
-	d.replacePublishedWindowLocked(windowName, next)
+	d.replacePublishedWindowLocked(windowName, next, removal)
 	committed := make([]string, 0, len(transfers))
 	for _, transfer := range transfers {
 		panel, found := next[workspacePanelKey{transfer.Tab.ClusterID(), transfer.Tab.PanelID}]
@@ -377,11 +423,16 @@ func addWorkspaceGroupPanels(group WorkspaceGroup, location PanelLocation, panel
 	return nil
 }
 
-func (d *WorkspaceDirectory) replacePublishedWindowLocked(windowName string, next map[workspacePanelKey]WorkspacePanel) {
+func (d *WorkspaceDirectory) replacePublishedWindowLocked(windowName string, next map[workspacePanelKey]WorkspacePanel, removal *panelRemoval) {
 	for key, panel := range d.panels {
 		_, awaitingMount := d.unpublished[key]
-		if panel.Location.WindowName == windowName && !awaitingMount {
+		if panel.Location.WindowName != windowName || awaitingMount {
+			continue
+		}
+		if _, republished := next[key]; republished {
 			delete(d.panels, key)
+		} else {
+			d.deletePanelLocked(key, removal)
 		}
 	}
 	for key, panel := range next {
@@ -400,11 +451,12 @@ func (d *WorkspaceDirectory) SetClusterRemovalHandler(handler func(string)) {
 
 // RemoveCluster discards panels for both explicit closure and runtime removal.
 func (d *WorkspaceDirectory) RemoveCluster(clusterID string) {
+	removal := &panelRemoval{}
+	defer removal.report()
 	d.mu.Lock()
 	for key := range d.panels {
 		if key.clusterID == clusterID {
-			delete(d.panels, key)
-			delete(d.unpublished, key)
+			d.deletePanelLocked(key, removal)
 			d.revision++
 		}
 	}

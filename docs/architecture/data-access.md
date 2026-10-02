@@ -102,6 +102,7 @@ The final command-to-owner map is:
 | `UpdateCoordinator` | 6 | Update checks, download, skip, and restart |
 | `AppLogService` | 5 | Process log reads, writes, and clear |
 | `DesktopShell` | 5 | Native dialogs, CSV save, workspace-menu dispatch, and process UI visibility |
+| `PanelMetricsService` | 2 | Object panels' live metric samples: append and series reads |
 
 Wails generates the callable module at
 `frontend/bindings/github.com/luxury-yacht/app/backend/desktopservice.ts` and

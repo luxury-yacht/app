@@ -18,7 +18,6 @@ import type { panelwindow } from '@/core/backend-api/models';
 import { requireValue } from '@/test-utils/requireValue';
 
 const clearLogViewerPrefsMock = vi.fn();
-const clearPanelMetricSamplesMock = vi.fn();
 
 let mockClusterId = 'cluster-a';
 let mockClusterName = 'Cluster A';
@@ -43,10 +42,6 @@ vi.mock('@/core/refresh', () => ({
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache', () => ({
   clearLogViewerPrefs: (...args: unknown[]) => clearLogViewerPrefsMock(...args),
-}));
-
-vi.mock('@modules/object-panel/components/ObjectPanel/Metrics/panelMetricSamples', () => ({
-  clearPanelMetricSamples: (...args: unknown[]) => clearPanelMetricSamplesMock(...args),
 }));
 
 const stateRef: { current: ReturnType<typeof useObjectPanelState> | null } = {
@@ -85,7 +80,6 @@ describe('ObjectPanelStateContext', () => {
     activeTabProbeRef.current = undefined;
     resetScopedDomainMock.mockReset();
     clearLogViewerPrefsMock.mockClear();
-    clearPanelMetricSamplesMock.mockClear();
   });
 
   afterEach(() => {
@@ -665,17 +659,14 @@ describe('ObjectPanelStateContext', () => {
       expect.arrayContaining(['object-details', 'object-yaml', 'object-events', 'container-logs'])
     );
     expect(clearLogViewerPrefsMock).toHaveBeenCalledWith(panelId);
-    expect(clearPanelMetricSamplesMock).toHaveBeenCalledWith(panelId);
 
     resetScopedDomainMock.mockClear();
     clearLogViewerPrefsMock.mockClear();
-    clearPanelMetricSamplesMock.mockClear();
     act(() => {
       stateRef.current?.removeOwnedPanel('cluster-a', panelId);
     });
     expect(resetScopedDomainMock).not.toHaveBeenCalled();
     expect(clearLogViewerPrefsMock).not.toHaveBeenCalled();
-    expect(clearPanelMetricSamplesMock).not.toHaveBeenCalled();
   });
 
   it.each(['transfer', 'close', 'close-all', 'cluster-close'] as const)(
@@ -731,8 +722,6 @@ describe('ObjectPanelStateContext', () => {
       );
       expect(new Set(evictedScopes).size).toBe(evictedScopes.length);
       expect(clearLogViewerPrefsMock).toHaveBeenCalledTimes(1);
-      expect(clearPanelMetricSamplesMock).toHaveBeenCalledTimes(1);
-      expect(clearPanelMetricSamplesMock).toHaveBeenCalledWith(panelId);
     }
   );
 });

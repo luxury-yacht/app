@@ -16,7 +16,6 @@ import {
 
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { clearLogViewerPrefs } from '@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache';
-import { clearPanelMetricSamples } from '@modules/object-panel/components/ObjectPanel/Metrics/panelMetricSamples';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import { getObjectPanelScopeEvictions } from '@modules/object-panel/objectPanelRef';
 import type React from 'react';
@@ -108,7 +107,6 @@ const evictRemovedPanelCaches = (
       if (!current[clusterId]?.openPanels.has(panelId)) {
         evictPanelScopes(ref);
         clearLogViewerPrefs(panelId);
-        clearPanelMetricSamples(panelId);
       }
     }
   }

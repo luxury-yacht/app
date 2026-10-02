@@ -60,9 +60,8 @@ they are not the ongoing live source.
 ## Object panel Metrics tab
 
 The **Metrics** tab shows the panel's Resource Utilization bars, then charts CPU
-and memory over the time the panel has been visible. It consumes
-`useResourceMetrics`; it is not a metric store. The Details tab has no
-utilization section and holds no metrics lease.
+and memory from the samples the panel has collected since it opened. The
+Details tab has no utilization section and holds no metrics lease.
 
 - **Availability.** `useObjectPanelTabs` offers the tab when
   `resolveResourceMetricsScope` serves the object from a refresh domain: Pods,
@@ -73,14 +72,27 @@ utilization section and holds no metrics lease.
   limits, and a Node's allocatable, using the object's detail values until the
   first live sample arrives. They stay while auto-refresh is paused, and their
   lease is held only while the panel is visible.
-- **Sampling.** The tab records one sample each time the payload's
-  `collectedAt` advances and keeps the last hour. A retained value from before
-  the current visit is ignored, so a revisit starts a new chart instead of
-  drawing a gap.
-- **Lifetime.** Samples live only in the tab's component state. The tab stays
-  mounted across tab switches within a visible panel, like Logs and YAML.
-  Hiding the panel (another panel active in its dock group, a cluster switch,
-  closing it) or pausing auto-refresh releases the lease and discards them.
+- **Collection.** `usePanelMetricsCollector`, mounted in `ObjectPanel`, leases
+  the object's metrics scope for the panel's whole life, whatever tab it shows
+  and even behind another panel of its dock group. It sends one sample each
+  time the payload's `collectedAt` advances, skipping data retained from before
+  it started. Pausing auto-refresh and a cluster switch (which unmounts the
+  panel) pause collection; the samples stay.
+- **Storage.** `PanelMetricsService` keeps the samples in backend memory
+  (`backend/panelmetrics`), never on disk, keyed by cluster and panel ID. A
+  sample stores its time and the two usage values; requests, limits, capacity,
+  and allocatable are stored only when they change. Each panel keeps at most
+  720 samples (an hour at the default 5-second poll); a shorter poll shortens
+  the window instead of growing memory.
+- **Lifetime.** The panel workspace directory owns it: a sample is accepted only
+  for a panel the directory holds (in a window, or retained without one), and
+  the directory's removal handler drops a panel's samples when it closes (its
+  window republishes without it, or the window or cluster is removed). Moving a
+  panel between windows, or retaining it after its app window closes, keeps
+  them; snapshots never carry them.
+- **Reading.** The tab reads the whole series when its panel is shown, then
+  only what is newer after each sample its window sends. A spacing over three
+  times the usual one is drawn as a gap.
 - **No history.** There is no stored history and no external metrics provider
   (Prometheus or other). Both were built and removed in October 2026: per-store
   authentication, cluster scoping, query languages, and settings turned the tab
@@ -109,6 +121,7 @@ boundary with partial identity.
 - Serve-time joins: `backend/refresh/snapshot`
 - Namespace metric payload: `backend/refresh/snapshot/namespace_metrics.go`
 - Frontend selectors/leases: `frontend/src/core/resource-metrics`
+- Panel sample buffer: `backend/panelmetrics`, `backend/panel_metrics_service.go`
 - Metrics tab: `frontend/src/modules/object-panel/components/ObjectPanel/Metrics`
 - Namespace composition:
   `frontend/src/modules/namespace/contexts/NamespaceContext.tsx`

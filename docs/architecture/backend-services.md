@@ -81,6 +81,7 @@ permission for an owner to call `DesktopService`.
 | `RefreshCoordinator` | Per-cluster refresh/catalog lifecycles, HTTP/streams, publication, governor/spill state, and global log limiter |
 | `WorkspaceCoordinator` | Peer selections, serialized selection mutations, namespace-scope rebuilds, foreground demand, and workspace assembly |
 | `ResourceGateway` | Request-shaped resource reads/actions, permission and response caches, YAML, details, and logs |
+| `PanelMetricsService` | In-memory metric samples for open object panels; drops a panel's samples when the panel workspace directory reports it closed |
 | `nodemaintenance.Store` | Process-wide, cluster-keyed node-drain jobs, cancellation handles, bounded history, and its lock |
 | `OperationsCoordinator` | Shell, port-forward, drain-operation registration, active-operation registry, and cleanup |
 | `DataManagementCoordinator` | Import/export and owner-directed live factory reset |

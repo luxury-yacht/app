@@ -5,23 +5,31 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ResourceMetricValues } from '@/core/resource-metrics';
+import type { ResourceMetricsResult, ResourceMetricValues } from '@/core/resource-metrics';
 import { requireValue } from '@/test-utils/requireValue';
 import MetricsTab from './MetricsTab';
-import type { MetricGraph } from './metricsTabModel';
-import {
-  clearPanelMetricSamples,
-  recordPanelMetricSample,
-  setPanelMetricError,
-  startPanelMetricCollection,
-  stopPanelMetricCollection,
-} from './panelMetricSamples';
+import type { LiveMetricSample, MetricGraph } from './metricsTabModel';
 import type { UtilizationData } from './useUtilizationData';
 
 const hoisted = vi.hoisted(() => ({
   autoRefresh: true,
   utilization: null as UtilizationData | null,
   utilizationCalls: [] as Array<{ objectData: unknown; detail: unknown; enabled: boolean }>,
+  series: { startedAt: null as number | null, samples: [] as LiveMetricSample[] },
+  seriesCalls: [] as Array<{ clusterId: string; panelId: string; enabled: boolean }>,
+  live: null as ResourceMetricsResult | null,
+}));
+
+// The panel's collector sends samples to the backend buffer; the tab shows what it returns.
+vi.mock('./panelMetricSamples', () => ({
+  usePanelMetricSeries: (clusterId: string, panelId: string, enabled: boolean) => {
+    hoisted.seriesCalls.push({ clusterId, panelId, enabled });
+    return hoisted.series;
+  },
+}));
+
+vi.mock('@/core/resource-metrics', () => ({
+  useResourceMetrics: () => hoisted.live,
 }));
 
 vi.mock('@/core/refresh/hooks/useRefreshPreferences', () => ({
@@ -61,9 +69,18 @@ const pod = {
 const PANEL_ID = 'obj:dev:dev-cluster:/v1:Pod:podinfo:podinfo-66888d8d86-5lpbr';
 const T0 = 1_800_000_000_000;
 
-// What the panel's collector records for one metrics-server collection.
-const collected = (t: number, cpu: ResourceMetricValues) =>
-  recordPanelMetricSample(PANEL_ID, { t, cpu, memory: { usage: 64 * 1024 * 1024 } });
+// What the backend buffer returns for one metrics-server collection.
+const collected = (t: number, cpu: ResourceMetricValues) => {
+  hoisted.series = {
+    startedAt: hoisted.series.startedAt ?? t,
+    samples: [...hoisted.series.samples, { t, cpu, memory: { usage: 64 * 1024 * 1024 } }],
+  };
+};
+const noMetrics: ResourceMetricsResult = {
+  status: 'missing',
+  metrics: null,
+  resolution: { kind: 'unsupported', reason: 'unsupported-kind' },
+};
 
 describe('MetricsTab', () => {
   let container: HTMLDivElement;
@@ -76,13 +93,14 @@ describe('MetricsTab', () => {
     hoisted.autoRefresh = true;
     hoisted.utilization = null;
     hoisted.utilizationCalls = [];
-    startPanelMetricCollection(PANEL_ID, T0);
+    hoisted.series = { startedAt: null, samples: [] };
+    hoisted.seriesCalls = [];
+    hoisted.live = noMetrics;
   });
 
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
-    clearPanelMetricSamples(PANEL_ID);
   });
 
   const render = async (props: Partial<React.ComponentProps<typeof MetricsTab>> = {}) => {
@@ -107,6 +125,11 @@ describe('MetricsTab', () => {
 
     await render();
 
+    expect(hoisted.seriesCalls[hoisted.seriesCalls.length - 1]).toEqual({
+      clusterId: pod.clusterId,
+      panelId: PANEL_ID,
+      enabled: true,
+    });
     expect(livePoints()).toBe('2');
     expect(tile('cpu').textContent).toContain('30m');
     expect(tile('cpu').textContent).toContain('500m');
@@ -117,19 +140,16 @@ describe('MetricsTab', () => {
     expect(container.querySelector('button')).toBeNull();
   });
 
-  it('follows new samples while it is shown', async () => {
+  it('reads the series only while the panel is visible', async () => {
     await render();
     expect(container.querySelector('[data-live-collecting]')).not.toBeNull();
 
-    await act(async () => collected(T0, { usage: 10 }));
-    expect(livePoints()).toBe('1');
-    await act(async () => collected(T0 + 5_000, { usage: 20 }));
-    expect(livePoints()).toBe('2');
+    await render({ isPanelOpen: false });
+    expect(hoisted.seriesCalls[hoisted.seriesCalls.length - 1]?.enabled).toBe(false);
   });
 
   it('keeps the charts while auto-refresh is paused and says collection is paused', async () => {
     collected(T0, { usage: 10 });
-    stopPanelMetricCollection(PANEL_ID);
     hoisted.autoRefresh = false;
 
     await render();
@@ -184,7 +204,7 @@ describe('MetricsTab', () => {
   });
 
   it('reports when live metrics are unavailable', async () => {
-    setPanelMetricError(PANEL_ID, 'metrics API not available');
+    hoisted.live = { ...noMetrics, status: 'error', error: 'metrics API not available' };
     await render();
 
     expect(container.querySelector('[data-live-unavailable]')?.textContent).toContain(

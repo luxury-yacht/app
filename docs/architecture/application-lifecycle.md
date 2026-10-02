@@ -217,7 +217,10 @@ collection and each tab’s physical placement: docked in an app window, rendere
 in a panel window, or retained without a renderer. Each tab carries complete
 object identity (`clusterId`, `group`, `version`, `kind`, `namespace`, `name`)
 and its active view. The directory contains no object data, React state, drafts,
-or mutation state. Opening an existing object focuses its existing placement.
+or mutation state. Owners of panel-lifetime state, such as the panel metrics
+buffer, register a removal handler and drop a panel's state when it leaves
+every window; moves and retained placements are not removals. Opening an
+existing object focuses its existing placement.
 The cluster tab’s context menu can open another app view, move the current view
 to a new window, or close the clicked view. Opening another view preserves the
 source and shared panel placements, using the same cluster selection admission
