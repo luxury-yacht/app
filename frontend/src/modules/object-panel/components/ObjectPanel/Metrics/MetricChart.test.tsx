@@ -2,12 +2,12 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/MetricChart.test.tsx
  */
 
-import { metrichistory } from '@core/backend-api/models';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { installWindowProperty } from '@/test-utils/windowProperty';
 import { MetricChart } from './MetricChart';
+import type { MetricGraph, MetricSeriesRole } from './metricsTabModel';
 
 // jsdom has no layout; ResponsiveContainer renders nothing until it observes a size.
 class SizedResizeObserver implements ResizeObserver {
@@ -33,11 +33,12 @@ class SizedResizeObserver implements ResizeObserver {
 
 const TIMES = [0, 1, 2, 3].map((index) => 1_790_891_640_000 + index * 15_000);
 
-const cpu = (roles: metrichistory.SeriesRole[]): metrichistory.Graph => ({
-  id: metrichistory.GraphID.GraphCPU,
-  unit: metrichistory.Unit.UnitMillicores,
-  status: metrichistory.GraphStatus.GraphStatusOK,
-  series: roles.map((role) => ({ id: role, role, values: [10, null, 30, 25] })),
+const cpu = (roles: MetricSeriesRole[]): MetricGraph => ({
+  id: 'cpu',
+  title: 'CPU',
+  unit: 'millicores',
+  hasData: true,
+  series: roles.map((role) => ({ role, values: [10, null, 30, 25] })),
 });
 
 describe('MetricChart', () => {
@@ -58,7 +59,7 @@ describe('MetricChart', () => {
     restoreResizeObserver();
   });
 
-  const linesFor = async (graph: metrichistory.Graph) => {
+  const linesFor = async (graph: MetricGraph) => {
     await act(async () => {
       root.render(<MetricChart graph={graph} times={TIMES} syncId="panel-1" />);
     });
@@ -66,9 +67,8 @@ describe('MetricChart', () => {
   };
 
   it('draws exactly the series the source returned', async () => {
-    const { RoleUsage, RoleRequest, RoleLimit } = metrichistory.SeriesRole;
-    expect(await linesFor(cpu([RoleUsage, RoleRequest, RoleLimit]))).toBe(3);
+    expect(await linesFor(cpu(['usage', 'request', 'limit']))).toBe(3);
     // No limit set: no limit line, rather than a line at zero.
-    expect(await linesFor(cpu([RoleUsage]))).toBe(1);
+    expect(await linesFor(cpu(['usage']))).toBe(1);
   });
 });

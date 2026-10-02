@@ -450,12 +450,7 @@ export function ObjectPanelContent(props: Readonly<ObjectPanelContentProps>) {
             tabName="Metrics"
             loadingName="metrics"
           >
-            <MetricsTab
-              objectData={objectData}
-              isActive={isPanelOpen && showMetrics}
-              isPanelOpen={isPanelOpen}
-              panelId={panelId}
-            />
+            <MetricsTab objectData={objectData} isPanelOpen={isPanelOpen} panelId={panelId} />
           </PanelTabBoundary>
         </RetainedTabFrame>
       )}

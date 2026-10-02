@@ -6,7 +6,6 @@ import {
   GetAppSettingsSchema,
   GetKubeconfigSearchPaths,
   GetKubeconfigs,
-  GetMetricSourceSettings,
   GetPanelWorkspace,
   GetShellSessionBacklog,
   GetThemes,
@@ -24,7 +23,6 @@ export const readAppSettingsSchema = () => GetAppSettingsSchema();
 export const readThemes = async () => (await GetThemes()) ?? [];
 export const readZoomLevel = () => GetZoomLevel();
 export const readKubeconfigSearchPaths = async () => (await GetKubeconfigSearchPaths()) ?? [];
-export const readMetricSourceSettings = () => GetMetricSourceSettings();
 export const readAppInfo = () => GetAppInfo();
 export const readAppLogs = async () => (await GetAppLogs()) ?? [];
 export const readAppLogsSince = async (sequence: number) => (await GetAppLogsSince(sequence)) ?? [];

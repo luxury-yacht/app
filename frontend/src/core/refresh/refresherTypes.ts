@@ -63,14 +63,12 @@ export type SystemRefresherName = ValueOf<SystemRefreshersRecord>;
 
 export type ObjectDetailsRefresherName = `object-${string}`;
 export type ObjectEventsRefresherName = `object-${string}-events`;
-export type ObjectMetricsRefresherName = `object-${string}-metrics`;
 export type ObjectYamlRefresherName = 'object-yaml';
 export type ObjectHelmManifestRefresherName = 'object-helm-manifest';
 export type ObjectHelmValuesRefresherName = 'object-helm-values';
 export type ObjectRefresherName =
   | ObjectDetailsRefresherName
   | ObjectEventsRefresherName
-  | ObjectMetricsRefresherName
   | ObjectYamlRefresherName
   | ObjectHelmManifestRefresherName
   | ObjectHelmValuesRefresherName;

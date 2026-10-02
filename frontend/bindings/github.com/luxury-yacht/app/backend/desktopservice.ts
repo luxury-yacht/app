@@ -146,10 +146,6 @@ export function DeleteGridTablePersistenceEntries(keys: string[] | null): $Cance
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DeleteGridTablePersistenceEntries", keys);
 }
 
-export function DeleteMetricSource(sourceID: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DeleteMetricSource", sourceID);
-}
-
 export function DeleteTheme(id: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DeleteTheme", id);
 }
@@ -258,16 +254,8 @@ export function GetKubernetesAPIClientDiagnostics(): $CancellablePromise<$models
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetKubernetesAPIClientDiagnostics");
 }
 
-export function GetMetricSourceSettings(): $CancellablePromise<$models.MetricSourceSettings | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetMetricSourceSettings");
-}
-
 export function GetNativeWindowDescriptor(windowName: string): $CancellablePromise<panelwindow$0.NativeDescriptor> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetNativeWindowDescriptor", windowName);
-}
-
-export function GetObjectMetricHistory(request: $models.MetricHistoryRequest): $CancellablePromise<$models.MetricHistoryResponse | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetObjectMetricHistory", request);
 }
 
 export function GetObjectYAMLByGVK(clusterID: string, apiVersion: string, kind: string, $namespace: string, name: string): $CancellablePromise<string> {
@@ -332,10 +320,6 @@ export function ImportSettings(): $CancellablePromise<$models.DataManagementResu
 
 export function IsWorkloadHPAManaged(clusterID: string, $namespace: string, group: string, version: string, kind: string, name: string): $CancellablePromise<boolean> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.IsWorkloadHPAManaged", clusterID, $namespace, group, version, kind, name);
-}
-
-export function ListMetricServiceCandidates(clusterID: string): $CancellablePromise<$models.MetricServiceCandidate[] | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ListMetricServiceCandidates", clusterID);
 }
 
 export function ListPortForwards(): $CancellablePromise<$models.PortForwardSession[] | null> {
@@ -438,10 +422,6 @@ export function SaveCsvFile(defaultFilename: string, content: string): $Cancella
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveCsvFile", defaultFilename, content);
 }
 
-export function SaveMetricSource(source: $models.MetricSource): $CancellablePromise<$models.MetricSource | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveMetricSource", source);
-}
-
 export function SaveTheme(theme: $models.Theme): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveTheme", theme);
 }
@@ -456,10 +436,6 @@ export function SetAppLogsPanelVisible(visible: boolean): $CancellablePromise<vo
 
 export function SetClusterAllowedNamespaces(clusterID: string, namespaces: string[] | null): $CancellablePromise<string[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SetClusterAllowedNamespaces", clusterID, namespaces);
-}
-
-export function SetClusterMetricAssignment(clusterID: string, assignment: $models.MetricClusterAssignment): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SetClusterMetricAssignment", clusterID, assignment);
 }
 
 export function SetClusterTabOrder(order: string[] | null): $CancellablePromise<void> {
@@ -496,10 +472,6 @@ export function StartShellSession(clusterID: string, request: $models.ShellSessi
 
 export function StopPortForward(sessionID: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.StopPortForward", sessionID);
-}
-
-export function TestMetricSource(source: $models.MetricSource): $CancellablePromise<$models.MetricSourceTestResult | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.TestMetricSource", source);
 }
 
 export function UpdateAppPreferences(request: $models.UpdateAppPreferencesRequest): $CancellablePromise<$models.UpdateAppPreferencesResponse | null> {

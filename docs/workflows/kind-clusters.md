@@ -32,7 +32,6 @@ mise exec -- ./test/kind/workloads.sh install dev --argocd --external-secrets-op
 | `--argocd` | `argo/argo-cd` | `argocd` |
 | `--external-secrets-operator` | `external-secrets/external-secrets` | `external-secrets` |
 | `--cert-manager` | `jetstack/cert-manager` | `cert-manager` |
-| `--prometheus` | `prometheus-community/kube-prometheus-stack` | `kube-prometheus-stack` |
 
 These use the latest stable chart selected by Helm and the chart's default
 values. [Argo CD](https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd)
@@ -41,18 +40,9 @@ include CRDs by default. For
 [cert-manager](https://cert-manager.io/docs/installation/helm/), the script sets
 `crds.enabled=true` as required by its installation instructions. Git repositories,
 SecretStores, and Issuers can be configured separately after installation.
-[kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack)
-installs its CRDs and a Prometheus that scrapes the kubelet/cAdvisor,
-kube-state-metrics, and node-exporter. The Metrics tab's queries and fixtures
-are built against it. It runs eight pods on `dev`: Prometheus, Alertmanager,
-Grafana, the operator, kube-state-metrics, and one node-exporter per node. Prometheus
-is reachable in-cluster as Service `kube-prometheus-stack-prometheus` (port
-`http-web`, 9090) in the `kube-prometheus-stack` namespace. On Kind, the etcd,
-scheduler, controller-manager, and kube-proxy scrape targets report down. The
-metrics the app uses do not come from those targets.
 
 Repeated installs upgrade the selected releases. Installing without a controller's
-flag leaves an existing release alone. `uninstall` removes all four optional
+flag leaves an existing release alone. `uninstall` removes all three optional
 releases before deleting their respective namespaces; a release-removal error
 aborts cleanup. Helm's default CRD retention policies apply, so some CRDs can
 remain after uninstall. Remove user-created controller resources before

@@ -13,7 +13,6 @@ import {
   AppearanceModeIcon,
   DisplayIcon,
   KubeconfigsIcon,
-  MetricsIcon,
 } from '@shared/components/icons/SettingsIcons';
 import {
   CategoryIcon,
@@ -35,7 +34,6 @@ import DataManagementSection from '@ui/settings/sections/DataManagementSection';
 import DisplaySection from '@ui/settings/sections/DisplaySection';
 import KubeconfigsSection from '@ui/settings/sections/KubeconfigsSection';
 import LogsSection from '@ui/settings/sections/LogsSection';
-import MetricsSection from '@ui/settings/sections/MetricsSection';
 import ObjectPanelSection from '@ui/settings/sections/ObjectPanelSection';
 import {
   DEFAULT_SETTINGS_TAB,
@@ -68,7 +66,6 @@ const TABS: TabDefinition[] = [
   { id: 'display', label: 'Display', icon: DisplayIcon },
   { id: 'object-panel', label: 'Object Panel', icon: FloatPanelIcon },
   { id: 'logs', label: 'Logs', icon: LogsIcon },
-  { id: 'metrics', label: 'Metrics', icon: MetricsIcon },
   { id: 'data-management', label: 'Data Management', icon: CategoryIcon },
   { id: 'advanced', label: 'Advanced', icon: AdvancedIcon },
 ];
@@ -194,7 +191,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
           {activeTab === 'display' && <DisplaySection />}
           {activeTab === 'object-panel' && <ObjectPanelSection />}
           {activeTab === 'logs' && <LogsSection />}
-          {activeTab === 'metrics' && <MetricsSection />}
           {activeTab === 'data-management' && <DataManagementSection />}
           {activeTab === 'advanced' && <AdvancedSection />}
         </div>

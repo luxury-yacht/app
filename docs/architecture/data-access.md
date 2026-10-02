@@ -76,7 +76,7 @@ maintained in [backend-services.md](backend-services.md).
 the stable frontend command signatures and delegates each command to exactly
 one owner-shaped interface: Favorites, UI state, Preferences, Data Management,
 Cluster Attention, Workspace, Cluster Runtime, Resources, Operations, Updates,
-App Logs, Desktop Shell, or Metric History. Lifecycle and `/api/v2` HTTP handling are separate
+App Logs, or Desktop Shell. Lifecycle and `/api/v2` HTTP handling are separate
 collaborators. Do not replace these seams with one interface containing every
 command, and do not give `DesktopService` a composition-root back-pointer.
 
@@ -102,7 +102,6 @@ The final command-to-owner map is:
 | `UpdateCoordinator` | 6 | Update checks, download, skip, and restart |
 | `AppLogService` | 5 | Process log reads, writes, and clear |
 | `DesktopShell` | 5 | Native dialogs, CSV save, workspace-menu dispatch, and process UI visibility |
-| `MetricHistoryService` | 7 | Metrics-tab sources, each cluster's source choice, the in-cluster Service picker, history reads, and connection tests |
 
 Wails generates the callable module at
 `frontend/bindings/github.com/luxury-yacht/app/backend/desktopservice.ts` and

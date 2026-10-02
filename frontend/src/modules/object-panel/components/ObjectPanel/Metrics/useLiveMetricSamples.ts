@@ -7,9 +7,9 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import type { ObjectReadTarget } from '@/core/data-access';
 import { type ResourceMetricsData, useResourceMetrics } from '@/core/resource-metrics';
-import type { LiveMetricSample } from './metricHistoryModel';
+import type { KubernetesObjectReference } from '@/types/view-state';
+import type { LiveMetricSample } from './metricsTabModel';
 
 const KEEP_MS = 60 * 60_000;
 // Re-enabling paints the scope's retained data before the first new collection. A sample older
@@ -45,12 +45,11 @@ const appendSample = (
   return { ...run, samples: [...kept, sample] };
 };
 
+/** objectRef must keep its identity across renders, or the metrics lease is re-acquired. */
 export function useLiveMetricSamples(
-  target: ObjectReadTarget,
+  objectRef: KubernetesObjectReference,
   enabled: boolean
 ): LiveMetricSamples {
-  // useResourceMetrics takes the loose panel-reference shape; a stable copy keeps its lease steady.
-  const objectRef = useMemo(() => ({ ...target }), [target]);
   const live = useResourceMetrics(objectRef, enabled);
   const [run, setRun] = useState<CollectionRun | null>(null);
 

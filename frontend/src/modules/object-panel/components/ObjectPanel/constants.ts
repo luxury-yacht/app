@@ -5,7 +5,6 @@
 import type {
   ObjectDetailsRefresherName,
   ObjectEventsRefresherName,
-  ObjectMetricsRefresherName,
 } from '@/core/refresh/refresherTypes';
 import type { ResourceCapability } from './types';
 
@@ -95,16 +94,6 @@ export const getObjectEventsRefresherName = (
   return `object-${kind.toLowerCase()}:${panelId}-events` as ObjectEventsRefresherName;
 };
 
-export const getObjectMetricsRefresherName = (
-  kind?: string | null,
-  panelId?: string | null
-): ObjectMetricsRefresherName | null => {
-  if (!kind || !panelId) {
-    return null;
-  }
-  return `object-${kind.toLowerCase()}:${panelId}-metrics` as ObjectMetricsRefresherName;
-};
-
 export const TABS = {
   DETAILS: { id: 'details', label: 'Details', alwaysShow: true },
   VALUES: { id: 'values', label: 'Values' },
@@ -121,7 +110,7 @@ export const TABS = {
     onlyForKinds: ['cronjob'],
   },
   EVENTS: { id: 'events', label: 'Events', alwaysShow: true },
-  // Nodes and workloads join in Phase 4 (docs/plans/metrics-history.md).
+  // Live metrics-server samples, kept while the panel is open (docs/plans/metrics-history.md).
   METRICS: { id: 'metrics', label: 'Metrics', onlyForKinds: ['pod'] },
   YAML: { id: 'yaml', label: 'YAML', alwaysShow: true },
   MAP: { id: 'map', label: 'Map', alwaysShow: true },

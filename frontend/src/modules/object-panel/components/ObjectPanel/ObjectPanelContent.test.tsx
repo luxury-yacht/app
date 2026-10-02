@@ -429,20 +429,16 @@ describe('ObjectPanelContent', () => {
     );
     expect(hoistedRefs.metricsTabProps.current).toMatchObject({
       objectData: pod,
-      isActive: true,
       isPanelOpen: true,
       panelId: baseProps.panelId,
     });
 
-    // Re-queries stop while the tab is hidden, but its charts survive the tab switch.
+    // Its charts survive the tab switch, and collection continues while the panel is visible.
     await renderContent({ activeTab: 'details', objectData: pod, objectKind: 'pod' });
     expect(mountedMetrics.isConnected).toBe(true);
     expect(mountedMetrics.closest('[aria-hidden="true"]')).not.toBeNull();
     // Live collection continues while the panel itself is visible.
-    expect(hoistedRefs.metricsTabProps.current).toMatchObject({
-      isActive: false,
-      isPanelOpen: true,
-    });
+    expect(hoistedRefs.metricsTabProps.current).toMatchObject({ isPanelOpen: true });
 
     await renderContent({ activeTab: 'metrics', objectData: pod, objectKind: 'pod' });
     expect(container.querySelector('[data-testid="metrics-tab"]')).toBe(mountedMetrics);
@@ -454,10 +450,7 @@ describe('ObjectPanelContent', () => {
       objectKind: 'pod',
       isPanelOpen: false,
     });
-    expect(hoistedRefs.metricsTabProps.current).toMatchObject({
-      isActive: false,
-      isPanelOpen: false,
-    });
+    expect(hoistedRefs.metricsTabProps.current).toMatchObject({ isPanelOpen: false });
   });
 
   it('renders helm manifest and values tabs with scope', async () => {

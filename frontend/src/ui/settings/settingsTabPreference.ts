@@ -12,7 +12,6 @@ export type SettingsTabId =
   | 'display'
   | 'object-panel'
   | 'logs'
-  | 'metrics'
   | 'data-management'
   | 'advanced';
 
@@ -23,7 +22,6 @@ const VALID_TABS: readonly SettingsTabId[] = [
   'display',
   'object-panel',
   'logs',
-  'metrics',
   'data-management',
   'advanced',
 ];

@@ -6,7 +6,7 @@
  * single contract instead of positional string lists.
  */
 
-import type { backend, capabilities, types } from '@core/backend-api/models';
+import type { capabilities, types } from '@core/backend-api/models';
 import {
   DiscoverNodeLogs,
   FetchContainerLogs,
@@ -14,17 +14,14 @@ import {
   FindCatalogObjectByUID,
   FindCatalogObjectMatch,
   GetContainerLogsScopeContainers,
-  GetObjectMetricHistory,
   GetObjectYAMLByGVK,
   GetPodContainers,
   GetRevisionHistory,
   GetTargetPorts,
   HydrateCatalogCustomRows,
   IsWorkloadHPAManaged,
-  ListMetricServiceCandidates,
   QueryPermissions,
   SaveCsvFile,
-  TestMetricSource,
 } from '@/core/backend-api';
 import { desktopRuntimeAvailable } from '@/core/desktop-runtime';
 
@@ -60,38 +57,6 @@ const apiVersionForTarget = (target: ObjectYAMLReadTarget): string => {
   }
   const group = target.group?.trim();
   return group ? `${group}/${version}` : version;
-};
-
-export const readMetricServiceCandidates = async (clusterId: string) =>
-  (await ListMetricServiceCandidates(clusterId)) ?? [];
-
-export const readObjectMetricHistory = async (
-  target: ObjectReadTarget,
-  spanMs: number
-): Promise<backend.MetricHistoryResponse> => {
-  const response = await GetObjectMetricHistory({
-    clusterId: target.clusterId,
-    group: target.group,
-    version: target.version,
-    kind: target.kind,
-    namespace: namespaceOrEmpty(target.namespace),
-    name: target.name,
-    spanMs,
-  });
-  if (!response) {
-    throw new Error(`Metrics history for ${target.kind}/${target.name} returned no response`);
-  }
-  return response;
-};
-
-export const readMetricSourceTest = async (
-  source: backend.MetricSource
-): Promise<backend.MetricSourceTestResult> => {
-  const result = await TestMetricSource(source);
-  if (!result) {
-    throw new Error(`Testing metrics source ${source.name || 'draft'} returned no result`);
-  }
-  return result;
 };
 
 export const readTargetPortsForRef = (target: ObjectReadTarget) =>

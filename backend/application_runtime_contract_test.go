@@ -371,7 +371,7 @@ func TestProductionFilesBelongToOneStateOwner(t *testing.T) {
 		"ApplicationLifecycle": {}, "AppLogService": {}, "ClusterAttentionService": {},
 		"ClusterRuntimeManager": {}, "ClusterWorkspaceProjection": {}, "DataManagementCoordinator": {},
 		"DesktopService": {}, "DesktopShell": {}, "ErrorReportingService": {}, "FavoritesService": {},
-		"MetricHistoryService": {}, "OperationsCoordinator": {}, "PreferencesService": {}, "RefreshCoordinator": {},
+		"OperationsCoordinator": {}, "PreferencesService": {}, "RefreshCoordinator": {},
 		"ResourceGateway": {}, "UIStateStore": {}, "UpdateCoordinator": {}, "WorkspaceCoordinator": {},
 	}
 	allowed := map[string]struct{}{

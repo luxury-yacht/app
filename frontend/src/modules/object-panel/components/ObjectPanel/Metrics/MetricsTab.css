@@ -84,17 +84,6 @@
   color: var(--color-text-secondary);
 }
 
-.metrics-tab__error {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-md);
-  border: var(--border-width) solid var(--color-error-border);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-error-bg);
-  color: var(--color-error-text);
-}
-
 .metrics-tab__notice {
   display: flex;
   flex-wrap: wrap;

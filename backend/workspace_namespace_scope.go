@@ -54,7 +54,7 @@ func (a *WorkspaceCoordinator) SetClusterAllowedNamespaces(clusterID string, nam
 }
 
 func clusterSettingsSectionEmpty(section settingsClusterSection) bool {
-	return len(section.AllowedNamespaces) == 0 && section.Metrics == nil &&
+	return len(section.AllowedNamespaces) == 0 &&
 		(section.Attention == nil ||
 			(len(section.Attention.ObjectFindings) == 0 && len(section.Attention.FindingTypes) == 0))
 }

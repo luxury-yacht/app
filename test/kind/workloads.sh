@@ -37,9 +37,6 @@ add_helm_repos() {
   if [[ "${INSTALL_CERT_MANAGER}" == true ]]; then
     helm repo add jetstack https://charts.jetstack.io --force-update
   fi
-  if [[ "${INSTALL_PROMETHEUS}" == true ]]; then
-    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
-  fi
   helm repo update
 }
 
@@ -133,17 +130,12 @@ install_addons() {
       --namespace cert-manager --create-namespace \
       --set crds.enabled=true
   fi
-  if [[ "${INSTALL_PROMETHEUS}" == true ]]; then
-    echo "  Installing kube-prometheus-stack..."
-    hhelm "$env" upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-      --namespace kube-prometheus-stack --create-namespace
-  fi
 }
 
 uninstall_addons() {
   local env="$1"
   local release
-  for release in argocd external-secrets cert-manager kube-prometheus-stack; do
+  for release in argocd external-secrets cert-manager; do
     hhelm "$env" uninstall "${release}" --namespace "${release}" --ignore-not-found
     kctl "$env" delete namespace "${release}" --ignore-not-found
   done
@@ -485,7 +477,7 @@ uninstall_prod() {
 
 usage() {
   echo "Usage: $0 install {dev|stg|prod|all} [options] | uninstall {dev|stg|prod|all}" >&2
-  echo "Install options: --stress-ng --argocd --external-secrets-operator --cert-manager --prometheus" >&2
+  echo "Install options: --stress-ng --argocd --external-secrets-operator --cert-manager" >&2
 }
 
 ACTION="${1:-}"
@@ -494,7 +486,6 @@ INSTALL_STRESS_NG=false
 INSTALL_ARGOCD=false
 INSTALL_EXTERNAL_SECRETS_OPERATOR=false
 INSTALL_CERT_MANAGER=false
-INSTALL_PROMETHEUS=false
 
 for install_option in "${@:3}"; do
   if [[ "${ACTION}" != install ]]; then
@@ -506,7 +497,6 @@ for install_option in "${@:3}"; do
     --argocd) INSTALL_ARGOCD=true ;;
     --external-secrets-operator) INSTALL_EXTERNAL_SECRETS_OPERATOR=true ;;
     --cert-manager) INSTALL_CERT_MANAGER=true ;;
-    --prometheus) INSTALL_PROMETHEUS=true ;;
     *) usage; exit 1 ;;
   esac
 done

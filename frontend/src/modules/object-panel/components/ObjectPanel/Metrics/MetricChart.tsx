@@ -6,7 +6,6 @@
  * passed as var(--…) so light and dark need no JavaScript.
  */
 
-import { metrichistory } from '@core/backend-api/models';
 import { useMemo } from 'react';
 import {
   CartesianGrid,
@@ -24,8 +23,11 @@ import {
   formatMetricValue,
   formatTickTime,
   formatTooltipTime,
+  type MetricGraph,
+  type MetricSeriesRole,
+  type MetricUnit,
   timeTicks,
-} from './metricHistoryModel';
+} from './metricsTabModel';
 
 interface SeriesStyle {
   label: string;
@@ -33,26 +35,17 @@ interface SeriesStyle {
   dash?: string;
 }
 
-const SERIES_STYLES: Record<metrichistory.SeriesRole, SeriesStyle> = {
-  [metrichistory.SeriesRole.$zero]: { label: '', stroke: 'var(--color-text-secondary)' },
-  [metrichistory.SeriesRole.RoleUsage]: { label: 'Usage', stroke: 'var(--color-accent)' },
-  [metrichistory.SeriesRole.RoleRequest]: {
-    label: 'Request',
-    stroke: 'var(--color-warning)',
-    dash: '4 3',
-  },
-  [metrichistory.SeriesRole.RoleLimit]: {
-    label: 'Limit',
-    stroke: 'var(--color-error)',
-    dash: '6 3',
-  },
+const SERIES_STYLES: Record<MetricSeriesRole, SeriesStyle> = {
+  usage: { label: 'Usage', stroke: 'var(--color-accent)' },
+  request: { label: 'Request', stroke: 'var(--color-warning)', dash: '4 3' },
+  limit: { label: 'Limit', stroke: 'var(--color-error)', dash: '6 3' },
 };
 
 const MINUTE = 60_000;
 
 interface MetricChartProps {
-  graph: metrichistory.Graph;
-  /** When each series value was measured (ms): grid points or live collection times. */
+  graph: MetricGraph;
+  /** When each series value was measured (ms): the live collection times. */
   times: readonly number[];
   /** Charts with the same syncId share the crosshair. */
   syncId: string;
@@ -67,7 +60,7 @@ function MetricTooltip({
 }: Readonly<
   // Recharts injects active/payload/label when it clones this element.
   Partial<Pick<TooltipContentProps, 'active' | 'payload' | 'label'>> & {
-    unit: metrichistory.Unit;
+    unit: MetricUnit;
     withSeconds: boolean;
   }
 >) {
@@ -120,13 +113,13 @@ export function MetricChart({ graph, times, syncId }: Readonly<MetricChartProps>
           tick={{ fill: 'var(--color-text-secondary)' }}
         />
         <Tooltip content={<MetricTooltip unit={graph.unit} withSeconds={withSeconds} />} />
-        {(graph.series ?? []).map((series) => {
-          const style = SERIES_STYLES[series.role] ?? SERIES_STYLES[metrichistory.SeriesRole.$zero];
+        {graph.series.map((series) => {
+          const style = SERIES_STYLES[series.role];
           return (
             <Line
-              key={series.id}
-              dataKey={series.id}
-              name={style.label || series.id}
+              key={series.role}
+              dataKey={series.role}
+              name={style.label}
               stroke={style.stroke}
               strokeDasharray={style.dash}
               // A lone first live sample has no line yet; show it as a dot.
