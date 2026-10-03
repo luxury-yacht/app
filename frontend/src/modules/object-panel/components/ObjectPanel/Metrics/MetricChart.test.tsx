@@ -59,18 +59,28 @@ describe('MetricChart', () => {
     restoreResizeObserver();
   });
 
-  const linesFor = async (graph: MetricGraph) => {
+  const seriesFor = async (graph: MetricGraph) => {
     await act(async () => {
       root.render(<MetricChart graph={graph} times={TIMES} syncId="panel-1" />);
     });
-    return container.querySelectorAll('.recharts-line').length;
+    return {
+      // Usage is a line with the area under it filled; the reservations are lines.
+      filledAreas: container.querySelectorAll('.recharts-area-area').length,
+      lines: container.querySelectorAll('.recharts-line').length,
+    };
   };
 
-  it('draws exactly the series the source returned', async () => {
-    expect(await linesFor(cpu(['usage', 'request', 'limit']))).toBe(3);
+  it('draws exactly the series the source returned, with usage filled', async () => {
+    expect(await seriesFor(cpu(['usage', 'request', 'limit']))).toEqual({
+      filledAreas: 1,
+      lines: 2,
+    });
     // A node also has an allocatable ceiling.
-    expect(await linesFor(cpu(['usage', 'request', 'limit', 'allocatable']))).toBe(4);
+    expect(await seriesFor(cpu(['usage', 'request', 'limit', 'allocatable']))).toEqual({
+      filledAreas: 1,
+      lines: 3,
+    });
     // No limit set: no limit line, rather than a line at zero.
-    expect(await linesFor(cpu(['usage']))).toBe(1);
+    expect(await seriesFor(cpu(['usage']))).toEqual({ filledAreas: 1, lines: 0 });
   });
 });

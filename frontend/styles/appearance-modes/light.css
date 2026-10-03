@@ -419,10 +419,11 @@
   --utilization-overcommitted-text: #d97706;
 
   /* Metrics charts (object panel Metrics tab) */
-  --chart-usage-color: var(--color-accent);
-  --chart-request-color: var(--color-warning);
-  --chart-limit-color: var(--color-error);
-  --chart-allocatable-color: var(--color-text-secondary);
+  --chart-usage-color: #2563eb;
+  --chart-request-color: #b45309;
+  --chart-limit-color: #dc2626;
+  --chart-allocatable-color: #047857;
+  --chart-usage-fill: rgba(37, 99, 235, 0.1);
 
   /* Events tab */
   --events-scroll-track: var(--editor-scroll-track);

@@ -1,16 +1,18 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/MetricChart.tsx
  *
- * One Metrics-tab line chart (Recharts). Usage is solid; requests, limits, and a node's allocatable
- * are dashed reference lines. Charts in a panel share a crosshair through syncId. Colors are theme tokens
- * passed as var(--…) so light and dark need no JavaScript.
+ * One Metrics-tab chart (Recharts). Usage is a solid line with the area under it filled; requests,
+ * limits, and a node's allocatable are dashed reference lines. Charts in a panel share a crosshair
+ * through syncId. Colors are theme tokens passed as var(--…) so light and dark need no JavaScript.
+ * ComposedChart, not LineChart: Recharts draws an Area only in an AreaChart or a ComposedChart.
  */
 
 import { useMemo } from 'react';
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   type TooltipContentProps,
@@ -91,7 +93,7 @@ export function MetricChart({ graph, times, syncId }: Readonly<MetricChartProps>
   const withSeconds = times.length < 2 || times[1] - times[0] < MINUTE;
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart
+      <ComposedChart
         data={rows}
         syncId={syncId}
         syncMethod="value"
@@ -116,20 +118,22 @@ export function MetricChart({ graph, times, syncId }: Readonly<MetricChartProps>
         <Tooltip content={<MetricTooltip unit={graph.unit} withSeconds={withSeconds} />} />
         {graph.series.map((series) => {
           const style = SERIES_STYLES[series.role];
-          return (
-            <Line
-              key={series.role}
-              dataKey={series.role}
-              name={style.label}
-              stroke={style.stroke}
-              strokeDasharray={style.dash}
-              // A lone first live sample has no line yet; show it as a dot.
-              dot={times.length === 1}
-              isAnimationActive={false}
-            />
+          const shared = {
+            dataKey: series.role,
+            name: style.label,
+            stroke: style.stroke,
+            // A lone first live sample has no line yet; show it as a dot.
+            dot: times.length === 1,
+            isAnimationActive: false,
+          };
+          // The fill token carries its own transparency.
+          return series.role === 'usage' ? (
+            <Area key={series.role} {...shared} fill="var(--chart-usage-fill)" fillOpacity={1} />
+          ) : (
+            <Line key={series.role} {...shared} strokeDasharray={style.dash} />
           );
         })}
-      </LineChart>
+      </ComposedChart>
     </ResponsiveContainer>
   );
 }
