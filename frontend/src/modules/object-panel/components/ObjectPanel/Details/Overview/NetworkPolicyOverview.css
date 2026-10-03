@@ -84,6 +84,25 @@
   font-weight: 600;
 }
 
+/* Pod peers read as a sentence: which pods ("All pods" / "Pods matching"), then where they live. */
+.network-policy-peer-subject {
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.network-policy-peer-scope {
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.network-policy-term {
+  color: var(--color-text);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
 /* Boxes keep their natural height; the shorter side centres against the taller one. */
 .network-policy-flow .reference-grant-side {
   flex: 0 0 auto;
@@ -98,8 +117,9 @@
   overflow-wrap: break-word;
 }
 
-/* Selectors, CIDRs, and ports stay copyable despite the app's descendant selection reset. */
+/* Selectors, names, CIDRs, and ports stay copyable despite the app's descendant selection reset. */
 .network-policy-flow .reference-grant-item,
+.network-policy-flow .network-policy-term,
 .network-policy-flow-ports li {
   user-select: text;
   -webkit-user-select: text;
@@ -142,6 +162,34 @@
 .network-policy-denied,
 .network-policy-denied .reference-grant-arrow {
   color: var(--color-error);
+}
+
+/* An ipBlock's except ranges: "excluding" followed by red chips that wrap within the box. */
+.network-policy-excluded {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+}
+
+.network-policy-excluded-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* The ✕ is generated content so copying a chip yields only the CIDR. */
+.network-policy-excluded-range {
+  font-family: var(--font-family-mono);
+  white-space: nowrap;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.network-policy-excluded-range::before {
+  content: "✕ ";
 }
 
 .network-policy-selected {

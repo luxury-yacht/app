@@ -108,14 +108,16 @@ describe('NetworkPolicyOverview', () => {
     expect(sources).toHaveLength(2);
     expect(sources[0]).toContain('payments');
     expect(sources[0]).toContain('app=checkout-web');
-    expect(sources[1]).toContain('kubernetes.io/metadata.name=monitoring');
+    expect(sources[1]).toContain('monitoring');
+    expect(sources[1]).not.toContain('kubernetes.io/metadata.name');
     expect(sources[1]).toContain('app=prometheus');
     expect(selectedPods(first)).toContain('app.kubernetes.io/name=payments-api');
     expect(items(first, 'Ports')).toEqual(['TCP 8080']);
 
     expect(items(second, 'Sources')).toHaveLength(1);
     expect(items(second, 'Sources')[0]).toContain('10.20.0.0/16');
-    expect(items(second, 'Sources')[0]).toContain('10.20.5.0/24');
+    // An ipBlock's except ranges are carved out of the allowed range, not more allowed addresses.
+    expect(items(second, 'Excluded')).toEqual(['10.20.5.0/24']);
 
     // Egress flows the other way: the policy's pods are the source.
     const [egress] = rules('Egress');
@@ -143,12 +145,52 @@ describe('NetworkPolicyOverview', () => {
 
     const [allNamespaces, anySource, samePods] = rules('Ingress');
     expect(selectedPods(allNamespaces)).toContain('tier In frontend, edge');
-    expect(items(allNamespaces, 'Sources')[0]).toContain('All namespaces');
-    expect(items(anySource, 'Sources')).toEqual([expect.stringContaining('Any source')]);
+    expect(items(allNamespaces, 'Sources')[0]).toContain('any namespace');
+    expect(items(anySource, 'Sources')).toEqual([expect.stringContaining('Any pod or IP address')]);
     // An empty pod selector without a namespace selector means every pod in the policy namespace.
     expect(items(samePods, 'Sources')[0]).toContain('edge');
-    expect(items(samePods, 'Sources')[0]).toContain('all pods');
+    expect(items(samePods, 'Sources')[0]).toContain('All pods');
     expect(items(samePods, 'Ports')).toEqual(['All ports']);
+  });
+
+  it('names namespaces selected by their name label and keeps other namespace selectors as written', async () => {
+    const nameLabel = 'kubernetes.io/metadata.name';
+    await render(
+      policy({
+        policyTypes: ['Ingress'],
+        ingressRules: [
+          {
+            from: [
+              {
+                namespaceSelector: {
+                  matchExpressions: [
+                    { key: nameLabel, operator: 'In', values: ['logging', 'tracing'] },
+                  ],
+                },
+              },
+              // Every selector requirement applies, so a name plus another label is not a plain name.
+              {
+                namespaceSelector: { matchLabels: { [nameLabel]: 'monitoring', team: 'platform' } },
+              },
+              {
+                namespaceSelector: {
+                  matchExpressions: [
+                    { key: nameLabel, operator: 'NotIn', values: ['kube-system'] },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      })
+    );
+
+    const [named, mixed, negated] = items(rules('Ingress')[0], 'Sources');
+    expect(named).toContain('logging, tracing');
+    expect(named).not.toContain(nameLabel);
+    expect(mixed).toContain(`${nameLabel}=monitoring`);
+    expect(mixed).toContain('team=platform');
+    expect(negated).toContain(`${nameLabel} NotIn kube-system`);
   });
 
   it('distinguishes a denied direction from one the policy does not restrict', async () => {

@@ -8,6 +8,7 @@
  */
 
 import type { networkpolicy } from '@core/backend-api/models';
+import { StatusChip } from '@shared/components/StatusChip';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import { Fragment } from 'react';
@@ -59,42 +60,97 @@ const MutedLine: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="reference-grant-item network-policy-muted">{children}</div>
 );
 
-// A peer without a namespaceSelector is limited to the policy's own namespace; an empty
-// namespaceSelector matches every namespace.
-const namespaceScope = (
-  peer: NetworkPolicyPeer,
-  policyNamespace: string
-): { heading: string; terms: string[] } => {
-  if (!peer.namespaceSelector) {
-    return { heading: `Namespace ${policyNamespace}`, terms: [] };
+// Kubernetes sets this label on every namespace to the namespace's own name.
+const NAMESPACE_NAME_LABEL = 'kubernetes.io/metadata.name';
+
+/**
+ * The namespace names a selector picks when its only requirement is the namespace-name label
+ * (equality or In); null when anything else applies, since every requirement must hold.
+ */
+const selectedNamespaceNames = (selector: networkpolicy.LabelSelector): string[] | null => {
+  const labels = Object.entries(selector.matchLabels ?? {});
+  const expressions = selector.matchExpressions ?? [];
+  if (expressions.length === 0 && labels.length === 1 && labels[0]?.[0] === NAMESPACE_NAME_LABEL) {
+    return [labels[0][1] ?? ''];
   }
-  const terms = labelSelectorTerms(peer.namespaceSelector);
-  return { heading: terms.length > 0 ? 'Namespaces matching' : 'All namespaces', terms };
+  const expression = expressions[0];
+  if (
+    labels.length === 0 &&
+    expressions.length === 1 &&
+    expression?.key === NAMESPACE_NAME_LABEL &&
+    expression.operator === 'In'
+  ) {
+    return expression.values ?? [];
+  }
+  return null;
 };
 
-const PodPeer: React.FC<{ peer: NetworkPolicyPeer; policyNamespace: string }> = ({
+// Where a pod peer's pods live. Without a namespaceSelector the peer is limited to the policy's
+// own namespace; an empty namespaceSelector matches every namespace.
+const NamespaceScope: React.FC<{ peer: NetworkPolicyPeer; policyNamespace: string }> = ({
   peer,
   policyNamespace,
 }) => {
-  const scope = namespaceScope(peer, policyNamespace);
-  const podTerms = labelSelectorTerms(peer.podSelector);
+  const selector = peer.namespaceSelector;
+  const names = selector ? selectedNamespaceNames(selector) : [policyNamespace];
+  if (names) {
+    return (
+      <div className="network-policy-peer-scope">
+        in {names.length === 1 ? 'namespace' : 'namespaces'}{' '}
+        <span className="network-policy-term">{names.join(', ')}</span>
+      </div>
+    );
+  }
+  const terms = labelSelectorTerms(selector);
+  if (terms.length === 0) {
+    return <div className="network-policy-peer-scope">in any namespace</div>;
+  }
   return (
     <>
-      <div className="reference-grant-namespace">{scope.heading}</div>
-      <TermLines terms={scope.terms} />
-      <MutedLine>{podTerms.length > 0 ? 'pods matching' : 'all pods'}</MutedLine>
-      <TermLines terms={podTerms} />
+      <div className="network-policy-peer-scope">in namespaces matching</div>
+      <TermLines terms={terms} />
     </>
   );
 };
 
+// A pod peer reads as a sentence: which pods, then where they live.
+const PodPeer: React.FC<{ peer: NetworkPolicyPeer; policyNamespace: string }> = ({
+  peer,
+  policyNamespace,
+}) => {
+  const podTerms = labelSelectorTerms(peer.podSelector);
+  return (
+    <>
+      <div className="network-policy-peer-subject">
+        {podTerms.length > 0 ? 'Pods matching' : 'All pods'}
+      </div>
+      <TermLines terms={podTerms} />
+      <NamespaceScope peer={peer} policyNamespace={policyNamespace} />
+    </>
+  );
+};
+
+// Except ranges are carved out of the allowed range, so they render as red exclusion chips.
 const IPBlockPeer: React.FC<{ ipBlock: networkpolicy.IPBlock }> = ({ ipBlock }) => (
   <>
-    <div className="reference-grant-namespace">IP range</div>
-    <div className="reference-grant-item">{ipBlock.cidr}</div>
-    {withStableListKeys(ipBlock.except ?? [], (cidr) => cidr).map(({ key, value }) => (
-      <MutedLine key={key}>except {value}</MutedLine>
-    ))}
+    <div className="network-policy-peer-subject">IP addresses</div>
+    <div className="network-policy-peer-scope">
+      in <span className="network-policy-term">{ipBlock.cidr}</span>
+    </div>
+    {!!ipBlock.except?.length && (
+      <div className="network-policy-excluded">
+        <span className="network-policy-muted">excluding</span>
+        <ul className="network-policy-list network-policy-excluded-list" aria-label="Excluded">
+          {withStableListKeys(ipBlock.except, (cidr) => cidr).map(({ key, value }) => (
+            <li key={key}>
+              <StatusChip variant="unhealthy" className="network-policy-excluded-range">
+                {value}
+              </StatusChip>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
   </>
 );
 
@@ -117,10 +173,7 @@ const PeerList: React.FC<{
     ) : (
       // No peers in a rule means traffic is allowed from (or to) anywhere.
       <li className="reference-grant-side">
-        <div className="reference-grant-namespace">
-          {label === 'Sources' ? 'Any source' : 'Any destination'}
-        </div>
-        <MutedLine>any pod or IP</MutedLine>
+        <div className="network-policy-peer-subject">Any pod or IP address</div>
       </li>
     )}
   </ul>
