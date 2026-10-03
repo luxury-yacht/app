@@ -3,7 +3,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { liveTimeline, type MetricGraph, peakUsage, timeTicks } from './metricsTabModel';
+import {
+  formatTickTime,
+  liveTimeline,
+  type MetricGraph,
+  peakUsage,
+  timeTicks,
+} from './metricsTabModel';
 
 const MINUTE = 60_000;
 
@@ -53,6 +59,33 @@ describe('timeTicks', () => {
       expect(local.getSeconds()).toBe(0);
       expect((local.getHours() * 60 + local.getMinutes()) % (interval / MINUTE)).toBe(0);
     });
+  });
+
+  it('labels a span under a minute with round seconds, from the second sample', () => {
+    // Samples at :02 and :07, the default 5-second poll.
+    const startMs = Date.UTC(2026, 9, 1, 14, 2, 2);
+    expect(timeTicks(startMs, startMs + 5_000)).toEqual([Date.UTC(2026, 9, 1, 14, 2, 5)]);
+  });
+
+  it('labels the lone first sample', () => {
+    const startMs = Date.UTC(2026, 9, 1, 14, 2, 2);
+    expect(timeTicks(startMs, startMs)).toEqual([startMs]);
+  });
+
+  it('labels the first sample when no round step falls between two close samples', () => {
+    const startMs = Date.UTC(2026, 9, 1, 14, 2, 1);
+    expect(timeTicks(startMs, startMs + 1_000)).toEqual([startMs]);
+  });
+});
+
+describe('formatTickTime', () => {
+  it('shows seconds while the ticks are under a minute apart', () => {
+    const t = Date.UTC(2026, 9, 1, 14, 2, 5);
+    const clock = { hour: '2-digit', minute: '2-digit' } as const;
+    const withSeconds = new Date(t).toLocaleTimeString([], { ...clock, second: '2-digit' });
+    expect(formatTickTime(t, 0)).toBe(withSeconds);
+    expect(formatTickTime(t, 5_000)).toBe(withSeconds);
+    expect(formatTickTime(t, 10 * MINUTE)).toBe(new Date(t).toLocaleTimeString([], clock));
   });
 });
 

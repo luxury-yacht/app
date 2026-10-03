@@ -133,10 +133,20 @@ export const chartRows = (times: readonly number[], graph: MetricGraph): MetricC
     return row;
   });
 
-const TICK_INTERVALS_MS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440].map(
-  (minutes) => minutes * MINUTE
-);
+// Seconds first, so the axis has times as soon as the second sample arrives (5-second polls).
+const TICK_INTERVALS_MS = [
+  5_000,
+  10_000,
+  15_000,
+  30_000,
+  ...[1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440].map((minutes) => minutes * MINUTE),
+];
 const MAX_TICK_GAPS = 7;
+
+// The smallest round step that leaves at most MAX_TICK_GAPS gaps across the span.
+const tickStep = (spanMs: number): number =>
+  TICK_INTERVALS_MS.find((candidate) => spanMs / candidate <= MAX_TICK_GAPS) ??
+  TICK_INTERVALS_MS[TICK_INTERVALS_MS.length - 1];
 
 // The first instant at or after start that is a whole multiple of interval in local time.
 const firstLocalBoundary = (startMs: number, intervalMs: number): number => {
@@ -144,20 +154,17 @@ const firstLocalBoundary = (startMs: number, intervalMs: number): number => {
   return Math.ceil((startMs - offsetMs) / intervalMs) * intervalMs + offsetMs;
 };
 
-/** Round local times to label a numeric time axis; Recharts does not generate time ticks. */
+/**
+ * Round local times to label a numeric time axis; Recharts does not generate time ticks. A lone
+ * sample, or samples too close for any round step between them, is labelled at the first sample.
+ */
 export const timeTicks = (startMs: number, endMs: number): number[] => {
-  const spanMs = endMs - startMs;
-  if (spanMs <= 0) {
-    return [];
-  }
-  const intervalMs =
-    TICK_INTERVALS_MS.find((candidate) => spanMs / candidate <= MAX_TICK_GAPS) ??
-    TICK_INTERVALS_MS[TICK_INTERVALS_MS.length - 1];
+  const intervalMs = tickStep(endMs - startMs);
   const ticks: number[] = [];
   for (let tick = firstLocalBoundary(startMs, intervalMs); tick <= endMs; tick += intervalMs) {
     ticks.push(tick);
   }
-  return ticks;
+  return ticks.length > 0 ? ticks : [startMs];
 };
 
 /** Full display value for chart tooltips, using the app's resource formatting. */
@@ -181,12 +188,18 @@ export const formatAxisValue = (unit: MetricUnit, value: number): string => {
   return `${Number(scaled.toFixed(digits))}${BYTE_UNITS[index]}`;
 };
 
-/** Axis time labels: clock time within a day, the date for longer spans. */
+/** Axis time labels: clock time (with seconds while ticks are under a minute apart), the date
+ * for spans over two days. */
 export const formatTickTime = (timeMs: number, spanMs: number): string => {
   const date = new Date(timeMs);
-  return spanMs > 2 * 24 * HOUR
-    ? date.toLocaleDateString([], { month: 'short', day: 'numeric' })
-    : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (spanMs > 2 * 24 * HOUR) {
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: tickStep(spanMs) < MINUTE ? '2-digit' : undefined,
+  });
 };
 
 /** Tooltip time; seconds matter when points are under a minute apart. */

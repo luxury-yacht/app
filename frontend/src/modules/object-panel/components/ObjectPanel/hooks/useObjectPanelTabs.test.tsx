@@ -442,8 +442,10 @@ describe('useObjectPanelTabs', () => {
     expect(tabShortcuts?.[3]?.handler()).toBe(true);
     expect(setActiveTabMock).toHaveBeenCalledWith('logs');
 
-    // Key '5' → Events (fifth visible tab).
+    // Key '5' → Metrics (fifth visible tab), then Events.
     expect(tabShortcuts?.[4]?.handler()).toBe(true);
+    expect(setActiveTabMock).toHaveBeenCalledWith('metrics');
+    expect(tabShortcuts?.[5]?.handler()).toBe(true);
     expect(setActiveTabMock).toHaveBeenCalledWith('events');
   });
 });
