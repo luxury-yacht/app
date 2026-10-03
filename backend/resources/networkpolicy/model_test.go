@@ -51,9 +51,9 @@ func TestBuildResourceModelFactsAndStatus(t *testing.T) {
 
 	facts := networkpolicy.BuildFacts(policy)
 	require.Equal(t, []string{"Ingress", "Egress"}, facts.PolicyTypes)
-	require.Equal(t, map[string]string{"app": "web"}, facts.PodSelector)
-	require.Equal(t, map[string]string{"team": "frontend"}, facts.IngressRules[0].Peers[0].NamespaceSelector)
-	require.Equal(t, map[string]string{"role": "client"}, facts.IngressRules[0].Peers[0].PodSelector)
+	require.Equal(t, networkpolicy.LabelSelectorFacts{MatchLabels: map[string]string{"app": "web"}}, facts.PodSelector)
+	require.Equal(t, &networkpolicy.LabelSelectorFacts{MatchLabels: map[string]string{"team": "frontend"}}, facts.IngressRules[0].Peers[0].NamespaceSelector)
+	require.Equal(t, &networkpolicy.LabelSelectorFacts{MatchLabels: map[string]string{"role": "client"}}, facts.IngressRules[0].Peers[0].PodSelector)
 	require.Equal(t, "TCP", facts.IngressRules[0].Ports[0].Protocol)
 	require.Equal(t, "https", facts.IngressRules[0].Ports[0].Port)
 	require.NotNil(t, facts.IngressRules[0].Ports[0].EndPort)

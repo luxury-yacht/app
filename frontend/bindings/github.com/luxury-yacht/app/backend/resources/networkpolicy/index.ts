@@ -3,6 +3,8 @@
 
 export type {
     IPBlock,
+    LabelSelector,
+    LabelSelectorRequirement,
     NetworkPolicyDetails,
     NetworkPolicyPeer,
     NetworkPolicyPort,

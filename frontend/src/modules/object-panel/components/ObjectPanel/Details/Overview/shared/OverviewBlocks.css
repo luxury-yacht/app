@@ -184,7 +184,8 @@
 /* ---------- Reference grant diagram ----------
    FROM block on the left, arrow in the middle, TO block on the right.
    Each side is a card-style panel listing entries; the arrow visually
-   conveys the access-grant direction without needing to/from labels. */
+   conveys the access-grant direction without needing to/from labels.
+   NetworkPolicy rules reuse these boxes (NetworkPolicyOverview.css). */
 
 .reference-grant-diagram {
   display: flex;

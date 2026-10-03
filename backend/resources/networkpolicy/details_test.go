@@ -8,6 +8,7 @@ package networkpolicy_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -117,6 +118,50 @@ func TestNetworkPolicyDetailsWithEgressAndIPBlock(t *testing.T) {
 	require.NotNil(t, detail.EgressRules[0].To[0].IPBlock)
 	require.Equal(t, "10.0.0.0/24", detail.EgressRules[0].To[0].IPBlock.CIDR)
 	require.Contains(t, detail.Details, "0 ingress, 1 egress rules")
+}
+
+// The Overview tells peers apart by selector presence: an empty selector matches everything, an
+// absent namespaceSelector scopes a peer to the policy's own namespace, and expression-only
+// selectors must not read as "all pods".
+func TestNetworkPolicyDetailsKeepSelectorSemantics(t *testing.T) {
+	np := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "edge-gateway", Namespace: "edge"},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{
+				Key:      "tier",
+				Operator: metav1.LabelSelectorOpIn,
+				Values:   []string{"frontend", "edge"},
+			}}},
+			Ingress: []networkingv1.NetworkPolicyIngressRule{{
+				From: []networkingv1.NetworkPolicyPeer{
+					{NamespaceSelector: &metav1.LabelSelector{}},
+					{PodSelector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{
+						Key:      "canary",
+						Operator: metav1.LabelSelectorOpDoesNotExist,
+					}}}},
+				},
+			}},
+		},
+	}
+
+	detail, err := newService(t, fake.NewClientset(np)).NetworkPolicy(context.Background(), "edge", "edge-gateway")
+	require.NoError(t, err)
+
+	payload, err := json.Marshal(detail)
+	require.NoError(t, err)
+	var wire struct {
+		PodSelector  json.RawMessage `json:"podSelector"`
+		IngressRules []struct {
+			From []json.RawMessage `json:"from"`
+		} `json:"ingressRules"`
+	}
+	require.NoError(t, json.Unmarshal(payload, &wire))
+
+	require.JSONEq(t, `{"matchExpressions":[{"key":"tier","operator":"In","values":["frontend","edge"]}]}`, string(wire.PodSelector))
+	require.Len(t, wire.IngressRules, 1)
+	require.Len(t, wire.IngressRules[0].From, 2)
+	require.JSONEq(t, `{"namespaceSelector":{}}`, string(wire.IngressRules[0].From[0]))
+	require.JSONEq(t, `{"podSelector":{"matchExpressions":[{"key":"canary","operator":"DoesNotExist"}]}}`, string(wire.IngressRules[0].From[1]))
 }
 
 func TestNetworkPolicyErrorWhenGetFails(t *testing.T) {

@@ -43,7 +43,7 @@ func (s *Service) buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *Net
 		Kind:        "NetworkPolicy",
 		Name:        np.Name,
 		Namespace:   np.Namespace,
-		PodSelector: facts.PodSelector,
+		PodSelector: labelSelectorToDetails(facts.PodSelector),
 		Labels:      np.Labels,
 		Annotations: np.Annotations,
 	}
@@ -59,8 +59,8 @@ func (s *Service) buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *Net
 	}
 
 	podSelectorInfo := "All pods"
-	if len(details.PodSelector) > 0 {
-		podSelectorInfo = fmt.Sprintf("%d pod selector(s)", len(details.PodSelector))
+	if terms := len(details.PodSelector.MatchLabels) + len(details.PodSelector.MatchExpressions); terms > 0 {
+		podSelectorInfo = fmt.Sprintf("%d pod selector(s)", terms)
 	}
 
 	policyTypeInfo := ""
@@ -98,8 +98,8 @@ func peerFactsToDetails(peers []PeerFacts) []NetworkPolicyPeer {
 	details := make([]NetworkPolicyPeer, 0, len(peers))
 	for _, peer := range peers {
 		next := NetworkPolicyPeer{
-			PodSelector:       peer.PodSelector,
-			NamespaceSelector: peer.NamespaceSelector,
+			PodSelector:       optionalLabelSelectorToDetails(peer.PodSelector),
+			NamespaceSelector: optionalLabelSelectorToDetails(peer.NamespaceSelector),
 		}
 		if peer.IPBlock != nil {
 			next.IPBlock = &IPBlock{
@@ -110,6 +110,23 @@ func peerFactsToDetails(peers []PeerFacts) []NetworkPolicyPeer {
 		details = append(details, next)
 	}
 	return details
+}
+
+func labelSelectorToDetails(facts LabelSelectorFacts) LabelSelector {
+	selector := LabelSelector{MatchLabels: facts.MatchLabels}
+	for _, expr := range facts.MatchExpressions {
+		selector.MatchExpressions = append(selector.MatchExpressions, LabelSelectorRequirement(expr))
+	}
+	return selector
+}
+
+// optionalLabelSelectorToDetails keeps an unset selector nil so it stays distinct from {}.
+func optionalLabelSelectorToDetails(facts *LabelSelectorFacts) *LabelSelector {
+	if facts == nil {
+		return nil
+	}
+	selector := labelSelectorToDetails(*facts)
+	return &selector
 }
 
 func portFactsToDetails(ports []PortFacts) []NetworkPolicyPort {

@@ -2,6 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/NetworkPolicyOverview.test.tsx
  */
 
+import type { networkpolicy } from '@core/backend-api/models';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,28 +21,40 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
   ResourceMetadata: () => <div data-testid="resource-metadata" />,
 }));
 
-const getValueForLabel = (container: HTMLElement, label: string) => {
-  const labelElement = Array.from(container.querySelectorAll<HTMLElement>('.overview-label')).find(
-    (el) => el.textContent?.trim() === label
-  );
-  return labelElement?.parentElement?.querySelector<HTMLElement>('.overview-value') ?? null;
-};
+const policy = (
+  overrides: Partial<networkpolicy.NetworkPolicyDetails>
+): networkpolicy.NetworkPolicyDetails => ({
+  kind: 'NetworkPolicy',
+  name: 'payments-api',
+  namespace: 'payments',
+  details: '',
+  podSelector: { matchLabels: { 'app.kubernetes.io/name': 'payments-api' } },
+  policyTypes: ['Ingress', 'Egress'],
+  ...overrides,
+});
 
 describe('NetworkPolicyOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: { networkPolicyDetails: unknown }) => {
+  const render = async (details: networkpolicy.NetworkPolicyDetails) => {
     await act(async () => {
-      root.render(
-        <OverviewRenderer
-          descriptor={networkPolicyDescriptor}
-          data={props.networkPolicyDetails as never}
-        />
-      );
+      root.render(<OverviewRenderer descriptor={networkPolicyDescriptor} data={details} />);
       await Promise.resolve();
     });
   };
+
+  const direction = (label: 'Ingress' | 'Egress') =>
+    container.querySelector<HTMLElement>(`section[aria-label="${label}"]`);
+  const rules = (label: 'Ingress' | 'Egress') =>
+    Array.from(direction(label)?.querySelectorAll<HTMLElement>('ol > li') ?? []);
+  const items = (scope: HTMLElement | undefined, listLabel: string) =>
+    Array.from(
+      scope?.querySelectorAll<HTMLElement>(`ul[aria-label="${listLabel}"] > li`) ?? [],
+      (item) => item.textContent ?? ''
+    );
+  const selectedPods = (scope: HTMLElement | undefined) =>
+    scope?.querySelector<HTMLElement>('[aria-label="Selected pods"]')?.textContent ?? '';
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -56,68 +69,95 @@ describe('NetworkPolicyOverview', () => {
     container.remove();
   });
 
-  it('renders selectors, policy types, and ingress/egress rules', async () => {
-    await renderComponent({
-      networkPolicyDetails: {
-        name: 'restrictive-policy',
-        namespace: 'prod',
-        podSelector: { app: 'web', tier: 'frontend' },
-        policyTypes: ['Ingress', 'Egress'],
+  it('shows each rule as sources flowing to the selected pods, keeping AND/OR peer grouping', async () => {
+    await render(
+      policy({
         ingressRules: [
           {
             from: [
+              { podSelector: { matchLabels: { app: 'checkout-web' } } },
               {
-                namespaceSelector: { team: 'platform' },
-              },
-              {
-                ipBlock: { cidr: '10.0.0.0/24', except: ['10.0.0.10/32'] },
+                namespaceSelector: {
+                  matchLabels: { 'kubernetes.io/metadata.name': 'monitoring' },
+                },
+                podSelector: { matchLabels: { app: 'prometheus' } },
               },
             ],
-            ports: [
-              { protocol: 'TCP', port: 80 },
-              { protocol: 'TCP', port: 443, endPort: 445 },
-            ],
+            ports: [{ protocol: 'TCP', port: '8080' }],
+          },
+          {
+            from: [{ ipBlock: { cidr: '10.20.0.0/16', except: ['10.20.5.0/24'] } }],
+            ports: [{ protocol: 'TCP', port: '8443' }],
           },
         ],
         egressRules: [
           {
-            to: [
-              {
-                podSelector: { app: 'api' },
-              },
+            to: [{ podSelector: { matchLabels: { app: 'postgres' } } }],
+            ports: [
+              { protocol: 'UDP', port: '53' },
+              { protocol: 'TCP', port: '30000', endPort: 32767 },
             ],
-            ports: [{ protocol: 'TCP', port: 5432 }],
           },
         ],
-        labels: {},
-        annotations: {},
-      } as unknown,
-    });
+      })
+    );
 
-    expect(getValueForLabel(container, 'Pod Selector')?.textContent).toContain('app=web');
-    expect(getValueForLabel(container, 'Policy Types')?.textContent).toBe('Ingress, Egress');
-    const ingressValue = getValueForLabel(container, 'Ingress Rules');
-    expect(ingressValue?.textContent).toContain('platform');
-    expect(ingressValue?.textContent).toContain('10.0.0.0/24');
-    expect(ingressValue?.textContent).toContain('TCP/80');
-    const egressValue = getValueForLabel(container, 'Egress Rules');
-    expect(egressValue?.textContent).toContain('app=api');
-    expect(egressValue?.textContent).toContain('5432');
+    const [first, second] = rules('Ingress');
+    const sources = items(first, 'Sources');
+    // Two peers are alternatives (OR); a peer's namespace and pod selectors apply together (AND).
+    expect(sources).toHaveLength(2);
+    expect(sources[0]).toContain('payments');
+    expect(sources[0]).toContain('app=checkout-web');
+    expect(sources[1]).toContain('kubernetes.io/metadata.name=monitoring');
+    expect(sources[1]).toContain('app=prometheus');
+    expect(selectedPods(first)).toContain('app.kubernetes.io/name=payments-api');
+    expect(items(first, 'Ports')).toEqual(['TCP 8080']);
+
+    expect(items(second, 'Sources')).toHaveLength(1);
+    expect(items(second, 'Sources')[0]).toContain('10.20.0.0/16');
+    expect(items(second, 'Sources')[0]).toContain('10.20.5.0/24');
+
+    // Egress flows the other way: the policy's pods are the source.
+    const [egress] = rules('Egress');
+    expect(selectedPods(egress)).toContain('app.kubernetes.io/name=payments-api');
+    expect(items(egress, 'Destinations')).toHaveLength(1);
+    expect(items(egress, 'Destinations')[0]).toContain('app=postgres');
+    expect(items(egress, 'Ports')).toEqual(['UDP 53', 'TCP 30000-32767']);
   });
 
-  it('defaults pod selector message when no selector is provided', async () => {
-    await renderComponent({
-      networkPolicyDetails: {
-        name: 'open-policy',
-        namespace: 'default',
-        podSelector: {},
-        policyTypes: [],
-        labels: {},
-        annotations: {},
-      } as unknown,
-    });
+  it('keeps selector meaning: expressions, empty selectors, and rules without peers or ports', async () => {
+    await render(
+      policy({
+        namespace: 'edge',
+        podSelector: {
+          matchExpressions: [{ key: 'tier', operator: 'In', values: ['frontend', 'edge'] }],
+        },
+        policyTypes: ['Ingress'],
+        ingressRules: [
+          { from: [{ namespaceSelector: {} }], ports: [{ protocol: 'TCP', port: 'http' }] },
+          { ports: [{ protocol: 'UDP', port: '5353' }] },
+          { from: [{ podSelector: {} }] },
+        ],
+      })
+    );
 
-    expect(getValueForLabel(container, 'Pod Selector')?.textContent).toBe('All pods in namespace');
-    expect(getValueForLabel(container, 'Policy Types')?.textContent).toBe('None');
+    const [allNamespaces, anySource, samePods] = rules('Ingress');
+    expect(selectedPods(allNamespaces)).toContain('tier In frontend, edge');
+    expect(items(allNamespaces, 'Sources')[0]).toContain('All namespaces');
+    expect(items(anySource, 'Sources')).toEqual([expect.stringContaining('Any source')]);
+    // An empty pod selector without a namespace selector means every pod in the policy namespace.
+    expect(items(samePods, 'Sources')[0]).toContain('edge');
+    expect(items(samePods, 'Sources')[0]).toContain('all pods');
+    expect(items(samePods, 'Ports')).toEqual(['All ports']);
+  });
+
+  it('distinguishes a denied direction from one the policy does not restrict', async () => {
+    await render(policy({ policyTypes: ['Ingress'] }));
+
+    expect(rules('Ingress')).toHaveLength(0);
+    expect(direction('Ingress')?.textContent).toContain('denied');
+    expect(selectedPods(direction('Ingress') ?? undefined)).toContain('payments-api');
+    expect(direction('Egress')?.textContent).not.toContain('denied');
+    expect(direction('Egress')?.textContent).toContain('No egress rules');
   });
 });

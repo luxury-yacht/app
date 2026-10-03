@@ -6,6 +6,7 @@ import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type { ReactNode } from 'react';
 import { formatFullDate } from '@/utils/ageFormatter';
 import { ConditionChips } from './ConditionChips';
+import { labelSelectorTerms } from './labelSelector';
 import { OverviewItem } from './OverviewItem';
 import './OverviewBlocks.css';
 import './OperatorOverview.css';
@@ -143,14 +144,7 @@ export const operatorSelectorValues = (
   selector: OperatorLabelSelector | null | undefined,
   { absent = 'None', empty = 'All' }: { absent?: string; empty?: string } = {}
 ): string[] => {
-  const values = Object.entries(selector?.matchLabels ?? {}).map(
-    ([key, value]) => `${key}=${value}`
-  );
-  for (const expression of selector?.matchExpressions ?? []) {
-    values.push(
-      [expression.key, expression.operator, expression.values?.join(', ')].filter(Boolean).join(' ')
-    );
-  }
+  const values = labelSelectorTerms(selector);
   return values.length ? values : [selector ? empty : absent];
 };
 

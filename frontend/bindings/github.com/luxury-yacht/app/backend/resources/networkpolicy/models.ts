@@ -6,12 +6,23 @@ export interface IPBlock {
     "except"?: string[] | null;
 }
 
+export interface LabelSelector {
+    "matchLabels"?: { [_ in string]?: string } | null;
+    "matchExpressions"?: LabelSelectorRequirement[] | null;
+}
+
+export interface LabelSelectorRequirement {
+    "key": string;
+    "operator": string;
+    "values"?: string[] | null;
+}
+
 export interface NetworkPolicyDetails {
     "kind": string;
     "name": string;
     "namespace": string;
     "details": string;
-    "podSelector": { [_ in string]?: string } | null;
+    "podSelector": LabelSelector;
     "policyTypes": string[] | null;
     "ingressRules"?: NetworkPolicyRule[] | null;
     "egressRules"?: NetworkPolicyRule[] | null;
@@ -19,9 +30,12 @@ export interface NetworkPolicyDetails {
     "annotations"?: { [_ in string]?: string } | null;
 }
 
+/**
+ * NetworkPolicyPeer omits an unset selector; an empty selector ({}) matches everything.
+ */
 export interface NetworkPolicyPeer {
-    "podSelector"?: { [_ in string]?: string } | null;
-    "namespaceSelector"?: { [_ in string]?: string } | null;
+    "podSelector"?: LabelSelector | null;
+    "namespaceSelector"?: LabelSelector | null;
     "ipBlock"?: IPBlock | null;
 }
 
