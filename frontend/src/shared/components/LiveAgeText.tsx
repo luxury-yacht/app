@@ -1,6 +1,6 @@
-import { type AgeTimestampInput, useAgeClock } from '@shared/hooks/useAgeClock';
+import { useAgeClock } from '@shared/hooks/useAgeClock';
 import type React from 'react';
-import { formatAge, formatFullDate } from '@/utils/ageFormatter';
+import { type AgeTimestampInput, formatAge, formatFullDate } from '@/utils/ageFormatter';
 
 export const formatLiveAgeText = (
   timestamp: AgeTimestampInput,

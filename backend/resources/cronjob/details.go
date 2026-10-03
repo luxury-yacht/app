@@ -208,6 +208,8 @@ func describeActiveJobs(cronJob *batchv1.CronJob, jobs *batchv1.JobList) []resty
 	return references
 }
 
+// collectCronJobPods returns the CronJob's pods, or nil when they could not be
+// listed, which the Logs tab must not read as a CronJob without pods.
 func (s *Service) collectCronJobPods(ctx context.Context, namespace string, cronJob *batchv1.CronJob, jobs *batchv1.JobList) ([]restypes.PodSimpleInfo, *restypes.PodMetricsSummary) {
 	if jobs == nil {
 		return nil, nil
@@ -220,9 +222,11 @@ func (s *Service) collectCronJobPods(ctx context.Context, namespace string, cron
 	podService := pods.NewService(s.deps)
 	rsMap := podService.BuildReplicaSetToDeploymentMap(ctx, namespace)
 	collected := s.podsOwnedByCronJob(ctx, namespace, cronJob, jobs)
-
-	if len(collected) == 0 {
+	if collected == nil {
 		return nil, nil
+	}
+	if len(collected) == 0 {
+		return []restypes.PodSimpleInfo{}, nil
 	}
 
 	metrics := podService.GetPodMetricsForPods(ctx, namespace, collected)
@@ -247,8 +251,10 @@ func (s *Service) podsOwnedByCronJob(ctx context.Context, namespace string, cron
 		}
 		podList, err := client.CoreV1().Pods(namespace).List(ctx, cronJobPodListOptions(job))
 		if err != nil {
+			// A partial list would read as the CronJob's full pod list, and the
+			// Logs tab hides lines of pods missing from it; report none.
 			s.deps.Logger.Debug(fmt.Sprintf("Failed to list pods for job %s/%s: %v", namespace, job.Name, err), logsources.ResourceLoader)
-			continue
+			return nil
 		}
 		appendUniqueJobPods(&collected, seen, podList.Items, job.UID)
 	}

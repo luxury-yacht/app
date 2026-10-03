@@ -17,6 +17,9 @@ interface RefreshManagerContextType {
 
 const RefreshManagerContext = createContext<RefreshManagerContextType | undefined>(undefined);
 
+// The manager is a module singleton, so one context value serves every render.
+const REFRESH_MANAGER_CONTEXT_VALUE: RefreshManagerContextType = { manager: refreshManager };
+
 export const useRefreshManagerContext = () => {
   const context = useContext(RefreshManagerContext);
   if (!context) {
@@ -52,11 +55,9 @@ export const RefreshManagerProvider: React.FC<RefreshManagerProviderProps> = ({ 
     };
   }, []);
 
-  const contextValue = {
-    manager: refreshManager,
-  };
-
   return (
-    <RefreshManagerContext.Provider value={contextValue}>{children}</RefreshManagerContext.Provider>
+    <RefreshManagerContext.Provider value={REFRESH_MANAGER_CONTEXT_VALUE}>
+      {children}
+    </RefreshManagerContext.Provider>
   );
 };

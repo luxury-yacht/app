@@ -12,8 +12,20 @@ object panel. They are snapshot/fetch based, not container log streaming.
 - Source switching should clearly reset or preserve content by policy.
 - Path-backed discovery and service-backed queries have different failure and
   filtering behavior; do not merge them accidentally.
-- Shared viewer behavior may be reused, but source selection and transport stay
-  node-log specific.
+- Node log requests set their own `Accept` header (`text/plain, */*`). The
+  typed clientset they go through negotiates protobuf-then-JSON for built-in
+  kinds, and a node answers 406 to a request that accepts neither.
+- Search, display, toolbar, keyboard shortcuts and copy come from the shared
+  viewer shell ([overview.md](overview.md#shared-viewer-shell)); source
+  selection and transport stay node-log specific. Node Logs has no timestamp or
+  previous-log shortcuts.
+- Loading, error and empty states look and sit as in Container Logs: in the log
+  region below the toolbar, which holds the source picker and must stay usable
+  when a source cannot be read.
+- The Buffer size setting (Settings → Logs) limits Node Logs as it limits
+  Container Logs: the newest lines are kept, shrinking the setting trims at once, and the
+  buffer-full indicator shows once lines have been dropped (by the node's
+  256 KB fetch limit or by the buffer) until another source is selected.
 
 ## Ownership
 
@@ -36,7 +48,8 @@ When changing node logs:
 
 1. Trace Node identity and `clusterId` from object panel to backend request.
 2. Check source discovery, unsupported states, and empty directory handling.
-3. Verify source switching, refresh, search, copy, and scroll behavior.
+3. Verify source switching, refresh, search, copy, keyboard shortcuts, and
+   scroll behavior.
 4. Keep container log paths hidden from node log source lists.
 5. Test supported and unsupported source types.
 

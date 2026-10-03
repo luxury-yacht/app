@@ -98,7 +98,8 @@ const renderTaints = (d: NodeDetails): React.ReactNode => (
   <div className="overview-condition-list">
     {withStableListKeys(d.taints ?? [], (taint) => JSON.stringify(taint)).map(
       ({ key, value: taint }) => {
-        const label = `${taint.key}${taint.value ? `=${taint.value}` : ''}:${taint.effect}`;
+        const valueSuffix = taint.value ? `=${taint.value}` : '';
+        const label = `${taint.key}${valueSuffix}:${taint.effect}`;
         return (
           <StatusChip key={key} variant="warning">
             {label}

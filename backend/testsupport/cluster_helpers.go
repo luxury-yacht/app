@@ -28,8 +28,8 @@ func SeedAPIResources(t testing.TB, client kubernetes.Interface, lists ...*metav
 
 	copyLists := make([]*metav1.APIResourceList, len(lists))
 	for i, l := range lists {
-		copy := *l
-		copyLists[i] = &copy
+		listCopy := *l
+		copyLists[i] = &listCopy
 	}
 	discoveryClient.Resources = copyLists
 }

@@ -152,6 +152,10 @@ vi.mock('@shared/components/tables/GridTable', () => ({
 
 vi.mock('./EventsTab.css', () => ({}));
 
+vi.mock('@/hooks/useShortNames', () => ({
+  useShortNames: () => false,
+}));
+
 vi.mock('@/core/cluster-workspace/useClusterWorkspace', () => ({
   useClusterNameResolver: () => (clusterId: string) =>
     clusterId === 'event-cluster' ? 'Event Cluster' : 'Parent Cluster',
@@ -191,7 +195,20 @@ function makeEvent(
     involvedObjectKind: 'Pod',
     involvedObjectNamespace: 'default',
     involvedObjectUid: 'related-pod-uid',
-    involvedObjectApiVersion: 'v1',
+    // The backend sends an openable link whenever the event names a versioned
+    // involved object, stamped with the event's cluster.
+    involvedObject: {
+      ref: {
+        clusterId: ref?.clusterId ?? PARENT_CLUSTER_ID,
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        resource: 'pods',
+        namespace: 'default',
+        name: 'related-pod',
+        uid: 'related-pod-uid',
+      },
+    },
     ...row,
   };
 }
@@ -250,6 +267,29 @@ describe('EventsTab', () => {
 
   const PANEL_ID = `obj:${PARENT_CLUSTER_ID}:apps/v1/deployment:default:my-deploy`;
 
+  // The Object Name link opens the involved object; Enter on the focused row
+  // opens the Event.
+  const clickObjectName = async (index = 0) => {
+    const gridProps = requireValue(
+      gridTableState.lastProps,
+      'expected captured GridTable props in EventsTab.test.tsx'
+    );
+    const column = requireValue(
+      gridProps.columns.find((candidate) => candidate.key === 'objectName'),
+      'expected Object Name column in EventsTab.test.tsx'
+    );
+    const cell = requireReactElement<{ onClick?: (event: { altKey: boolean }) => void }>(
+      column.render(
+        requireValue(gridProps.data[index], 'expected Event row in EventsTab.test.tsx')
+      ),
+      'expected interactive Object Name cell in EventsTab.test.tsx'
+    );
+    await act(async () => {
+      cell.props.onClick?.({ altKey: false });
+      await Promise.resolve();
+    });
+  };
+
   it('registers the events refresher under the panel-scoped name', async () => {
     // Same-kind panels must not share an events refresher: a kind-only name
     // let one panel's unmount unregister the other's refresher + subscribers.
@@ -293,7 +333,9 @@ describe('EventsTab', () => {
         'expected object name column'
       );
       const row = requireValue(gridTableState.lastProps?.data[0], 'expected event row');
-      expect(objectNameColumn.rowAction).toBe(true);
+      // The link opens the involved object while Enter on the row opens the Event, so it
+      // is its own action with its own Tab stop.
+      expect(objectNameColumn.rowAction).not.toBe(true);
       const objectNameCell = requireReactElement<{
         onClick: (event: {
           altKey: boolean;
@@ -414,6 +456,7 @@ describe('EventsTab', () => {
       'expected captured GridTable props in EventsTab.test.tsx'
     );
     expect(gridProps.columns.map((column) => column.header)).toEqual([
+      'Kind',
       'Type',
       'Source',
       'Object Type',
@@ -436,6 +479,88 @@ describe('EventsTab', () => {
     expect(typeCell.props).toMatchObject({ children: 'Warning', variant: 'warning' });
   });
 
+  // The mocked table invokes onRowClick, which GridTable calls only for Enter on
+  // the focused row; a mouse click on a row opens nothing.
+  it('opens the Event itself when the focused row is activated with Enter', async () => {
+    hoistedSnapshot.data = { events: [makeEvent()] };
+    hoistedSnapshot.status = 'ready';
+
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          panelId={PANEL_ID}
+          isActive={true}
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
+        />
+      );
+    });
+
+    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
+    await act(async () => {
+      row.click();
+      await Promise.resolve();
+    });
+
+    expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
+    expect(mockOpenWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: PARENT_CLUSTER_ID,
+        group: 'events.k8s.io',
+        version: 'v1',
+        kind: 'Event',
+        namespace: 'default',
+        name: 'event-a',
+      })
+    );
+  });
+
+  // The Kind badge is how a mouse user opens the Event, as in the Cluster and
+  // Namespace Events tables; a click on the row itself opens nothing.
+  it('opens the Event itself from its Kind badge', async () => {
+    hoistedSnapshot.data = { events: [makeEvent()] };
+    hoistedSnapshot.status = 'ready';
+
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          panelId={PANEL_ID}
+          isActive={true}
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
+        />
+      );
+    });
+
+    const gridProps = requireValue(
+      gridTableState.lastProps,
+      'expected captured GridTable props in EventsTab.test.tsx'
+    );
+    const kindColumn = requireValue(
+      gridProps.columns.find((column) => column.key === 'kind'),
+      'expected the Event Kind column in EventsTab.test.tsx'
+    );
+    const kindCell = requireReactElement<{ onClick: (event: { altKey: boolean }) => void }>(
+      kindColumn.render(
+        requireValue(gridProps.data[0], 'expected Event row in EventsTab.test.tsx')
+      ),
+      'expected the interactive Event Kind badge in EventsTab.test.tsx'
+    );
+    await act(async () => {
+      kindCell.props.onClick({ altKey: false });
+      await Promise.resolve();
+    });
+
+    expect(mockOpenWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: PARENT_CLUSTER_ID,
+        kind: 'Event',
+        namespace: 'default',
+        name: 'event-a',
+      })
+    );
+  });
+
   it('prefers per-event clusterId over parent panel cluster when opening related objects', async () => {
     // Event has its own cluster identity distinct from the parent panel.
     hoistedSnapshot.data = {
@@ -454,13 +579,7 @@ describe('EventsTab', () => {
       );
     });
 
-    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
-    expect(row).toBeTruthy();
-
-    await act(async () => {
-      row.click();
-      await Promise.resolve();
-    });
+    await clickObjectName();
 
     expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
     const call = mockOpenWithObject.mock.calls[0][0];
@@ -588,85 +707,6 @@ describe('EventsTab', () => {
     expect(mockFetchScopedDomain).not.toHaveBeenCalled();
   });
 
-  it('falls back to parent panel cluster when event has no cluster identity', async () => {
-    // Event without cluster fields — should fall back to parent panel.
-    hoistedSnapshot.data = {
-      events: [makeEvent({ ref: { clusterId: undefined } })],
-    };
-    hoistedSnapshot.status = 'ready';
-
-    act(() => {
-      root.render(
-        <EventsTab
-          objectData={parentObjectData}
-          panelId={PANEL_ID}
-          isActive={true}
-          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
-        />
-      );
-    });
-
-    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
-    expect(row).toBeTruthy();
-
-    await act(async () => {
-      row.click();
-      await Promise.resolve();
-    });
-
-    expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
-    const call = mockOpenWithObject.mock.calls[0][0];
-    expect(call.clusterId).toBe(PARENT_CLUSTER_ID);
-    expect(call.clusterName).toBe(PARENT_CLUSTER_NAME);
-  });
-
-  it('threads the event involvedObject GVK to openWithObject so colliding kinds are disambiguated', async () => {
-    // Two different CRDs both define the kind "DBInstance". Without
-    // group/version on the openWithObject reference, the panel cannot
-    // tell them apart and the backend's legacy kind-only resolver picks
-    // whichever one came first in discovery — which is exactly the
-    // kind-only-objects bug.
-    hoistedSnapshot.data = {
-      events: [
-        makeEvent({
-          ref: { clusterId: EVENT_CLUSTER_ID },
-          involvedObjectKind: 'DBInstance',
-          involvedObjectName: 'orders-db',
-          involvedObjectNamespace: 'team-a',
-          involvedObjectApiVersion: 'documentdb.services.k8s.aws/v1alpha1',
-        }),
-      ],
-    };
-    hoistedSnapshot.status = 'ready';
-
-    act(() => {
-      root.render(
-        <EventsTab
-          objectData={parentObjectData}
-          panelId={PANEL_ID}
-          isActive={true}
-          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
-        />
-      );
-    });
-
-    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
-    expect(row).toBeTruthy();
-
-    await act(async () => {
-      row.click();
-      await Promise.resolve();
-    });
-
-    expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
-    const call = mockOpenWithObject.mock.calls[0][0];
-    expect(call.kind).toBe('DBInstance');
-    expect(call.name).toBe('orders-db');
-    expect(call.namespace).toBe('team-a');
-    expect(call.group).toBe('documentdb.services.k8s.aws');
-    expect(call.version).toBe('v1alpha1');
-  });
-
   it('prefers the openable involvedObject ref over display-only event object fields', async () => {
     hoistedSnapshot.data = {
       events: [
@@ -675,7 +715,6 @@ describe('EventsTab', () => {
           involvedObjectName: 'display-only-name',
           involvedObjectNamespace: 'default',
           involvedObjectUid: 'display-uid',
-          involvedObjectApiVersion: 'v1',
           involvedObject: {
             ref: {
               clusterId: EVENT_CLUSTER_ID,
@@ -704,11 +743,7 @@ describe('EventsTab', () => {
       );
     });
 
-    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
-    await act(async () => {
-      row.click();
-      await Promise.resolve();
-    });
+    await clickObjectName();
 
     expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
     expect(mockOpenWithObject).toHaveBeenCalledWith(
@@ -723,42 +758,6 @@ describe('EventsTab', () => {
         uid: 'deployment-uid',
       })
     );
-  });
-
-  it('parses core/v1 involvedObject apiVersion into an empty group + v1 version', async () => {
-    hoistedSnapshot.data = {
-      events: [
-        makeEvent({
-          involvedObjectKind: 'Pod',
-          involvedObjectName: 'web-0',
-          involvedObjectNamespace: 'default',
-          involvedObjectApiVersion: 'v1',
-        }),
-      ],
-    };
-    hoistedSnapshot.status = 'ready';
-
-    act(() => {
-      root.render(
-        <EventsTab
-          objectData={parentObjectData}
-          panelId={PANEL_ID}
-          isActive={true}
-          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
-        />
-      );
-    });
-
-    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
-    await act(async () => {
-      row.click();
-      await Promise.resolve();
-    });
-
-    expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
-    const call = mockOpenWithObject.mock.calls[0][0];
-    expect(call.group).toBe('');
-    expect(call.version).toBe('v1');
   });
 
   it('resolves involved CRDs by UID when the event omits apiVersion', async () => {
@@ -782,7 +781,16 @@ describe('EventsTab', () => {
           involvedObjectName: 'orders-db',
           involvedObjectNamespace: 'team-a',
           involvedObjectUid: 'orders-db-uid',
-          involvedObjectApiVersion: undefined,
+          // Without an apiVersion the backend can only send a display-only link.
+          involvedObject: {
+            display: {
+              clusterId: EVENT_CLUSTER_ID,
+              kind: 'Database',
+              namespace: 'team-a',
+              name: 'orders-db',
+              uid: 'orders-db-uid',
+            },
+          },
         }),
       ],
     };
@@ -799,11 +807,7 @@ describe('EventsTab', () => {
       );
     });
 
-    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
-    await act(async () => {
-      row.click();
-      await Promise.resolve();
-    });
+    await clickObjectName();
 
     expect(mockFindCatalogObjectByUID).toHaveBeenCalledWith(EVENT_CLUSTER_ID, 'orders-db-uid');
     expect(mockOpenWithObject).toHaveBeenCalledWith(

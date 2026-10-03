@@ -13,7 +13,7 @@ import {
   OBJECT_ACTION_IDS,
 } from '@shared/actions/objectActionContract';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { type CapabilityDescriptor, useCapabilities, useUserPermission } from '@/core/capabilities';
+import { type CapabilityDescriptor, useCapabilities } from '@/core/capabilities';
 import {
   discoverNodeLogs,
   getCachedNodeLogDiscovery,
@@ -27,7 +27,6 @@ import {
   type ComputedCapabilities,
   createEmptyCapabilityIdMap,
   type FeatureSupport,
-  type NodeLogsState,
   type PanelObjectData,
 } from '../types';
 
@@ -42,7 +41,7 @@ export interface ObjectPanelCapabilitiesResult {
   capabilityStates: CapabilityStates;
   capabilities: ComputedCapabilities;
   capabilityReasons: CapabilityReasons;
-  nodeLogsState: NodeLogsState;
+  nodeLogsState: CapabilityState;
   nodeLogSources: NodeLogSource[];
 }
 
@@ -425,15 +424,11 @@ export const useObjectPanelCapabilities = ({
     };
   }, [capabilityDescriptorInfo.idMap, getCapabilityState]);
 
-  const viewObjPanelLogsPermission = useUserPermission(
-    'Pod',
-    'get',
-    objectData?.namespace ?? null,
-    'log',
-    objectData?.clusterId ?? null,
-    '',
-    'v1'
-  );
+  // The Logs tab hides only on a settled denial of `view-logs`: named for a
+  // pod, so per-pod grants count, and Pod-level for workloads.
+  const viewObjPanelLogs = capabilitiesEnabled
+    ? getCapabilityState(capabilityDescriptorInfo.idMap.viewObjPanelLogs)
+    : null;
 
   const nodeLogDiscoveryTarget = useMemo(
     () => resolveNodeLogDiscoveryTarget(objectData, objectKind, featureSupport.nodeLogs),
@@ -488,11 +483,7 @@ export const useObjectPanelCapabilities = ({
       objectKind === 'node'
         ? featureSupport.nodeLogs
         : featureSupport.objPanelLogs &&
-          !(
-            viewObjPanelLogsPermission &&
-            !viewObjPanelLogsPermission.pending &&
-            viewObjPanelLogsPermission.allowed === false
-          );
+          !(viewObjPanelLogs && !viewObjPanelLogs.pending && !viewObjPanelLogs.allowed);
 
     return {
       hasObjPanelLogs,
@@ -512,7 +503,7 @@ export const useObjectPanelCapabilities = ({
     featureSupport,
     nodeLogsCapabilityState.allowed,
     objectKind,
-    viewObjPanelLogsPermission,
+    viewObjPanelLogs,
   ]);
 
   const capabilityReasons = useMemo<CapabilityReasons>(

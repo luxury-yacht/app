@@ -1,7 +1,6 @@
 package containerlogs
 
 import (
-	"fmt"
 	"sort"
 
 	corev1 "k8s.io/api/core/v1"
@@ -35,51 +34,15 @@ func (t SelectedTarget) Key() string {
 
 func SelectTargets(
 	pods []*corev1.Pod,
-	options ContainerSelectionOptions,
+	selection ScopeSelection,
 	limit int,
 ) ([]SelectedTarget, int) {
-	if len(pods) == 0 {
-		return nil, 0
-	}
-
 	if limit <= 0 {
 		limit = DefaultPerScopeTargetLimit
 	}
 	limit = ClampPerScopeTargetLimit(limit)
 
-	type rankedTarget struct {
-		target SelectedTarget
-		rank   int
-	}
-
-	var ranked []rankedTarget
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
-		rank := rankPodForLogs(pod)
-		for _, container := range EnumerateContainersWithOptions(pod, options) {
-			ranked = append(ranked, rankedTarget{
-				target: SelectedTarget{
-					Namespace: pod.Namespace,
-					PodName:   pod.Name,
-					Container: container,
-				},
-				rank: rank,
-			})
-		}
-	}
-
-	sort.Slice(ranked, func(i, j int) bool {
-		if ranked[i].rank != ranked[j].rank {
-			return ranked[i].rank < ranked[j].rank
-		}
-		if ranked[i].target.PodName != ranked[j].target.PodName {
-			return ranked[i].target.PodName < ranked[j].target.PodName
-		}
-		return ranked[i].target.Container.Name < ranked[j].target.Container.Name
-	})
-
+	ranked := rankTargets(pods, selection)
 	total := len(ranked)
 	if total == 0 {
 		return nil, 0
@@ -95,19 +58,79 @@ func SelectTargets(
 	return selected, total
 }
 
-func BuildTargetLimitWarnings(selectedCount, totalCount, limit int) []string {
-	if totalCount <= selectedCount || selectedCount <= 0 {
+type rankedTarget struct {
+	target SelectedTarget
+	rank   int
+}
+
+// rankTargets lists every selected container, best log candidates first.
+func rankTargets(pods []*corev1.Pod, selection ScopeSelection) []rankedTarget {
+	var ranked []rankedTarget
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		rank := rankPodForLogs(pod)
+		for _, container := range EnumerateContainers(pod, selection) {
+			ranked = append(ranked, rankedTarget{
+				target: SelectedTarget{Namespace: pod.Namespace, PodName: pod.Name, Container: container},
+				rank:   rank,
+			})
+		}
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		return lessRankedTarget(ranked[i], ranked[j])
+	})
+	return ranked
+}
+
+func lessRankedTarget(left, right rankedTarget) bool {
+	if left.rank != right.rank {
+		return left.rank < right.rank
+	}
+	if left.target.PodName != right.target.PodName {
+		return left.target.PodName < right.target.PodName
+	}
+	return left.target.Container.Name < right.target.Container.Name
+}
+
+// WarningKind names a typed notice about logs the viewer is not showing.
+type WarningKind string
+
+const (
+	// WarningTargetLimit means a target limit hid some containers.
+	WarningTargetLimit WarningKind = "targetLimit"
+	// WarningDropped means entries were lost because the client fell behind.
+	WarningDropped WarningKind = "dropped"
+)
+
+// LimitScope says which target limit hid containers.
+type LimitScope string
+
+const (
+	// LimitPerTab is the per-scope (per-tab) target limit.
+	LimitPerTab LimitScope = "perTab"
+	// LimitGlobal is the limit shared by every open log stream.
+	LimitGlobal LimitScope = "global"
+)
+
+// Warning is a typed notice about logs the viewer is not showing. Scope,
+// Hidden and Limit describe a target limit; Count is the number of dropped
+// entries.
+type Warning struct {
+	Kind   WarningKind `json:"kind"`
+	Scope  LimitScope  `json:"scope,omitempty"`
+	Hidden int         `json:"hidden,omitempty"`
+	Limit  int         `json:"limit,omitempty"`
+	Count  int         `json:"count,omitempty"`
+}
+
+// TargetLimitWarnings reports the containers a target limit hid, if any.
+func TargetLimitWarnings(scope LimitScope, selectedCount, totalCount, limit int) []Warning {
+	if totalCount <= selectedCount {
 		return nil
 	}
-	limit = ClampPerScopeTargetLimit(limit)
-	hiddenCount := totalCount - selectedCount
-	return []string{
-		fmt.Sprintf(
-			"Logs are hidden for %d containers because the per-tab limit of %d was reached. Using filters to reduce the number of containers may clear this message.",
-			hiddenCount,
-			limit,
-		),
-	}
+	return []Warning{{Kind: WarningTargetLimit, Scope: scope, Hidden: totalCount - selectedCount, Limit: limit}}
 }
 
 func rankPodForLogs(pod *corev1.Pod) int {

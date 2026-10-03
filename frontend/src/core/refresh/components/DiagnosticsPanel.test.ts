@@ -611,14 +611,14 @@ describe('DiagnosticsPanel component', () => {
           overview: {
             clusterType: 'EKS',
             clusterVersion: 'v1.29.3',
-            cpuUsage: '150m',
-            cpuRequests: '320m',
-            cpuLimits: '500m',
-            cpuAllocatable: '2.50',
-            memoryUsage: '200.0Mi',
-            memoryRequests: '320.0Mi',
-            memoryLimits: '512.0Mi',
-            memoryAllocatable: '9.0Gi',
+            cpuUsageMilli: 150,
+            cpuRequestsMilli: 320,
+            cpuLimitsMilli: 500,
+            cpuAllocatableMilli: 2500,
+            memoryUsageBytes: 200 * 1024 ** 2,
+            memoryRequestsBytes: 320 * 1024 ** 2,
+            memoryLimitsBytes: 512 * 1024 ** 2,
+            memoryAllocatableBytes: 9 * 1024 ** 3,
             totalNodes: 3,
             fargateNodes: 1,
             regularNodes: 0,
@@ -1289,6 +1289,7 @@ describe('DiagnosticsPanel component', () => {
           lastError: 'Timeout while fetching workload pods',
         },
       ],
+      metricsClusterId: 'test-cluster',
       metrics: {
         lastCollected: now - 3500,
         lastDurationMs: 640,
@@ -1298,18 +1299,24 @@ describe('DiagnosticsPanel component', () => {
         active: true,
       },
       streams: [
+        // Event-table doorbells are deliveries on the resources socket's
+        // cluster-events domain, never on the socket itself.
         {
-          name: 'events',
-          activeSessions: 2,
+          name: 'resources',
+          clusterId: 'test-cluster',
+          leafKind: 'domain',
+          leaf: 'cluster-events',
+          activeSessions: 0,
           totalMessages: 12,
           droppedMessages: 1,
           skippedTargets: 0,
           errorCount: 0,
-          lastConnect: now - 6000,
+          lastConnect: 0,
           lastEvent: now - 3000,
         },
         {
           name: 'resources',
+          clusterId: 'test-cluster',
           activeSessions: 1,
           totalMessages: 15,
           droppedMessages: 0,
@@ -1320,6 +1327,7 @@ describe('DiagnosticsPanel component', () => {
         },
         {
           name: 'resources',
+          clusterId: 'test-cluster',
           leafKind: 'domain',
           leaf: 'catalog',
           activeSessions: 0,
@@ -1333,14 +1341,42 @@ describe('DiagnosticsPanel component', () => {
         },
         {
           name: 'container-logs',
+          clusterId: 'test-cluster',
           activeSessions: 1,
-          totalMessages: 9,
-          droppedMessages: 2,
+          totalMessages: 0,
+          droppedMessages: 0,
           skippedTargets: 5,
           errorCount: 0,
           lastConnect: now - 8000,
-          lastEvent: now - 1000,
+          lastEvent: now - 8000,
           lastSkipReason: 'per-scope target cap',
+        },
+        // Container logs count deliveries per log target, never on the socket.
+        {
+          name: 'container-logs',
+          clusterId: 'test-cluster',
+          leafKind: 'target',
+          leaf: 'default/web',
+          activeSessions: 0,
+          totalMessages: 4,
+          droppedMessages: 2,
+          skippedTargets: 0,
+          errorCount: 0,
+          lastConnect: 0,
+          lastEvent: now - 1000,
+        },
+        {
+          name: 'container-logs',
+          clusterId: 'test-cluster',
+          leafKind: 'target',
+          leaf: 'default/api',
+          activeSessions: 0,
+          totalMessages: 5,
+          droppedMessages: 0,
+          skippedTargets: 0,
+          errorCount: 0,
+          lastConnect: 0,
+          lastEvent: now - 2000,
         },
       ],
     });
@@ -1375,7 +1411,7 @@ describe('DiagnosticsPanel component', () => {
 
     scopedEntriesMap['container-logs'] = [
       [
-        'cluster-a|default:apps/v1:deployment:web',
+        'test-cluster|default:apps/v1:deployment:web',
         {
           ...createReadyState({}),
           status: 'ready',
@@ -1383,12 +1419,22 @@ describe('DiagnosticsPanel component', () => {
         },
       ],
       [
-        'cluster-a|default:apps/v1:deployment:api',
+        'test-cluster|default:apps/v1:deployment:api',
         {
           ...createReadyState({}),
           status: 'error',
           error: 'Unable to stream logs',
           lastUpdated: now - 3000,
+        },
+      ],
+      // Another cluster's Logs tab does not count toward the active cluster.
+      [
+        'other-cluster|default:apps/v1:deployment:web',
+        {
+          ...createReadyState({}),
+          status: 'error',
+          error: 'Unable to stream logs',
+          lastUpdated: now - 1000,
         },
       ],
     ];
@@ -1426,7 +1472,7 @@ describe('DiagnosticsPanel component', () => {
       '.diagnostics-summary-card:nth-of-type(3) .diagnostics-summary-primary'
     );
     expect(eventsPrimary?.textContent).toBe('12 delivered');
-    expect(eventsPrimary?.getAttribute('title')).toContain('Active 2');
+    expect(eventsPrimary?.getAttribute('title')).toContain('Active 1');
 
     const catalogPrimary = rendered.container.querySelector<HTMLSpanElement>(
       '.diagnostics-summary-card:nth-of-type(4) .diagnostics-summary-primary'
@@ -1452,16 +1498,16 @@ describe('DiagnosticsPanel component', () => {
     });
     await flushAsync();
 
-    // Connections lists one socket row per (stream, cluster). The fixture has no
-    // leaf-keyed entries, so every row here is a socket.
+    // Connections lists one socket row per (stream, cluster) and one row per
+    // log target; domain leaves (catalog, cluster-events) belong to Cluster Data.
     const connectionsSection = rendered.container.querySelector('.diagnostics-section');
-    expect(connectionsSection?.textContent).toContain('3 sockets');
+    expect(connectionsSection?.textContent).toContain('2 sockets');
     expect(connectionsSection?.textContent).toContain('Resources');
     const connectionRows =
       connectionsSection
         ?.querySelector('.diagnostics-table-wrapper')
         ?.querySelectorAll('tbody tr') ?? [];
-    expect(connectionRows).toHaveLength(3);
+    expect(connectionRows).toHaveLength(4);
     const resourcesRow = Array.from(connectionRows).find((row) =>
       row.textContent?.includes('Resources')
     );
@@ -1587,6 +1633,7 @@ describe('DiagnosticsPanel component', () => {
 
     fetchTelemetrySummaryMock.mockResolvedValueOnce(
       makeTelemetrySummary({
+        metricsClusterId: 'cluster-a',
         snapshots: [],
         metrics: {
           lastCollected: now - 2000,
@@ -1728,6 +1775,7 @@ describe('DiagnosticsPanel component', () => {
 
     fetchTelemetrySummaryMock.mockResolvedValueOnce(
       makeTelemetrySummary({
+        metricsClusterId: 'test-cluster',
         snapshots: [],
         metrics: {
           lastCollected: now,
@@ -1749,7 +1797,7 @@ describe('DiagnosticsPanel component', () => {
             lastEvent: now - 500,
           },
           {
-            name: 'events',
+            name: 'container-logs',
             activeSessions: 2,
             totalMessages: 10,
             droppedMessages: 1,
@@ -1789,7 +1837,9 @@ describe('DiagnosticsPanel component', () => {
 
     const streamRows = connectionsTable.querySelectorAll('tbody tr');
     expect(Array.from(streamRows).some((row) => row.textContent?.includes('Resources'))).toBe(true);
-    expect(Array.from(streamRows).some((row) => row.textContent?.includes('Events'))).toBe(true);
+    expect(Array.from(streamRows).some((row) => row.textContent?.includes('Container Logs'))).toBe(
+      true
+    );
 
     await rendered.unmount();
   });
@@ -1801,6 +1851,7 @@ describe('DiagnosticsPanel component', () => {
 
     fetchTelemetrySummaryMock.mockResolvedValueOnce(
       makeTelemetrySummary({
+        metricsClusterId: 'test-cluster',
         snapshots: [],
         metrics: {
           lastCollected: now,
@@ -1899,6 +1950,7 @@ describe('DiagnosticsPanel component', () => {
 
     fetchTelemetrySummaryMock.mockResolvedValueOnce(
       makeTelemetrySummary({
+        metricsClusterId: 'test-cluster',
         snapshots: [],
         metrics: {
           lastCollected: now - 1000,
@@ -1936,8 +1988,10 @@ describe('DiagnosticsPanel component', () => {
         finish = resolve;
       })
     );
-    const latest = makeTelemetrySummary();
-    latest.metrics.successCount = 23;
+    const latest = makeTelemetrySummary({
+      metricsClusterId: 'test-cluster',
+      metrics: { successCount: 23 },
+    });
     fetchTelemetrySummaryMock.mockResolvedValue(latest);
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel);
@@ -1964,8 +2018,10 @@ describe('DiagnosticsPanel component', () => {
 
   test('retains successful diagnostics and reports each failure only until that source recovers', async () => {
     vi.useFakeTimers();
-    const summary = makeTelemetrySummary();
-    summary.metrics.successCount = 17;
+    const summary = makeTelemetrySummary({
+      metricsClusterId: 'test-cluster',
+      metrics: { successCount: 17 },
+    });
     fetchTelemetrySummaryMock.mockResolvedValue(summary);
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel);

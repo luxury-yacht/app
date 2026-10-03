@@ -2,11 +2,18 @@ import { describe, expect, it } from 'vitest';
 
 import {
   calculateResourceMetrics,
+  calculateResourceOvercommit,
   formatMemoryValue,
+  formatResourceExportValue,
   formatResourceValue,
   getResourceLimitUsagePercent,
-  parseResourceValue,
+  parseResourceQuantity,
 } from './resourceCalculations';
+
+const KIB = 1024;
+const MIB = 1024 ** 2;
+const GIB = 1024 ** 3;
+const TIB = 1024 ** 4;
 
 describe('shared resource calculations', () => {
   it.each([
@@ -46,21 +53,14 @@ describe('shared resource calculations', () => {
     }
   });
 
-  it('parses and formats tebibyte memory values', () => {
-    const metrics = calculateResourceMetrics(
-      {
-        usage: '512.0 Gi',
-        request: '1.0 Ti',
-        limit: '1.5 Ti',
-        allocatable: '2.0 Ti',
-      },
-      'memory'
-    );
+  it('scales tebibyte memory values and formats them in binary units', () => {
+    const metrics = calculateResourceMetrics({
+      usage: 512 * GIB,
+      request: TIB,
+      limit: 1.5 * TIB,
+      allocatable: 2 * TIB,
+    });
 
-    expect(metrics.usage).toBe(512 * 1024);
-    expect(metrics.request).toBe(1024 * 1024);
-    expect(metrics.limit).toBe(1.5 * 1024 * 1024);
-    expect(metrics.allocatable).toBe(2 * 1024 * 1024);
     expect(metrics.usagePercent).toBe(25);
     expect(metrics.requestPercent).toBe(50);
     expect(metrics.limitPercent).toBe(75);
@@ -68,15 +68,12 @@ describe('shared resource calculations', () => {
   });
 
   it('reports percentages over 100 percent for overcommitted resources', () => {
-    const metrics = calculateResourceMetrics(
-      {
-        usage: '2.5 Ti',
-        request: '3.0 Ti',
-        limit: '5.0 Ti',
-        allocatable: '2.0 Ti',
-      },
-      'memory'
-    );
+    const metrics = calculateResourceMetrics({
+      usage: 2.5 * TIB,
+      request: 3 * TIB,
+      limit: 5 * TIB,
+      allocatable: 2 * TIB,
+    });
 
     expect(metrics.usagePercent).toBe(125);
     expect(metrics.requestPercent).toBe(150);
@@ -91,37 +88,43 @@ describe('shared resource calculations', () => {
     ['cpu', '-0.25', -250],
     ['cpu', '5e-1', 500],
     ['cpu', '+2E+3', 2_000_000],
-    ['memory', '1024Ki', 1],
-    ['memory', '128Mi', 128],
-    ['memory', '2Gi', 2048],
-    ['memory', '1.5Ti', 1.5 * 1024 * 1024],
-    ['memory', '3GB', 3072],
-    ['memory', '512MB', 512],
-    ['memory', '1048576', 1],
-  ] as const)('parses %s resource value %s', (type, value, expected) => {
-    expect(parseResourceValue(value, type)).toBe(expected);
+    ['memory', '1Ki', KIB],
+    ['memory', '128Mi', 128 * MIB],
+    ['memory', '2Gi', 2 * GIB],
+    ['memory', '1.5Ti', 1.5 * TIB],
+    ['memory', '3GB', 3 * GIB],
+    ['memory', '512 MB', 512 * MIB],
+    ['memory', '1048576', MIB],
+  ] as const)('parses %s quantity %s into millicores or bytes', (type, value, expected) => {
+    expect(parseResourceQuantity(value, type)).toBe(expected);
   });
 
-  it.each(['', '-', 'undefined', 'null', 'not set', 'invalid'])(
-    'normalizes an invalid resource value %j to zero',
+  it.each([undefined, '', '-', 'undefined', 'null', 'not set', 'invalid'])(
+    'treats %j as no value rather than zero',
     (value) => {
-      expect(parseResourceValue(value, 'cpu')).toBe(0);
-      expect(parseResourceValue(value, 'memory')).toBe(0);
+      expect(parseResourceQuantity(value, 'cpu')).toBeUndefined();
+      expect(parseResourceQuantity(value, 'memory')).toBeUndefined();
     }
   );
 
-  it('formats parsed values consistently for UI and table exports', () => {
-    expect(formatResourceValue('0.25', 250, 'cpu')).toBe('250m');
-    expect(formatResourceValue('1.5Ti', 1.5 * 1024 * 1024, 'memory')).toBe('1.5Ti');
-    expect(formatResourceValue('invalid', 0, 'memory')).toBe('-');
-    expect(formatResourceValue('-', 0, 'cpu')).toBe('-');
-    expect(formatResourceValue('not set', 0, 'cpu')).toBe('-');
+  it('formats CPU in millicores and memory in binary units, with a dash for no value', () => {
+    expect(formatResourceValue(250, 'cpu')).toBe('250m');
+    expect(formatResourceValue(1.5 * TIB, 'memory')).toBe('1.5Ti');
+    expect(formatResourceValue(0, 'memory')).toBe('0');
+    expect(formatResourceValue(undefined, 'cpu')).toBe('-');
   });
 
-  it.each(['0', '0Ki', '0Mi'])('preserves an explicit zero memory value %s', (value) => {
-    const parsedValue = parseResourceValue(value, 'memory');
+  it('exports usage as whole millicores and KiB, keeping zero distinct from no value', () => {
+    expect(formatResourceExportValue(1234.4, 'cpu')).toBe('1234');
+    expect(formatResourceExportValue(1560 * MIB + 123, 'memory')).toBe('1597440');
+    expect(formatResourceExportValue(0, 'memory')).toBe('0');
+    expect(formatResourceExportValue(undefined, 'memory')).toBe('-');
+  });
 
-    expect(parsedValue).toBe(0);
-    expect(formatResourceValue(value, parsedValue, 'memory')).toBe('0');
+  it('reports overcommit only when limits exceed positive allocatable capacity', () => {
+    expect(calculateResourceOvercommit(2500, 2000).overcommittedPercent).toBe(25);
+    expect(calculateResourceOvercommit(8 * GIB, 4 * GIB).overcommittedPercent).toBe(100);
+    expect(calculateResourceOvercommit(500, 2000).overcommittedPercent).toBe(0);
+    expect(calculateResourceOvercommit(2000, 0).overcommittedPercent).toBe(0);
   });
 });

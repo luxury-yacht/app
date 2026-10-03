@@ -13,9 +13,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -80,8 +80,8 @@ func TestOverlayPodMetricsMissingSampleRendersNoData(t *testing.T) {
 	rows := []PodSummary{{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "lonely"}, AgeTimestamp: created.UnixMilli()}}
 	overlayPodMetrics(rows, map[string]metrics.PodUsage{}) // no sample for this pod
 
-	require.Equal(t, streamrows.MetricsNoData, rows[0].CPUUsage)
-	require.Equal(t, streamrows.MetricsNoData, rows[0].MemUsage)
+	require.Nil(t, rows[0].CPUUsageMilli)
+	require.Nil(t, rows[0].MemoryUsageBytes)
 }
 
 // TestOverlayPodMetricsPresentSampleRendersNumbers proves a fresh sample (taken
@@ -93,8 +93,8 @@ func TestOverlayPodMetricsPresentSampleRendersNumbers(t *testing.T) {
 		"default/api": {CPUUsageMilli: 125, MemoryUsageBytes: 256 * 1024 * 1024, Timestamp: created.Add(30 * time.Second)},
 	})
 
-	require.Equal(t, "125m", rows[0].CPUUsage)
-	require.Equal(t, "256 MB", rows[0].MemUsage)
+	require.Equal(t, ptr.To[int64](125), rows[0].CPUUsageMilli)
+	require.Equal(t, ptr.To[int64](256<<20), rows[0].MemoryUsageBytes)
 }
 
 // TestOverlayPodMetricsDropsStaleSampleFromPriorIncarnation is the Risk #9 / §3.6
@@ -119,9 +119,8 @@ func TestOverlayPodMetricsDropsStaleSampleFromPriorIncarnation(t *testing.T) {
 	overlayPodMetrics(rows, map[string]metrics.PodUsage{"default/churned": staleSample})
 
 	// The recreated pod must NOT show the deleted pod's 900m / 4Gi numbers.
-	require.NotEqual(t, "900m", rows[0].CPUUsage)
-	require.Equal(t, streamrows.MetricsNoData, rows[0].CPUUsage)
-	require.Equal(t, streamrows.MetricsNoData, rows[0].MemUsage)
+	require.Nil(t, rows[0].CPUUsageMilli)
+	require.Nil(t, rows[0].MemoryUsageBytes)
 
 	// Once a fresh sample (after the new creation) arrives, the numbers appear.
 	freshSample := metrics.PodUsage{
@@ -130,8 +129,8 @@ func TestOverlayPodMetricsDropsStaleSampleFromPriorIncarnation(t *testing.T) {
 		Timestamp:        newCreated.Add(30 * time.Second),
 	}
 	overlayPodMetrics(rows, map[string]metrics.PodUsage{"default/churned": freshSample})
-	require.Equal(t, "50m", rows[0].CPUUsage)
-	require.Equal(t, "128 MB", rows[0].MemUsage)
+	require.Equal(t, ptr.To[int64](50), rows[0].CPUUsageMilli)
+	require.Equal(t, ptr.To[int64](128<<20), rows[0].MemoryUsageBytes)
 }
 
 func TestPodBuilderNodeScope(t *testing.T) {
@@ -224,8 +223,8 @@ func TestPodBuilderNodeScope(t *testing.T) {
 	require.Equal(t, "Deployment", first.OwnerKind)
 	require.Equal(t, "deploy-a", first.OwnerName)
 	require.Equal(t, "apps/v1", first.OwnerAPIVersion, "ReplicaSet→Deployment collapse must produce apps/v1")
-	require.Equal(t, streamrows.MetricsNoData, first.CPUUsage)
-	require.Equal(t, streamrows.MetricsNoData, first.MemUsage)
+	require.Nil(t, first.CPUUsageMilli)
+	require.Nil(t, first.MemoryUsageBytes)
 	require.True(t, strings.HasPrefix(first.Ready, "1/"))
 
 }
@@ -368,8 +367,8 @@ func TestPodBuilderNamespaceScope(t *testing.T) {
 	require.Len(t, payload.Rows, 2)
 	require.Equal(t, "team-a", payload.Rows[0].Ref.Namespace)
 	require.Equal(t, "team-a-pod-1", payload.Rows[0].Ref.Name)
-	require.Equal(t, streamrows.MetricsNoData, payload.Rows[0].CPUUsage)
-	require.Equal(t, streamrows.MetricsNoData, payload.Rows[0].MemUsage)
+	require.Nil(t, payload.Rows[0].CPUUsageMilli)
+	require.Nil(t, payload.Rows[0].MemoryUsageBytes)
 	require.Equal(t, "team-a-pod-2", payload.Rows[1].Ref.Name)
 }
 

@@ -124,15 +124,16 @@ type ClusterOverviewPayload struct {
 	ClusterType    string `json:"clusterType"`
 	ClusterVersion string `json:"clusterVersion"`
 
-	CPUUsage       string `json:"cpuUsage"`
-	CPURequests    string `json:"cpuRequests"`
-	CPULimits      string `json:"cpuLimits"`
-	CPUAllocatable string `json:"cpuAllocatable"`
+	// CPU is in millicores and memory in bytes; the frontend formats both.
+	CPUUsageMilli       int64 `json:"cpuUsageMilli"`
+	CPURequestsMilli    int64 `json:"cpuRequestsMilli"`
+	CPULimitsMilli      int64 `json:"cpuLimitsMilli"`
+	CPUAllocatableMilli int64 `json:"cpuAllocatableMilli"`
 
-	MemoryUsage       string `json:"memoryUsage"`
-	MemoryRequests    string `json:"memoryRequests"`
-	MemoryLimits      string `json:"memoryLimits"`
-	MemoryAllocatable string `json:"memoryAllocatable"`
+	MemoryUsageBytes       int64 `json:"memoryUsageBytes"`
+	MemoryRequestsBytes    int64 `json:"memoryRequestsBytes"`
+	MemoryLimitsBytes      int64 `json:"memoryLimitsBytes"`
+	MemoryAllocatableBytes int64 `json:"memoryAllocatableBytes"`
 
 	TotalNodes    int `json:"totalNodes"`
 	FargateNodes  int `json:"fargateNodes"`
@@ -185,26 +186,25 @@ type WorkloadResourceUsage struct {
 }
 
 type WorkloadTypeResourceUsage struct {
-	CPUUsage    string `json:"cpuUsage"`
-	MemoryUsage string `json:"memoryUsage"`
+	CPUUsageMilli    int64 `json:"cpuUsageMilli"`
+	MemoryUsageBytes int64 `json:"memoryUsageBytes"`
 }
 
 // RecentEvent is a single warning event shown on the cluster overview.
 // Only the fields needed to render the row and navigate to the involved
 // object are included; richer event detail lives in the Events views.
 type RecentEvent struct {
-	ClusterID        string                      `json:"clusterId,omitempty"`
-	ClusterName      string                      `json:"clusterName,omitempty"`
-	InvolvedObject   *resourcemodel.ResourceLink `json:"involvedObject,omitempty"`
-	EventUID         string                      `json:"eventUid"`
-	Reason           string                      `json:"reason"`
-	Message          string                      `json:"message"`
-	Timestamp        int64                       `json:"timestamp"`
-	ObjectKind       string                      `json:"objectKind"`
-	ObjectName       string                      `json:"objectName"`
-	ObjectNamespace  string                      `json:"objectNamespace"`
-	ObjectAPIVersion string                      `json:"objectApiVersion"`
-	ObjectUID        string                      `json:"objectUid"`
+	ClusterID       string                      `json:"clusterId,omitempty"`
+	ClusterName     string                      `json:"clusterName,omitempty"`
+	InvolvedObject  *resourcemodel.ResourceLink `json:"involvedObject,omitempty"`
+	EventUID        string                      `json:"eventUid"`
+	Reason          string                      `json:"reason"`
+	Message         string                      `json:"message"`
+	Timestamp       int64                       `json:"timestamp"`
+	ObjectKind      string                      `json:"objectKind"`
+	ObjectName      string                      `json:"objectName"`
+	ObjectNamespace string                      `json:"objectNamespace"`
+	ObjectUID       string                      `json:"objectUid"`
 }
 
 // RegisterClusterOverviewDomain wires the cluster-overview domain into the registry.
@@ -630,14 +630,14 @@ func (a *clusterOverviewAccumulator) finalize(
 	versionFn func(context.Context) string,
 	serverHost string,
 ) {
-	a.overview.CPUUsage = formatCPUValue(a.cpuUsageMilli)
-	a.overview.CPURequests = formatCPUValue(a.cpuRequestsMilli)
-	a.overview.CPULimits = formatCPUValue(a.cpuLimitsMilli)
-	a.overview.CPUAllocatable = formatCPUValue(a.cpuAllocatableMilli)
-	a.overview.MemoryUsage = formatMemoryValue(a.memUsageBytes)
-	a.overview.MemoryRequests = formatMemoryValue(a.memRequestsBytes)
-	a.overview.MemoryLimits = formatMemoryValue(a.memLimitsBytes)
-	a.overview.MemoryAllocatable = formatMemoryValue(a.memAllocatableBytes)
+	a.overview.CPUUsageMilli = a.cpuUsageMilli
+	a.overview.CPURequestsMilli = a.cpuRequestsMilli
+	a.overview.CPULimitsMilli = a.cpuLimitsMilli
+	a.overview.CPUAllocatableMilli = a.cpuAllocatableMilli
+	a.overview.MemoryUsageBytes = a.memUsageBytes
+	a.overview.MemoryRequestsBytes = a.memRequestsBytes
+	a.overview.MemoryLimitsBytes = a.memLimitsBytes
+	a.overview.MemoryAllocatableBytes = a.memAllocatableBytes
 	if versionFn != nil {
 		a.overview.ClusterVersion = versionFn(ctx)
 	}
@@ -814,45 +814,6 @@ func detectClusterTypeFromServer(serverHost string) string {
 	}
 }
 
-func formatCPUValue(millicores int64) string {
-	if millicores == 0 {
-		return "0"
-	}
-	if millicores < 1000 {
-		return fmt.Sprintf("%dm", millicores)
-	}
-	cores := float64(millicores) / 1000.0
-	if cores == float64(int64(cores)) {
-		return fmt.Sprintf("%.0f", cores)
-	}
-	return fmt.Sprintf("%.2f", cores)
-}
-
-func formatMemoryValue(bytes int64) string {
-	if bytes == 0 {
-		return "0"
-	}
-	const (
-		ki = 1024
-		mi = ki * 1024
-		gi = mi * 1024
-		ti = gi * 1024
-	)
-	if bytes < ki {
-		return fmt.Sprintf("%d", bytes)
-	}
-	if bytes < mi {
-		return fmt.Sprintf("%.1f Ki", float64(bytes)/float64(ki))
-	}
-	if bytes < gi {
-		return fmt.Sprintf("%.1f Mi", float64(bytes)/float64(mi))
-	}
-	if bytes < ti {
-		return fmt.Sprintf("%.1f Gi", float64(bytes)/float64(gi))
-	}
-	return fmt.Sprintf("%.1f Ti", float64(bytes)/float64(ti))
-}
-
 type workloadUsageTotals struct {
 	cpuMilli int64
 	memBytes int64
@@ -888,10 +849,10 @@ func buildWorkloadResourceUsage(podAggregates []streamrows.PodAggregate, podUsag
 	}
 
 	return WorkloadResourceUsage{
-		Deployments:  formatWorkloadTypeResourceUsage(totals[deploymentpkg.Identity.Kind]),
-		DaemonSets:   formatWorkloadTypeResourceUsage(totals[daemonsetpkg.Identity.Kind]),
-		StatefulSets: formatWorkloadTypeResourceUsage(totals[statefulsetpkg.Identity.Kind]),
-		Jobs:         formatWorkloadTypeResourceUsage(totals[jobpkg.Identity.Kind]),
+		Deployments:  workloadTypeResourceUsage(totals[deploymentpkg.Identity.Kind]),
+		DaemonSets:   workloadTypeResourceUsage(totals[daemonsetpkg.Identity.Kind]),
+		StatefulSets: workloadTypeResourceUsage(totals[statefulsetpkg.Identity.Kind]),
+		Jobs:         workloadTypeResourceUsage(totals[jobpkg.Identity.Kind]),
 	}
 }
 
@@ -930,10 +891,10 @@ func countPodStatusPresentation(overview *ClusterOverviewPayload, presentation s
 	}
 }
 
-func formatWorkloadTypeResourceUsage(totals workloadUsageTotals) WorkloadTypeResourceUsage {
+func workloadTypeResourceUsage(totals workloadUsageTotals) WorkloadTypeResourceUsage {
 	return WorkloadTypeResourceUsage{
-		CPUUsage:    formatCPUValue(totals.cpuMilli),
-		MemoryUsage: formatMemoryValue(totals.memBytes),
+		CPUUsageMilli:    totals.cpuMilli,
+		MemoryUsageBytes: totals.memBytes,
 	}
 }
 
@@ -1093,7 +1054,7 @@ func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
 		if !strings.EqualFold(evt.Type, corev1.EventTypeWarning) {
 			continue
 		}
-		if eventTimestamp(evt).Before(cutoff) {
+		if eventres.EventTimestamp(evt).Time.Before(cutoff) {
 			continue
 		}
 		filtered = append(filtered, evt)
@@ -1111,18 +1072,17 @@ func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
 	for _, evt := range filtered {
 		facts := eventres.BuildFacts(meta.ClusterID, evt)
 		out = append(out, RecentEvent{
-			ClusterID:        meta.ClusterID,
-			ClusterName:      meta.ClusterName,
-			InvolvedObject:   facts.InvolvedObject,
-			EventUID:         string(evt.UID),
-			Reason:           strings.TrimSpace(evt.Reason),
-			Message:          eventres.EventMessage(evt),
-			Timestamp:        eventres.EventTimestamp(evt).UnixMilli(),
-			ObjectKind:       evt.InvolvedObject.Kind,
-			ObjectName:       evt.InvolvedObject.Name,
-			ObjectNamespace:  evt.InvolvedObject.Namespace,
-			ObjectAPIVersion: evt.InvolvedObject.APIVersion,
-			ObjectUID:        string(evt.InvolvedObject.UID),
+			ClusterID:       meta.ClusterID,
+			ClusterName:     meta.ClusterName,
+			InvolvedObject:  facts.InvolvedObject,
+			EventUID:        string(evt.UID),
+			Reason:          strings.TrimSpace(evt.Reason),
+			Message:         facts.Message,
+			Timestamp:       eventres.EventTimestamp(evt).UnixMilli(),
+			ObjectKind:      evt.InvolvedObject.Kind,
+			ObjectName:      evt.InvolvedObject.Name,
+			ObjectNamespace: evt.InvolvedObject.Namespace,
+			ObjectUID:       string(evt.InvolvedObject.UID),
 		})
 	}
 	return out

@@ -86,7 +86,7 @@ func RegisterClusterCRDDomain(
 
 	maintained := newTypedMaintainedStore(clusterMeta, crdsQuerypageSchema(), clusterCRDTableQueryAdapter())
 	reg.RegisterMaintainedStore(clusterCRDDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
-	if err := registerMaintainedInformerHandler(maintained, crdInformer.Informer(),
+	if _, err := registerMaintainedInformerHandler(maintained, crdInformer.Informer(),
 		func(obj interface{}) (ClusterCRDEntry, metav1.Object, bool) {
 			crd, ok := obj.(*apiextv1.CustomResourceDefinition)
 			if !ok {
@@ -94,6 +94,7 @@ func RegisterClusterCRDDomain(
 			}
 			return apiextensions.BuildStreamSummary(clusterMeta, crd), crd, true
 		},
+		nil,
 	); err != nil {
 		return err
 	}

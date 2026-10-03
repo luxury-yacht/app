@@ -23,11 +23,13 @@ const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn<(event: string, handler: (...args: unknown[]) => void) => () => void>(
     () => () => undefined
   ),
+  writeClipboardText: vi.fn<(text: string) => Promise<void>>(() => Promise.resolve()),
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: runtimeMocks.eventsOn,
+  writeClipboardText: runtimeMocks.writeClipboardText,
 }));
 
 type KeyboardContextApi = ReturnType<typeof useKeyboardContext>;
@@ -311,8 +313,8 @@ describe('KeyboardProvider', () => {
     });
 
     it('cuts a contenteditable selection through the Selection API', () => {
-      const writeText = vi.fn(() => Promise.resolve());
-      Object.assign(navigator, { clipboard: { writeText } });
+      const writeText = runtimeMocks.writeClipboardText;
+      writeText.mockClear();
       const deleteFromDocument = vi.fn();
       const selectedNode = document.createTextNode('selected text');
       const selection = {
@@ -582,8 +584,8 @@ describe('keyboard handling edge cases', () => {
   });
 
   it('cuts the focused input selection through the menu bridge fallback', async () => {
-    const writeText = vi.fn(() => Promise.resolve());
-    Object.assign(navigator, { clipboard: { writeText } });
+    const writeText = runtimeMocks.writeClipboardText;
+    writeText.mockClear();
 
     await act(async () => {
       root.render(

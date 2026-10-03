@@ -25,9 +25,11 @@ func (g *ResourceGateway) FetchContainerLogs(clusterID string, req ContainerLogs
 		return ContainerLogsFetchResponse{Error: err.Error()}
 	}
 	service := pods.NewService(deps)
+	// No budget for the whole call: each container's read has its own timeout,
+	// and a shared one would fail the containers read last.
 	return service.FetchContainerLogs(g.CtxOrBackground(), req)
 }
-func (g *ResourceGateway) GetPodContainers(clusterID, namespace, podName string) ([]string, error) {
+func (g *ResourceGateway) GetPodContainers(clusterID, namespace, podName string) ([]PodContainer, error) {
 	if err := requirePodObject(namespace, podName); err != nil {
 		return nil, err
 	}
@@ -38,7 +40,7 @@ func (g *ResourceGateway) GetPodContainers(clusterID, namespace, podName string)
 	service := pods.NewService(deps)
 	return service.PodContainers(g.CtxOrBackground(), namespace, podName)
 }
-func (g *ResourceGateway) GetContainerLogsScopeContainers(clusterID, scope string) ([]string, error) {
+func (g *ResourceGateway) GetContainerLogsScopeContainers(clusterID, scope string) ([]PodContainer, error) {
 	if err := requireMatchingContainerLogsScopeCluster(clusterID, scope); err != nil {
 		return nil, err
 	}

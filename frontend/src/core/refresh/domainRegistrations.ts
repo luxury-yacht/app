@@ -7,17 +7,24 @@ import type { RefreshDomain } from './types';
 
 type OrchestratorRegistrationBuilder = (domain: RefreshDomain) => StreamingRegistration | undefined;
 
+// Runs a synchronous stream operation immediately and reports its outcome as a
+// promise. The orchestrator handles start failures only through the returned
+// promise, so an unsupported scope must reject rather than throw.
+const settleStreamOperation = (operation: () => void): Promise<undefined> =>
+  new Promise((resolve) => {
+    operation();
+    resolve(undefined);
+  });
+
 const resourceStreamRegistration: OrchestratorRegistrationBuilder = (domain) => {
   if (!isSupportedDomain(domain)) {
     throw new Error(`Missing resource-stream callback for refresh domain "${domain}".`);
   }
   return {
-    start: async (scope) => {
-      await resourceStreamManager.start(domain, scope);
-      return undefined;
-    },
+    start: (scope) => settleStreamOperation(() => resourceStreamManager.start(domain, scope)),
     stop: (scope, options) => resourceStreamManager.stop(domain, scope, options?.reset ?? false),
-    refreshOnce: (scope) => resourceStreamManager.refreshOnce(domain, scope),
+    refreshOnce: (scope) =>
+      settleStreamOperation(() => resourceStreamManager.refreshOnce(domain, scope)),
     pauseRefresherWhenStreaming: true,
   };
 };
@@ -28,12 +35,11 @@ const containerLogsRegistration: OrchestratorRegistrationBuilder = (domain) => {
   }
   return {
     snapshotless: true,
-    start: async (scope) => {
-      await containerLogsStreamManager.startStream(scope);
-      return undefined;
+    start: (scope) => {
+      containerLogsStreamManager.startStream(scope);
+      return Promise.resolve(undefined);
     },
     stop: (scope, options) => containerLogsStreamManager.stop(scope, options?.reset ?? false),
-    refreshOnce: (scope) => containerLogsStreamManager.refreshOnce(scope),
   };
 };
 
@@ -44,7 +50,6 @@ const orchestratorRegistrationBuilders = {
   snapshot: () => undefined,
   'doorbell-snapshot': resourceStreamRegistration,
   'resource-stream': resourceStreamRegistration,
-  'event-stream': resourceStreamRegistration,
   'catalog-stream': resourceStreamRegistration,
   'container-logs-stream': containerLogsRegistration,
 } satisfies Record<RefreshOrchestratorKind, OrchestratorRegistrationBuilder>;

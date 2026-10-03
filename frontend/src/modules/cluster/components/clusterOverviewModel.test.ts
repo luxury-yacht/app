@@ -10,6 +10,9 @@ import {
   selectClusterScopedValue,
 } from './clusterOverviewModel';
 
+const MIB = 1024 ** 2;
+const GIB = 1024 ** 3;
+
 const overviewWithWorkloadUsage = (
   workloadResourceUsage: ClusterOverviewPayload['workloadResourceUsage']
 ): ClusterOverviewPayload => ({ workloadResourceUsage }) as ClusterOverviewPayload;
@@ -108,11 +111,8 @@ describe('clusterOverviewModel', () => {
   });
 
   it('formats utilization summaries with and without known node capacity', () => {
-    const cpuMetrics = calculateResourceMetrics({ usage: '1500m', allocatable: '4' }, 'cpu');
-    const memoryMetrics = calculateResourceMetrics(
-      { usage: '1536Mi', allocatable: '8Gi' },
-      'memory'
-    );
+    const cpuMetrics = calculateResourceMetrics({ usage: 1500, allocatable: 4000 });
+    const memoryMetrics = calculateResourceMetrics({ usage: 1536 * MIB, allocatable: 8 * GIB });
 
     expect(
       buildResourceUsageSummaries({ cpuMetrics, memoryMetrics, nodesUnavailable: false })
@@ -122,18 +122,18 @@ describe('clusterOverviewModel', () => {
     ).toEqual({ cpu: '1.50 used', memory: '1.5Gi used' });
   });
 
-  it('builds CPU and memory workload usage from the shared resource parser', () => {
+  it('formats raw workload usage for the legend and sums the exact values', () => {
     const overview = overviewWithWorkloadUsage({
-      deployments: { cpuUsage: '500m', memoryUsage: '1Gi' },
-      daemonSets: { cpuUsage: '250m', memoryUsage: '256Mi' },
-      statefulSets: { cpuUsage: '1', memoryUsage: '512Mi' },
-      jobs: { cpuUsage: 'bad', memoryUsage: 'not set' },
+      deployments: { cpuUsageMilli: 500, memoryUsageBytes: GIB },
+      daemonSets: { cpuUsageMilli: 250, memoryUsageBytes: 256 * MIB },
+      statefulSets: { cpuUsageMilli: 1000, memoryUsageBytes: 512 * MIB },
+      jobs: { cpuUsageMilli: 0, memoryUsageBytes: 0 },
     });
     const emptyOverview = overviewWithWorkloadUsage({
-      deployments: { cpuUsage: '0', memoryUsage: '0' },
-      daemonSets: { cpuUsage: '0', memoryUsage: '0' },
-      statefulSets: { cpuUsage: '0', memoryUsage: '0' },
-      jobs: { cpuUsage: '0', memoryUsage: '0' },
+      deployments: { cpuUsageMilli: 0, memoryUsageBytes: 0 },
+      daemonSets: { cpuUsageMilli: 0, memoryUsageBytes: 0 },
+      statefulSets: { cpuUsageMilli: 0, memoryUsageBytes: 0 },
+      jobs: { cpuUsageMilli: 0, memoryUsageBytes: 0 },
     });
 
     const presentation = buildWorkloadUsagePresentation(overview, emptyOverview);
@@ -142,15 +142,15 @@ describe('clusterOverviewModel', () => {
       { usage: '500m', value: 500 },
       { usage: '1', value: 1000 },
       { usage: '250m', value: 250 },
-      { usage: 'bad', value: 0 },
+      { usage: '0', value: 0 },
     ]);
     expect(presentation.memoryItems.map(({ usage, value }) => ({ usage, value }))).toEqual([
-      { usage: '1Gi', value: 1024 },
-      { usage: '512Mi', value: 512 },
-      { usage: '256Mi', value: 256 },
-      { usage: 'not set', value: 0 },
+      { usage: '1.0Gi', value: GIB },
+      { usage: '512Mi', value: 512 * MIB },
+      { usage: '256Mi', value: 256 * MIB },
+      { usage: '0', value: 0 },
     ]);
     expect(presentation.cpuTotal).toBe(1750);
-    expect(presentation.memoryTotal).toBe(1792);
+    expect(presentation.memoryTotal).toBe(1792 * MIB);
   });
 });

@@ -233,8 +233,8 @@ func TestObjectDetailProviderCacheKeyIncludesGVK(t *testing.T) {
 	gateway := newResourceGatewayFixture().gateway
 	gateway.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
-	gateway.responseCacheStore(selectionKey, coreKey, "core")
-	gateway.responseCacheStore(selectionKey, otherKey, "other")
+	gateway.seedResponseCache(selectionKey, coreKey, "core")
+	gateway.seedResponseCache(selectionKey, otherKey, "other")
 
 	gateway.invalidateResponseCache(selectionKey, "ConfigMap", "default", "demo")
 

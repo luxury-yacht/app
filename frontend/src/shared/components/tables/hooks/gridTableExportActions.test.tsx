@@ -1,5 +1,6 @@
 import type { IconBarAction } from '@shared/components/IconBar/IconBar';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { Clipboard } from '@wailsio/runtime';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,18 +23,14 @@ describe('table export operation lifetime', () => {
   let container: HTMLDivElement;
   let actions: Record<Destination, IconBarAction>;
   let fetchRows: ReturnType<typeof vi.fn<() => Promise<Row[]>>>;
-  let writeText: ReturnType<typeof vi.fn>;
+  const writeText = vi.mocked(Clipboard.SetText);
 
   beforeEach(() => {
     vi.useFakeTimers();
     mocks.save.mockReset().mockResolvedValue({ path: '/tmp/table.csv' });
     mocks.report.mockReset();
     fetchRows = vi.fn().mockResolvedValue([{ name: 'all-matches' }]);
-    writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    });
+    writeText.mockReset().mockResolvedValue(undefined);
     container = document.createElement('div');
     root = createRoot(container);
   });

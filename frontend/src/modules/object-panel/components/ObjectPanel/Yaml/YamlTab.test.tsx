@@ -2,6 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.test.tsx
  */
 
+import { Clipboard } from '@wailsio/runtime';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -491,7 +492,6 @@ describe('YamlTab', () => {
       configurable: true,
       value: {
         readText: vi.fn(() => Promise.resolve('')),
-        writeText: vi.fn(() => Promise.resolve()),
       },
     });
     snapshotState.current = { status: 'ready', data: { yaml: YAML }, error: null };
@@ -508,7 +508,7 @@ describe('YamlTab', () => {
     };
     codeMirrorState.editorView.dispatch.mockClear();
     codeMirrorState.editorView.focus.mockClear();
-    (navigator.clipboard.writeText as unknown as ReturnType<typeof vi.fn>).mockClear();
+    vi.mocked(Clipboard.SetText).mockReset().mockResolvedValue(undefined);
     refreshMocks.setScopedDomainEnabled.mockClear();
     refreshMocks.fetchScopedDomain.mockClear();
     refreshMocks.resetScopedDomain.mockClear();
@@ -672,7 +672,7 @@ describe('YamlTab', () => {
     });
 
     expect(handled).toBe(true);
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('apiVersion');
+    expect(Clipboard.SetText).toHaveBeenCalledWith('apiVersion');
 
     await unmount();
   });

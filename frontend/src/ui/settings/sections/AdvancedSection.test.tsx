@@ -1,6 +1,7 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { controlName } from '@/test-utils/controlName';
 import { requireValue } from '@/test-utils/requireValue';
 import AdvancedSection from './AdvancedSection';
 
@@ -128,6 +129,13 @@ describe('AdvancedSection', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+  });
+
+  it('gives every input a name', () => {
+    const unnamed = Array.from(container.querySelectorAll('input')).filter(
+      (input) => controlName(input) === ''
+    );
+    expect(unnamed).toEqual([]);
   });
 
   it('keeps the refresh, persistence, and reset controls interactive', async () => {

@@ -154,8 +154,8 @@ func (idx *catalogIndex) resource(gvr string) (Descriptor, bool) {
 func (idx *catalogIndex) resourceForGroupResource(group, resource string) (string, *Descriptor) {
 	for gvr, desc := range idx.resources {
 		if desc.Group == group && desc.Resource == resource {
-			copy := desc
-			return gvr, &copy
+			descriptorCopy := desc
+			return gvr, &descriptorCopy
 		}
 	}
 	return "", nil

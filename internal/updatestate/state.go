@@ -386,8 +386,8 @@ func (store *Store) RecordPrepared(prepared PreparedUpdate) error {
 	if document.Prepared != nil || document.Attempt != nil {
 		return fmt.Errorf("application update state already owns an active update")
 	}
-	copy := prepared
-	document.Prepared = &copy
+	preparedCopy := prepared
+	document.Prepared = &preparedCopy
 	return store.saveLocked(document)
 }
 

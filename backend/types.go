@@ -30,6 +30,7 @@ type (
 	ContainerLogsEntry                  = types.ContainerLogsEntry
 	ContainerLogsFetchRequest           = types.ContainerLogsFetchRequest
 	ContainerLogsFetchResponse          = types.ContainerLogsFetchResponse
+	PodContainer                        = types.PodContainer
 	NodeLogSource                       = types.NodeLogSource
 	NodeLogDiscoveryResponse            = types.NodeLogDiscoveryResponse
 	NodeLogFetchRequest                 = types.NodeLogFetchRequest

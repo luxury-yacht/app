@@ -361,6 +361,10 @@
 
   --tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 
+  /* Status popover action buttons: text on the tooltip surface */
+  --status-action-text: #1e40af;
+  --status-action-text-hover: #1e3a8a;
+
   /* Editor content shared tokens */
   --editor-scroll-track: rgba(0, 0, 0, 0.03);
   --editor-scroll-thumb: rgba(0, 0, 0, 0.15);
@@ -413,6 +417,13 @@
     #dc2626 8px
   );
   --utilization-overcommitted-text: #d97706;
+
+  /* Metrics charts (object panel Metrics tab) */
+  --chart-usage-color: #2563eb;
+  --chart-request-color: #b45309;
+  --chart-limit-color: #dc2626;
+  --chart-allocatable-color: #047857;
+  --chart-usage-fill: rgba(37, 99, 235, 0.1);
 
   /* Events tab */
   --events-scroll-track: var(--editor-scroll-track);

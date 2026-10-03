@@ -360,14 +360,11 @@ const appendChange = (
   if (message.source && message.version) {
     sourceVersions[message.source] = message.version;
   }
+  const latest = message.version || pending.latest;
   return {
     count: pending.count + 1,
     sourceVersions,
-    ...(message.version
-      ? { latest: message.version }
-      : pending.latest
-        ? { latest: pending.latest }
-        : {}),
+    ...(latest ? { latest } : {}),
   };
 };
 

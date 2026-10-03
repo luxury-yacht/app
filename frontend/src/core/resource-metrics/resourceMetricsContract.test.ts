@@ -54,7 +54,7 @@ describe('resource metrics contracts', () => {
         .map((helper) => (!source.includes(helper) ? `${file}: ${helper}` : null))
         .filter(Boolean);
       const directUsageGetter =
-        /getUsage:\s*\([^)]*\)\s*=>\s*[^,\n]*\.(?:cpuUsage|memUsage|memoryUsage)\b/.test(source);
+        /getUsage:\s*\([^)]*\)\s*=>\s*[^,\n]*\.(?:cpuUsageMilli|memoryUsageBytes)\b/.test(source);
       return directUsageGetter ? [...missing, `${file}: direct usage getter`] : missing;
     });
 

@@ -47,7 +47,7 @@ import {
   setRefreshDomainEnabled,
 } from '@/core/data-access';
 import { useShortNames } from '@/hooks/useShortNames';
-import { formatAge, formatFullDate } from '@/utils/ageFormatter';
+import { formatAgeAgo, formatFullDate } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { useObjectDiffYaml } from './useObjectDiffYaml';
 
@@ -142,12 +142,6 @@ const buildSelectionParts = (
 
 const isSnapshotLoading = (status: DomainStatus) =>
   status === 'loading' || status === 'initialising';
-
-// Format a concise, user-friendly age label for change notifications.
-const formatChangeAge = (timestamp: number): string => {
-  const age = formatAge(timestamp);
-  return age === 'now' ? 'just now' : `${age} ago`;
-};
 
 const normalizeMatchNamespace = (namespace?: string | null): string => {
   const trimmed = namespace?.trim();
@@ -868,7 +862,7 @@ const ObjectDiffUpdateLabel = ({
       className="object-diff-column-update"
       title={`${side} updated ${formatFullDate(changedAt)}`}
     >
-      Updated {formatChangeAge(changedAt)}
+      Updated {formatAgeAgo(changedAt)}
     </span>
   );
 };

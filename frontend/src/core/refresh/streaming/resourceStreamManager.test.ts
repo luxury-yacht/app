@@ -243,8 +243,8 @@ describe('ResourceStreamManager', () => {
     ).ensureSubscriptions('pods', storeScope);
 
     const existing = makePodSnapshotEntry({
-      cpuUsage: '50m',
-      memUsage: '40Mi',
+      cpuUsageMilli: 50,
+      memoryUsageBytes: 40 * 1024 ** 2,
     });
 
     setScopedDomainState('pods', storeScope, () => ({
@@ -271,7 +271,7 @@ describe('ResourceStreamManager', () => {
         ref: resourceRef({ kind: 'Pod', namespace: 'default', name: 'pod-a' }),
         // The backend ships no row for signal-only pods; even if one slipped through
         // the frontend must not apply it. The query-backed table refetches instead.
-        row: { ...existing, status: 'Pending', cpuUsage: '5m', memUsage: '8Mi' },
+        row: { ...existing, status: 'Pending', cpuUsageMilli: 5, memoryUsageBytes: 8 * 1024 ** 2 },
       })
     );
 
@@ -281,7 +281,7 @@ describe('ResourceStreamManager', () => {
     expect(state.sourceVersion).toBe('object:2');
     expect(state.signalVersions?.object).toBe('object:2');
     expect(state.data?.rows?.[0]?.status).toBe('Running');
-    expect(state.data?.rows?.[0]?.cpuUsage).toBe('50m');
+    expect(state.data?.rows?.[0]?.cpuUsageMilli).toBe(50);
   });
 
   test.each([
@@ -308,7 +308,7 @@ describe('ResourceStreamManager', () => {
     async ({ label: _label, ...frame }) => {
       const manager = new ResourceStreamManager();
       const scope = buildClusterScope('cluster-a', '');
-      await manager.start('cluster-config', scope);
+      manager.start('cluster-config', scope);
       await flushPromises();
       const socket = createdSockets[0];
       socket.onopen?.(new Event('open'));
@@ -360,7 +360,7 @@ describe('ResourceStreamManager', () => {
       notModified: false,
     });
 
-    await manager.start('cluster-config', storeScope);
+    manager.start('cluster-config', storeScope);
     await flushPromises();
 
     createdSockets[0].onopen?.(new Event('open'));
@@ -384,7 +384,7 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = buildClusterScope('cluster-a', '');
-    await manager.start('namespaces', storeScope);
+    manager.start('namespaces', storeScope);
     await flushPromises();
 
     createdSockets[0].onopen?.(new Event('open'));
@@ -423,7 +423,7 @@ describe('ResourceStreamManager', () => {
     const unsubscribe = eventBus.on('refresh:resource-stream-permission-denied', permissionDenied);
 
     try {
-      await manager.start('namespaces', storeScope);
+      manager.start('namespaces', storeScope);
       await flushPromises();
       createdSockets[0].onopen?.(new Event('open'));
       await flushPromises();
@@ -490,7 +490,7 @@ describe('ResourceStreamManager', () => {
       expect(manager.getHealthStatus('namespaces', storeScope)).toBe('unhealthy');
 
       manager.stop('namespaces', storeScope, false);
-      await manager.start('namespaces', storeScope);
+      manager.start('namespaces', storeScope);
       await flushPromises();
 
       expect(requestCount()).toBeGreaterThan(requestsBeforeDenial);
@@ -698,7 +698,7 @@ describe('ResourceStreamManager', () => {
       'limit=1&resourceScope=namespace&namespace=team-a&scopeNamespace=team-a'
     );
 
-    await manager.start('catalog', pageScope);
+    manager.start('catalog', pageScope);
     await flushPromises();
     createdSockets[0].onopen?.(new Event('open'));
     await vi.advanceTimersByTimeAsync(1_100);
@@ -710,7 +710,7 @@ describe('ResourceStreamManager', () => {
     // Browse owns a second report scope for facets. It reuses the same physical
     // catalog doorbell and may re-arm that subscribe after the resync cooldown.
     await vi.advanceTimersByTimeAsync(1_100);
-    await manager.start('catalog', metadataScope);
+    manager.start('catalog', metadataScope);
 
     expect(manager.getHealthStatus('catalog', pageScope)).toBe('healthy');
     expect(manager.getHealthStatus('catalog', metadataScope)).toBe('healthy');
@@ -1286,7 +1286,7 @@ describe('ResourceStreamManager', () => {
       notModified: false,
     });
 
-    await manager.start('namespace-config', storeScope);
+    manager.start('namespace-config', storeScope);
     await flushPromises();
 
     const firstSocket = createdSockets[0];
@@ -1330,7 +1330,7 @@ describe('ResourceStreamManager', () => {
       notModified: false,
     });
 
-    await manager.start('namespace-config', storeScope);
+    manager.start('namespace-config', storeScope);
     await flushPromises();
 
     const firstSocket = createdSockets[0];
@@ -1366,7 +1366,7 @@ describe('ResourceStreamManager', () => {
       signalVersions: { object: 'object:before-gap' },
     }));
 
-    await manager.start('namespaces', storeScope);
+    manager.start('namespaces', storeScope);
     await flushPromises();
 
     const firstSocket = createdSockets[0];
@@ -1411,7 +1411,7 @@ describe('ResourceStreamManager', () => {
       signalVersions: { metric: 'metric:before-gap' },
     }));
 
-    await manager.start('namespace-metrics', storeScope);
+    manager.start('namespace-metrics', storeScope);
     await flushPromises();
     const socket = createdSockets[0];
     expect(socket).toBeDefined();
@@ -1450,7 +1450,7 @@ describe('ResourceStreamManager', () => {
       notModified: false,
     });
 
-    await manager.start('namespace-config', storeScope);
+    manager.start('namespace-config', storeScope);
     await flushPromises();
 
     manager.handleMessage(
@@ -1509,7 +1509,7 @@ describe('ResourceStreamManager', () => {
       notModified: false,
     });
 
-    await manager.start('namespace-config', storeScope);
+    manager.start('namespace-config', storeScope);
     await flushPromises();
 
     vi.advanceTimersByTime(1100);
@@ -1572,7 +1572,7 @@ describe('ResourceStreamManager', () => {
       notModified: false,
     });
 
-    await manager.start('nodes', storeScope);
+    manager.start('nodes', storeScope);
     await flushPromises();
 
     const socket = createdSockets[0];
@@ -1588,7 +1588,7 @@ describe('ResourceStreamManager', () => {
   test('counts a stream-down fallback only against a live subscription for that scope', async () => {
     const manager = new ResourceStreamManager();
     const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    await manager.start('pods', storeScope);
+    manager.start('pods', storeScope);
     await flushPromises();
 
     manager.recordStreamFallback('pods', storeScope, 'stream not delivering');
@@ -1637,7 +1637,7 @@ describe('ResourceStreamManager', () => {
     // pods is signal-only: starting the subscription must NOT fetch a full-row
     // baseline (the query-backed table no longer waits on one — that's the
     // load-time win), yet deltas must still be processed.
-    await manager.start('pods', storeScope);
+    manager.start('pods', storeScope);
     await flushPromises();
 
     vi.advanceTimersByTime(1100);
@@ -1702,7 +1702,7 @@ describe('ResourceStreamManager', () => {
       notModified: false,
     });
 
-    await manager.start('nodes', storeScope);
+    manager.start('nodes', storeScope);
     await flushPromises();
 
     const socket = createdSockets[0];
@@ -1739,7 +1739,7 @@ describe('ResourceStreamManager', () => {
       notModified: false,
     });
 
-    await manager.start('nodes', storeScope);
+    manager.start('nodes', storeScope);
     await flushPromises();
 
     const socket = createdSockets[0];
@@ -1751,7 +1751,7 @@ describe('ResourceStreamManager', () => {
     manager.stop('nodes', storeScope, false);
     expect(cancelCount()).toBe(0);
 
-    await manager.start('nodes', storeScope);
+    manager.start('nodes', storeScope);
     await flushPromises();
 
     vi.runOnlyPendingTimers();
@@ -1759,33 +1759,31 @@ describe('ResourceStreamManager', () => {
     expect(cancelCount()).toBe(0);
   });
 
-  it('rejects node streaming for multi-cluster scopes', async () => {
+  it('rejects node streaming for multi-cluster scopes', () => {
     const manager = new ResourceStreamManager();
     const storeScope = 'clusters=cluster-a,cluster-b|';
 
-    await expect(manager.start('nodes', storeScope)).rejects.toThrow('single cluster');
+    expect(() => manager.start('nodes', storeScope)).toThrow('single cluster');
 
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
     expect(createdSockets).toHaveLength(0);
   });
 
-  test('rejects pod streaming for multi-cluster scopes', async () => {
+  test('rejects pod streaming for multi-cluster scopes', () => {
     const manager = new ResourceStreamManager();
     const storeScope = 'clusters=cluster-a,cluster-b|namespace:default';
 
-    await expect(manager.start('pods', storeScope)).rejects.toThrow('single cluster');
+    expect(() => manager.start('pods', storeScope)).toThrow('single cluster');
 
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
     expect(createdSockets).toHaveLength(0);
   });
 
-  test('rejects namespace workload streaming for multi-cluster scopes', async () => {
+  test('rejects namespace workload streaming for multi-cluster scopes', () => {
     const manager = new ResourceStreamManager();
     const storeScope = 'clusters=cluster-a,cluster-b|namespace:default';
 
-    await expect(manager.start('namespace-workloads', storeScope)).rejects.toThrow(
-      'single cluster'
-    );
+    expect(() => manager.start('namespace-workloads', storeScope)).toThrow('single cluster');
 
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
     expect(createdSockets).toHaveLength(0);

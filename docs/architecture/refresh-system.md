@@ -160,6 +160,11 @@ states plus refresh metadata. Global metrics demand is independently reduced as
 `idle`, `requesting`, or `waiting-retry`; only the matching demand key may
 complete or schedule a retry.
 
+Disabling a scope with `preserveState` lets its stream owner keep the scope's data
+for a remount. Resetting a streaming scope that no consumer has enabled therefore
+also resets its owner (`stop(scope, { reset: true })`), so a closed panel's data is
+released; an enabled scope keeps its stream and only its store state is reset.
+
 One-shot broker reads hold independent scope leases through completion. Overlapping
 reads coalesce without aborting their owners; a caller that arrives during a read
 waits for the trailing snapshot before releasing its lease. Explicit manual refresh
@@ -301,10 +306,12 @@ Four rules keep the two views joinable:
   copied onto each scope row. The backend retains only the 512 most recently
   updated snapshot identities per recorder so query scopes cannot grow
   diagnostics memory without bound.
-- `telemetry.StreamStatus` carries `Leaf` plus `LeafKind`. The three streams key
-  their children differently — resources by refresh domain, events by event
-  scope, container logs by pod target — so a consumer may only join leaves of
-  the same kind and the same cluster. A leaf-less row is socket level.
+- `telemetry.StreamStatus` carries `Leaf` plus `LeafKind`. The two streams key
+  their children differently — resources by refresh domain, container logs by
+  pod target — so a consumer may only join leaves of the same kind and the same
+  cluster. A leaf-less row is socket level, for transport-wide problems only: a
+  failure that belongs to one domain, such as a rejected subscribe, is recorded
+  on that domain's leaf.
 - A broker-read row is keyed by cluster as well as broker, resource, adapter and
   reason. A scope naming several clusters has no single owner and stays an
   app-level row.

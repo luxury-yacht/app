@@ -1,110 +1,106 @@
 /**
  * frontend/src/core/refresh/streaming/containerLogsStreamManager.test.ts
  *
- * Test suite for containerLogsStreamManager.
- * Covers key behaviors and edge cases for containerLogsStreamManager.
+ * Covers the container-logs stream manager as the only writer of
+ * `container-logs` state: request, staged snapshots, ordered and bounded
+ * buffers, reconnect and failure handling, and lifecycle events.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { requireValue } from '@/test-utils/requireValue';
 
 vi.mock('@core/backend-api', () => ({
   GetSelectionDiagnostics: vi.fn(async () => ({})),
 }));
 
-const errorHandlerMock = vi.hoisted(() => ({
-  handle: vi.fn(),
-}));
+const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: errorHandlerMock,
-}));
+vi.mock('@utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
 
+import { eventBus } from '@/core/events';
+import { getScopedDomainState, resetScopedDomainState } from '../store';
+import type { ContainerLogsStreamEventPayload, ContainerLogsWireEntry } from '../types';
+import { CONTAINER_LOGS_MAX_BYTES, ContainerLogsStreamManager } from './containerLogsStreamManager';
 import {
   resetContainerLogsStreamScopeParamsCacheForTesting,
   setContainerLogsStreamScopeParams,
-} from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
-import { getScopedDomainState, resetScopedDomainState } from '../store';
+} from './containerLogsStreamScopeParams';
 
 const SCOPE = 'cluster-a|default:/v1:Pod:example';
-type JSONStreamSourceHarness = {
-  addEventListener(type: string, handler: (event?: unknown) => void): void;
-  removeEventListener(type: string, handler?: (event?: unknown) => void): void;
-  close(): void;
-  sent?: unknown[];
+
+// A scripted Wails JSON stream: frames are pushed with `receive`, and the
+// connection is dropped with `lose`.
+class FakeStream {
+  static instances: FakeStream[] = [];
+  sent: unknown[] = [];
+  closed = false;
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  onclose: ((event: Event) => void) | null = null;
+
+  constructor() {
+    FakeStream.instances.push(this);
+    queueMicrotask(() => this.onopen?.(new Event('open')));
+  }
+
+  send(value: unknown) {
+    this.sent.push(value);
+  }
+
+  close() {
+    this.closed = true;
+  }
+
+  receive(payload: Partial<ContainerLogsStreamEventPayload>) {
+    this.onmessage?.({
+      data: { domain: 'container-logs', scope: SCOPE, sequence: 1, generatedAt: 1, ...payload },
+    } as MessageEvent<unknown>);
+  }
+
+  lose() {
+    this.onerror?.(new Event('error'));
+  }
+
+  static latest(): FakeStream {
+    const stream = FakeStream.instances[FakeStream.instances.length - 1];
+    if (!stream) {
+      throw new Error('no stream was opened');
+    }
+    return stream;
+  }
+}
+
+const entry = (timestamp: string, line: string, pod = 'web-0'): ContainerLogsWireEntry => ({
+  timestamp,
+  pod,
+  container: 'app',
+  line,
+  isInit: false,
+});
+
+const state = () => getScopedDomainState('container-logs', SCOPE);
+const lines = () => (state().data?.entries ?? []).map((item) => item.line);
+
+const flushOpen = async () => {
+  await Promise.resolve();
+  await Promise.resolve();
 };
 
-const installJSONStreamSource = (sourceType: unknown) => {
-  const Source = sourceType as new (name: string) => JSONStreamSourceHarness;
-  (
-    globalThis as typeof globalThis & {
-      __wailsJSONStreamFactory?: (name: string) => unknown;
-    }
-  ).__wailsJSONStreamFactory = (name: string) => {
-    const source = new Source(name);
-    let openHandler: ((event: Event) => void) | null = null;
-    let messageHandler: ((event: MessageEvent<unknown>) => void) | null = null;
-    let errorHandler: ((event: Event) => void) | null = null;
-    const messageListener = (event?: unknown) => messageHandler?.(event as MessageEvent<unknown>);
-    const streamErrorListener = (event?: unknown) => errorHandler?.(event as Event);
-    source.addEventListener('message', messageListener);
-    source.addEventListener('error', streamErrorListener);
-    const socket = {
-      OPEN: 1,
-      readyState: 1,
-      send: vi.fn((value: unknown) => {
-        source.sent ??= [];
-        source.sent.push(value);
-      }),
-      close: () => {
-        source.removeEventListener('message', messageListener);
-        source.removeEventListener('error', streamErrorListener);
-        source.close();
-      },
-      onclose: null,
-    };
-    Object.defineProperties(socket, {
-      onopen: {
-        get: () => openHandler,
-        set: (handler: ((event: Event) => void) | null) => {
-          openHandler = handler;
-          if (handler) {
-            queueMicrotask(() => handler(new Event('open')));
-          }
-        },
-      },
-      onmessage: {
-        get: () => messageHandler,
-        set: (handler: ((event: MessageEvent<unknown>) => void) | null) => {
-          messageHandler = handler;
-        },
-      },
-      onerror: {
-        get: () => errorHandler,
-        set: (handler: ((event: Event) => void) | null) => {
-          errorHandler = handler;
-        },
-      },
-    });
-    return socket;
-  };
+const startLive = async (
+  manager: ContainerLogsStreamManager,
+  snapshot: ContainerLogsWireEntry[] = []
+) => {
+  manager.startStream(SCOPE);
+  await flushOpen();
+  FakeStream.latest().receive({ reset: true, snapshotComplete: true, entries: snapshot });
 };
 
 beforeEach(() => {
+  FakeStream.instances = [];
   errorHandlerMock.handle.mockClear();
-  if (!globalThis.window) {
-    Object.defineProperty(globalThis, 'window', {
-      value: {
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      },
-      writable: true,
-    });
-  }
-  Object.assign(globalThis.window, {
-    addEventListener: globalThis.window.addEventListener ?? vi.fn(),
-    removeEventListener: globalThis.window.removeEventListener ?? vi.fn(),
-  });
+  (
+    globalThis as typeof globalThis & { __wailsJSONStreamFactory?: (name: string) => unknown }
+  ).__wailsJSONStreamFactory = () => new FakeStream();
   resetContainerLogsStreamScopeParamsCacheForTesting();
   resetScopedDomainState('container-logs', SCOPE);
 });
@@ -112,1204 +108,473 @@ beforeEach(() => {
 afterEach(() => {
   Reflect.deleteProperty(globalThis, '__wailsJSONStreamFactory');
   vi.useRealTimers();
-  if (typeof window !== 'undefined') {
-    Object.assign(window, {
-      setTimeout: globalThis.setTimeout,
-      clearTimeout: globalThis.clearTimeout,
-    });
-  }
   resetContainerLogsStreamScopeParamsCacheForTesting();
 });
 
 describe('ContainerLogsStreamManager', () => {
-  test('applyPayload stores entries and marks ready', async () => {
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
+  test('asks for the scope, its source selection and the buffer limits', async () => {
+    setContainerLogsStreamScopeParams(SCOPE, { selectedFilters: ['pod:web-2', 'container:app'] });
+    const manager = new ContainerLogsStreamManager({ maxEntries: 500 });
 
-    manager.applyPayload(
-      SCOPE,
+    manager.startStream(SCOPE);
+    await flushOpen();
+
+    expect(FakeStream.latest().sent).toEqual([
       {
-        domain: 'container-logs',
         scope: SCOPE,
-        sequence: 1,
-        generatedAt: 123,
-        reset: true,
-        entries: [
-          {
-            timestamp: '2024-01-01T00:00:00Z',
-            pod: 'pod-1',
-            container: 'app',
-            line: 'hello world',
-            isInit: false,
-          },
-        ],
-      },
-      'stream'
-    );
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.status).toBe('ready');
-    expect(state.data?.entries).toHaveLength(1);
-    expect(state.data?.entries?.[0].line).toBe('hello world');
-    expect(state.data?.resetCount).toBe(1);
-  });
-
-  test('applyPayload carries backend warnings into snapshot stats', async () => {
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 1,
-        generatedAt: 123,
-        reset: true,
-        warnings: ['Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'],
-        entries: [],
-      },
-      'stream'
-    );
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.status).toBe('ready');
-    expect(state.stats?.warnings).toContain(
-      'Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'
-    );
-  });
-
-  test('applyPayload clears backend warnings when the server sends an empty warning list', async () => {
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 1,
-        generatedAt: 123,
-        reset: true,
-        warnings: ['Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'],
-        entries: [],
-      },
-      'stream'
-    );
-
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 2,
-        generatedAt: 124,
-        warnings: [],
-        entries: [],
-      },
-      'stream'
-    );
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.stats?.warnings).toBeUndefined();
-  });
-
-  test('applyPayload treats a null warning list as a warning clear', async () => {
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 1,
-        generatedAt: 123,
-        warnings: ['selection truncated'],
-        entries: [],
-      },
-      'stream'
-    );
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 2,
-        generatedAt: 124,
-        warnings: null,
-        entries: [],
-      },
-      'stream'
-    );
-
-    expect(getScopedDomainState('container-logs', SCOPE).stats?.warnings).toBeUndefined();
-  });
-
-  test('applyPayload uses permission denied details when provided', async () => {
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 1,
-        generatedAt: 123,
-        errorDetails: {
-          kind: 'Status',
-          apiVersion: 'v1',
-          message: 'permission denied',
-          reason: 'Forbidden',
-          details: { domain: 'container-logs', resource: 'core/pods/log' },
-          code: 403,
-        },
-      },
-      'stream'
-    );
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.status).toBe('error');
-    expect(state.error).toBe('permission denied (domain container-logs, resource core/pods/log)');
-  });
-
-  test('handleStreamError sets error state', async () => {
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-
-    manager.handleStreamError(SCOPE, 'connection lost');
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.status).toBe('error');
-    expect(state.error).toBe('connection lost');
-  });
-
-  test('reconnects with exponential backoff after failures', async () => {
-    vi.useFakeTimers();
-    Object.assign(window, {
-      setTimeout: globalThis.setTimeout,
-      clearTimeout: globalThis.clearTimeout,
-    });
-    class MockJSONStreamSource {
-      static instances: MockJSONStreamSource[] = [];
-      listeners: Record<string, (evt?: unknown) => void> = {};
-      constructor(_url: string) {
-        MockJSONStreamSource.instances.push(this);
-      }
-      addEventListener(type: string, handler: (evt?: unknown) => void) {
-        this.listeners[type] = handler;
-      }
-      removeEventListener(): void {
-        // Listener removal is intentionally inert in this test double.
-      }
-      close(): void {
-        // Closing is intentionally inert in this test double.
-      }
-      emit(type: string, event?: unknown): void {
-        this.listeners[type]?.(event);
-      }
-    }
-    installJSONStreamSource(MockJSONStreamSource);
-
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-    const errorSpy = vi.spyOn(
-      manager as unknown as { handleStreamError: (...args: unknown[]) => void },
-      'handleStreamError'
-    );
-
-    await manager.startStream(SCOPE);
-    await Promise.resolve();
-    MockJSONStreamSource.instances[0]?.emit('error', new Event('error'));
-
-    expect(errorSpy).toHaveBeenCalledWith(SCOPE, 'Container logs stream connection lost');
-    expect(errorSpy).toHaveBeenCalledWith(SCOPE, expect.stringContaining('Reconnecting in 1s'));
-
-    await vi.advanceTimersByTimeAsync(1000);
-    MockJSONStreamSource.instances[1]?.emit('error', new Event('error'));
-    expect(errorSpy).toHaveBeenCalledWith(SCOPE, expect.stringContaining('Reconnecting in 1s'));
-
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(MockJSONStreamSource.instances).toHaveLength(3);
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(['loading', 'updating']).toContain(state.status);
-  });
-
-  test('closes failed container log streams before scheduling one reconnect', async () => {
-    vi.useFakeTimers();
-    Object.assign(window, {
-      setTimeout: globalThis.setTimeout,
-      clearTimeout: globalThis.clearTimeout,
-    });
-
-    class MockJSONStreamSource {
-      static instances: MockJSONStreamSource[] = [];
-      listeners: Record<string, (evt?: unknown) => void> = {};
-      closed = false;
-      constructor(_url: string) {
-        MockJSONStreamSource.instances.push(this);
-      }
-      addEventListener(type: string, handler: (evt?: unknown) => void) {
-        this.listeners[type] = handler;
-      }
-      removeEventListener(type: string): void {
-        delete this.listeners[type];
-      }
-      close(): void {
-        this.closed = true;
-      }
-      emit(type: string, evt?: unknown) {
-        this.listeners[type]?.(evt);
-      }
-    }
-    installJSONStreamSource(MockJSONStreamSource);
-
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-
-    await manager.startStream(SCOPE);
-    expect(MockJSONStreamSource.instances).toHaveLength(1);
-
-    const firstStream = requireValue(
-      MockJSONStreamSource.instances[0],
-      'expected test value in containerLogsStreamManager.test.ts'
-    );
-    firstStream.emit('error');
-    firstStream.emit('error');
-
-    expect(firstStream.closed).toBe(true);
-    expect(firstStream.listeners).toEqual({});
-
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(MockJSONStreamSource.instances).toHaveLength(2);
-  });
-
-  test('refreshOnce streams once and resolves when reset payload arrives', async () => {
-    class MockJSONStreamSource {
-      static instances: MockJSONStreamSource[] = [];
-      listeners: Record<string, (evt?: unknown) => void> = {};
-      constructor() {
-        MockJSONStreamSource.instances.push(this);
-      }
-      addEventListener(type: string, handler: (evt?: unknown) => void) {
-        this.listeners[type] = handler;
-      }
-      removeEventListener(): void {
-        // Listener removal is intentionally inert in this test double.
-      }
-      close(): void {
-        // Closing is intentionally inert in this test double.
-      }
-      emit(type: string, evt?: unknown) {
-        this.listeners[type]?.(evt);
-      }
-    }
-    installJSONStreamSource(MockJSONStreamSource);
-
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-
-    const refreshPromise = manager.refreshOnce(SCOPE);
-    await Promise.resolve();
-    expect(MockJSONStreamSource.instances).toHaveLength(1);
-
-    const payload = {
-      domain: 'container-logs',
-      scope: SCOPE,
-      sequence: 10,
-      generatedAt: 555,
-      reset: true,
-      entries: [
-        {
-          timestamp: '2024-01-01T00:00:00Z',
-          pod: 'pod-a',
-          container: 'sidecar',
-          line: 'manual line',
-          isInit: false,
-        },
-      ],
-    };
-    MockJSONStreamSource.instances[0]?.emit('message', { data: payload });
-
-    await refreshPromise;
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.status).toBe('ready');
-    expect(state.data?.entries).toHaveLength(1);
-    expect(state.data?.sequence).toBe(10);
-    expect(state.isManual).toBe(true);
-    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
-  });
-
-  test('accepts a null warning list from the stream as a warning clear', async () => {
-    class MockJSONStreamSource {
-      static instances: MockJSONStreamSource[] = [];
-      listeners: Record<string, (evt?: unknown) => void> = {};
-      constructor() {
-        MockJSONStreamSource.instances.push(this);
-      }
-      addEventListener(type: string, handler: (evt?: unknown) => void) {
-        this.listeners[type] = handler;
-      }
-      removeEventListener(): void {
-        // Listener removal is intentionally inert in this test double.
-      }
-      close(): void {
-        // Closing is intentionally inert in this test double.
-      }
-      emit(type: string, evt?: unknown) {
-        this.listeners[type]?.(evt);
-      }
-    }
-    installJSONStreamSource(MockJSONStreamSource);
-
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 1,
-        generatedAt: 123,
-        warnings: ['selection truncated'],
-        entries: [],
-      },
-      'stream'
-    );
-
-    await manager.startStream(SCOPE);
-    MockJSONStreamSource.instances[0]?.emit('message', {
-      data: {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 2,
-        generatedAt: 124,
-        warnings: null,
-        entries: [],
-      },
-    });
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.status).toBe('ready');
-    expect(state.stats?.warnings).toBeUndefined();
-    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
-  });
-
-  test('rejects a stream payload whose log entry is missing backend-required fields', async () => {
-    class MockJSONStreamSource {
-      static instances: MockJSONStreamSource[] = [];
-      listeners: Record<string, (evt?: unknown) => void> = {};
-      constructor() {
-        MockJSONStreamSource.instances.push(this);
-      }
-      addEventListener(type: string, handler: (evt?: unknown) => void) {
-        this.listeners[type] = handler;
-      }
-      removeEventListener(): void {
-        // Listener removal is intentionally inert in this test double.
-      }
-      close(): void {
-        // Closing is intentionally inert in this test double.
-      }
-      emit(type: string, evt?: unknown) {
-        this.listeners[type]?.(evt);
-      }
-    }
-    installJSONStreamSource(MockJSONStreamSource);
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-    await manager.startStream(SCOPE);
-
-    MockJSONStreamSource.instances[0]?.emit('message', {
-      data: {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 1,
-        generatedAt: 123,
-        entries: [{ pod: 'pod-a', container: 'app' }],
-      },
-    });
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.data).toBeNull();
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Invalid container logs stream payload structure' }),
-      expect.objectContaining({ scope: SCOPE }),
-      'Invalid container logs stream payload'
-    );
-  });
-
-  test('rejects a manual refresh when its reset frame violates the log entry contract', async () => {
-    class MockJSONStreamSource {
-      static instances: MockJSONStreamSource[] = [];
-      listeners: Record<string, (evt?: unknown) => void> = {};
-      constructor() {
-        MockJSONStreamSource.instances.push(this);
-      }
-      addEventListener(type: string, handler: (evt?: unknown) => void) {
-        this.listeners[type] = handler;
-      }
-      removeEventListener(): void {
-        // Listener removal is intentionally inert in this test double.
-      }
-      close(): void {
-        // Closing is intentionally inert in this test double.
-      }
-      emit(type: string, evt?: unknown) {
-        this.listeners[type]?.(evt);
-      }
-    }
-    installJSONStreamSource(MockJSONStreamSource);
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-    const refreshPromise = manager.refreshOnce(SCOPE);
-    await Promise.resolve();
-
-    MockJSONStreamSource.instances[0]?.emit('message', {
-      data: {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 1,
-        generatedAt: 123,
-        reset: true,
-        entries: [{ pod: 'pod-a', container: 'app' }],
-      },
-    });
-
-    await expect(refreshPromise).rejects.toThrow('Invalid container logs stream payload');
-    expect(getScopedDomainState('container-logs', SCOPE).status).toBe('error');
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Invalid container logs stream payload structure' }),
-      expect.objectContaining({ scope: SCOPE }),
-      'Invalid container logs stream payload'
-    );
-  });
-
-  test('startStream sends cluster scope and cached filters in the first frame', async () => {
-    class MockJSONStreamSource {
-      static instances: MockJSONStreamSource[] = [];
-      listeners: Record<string, (evt?: unknown) => void> = {};
-      url: string;
-      constructor(url: string) {
-        this.url = url;
-        MockJSONStreamSource.instances.push(this);
-      }
-      addEventListener(type: string, handler: (evt?: unknown) => void) {
-        this.listeners[type] = handler;
-      }
-      removeEventListener(): void {
-        // Listener removal is intentionally inert in this test double.
-      }
-      close(): void {
-        // Closing is intentionally inert in this test double.
-      }
-    }
-    installJSONStreamSource(MockJSONStreamSource);
-
-    const logScope = 'cluster-a|default:apps/v1:deployment:web';
-    setContainerLogsStreamScopeParams(logScope, {
-      container: 'app',
-      selectedFilters: ['pod:web-2', 'container:app'],
-    });
-
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-
-    await manager.startStream(logScope);
-    await Promise.resolve();
-
-    expect(MockJSONStreamSource.instances).toHaveLength(1);
-    expect(
-      (MockJSONStreamSource.instances[0] as JSONStreamSourceHarness | undefined)?.sent
-    ).toEqual([
-      {
-        scope: logScope,
-        container: 'app',
         selectedFilters: ['pod:web-2', 'container:app'],
         matchNone: false,
+        maxEntries: 500,
+        maxBytes: CONTAINER_LOGS_MAX_BYTES,
       },
     ]);
-  });
-
-  test('startStream preserves an explicit empty selection in the first frame', async () => {
-    class MockJSONStreamSource {
-      static instances: MockJSONStreamSource[] = [];
-      listeners: Record<string, (evt?: unknown) => void> = {};
-      url: string;
-      constructor(url: string) {
-        this.url = url;
-        MockJSONStreamSource.instances.push(this);
-      }
-      addEventListener(type: string, handler: (evt?: unknown) => void) {
-        this.listeners[type] = handler;
-      }
-      removeEventListener(): void {
-        // The test only observes stream creation and its URL.
-      }
-      close(): void {
-        // The test only observes stream creation and its URL.
-      }
-    }
-    installJSONStreamSource(MockJSONStreamSource);
-
-    const logScope = 'cluster-a|default:apps/v1:deployment:web';
-    setContainerLogsStreamScopeParams(logScope, { matchNone: true });
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-
-    await manager.startStream(logScope);
-    await Promise.resolve();
-
-    expect(
-      (MockJSONStreamSource.instances[0] as JSONStreamSourceHarness | undefined)?.sent
-    ).toEqual([
-      {
-        scope: logScope,
-        container: '',
-        selectedFilters: [],
-        matchNone: true,
-      },
-    ]);
-  });
-
-  test('refreshOnce rejects and marks error when the stream fails', async () => {
-    class MockJSONStreamSource {
-      static instances: MockJSONStreamSource[] = [];
-      listeners: Record<string, (evt?: unknown) => void> = {};
-      constructor() {
-        MockJSONStreamSource.instances.push(this);
-      }
-      addEventListener(type: string, handler: (evt?: unknown) => void) {
-        this.listeners[type] = handler;
-      }
-      removeEventListener(): void {
-        // Listener removal is intentionally inert in this test double.
-      }
-      close(): void {
-        // Closing is intentionally inert in this test double.
-      }
-      emit(type: string, evt?: unknown) {
-        this.listeners[type]?.(evt);
-      }
-    }
-    installJSONStreamSource(MockJSONStreamSource);
-
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-
-    const refreshPromise = manager.refreshOnce(SCOPE);
-    await Promise.resolve();
-    expect(MockJSONStreamSource.instances).toHaveLength(1);
-
-    MockJSONStreamSource.instances[0]?.emit('error');
-
-    await expect(refreshPromise).rejects.toThrow('Container logs stream connection lost');
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.status).toBe('error');
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Container logs stream connection lost' }),
-      expect.objectContaining({ scope: SCOPE }),
-      'Container logs stream connection lost'
-    );
-  });
-
-  test('stopAll with reset clears scoped buffers and state', async () => {
-    class MockJSONStreamSource {
-      static instances: MockJSONStreamSource[] = [];
-      listeners: Record<string, (evt?: unknown) => void> = {};
-      constructor() {
-        MockJSONStreamSource.instances.push(this);
-      }
-      addEventListener(): void {
-        // Listener registration is intentionally inert in this test double.
-      }
-      removeEventListener(): void {
-        // Listener removal is intentionally inert in this test double.
-      }
-      close(): void {
-        // Closing is intentionally inert in this test double.
-      }
-    }
-    installJSONStreamSource(MockJSONStreamSource);
-
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-
-    await manager.startStream(SCOPE);
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 3,
-        generatedAt: Date.now(),
-        reset: true,
-        entries: [
-          { timestamp: 't1', pod: 'pod-1', container: 'app', line: 'line 1', isInit: false },
-          { timestamp: 't2', pod: 'pod-1', container: 'app', line: 'line 2', isInit: false },
-        ],
-      },
-      'stream'
-    );
-
-    expect(getScopedDomainState('container-logs', SCOPE).status).toBe('ready');
     manager.stopAll(true);
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.status).toBe('idle');
-    expect(state.data).toBeNull();
   });
 
-  test('kubeconfig:changing resets active container logs streams and scoped state', async () => {
-    class MockJSONStreamSource {
-      static instances: MockJSONStreamSource[] = [];
-      listeners: Record<string, (evt?: unknown) => void> = {};
-      closed = false;
-      constructor() {
-        MockJSONStreamSource.instances.push(this);
-      }
-      addEventListener(type: string, handler: (evt?: unknown) => void): void {
-        this.listeners[type] = handler;
-      }
-      removeEventListener(): void {
-        // Listener removal is intentionally inert in this test double.
-      }
-      close(): void {
-        this.closed = true;
-      }
-    }
-    installJSONStreamSource(MockJSONStreamSource);
-
-    const { eventBus } = await import('@/core/events');
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
+  test('keeps an explicit empty selection in the request', async () => {
+    setContainerLogsStreamScopeParams(SCOPE, { matchNone: true });
     const manager = new ContainerLogsStreamManager();
 
-    await manager.startStream(SCOPE);
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 2,
-        generatedAt: Date.now(),
-        reset: true,
-        entries: [
-          { timestamp: 't1', pod: 'pod-1', container: 'app', line: 'line 1', isInit: false },
-        ],
-      },
-      'stream'
-    );
+    manager.startStream(SCOPE);
+    await flushOpen();
 
-    expect(getScopedDomainState('container-logs', SCOPE).data?.entries).toHaveLength(1);
-
-    eventBus.emit('kubeconfig:changing', '');
-
-    expect(MockJSONStreamSource.instances[0]?.closed).toBe(true);
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.status).toBe('idle');
-    expect(state.data).toBeNull();
+    expect(FakeStream.latest().sent[0]).toMatchObject({ selectedFilters: [], matchNone: true });
+    manager.stopAll(true);
   });
 
-  test('applyPayload truncates buffers and emits warnings when exceeding max size', async () => {
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
+  test('shows a staged snapshot only once all its frames have arrived', async () => {
     const manager = new ContainerLogsStreamManager();
+    manager.startStream(SCOPE);
+    await flushOpen();
+    const stream = FakeStream.latest();
 
-    const manyEntries = Array.from({ length: 1050 }, (_, index) => ({
-      timestamp: `2024-01-01T00:00:${index.toString().padStart(2, '0')}Z`,
-      pod: `pod-${Math.floor(index / 10)}`,
-      container: 'app',
-      line: `line-${index}`,
-      isInit: false,
-    }));
-
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 1,
-        generatedAt: 10,
-        reset: true,
-        entries: manyEntries,
-      },
-      'stream'
-    );
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.data?.entries).toHaveLength(1000);
-    expect(state.stats?.truncated).toBe(true);
-    expect(state.stats?.warnings?.[0]).toBe('Showing most recent 1000 of 1050 log entries');
-  });
-
-  test('deduplicates container logs stream error notifications and clears when connected', async () => {
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-
-    manager.handleStreamError(SCOPE, 'lost');
-    manager.handleStreamError(SCOPE, 'lost');
-    expect(errorHandlerMock.handle).toHaveBeenCalledTimes(1);
-
-    manager.markConnected(SCOPE);
-    manager.handleStreamError(SCOPE, 'lost');
-    expect(errorHandlerMock.handle).toHaveBeenCalledTimes(2);
-  });
-
-  // ---------------------------------------------------------------------
-  // Reconnect semantics — the reset=true handshake on new connections
-  // must not wipe the client's buffered history, and the client-side
-  // sequence must stay monotonic across stream restarts. Together these
-  // guarantee the initial-load spinner only shows on the true first load
-  // of a scope, not on every auto-refresh toggle / cluster-switch
-  // remount. See docs/workflows/logs/container-logs.md.
-  // ---------------------------------------------------------------------
-
-  const seedScopeWithEntries = async (
-    count: number,
-    sequence = 3
-  ): Promise<
-    InstanceType<typeof import('./containerLogsStreamManager').ContainerLogsStreamManager>
-  > => {
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence,
-        generatedAt: 1_000,
-        reset: true,
-        entries: Array.from({ length: count }, (_, index) => ({
-          timestamp: `2024-01-01T00:00:${index.toString().padStart(2, '0')}Z`,
-          pod: 'pod-1',
-          container: 'app',
-          line: `seed-${index}`,
-          isInit: false,
-        })),
-      },
-      'stream'
-    );
-    return manager;
-  };
-
-  test('applyPayload preserves the buffer when reset=true and incoming is empty', async () => {
-    const manager = await seedScopeWithEntries(3);
-
-    // Simulates the server's "new connection" handshake on stream
-    // reconnect: reset flag set, but no new entries to send yet.
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 1,
-        generatedAt: 2_000,
-        reset: true,
-        entries: [],
-      },
-      'stream'
-    );
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.data?.entries).toHaveLength(3);
-    expect(state.data?.entries?.map((e) => e.line)).toEqual(['seed-0', 'seed-1', 'seed-2']);
-  });
-
-  test('applyPayload replaces the buffer when reset=true and incoming is non-empty', async () => {
-    const manager = await seedScopeWithEntries(3);
-
-    // Manual refresh or server-driven fresh snapshot: replace as before.
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 5,
-        generatedAt: 2_000,
-        reset: true,
-        entries: [
-          {
-            timestamp: '2024-01-01T00:01:00Z',
-            pod: 'pod-1',
-            container: 'app',
-            line: 'fresh-a',
-            isInit: false,
-          },
-          {
-            timestamp: '2024-01-01T00:01:01Z',
-            pod: 'pod-1',
-            container: 'app',
-            line: 'fresh-b',
-            isInit: false,
-          },
-        ],
-      },
-      'stream'
-    );
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.data?.entries).toHaveLength(2);
-    expect(state.data?.entries?.map((e) => e.line)).toEqual(['fresh-a', 'fresh-b']);
-  });
-
-  test('applyPayload preserves render identity when a reconnect snapshot is unchanged', async () => {
-    const manager = await seedScopeWithEntries(3);
-    const previousEntries = getScopedDomainState('container-logs', SCOPE).data?.entries ?? [];
-
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 1,
-        generatedAt: 2_000,
-        reset: true,
-        entries: previousEntries.map(
-          ({ timestamp, pod, container, line, isInit, isEphemeral }) => ({
-            timestamp,
-            pod,
-            container,
-            line,
-            isInit,
-            isEphemeral,
-          })
-        ),
-      },
-      'stream'
-    );
-
-    const nextEntries = getScopedDomainState('container-logs', SCOPE).data?.entries ?? [];
-    expect(nextEntries.map(({ line }) => line)).toEqual(previousEntries.map(({ line }) => line));
-    expect(nextEntries.map(({ _seq }) => _seq)).toEqual(previousEntries.map(({ _seq }) => _seq));
-  });
-
-  test('applyPayload preserves truncated total across stream reconnect replacement snapshots', async () => {
-    const { eventBus } = await import('@/core/events');
-    const manager = await seedScopeWithEntries(5);
-
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 3);
-
-    let state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.data?.entries).toHaveLength(3);
-    expect(state.stats?.totalItems).toBe(5);
-
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 6,
-        generatedAt: 2_000,
-        reset: true,
-        entries: [
-          {
-            timestamp: '2024-01-01T00:01:00Z',
-            pod: 'pod-1',
-            container: 'app',
-            line: 'fresh-a',
-            isInit: false,
-          },
-          {
-            timestamp: '2024-01-01T00:01:01Z',
-            pod: 'pod-1',
-            container: 'app',
-            line: 'fresh-b',
-            isInit: false,
-          },
-          {
-            timestamp: '2024-01-01T00:01:02Z',
-            pod: 'pod-1',
-            container: 'app',
-            line: 'fresh-c',
-            isInit: false,
-          },
-        ],
-      },
-      'stream'
-    );
-
-    state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.data?.entries).toHaveLength(3);
-    expect(state.data?.entries?.map((e) => e.line)).toEqual(['fresh-a', 'fresh-b', 'fresh-c']);
-    expect(state.stats?.totalItems).toBe(5);
-
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 1000);
-  });
-
-  test('applyPayload appends when reset=false regardless of what was buffered', async () => {
-    const manager = await seedScopeWithEntries(2);
-
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 4,
-        generatedAt: 2_000,
-        reset: false,
-        entries: [
-          {
-            timestamp: '2024-01-01T00:02:00Z',
-            pod: 'pod-1',
-            container: 'app',
-            line: 'appended',
-            isInit: false,
-          },
-        ],
-      },
-      'stream'
-    );
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.data?.entries).toHaveLength(3);
-    expect(state.data?.entries?.map((e) => e.line)).toEqual(['seed-0', 'seed-1', 'appended']);
-  });
-
-  test('sequence is monotonic across reset frames (does not regress on reconnect)', async () => {
-    const manager = await seedScopeWithEntries(2, 5);
-
-    // The server's per-connection counter restarts at 1 on every new
-    // stream open, but the client-side sequence must stay at 5 so the
-    // view's hasReceivedInitialLogs (>= 2) keeps evaluating true.
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 1,
-        generatedAt: 2_000,
-        reset: true,
-        entries: [],
-      },
-      'stream'
-    );
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.data?.sequence).toBe(5);
-  });
-
-  test('sequence advances normally on forward progress', async () => {
-    const manager = await seedScopeWithEntries(2, 2);
-
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 4,
-        generatedAt: 2_000,
-        reset: false,
-        entries: [
-          {
-            timestamp: '2024-01-01T00:02:00Z',
-            pod: 'pod-1',
-            container: 'app',
-            line: 'forward',
-            isInit: false,
-          },
-        ],
-      },
-      'stream'
-    );
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.data?.sequence).toBe(4);
-  });
-
-  // ---------------------------------------------------------------------
-  // User-configurable buffer size. The manager subscribes to the
-  // 'settings:obj-panel-logs-buffer-size' event in its constructor — shrinking the
-  // size must retroactively trim existing buffers and push the update
-  // to the scoped store so open LogViewers re-render; growing the size
-  // must not disturb anything.
-  // ---------------------------------------------------------------------
-
-  const seedScopeWithNEntries = async (
-    count: number
-  ): Promise<
-    InstanceType<typeof import('./containerLogsStreamManager').ContainerLogsStreamManager>
-  > => {
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 3,
-        generatedAt: 1_000,
-        reset: true,
-        entries: Array.from({ length: count }, (_, index) => ({
-          timestamp: `2024-01-01T00:00:${index.toString().padStart(2, '0')}Z`,
-          pod: 'pod-1',
-          container: 'app',
-          line: `line-${index}`,
-          isInit: false,
-        })),
-      },
-      'stream'
-    );
-    return manager;
-  };
-
-  test('settings:obj-panel-logs-buffer-size event trims existing buffers when shrinking', async () => {
-    const { eventBus } = await import('@/core/events');
-    await seedScopeWithNEntries(50);
-
-    // Baseline: all 50 entries in the store.
-    expect(getScopedDomainState('container-logs', SCOPE).data?.entries).toHaveLength(50);
-
-    // Shrink the buffer cap. The event is dispatched synchronously, so
-    // the store update should be visible immediately after emit.
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 20);
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.data?.entries).toHaveLength(20);
-    // The trim must keep the TAIL (newest entries), not the head.
-    expect(state.data?.entries?.[0].line).toBe('line-30');
-    expect(state.data?.entries?.[19].line).toBe('line-49');
-    expect(state.stats?.truncated).toBe(true);
-  });
-
-  test('settings:obj-panel-logs-buffer-size event leaves smaller buffers untouched when growing', async () => {
-    const { eventBus } = await import('@/core/events');
-    await seedScopeWithNEntries(10);
-
-    const before = getScopedDomainState('container-logs', SCOPE).data?.entries;
-    expect(before).toHaveLength(10);
-
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 5000);
-
-    // No change — the existing buffer is smaller than the new cap.
-    const after = getScopedDomainState('container-logs', SCOPE).data?.entries;
-    expect(after).toHaveLength(10);
-    expect(after?.map((e) => e.line)).toEqual(before?.map((e) => e.line));
-  });
-
-  test('settings:obj-panel-logs-buffer-size event clamps subsequent applyPayload truncation', async () => {
-    const { eventBus } = await import('@/core/events');
-    const manager = await seedScopeWithNEntries(5);
-
-    // Tighten the cap to 10. The existing 5 entries aren't touched.
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 10);
-
-    // Send a payload large enough to exceed the new cap. applyPayload
-    // must honor the updated cap, not the old default.
-    manager.applyPayload(
-      SCOPE,
-      {
-        domain: 'container-logs',
-        scope: SCOPE,
-        sequence: 4,
-        generatedAt: 2_000,
-        reset: false,
-        entries: Array.from({ length: 20 }, (_, index) => ({
-          timestamp: `2024-01-01T00:01:${index.toString().padStart(2, '0')}Z`,
-          pod: 'pod-1',
-          container: 'app',
-          line: `new-${index}`,
-          isInit: false,
-        })),
-      },
-      'stream'
-    );
-
-    const state = getScopedDomainState('container-logs', SCOPE);
-    expect(state.data?.entries).toHaveLength(10);
-    expect(state.stats?.truncated).toBe(true);
-  });
-});
-
-describe('log connection ownership', () => {
-  class Source {
-    static instances: Source[] = [];
-    listeners: Record<string, (event?: unknown) => void> = {};
-    closed = false;
-    constructor() {
-      Source.instances.push(this);
-    }
-    addEventListener(type: string, handler: (event?: unknown) => void) {
-      this.listeners[type] = handler;
-    }
-    removeEventListener(type: string) {
-      delete this.listeners[type];
-    }
-    close() {
-      this.closed = true;
-    }
-    complete() {
-      this.listeners.message?.({
-        data: {
-          domain: 'container-logs',
-          scope: SCOPE,
-          sequence: 1,
-          generatedAt: 123,
-          reset: true,
-          warnings: ['retained warning'],
-          entries: [
-            { timestamp: 't1', pod: 'pod-1', container: 'app', line: 'retained', isInit: false },
-          ],
-        },
-      });
-    }
-  }
-  beforeEach(() => {
-    Source.instances = [];
-    installJSONStreamSource(Source);
-  });
-  test('stopping a pending manual refresh settles it without logging a transport failure', async () => {
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-    let settled = false;
-    const pending = manager.refreshOnce(SCOPE).then(() => {
-      settled = true;
+    stream.receive({
+      reset: true,
+      entries: [entry('2024-01-01T00:00:01Z', 'first')],
+      warnings: [{ kind: 'targetLimit', scope: 'perTab', hidden: 2, limit: 100 }],
     });
-    manager.stop(SCOPE);
-    // Flush the refresh wrapper and its finally handler without a timeout race.
-    for (let i = 0; i < 8; i++) {
-      await Promise.resolve();
-    }
-    expect(settled).toBe(true);
-    await pending;
-    expect(Source.instances[0].closed).toBe(true);
+    expect(lines()).toEqual([]);
+    expect(state().status).toBe('loading');
+
+    stream.receive({ entries: [entry('2024-01-01T00:00:02Z', 'second')], snapshotComplete: true });
+    expect(lines()).toEqual(['first', 'second']);
+    expect(state().status).toBe('ready');
+    expect(state().data?.phase).toEqual({ status: 'live' });
+    expect(state().data?.warnings).toEqual([
+      { kind: 'targetLimit', scope: 'perTab', hidden: 2, limit: 100 },
+    ]);
+    manager.stopAll(true);
+  });
+
+  test('places late history in timestamp order and keeps same-time lines in arrival order', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, [
+      entry('2024-01-01T00:00:02Z', 'two'),
+      entry('2024-01-01T00:00:03.5Z', 'three'),
+    ]);
+
+    FakeStream.latest().receive({
+      entries: [
+        entry('2024-01-01T00:00:01Z', 'one'),
+        entry('2024-01-01T00:00:03Z', 'three-a'),
+        entry('2024-01-01T00:00:03Z', 'three-b'),
+        entry('2024-01-01T00:00:04Z', 'four'),
+      ],
+    });
+
+    expect(lines()).toEqual(['one', 'two', 'three-a', 'three-b', 'three', 'four']);
+    manager.stopAll(true);
+  });
+
+  test('evicts the oldest entries by bytes and still keeps a delayed older line that fits', async () => {
+    const manager = new ContainerLogsStreamManager({ maxEntries: 3, maxBytes: 1000 });
+    const hundred = (label: string) => label.padEnd(100, '.');
+    await startLive(manager, [
+      entry('2024-01-01T00:00:01Z', hundred('a')),
+      entry('2024-01-01T00:00:02Z', hundred('b')),
+      entry('2024-01-01T00:00:03Z', hundred('c')),
+    ]);
+
+    FakeStream.latest().receive({
+      entries: [entry('2024-01-01T00:00:05Z', 'big'.padEnd(950, '.'))],
+    });
+    expect(lines()).toEqual(['big'.padEnd(950, '.')]);
+
+    FakeStream.latest().receive({
+      entries: [entry('2024-01-01T00:00:04Z', 'late'.padEnd(25, '.'))],
+    });
+    expect(lines()).toEqual(['late'.padEnd(25, '.'), 'big'.padEnd(950, '.')]);
+    expect(state().data?.truncation).toEqual({ shown: 2, received: 5 });
+    manager.stopAll(true);
+  });
+
+  test('counts history the backend left out as truncation', async () => {
+    const manager = new ContainerLogsStreamManager();
+    manager.startStream(SCOPE);
+    await flushOpen();
+
+    FakeStream.latest().receive({
+      reset: true,
+      snapshotComplete: true,
+      trimmed: 40,
+      entries: [entry('2024-01-01T00:00:01Z', 'kept')],
+    });
+
+    expect(state().data?.truncation).toEqual({ shown: 1, received: 41 });
+    manager.stopAll(true);
+  });
+
+  test('keeps entries while reconnecting and backs off until a snapshot arrives', async () => {
+    vi.useFakeTimers();
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, [entry('2024-01-01T00:00:01Z', 'kept')]);
+
+    FakeStream.latest().lose();
+    expect(state().data?.phase).toMatchObject({ status: 'reconnecting', attempt: 1 });
+    expect(lines()).toEqual(['kept']);
     expect(errorHandlerMock.handle).not.toHaveBeenCalled();
-  });
-  test('an old manual completion cannot remove a new live connection', async () => {
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-    const pending = manager.refreshOnce(SCOPE);
-    Source.instances[0].complete();
-    await manager.startStream(SCOPE);
-    await pending;
-    manager.stop(SCOPE);
-    expect(Source.instances[1].closed).toBe(true);
-  });
-  test('reset clears retained manual data and warnings after its connection has completed', async () => {
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
-    const manager = new ContainerLogsStreamManager();
-    const pending = manager.refreshOnce(SCOPE);
-    Source.instances[0].complete();
-    await pending;
-    manager.stopAll(true);
-    expect(getScopedDomainState('container-logs', SCOPE).data).toBeNull();
-    await manager.startStream(SCOPE);
-    expect(getScopedDomainState('container-logs', SCOPE).stats?.warnings).toBeUndefined();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(FakeStream.instances).toHaveLength(2);
+    await flushOpen();
+    FakeStream.latest().lose();
+
+    // The socket opened but no snapshot arrived, so the next wait doubles.
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(FakeStream.instances).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(FakeStream.instances).toHaveLength(3);
     manager.stopAll(true);
   });
-  test('stopped or reset hidden scopes do not restart when the window becomes visible', async () => {
-    const { eventBus } = await import('@/core/events');
-    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
+
+  test('stops for good on a failure that cannot be retried', async () => {
+    vi.useFakeTimers();
     const manager = new ContainerLogsStreamManager();
-    await manager.startStream(SCOPE);
+    await startLive(manager, [entry('2024-01-01T00:00:01Z', 'kept')]);
+
+    FakeStream.latest().receive({ error: 'deployments.apps "web" not found', retryable: false });
+
+    expect(state().status).toBe('error');
+    expect(state().error).toBe('deployments.apps "web" not found');
+    expect(state().data?.phase).toMatchObject({ status: 'failed', retryable: false });
+    expect(lines()).toEqual(['kept']);
+    expect(errorHandlerMock.handle).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(FakeStream.instances).toHaveLength(1);
+    manager.stopAll(true);
+  });
+
+  test('reconnects after a failure the backend marks retryable', async () => {
+    vi.useFakeTimers();
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager);
+
+    FakeStream.latest().receive({ error: 'apiserver is restarting', retryable: true });
+    expect(state().data?.phase).toMatchObject({
+      status: 'reconnecting',
+      reason: 'apiserver is restarting',
+    });
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(FakeStream.instances).toHaveLength(2);
+    manager.stopAll(true);
+  });
+
+  test('treats a malformed frame as a lost connection', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, [entry('2024-01-01T00:00:01Z', 'kept')]);
+
+    FakeStream.latest().receive({
+      entries: [{ ...entry('t', 'x'), line: 7 } as unknown as ContainerLogsWireEntry],
+    });
+
+    expect(state().data?.phase).toMatchObject({ status: 'reconnecting' });
+    expect(FakeStream.instances[0].closed).toBe(true);
+    expect(lines()).toEqual(['kept']);
+    manager.stopAll(true);
+  });
+
+  test('keeps the buffer across a stop and restart until the new snapshot arrives', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, [entry('2024-01-01T00:00:01Z', 'kept')]);
+    const before = state().data?.entries;
+
+    manager.stop(SCOPE, false);
+    manager.startStream(SCOPE);
+    await flushOpen();
+    expect(lines()).toEqual(['kept']);
+    expect(state().status).toBe('updating');
+
+    FakeStream.latest().receive({
+      reset: true,
+      snapshotComplete: true,
+      entries: [entry('2024-01-01T00:00:01Z', 'kept')],
+    });
+    expect(state().data?.entries).toBe(before);
+    manager.stopAll(true);
+  });
+
+  // A closed panel's scope is reset after its Logs tab stopped keeping its
+  // lines; reopening starts empty and reads full history.
+  test('forgets a stopped scope once it is reset', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, [entry('2024-01-01T00:00:01Z', 'old')]);
+    manager.stop(SCOPE, false);
+
+    manager.stop(SCOPE, true);
+    manager.startStream(SCOPE);
+    await flushOpen();
+
+    expect(lines()).toEqual([]);
+    expect((FakeStream.latest().sent[0] as { resume?: unknown[] }).resume).toBeUndefined();
+    manager.stopAll(true);
+  });
+
+  const resumeBuffer = [
+    entry('2024-01-01T00:00:01Z', 'a-1'),
+    entry('2024-01-01T00:00:02Z', 'b-1', 'web-1'),
+    entry('2024-01-01T00:00:03Z', 'a-2'),
+    entry('2024-01-01T00:00:03.000Z', 'a-3'),
+  ];
+  const resumePoints = [
+    {
+      pod: 'web-0',
+      container: 'app',
+      isInit: false,
+      isEphemeral: false,
+      timestamp: '2024-01-01T00:00:03.000Z',
+      lines: ['a-2', 'a-3'],
+    },
+    {
+      pod: 'web-1',
+      container: 'app',
+      isInit: false,
+      isEphemeral: false,
+      timestamp: '2024-01-01T00:00:02Z',
+      lines: ['b-1'],
+    },
+  ];
+  const sentResume = () =>
+    (FakeStream.latest().sent[0] as { resume?: unknown[] } | undefined)?.resume;
+
+  test('after a reconnect, asks only for what follows the buffer and adds it', async () => {
+    vi.useFakeTimers();
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, resumeBuffer);
+
+    FakeStream.latest().lose();
+    await vi.advanceTimersByTimeAsync(1000);
+    await flushOpen();
+    expect(sentResume()).toEqual(expect.arrayContaining(resumePoints));
+    expect(sentResume()).toHaveLength(2);
+
+    FakeStream.latest().receive({
+      reset: true,
+      resumed: true,
+      snapshotComplete: true,
+      trimmed: 2,
+      entries: [
+        entry('2024-01-01T00:00:02.5Z', 'b-2', 'web-1'),
+        entry('2024-01-01T00:00:04Z', 'a-4'),
+      ],
+    });
+    expect(lines()).toEqual(['a-1', 'b-1', 'b-2', 'a-2', 'a-3', 'a-4']);
+    expect(state().data?.truncation).toEqual({ shown: 6, received: 8 });
+    manager.stopAll(true);
+  });
+
+  test('resumes from the buffer when the window is shown again', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, resumeBuffer);
+
+    eventBus.emit('app:visibility-hidden');
+    eventBus.emit('app:visibility-visible');
+    await flushOpen();
+
+    expect(FakeStream.instances).toHaveLength(2);
+    expect(sentResume()).toEqual(expect.arrayContaining(resumePoints));
+    manager.stopAll(true);
+  });
+
+  test('reads full history again after the source selection changes', async () => {
+    setContainerLogsStreamScopeParams(SCOPE, { selectedFilters: ['pod:web-0'] });
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, resumeBuffer);
+
+    setContainerLogsStreamScopeParams(SCOPE, { selectedFilters: ['pod:web-0', 'pod:web-1'] });
+    manager.startStream(SCOPE);
+    await flushOpen();
+
+    expect(sentResume()).toBeUndefined();
+    manager.stopAll(true);
+  });
+
+  test('reads full history again after the buffer grows, but not after it shrinks', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, resumeBuffer);
+
+    eventBus.emit('settings:obj-panel-logs-buffer-size', 50);
+    manager.startStream(SCOPE);
+    await flushOpen();
+    expect(sentResume()).toBeDefined();
+
+    eventBus.emit('settings:obj-panel-logs-buffer-size', 9000);
+    manager.startStream(SCOPE);
+    await flushOpen();
+    expect(sentResume()).toBeUndefined();
+    manager.stopAll(true);
+  });
+
+  // The snapshot was asked for with the larger size but the buffer kept only
+  // the smaller one, so growing back needs the history read again.
+  test('reads full history after growing back from a shrink made while a snapshot was on its way', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, resumeBuffer);
+    manager.startStream(SCOPE);
+    await flushOpen();
+
+    eventBus.emit('settings:obj-panel-logs-buffer-size', 100);
+    FakeStream.latest().receive({
+      reset: true,
+      resumed: true,
+      snapshotComplete: true,
+      entries: [],
+    });
+    eventBus.emit('settings:obj-panel-logs-buffer-size', 5000);
+    manager.startStream(SCOPE);
+    await flushOpen();
+
+    expect(sentResume()).toBeUndefined();
+    manager.stopAll(true);
+  });
+
+  test('replaces the buffer when the backend sends full history instead', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, resumeBuffer);
+
+    manager.startStream(SCOPE);
+    await flushOpen();
+    expect(sentResume()).toBeDefined();
+    FakeStream.latest().receive({
+      reset: true,
+      snapshotComplete: true,
+      entries: [entry('2024-01-01T00:00:09Z', 'fresh')],
+    });
+
+    expect(lines()).toEqual(['fresh']);
+    manager.stopAll(true);
+  });
+
+  test('drops the lines of pods a resumed snapshot says no longer exist', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, [
+      entry('2024-01-01T00:00:01Z', 'gone-1', 'web-gone'),
+      entry('2024-01-01T00:00:02Z', 'kept-1'),
+      entry('2024-01-01T00:00:03Z', 'gone-2', 'web-gone'),
+    ]);
+
+    manager.startStream(SCOPE);
+    await flushOpen();
+    FakeStream.latest().receive({
+      reset: true,
+      resumed: true,
+      snapshotComplete: true,
+      removedPods: ['web-gone'],
+      entries: [entry('2024-01-01T00:00:04Z', 'kept-2')],
+    });
+
+    expect(lines()).toEqual(['kept-1', 'kept-2']);
+    expect(state().data?.pods).toEqual(['web-0']);
+    // Lines of ended pods are not lines the buffer had no room for.
+    expect(state().data?.truncation).toBeNull();
+    manager.stopAll(true);
+  });
+
+  test('drops the lines of a pod that ended during the session', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, [
+      entry('2024-01-01T00:00:01Z', 'kept', 'web-0'),
+      entry('2024-01-01T00:00:02Z', 'gone', 'web-1'),
+    ]);
+
+    FakeStream.latest().receive({ removedPods: ['web-1'] });
+
+    expect(lines()).toEqual(['kept']);
+    expect(state().data?.pods).toEqual(['web-0']);
+    expect(state().data?.truncation).toBeNull();
+    manager.stopAll(true);
+  });
+
+  test('lists the pods that have lines in the buffer', async () => {
+    const manager = new ContainerLogsStreamManager({ maxEntries: 2 });
+    await startLive(manager, [
+      entry('2024-01-01T00:00:01Z', 'one', 'web-1'),
+      entry('2024-01-01T00:00:02Z', 'two', 'web-2'),
+    ]);
+    expect([...(state().data?.pods ?? [])].sort()).toEqual(['web-1', 'web-2']);
+
+    FakeStream.latest().receive({
+      entries: [entry('2024-01-01T00:00:03Z', 'three', 'web-3')],
+    });
+    // web-1's only line was evicted.
+    expect([...(state().data?.pods ?? [])].sort()).toEqual(['web-2', 'web-3']);
+    manager.stopAll(true);
+  });
+
+  test('stopAll with reset clears every scope', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, [entry('2024-01-01T00:00:01Z', 'kept')]);
+
+    manager.stopAll(true);
+
+    expect(state().data).toBeNull();
+    expect(FakeStream.latest().closed).toBe(true);
+  });
+
+  test('kubeconfig:changing resets active streams', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager, [entry('2024-01-01T00:00:01Z', 'kept')]);
+
+    eventBus.emit('kubeconfig:changing', 'other-config');
+
+    expect(state().data).toBeNull();
+    expect(FakeStream.latest().closed).toBe(true);
+  });
+
+  test('suspends while hidden and resumes active scopes, but not stopped ones', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(manager);
+
+    eventBus.emit('app:visibility-hidden');
+    expect(FakeStream.latest().closed).toBe(true);
+    eventBus.emit('app:visibility-visible');
+    await flushOpen();
+    expect(FakeStream.instances).toHaveLength(2);
+
     eventBus.emit('app:visibility-hidden');
     manager.stop(SCOPE);
-    const before = Source.instances.length;
     eventBus.emit('app:visibility-visible');
-    await Promise.resolve();
-    expect(Source.instances.length).toBe(before);
+    await flushOpen();
+    expect(FakeStream.instances).toHaveLength(2);
+    manager.stopAll(true);
+  });
+
+  test('a smaller buffer setting trims existing buffers at once', async () => {
+    const manager = new ContainerLogsStreamManager();
+    await startLive(
+      manager,
+      Array.from({ length: 150 }, (_, index) =>
+        entry(
+          `2024-01-01T00:00:${String(index % 60).padStart(2, '0')}.${String(index).padStart(3, '0')}Z`,
+          `line-${index}`
+        )
+      )
+    );
+
+    eventBus.emit('settings:obj-panel-logs-buffer-size', 100);
+
+    expect(state().data?.entries).toHaveLength(100);
+    expect(state().data?.truncation).toEqual({ shown: 100, received: 150 });
     manager.stopAll(true);
   });
 });

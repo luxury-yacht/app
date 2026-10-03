@@ -86,7 +86,7 @@
   background: rgba(96, 165, 250, 0.12);
   border: 1px solid rgba(96, 165, 250, 0.3);
   border-radius: 4px;
-  color: #60a5fa;
+  color: var(--status-action-text);
   cursor: pointer;
   transition:
     background-color 0.15s ease,
@@ -97,21 +97,21 @@
 .status-popover-actions button:hover {
   background: rgba(96, 165, 250, 0.22);
   border-color: rgba(96, 165, 250, 0.5);
-  color: #93bbfd;
+  color: var(--status-action-text-hover);
 }
 
-.connectivity-status-message {
+.status-popover-lines {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.connectivity-status-summary {
+.status-popover-summary {
   font-weight: 600;
   color: var(--color-text);
 }
 
-.connectivity-status-detail {
+.status-popover-detail {
   color: var(--color-text-secondary);
 }
 

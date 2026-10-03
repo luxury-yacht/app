@@ -23,7 +23,7 @@ func makeEventSummaryRows(n int) []EventSummary {
 		rows[i] = EventSummary{Ref: resourcemodel.ResourceRef{Namespace:
 
 		// unique -> unique row key
-		namespaces[i%len(namespaces)], Name: fmt.Sprintf("evt-%03d", i)}, Kind: kinds[i%len(kinds)],
+		namespaces[i%len(namespaces)], Name: fmt.Sprintf("evt-%03d", i)}, ObjectKind: kinds[i%len(kinds)],
 
 			Type:         types[i%len(types)],
 			Source:       sources[i%len(sources)],
@@ -78,8 +78,8 @@ func TestClusterEventQueryIdentityIncludesEventNamespace(t *testing.T) {
 
 func TestNamespaceEventsQueryFacetsFilterAndKeepStructuralScopeOptions(t *testing.T) {
 	items := []EventSummary{
-		{Ref: resourcemodel.ResourceRef{Namespace: "team-a", Name: "normal"}, Kind: "Pod", Type: "Normal", Reason: "Started", Source: "kubelet"},
-		{Ref: resourcemodel.ResourceRef{Namespace: "team-a", Name: "warning"}, Kind: "Pod", Type: "Warning", Reason: "BackOff", Source: "node-controller"},
+		{Ref: resourcemodel.ResourceRef{Namespace: "team-a", Name: "normal"}, ObjectKind: "Pod", Type: "Normal", Reason: "Started", Source: "kubelet"},
+		{Ref: resourcemodel.ResourceRef{Namespace: "team-a", Name: "warning"}, ObjectKind: "Pod", Type: "Warning", Reason: "BackOff", Source: "node-controller"},
 	}
 	page := applyTypedTableQueryViaStore(
 		items,

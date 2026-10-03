@@ -196,7 +196,7 @@ type settingsObjPanelLogs struct {
 // range, so the client can't push values outside these limits; clamping again
 // in the setter is defence in depth.
 const (
-	defaultObjPanelLogsBufferMaxSize       = 1000
+	defaultObjPanelLogsBufferMaxSize       = 5000
 	minObjPanelLogsBufferMaxSize           = 100
 	maxObjPanelLogsBufferMaxSize           = 10000
 	defaultObjPanelLogsAPITimestampFormat  = "YYYY-MM-DDTHH:mm:ss.SSS[Z]"

@@ -53,8 +53,12 @@ type NodeMaintenanceSnapshotPayloadState = ReturnType<typeof useRefreshScopedDom
   data: NodeMaintenanceSnapshotPayload | null;
 };
 
-const toDrainOperationError = (value: unknown, fallback: string): Error =>
-  value instanceof Error ? value : new Error(typeof value === 'string' ? value : fallback);
+const toDrainOperationError = (value: unknown, fallback: string): Error => {
+  if (value instanceof Error) {
+    return value;
+  }
+  return new Error(typeof value === 'string' ? value : fallback);
+};
 
 const DrainNodeModal = ({
   isOpen,

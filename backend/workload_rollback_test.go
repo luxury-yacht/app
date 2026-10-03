@@ -524,7 +524,7 @@ func TestRollbackWorkloadDeployment(t *testing.T) {
 	app := buildRevisionHistoryGateway(client)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	detailKey := objectDetailCacheKey("Deployment", "default", "webapp")
-	app.responseCacheStore("config:ctx", detailKey, "stale")
+	app.seedResponseCache("config:ctx", detailKey, "stale")
 
 	err := app.rollbackWorkloadAction(ObjectActionTargetRef{ClusterID: "config:ctx", Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "webapp"}, 1)
 	require.NoError(t, err)

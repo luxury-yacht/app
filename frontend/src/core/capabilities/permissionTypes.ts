@@ -92,5 +92,4 @@ export interface PermissionQueryDiagnostics {
   }>;
 }
 
-export type PermissionKey = string;
-export type PermissionMap = Map<PermissionKey, PermissionStatus>;
+export type PermissionMap = Map<string, PermissionStatus>;

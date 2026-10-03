@@ -14,7 +14,7 @@ import {
   type KeyBinding,
   keymap,
 } from '@codemirror/view';
-import { readClipboardText } from '@core/desktop-runtime';
+import { readClipboardText, writeClipboardText } from '@core/desktop-runtime';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { RegexSearchIcon } from '@shared/components/icons/LogIcons';
@@ -481,7 +481,7 @@ const YamlEditor = ({
             disabled: !hasSelection,
             onClick: () => {
               if (selectedText) {
-                void navigator.clipboard.writeText(selectedText);
+                void writeClipboardText(selectedText);
               }
             },
           });

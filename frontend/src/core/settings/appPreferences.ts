@@ -171,7 +171,7 @@ const PALETTE_BRIGHTNESS_MAX = 50;
 
 export const OBJ_PANEL_LOGS_BUFFER_MIN_SIZE = 100;
 export const OBJ_PANEL_LOGS_BUFFER_MAX_SIZE = 10000;
-export const OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE = 1000;
+export const OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE = 5000;
 export const KUBERNETES_CLIENT_QPS_MIN = 1;
 export const KUBERNETES_CLIENT_QPS_MAX = 5000;
 export const KUBERNETES_CLIENT_QPS_DEFAULT = 200;
@@ -1266,32 +1266,36 @@ const normalizePreferences = (
   return preferences;
 };
 
-const hydrateLatestPreferences = async (): Promise<HydratedAppPreferences> => {
-  while (true) {
-    while (pendingMutations.length) {
-      await pendingMutations[pendingMutations.length - 1].completion.catch(() => undefined);
-    }
-    const revision = preferenceRevision;
-    const snapshot = await fetchPreferenceSnapshot();
-    if (revision !== preferenceRevision) {
-      continue;
-    }
-    preferenceSchemaByKey = snapshot.metadata;
-    confirmedPreferences = normalizePreferences(snapshot.settings, snapshot.failed);
-    anonymizedIdCache = snapshot.settings?.anonymizedId?.trim() ?? '';
-    hydrated = true;
-    persistAppearanceModeToLocalStorage(confirmedPreferences.appearanceMode);
-    confirmedStorage = projectAppearanceStorage(
-      captureLocalStorageSnapshot(),
-      confirmedPreferences,
-      {
-        persistAppearanceMode: confirmedPreferences.appearanceMode,
-        persistAppearanceBootstrap: true,
-      }
-    );
-    publishPreferences();
-    return { ...preferenceCache, anonymizedId: anonymizedIdCache };
+// Waits until no preference change is being saved, including changes queued
+// while waiting.
+const settlePendingMutations = async (): Promise<void> => {
+  const latest = pendingMutations[pendingMutations.length - 1];
+  if (!latest) {
+    return;
   }
+  await latest.completion.catch(() => undefined);
+  return settlePendingMutations();
+};
+
+const hydrateLatestPreferences = async (): Promise<HydratedAppPreferences> => {
+  await settlePendingMutations();
+  const revision = preferenceRevision;
+  const snapshot = await fetchPreferenceSnapshot();
+  if (revision !== preferenceRevision) {
+    // A preference changed while the snapshot was read; read it again.
+    return hydrateLatestPreferences();
+  }
+  preferenceSchemaByKey = snapshot.metadata;
+  confirmedPreferences = normalizePreferences(snapshot.settings, snapshot.failed);
+  anonymizedIdCache = snapshot.settings?.anonymizedId?.trim() ?? '';
+  hydrated = true;
+  persistAppearanceModeToLocalStorage(confirmedPreferences.appearanceMode);
+  confirmedStorage = projectAppearanceStorage(captureLocalStorageSnapshot(), confirmedPreferences, {
+    persistAppearanceMode: confirmedPreferences.appearanceMode,
+    persistAppearanceBootstrap: true,
+  });
+  publishPreferences();
+  return { ...preferenceCache, anonymizedId: anonymizedIdCache };
 };
 
 export const hydrateAppPreferences = async (options?: {
@@ -1704,11 +1708,9 @@ export const saveTheme = async (theme: types.Theme): Promise<void> => {
   await SaveTheme(theme);
 };
 
-export const validateThemeClusterPattern = async (
+export const validateThemeClusterPattern = (
   pattern: string
-): Promise<types.ThemeClusterPatternValidationResult> => {
-  return ValidateThemeClusterPattern(pattern);
-};
+): Promise<types.ThemeClusterPatternValidationResult> => ValidateThemeClusterPattern(pattern);
 
 // Deletes a theme by its ID from the backend.
 export const deleteTheme = async (id: string): Promise<void> => {

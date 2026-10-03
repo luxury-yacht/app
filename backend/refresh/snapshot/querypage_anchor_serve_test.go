@@ -6,6 +6,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"k8s.io/utils/ptr"
 )
 
 // anchorFor builds a valid same-cluster anchor ref for typed serve tests.
@@ -269,7 +270,7 @@ func TestPerBuildAnchorOnMetricSortRanksByOverlaidUsage(t *testing.T) {
 	for i := range items {
 		items[i] = PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: fmt.Sprintf("pod-%d", i)}, // Overlaid usage: descending as names ascend, so cpu order is the
 			// REVERSE of name order — an anchor rank must follow cpu, not name.
-			CPUUsage: fmt.Sprintf("%dm", (10-i)*100),
+			CPUUsageMilli: ptr.To(int64((10 - i) * 100)),
 		}
 	}
 	query := typedTableQuery{
@@ -316,7 +317,7 @@ func TestAdapterAnchorKeyMatchesKey(t *testing.T) {
 		{"quotas", quotaTableQueryAdapter().AnchorKey, quotaTableQueryAdapter().Key(QuotaSummary{Ref: resourcemodel.ResourceRef{Kind: "ResourceQuota", Namespace: "ns-a", Name: "obj"}}), "ResourceQuota", "ns-a", "obj"},
 		{"rbac", rbacTableQueryAdapter().AnchorKey, rbacTableQueryAdapter().Key(RBACSummary{Ref: resourcemodel.ResourceRef{Kind: "Role", Namespace: "ns-a", Name: "obj"}}), "Role", "ns-a", "obj"},
 		{"helm", helmTableQueryAdapter().AnchorKey, helmTableQueryAdapter().Key(NamespaceHelmSummary{Ref: resourcemodel.ResourceRef{Namespace: "ns-a", Name: "obj"}}), "HelmRelease", "ns-a", "obj"},
-		{"events", namespacedEventTableQueryAdapter().AnchorKey, namespacedEventTableQueryAdapter().Key(EventSummary{Ref: resourcemodel.ResourceRef{Namespace: "ns-a", Name: "obj"}, Kind: "Pod"}), "Event", "ns-a", "obj"},
+		{"events", namespacedEventTableQueryAdapter().AnchorKey, namespacedEventTableQueryAdapter().Key(EventSummary{Ref: resourcemodel.ResourceRef{Namespace: "ns-a", Name: "obj"}, ObjectKind: "Pod"}), "Event", "ns-a", "obj"},
 		{"cluster-events", clusterEventTableQueryAdapter().AnchorKey, clusterEventTableQueryAdapter().Key(ClusterEventEntry{Ref: resourcemodel.ResourceRef{Namespace: "ns-a", Name: "evt-1"}}), "Event", "ns-a", "evt-1"},
 		{"pods", podTableQueryAdapter().AnchorKey, podTableQueryAdapter().Key(PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "ns-a", Name: "obj"}}), "Pod", "ns-a", "obj"},
 		{"workloads", workloadTableQueryAdapter().AnchorKey, workloadTableQueryAdapter().Key(WorkloadSummary{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "ns-a", Name: "obj"}}), "Deployment", "ns-a", "obj"},

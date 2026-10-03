@@ -8,6 +8,7 @@
 package types
 
 import (
+	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -157,30 +158,32 @@ type ContainerLogsEntry struct {
 	IsEphemeral bool   `json:"isEphemeral,omitempty"` // Whether this is from an ephemeral/debug container
 }
 
+// PodContainer names one of a pod's containers and says whether it is an init
+// or an ephemeral (debug) container.
+type PodContainer struct {
+	Name        string `json:"name"`
+	IsInit      bool   `json:"isInit"`
+	IsEphemeral bool   `json:"isEphemeral"`
+}
+
 // ContainerLogsFetchRequest represents parameters for fetching logs
 type ContainerLogsFetchRequest struct {
-	Scope            string   `json:"scope,omitempty"`
-	PodFilter        string   `json:"podFilter,omitempty"`
-	PodInclude       string   `json:"podInclude,omitempty"`
-	PodExclude       string   `json:"podExclude,omitempty"`
-	SelectedFilters  []string `json:"selectedFilters,omitempty"`
-	MatchNone        bool     `json:"matchNone,omitempty"`
-	Container        string   `json:"container,omitempty"` // empty means all containers
-	IncludeInit      *bool    `json:"includeInit,omitempty"`
-	IncludeEphemeral *bool    `json:"includeEphemeral,omitempty"`
-	ContainerState   string   `json:"containerState,omitempty"`
-	Include          string   `json:"include,omitempty"`
-	Exclude          string   `json:"exclude,omitempty"`
-	Previous         bool     `json:"previous"`
-	TailLines        int      `json:"tailLines"`
-	SinceSeconds     int64    `json:"sinceSeconds,omitempty"`
+	Scope           string   `json:"scope,omitempty"`
+	SelectedFilters []string `json:"selectedFilters,omitempty"`
+	MatchNone       bool     `json:"matchNone,omitempty"`
+	Previous        bool     `json:"previous"`
+	TailLines       int      `json:"tailLines"`
 }
 
 // ContainerLogsFetchResponse represents the response from FetchContainerLogs
 type ContainerLogsFetchResponse struct {
-	Entries  []ContainerLogsEntry `json:"entries"`
-	Warnings []string             `json:"warnings,omitempty"`
-	Error    string               `json:"error,omitempty"`
+	Entries  []ContainerLogsEntry    `json:"entries"`
+	Warnings []containerlogs.Warning `json:"warnings,omitempty"`
+	// Issues lists each container whose logs could not be read.
+	Issues []containerlogs.TargetIssue `json:"issues,omitempty"`
+	// Error is set when the request failed as a whole, including when no
+	// container could be read.
+	Error string `json:"error,omitempty"`
 }
 
 // NodeLogSource represents a discovered node log source that can be fetched directly.

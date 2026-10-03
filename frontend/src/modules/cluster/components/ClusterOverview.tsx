@@ -48,14 +48,14 @@ interface ClusterOverviewProps {
 const EMPTY_OVERVIEW: ClusterOverviewPayload = {
   clusterType: '',
   clusterVersion: '',
-  cpuUsage: '0',
-  cpuRequests: '0',
-  cpuLimits: '0',
-  cpuAllocatable: '0',
-  memoryUsage: '0',
-  memoryRequests: '0',
-  memoryLimits: '0',
-  memoryAllocatable: '0',
+  cpuUsageMilli: 0,
+  cpuRequestsMilli: 0,
+  cpuLimitsMilli: 0,
+  cpuAllocatableMilli: 0,
+  memoryUsageBytes: 0,
+  memoryRequestsBytes: 0,
+  memoryLimitsBytes: 0,
+  memoryAllocatableBytes: 0,
   totalNodes: 0,
   fargateNodes: 0,
   regularNodes: 0,
@@ -81,10 +81,10 @@ const EMPTY_OVERVIEW: ClusterOverviewPayload = {
   totalDaemonSets: 0,
   totalCronJobs: 0,
   workloadResourceUsage: {
-    deployments: { cpuUsage: '0', memoryUsage: '0' },
-    daemonSets: { cpuUsage: '0', memoryUsage: '0' },
-    statefulSets: { cpuUsage: '0', memoryUsage: '0' },
-    jobs: { cpuUsage: '0', memoryUsage: '0' },
+    deployments: { cpuUsageMilli: 0, memoryUsageBytes: 0 },
+    daemonSets: { cpuUsageMilli: 0, memoryUsageBytes: 0 },
+    statefulSets: { cpuUsageMilli: 0, memoryUsageBytes: 0 },
+    jobs: { cpuUsageMilli: 0, memoryUsageBytes: 0 },
   },
   readyNodes: 0,
   notReadyNodes: 0,
@@ -392,11 +392,8 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   });
 
   const overviewResourceMetrics = clusterOverviewResourceMetrics(displayOverview, metricsInfo);
-  const memoryResourceMetrics = calculateResourceMetrics(
-    overviewResourceMetrics.memory ?? {},
-    'memory'
-  );
-  const cpuResourceMetrics = calculateResourceMetrics(overviewResourceMetrics.cpu ?? {}, 'cpu');
+  const memoryResourceMetrics = calculateResourceMetrics(overviewResourceMetrics.memory ?? {});
+  const cpuResourceMetrics = calculateResourceMetrics(overviewResourceMetrics.cpu ?? {});
   // Without node access the cluster's allocatable capacity is unknown, so the
   // summaries drop the "of <allocatable>" denominator and the utilization
   // percentages dash out below (calculateResourceMetrics would otherwise

@@ -1,4 +1,5 @@
 import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
+
 /**
  * frontend/src/modules/cluster/components/ClusterOverview.test.tsx
  *
@@ -18,6 +19,9 @@ import { eventBus } from '@/core/events';
 import type { ClusterOverviewPayload, ClusterOverviewSnapshotPayload } from '@/core/refresh/types';
 import { requireValue } from '@/test-utils/requireValue';
 import ClusterOverview from './ClusterOverview';
+
+const MIB = 1024 ** 2;
+const GIB = 1024 ** 3;
 
 const {
   mockRefreshOrchestrator,
@@ -71,7 +75,9 @@ const {
     browserOpenURLMock: vi.fn(),
     openWithObjectMock: vi.fn(),
     setObjectPanelActiveTabMock: vi.fn(),
-    canResolveEventObjectReferenceMock: vi.fn<(input: { object?: string }) => boolean>(() => false),
+    canResolveEventObjectReferenceMock: vi.fn<(input: { objectUid?: string }) => boolean>(
+      () => false
+    ),
     resolveEventObjectReferenceMock: vi.fn(),
     requestGridTableFiltersMock: vi.fn(),
   };
@@ -323,14 +329,14 @@ describe('ClusterOverview', () => {
         ...EMPTY_OVERVIEW_DATA,
         clusterType: 'EKS',
         clusterVersion: '1.26.3',
-        cpuUsage: '400m',
-        cpuRequests: '500m',
-        cpuLimits: '1000m',
-        cpuAllocatable: '2000m',
-        memoryUsage: '2Gi',
-        memoryRequests: '3Gi',
-        memoryLimits: '8Gi',
-        memoryAllocatable: '16Gi',
+        cpuUsageMilli: 400,
+        cpuRequestsMilli: 500,
+        cpuLimitsMilli: 1000,
+        cpuAllocatableMilli: 2000,
+        memoryUsageBytes: 2 * GIB,
+        memoryRequestsBytes: 3 * GIB,
+        memoryLimitsBytes: 8 * GIB,
+        memoryAllocatableBytes: 16 * GIB,
         totalNodes: 3,
         fargateNodes: 1,
         regularNodes: 2,
@@ -409,14 +415,14 @@ describe('ClusterOverview', () => {
     domainStateRef.current = createDomainState('ready', {
       overview: {
         ...EMPTY_OVERVIEW_DATA,
-        cpuUsage: '2500m',
-        cpuRequests: '3000m',
-        cpuLimits: '4000m',
-        cpuAllocatable: '2000m',
-        memoryUsage: '1Gi',
-        memoryRequests: '1Gi',
-        memoryLimits: '1Gi',
-        memoryAllocatable: '2Gi',
+        cpuUsageMilli: 2500,
+        cpuRequestsMilli: 3000,
+        cpuLimitsMilli: 4000,
+        cpuAllocatableMilli: 2000,
+        memoryUsageBytes: GIB,
+        memoryRequestsBytes: GIB,
+        memoryLimitsBytes: GIB,
+        memoryAllocatableBytes: 2 * GIB,
       },
     });
 
@@ -658,10 +664,10 @@ describe('ClusterOverview', () => {
       overview: {
         ...EMPTY_OVERVIEW_DATA,
         workloadResourceUsage: {
-          deployments: { cpuUsage: '250m', memoryUsage: '300.0 Mi' },
-          daemonSets: { cpuUsage: '50m', memoryUsage: '100.0 Mi' },
-          statefulSets: { cpuUsage: '75m', memoryUsage: '120.0 Mi' },
-          jobs: { cpuUsage: '125m', memoryUsage: '256.0 Mi' },
+          deployments: { cpuUsageMilli: 250, memoryUsageBytes: 300 * MIB },
+          daemonSets: { cpuUsageMilli: 50, memoryUsageBytes: 100 * MIB },
+          statefulSets: { cpuUsageMilli: 75, memoryUsageBytes: 120 * MIB },
+          jobs: { cpuUsageMilli: 125, memoryUsageBytes: 256 * MIB },
         },
       },
     });
@@ -701,10 +707,10 @@ describe('ClusterOverview', () => {
     expect(
       container.querySelector('[data-testid="cluster-workload-usage-memory-deployment"]')
         ?.textContent
-    ).toContain('300.0 Mi');
+    ).toContain('300Mi');
     expect(
       container.querySelector('[data-testid="cluster-workload-usage-memory-job"]')?.textContent
-    ).toContain('256.0 Mi');
+    ).toContain('256Mi');
   });
 
   it('shows an inline error while retaining the zero skeleton when permissions fail', async () => {
@@ -913,8 +919,17 @@ describe('ClusterOverview', () => {
             objectKind: 'Pod',
             objectName: 'api-7c8d9',
             objectNamespace: 'default',
-            objectApiVersion: '',
             objectUid: 'pod-uid-1',
+            // The backend sends a display-only link when the event has no apiVersion.
+            involvedObject: {
+              display: {
+                clusterId: 'cluster-1',
+                kind: 'Pod',
+                namespace: 'default',
+                name: 'api-7c8d9',
+                uid: 'pod-uid-1',
+              },
+            },
           },
         ],
       },
@@ -933,11 +948,18 @@ describe('ClusterOverview', () => {
       await Promise.resolve();
     });
 
+    // The resolver gets the backend's link, never a kind to guess from.
     expect(resolveEventObjectReferenceMock).toHaveBeenCalledWith({
-      object: 'Pod/api-7c8d9',
+      involvedObject: {
+        display: {
+          clusterId: 'cluster-1',
+          kind: 'Pod',
+          namespace: 'default',
+          name: 'api-7c8d9',
+          uid: 'pod-uid-1',
+        },
+      },
       objectUid: 'pod-uid-1',
-      objectApiVersion: '',
-      objectNamespace: 'default',
       clusterId: 'cluster-1',
       clusterName: 'cluster-1',
     });
@@ -960,7 +982,7 @@ describe('ClusterOverview', () => {
   it('uses one warning-events Tab stop and arrows to focus every row', async () => {
     setWarningEvents(['first', 'unavailable', 'last']);
     canResolveEventObjectReferenceMock.mockImplementation(
-      (input) => input.object !== 'Pod/unavailable'
+      (input) => input.objectUid !== 'pod-unavailable'
     );
     const { container, cleanup } = renderClusterOverview(true);
     cleanupRoot = cleanup;
@@ -1017,7 +1039,7 @@ describe('ClusterOverview', () => {
     await act(async () => rows[1].click());
     expect(document.activeElement).toBe(rows[1]);
     expect(resolveEventObjectReferenceMock).toHaveBeenCalledWith(
-      expect.objectContaining({ clusterId: 'cluster-1', object: 'Pod/last' })
+      expect.objectContaining({ clusterId: 'cluster-1', objectUid: 'pod-last' })
     );
     for (const key of ['Enter', ' ']) {
       expect((await pressOverviewKey(key)).defaultPrevented).toBe(false);
@@ -1065,10 +1087,10 @@ describe('ClusterOverview', () => {
       overview: {
         ...EMPTY_OVERVIEW_DATA,
         clusterType: 'Unmanaged',
-        cpuUsage: '400m',
-        cpuLimits: '1000m',
-        memoryUsage: '2Gi',
-        memoryLimits: '8Gi',
+        cpuUsageMilli: 400,
+        cpuLimitsMilli: 1000,
+        memoryUsageBytes: 2 * GIB,
+        memoryLimitsBytes: 8 * GIB,
         totalPods: 42,
         totalNamespaces: 6,
         unavailableResources: ['core/nodes'],
@@ -1133,8 +1155,8 @@ describe('ClusterOverview', () => {
         clusterType: 'Unmanaged',
         totalNodes: 2,
         readyNodes: 2,
-        cpuUsage: '400m',
-        cpuAllocatable: '2000m',
+        cpuUsageMilli: 400,
+        cpuAllocatableMilli: 2000,
         unavailableResources: ['core/pods', 'core/namespaces'],
       },
     });
@@ -1310,14 +1332,14 @@ describe('ClusterOverview', () => {
 const EMPTY_OVERVIEW_DATA: ClusterOverviewPayload = {
   clusterType: 'EKS',
   clusterVersion: '1.27.1',
-  cpuUsage: '0',
-  cpuRequests: '0',
-  cpuLimits: '0',
-  cpuAllocatable: '0',
-  memoryUsage: '0',
-  memoryRequests: '0',
-  memoryLimits: '0',
-  memoryAllocatable: '0',
+  cpuUsageMilli: 0,
+  cpuRequestsMilli: 0,
+  cpuLimitsMilli: 0,
+  cpuAllocatableMilli: 0,
+  memoryUsageBytes: 0,
+  memoryRequestsBytes: 0,
+  memoryLimitsBytes: 0,
+  memoryAllocatableBytes: 0,
   totalNodes: 0,
   fargateNodes: 0,
   regularNodes: 0,
@@ -1342,10 +1364,10 @@ const EMPTY_OVERVIEW_DATA: ClusterOverviewPayload = {
   totalDaemonSets: 0,
   totalCronJobs: 0,
   workloadResourceUsage: {
-    deployments: { cpuUsage: '0', memoryUsage: '0' },
-    daemonSets: { cpuUsage: '0', memoryUsage: '0' },
-    statefulSets: { cpuUsage: '0', memoryUsage: '0' },
-    jobs: { cpuUsage: '0', memoryUsage: '0' },
+    deployments: { cpuUsageMilli: 0, memoryUsageBytes: 0 },
+    daemonSets: { cpuUsageMilli: 0, memoryUsageBytes: 0 },
+    statefulSets: { cpuUsageMilli: 0, memoryUsageBytes: 0 },
+    jobs: { cpuUsageMilli: 0, memoryUsageBytes: 0 },
   },
   readyNodes: 0,
   notReadyNodes: 0,
@@ -1368,8 +1390,19 @@ function setWarningEvents(ids: string[]) {
         objectKind: 'Pod',
         objectName: id,
         objectNamespace: 'default',
-        objectApiVersion: 'v1',
         objectUid: `pod-${id}`,
+        involvedObject: {
+          ref: {
+            clusterId: 'cluster-1',
+            group: '',
+            version: 'v1',
+            kind: 'Pod',
+            resource: 'pods',
+            namespace: 'default',
+            name: id,
+            uid: `pod-${id}`,
+          },
+        },
       })),
     },
   });

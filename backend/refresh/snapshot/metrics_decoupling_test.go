@@ -15,7 +15,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -37,8 +36,8 @@ func TestPodSnapshotWithoutProviderServesNoDataAndNoMetricClock(t *testing.T) {
 
 	payload := snapshot.Payload.(PodSnapshot)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, streamrows.MetricsNoData, payload.Rows[0].CPUUsage)
-	require.Equal(t, streamrows.MetricsNoData, payload.Rows[0].MemUsage)
+	require.Nil(t, payload.Rows[0].CPUUsageMilli)
+	require.Nil(t, payload.Rows[0].MemoryUsageBytes)
 	require.NotContains(t, snapshot.SourceVersions, "metric")
 }
 
@@ -62,8 +61,8 @@ func TestNodeSnapshotWithoutProviderServesNoDataAndNoMetricClock(t *testing.T) {
 
 	payload := snapshot.Payload.(NodeSnapshot)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, streamrows.MetricsNoData, payload.Rows[0].CPUUsage)
-	require.Equal(t, streamrows.MetricsNoData, payload.Rows[0].MemoryUsage)
+	require.Nil(t, payload.Rows[0].CPUUsageMilli)
+	require.Nil(t, payload.Rows[0].MemoryUsageBytes)
 	require.NotContains(t, snapshot.SourceVersions, "metric")
 }
 
@@ -99,7 +98,7 @@ func TestWorkloadSnapshotWithoutProviderServesNoDataAndNoMetricClock(t *testing.
 
 	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "-", payload.Rows[0].CPUUsage)
-	require.Equal(t, "-", payload.Rows[0].MemUsage)
+	require.Nil(t, payload.Rows[0].CPUUsageMilli)
+	require.Nil(t, payload.Rows[0].MemoryUsageBytes)
 	require.NotContains(t, snapshot.SourceVersions, "metric")
 }

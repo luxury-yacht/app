@@ -27,6 +27,7 @@ changed path crosses that boundary.
 
 - `backend/operations_coordinator.go`
 - `backend/runtime_operations.go`
+- `backend/internal/containerlogs`
 - `backend/refresh/containerlogsstream`
 - `backend/resources/pods/logs.go`
 - `backend/resources/nodes/logs.go`

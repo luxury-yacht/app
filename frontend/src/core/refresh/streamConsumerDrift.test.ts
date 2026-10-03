@@ -30,7 +30,6 @@ import { refreshDomainContract } from './domainRegistry';
 const STREAM_CLASS_ORCHESTRATORS = new Set([
   'resource-stream',
   'doorbell-snapshot',
-  'event-stream',
   'catalog-stream',
 ]);
 

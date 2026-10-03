@@ -14,6 +14,8 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 	cgotesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
+
+	"github.com/luxury-yacht/app/backend/internal/config"
 )
 
 func TestObjectEventsBuilderUsesCacheWhenSynced(t *testing.T) {
@@ -253,8 +255,7 @@ func TestObjectEventsBuilderPayloadCarriesEventIdentityAndFullInvolvedObjectRef(
 	if event.InvolvedObjectName != "api" ||
 		event.InvolvedObjectKind != "Deployment" ||
 		event.InvolvedObjectNamespace != "default" ||
-		event.InvolvedObjectUID != "deployment-uid-1" ||
-		event.InvolvedObjectAPIVersion != "apps/v1" {
+		event.InvolvedObjectUID != "deployment-uid-1" {
 		t.Fatalf("display involved-object fields were not preserved: %+v", event)
 	}
 	if event.InvolvedObject == nil || event.InvolvedObject.Ref == nil {
@@ -358,8 +359,8 @@ func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T)
 		if len(payload.Events) != 1 {
 			t.Fatalf("expected exactly one event, got %d (events merged across CRDs?)", len(payload.Events))
 		}
-		if got := payload.Events[0].InvolvedObjectAPIVersion; got != "rds.services.k8s.aws/v1alpha1" {
-			t.Fatalf("expected ACK event, got apiVersion=%q", got)
+		if got := payload.Events[0].Ref.Name; got != "evt-ack" {
+			t.Fatalf("expected ACK event, got %q", got)
 		}
 
 		// And the kinda.rocks scope picks the OTHER CRD.
@@ -374,8 +375,8 @@ func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T)
 		if len(payload.Events) != 1 {
 			t.Fatalf("expected exactly one event, got %d", len(payload.Events))
 		}
-		if got := payload.Events[0].InvolvedObjectAPIVersion; got != "kinda.rocks/v1beta1" {
-			t.Fatalf("expected kinda.rocks event, got apiVersion=%q", got)
+		if got := payload.Events[0].Ref.Name; got != "evt-kinda" {
+			t.Fatalf("expected kinda.rocks event, got %q", got)
 		}
 	})
 
@@ -418,8 +419,8 @@ func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T)
 		if len(payload.Events) != 1 {
 			t.Fatalf("expected exactly one event, got %d (cache post-filter missed?)", len(payload.Events))
 		}
-		if got := payload.Events[0].InvolvedObjectAPIVersion; got != "rds.services.k8s.aws/v1alpha1" {
-			t.Fatalf("expected ACK event, got apiVersion=%q", got)
+		if got := payload.Events[0].Ref.Name; got != "evt-ack" {
+			t.Fatalf("expected ACK event, got %q", got)
 		}
 	})
 
@@ -434,5 +435,145 @@ func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T)
 		if _, err := builder.Build(context.Background(), "default:DBInstance:primary"); err == nil {
 			t.Fatal("expected kind-only scope to be rejected")
 		}
+	})
+}
+
+// Truncation must keep the most recently observed events, as its warning
+// claims; an index lookup returns events in arbitrary order.
+func TestObjectEventsBuilderKeepsTheMostRecentEventsWhenTruncating(t *testing.T) {
+	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
+		objectEventIndexName: objectEventIndex,
+	})
+	builder := &ObjectEventsBuilder{
+		client:       fake.NewClientset(),
+		eventLister:  corelisters.NewEventLister(indexer),
+		eventIndexer: indexer,
+		eventSynced:  func() bool { return true },
+	}
+	limit := config.SnapshotObjectEventsLimit
+	base := time.Now().Add(-time.Hour)
+	newest := make(map[string]bool, limit)
+	for i := 0; i < 2*limit; i++ {
+		name := fmt.Sprintf("evt-%04d", i)
+		evt := &corev1.Event{
+			ObjectMeta:     metav1.ObjectMeta{Name: name, Namespace: "default", ResourceVersion: fmt.Sprint(i + 1)},
+			InvolvedObject: corev1.ObjectReference{Name: "demo", Namespace: "default", Kind: "Pod", APIVersion: "v1"},
+			LastTimestamp:  metav1.NewTime(base.Add(time.Duration(i) * time.Second)),
+		}
+		if i >= limit {
+			newest[name] = true
+		}
+		if err := indexer.Add(evt); err != nil {
+			t.Fatalf("seed event: %v", err)
+		}
+	}
+
+	snap, err := builder.Build(context.Background(), "default:/v1:Pod:demo")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectEventsSnapshotPayload)
+	if len(payload.Events) != limit || !snap.Stats.Truncated {
+		t.Fatalf("expected a truncated page of %d events, got %d (truncated=%v)", limit, len(payload.Events), snap.Stats.Truncated)
+	}
+	for _, event := range payload.Events {
+		if !newest[event.Ref.Name] {
+			t.Fatalf("truncated page kept older event %s instead of the %d most recent", event.Ref.Name, limit)
+		}
+	}
+}
+
+// An object exists once per API group; its served versions are views of it.
+// Events a controller recorded against another served version of the same
+// group, or with no apiVersion at all, belong to the object.
+func TestObjectEventsBuilderMatchesTheInvolvedObjectsGroupNotItsVersion(t *testing.T) {
+	v1Event := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{Name: "evt-v1", Namespace: "default", ResourceVersion: "10"},
+		InvolvedObject: corev1.ObjectReference{
+			Name: "web", Namespace: "default", Kind: "HorizontalPodAutoscaler", APIVersion: "autoscaling/v1",
+		},
+	}
+	unversionedEvent := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{Name: "evt-unversioned", Namespace: "default", ResourceVersion: "11"},
+		InvolvedObject: corev1.ObjectReference{
+			Name: "web", Namespace: "default", Kind: "HorizontalPodAutoscaler",
+		},
+	}
+	otherGroupEvent := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{Name: "evt-other-group", Namespace: "default", ResourceVersion: "12"},
+		InvolvedObject: corev1.ObjectReference{
+			Name: "web", Namespace: "default", Kind: "HorizontalPodAutoscaler", APIVersion: "example.io/v1",
+		},
+	}
+	events := []*corev1.Event{v1Event, unversionedEvent, otherGroupEvent}
+	scope := "default:autoscaling/v2:HorizontalPodAutoscaler:web"
+	want := map[string]bool{"evt-v1": true, "evt-unversioned": true}
+
+	requireNames := func(t *testing.T, builder *ObjectEventsBuilder) {
+		t.Helper()
+		snap, err := builder.Build(context.Background(), scope)
+		if err != nil {
+			t.Fatalf("Build returned error: %v", err)
+		}
+		got := map[string]bool{}
+		for _, event := range snap.Payload.(ObjectEventsSnapshotPayload).Events {
+			got[event.Ref.Name] = true
+		}
+		if len(got) != len(want) || !got["evt-v1"] || !got["evt-unversioned"] {
+			t.Fatalf("expected events %v, got %v", want, got)
+		}
+	}
+
+	t.Run("cache index", func(t *testing.T) {
+		indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
+			objectEventIndexName: objectEventIndex,
+		})
+		for _, evt := range events {
+			if err := indexer.Add(evt); err != nil {
+				t.Fatalf("seed event: %v", err)
+			}
+		}
+		requireNames(t, &ObjectEventsBuilder{
+			client:       fake.NewClientset(),
+			eventLister:  corelisters.NewEventLister(indexer),
+			eventIndexer: indexer,
+			eventSynced:  func() bool { return true },
+		})
+	})
+
+	// Without the object index (AddIndexers failed after the informer started)
+	// the builder scans the cache and must match exactly the same events.
+	t.Run("cache scan", func(t *testing.T) {
+		indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+		for _, evt := range events {
+			if err := indexer.Add(evt); err != nil {
+				t.Fatalf("seed event: %v", err)
+			}
+		}
+		requireNames(t, &ObjectEventsBuilder{
+			client:      fake.NewClientset(),
+			eventLister: corelisters.NewEventLister(indexer),
+			eventSynced: func() bool { return true },
+		})
+	})
+
+	t.Run("api fallback", func(t *testing.T) {
+		client := fake.NewClientset()
+		client.PrependReactor("list", "events", func(action cgotesting.Action) (bool, runtime.Object, error) {
+			selector := action.(cgotesting.ListAction).GetListRestrictions().Fields
+			list := &corev1.EventList{}
+			for _, evt := range events {
+				if selector.Matches(fields.Set{
+					"involvedObject.name":       evt.InvolvedObject.Name,
+					"involvedObject.namespace":  evt.InvolvedObject.Namespace,
+					"involvedObject.kind":       evt.InvolvedObject.Kind,
+					"involvedObject.apiVersion": evt.InvolvedObject.APIVersion,
+				}) {
+					list.Items = append(list.Items, *evt)
+				}
+			}
+			return true, list, nil
+		})
+		requireNames(t, &ObjectEventsBuilder{client: client, eventSynced: func() bool { return false }})
 	})
 }

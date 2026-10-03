@@ -5,9 +5,17 @@
  * Implements context logic for the UI layer.
  */
 
-import { onEvent } from '@core/desktop-runtime';
+import { onEvent, writeClipboardText } from '@core/desktop-runtime';
 import type React from 'react';
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type {
   RegisteredShortcut,
   ShortcutDefinition,
@@ -180,7 +188,7 @@ const cutTextEntrySelection = (element: TextEntryElement): boolean => {
   if (start === null || end === null || start === end) {
     return false;
   }
-  void navigator.clipboard.writeText(element.value.slice(start, end));
+  void writeClipboardText(element.value.slice(start, end));
   element.setRangeText('', start, end, 'end');
   element.dispatchEvent(new Event('input', { bubbles: true }));
   return true;
@@ -220,7 +228,7 @@ export const cutContentEditableSelection = (
     return false;
   }
   const root = selection ? resolveContentEditableRoot(selection) : null;
-  void navigator.clipboard.writeText(text);
+  void writeClipboardText(text);
   selection?.deleteFromDocument();
   dispatchContentEditableInput(root, 'deleteByCut', null);
   return true;
@@ -630,7 +638,7 @@ export function KeyboardProvider({ children, disabled = false }: Readonly<Keyboa
       }
       const text = deriveCopyText(window.getSelection());
       if (text) {
-        navigator.clipboard.writeText(text);
+        void writeClipboardText(text);
       }
     };
 
@@ -686,18 +694,32 @@ export function KeyboardProvider({ children, disabled = false }: Readonly<Keyboa
     [shortcuts]
   );
 
-  const value: KeyboardProviderValue = {
-    registerShortcut,
-    unregisterShortcut,
-    getAvailableShortcuts,
-    isShortcutAvailable,
-    setEnabled: setIsEnabled,
-    isEnabled: isEnabled && !disabled,
-    registerSurface,
-    unregisterSurface,
-    hasActiveBlockingSurface,
-    dispatchNativeAction,
-  };
+  const value = useMemo<KeyboardProviderValue>(
+    () => ({
+      registerShortcut,
+      unregisterShortcut,
+      getAvailableShortcuts,
+      isShortcutAvailable,
+      setEnabled: setIsEnabled,
+      isEnabled: isEnabled && !disabled,
+      registerSurface,
+      unregisterSurface,
+      hasActiveBlockingSurface,
+      dispatchNativeAction,
+    }),
+    [
+      registerShortcut,
+      unregisterShortcut,
+      getAvailableShortcuts,
+      isShortcutAvailable,
+      isEnabled,
+      disabled,
+      registerSurface,
+      unregisterSurface,
+      hasActiveBlockingSurface,
+      dispatchNativeAction,
+    ]
+  );
 
   return <KeyboardContext.Provider value={value}>{children}</KeyboardContext.Provider>;
 }

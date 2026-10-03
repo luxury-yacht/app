@@ -1,4 +1,5 @@
 import type { EditorView } from '@codemirror/view';
+import { writeClipboardText } from '@core/desktop-runtime';
 
 export function getCodeMirrorSelectedText(view: EditorView | null): string {
   if (!view) {
@@ -28,7 +29,7 @@ export function selectCodeMirrorContent(view: EditorView | null): boolean {
 }
 
 export function cutCodeMirrorSelection(view: EditorView | null): boolean {
-  if (!view || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+  if (!view) {
     return false;
   }
 
@@ -37,7 +38,7 @@ export function cutCodeMirrorSelection(view: EditorView | null): boolean {
     return false;
   }
 
-  void navigator.clipboard.writeText(text);
+  void writeClipboardText(text);
   view.dispatch({
     changes: view.state.selection.ranges
       .filter((range) => range.from !== range.to)
@@ -49,7 +50,7 @@ export function cutCodeMirrorSelection(view: EditorView | null): boolean {
 }
 
 export function copyCodeMirrorSelection(view: EditorView | null): boolean {
-  if (!view || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+  if (!view) {
     return false;
   }
 
@@ -58,6 +59,6 @@ export function copyCodeMirrorSelection(view: EditorView | null): boolean {
     return false;
   }
 
-  void navigator.clipboard.writeText(text);
+  void writeClipboardText(text);
   return true;
 }

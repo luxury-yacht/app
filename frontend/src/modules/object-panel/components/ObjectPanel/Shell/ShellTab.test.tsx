@@ -149,8 +149,13 @@ vi.mock('@utils/errorHandler', () => ({
   },
 }));
 
+const nativeClipboardMocks = vi.hoisted(() => ({
+  writeClipboardText: vi.fn<(text: string) => Promise<void>>(),
+}));
+
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
+  writeClipboardText: nativeClipboardMocks.writeClipboardText,
   onEvent: (name: string, handler: (payload: unknown) => void) => {
     eventRegistry.handlers[name] = handler;
     return () => {
@@ -211,6 +216,13 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
   ),
 }));
 
+// A container in the list the backend returns for a pod.
+const podContainer = (name: string, kind: { isInit?: boolean; isEphemeral?: boolean } = {}) => ({
+  name,
+  isInit: kind.isInit ?? false,
+  isEphemeral: kind.isEphemeral ?? false,
+});
+
 const flushAsync = () => act(() => Promise.resolve());
 const getLatestTerminal = () =>
   terminalMocks.instances.length > 0
@@ -245,9 +257,9 @@ describe('ShellTab', () => {
       }
     }
     globalThis.ResizeObserver = TestResizeObserver;
+    nativeClipboardMocks.writeClipboardText.mockReset().mockResolvedValue(undefined);
     const clipboardMock = {
       readText: vi.fn().mockResolvedValue(''),
-      writeText: vi.fn().mockResolvedValue(undefined),
     };
     if (!navigator.clipboard) {
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboardMock });
@@ -396,7 +408,7 @@ describe('ShellTab', () => {
 
     const handled = terminal?.triggerKey?.(event);
 
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('kubectl get pods');
+    expect(nativeClipboardMocks.writeClipboardText).toHaveBeenCalledWith('kubectl get pods');
     expect(event.preventDefault).toHaveBeenCalled();
     expect(event.stopPropagation).toHaveBeenCalled();
     expect(handled).toBe(false);
@@ -535,7 +547,7 @@ describe('ShellTab', () => {
       await Promise.resolve();
     });
 
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('kubectl get pods');
+    expect(nativeClipboardMocks.writeClipboardText).toHaveBeenCalledWith('kubectl get pods');
   });
 
   it('sends stdin data to the backend when the session is open', async () => {
@@ -742,21 +754,23 @@ describe('ShellTab', () => {
   });
 
   it('ignores container discovery from the previous cluster', async () => {
-    let finishDiscovery!: (containers: string[]) => void;
+    let finishDiscovery!: (containers: ReturnType<typeof podContainer>[]) => void;
     wailsMocks.GetPodContainers.mockReturnValueOnce(
       new Promise((resolve) => {
         finishDiscovery = resolve;
       })
-    ).mockResolvedValue(['beta-container']);
+    ).mockResolvedValue([podContainer('beta-container')]);
     await renderShellTab();
     await renderShellTab({ clusterId: 'beta:ctx' });
-    await act(async () => finishDiscovery(['alpha-container']));
+    await act(async () => finishDiscovery([podContainer('alpha-container')]));
     const selector = container.querySelector('select') as HTMLSelectElement;
     expect(Array.from(selector.options, (option) => option.value)).toEqual(['beta-container']);
   });
 
   it('clears discovered containers and their selection when the cluster changes', async () => {
-    wailsMocks.GetPodContainers.mockResolvedValueOnce(['alpha-container']).mockResolvedValue([]);
+    wailsMocks.GetPodContainers.mockResolvedValueOnce([
+      podContainer('alpha-container'),
+    ]).mockResolvedValue([]);
     await renderShellTab();
     await renderShellTab({ clusterId: 'beta:ctx', availableContainers: ['beta-container'] });
     clickConnectButton();
@@ -1221,7 +1235,11 @@ describe('ShellTab', () => {
   });
 
   it('includes debug containers in shell dropdown from backend container discovery', async () => {
-    wailsMocks.GetPodContainers.mockResolvedValue(['init-a (init)', 'app', 'debug-abc (debug)']);
+    wailsMocks.GetPodContainers.mockResolvedValue([
+      podContainer('init-a', { isInit: true }),
+      podContainer('app'),
+      podContainer('debug-abc', { isEphemeral: true }),
+    ]);
     await renderShellTab();
     await flushAsync();
 

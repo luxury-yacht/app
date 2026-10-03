@@ -6,24 +6,20 @@ import type {
   RefreshDomain,
 } from '@/core/refresh/types';
 
-export type ResourceMetricsSource =
-  | 'pods'
-  | 'namespace-workloads'
-  | 'nodes'
-  | 'cluster-overview'
-  | 'detail-replicaset';
+export type ResourceMetricsSource = 'pods' | 'namespace-workloads' | 'nodes' | 'cluster-overview';
 
 export type ResourceMetricsDomain = Extract<
   RefreshDomain,
   'pods' | 'namespace-workloads' | 'nodes' | 'cluster-overview'
 >;
 
+/** CPU values are millicores and memory values are bytes; undefined means no value. */
 export interface ResourceMetricValues {
-  usage?: string;
-  request?: string;
-  limit?: string;
-  capacity?: string;
-  allocatable?: string;
+  usage?: number;
+  request?: number;
+  limit?: number;
+  capacity?: number;
+  allocatable?: number;
 }
 
 export interface ResourcePodsMetricValues {
@@ -69,12 +65,6 @@ export interface DomainResourceMetricsResolution {
   scope: string;
 }
 
-export interface DetailExceptionResourceMetricsResolution {
-  kind: 'detail-exception';
-  source: 'detail-replicaset';
-  reason: 'replicaset-owner-collapse';
-}
-
 export interface UnsupportedResourceMetricsResolution {
   kind: 'unsupported';
   reason: 'unsupported-kind';
@@ -87,7 +77,6 @@ export interface InvalidResourceMetricsResolution {
 
 export type ResourceMetricsResolution =
   | DomainResourceMetricsResolution
-  | DetailExceptionResourceMetricsResolution
   | UnsupportedResourceMetricsResolution
   | InvalidResourceMetricsResolution;
 
@@ -97,8 +86,7 @@ export type ResourceMetricsStatus =
   | 'missing'
   | 'error'
   | 'unsupported'
-  | 'invalid'
-  | 'detail-exception';
+  | 'invalid';
 
 export interface ResourceMetricsResult {
   status: ResourceMetricsStatus;

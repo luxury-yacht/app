@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 
 	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
@@ -94,7 +95,9 @@ func representativeResourceRowFixtures() []representativeRowFixture {
 					},
 					Status: corev1.PodStatus{Phase: corev1.PodRunning},
 				}
-				return podresource.BuildStreamSummaryFromRSMap(metaFor(index), pod, 125, 64*1024*1024, nil)
+				row := podresource.BuildStreamSummaryFromRSMap(metaFor(index), pod, nil)
+				row.CPUUsageMilli, row.MemoryUsageBytes = ptr.To[int64](125), ptr.To[int64](64*1024*1024)
+				return row
 			},
 		},
 		{

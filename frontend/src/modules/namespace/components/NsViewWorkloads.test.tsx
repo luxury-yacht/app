@@ -647,8 +647,8 @@ describe('NsViewWorkloads', () => {
       age: '5m',
       clusterId: 'path:context',
       clusterName: 'ctx',
-      cpuUsage: '250m',
-      memUsage: '128Mi',
+      cpuUsageMilli: 250,
+      memoryUsageBytes: 128 * 1024 ** 2,
     };
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
@@ -890,8 +890,8 @@ describe('NsViewWorkloads', () => {
     const workload = makeWorkload('Deployment', 'api', 'team-a', 'alpha:ctx', {
       ready: '1/1',
       restarts: 0,
-      cpuUsage: '10m',
-      memUsage: '20Mi',
+      cpuUsageMilli: 10,
+      memoryUsageBytes: 20 * 1024 ** 2,
     });
 
     await act(async () => {
@@ -913,13 +913,13 @@ describe('NsViewWorkloads', () => {
 
     expect(readyColumn?.sortValue?.({ ...workload, ready: '2/10' })).toBe(2000010);
     expect(cpuColumn?.sortValue?.(workload)).toBe(10);
-    expect(memoryColumn?.sortValue?.(workload)).toBe(20);
+    expect(memoryColumn?.sortValue?.(workload)).toBe(20 * 1024 ** 2);
   });
 
   it('routes workload clicks through the object panel with cluster metadata', async () => {
     const workload = makeWorkload('Deployment', 'api', 'team-a', 'alpha:ctx', {
-      cpuUsage: '10m',
-      memUsage: '20Mi',
+      cpuUsageMilli: 10,
+      memoryUsageBytes: 20 * 1024 ** 2,
     });
 
     // Query-backed single-namespace table: feed the typed query the row so it renders in the table.

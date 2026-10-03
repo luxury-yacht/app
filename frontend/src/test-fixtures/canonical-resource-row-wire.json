@@ -111,21 +111,9 @@
             {
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
-              "cpu": "0",
-              "cpuAllocatable": "0",
-              "cpuCapacity": "0",
-              "cpuLimits": "",
-              "cpuRequests": "",
-              "cpuUsage": "",
               "labels": {
                 "app": "wire-fixture"
               },
-              "memLimits": "",
-              "memRequests": "",
-              "memory": "0Mi",
-              "memoryAllocatable": "0Mi",
-              "memoryCapacity": "0Mi",
-              "memoryUsage": "",
               "pods": "",
               "podsAllocatable": "0",
               "podsCapacity": "0",
@@ -533,7 +521,8 @@
                 }
               },
               "object": "Node/node-wire",
-              "objectApiVersion": "v1",
+              "objectKind": "Node",
+              "objectName": "node-wire",
               "objectNamespace": "",
               "objectUid": "node-wire-uid",
               "reason": "NodePressure",
@@ -548,7 +537,7 @@
                 "version": "v1"
               },
               "resourceVersion": "7",
-              "source": "-",
+              "source": "",
               "type": "Warning"
             }
           ],
@@ -922,7 +911,6 @@
                   "version": "v1"
                 }
               },
-              "kind": "Pod",
               "message": "Node reports pressure",
               "metadata": {
                 "labels": {
@@ -930,7 +918,8 @@
                 }
               },
               "object": "Pod/pod-wire",
-              "objectApiVersion": "v1",
+              "objectKind": "Pod",
+              "objectName": "pod-wire",
               "objectNamespace": "default",
               "objectUid": "pod-wire-uid",
               "reason": "NodePressure",
@@ -1040,12 +1029,8 @@
             {
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
-              "cpuLimit": "0m",
-              "cpuRequest": "0m",
-              "cpuUsage": "25m",
-              "memLimit": "0Mi",
-              "memRequest": "0Mi",
-              "memUsage": "64 MB",
+              "cpuUsageMilli": 25,
+              "memoryUsageBytes": 67108864,
               "metadata": {
                 "labels": {
                   "app": "wire-fixture"
@@ -1111,13 +1096,7 @@
             {
               "age": "\u003cage\u003e",
               "ageTimestamp": 1699999000000,
-              "cpuLimit": "-",
-              "cpuRequest": "-",
-              "cpuUsage": "-",
               "desiredReplicas": 2,
-              "memLimit": "-",
-              "memRequest": "-",
-              "memUsage": "-",
               "metadata": {
                 "labels": {
                   "app": "wire-fixture"
@@ -1203,7 +1182,6 @@
                   "version": "v1"
                 }
               },
-              "involvedObjectApiVersion": "v1",
               "involvedObjectKind": "Pod",
               "involvedObjectName": "pod-wire",
               "involvedObjectNamespace": "default",
@@ -1227,7 +1205,7 @@
                 "version": "v1"
               },
               "resourceVersion": "7",
-              "source": "Unknown"
+              "source": ""
             }
           ]
         },

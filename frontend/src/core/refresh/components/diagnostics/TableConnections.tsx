@@ -4,8 +4,8 @@
  * Connections & Calls: the transport itself, plus every read that belongs to no
  * refresh domain.
  *
- * This view is deliberately FLAT. A socket, an event scope, a container-logs
- * target and an app-state read share no parent, so nesting them would invent a
+ * This view is deliberately FLAT. A socket, a container-logs target and an
+ * app-state read share no parent, so nesting them would invent a
  * hierarchy that does not exist. Anything that does have a domain parent lives
  * in the Cluster Data tree instead.
  *
@@ -29,8 +29,7 @@ import { useDeferredValue, useId, useMemo, useState } from 'react';
 import type { BrokerReadRow, ConnectionsRow } from './diagnosticsPanelTypes';
 import { formatLastUpdated } from './diagnosticsPanelUtils';
 
-const LEAF_KIND_LABELS: Record<'scope' | 'target', string> = {
-  scope: 'event scope',
+const LEAF_KIND_LABELS: Record<'target', string> = {
   target: 'log target',
 };
 

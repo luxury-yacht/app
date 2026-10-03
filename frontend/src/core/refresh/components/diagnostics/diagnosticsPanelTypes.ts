@@ -150,8 +150,8 @@ export interface ClusterDataScopeRow extends ClusterDataTreeNode {
 }
 
 // ConnectionsRow is the flat Connections & Calls view. Its members genuinely
-// have no common parent - a socket, an event scope, a log target and an app
-// state read do not nest - so it is a list, not a tree.
+// have no common parent - a socket, a log target and an app state read do not
+// nest - so it is a list, not a tree.
 export type ConnectionsRow = ConnectionsSocketRow | ConnectionsLeafRow;
 
 export interface ConnectionsSocketRow {
@@ -172,15 +172,15 @@ export interface ConnectionsSocketRow {
   lastErrorAt?: number;
 }
 
-// A stream child whose key is NOT a refresh domain: an events scope or a
-// container-logs target. These cannot join the Cluster Data tree.
+// A stream child whose key is NOT a refresh domain: a container-logs target.
+// These cannot join the Cluster Data tree.
 export interface ConnectionsLeafRow {
   kind: 'leaf';
   rowKey: string;
   stream: string;
   label: string;
   cluster: string;
-  leafKind: 'scope' | 'target';
+  leafKind: 'target';
   leaf: string;
   delivered: number;
   dropped: number;

@@ -12,10 +12,12 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 // Projected own fields survive serving while pod readiness, reservations and usage
@@ -96,32 +98,34 @@ func TestReaggregateWorkloadSummaryPreservesOwnFieldsAndJoinsPods(t *testing.T) 
 		CPURequestMilli: 9999, CPULimitMilli: 9999, MemRequestBytes: 9999, MemLimitBytes: 9999,
 	})
 	cases := []struct {
-		kind                           string
-		own                            WorkloadSummary
-		pods                           []streamrows.PodAggregate
-		ready                          string
-		restarts                       int32
-		cpuUsage, cpuRequest, cpuLimit string
-		memUsage, memRequest, memLimit string
+		kind                 string
+		own                  WorkloadSummary
+		pods                 []streamrows.PodAggregate
+		ready                string
+		restarts             int32
+		cpuUsage             *int64
+		cpuRequest, cpuLimit int64
+		memUsage             *int64
+		memRequest, memLimit int64
 	}{
-		{deployment.Identity.Kind, buildDeploymentOwnSummary(clusterID, deploy), depPods, "1/2", 3, "45m", "150m", "300m", "384Ki", "2Mi", "3Mi"},
-		{statefulset.Identity.Kind, buildStatefulSetOwnSummary(clusterID, sts), nil, "3/3", 0, "-", "-", "-", "-", "-", "-"},
-		{daemonset.Identity.Kind, buildDaemonSetOwnSummary(clusterID, ds), nil, "4/5", 0, "-", "-", "-", "-", "-", "-"},
-		{jobres.Identity.Kind, buildJobOwnSummary(clusterID, job), jobPods, "2/6", 3, "5m", "10m", "20m", "2Ki", "4Ki", "8Ki"},
-		{cronjob.Identity.Kind, buildCronJobOwnSummary(clusterID, cron), nil, "1", 0, "-", "-", "-", "-", "-", "-"},
+		{deployment.Identity.Kind, buildDeploymentOwnSummary(clusterID, deploy), depPods, "1/2", 3, ptr.To[int64](45), 150, 300, ptr.To[int64](384 << 10), 3 << 19, 3 << 20},
+		{statefulset.Identity.Kind, buildStatefulSetOwnSummary(clusterID, sts), nil, "3/3", 0, nil, 0, 0, nil, 0, 0},
+		{daemonset.Identity.Kind, buildDaemonSetOwnSummary(clusterID, ds), nil, "4/5", 0, nil, 0, 0, nil, 0, 0},
+		{jobres.Identity.Kind, buildJobOwnSummary(clusterID, job), jobPods, "2/6", 3, ptr.To[int64](5), 10, 20, ptr.To[int64](2048), 4096, 8192},
+		{cronjob.Identity.Kind, buildCronJobOwnSummary(clusterID, cron), nil, "1", 0, nil, 0, 0, nil, 0, 0},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.kind, func(t *testing.T) {
 			want := tc.own
 			want.Ready, want.Restarts = tc.ready, tc.restarts
-			want.CPUUsage, want.CPURequest, want.CPULimit = tc.cpuUsage, tc.cpuRequest, tc.cpuLimit
-			want.MemUsage, want.MemRequest, want.MemLimit = tc.memUsage, tc.memRequest, tc.memLimit
+			want.CPUUsageMilli, want.CPURequestMilli, want.CPULimitMilli = tc.cpuUsage, tc.cpuRequest, tc.cpuLimit
+			want.MemoryUsageBytes, want.MemoryRequestBytes, want.MemoryLimitBytes = tc.memUsage, tc.memRequest, tc.memLimit
 			got := reaggregateWorkloadSummary(tc.own, tc.pods, usage)
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("re-aggregation mismatch:\n got=%#v\nwant=%#v", got, want)
 			}
-			if tc.own.Restarts != 0 || tc.own.CPUUsage != "-" || tc.own.MemRequest != "-" {
+			if tc.own.Restarts != 0 || tc.own.CPUUsageMilli != nil || tc.own.MemoryRequestBytes != 0 {
 				t.Fatalf("serve mutated the retained intake row: %#v", tc.own)
 			}
 		})
@@ -135,4 +139,19 @@ func TestReaggregateWorkloadSummaryPreservesOutOfRangeReadyFallback(t *testing.T
 	if got.Ready != own.Ready {
 		t.Fatalf("ready fallback changed: got %q, want %q", got.Ready, own.Ready)
 	}
+}
+
+// A pod sampled at zero usage is a real zero, not missing metrics: the workload row
+// keeps 0 so the table and its export show 0 rather than the no-data dash.
+func TestReaggregateWorkloadSummaryKeepsSampledZeroUsage(t *testing.T) {
+	own := WorkloadSummary{Ref: resourcemodel.ResourceRef{Kind: deployment.Identity.Kind, Namespace: "team-a", Name: "idle"}}
+	pods := []streamrows.PodAggregate{{Namespace: "team-a", Name: "idle-1", Phase: string(corev1.PodRunning)}}
+
+	sampled := reaggregateWorkloadSummary(own, pods, map[string]metrics.PodUsage{"team-a/idle-1": {}})
+	require.Equal(t, ptr.To[int64](0), sampled.CPUUsageMilli)
+	require.Equal(t, ptr.To[int64](0), sampled.MemoryUsageBytes)
+
+	unsampled := reaggregateWorkloadSummary(own, pods, map[string]metrics.PodUsage{})
+	require.Nil(t, unsampled.CPUUsageMilli)
+	require.Nil(t, unsampled.MemoryUsageBytes)
 }

@@ -44,6 +44,8 @@ export interface GridColumnMeasurementElement {
 export interface GridColumnDefinition<T> extends GridColumnAlignmentOptions {
   key: string;
   header: string;
+  /** Header written by Copy/Export when the exported values need a unit the screen omits. */
+  exportHeader?: string;
   render: (item: T) => React.ReactNode;
   /** Whether the user may hide this column. Defaults to true. */
   hideable?: boolean;

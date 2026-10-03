@@ -59,7 +59,7 @@
   --grid-spacing-cell-x: 1rem;
   --grid-spacing-cell-y: 0.3rem;
   --grid-spacing-badge-cell-y: var(--spacing-sm);
-  --grid-cell-line-height: 1.35rem;
+  --grid-cell-line-height: 1rem;
 
   /* Note: Table-specific column definitions moved to individual CSS files */
 }

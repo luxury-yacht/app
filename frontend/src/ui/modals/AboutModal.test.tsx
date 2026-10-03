@@ -95,7 +95,7 @@ const renderModal = async (props: AboutModalProps) => {
 describe('AboutModal', () => {
   beforeEach(() => {
     runtimeMock.eventsOn.mockReset().mockReturnValue(() => undefined);
-    runtimeMock.openURL.mockReset();
+    runtimeMock.openURL.mockReset().mockResolvedValue(undefined);
     appInfoMock.GetAppInfo.mockReset();
     appInfoMock.CheckForUpdates.mockReset();
     appInfoMock.DownloadApplicationUpdate.mockReset();
@@ -263,6 +263,55 @@ describe('AboutModal', () => {
     expect(document.body.textContent).not.toContain('Download Update');
     expect(appInfoMock.DownloadApplicationUpdate).not.toHaveBeenCalled();
 
+    await modal.unmount();
+  });
+
+  it('reports a recovery page that the system browser fails to open', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({
+      version: '2.0.0',
+      update: {
+        status: 'available',
+        currentVersion: '2.0.0',
+        availableVersion: '2.1.0',
+        canCheck: true,
+        canInstall: false,
+        eligibilityReason: 'linux-package-managed',
+        recoveryTarget: 'linux-packages',
+      },
+    });
+    runtimeMock.openURL.mockRejectedValue(new Error('no default browser'));
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    const recovery = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'View Linux Packages'
+    );
+    await act(async () => recovery?.click());
+
+    expect(runtimeMock.openURL).toHaveBeenCalled();
+    expect(errorMock.reportOperationalError).toHaveBeenCalledWith(expect.any(Error), {
+      source: 'AboutModal',
+      action: 'openApplicationUpdateRecovery',
+    });
+    await modal.unmount();
+  });
+
+  it('reports an external link that the system browser fails to open', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({ version: '2.0.0' });
+    runtimeMock.openURL.mockRejectedValue(new Error('no default browser'));
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    const wailsLink = Array.from(document.querySelectorAll('a')).find((link) =>
+      link.textContent?.includes('Wails')
+    );
+    await act(async () => wailsLink?.click());
+
+    expect(runtimeMock.openURL).toHaveBeenCalledWith('https://v3.wails.io');
+    expect(errorMock.reportOperationalError).toHaveBeenCalledWith(expect.any(Error), {
+      source: 'AboutModal',
+      action: 'openExternalLink',
+    });
     await modal.unmount();
   });
 

@@ -16,6 +16,7 @@ import type {
   GridTableFilterState,
   GridTableVirtualizationOptions,
 } from '@shared/components/tables/GridTable';
+import type { GridTableFilterAccessors } from '@shared/components/tables/GridTable.types';
 import type { GridTableFilterPersistenceOptions } from '@shared/components/tables/persistence/gridTablePersistence';
 import type React from 'react';
 import type { ResourceRef, ResourceTableMetadata } from '@/core/refresh/types';
@@ -80,7 +81,7 @@ export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   objectIdentity?: ResourceGridObjectIdentityAdapter<T>;
   availableKinds?: string[];
   diagnosticsLabel?: string;
-  filterAccessors?: GridTableFilterConfig<T>['accessors'];
+  filterAccessors?: GridTableFilterAccessors<T>;
   leadingFilterActions?: IconBarItem[];
   filterOptions?: GridTableFilterPersistenceOptions;
   pageSizeOptions?: readonly number[];
@@ -195,7 +196,7 @@ export interface QueryResourceGridTableParams<T extends ResourceGridTableRow> {
   defaultSortKey?: string;
   defaultSortDirection?: SortDirection;
   diagnosticsLabel?: string;
-  filterAccessors?: GridTableFilterConfig<T>['accessors'];
+  filterAccessors?: GridTableFilterAccessors<T>;
   filterOptions: GridTableFilterOptions;
   rowIdentity?: (item: T, index: number) => string;
   virtualization?: GridTableVirtualizationOptions;

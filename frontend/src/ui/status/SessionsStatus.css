@@ -111,10 +111,6 @@
   gap: 10px;
 }
 
-.sessions-status-message .ss-session-item {
-  padding: 6px;
-}
-
 .sessions-status-message .as-empty {
   display: flex;
   flex-direction: column;
@@ -184,6 +180,7 @@
 .sessions-status-message .ss-session-item {
   border: 1px solid var(--border-color);
   border-radius: 6px;
+  padding: 6px;
   display: flex;
   align-items: center;
   gap: 8px;

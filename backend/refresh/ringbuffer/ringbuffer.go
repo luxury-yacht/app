@@ -15,11 +15,11 @@ type Buffer[T any] struct {
 	seqOf func(T) uint64
 }
 
-// New allocates a buffer capped at max items.
-func New[T any](max int, seqOf func(T) uint64) *Buffer[T] {
+// New allocates a buffer capped at capacity items.
+func New[T any](capacity int, seqOf func(T) uint64) *Buffer[T] {
 	return &Buffer[T]{
-		items: make([]T, max),
-		max:   max,
+		items: make([]T, capacity),
+		max:   capacity,
 		seqOf: seqOf,
 	}
 }

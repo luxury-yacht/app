@@ -15,20 +15,33 @@ import {
   getIntegerPreferenceMetadata,
 } from '@/core/settings/appPreferences';
 
-/** The standard settings row: title + help on the left, control on the right. */
+/**
+ * The standard settings row: title + help on the left, control on the right.
+ * Pass the control's id as `controlId` when the title is its only name, so the
+ * title labels it; controls that name themselves (switches, dropdowns, choice
+ * groups, buttons) leave it out.
+ */
 export function SettingRow({
   title,
   help,
+  controlId,
   children,
 }: Readonly<{
   title: string;
   help: ReactNode;
+  controlId?: string;
   children: ReactNode;
 }>) {
   return (
     <div className="settings-row">
       <div className="settings-row-label">
-        <div className="settings-row-label-title">{title}</div>
+        {controlId ? (
+          <label className="settings-row-label-title" htmlFor={controlId}>
+            {title}
+          </label>
+        ) : (
+          <div className="settings-row-label-title">{title}</div>
+        )}
         <div className="settings-row-label-help">{help}</div>
       </div>
       <div className="settings-row-control">{children}</div>

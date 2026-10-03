@@ -104,6 +104,10 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Helm/ValuesTab', () => ({
   default: () => null,
 }));
 
+// Metrics collection has its own tests; this suite is about which object the panel shows.
+vi.mock('@modules/object-panel/components/ObjectPanel/Metrics/usePanelMetricsCollector', () => ({
+  usePanelMetricsCollector: () => undefined,
+}));
 vi.mock('@/core/refresh/hooks/useRefreshWatcher', () => ({
   useRefreshWatcher: vi.fn(),
 }));

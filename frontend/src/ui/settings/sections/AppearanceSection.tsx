@@ -427,6 +427,7 @@ const ThemeEditor = (props: ThemeEditorProps) => {
           props.setThemeDraft((draft) => ({ ...draft, name: event.target.value }))
         }
         placeholder="Name"
+        aria-label="Theme name"
         onKeyDown={(event) => handleThemeEditorKeyDown(event, props.onSave, props.onCancel)}
       />
       <input
@@ -440,6 +441,7 @@ const ThemeEditor = (props: ThemeEditorProps) => {
           }));
         }}
         placeholder="Pattern (optional)"
+        aria-label="Cluster name pattern"
         aria-invalid={props.themePatternError ? 'true' : undefined}
         aria-describedby={props.themePatternError ? props.errorId : undefined}
         onKeyDown={(event) => handleThemeEditorKeyDown(event, props.onSave, props.onCancel)}
@@ -611,12 +613,12 @@ const UnsavedDefaultThemePrompt = ({
     return null;
   }
   return (
-    <div className="themes-unsaved-default" role="status">
+    <output className="themes-unsaved-default">
       <span>There are unsaved changes. Save as default?</span>
       <button type="button" className="themes-unsaved-default-action" onClick={onSave}>
         Save
       </button>
-    </div>
+    </output>
   );
 };
 
@@ -869,7 +871,7 @@ function AppearanceSection() {
       setActiveThemeId(theme.id);
       return;
     }
-    handleApplyTheme(theme.id);
+    void handleApplyTheme(theme.id);
   };
 
   // Commit the active theme's edits (palette + name/pattern from themeDraft).
@@ -1115,6 +1117,7 @@ function AppearanceSection() {
         <input
           ref={paletteInputRef}
           className="palette-slider-value palette-hex-input"
+          aria-label={`${paletteFields.find((entry) => entry.field === field)?.label ?? field} value`}
           value={paletteDraft}
           onChange={(e) => setPaletteDraft(e.target.value)}
           onKeyDown={(e) => {

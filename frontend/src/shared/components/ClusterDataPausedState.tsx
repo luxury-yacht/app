@@ -6,11 +6,7 @@ interface ClusterDataPausedStateProps {
 }
 
 const ClusterDataPausedState: React.FC<ClusterDataPausedStateProps> = ({ className }) => {
-  return (
-    <div className={className} role="status">
-      {CLUSTER_DATA_AUTO_REFRESH_DISABLED_MESSAGE}
-    </div>
-  );
+  return <output className={className}>{CLUSTER_DATA_AUTO_REFRESH_DISABLED_MESSAGE}</output>;
 };
 
 export default ClusterDataPausedState;

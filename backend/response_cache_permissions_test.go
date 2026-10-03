@@ -20,7 +20,7 @@ func TestCanServeCachedResponseDeniedEvictsCaches(t *testing.T) {
 
 	// Use Helm kinds to avoid GVR discovery in the permission gate.
 	detailKey := objectDetailCacheKey("HelmManifest", "default", "demo")
-	gateway.responseCacheStore(selectionKey, detailKey, "manifest")
+	gateway.seedResponseCache(selectionKey, detailKey, "manifest")
 
 	deps := common.Dependencies{KubernetesClient: client}
 	if allowed := gateway.canServeCachedResponse(context.Background(), deps, selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmManifest"}, "default", "demo"); allowed {
@@ -41,7 +41,7 @@ func TestCanServeCachedResponseAllowedKeepsCaches(t *testing.T) {
 
 	// Use Helm kinds to avoid GVR discovery in the permission gate.
 	detailKey := objectDetailCacheKey("HelmValues", "default", "demo")
-	gateway.responseCacheStore(selectionKey, detailKey, "values")
+	gateway.seedResponseCache(selectionKey, detailKey, "values")
 
 	deps := common.Dependencies{KubernetesClient: client}
 	if allowed := gateway.canServeCachedResponse(context.Background(), deps, selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmValues"}, "default", "demo"); !allowed {

@@ -140,7 +140,7 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 			gateway := newWorkloadResourceGateway(tc.object)
 			gateway.responseCache = newResponseCache(time.Minute, 10)
 			detailKey := objectDetailCacheKey(tc.kind, "default", "demo")
-			gateway.responseCacheStore(workloadClusterID, detailKey, "stale")
+			gateway.seedResponseCache(workloadClusterID, detailKey, "stale")
 
 			err := gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: tc.kind, Name: "demo"})
 			require.NoError(t, err)
@@ -253,7 +253,7 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 			gateway := newWorkloadResourceGateway(client)
 			gateway.responseCache = newResponseCache(time.Minute, 10)
 			detailKey := objectDetailCacheKey(tc.kind, "default", "demo")
-			gateway.responseCacheStore(workloadClusterID, detailKey, "stale")
+			gateway.seedResponseCache(workloadClusterID, detailKey, "stale")
 
 			err := gateway.scaleWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: tc.kind, Name: "demo"}, 3)
 			require.NoError(t, err)
@@ -406,7 +406,7 @@ func TestTriggerCronJobCreatesJob(t *testing.T) {
 	gateway := newWorkloadResourceGateway(client)
 	gateway.responseCache = newResponseCache(time.Minute, 10)
 	detailKey := objectDetailCacheKey("CronJob", "default", "backup")
-	gateway.responseCacheStore(workloadClusterID, detailKey, "stale")
+	gateway.seedResponseCache(workloadClusterID, detailKey, "stale")
 
 	jobName, err := gateway.triggerCronJobAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "backup"})
 	require.NoError(t, err)
@@ -526,7 +526,7 @@ func TestSuspendCronJobTogglesSuspendField(t *testing.T) {
 			gateway := newWorkloadResourceGateway(client)
 			gateway.responseCache = newResponseCache(time.Minute, 10)
 			detailKey := objectDetailCacheKey("CronJob", "default", "backup")
-			gateway.responseCacheStore(workloadClusterID, detailKey, "stale")
+			gateway.seedResponseCache(workloadClusterID, detailKey, "stale")
 
 			err := gateway.suspendCronJobAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "backup"}, tc.setSuspend)
 			require.NoError(t, err)

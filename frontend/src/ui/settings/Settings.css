@@ -63,6 +63,8 @@
 }
 
 .settings-row-label-title {
+  /* A label title renders like the div one. */
+  display: block;
   font-size: var(--font-size-normal);
   font-weight: 600;
   color: var(--color-text);
@@ -426,6 +428,29 @@
   display: flex;
   gap: var(--spacing-sm);
   flex-wrap: wrap;
+}
+
+/* A link inside a row's help text (e.g. a formatting reference). */
+.settings-help-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-color: var(--color-accent);
+}
+
+.setting-item-inline input.settings-input-error {
+  border-color: var(--color-error-text);
+}
+
+/* A field's validation message, below the field (as the theme pattern error). */
+.settings-field-error {
+  color: var(--color-error-text);
+  font-size: var(--font-size-small);
+  line-height: 1.25;
 }
 
 .setting-description {

@@ -18,6 +18,7 @@ import {
   useContext,
   useEffect,
   useEffectEvent,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -180,14 +181,17 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
     [dismissError]
   );
 
-  const value: ErrorContextValue = {
-    errors,
-    addError,
-    dismissError,
-    dismissAllErrors: clearErrors,
-    clearErrors,
-    retryError,
-  };
+  const value = useMemo<ErrorContextValue>(
+    () => ({
+      errors,
+      addError,
+      dismissError,
+      dismissAllErrors: clearErrors,
+      clearErrors,
+      retryError,
+    }),
+    [errors, addError, dismissError, clearErrors, retryError]
+  );
 
   return <ErrorContext.Provider value={value}>{children}</ErrorContext.Provider>;
 };

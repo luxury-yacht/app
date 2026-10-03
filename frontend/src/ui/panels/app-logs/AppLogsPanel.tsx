@@ -886,7 +886,7 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
             <input
               type="text"
               className="app-logs-text-filter"
-              placeholder="Filter logs..."
+              placeholder="Filter"
               value={textFilter}
               onChange={(e) => setTextFilter(e.target.value)}
               title="Filter by text (searches message and source)"

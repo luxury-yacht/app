@@ -432,14 +432,6 @@ describe('buildConnectionsRows', () => {
           leaf: 'pods',
           totalMessages: 5,
         }),
-        stream({ name: 'events', clusterId: 'c1', activeSessions: 1, lastConnect: 11 }),
-        stream({
-          name: 'events',
-          clusterId: 'c1',
-          leafKind: 'scope',
-          leaf: 'namespace:demo',
-          totalMessages: 3,
-        }),
         stream({ name: 'container-logs', clusterId: 'c1', activeSessions: 1, lastConnect: 12 }),
         stream({
           name: 'container-logs',
@@ -454,13 +446,7 @@ describe('buildConnectionsRows', () => {
 
     expect(
       rows.map((row) => `${row.kind}:${row.stream}:${row.kind === 'leaf' ? row.leaf : ''}`)
-    ).toEqual([
-      'socket:container-logs:',
-      'leaf:container-logs:demo/pod/app',
-      'socket:events:',
-      'leaf:events:namespace:demo',
-      'socket:resources:',
-    ]);
+    ).toEqual(['socket:container-logs:', 'leaf:container-logs:demo/pod/app', 'socket:resources:']);
     // The resources socket carries a pods DOMAIN leaf; it must not appear here,
     // because that leaf belongs to the pods domain in the Cluster Data tree.
     expect(rows.some((row) => row.kind === 'leaf' && row.leaf === 'pods')).toBe(false);

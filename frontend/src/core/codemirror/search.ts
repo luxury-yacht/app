@@ -197,9 +197,7 @@ const prepareSearchNavigation = (panel: HTMLElement, primaryRow: HTMLDivElement)
   const navRow = getOrCreateSearchRow(panel, 'cm-search-nav');
   const previousButton = panel.querySelector<HTMLButtonElement>('button[name="prev"]');
   const nextButton = panel.querySelector<HTMLButtonElement>('button[name="next"]');
-  while (navRow.firstChild) {
-    navRow.removeChild(navRow.firstChild);
-  }
+  navRow.replaceChildren();
 
   updateNavButton(previousButton, '<');
   updateNavButton(nextButton, '>');
@@ -249,12 +247,7 @@ const prepareAdvancedSearchRow = (panel: HTMLElement): HTMLDivElement | null => 
   }
 
   const advanced = existing ?? getOrCreateSearchRow(panel, 'cm-search-advanced');
-  while (advanced.firstChild) {
-    advanced.removeChild(advanced.firstChild);
-  }
-  labels.forEach((label) => {
-    advanced.appendChild(label);
-  });
+  advanced.replaceChildren(...labels);
   advanced.hidden = true;
   advanced.setAttribute('aria-hidden', 'true');
   return advanced;

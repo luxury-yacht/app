@@ -41,8 +41,11 @@ interface ActiveAnsiState {
 }
 
 const HEX_PATTERN = /^#([\da-f]{3,8})$/i;
-const RGB_PATTERN =
-  /^rgba?\(\s*(\d{1,3})(?:\s*,\s*|\s+)(\d{1,3})(?:\s*,\s*|\s+)(\d{1,3})(?:(?:\s*,\s*|\s*\/\s*)([\d.]+))?\s*\)$/i;
+const RGB_FUNCTION_PATTERN = /^rgba?\((.*)\)$/is;
+// Channels are separated by commas or whitespace; an optional alpha follows a
+// comma or slash, as in "1, 2, 3, 0.5" or "1 2 3 / 0.5".
+const RGB_ARGUMENTS_PATTERN =
+  /^(\d{1,3})(?:\s*,|\s)\s*(\d{1,3})(?:\s*,|\s)\s*(\d{1,3})(?:\s*[,/]\s*([\d.]+))?$/;
 
 export const containsAnsi = (text: string): boolean => ANSI_TEST_PATTERN.test(text);
 
@@ -76,7 +79,8 @@ const normalizeHex = (hex: string): [number, number, number, number] | null => {
 };
 
 const normalizeRgb = (color: string): [number, number, number, number] | null => {
-  const match = RGB_PATTERN.exec(color.trim());
+  const args = RGB_FUNCTION_PATTERN.exec(color.trim())?.[1];
+  const match = args === undefined ? null : RGB_ARGUMENTS_PATTERN.exec(args.trim());
   if (!match) {
     return null;
   }

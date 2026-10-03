@@ -26,6 +26,7 @@ export type {
     NodeLogFetchResponse,
     NodeLogSource,
     ObjectRef,
+    PodContainer,
     PodDetailInfo,
     PodDetailInfoContainer,
     PodMetricsSummary,

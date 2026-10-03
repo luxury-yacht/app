@@ -149,9 +149,9 @@ func TestPollerRefreshSuccess(t *testing.T) {
 	require.False(t, meta.CollectedAt.IsZero())
 
 	summary := recorder.SnapshotSummary()
-	require.Equal(t, uint64(1), summary.Metrics.SuccessCount)
-	require.Zero(t, summary.Metrics.ConsecutiveFailures)
-	require.Empty(t, summary.Metrics.LastError)
+	require.Equal(t, uint64(1), summary.ClusterMetrics[0].Metrics.SuccessCount)
+	require.Zero(t, summary.ClusterMetrics[0].Metrics.ConsecutiveFailures)
+	require.Empty(t, summary.ClusterMetrics[0].Metrics.LastError)
 }
 
 // Every collection attempt must notify the observer because both fresh samples
@@ -438,8 +438,8 @@ func TestPollerRefreshHandlesPodMetricsFailure(t *testing.T) {
 	require.Contains(t, meta.LastError, "pod metrics poll failed")
 
 	summary := recorder.SnapshotSummary()
-	require.Equal(t, uint64(1), summary.Metrics.FailureCount)
-	require.NotEmpty(t, summary.Metrics.LastError)
+	require.Equal(t, uint64(1), summary.ClusterMetrics[0].Metrics.FailureCount)
+	require.NotEmpty(t, summary.ClusterMetrics[0].Metrics.LastError)
 }
 
 func TestPollerRefreshHandlesUnavailableMetricsAPI(t *testing.T) {
@@ -477,8 +477,8 @@ func TestPollerRefreshHandlesUnavailableMetricsAPI(t *testing.T) {
 	require.True(t, meta.CollectedAt.IsZero())
 
 	summary := recorder.SnapshotSummary()
-	require.Equal(t, uint64(3), summary.Metrics.FailureCount)
-	require.Contains(t, summary.Metrics.LastError, "metrics API unavailable")
+	require.Equal(t, uint64(3), summary.ClusterMetrics[0].Metrics.FailureCount)
+	require.Contains(t, summary.ClusterMetrics[0].Metrics.LastError, "metrics API unavailable")
 	require.Zero(t, logger.captureCount())
 	var warnings []recordedMetricsLog
 	for _, entry := range logger.snapshot() {
@@ -537,8 +537,8 @@ func TestPollerRefreshRequiresConfig(t *testing.T) {
 	require.Contains(t, meta.LastError, "rest config not provided")
 
 	summary := recorder.SnapshotSummary()
-	require.Equal(t, uint64(1), summary.Metrics.FailureCount)
-	require.Contains(t, summary.Metrics.LastError, "rest config not provided")
+	require.Equal(t, uint64(1), summary.ClusterMetrics[0].Metrics.FailureCount)
+	require.Contains(t, summary.ClusterMetrics[0].Metrics.LastError, "rest config not provided")
 }
 
 // TestPollerRefreshCapturesSampleTimestamps proves each parsed pod/node usage

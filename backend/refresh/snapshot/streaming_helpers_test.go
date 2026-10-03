@@ -692,14 +692,10 @@ func TestBuildNamespaceCustomSummaryThreadsCRDName(t *testing.T) {
 	require.Equal(t, "unknown", row.StatusPresentation)
 }
 
-// buildPodSummaryForTest resolves a pod's usage from the map and calls the
-// pods-package builder (which takes usage primitives, not the metrics map).
+// buildPodSummaryForTest calls the pods-package builder and joins usage from the
+// map the way the serve path does.
 func buildPodSummaryForTest(meta ClusterMeta, pod *corev1.Pod, usage map[string]metrics.PodUsage, rsLister v1.ReplicaSetLister) PodSummary {
-	var u metrics.PodUsage
-	if pod != nil {
-		u = usage[pod.Namespace+"/"+pod.Name]
-	}
-	row := podres.BuildStreamSummary(meta, pod, u.CPUUsageMilli, u.MemoryUsageBytes, rsLister, nil)
+	row := podres.BuildStreamSummary(meta, pod, rsLister, nil)
 	// Mirror the production serve-time overlay so the parity harness and the real
 	// Build path render CPU/mem identically — including the no-data marker for a
 	// pod with no valid sample (Risk #9 / §3.6). overlayPodMetrics re-derives the

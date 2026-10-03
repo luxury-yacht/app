@@ -5,13 +5,15 @@
  * Provides shared helper functions for the frontend.
  */
 
-// Shared resource calculation utilities used by ResourceBar and object panel
+// Shared resource calculation utilities used by ResourceBar and object panel.
+// CPU quantities are millicores and memory quantities are bytes throughout; only
+// display formatting converts to other units.
 
 export interface ResourceData {
-  usage?: string;
-  request?: string;
-  limit?: string;
-  allocatable?: string;
+  usage?: number;
+  request?: number;
+  limit?: number;
+  allocatable?: number;
 }
 
 export type ResourceType = 'cpu' | 'memory';
@@ -30,12 +32,8 @@ export interface ResourceCalculations {
   hasConfigIssue: boolean;
 }
 
-const EMPTY_RESOURCE_VALUES = new Set(['-', 'undefined', 'null', 'not set']);
-
-const isEmptyResourceValue = (value: string): boolean => !value || EMPTY_RESOURCE_VALUES.has(value);
-
-// Kubernetes quantities use decimal SI, binary SI, or a decimal exponent. UI
-// producers also supply spaced values and the existing MB/GB display aliases.
+// Kubernetes quantities use decimal SI, binary SI, or a decimal exponent. Object
+// detail payloads also supply spaced values and the existing MB/GB display aliases.
 const QUANTITY_FACTORS: Readonly<Record<string, number>> = {
   '': 1,
   n: 1e-9,
@@ -55,7 +53,12 @@ const QUANTITY_FACTORS: Readonly<Record<string, number>> = {
   Ei: 1024 ** 6,
 };
 
-const parseQuantity = (value: string | undefined, type: ResourceType): number | undefined => {
+// Parses a quantity string into millicores (CPU) or bytes (memory); undefined when
+// the value is absent or not a quantity (for example the "-" no-data marker).
+export const parseResourceQuantity = (
+  value: string | undefined,
+  type: ResourceType
+): number | undefined => {
   // Number conversion below rejects malformed decimal parts such as multiple dots.
   const match = value?.trim().match(/^([+-]?[\d.]+)\s*([a-zA-Z]*|[eE][+-]?\d+)$/);
   if (!match) {
@@ -70,13 +73,9 @@ const parseQuantity = (value: string | undefined, type: ResourceType): number | 
   if (factor === undefined) {
     return undefined;
   }
-  const parsed = Number(match[1]) * factor * (type === 'cpu' ? 1000 : 1 / 1024 ** 2);
+  const parsed = Number(match[1]) * factor * (type === 'cpu' ? 1000 : 1);
   return Number.isFinite(parsed) ? parsed : undefined;
 };
-
-// CPU is expressed in millicores; memory is expressed in MiB.
-export const parseResourceValue = (value: string | undefined, type: ResourceType): number =>
-  parseQuantity(value, type) ?? 0;
 
 // A missing usage or limit is unknown, while an explicit zero usage is valid.
 export const getResourceLimitUsagePercent = (
@@ -84,8 +83,8 @@ export const getResourceLimitUsagePercent = (
   limit: string | undefined,
   type: ResourceType
 ): number | undefined => {
-  const rawUsage = parseQuantity(usage, type);
-  const rawLimit = parseQuantity(limit, type);
+  const rawUsage = parseResourceQuantity(usage, type);
+  const rawLimit = parseResourceQuantity(limit, type);
   if (rawUsage === undefined || rawLimit === undefined || rawLimit <= 0 || rawUsage < 0) {
     return undefined;
   }
@@ -109,11 +108,14 @@ export const formatCpuValue = (millicores: number): string => {
   return `${cores.toFixed(2)}`;
 };
 
+const BYTES_PER_MIB = 1024 * 1024;
+
 // Format memory values for display
-export const formatMemoryValue = (mb: number): string => {
-  if (mb === 0) {
+export const formatMemoryValue = (bytes: number): string => {
+  if (bytes === 0) {
     return '0';
   }
+  const mb = bytes / BYTES_PER_MIB;
   if (mb >= 1024 * 1024) {
     return `${(mb / (1024 * 1024)).toFixed(1)}Ti`;
   } else if (mb >= 1024) {
@@ -123,22 +125,34 @@ export const formatMemoryValue = (mb: number): string => {
   }
 };
 
-export const formatResourceValue = (
-  value: string | undefined,
-  parsedValue: number,
-  type: ResourceType
-): string => {
-  if (
-    value === undefined ||
-    isEmptyResourceValue(value) ||
-    parseQuantity(value, type) === undefined
-  ) {
+const isResourceAmount = (value: number | undefined): value is number =>
+  value !== undefined && Number.isFinite(value);
+
+export const formatResourceValue = (value: number | undefined, type: ResourceType): string => {
+  if (!isResourceAmount(value)) {
     return '-';
   }
   if (type === 'cpu') {
-    return `${Math.round(parsedValue)}m`;
+    return `${Math.round(value)}m`;
   }
-  return formatMemoryValue(parsedValue);
+  return formatMemoryValue(value);
+};
+
+// Copy and Export write plain integers, with the unit in the column header, so
+// spreadsheets can sort and sum them. Memory uses KiB: MiB is too coarse.
+export const RESOURCE_EXPORT_UNITS: Readonly<Record<ResourceType, string>> = {
+  cpu: 'm',
+  memory: 'KiB',
+};
+
+export const formatResourceExportValue = (
+  value: number | undefined,
+  type: ResourceType
+): string => {
+  if (!isResourceAmount(value)) {
+    return '-';
+  }
+  return String(Math.round(type === 'cpu' ? value : value / 1024));
 };
 
 const calculateResourceScale = ({
@@ -182,14 +196,11 @@ export const calculateResourceOvercommit = (
 };
 
 // Calculate all resource metrics
-export const calculateResourceMetrics = (
-  data: ResourceData,
-  type: ResourceType
-): ResourceCalculations => {
-  const usage = parseResourceValue(data.usage, type);
-  const request = parseResourceValue(data.request, type);
-  const limit = parseResourceValue(data.limit, type);
-  const allocatable = parseResourceValue(data.allocatable, type);
+export const calculateResourceMetrics = (data: ResourceData): ResourceCalculations => {
+  const usage = data.usage ?? 0;
+  const request = data.request ?? 0;
+  const limit = data.limit ?? 0;
+  const allocatable = data.allocatable ?? 0;
 
   const scale = calculateResourceScale({ usage, request, limit, allocatable });
 

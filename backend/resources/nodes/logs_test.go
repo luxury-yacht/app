@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 )
@@ -48,6 +51,52 @@ func stubNodeFetchLogs(t *testing.T, responses map[string][]byte) {
 		}
 		return nil, errors.New("unexpected path: " + absPath)
 	}
+}
+
+// The app's typed clientset negotiates protobuf-then-JSON for built-in kinds
+// (backend protobufRestConfig). Node log pages are plain text and HTML, and the
+// node answers 406 Not Acceptable when a request accepts neither, so node log
+// requests must accept text whatever the clientset prefers.
+func TestNodeLogRequestsAcceptTextThroughAProtobufClientset(t *testing.T) {
+	nodeName := "node-a"
+	pages := map[string]string{
+		nodeLogProxyPath(nodeName, ""):                `<!doctype html><pre><a href="journal/">journal/</a></pre>`,
+		nodeLogProxyPath(nodeName, "journal/"):        `<!doctype html><pre><a href="kubelet">kubelet</a></pre>`,
+		nodeLogProxyPath(nodeName, "journal/kubelet"): "kubelet log line",
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accept := r.Header.Get("Accept")
+		if !strings.Contains(accept, "*/*") && !strings.Contains(accept, "text/") {
+			http.Error(w, "not acceptable: "+accept, http.StatusNotAcceptable)
+			return
+		}
+		page, ok := pages[r.URL.RequestURI()]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(page))
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := kubernetes.NewForConfig(&rest.Config{
+		Host: server.URL,
+		ContentConfig: rest.ContentConfig{
+			AcceptContentTypes: "application/vnd.kubernetes.protobuf,application/json",
+			ContentType:        "application/vnd.kubernetes.protobuf",
+		},
+	})
+	require.NoError(t, err)
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(client)))
+
+	discovery := service.DiscoverLogs(context.Background(), nodeName)
+	require.Empty(t, discovery.Reason)
+	require.True(t, discovery.Supported)
+	require.Equal(t, "journal/kubelet", discovery.Sources[0].Path)
+
+	logs := service.FetchLogs(context.Background(), nodeName, restypes.NodeLogFetchRequest{SourcePath: "journal/kubelet"})
+	require.Empty(t, logs.Error)
+	require.Equal(t, "kubelet log line", logs.Content)
 }
 
 func TestDiscoverLogsFindsReadableSourcesOneLevelBelowRoot(t *testing.T) {

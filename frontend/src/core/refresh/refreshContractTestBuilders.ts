@@ -12,6 +12,7 @@ import type {
   PodSnapshotEntry,
   PodSnapshotPayload,
   ResourceQueryCapabilities,
+  TelemetryClusterMetricsStatus,
   TelemetrySummary,
 } from './types';
 
@@ -212,12 +213,12 @@ export const makePodSnapshotEntry = (
     ownerKind: 'Deployment',
     ownerName: 'web',
     portForwardAvailable: false,
-    cpuRequest: '10m',
-    cpuLimit: '20m',
-    cpuUsage: '10m',
-    memRequest: '10Mi',
-    memLimit: '20Mi',
-    memUsage: '20Mi',
+    cpuRequestMilli: 10,
+    cpuLimitMilli: 20,
+    cpuUsageMilli: 10,
+    memoryRequestBytes: 10 * 1024 ** 2,
+    memoryLimitBytes: 20 * 1024 ** 2,
+    memoryUsageBytes: 20 * 1024 ** 2,
     ...split.row,
     ref: {
       ...builtInRef('Pod', 'pods', 'pod-a', 'default'),
@@ -235,22 +236,20 @@ export const makeClusterNodeSnapshotEntry = (
     roles: 'worker',
     age: '1d',
     version: 'v1.31.0',
-    cpuCapacity: '8',
-    cpuAllocatable: '7600m',
-    cpuRequests: '2',
-    cpuLimits: '4',
-    cpuUsage: '1200m',
-    memoryCapacity: '32Gi',
-    memoryAllocatable: '30Gi',
-    memRequests: '6Gi',
-    memLimits: '12Gi',
-    memoryUsage: '5Gi',
+    cpuCapacityMilli: 8000,
+    cpuAllocatableMilli: 7600,
+    cpuRequestsMilli: 2000,
+    cpuLimitsMilli: 4000,
+    cpuUsageMilli: 1200,
+    memoryCapacityBytes: 32 * 1024 ** 3,
+    memoryAllocatableBytes: 30 * 1024 ** 3,
+    memoryRequestsBytes: 6 * 1024 ** 3,
+    memoryLimitsBytes: 12 * 1024 ** 3,
+    memoryUsageBytes: 5 * 1024 ** 3,
     pods: '18',
     podsCapacity: '110',
     podsAllocatable: '100',
     restarts: 0,
-    cpu: '1200m',
-    memory: '5Gi',
     unschedulable: false,
     ...split.row,
     ref: {
@@ -278,22 +277,28 @@ export const makeNamespaceWorkloadSummary = (
   };
 };
 
-type TelemetrySummaryOverrides = Omit<Partial<TelemetrySummary>, 'metrics' | 'connection'> & {
-  metrics?: Partial<TelemetrySummary['metrics']>;
+type TelemetrySummaryOverrides = Omit<
+  Partial<TelemetrySummary>,
+  'clusterMetrics' | 'connection'
+> & {
+  // One cluster's metrics polling status, reported under metricsClusterId.
+  metrics?: Partial<TelemetryClusterMetricsStatus['metrics']>;
+  metricsClusterId?: string;
   connection?: Partial<TelemetrySummary['connection']>;
 };
 
 export const makeTelemetrySummary = (
   overrides: TelemetrySummaryOverrides = {}
 ): TelemetrySummary => {
-  const metrics: TelemetrySummary['metrics'] = {
+  const { metrics: metricsOverride, metricsClusterId = '', ...summaryOverrides } = overrides;
+  const metrics: TelemetryClusterMetricsStatus['metrics'] = {
     lastCollected: 0,
     lastDurationMs: 0,
     consecutiveFailures: 0,
     successCount: 0,
     failureCount: 0,
     active: false,
-    ...overrides.metrics,
+    ...metricsOverride,
   };
   const connection: TelemetrySummary['connection'] = {
     retryAttempts: 0,
@@ -305,8 +310,8 @@ export const makeTelemetrySummary = (
   return {
     snapshots: [],
     streams: [],
-    ...overrides,
-    metrics,
+    ...summaryOverrides,
+    clusterMetrics: [{ clusterId: metricsClusterId, metrics }],
     connection,
   };
 };

@@ -131,13 +131,11 @@ export type GeneratedRefreshOrchestratorKind =
   | 'snapshot'
   | 'doorbell-snapshot'
   | 'resource-stream'
-  | 'event-stream'
   | 'catalog-stream'
   | 'container-logs-stream';
 
 export type GeneratedRefreshDiagnosticsStream =
   | 'resources'
-  | 'events'
   | 'container-logs';
 
 export interface GeneratedRefreshDomainPolicy {

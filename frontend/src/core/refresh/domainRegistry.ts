@@ -38,7 +38,6 @@ export type RefreshBehaviorClass =
   | 'complete-resync-stream'
   | 'catalog-stream'
   | 'catalog-snapshot'
-  | 'event-stream'
   | 'event-snapshot'
   | 'log-stream'
   | 'detail-payload'
@@ -51,7 +50,7 @@ export type RefreshScopeContractKind =
   | 'optional-namespace'
   | 'catalog-query'
   | 'resource-stream-selector'
-  | 'event-stream-scope'
+  | 'namespace-scope'
   | 'object-ref'
   | 'helm-release'
   | 'object-map'
@@ -63,7 +62,6 @@ export type RefreshCachePolicy = GeneratedRefreshCachePolicy;
 export type RefreshStreamSemantic =
   | 'change-signal'
   | 'complete-resync'
-  | 'append-merge'
   | 'snapshot-replace'
   | 'line-stream'
   | 'none';
@@ -74,7 +72,6 @@ export type RefreshCoverageContract =
   | 'complete-resync-only'
   | 'catalog-consistency'
   | 'catalog-snapshot-query'
-  | 'event-resume-merge'
   | 'event-snapshot-payload'
   | 'log-stream-lifecycle'
   | 'detail-payload-shape'

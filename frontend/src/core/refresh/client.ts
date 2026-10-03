@@ -18,8 +18,12 @@ import {
 
 export type Snapshot<TPayload> = RefreshSnapshot<TPayload>;
 export type { SnapshotStats } from './types';
-export type NormalizedTelemetrySummary = Omit<TelemetrySummary, 'snapshots' | 'streams'> & {
+export type NormalizedTelemetrySummary = Omit<
+  TelemetrySummary,
+  'snapshots' | 'clusterMetrics' | 'streams'
+> & {
   snapshots: NonNullable<TelemetrySummary['snapshots']>;
+  clusterMetrics: NonNullable<TelemetrySummary['clusterMetrics']>;
   streams: NonNullable<TelemetrySummary['streams']>;
 };
 
@@ -75,26 +79,35 @@ const parseManualRefreshJob = async (response: Response): Promise<ManualRefreshJ
   return job as ManualRefreshJob;
 };
 
+const isManualRefreshJobPending = (job: ManualRefreshJob): boolean =>
+  job.state === 'queued' || job.state === 'running';
+
+// Polls until the job settles, doubling the wait between polls up to the cap.
 const pollManualRefreshJob = async (
-  initialJob: ManualRefreshJob,
+  job: ManualRefreshJob,
   signal: AbortSignal,
-  correlationId?: string
+  correlationId?: string,
+  pollDelayMs = INITIAL_MANUAL_JOB_POLL_MS
 ): Promise<ManualRefreshJob> => {
-  let job = initialJob;
-  let pollDelayMs = INITIAL_MANUAL_JOB_POLL_MS;
-  while (job.state === 'queued' || job.state === 'running') {
-    job = await parseManualRefreshJob(
-      await fetch(`/api/v2/jobs/${job.jobId}`, {
-        signal,
-        ...(correlationId ? { headers: { 'X-Correlation-ID': correlationId } } : {}),
-      })
-    );
-    if (job.state === 'queued' || job.state === 'running') {
-      await abortableDelay(pollDelayMs, signal);
-      pollDelayMs = Math.min(MAX_MANUAL_JOB_POLL_MS, pollDelayMs * 2);
-    }
+  if (!isManualRefreshJobPending(job)) {
+    return job;
   }
-  return job;
+  const next = await parseManualRefreshJob(
+    await fetch(`/api/v2/jobs/${job.jobId}`, {
+      signal,
+      ...(correlationId ? { headers: { 'X-Correlation-ID': correlationId } } : {}),
+    })
+  );
+  if (!isManualRefreshJobPending(next)) {
+    return next;
+  }
+  await abortableDelay(pollDelayMs, signal);
+  return pollManualRefreshJob(
+    next,
+    signal,
+    correlationId,
+    Math.min(MAX_MANUAL_JOB_POLL_MS, pollDelayMs * 2)
+  );
 };
 
 const waitForManualRefresh = async (
@@ -191,28 +204,26 @@ const isRetryableNetworkError = (error: unknown, signal?: AbortSignal): boolean 
   return false;
 };
 
+const SNAPSHOT_REQUEST_MAX_ATTEMPTS = 3;
+
+// Retries a network failure twice, after 200 ms and then 400 ms.
 const requestSnapshotWithRetry = async (
   domain: RefreshDomain,
-  options: FetchSnapshotOptions
+  options: FetchSnapshotOptions,
+  attempt = 0
 ): Promise<Response> => {
-  const maxAttempts = 3;
-  let response: Response | undefined;
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    try {
-      response = await requestSnapshot(domain, options);
-      break;
-    } catch (error) {
-      if (!isRetryableNetworkError(error, options.signal) || attempt + 1 >= maxAttempts) {
-        throw error;
-      }
-      const delayMs = Math.min(1000, 200 * 2 ** attempt);
-      await delay(delayMs);
+  try {
+    return await requestSnapshot(domain, options);
+  } catch (error) {
+    if (
+      !isRetryableNetworkError(error, options.signal) ||
+      attempt + 1 >= SNAPSHOT_REQUEST_MAX_ATTEMPTS
+    ) {
+      throw error;
     }
+    await delay(Math.min(1000, 200 * 2 ** attempt));
+    return requestSnapshotWithRetry(domain, options, attempt + 1);
   }
-  if (!response) {
-    throw new Error('Snapshot request failed');
-  }
-  return response;
 };
 
 export async function fetchSnapshot<TPayload>(
@@ -283,6 +294,7 @@ export async function fetchTelemetrySummary(): Promise<NormalizedTelemetrySummar
   return {
     ...summary,
     snapshots: summary.snapshots ?? [],
+    clusterMetrics: summary.clusterMetrics ?? [],
     streams: summary.streams ?? [],
   };
 }

@@ -47,12 +47,15 @@ func (s *Service) Job(ctx context.Context, namespace, name string) (*JobDetails,
 		return nil, fmt.Errorf("failed to get job: %w", err)
 	}
 
+	// A nil pod list means the pods could not be listed, which the Logs tab must
+	// not read as a Job without pods.
+	var podsForJob []corev1.Pod
 	podList, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: metav1.FormatLabelSelector(job.Spec.Selector)})
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods for Job %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
+	} else {
+		podsForJob = filterPodsForJob(job, podList)
 	}
-
-	podsForJob := filterPodsForJob(job, podList)
 	metrics := pods.NewService(s.deps).GetPodMetricsForPods(ctx, namespace, podsForJob)
 	return buildJobDetails(s.deps.ClusterID, job, podsForJob, metrics), nil
 }
@@ -106,8 +109,9 @@ func buildJobDetails(clusterID string, job *batchv1.Job, podsList []corev1.Pod, 
 	return details
 }
 
+// buildSimplePodInfo keeps nil (pods not listed) apart from empty (no pods).
 func buildSimplePodInfo(clusterID string, podSlice []corev1.Pod) []restypes.PodSimpleInfo {
-	if len(podSlice) == 0 {
+	if podSlice == nil {
 		return nil
 	}
 
@@ -132,7 +136,7 @@ func filterPodsForJob(job *batchv1.Job, podList *corev1.PodList) []corev1.Pod {
 		return nil
 	}
 
-	var filtered []corev1.Pod
+	filtered := make([]corev1.Pod, 0)
 	for _, pod := range podList.Items {
 		for _, owner := range pod.OwnerReferences {
 			if owner.Controller != nil && *owner.Controller && owner.Kind == "Job" && owner.UID == job.UID {

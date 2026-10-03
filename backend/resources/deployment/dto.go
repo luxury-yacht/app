@@ -53,8 +53,8 @@ type DeploymentDetails struct {
 	Containers     []restypes.PodDetailInfoContainer `json:"containers,omitempty"`
 	InitContainers []restypes.PodDetailInfoContainer `json:"initContainers,omitempty"`
 
-	// Pod information
-	Pods              []restypes.PodSimpleInfo    `json:"pods,omitempty"`
+	// The workload's pods: empty when it has none, null when they could not be listed.
+	Pods              []restypes.PodSimpleInfo    `json:"pods"`
 	PodMetricsSummary *restypes.PodMetricsSummary `json:"podMetricsSummary,omitempty"`
 
 	// ReplicaSet information

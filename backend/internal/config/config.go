@@ -247,20 +247,11 @@ const (
 	// ContainerLogsStreamBackoffInitial is the initial backoff applied when container logs streaming reconnects.
 	ContainerLogsStreamBackoffInitial = 1 * time.Second
 
-	// ContainerLogsStreamBackoffMax is the cap for container logs stream reconnection backoff.
-	ContainerLogsStreamBackoffMax = 30 * time.Second
-
 	// StreamHeartbeatInterval defines how often we evaluate heartbeat state for native streams.
 	StreamHeartbeatInterval = 15 * time.Second
 
-	// StreamHeartbeatTimeout is the max idle time before we flag the stream as stale.
-	StreamHeartbeatTimeout = 45 * time.Second
-
 	// ContainerLogsStreamBatchWindow controls the bundling window for container logs stream events before flushing.
 	ContainerLogsStreamBatchWindow = 250 * time.Millisecond
-
-	// ContainerLogsStreamKeepAliveInterval controls how often keepalive messages are emitted for container logs streams.
-	ContainerLogsStreamKeepAliveInterval = 15 * time.Second
 
 	// ContainerLogsStreamGlobalTargetLimit caps resolved pod/container targets across all active log scopes.
 	ContainerLogsStreamGlobalTargetLimit = 200
@@ -276,27 +267,54 @@ const (
 
 	// ContainerLogsStreamCronCacheMaxSize caps cached cron job owner lookups.
 	ContainerLogsStreamCronCacheMaxSize = 1000
-)
 
-// Event stream settings.
-const (
-	// EventStreamKeepAliveInterval controls how often keepalive messages are emitted for event streams.
-	EventStreamKeepAliveInterval = 15 * time.Second
+	// ContainerLogsStreamSnapshotDeadline is the longest a session waits for its
+	// containers' history before sending the first snapshot; later history
+	// arrives as ordinary batches.
+	ContainerLogsStreamSnapshotDeadline = 2 * time.Second
 
-	// EventStreamMaxSubscribersPerScope limits concurrent subscribers per scope to prevent memory exhaustion.
-	EventStreamMaxSubscribersPerScope = 100
+	// ContainerLogsStreamHistoryDecision is the longest a session waits for
+	// every container's first history read before choosing which containers
+	// read again. It is half the snapshot deadline, so a slow read cannot hold
+	// back the others' history.
+	ContainerLogsStreamHistoryDecision = ContainerLogsStreamSnapshotDeadline / 2
 
-	// EventStreamResumeBufferSize caps stored events per scope for resume tokens.
-	EventStreamResumeBufferSize = 1000
+	// ContainerLogsStreamHistoryGather is how long a session gathers the
+	// containers that start during it before reading their history together.
+	ContainerLogsStreamHistoryGather = 250 * time.Millisecond
 
-	// EventStreamSubscriberBufferSize buffers per-subscriber event stream deliveries.
-	EventStreamSubscriberBufferSize = 256
+	// ContainerLogsStreamRemovedPodGrace is how long a session waits after a
+	// pod is deleted before telling the client to drop its lines; a pod
+	// recreated with the same name in that time (a StatefulSet pod) keeps them.
+	ContainerLogsStreamRemovedPodGrace = 10 * time.Second
 
-	// AggregateEventStreamResumeBufferSize caps stored aggregate events per scope for resume tokens.
-	AggregateEventStreamResumeBufferSize = 2000
+	// ContainerLogsStreamCaughtUpIdle is how long an opened log stream may go
+	// without a line before its history counts as delivered. Kubelet sends
+	// history back-to-back, so a gap this long ends it.
+	ContainerLogsStreamCaughtUpIdle = 250 * time.Millisecond
 
-	// AggregateEventStreamEntryBufferSize buffers aggregate events before delivery.
-	AggregateEventStreamEntryBufferSize = 256
+	// ContainerLogsStreamResponseTimeout is how long a log request may wait for
+	// response headers before it is abandoned and retried. An established
+	// stream that is merely quiet never times out.
+	ContainerLogsStreamResponseTimeout = 20 * time.Second
+
+	// ContainerLogsStreamPendingMaxEntries and ContainerLogsStreamPendingMaxBytes
+	// bound the entries a session holds before sending them; beyond them new
+	// entries are dropped and reported.
+	ContainerLogsStreamPendingMaxEntries = 100_000
+	ContainerLogsStreamPendingMaxBytes   = 64 * 1024 * 1024
+
+	// ContainerLogsStreamMaxBytes caps the line bytes a client log buffer
+	// holds; the first snapshot is trimmed to it.
+	ContainerLogsStreamMaxBytes = 64 * 1024 * 1024
+
+	// ContainerLogsFetchParallelism caps how many containers a one-shot log
+	// fetch (previous logs) reads at once.
+	ContainerLogsFetchParallelism = 5
+
+	// ContainerLogsFetchTargetTimeout bounds reading one container's logs in a
+	// one-shot fetch, so one unresponsive container cannot hold back the rest.
+	ContainerLogsFetchTargetTimeout = 20 * time.Second
 )
 
 // Resource stream settings.

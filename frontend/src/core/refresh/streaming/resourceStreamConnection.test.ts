@@ -46,7 +46,7 @@ describe('ResourceStreamConnection', () => {
     vi.useRealTimers();
   });
 
-  it('connects to the resource stream endpoint and forwards messages', async () => {
+  it('connects to the resource stream endpoint and forwards messages', () => {
     const delegate = {
       handleConnectionOpen: vi.fn(),
       handleMessage: vi.fn(),
@@ -54,7 +54,7 @@ describe('ResourceStreamConnection', () => {
     };
     const connection = new ResourceStreamConnection(delegate);
 
-    await connection.connect();
+    connection.connect();
 
     const socket = createdSockets[0];
     expect(socket.url).toBe('refresh-resources');
@@ -65,7 +65,7 @@ describe('ResourceStreamConnection', () => {
     expect(delegate.handleMessage).toHaveBeenCalledWith({ type: 'HEARTBEAT' });
   });
 
-  it('queues outbound messages until the socket is available', async () => {
+  it('queues outbound messages until the socket is available', () => {
     const delegate = {
       handleConnectionOpen: vi.fn(),
       handleMessage: vi.fn(),
@@ -79,7 +79,7 @@ describe('ResourceStreamConnection', () => {
       domain: 'pods',
       scope: 'cluster-a|namespace:default',
     });
-    await connection.connect();
+    connection.connect();
 
     const socket = createdSockets[0];
     socket.onopen?.(new Event('open'));
@@ -103,7 +103,7 @@ describe('ResourceStreamConnection', () => {
     };
     const connection = new ResourceStreamConnection(delegate);
 
-    await connection.connect();
+    connection.connect();
     createdSockets[0].onclose?.();
     await Promise.resolve();
 

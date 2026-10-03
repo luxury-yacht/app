@@ -88,11 +88,10 @@ var knownFrontendOrchestrators = stringSet(
 	"snapshot",
 	"doorbell-snapshot",
 	"resource-stream",
-	"event-stream",
 	"catalog-stream",
 	"container-logs-stream",
 )
-var knownDiagnosticsStreams = stringSet("resources", "events", "container-logs")
+var knownDiagnosticsStreams = stringSet("resources", "container-logs")
 
 func stringSet(values ...string) map[string]struct{} {
 	result := make(map[string]struct{}, len(values))

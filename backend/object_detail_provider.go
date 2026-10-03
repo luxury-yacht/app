@@ -160,10 +160,11 @@ func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schem
 	if cached, ok := p.cachedObjectDetails(ctx, resolved, gvk, namespace, name, cacheKey); ok {
 		return cached, nil
 	}
+	since := p.cacheGeneration()
 
 	detail, err := fetcher.withDeps(ctx, resolved.deps, namespace, name)
 	if err == nil && p != nil && p.gateway != nil {
-		p.gateway.responseCacheStore(resolved.selectionKey, cacheKey, detail)
+		p.gateway.responseCacheStore(resolved.selectionKey, cacheKey, detail, since)
 	}
 	return detail, err
 }
@@ -192,13 +193,14 @@ func (p *objectDetailProvider) FetchObjectHeaderMetadata(ctx context.Context, gv
 		}
 	}
 
+	since := p.cacheGeneration()
 	obj, err := fetchObjectByGVK(ctx, resolved.deps, gvk, namespace, name)
 	if err != nil {
 		return snapshot.ObjectHeaderMetadata{}, err
 	}
 	meta := objectHeaderMetadata(obj)
 	if p != nil && p.gateway != nil {
-		p.gateway.responseCacheStore(resolved.selectionKey, cacheKey, meta)
+		p.gateway.responseCacheStore(resolved.selectionKey, cacheKey, meta, since)
 	}
 	return meta, nil
 }
@@ -338,12 +340,13 @@ func fetchHelmContent[T any](
 	if content, revision, ok := cachedHelmDetail[T](p, ctx, resolved, service, kind, namespace, name); ok {
 		return content, revision, nil
 	}
+	since := p.cacheGeneration()
 	content, err := fetch(service, namespace, name)
 	if err != nil {
 		return zero, 0, err
 	}
 	if p != nil && p.gateway != nil {
-		p.gateway.responseCacheStore(resolved.selectionKey, objectDetailCacheKey(kind, namespace, name), content)
+		p.gateway.responseCacheStore(resolved.selectionKey, objectDetailCacheKey(kind, namespace, name), content, since)
 	}
 	return content, helmRevisionOrZero(ctx, p, resolved, service, namespace, name), nil
 }
@@ -405,13 +408,14 @@ func (p *objectDetailProvider) helmReleaseRevisionWithCache(
 	if revision, ok := p.cachedHelmReleaseRevision(ctx, resolved, detailsCacheKey, namespace, name); ok {
 		return revision, nil
 	}
+	since := p.cacheGeneration()
 
 	details, err := service.ReleaseDetails(ctx, namespace, name)
 	if err != nil || details == nil {
 		return 0, err
 	}
 	if p != nil && p.gateway != nil {
-		p.gateway.responseCacheStore(resolved.selectionKey, detailsCacheKey, details)
+		p.gateway.responseCacheStore(resolved.selectionKey, detailsCacheKey, details, since)
 	}
 	return details.Revision, nil
 }
@@ -441,6 +445,15 @@ func (p *objectDetailProvider) cachedHelmReleaseRevision(
 	}
 	p.gateway.responseCacheDelete(resolved.selectionKey, detailsCacheKey)
 	return 0, false
+}
+
+// cacheGeneration is read after the cache lookup, which may evict, and before
+// the fetch whose result is cached.
+func (p *objectDetailProvider) cacheGeneration() uint64 {
+	if p == nil {
+		return 0
+	}
+	return p.gateway.responseCacheGeneration()
 }
 
 func (p *objectDetailProvider) cachedObjectDetails(ctx context.Context, resolved resolvedObjectDetailContext, gvk schema.GroupVersionKind, namespace, name, cacheKey string) (interface{}, bool) {

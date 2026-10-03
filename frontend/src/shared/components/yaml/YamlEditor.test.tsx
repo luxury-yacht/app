@@ -26,6 +26,7 @@ const nativeActionMocks = vi.hoisted(() => ({
 
 const wailsRuntimeMocks = vi.hoisted(() => ({
   readClipboardText: vi.fn(() => Promise.resolve('clipboard-text')),
+  writeClipboardText: vi.fn<(text: string) => Promise<void>>(() => Promise.resolve()),
 }));
 
 const searchMocks = vi.hoisted(() => {
@@ -256,6 +257,7 @@ describe('YamlEditor', () => {
     nativeActionMocks.getCodeMirrorSelectedText.mockClear();
     nativeActionMocks.selectCodeMirrorContent.mockClear();
     wailsRuntimeMocks.readClipboardText.mockClear();
+    wailsRuntimeMocks.writeClipboardText.mockClear();
     searchMocks.findNext.mockClear();
     searchMocks.findPrevious.mockClear();
     codeMirrorState.props = { value: '', onChange: () => undefined };
@@ -267,7 +269,6 @@ describe('YamlEditor', () => {
     codeMirrorState.decorationRanges = [];
     Object.assign(navigator, {
       clipboard: {
-        writeText: vi.fn(() => Promise.resolve()),
         readText: vi.fn(() => Promise.resolve('pasted')),
       },
     });
@@ -505,6 +506,30 @@ describe('YamlEditor', () => {
     expect(nativeActionMocks.cutCodeMirrorSelection).toHaveBeenCalledWith(
       codeMirrorState.editorView
     );
+
+    await unmount();
+  });
+
+  it('copies the selection to the Wails clipboard from the context menu', async () => {
+    const { container, unmount } = await renderYamlEditor({ editable: false });
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="code-mirror"]')
+        ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    });
+
+    const copyItem = Array.from(document.querySelectorAll('.context-menu-item')).find(
+      (candidate) => candidate.querySelector('.context-menu-label')?.textContent === 'Copy'
+    );
+    expect(copyItem).toBeTruthy();
+
+    await act(async () => {
+      copyItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    // The WebView refuses browser clipboard writes that a click starts.
+    expect(wailsRuntimeMocks.writeClipboardText).toHaveBeenCalledWith('selected');
 
     await unmount();
   });

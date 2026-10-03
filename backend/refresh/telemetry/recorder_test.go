@@ -167,13 +167,13 @@ func TestRecordMetrics(t *testing.T) {
 	rec.RecordMetrics(250*time.Millisecond, ts, errors.New("oops"), 2, false)
 	rec.RecordMetrics(120*time.Millisecond, ts, nil, 0, true)
 
-	summary := rec.SnapshotSummary()
-	require.Equal(t, int64(120), summary.Metrics.LastDurationMs)
-	require.Equal(t, ts.UnixMilli(), summary.Metrics.LastCollected)
-	require.Equal(t, 0, summary.Metrics.ConsecutiveFailures)
-	require.Equal(t, uint64(1), summary.Metrics.SuccessCount)
-	require.Equal(t, uint64(1), summary.Metrics.FailureCount)
-	require.Equal(t, "", summary.Metrics.LastError)
+	metrics := rec.SnapshotSummary().ClusterMetrics[0].Metrics
+	require.Equal(t, int64(120), metrics.LastDurationMs)
+	require.Equal(t, ts.UnixMilli(), metrics.LastCollected)
+	require.Equal(t, 0, metrics.ConsecutiveFailures)
+	require.Equal(t, uint64(1), metrics.SuccessCount)
+	require.Equal(t, uint64(1), metrics.FailureCount)
+	require.Equal(t, "", metrics.LastError)
 }
 
 func TestStreamTelemetry(t *testing.T) {
@@ -263,15 +263,14 @@ func TestRecordStreamDeliveryForLeafTracksPerDomainCounters(t *testing.T) {
 	require.Equal(t, StreamResources, byDomain["nodes"].Name)
 }
 
-// TestStreamLeafKindsDoNotCollide proves the three streams key their per-leaf
-// counters by different things (a refresh domain, an event scope, a container
-// target) and that a diagnostics consumer can tell them apart. Two leaves that
-// share a key string but not a kind must stay separate entries.
+// TestStreamLeafKindsDoNotCollide proves the two streams key their per-leaf
+// counters by different things (a refresh domain, a container target) and that
+// a diagnostics consumer can tell them apart. Two leaves that share a key
+// string but not a kind must stay separate entries.
 func TestStreamLeafKindsDoNotCollide(t *testing.T) {
 	rec := NewRecorder()
 	rec.RecordStreamDeliveryForLeaf(StreamResources, DomainLeaf("pods"), 5, 0)
-	rec.RecordStreamDeliveryForLeaf(StreamEvents, ScopeLeaf("pods"), 2, 0)
-	rec.RecordStreamDeliveryForLeaf(StreamContainerLogs, TargetLeaf("ns/pods/app"), 7, 0)
+	rec.RecordStreamDeliveryForLeaf(StreamContainerLogs, TargetLeaf("pods"), 7, 0)
 
 	type leafID struct {
 		name string
@@ -284,9 +283,8 @@ func TestStreamLeafKindsDoNotCollide(t *testing.T) {
 	}
 
 	require.Equal(t, uint64(5), byLeaf[leafID{StreamResources, StreamLeafDomain, "pods"}].TotalMessages)
-	require.Equal(t, uint64(2), byLeaf[leafID{StreamEvents, StreamLeafScope, "pods"}].TotalMessages)
-	require.Equal(t, uint64(7), byLeaf[leafID{StreamContainerLogs, StreamLeafTarget, "ns/pods/app"}].TotalMessages)
-	require.Len(t, byLeaf, 3)
+	require.Equal(t, uint64(7), byLeaf[leafID{StreamContainerLogs, StreamLeafTarget, "pods"}].TotalMessages)
+	require.Len(t, byLeaf, 2)
 }
 
 // TestStreamLevelRowsCarryNoLeaf proves socket-level activity (sessions,

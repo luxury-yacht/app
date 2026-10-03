@@ -299,7 +299,7 @@ func newFakePodWorkloadsIngestSource(meta ClusterMeta, rsLister appslisters.Repl
 		}
 		aggregate := projectPodAggregate(pod, PodOwnerSources{ReplicaSets: rsLister})
 		bundles = append(bundles, ingest.Bundle{
-			Table:     podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister, nil)),
+			Table:     podres.BuildStreamSummary(streamMeta, pod, rsLister, nil),
 			Aggregate: aggregate,
 			Indexes:   podAggregateBundleIndexes(aggregate),
 		})

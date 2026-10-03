@@ -91,9 +91,8 @@ export function resolveBuiltinGroupVersion(
  * "group/version" (e.g. "apps/v1", "documentdb.services.k8s.aws/v1alpha1").
  *
  * Returns `{}` for null/empty input. Use this when threading an
- * apiVersion field from the backend (e.g. an Event's
- * `involvedObjectApiVersion`) into a `KubernetesObjectReference`
- * that needs split `group`/`version` keys.
+ * apiVersion field from the backend (e.g. a Pod's `ownerApiVersion`) into a
+ * `KubernetesObjectReference` that needs split `group`/`version` keys.
  */
 export function parseApiVersion(
   apiVersion: string | null | undefined

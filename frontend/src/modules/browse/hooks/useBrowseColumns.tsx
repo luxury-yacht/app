@@ -10,7 +10,7 @@ import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { useMemo } from 'react';
-import type { CatalogItem } from '@/core/refresh/types';
+import type { CatalogActionFacts, CatalogItem } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
 /**
@@ -23,8 +23,8 @@ export type BrowseTableRow = {
   creationTimestamp: CatalogItem['creationTimestamp'];
   scope: CatalogItem['scope'];
   metadata: CatalogItem['metadata'];
-  labelsDigest?: CatalogItem['labelsDigest'];
-  actionFacts?: CatalogItem['actionFacts'];
+  labelsDigest?: string;
+  actionFacts?: CatalogActionFacts;
   kindDisplay: string;
   namespaceDisplay: string;
   apiDisplay: string;

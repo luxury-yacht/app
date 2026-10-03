@@ -17,18 +17,15 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   border: 1px solid transparent;
-}
-
-/* ==========================================================================
-   Kind Badges (Resource Type Indicators)
-   ========================================================================== */
-.kind-badge {
   /* Default/fallback colors (used for unknown kinds like custom resources) */
   background-color: var(--badge-grey-bg);
   color: var(--badge-grey-text);
   border-color: rgba(100, 116, 139, 0.3);
 }
 
+/* ==========================================================================
+   Kind Badges (Resource Type Indicators)
+   ========================================================================== */
 /* Clickable badge interactions */
 .kind-badge.clickable {
   cursor: pointer;

@@ -33,7 +33,7 @@ func TestPodOwnerCollapseRequiresBuiltinAPIVersion(t *testing.T) {
 			require.Equal(t, "owner", ownerName)
 			require.Equal(t, "custom.example/v1", ownerAPI)
 			calls := 0
-			row := buildPodRow(streamrows.ClusterMeta{ClusterID: "cluster-a"}, &pod, 0, 0, mapping,
+			row := buildPodRow(streamrows.ClusterMeta{ClusterID: "cluster-a"}, &pod, mapping,
 				func(namespace, name string) (string, string, string, bool) {
 					calls++
 					return "batch/v1", "CronJob", "cron", true
@@ -59,7 +59,7 @@ func TestReplicaSetCollapseRequiresBuiltinDeploymentParent(t *testing.T) {
 			pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "ns", OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "rs", Controller: ptr.To(true),
 			}}}}
-			row := BuildStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, pod, 0, 0, appslisters.NewReplicaSetLister(indexer), nil)
+			row := BuildStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, pod, appslisters.NewReplicaSetLister(indexer), nil)
 			if apiVersion == "apps/v1" {
 				require.Equal(t, "parent", mapping["rs"])
 				require.Equal(t, "Deployment", row.OwnerKind)

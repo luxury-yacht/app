@@ -117,9 +117,6 @@ type NodeSummary = streamrows.NodeSummary
 // NodeTaint represents a node taint in snapshot payload.
 type NodeTaint = streamrows.NodeTaint
 
-// NodePodMetric captures realtime usage for a pod scheduled on the node.
-type NodePodMetric = streamrows.NodePodMetric
-
 // RegisterNodeDomain registers the nodes snapshot domain. Node and pods are both cut to the
 // ingest path. The node OWN-rows are served from a per-cluster maintained store fed by the
 // node reflector's Table-half ingest Sink — the SAME mechanism pods uses (RegisterPodDomain):
@@ -170,7 +167,7 @@ func RegisterNodeDomainList(reg *domain.Registry, client kubernetes.Interface, p
 // serve. The store rows stay usage-free: a metric tick changes only the served copies and the
 // metric source clock, never the object version.
 func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	nodeUsage, podUsage, metadata := latestNodeMetrics(b.metrics)
+	nodeUsage, metadata := latestNodeMetrics(b.metrics)
 	version := maxIngestStoreVersion(b.ingest, NodeGVR, PodGVR)
 	return buildNodeSnapshotFromIngestUsage(
 		ctx,
@@ -183,7 +180,7 @@ func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapsho
 			storeVersion:  version,
 			podAggregates: podAggregatesFromIngest(b.ingest),
 			usage: nodeUsageInputs{
-				nodes: nodeUsage, pods: podUsage, metadata: metadata,
+				nodes: nodeUsage, metadata: metadata,
 			},
 		},
 		// Reuse the per-Build engine store across page turns/sort flips while
@@ -258,10 +255,10 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 			podsVersion = v
 		}
 	}
-	nodeUsage, podUsage, metadata := latestNodeMetrics(b.metrics)
+	nodeUsage, metadata := latestNodeMetrics(b.metrics)
 	return buildNodeSnapshotFromUsage(ctx, scope, nodeSnapshotInputs{
 		nodes: nodes, podAggregates: aggregates, podsVersion: podsVersion,
-		usage: nodeUsageInputs{nodes: nodeUsage, pods: podUsage, metadata: metadata},
+		usage: nodeUsageInputs{nodes: nodeUsage, metadata: metadata},
 	})
 }
 
@@ -274,7 +271,6 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 // never touched here.
 type nodeUsageInputs struct {
 	nodes    map[string]metrics.NodeUsage
-	pods     map[string]metrics.PodUsage
 	metadata metrics.Metadata
 }
 
@@ -324,7 +320,7 @@ func buildNodeSnapshotFromIngestUsage(ctx context.Context, scope string, inputs 
 	items := make([]NodeSummary, 0, len(inputs.ownRows))
 	podsByNode := podAggregatesByNode(inputs.podAggregates)
 	for _, own := range inputs.ownRows {
-		items = append(items, reaggregateNodeSummary(own, podsByNode[own.Ref.Name], inputs.usage.pods, inputs.usage.nodes))
+		items = append(items, reaggregateNodeSummary(own, podsByNode[own.Ref.Name], inputs.usage.nodes))
 	}
 	return finishNodeSnapshot(ctx, scope, items, inputs.storeVersion, inputs.usage.metadata, opts...)
 }
@@ -480,12 +476,6 @@ func formatRoles(roles []string) string {
 func formatAge(t time.Time) string {
 	return timeutil.FormatAge(t)
 }
-
-// formatCPUMilli/formatMemoryBytes live in the streamrows leaf so the metrics
-// kind packages (pods/nodes/workloads) share them; these aliases keep the
-// snapshot-side names for the remaining snapshot callers.
-var formatCPUMilli = streamrows.FormatCPUMilli
-var formatMemoryBytes = streamrows.FormatMemoryBytes
 
 func aggregatePodResources(pods []streamrows.PodAggregate) (cpuReq, cpuLim, memReq, memLim int64, restarts int32) {
 	for _, agg := range pods {

@@ -124,6 +124,12 @@ backpressure, cancellation, manager replacement, and shutdown behavior. Keep
 those contracts on their framework-owned transports rather than recreating an
 application transport between them.
 
+The telemetry summary reports every open cluster's streams, snapshots and
+metrics polling status, each tagged with its cluster. The Diagnostics summary
+cards describe the active cluster only, combining a stream's socket entry with
+its delivery entries (catalog and event-table domains, log targets); the
+Connections tab lists each cluster's rows with a Cluster column.
+
 - Signal-driven refetch keys only on the declared `signalVersions`. Snapshot
   responses also update validators and must not echo into another refetch.
 - Signal versions are opaque equality tokens. Sequence and Kubernetes
@@ -135,6 +141,14 @@ application transport between them.
   count. Tests for collection-source changes or table-source migrations must
   exercise that composition with real state owners; separate mocked producer
   and consumer tests cannot establish the connection.
+- A doorbell for an informer-fed maintained store rings from that store's own
+  handler after it applies the change. client-go runs every handler on its own
+  listener goroutine, so a second handler on the same informer can ring before
+  the store holds the change. Adds, real updates, and deletes ring; resync
+  echoes (unchanged `resourceVersion`) do not. The Cluster and Namespace Events
+  tables follow this through the `changed` hook of
+  `registerMaintainedInformerHandler`; namespaced tables ring both
+  `namespace:<name>` and `namespace:all`.
 - A source must advance only the payload it owns. In particular, a metric tick
   must not advance an object clock or make an object snapshot appear changed.
 - A signal producer invalidates the affected snapshot/query cache before it
@@ -302,6 +316,14 @@ Finish non-documentation changes with `wails3 task qc:prerelease`.
 Cache invalidation advances a domain generation as well as deleting cache entries.
 New requests cannot join pre-invalidation builds, and those builds cannot populate
 the new generation's cache after completion.
+
+The resource gateway's response cache (object details, header metadata, Helm
+content) follows the same rule per entry: a fetch stores its result only if the
+entry was not evicted after the fetch began (`backend/response_cache.go`). A kind
+whose details embed its pods sets `DetailListsPods`; any pod change in a
+namespace evicts those kinds' cached details there, since a pod row does not name
+its workload. A stale pod list would otherwise hide a new pod's lines in the Logs
+tab.
 
 Cooled mmap stores belong to the exact subsystem generation. Replacement publishes
 new aggregate routes before retiring old snapshot serving; retirement rejects late

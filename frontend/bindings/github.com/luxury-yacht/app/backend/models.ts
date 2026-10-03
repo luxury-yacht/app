@@ -704,6 +704,19 @@ export interface ObjectYAMLReloadMergeResponse {
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
+export type PodContainer = types$0.PodContainer;
+
+/**
+ * Per-kind detail DTOs are no longer re-exported here. The generated
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * nested sub-type through those parent structs — so no package-backend alias is
+ * needed for any kind DTO or its sub-types. What remains is app-level and shared
+ * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
+ * hand-written and therefore still named in package backend (HelmReleaseDetails,
+ * PodDetailInfo, CustomResourceDefinitionDetails).
+ */
 export type PodDetailInfo = types$0.PodDetailInfo;
 
 /**

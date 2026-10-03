@@ -3,10 +3,10 @@
 # frontend/package.json must mirror these values.
 go = "1.26.8"
 node = "26.10.0"
-npm = "12.1.0"
+npm = "12.2.0"
 "go:honnef.co/go/tools/cmd/staticcheck" = "0.8.1"
 trivy = "0.74.0"
-"go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.26"
+"go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.27"
 
 [vars]
 # NSIS is installed by the Windows-specific release action rather than Mise.

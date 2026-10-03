@@ -1,51 +1,45 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogKeyboardShortcuts.ts
  *
- * Keyboard shortcuts for the Log Viewer.
- * Extracts shortcut registration from the main component for clarity.
+ * Keyboard shortcuts shared by Container Logs and Node Logs. Timestamps (T)
+ * and previous logs (V) are optional features a viewer passes when it has them.
  */
 
 import { useSearchShortcutTarget, useShortcut } from '@ui/shortcuts';
-import { type RefObject, useCallback } from 'react';
-import type { LogViewerAction } from '../logViewerReducer';
+import { type Dispatch, type RefObject, useCallback } from 'react';
+import type { LogOptionsAction, LogOptionsState } from '../logOptionsReducer';
 
 interface UseLogKeyboardShortcutsParams {
   isActive: boolean;
-  isParsedView: boolean;
-  displayMode: 'raw' | 'structured' | 'pretty' | 'parsed';
-  showTimestamps: boolean;
-  regexMatches: boolean;
+  options: Pick<LogOptionsState, 'displayMode' | 'regexMatches'>;
   hasAnsiLogEntries: boolean;
   hasCopyableContent: boolean;
-  dispatch: React.Dispatch<LogViewerAction>;
-  supportsPreviousContainerLogs: boolean;
-  canParseContainerLogs: boolean;
-  handleTogglePreviousContainerLogs: () => void;
-  handleCopyContainerLogs: () => void;
+  canParseLogs: boolean;
+  dispatch: Dispatch<LogOptionsAction>;
+  copyLogs: () => void;
   filterInputRef: RefObject<HTMLInputElement | null>;
   logsContentRef: RefObject<HTMLElement | null>;
+  timestamps?: { toggle: () => void };
+  previousLogs?: { toggle: () => void };
 }
 
-/**
- * Keyboard shortcuts for the Log Viewer.
- * Extracts shortcut registration from the main component for clarity.
- */
 export function useLogKeyboardShortcuts({
   isActive,
-  isParsedView,
-  displayMode,
-  showTimestamps,
-  regexMatches,
+  options,
   hasAnsiLogEntries,
   hasCopyableContent,
+  canParseLogs,
   dispatch,
-  supportsPreviousContainerLogs,
-  canParseContainerLogs,
-  handleTogglePreviousContainerLogs,
-  handleCopyContainerLogs,
+  copyLogs,
   filterInputRef,
   logsContentRef,
+  timestamps,
+  previousLogs,
 }: UseLogKeyboardShortcutsParams) {
+  const { displayMode, regexMatches } = options;
+  const isParsedView = displayMode === 'parsed';
+  const toggleTimestamps = timestamps?.toggle;
+  const togglePreviousLogs = previousLogs?.toggle;
   // Toggle auto-refresh with 'R' key
   useShortcut({
     key: 'r',
@@ -63,40 +57,35 @@ export function useLogKeyboardShortcuts({
     priority: 20,
   });
 
-  // Toggle timestamps with 'T' key
   useShortcut({
     key: 't',
     handler: useCallback(() => {
-      if (!isActive) {
+      if (!isActive || !toggleTimestamps) {
         return false;
       }
-      dispatch({
-        type: 'SET_TIMESTAMP_MODE',
-        payload: showTimestamps ? 'hidden' : 'default',
-      });
+      toggleTimestamps();
       return true;
-    }, [isActive, showTimestamps, dispatch]),
+    }, [isActive, toggleTimestamps]),
     description: 'Toggle API timestamps',
     category: 'Logs',
     helpOrder: 30,
-    enabled: isActive,
+    enabled: isActive && Boolean(toggleTimestamps),
     priority: 20,
   });
 
-  // Toggle previous logs with 'V' key
   useShortcut({
     key: 'v',
     handler: useCallback(() => {
-      if (!isActive || !supportsPreviousContainerLogs) {
+      if (!isActive || !togglePreviousLogs) {
         return false;
       }
-      handleTogglePreviousContainerLogs();
+      togglePreviousLogs();
       return true;
-    }, [handleTogglePreviousContainerLogs, isActive, supportsPreviousContainerLogs]),
+    }, [isActive, togglePreviousLogs]),
     description: 'Toggle previous logs',
     category: 'Logs',
     helpOrder: 40,
-    enabled: isActive && supportsPreviousContainerLogs,
+    enabled: isActive && Boolean(togglePreviousLogs),
     priority: 20,
   });
 
@@ -168,16 +157,16 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'p',
     handler: useCallback(() => {
-      if (!isActive || !canParseContainerLogs) {
+      if (!isActive || !canParseLogs) {
         return false;
       }
       dispatch({ type: 'TOGGLE_PARSED_VIEW' });
       return true;
-    }, [isActive, canParseContainerLogs, dispatch]),
+    }, [isActive, canParseLogs, dispatch]),
     description: 'Toggle Parse/Raw mode',
     category: 'Logs',
     helpOrder: 60,
-    enabled: isActive && canParseContainerLogs,
+    enabled: isActive && canParseLogs,
     priority: 20,
   });
 
@@ -204,10 +193,10 @@ export function useLogKeyboardShortcuts({
       if (!isActive || !hasCopyableContent) {
         return false;
       }
-      handleCopyContainerLogs();
+      copyLogs();
       return true;
-    }, [handleCopyContainerLogs, hasCopyableContent, isActive]),
-    description: 'Copy container logs to clipboard',
+    }, [copyLogs, hasCopyableContent, isActive]),
+    description: 'Copy logs to clipboard',
     category: 'Logs',
     helpOrder: 70,
     enabled: isActive && hasCopyableContent,
@@ -217,7 +206,7 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'j',
     handler: useCallback(() => {
-      if (!isActive || !canParseContainerLogs) {
+      if (!isActive || !canParseLogs) {
         return false;
       }
       dispatch({
@@ -225,11 +214,11 @@ export function useLogKeyboardShortcuts({
         payload: displayMode === 'pretty' ? 'raw' : 'pretty',
       });
       return true;
-    }, [isActive, canParseContainerLogs, displayMode, dispatch]),
+    }, [isActive, canParseLogs, displayMode, dispatch]),
     description: 'Toggle pretty JSON',
     category: 'Logs',
     helpOrder: 61,
-    enabled: isActive && canParseContainerLogs,
+    enabled: isActive && canParseLogs,
     priority: 20,
   });
 
@@ -280,7 +269,7 @@ export function useLogKeyboardShortcuts({
       container.scrollTo({ top: 0, behavior: 'auto' });
       return true;
     }, [isActive, getScrollContainer]),
-    description: 'Scroll container logs to top',
+    description: 'Scroll logs to top',
     category: 'Logs',
     helpOrder: 20,
     enabled: isActive,
@@ -302,7 +291,7 @@ export function useLogKeyboardShortcuts({
       container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
       return true;
     }, [isActive, getScrollContainer]),
-    description: 'Scroll container logs to bottom',
+    description: 'Scroll logs to bottom',
     category: 'Logs',
     helpOrder: 21,
     enabled: isActive,

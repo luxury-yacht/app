@@ -49,6 +49,7 @@ describe('MetricsStatus', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    vi.useRealTimers();
   });
 
   const render = () => {
@@ -85,6 +86,36 @@ describe('MetricsStatus', () => {
 
     const indicator = render();
     expect(indicator?.getAttribute('data-status')).toBe('healthy');
+  });
+
+  it('shows the age of the last collection from the seconds-based collectedAt', () => {
+    // collectedAt is Unix seconds; reading it as milliseconds would render a
+    // 1970-era age instead of the real one.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-30T12:00:04Z'));
+    mockMetricsInfo = {
+      stale: false,
+      successCount: 3,
+      failureCount: 0,
+      collectedAt: Date.parse('2026-09-30T12:00:00Z') / 1000,
+    };
+
+    const indicator = render();
+    expect(indicator?.textContent).toMatch(/collected 4s ago/);
+  });
+
+  it('shows no collection age for a legacy zero-time collectedAt', () => {
+    // Older backends serialized Go's zero time instead of omitting it; that is
+    // "never collected", not a collection decades ago.
+    mockMetricsInfo = {
+      stale: false,
+      successCount: 3,
+      failureCount: 0,
+      collectedAt: -62135596800,
+    };
+
+    const indicator = render();
+    expect(indicator?.textContent).not.toMatch(/collected/i);
   });
 
   it('is inactive when no metrics payload has arrived', () => {

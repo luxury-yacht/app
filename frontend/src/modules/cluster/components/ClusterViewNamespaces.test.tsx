@@ -265,9 +265,10 @@ describe('ClusterViewNamespaces', () => {
       throw new Error('expected CPU ResourceBar');
     }
     expect(cpuCell.props).toMatchObject({
-      usage: '450m',
-      request: '300m',
-      limit: '600m',
+      usage: 450,
+      request: 300,
+      limit: 600,
+      'data-gridtable-export-text': '450',
       type: 'cpu',
       variant: 'compact',
       animationScopeKey: 'cluster-a|/v1/Namespace//payments:cpu',
@@ -278,9 +279,10 @@ describe('ClusterViewNamespaces', () => {
       throw new Error('expected Memory ResourceBar');
     }
     expect(memoryCell.props).toMatchObject({
-      usage: '256Mi',
-      request: '512Mi',
-      limit: '1.0Gi',
+      usage: 256 * 1024 * 1024,
+      request: 512 * 1024 * 1024,
+      limit: 1024 * 1024 * 1024,
+      'data-gridtable-export-text': '262144',
       type: 'memory',
       variant: 'compact',
       animationScopeKey: 'cluster-a|/v1/Namespace//payments:memory',

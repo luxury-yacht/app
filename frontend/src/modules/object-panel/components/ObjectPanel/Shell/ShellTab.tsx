@@ -14,7 +14,7 @@ import {
 import { readPodContainers, requestData } from '@/core/data-access';
 import '@xterm/xterm/css/xterm.css';
 import type { types } from '@core/backend-api/models';
-import { type DesktopEventPayload, onEvent } from '@core/desktop-runtime';
+import { type DesktopEventPayload, onEvent, writeClipboardText } from '@core/desktop-runtime';
 import {
   buildObjectActionTarget,
   runCreateDebugContainer,
@@ -178,7 +178,7 @@ function handleShellClipboardKey(
   }
   const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
   const key = event.key.toLowerCase();
-  if (key === 'c' && clipboard?.writeText && terminal.hasSelection() && copySelection()) {
+  if (key === 'c' && terminal.hasSelection() && copySelection()) {
     event.preventDefault();
     event.stopPropagation();
     return false;
@@ -295,8 +295,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
 
   const copyTerminalSelection = useCallback(() => {
     const terminal = terminalRef.current;
-    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
-    if (!terminal || !clipboard?.writeText || !terminal.hasSelection()) {
+    if (!terminal?.hasSelection()) {
       return false;
     }
 
@@ -305,7 +304,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
       return false;
     }
 
-    void clipboard.writeText(selection).catch(() => {
+    void writeClipboardText(selection).catch(() => {
       /* ignore clipboard write failures */
     });
     return true;
@@ -805,18 +804,12 @@ const ShellTab: React.FC<ShellTabProps> = ({
       if (lastTargetRef.current !== target) {
         return;
       }
-      const containerNames = result.status === 'executed' ? (result.data ?? []) : [];
-      const normalized = Array.from(
-        new Set(
-          containerNames
-            .map((name) => name.trim())
-            // init containers are not valid exec targets
-            .filter((name) => !name.endsWith(' (init)'))
-            .map((name) => (name.endsWith(' (debug)') ? name.replace(' (debug)', '') : name))
-            .filter((name) => name.length > 0)
-        )
-      );
-      setDiscoveredContainers(normalized);
+      const containers = result.status === 'executed' ? (result.data ?? []) : [];
+      // Init containers are not valid exec targets.
+      const execTargets = containers
+        .filter((podContainer) => !podContainer.isInit)
+        .map((podContainer) => podContainer.name);
+      setDiscoveredContainers(Array.from(new Set(execTargets)));
     } catch {
       // Keep existing fallback list from details/session if fetch fails.
     }

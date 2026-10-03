@@ -53,6 +53,10 @@ selected by the column change. Custom label/annotation columns have a separate
   dash through `tableNoValue`; native tables must render potentially absent
   scalar values through `TableCellValue`. Copy and CSV export use the same
   canonical hyphen.
+- CPU and memory columns (`createResourceBarColumn`) export plain integers,
+  millicores and KiB, under `CPU (m)` / `Memory (KiB)` headers (the column's
+  `exportHeader`), so spreadsheets can sort and total them. The cells keep
+  their display units.
 
 ## Columns menu
 

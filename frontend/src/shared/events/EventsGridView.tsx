@@ -26,7 +26,6 @@ import {
 import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { splitEventObjectTarget } from '@shared/utils/eventObjectIdentity';
 import { useCallback, useMemo } from 'react';
 import { useShortNames } from '@/hooks/useShortNames';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -34,18 +33,17 @@ import { getDisplayKind } from '@/utils/kindAliasMap';
 /** The event row shape both scope views select from their snapshots. */
 export interface EventGridRow {
   ref: CanonicalResourceRef;
-  /** Involved-object kind, present on namespace Event rows. */
-  kind?: string;
   kindAlias?: string;
   resourceVersion: string;
-  type: string; // Event severity (Normal, Warning)
+  type: string; // Event severity (Normal, Warning); empty when the Event has none
   source: string;
   reason: string;
   object: string;
+  objectKind?: string;
+  objectName?: string;
   message: string;
   objectNamespace?: string;
   objectUid?: string;
-  objectApiVersion?: string;
   involvedObject?: ResourceLink;
   age?: string;
   ageTimestamp?: number;
@@ -53,8 +51,8 @@ export interface EventGridRow {
 
 /**
  * useEventsGridParts wires the scope-independent event grid machinery.
- * `defaultNamespace` threads the namespace view's scope into involved-object
- * resolution and the stable row key; the cluster view passes none.
+ * `defaultNamespace` threads the namespace view's scope into the stable row
+ * key; the cluster view passes none.
  */
 export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: string } = {}) {
   const { openWithObject } = useObjectPanel();
@@ -68,11 +66,8 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
   );
 
   const resolveOptions = useMemo(
-    () =>
-      defaultNamespace === undefined
-        ? { selectedClusterId, selectedClusterName }
-        : { defaultNamespace, selectedClusterId, selectedClusterName },
-    [defaultNamespace, selectedClusterId, selectedClusterName]
+    () => ({ selectedClusterId, selectedClusterName }),
+    [selectedClusterId, selectedClusterName]
   );
 
   const canOpenInvolvedObject = useCallback(
@@ -119,76 +114,63 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
     [defaultNamespace]
   );
 
-  /**
-   * Builds the shared event columns. The cluster view suppresses row clicks on
-   * the kind column; the namespace view keeps them.
-   */
-  const buildColumns = useCallback(
-    ({
-      kindAllowRowClick = true,
-    }: {
-      kindAllowRowClick?: boolean;
-    } = {}): GridColumnDefinition<EventGridRow>[] => {
-      const baseColumns: GridColumnDefinition<EventGridRow>[] = [
-        cf.createKindColumn<EventGridRow>({
-          getKind: () => 'Event',
-          getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
-          onClick: openEvent,
-          onAltClick: navigateToEvent,
-          ...(kindAllowRowClick ? {} : { allowRowClick: false }),
-        }),
-        createEventTypeColumn<EventGridRow>(),
-        cf.createTextColumn('source', EVENT_LABELS.source, (event) => event.source || '-'),
-        cf.createTextColumn<EventGridRow>('objectType', EVENT_LABELS.objectType, (event) => {
-          const parsed = splitEventObjectTarget(event.object);
-          return parsed.objectType;
-        }),
-        cf.createTextColumn<EventGridRow>(
-          'objectName',
-          EVENT_LABELS.objectName,
-          (event) => {
-            const parsed = splitEventObjectTarget(event.object);
-            return parsed.objectName;
+  /** Builds the shared event columns for both Events tables. */
+  const buildColumns = useCallback((): GridColumnDefinition<EventGridRow>[] => {
+    const baseColumns: GridColumnDefinition<EventGridRow>[] = [
+      cf.createKindColumn<EventGridRow>({
+        getKind: () => 'Event',
+        getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
+        onClick: openEvent,
+        onAltClick: navigateToEvent,
+      }),
+      createEventTypeColumn<EventGridRow>(),
+      cf.createTextColumn('source', EVENT_LABELS.source, (event) => event.source || '-'),
+      cf.createTextColumn<EventGridRow>(
+        'objectType',
+        EVENT_LABELS.objectType,
+        (event) => event.objectKind || '-'
+      ),
+      cf.createTextColumn<EventGridRow>(
+        'objectName',
+        EVENT_LABELS.objectName,
+        (event) => event.objectName || '-',
+        {
+          onClick: (event) => {
+            void openInvolvedObject(event);
           },
-          {
-            onClick: (event) => {
-              void openInvolvedObject(event);
-            },
-            onAltClick: (event) => {
-              void navigateToInvolvedObject(event);
-            },
-            getClassName: () => 'object-panel-link',
-            isInteractive: canOpenInvolvedObject,
-            allowRowClick: false,
-            hideable: false,
-          }
-        ),
-        cf.createTextColumn('reason', EVENT_LABELS.reason, (event) => event.reason || '-'),
-        cf.createTextColumn('message', EVENT_LABELS.message, (event) => event.message || '-'),
-        cf.createAgeColumn<EventGridRow>('age', EVENT_LABELS.lastSeen, (event) => event.age),
-      ];
+          onAltClick: (event) => {
+            void navigateToInvolvedObject(event);
+          },
+          getClassName: () => 'object-panel-link',
+          isInteractive: canOpenInvolvedObject,
+          allowRowClick: false,
+          hideable: false,
+        }
+      ),
+      cf.createTextColumn('reason', EVENT_LABELS.reason, (event) => event.reason || '-'),
+      cf.createTextColumn('message', EVENT_LABELS.message, (event) => event.message || '-'),
+      cf.createAgeColumn<EventGridRow>('age', EVENT_LABELS.lastSeen, (event) => event.age),
+    ];
 
-      const sizing: cf.ColumnSizingMap = {
-        kind: { autoWidth: true },
-        type: { autoWidth: true },
-        source: { width: 200 },
-        objectType: { autoWidth: true },
-        objectName: { width: 200 },
-        reason: { width: 200 },
-        message: { width: 250 },
-        age: { autoWidth: true },
-      };
-      return cf.withColumnSizing(baseColumns, sizing);
-    },
-    [
-      canOpenInvolvedObject,
-      navigateToEvent,
-      navigateToInvolvedObject,
-      openEvent,
-      openInvolvedObject,
-      useShortResourceNames,
-    ]
-  );
+    const sizing: cf.ColumnSizingMap = {
+      kind: { autoWidth: true },
+      type: { autoWidth: true },
+      source: { width: 200 },
+      objectType: { autoWidth: true },
+      objectName: { width: 200 },
+      reason: { width: 200 },
+      message: { width: 250 },
+      age: { autoWidth: true },
+    };
+    return cf.withColumnSizing(baseColumns, sizing);
+  }, [
+    canOpenInvolvedObject,
+    navigateToEvent,
+    navigateToInvolvedObject,
+    openEvent,
+    openInvolvedObject,
+    useShortResourceNames,
+  ]);
 
   return {
     selectedClusterId,
@@ -243,9 +225,8 @@ export function useEventsGridActions({
 
   const getContextMenuItems = useCallback(
     (event: EventGridRow): ContextMenuItem[] => {
-      const parsed = splitEventObjectTarget(event.object);
       const involvedObjectExtras =
-        parsed.isLinkable && canOpenInvolvedObject(event)
+        event.objectKind && event.objectName && canOpenInvolvedObject(event)
           ? {
               involvedObject: event.object,
               involvedObjectRef: event.involvedObject,

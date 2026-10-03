@@ -234,12 +234,6 @@ const createPod = (
     restarts: 0,
     age: '1m',
     portForwardAvailable: false,
-    cpuRequest: '',
-    cpuLimit: '',
-    cpuUsage: '',
-    memRequest: '',
-    memLimit: '',
-    memUsage: '',
     ...row,
   };
 };
@@ -671,12 +665,12 @@ describe('PodsTab (query-backed)', () => {
 
   it('projects CPU and memory values and freshness from the panel-scoped query into metric cells', async () => {
     const pod = createPod({
-      cpuUsage: '250m',
-      cpuRequest: '500m',
-      cpuLimit: '1',
-      memUsage: '64Mi',
-      memRequest: '128Mi',
-      memLimit: '256Mi',
+      cpuUsageMilli: 250,
+      cpuRequestMilli: 500,
+      cpuLimitMilli: 1000,
+      memoryUsageBytes: 64 * 1024 ** 2,
+      memoryRequestBytes: 128 * 1024 ** 2,
+      memoryLimitBytes: 256 * 1024 ** 2,
     });
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
@@ -707,21 +701,21 @@ describe('PodsTab (query-backed)', () => {
     );
     expect(cpu.props).toMatchObject({
       type: 'cpu',
-      usage: '250m',
-      request: '500m',
-      limit: '1',
+      usage: 250,
+      request: 500,
+      limit: 1000,
       metricsStale: true,
       metricsError: 'panel metrics unavailable',
-      'data-gridtable-export-text': '—',
+      'data-gridtable-export-text': '-',
     });
     expect(memory.props).toMatchObject({
       type: 'memory',
-      usage: '64Mi',
-      request: '128Mi',
-      limit: '256Mi',
+      usage: 64 * 1024 ** 2,
+      request: 128 * 1024 ** 2,
+      limit: 256 * 1024 ** 2,
       metricsStale: true,
       metricsError: 'panel metrics unavailable',
-      'data-gridtable-export-text': '—',
+      'data-gridtable-export-text': '-',
     });
   });
 

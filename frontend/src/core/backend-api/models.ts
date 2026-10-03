@@ -2,6 +2,7 @@ export * as capabilities from '@bindings/github.com/luxury-yacht/app/backend/cap
 export * as appupdates from '@bindings/github.com/luxury-yacht/app/backend/internal/appupdates/models';
 export * as backend from '@bindings/github.com/luxury-yacht/app/backend/models';
 export * as objectcatalog from '@bindings/github.com/luxury-yacht/app/backend/objectcatalog/models';
+export * as panelmetrics from '@bindings/github.com/luxury-yacht/app/backend/panelmetrics/models';
 export * as snapshot from '@bindings/github.com/luxury-yacht/app/backend/refresh/snapshot/models';
 export * as resourcemodel from '@bindings/github.com/luxury-yacht/app/backend/resourcemodel/models';
 export * as admission from '@bindings/github.com/luxury-yacht/app/backend/resources/admission/models';

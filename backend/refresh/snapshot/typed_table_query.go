@@ -5,7 +5,6 @@ import (
 	"math"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -485,58 +484,13 @@ func stringSet(values []string) map[string]struct{} {
 	return result
 }
 
-// parseFormattedCPUToMilli and parseFormattedMemoryToBytes are used for the
-// always-numeric CPU/memory metric columns. A missing or unparseable value
-// returns ok=true with a -Inf sentinel (sorts first ascending) rather than
-// ok=false, so the field stays uniformly numeric and the page sort and keyset
-// cursor cannot diverge on rows that lack a metric sample.
-func parseFormattedCPUToMilli(value string) (float64, bool) {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" || trimmed == "-" {
+// usageSortValue keeps the CPU/memory metric columns uniformly numeric. A row
+// without a usage sample returns ok=true with a -Inf sentinel (sorts first
+// ascending) rather than ok=false, so the page sort and keyset cursor cannot
+// diverge on rows that lack a metric sample.
+func usageSortValue(value *int64) (float64, bool) {
+	if value == nil {
 		return math.Inf(-1), true
 	}
-	if strings.HasSuffix(trimmed, "m") {
-		parsed, err := strconv.ParseFloat(strings.TrimSuffix(trimmed, "m"), 64)
-		if err != nil {
-			return math.Inf(-1), true
-		}
-		return parsed, true
-	}
-	parsed, err := strconv.ParseFloat(trimmed, 64)
-	if err != nil {
-		return math.Inf(-1), true
-	}
-	return parsed * 1000, true
-}
-
-func parseFormattedMemoryToBytes(value string) (float64, bool) {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" || trimmed == "-" {
-		return math.Inf(-1), true
-	}
-	units := []struct {
-		suffix string
-		scale  float64
-	}{
-		{"Gi", 1024 * 1024 * 1024},
-		{"GB", 1000 * 1000 * 1000},
-		{"Mi", 1024 * 1024},
-		{"MB", 1000 * 1000},
-		{"Ki", 1024},
-		{"KB", 1000},
-	}
-	for _, unit := range units {
-		if strings.HasSuffix(trimmed, unit.suffix) {
-			parsed, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(trimmed, unit.suffix)), 64)
-			if err != nil {
-				return math.Inf(-1), true
-			}
-			return parsed * unit.scale, true
-		}
-	}
-	parsed, err := strconv.ParseFloat(trimmed, 64)
-	if err != nil {
-		return math.Inf(-1), true
-	}
-	return parsed, true
+	return float64(*value), true
 }

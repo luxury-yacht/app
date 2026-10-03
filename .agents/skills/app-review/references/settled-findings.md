@@ -12,8 +12,11 @@ item only with current repository evidence that overturns its recorded verdict.
   panel-local action reducer.
 - Query-backed cluster tables own their base-scope refresh leases. Contexts do
   not hold domain data or a `clusterDomainScopes` manifest.
-- LogViewer async state is the `LogViewMode` discriminated union in
-  `frontend/src/modules/object-panel/components/ObjectPanel/Logs/logViewerReducer.ts`.
+- LogViewer's view mode is `LogViewMode` (`live | previous`) in
+  `frontend/src/modules/object-panel/components/ObjectPanel/Logs/logViewerReducer.ts`;
+  previous logs live in component state and the stream manager is the only
+  writer of `container-logs` state. Container and Node Logs share one viewer
+  shell (options reducer, presentation hook, toolbar, shortcuts, copy action).
 - The resource-kind registry drives the catalog, table rows, generated detail
   dispatch, object map, and stream summaries. See
   `docs/architecture/resource-kind-registry.md`; remaining exceptions are

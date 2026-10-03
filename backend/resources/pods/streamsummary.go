@@ -2,10 +2,9 @@
  * backend/resources/pods/streamsummary.go
  *
  * Pod's stream-summary builder, owned by the kind's package. Produces the neutral
- * streamrows.PodSummary row. It takes the pod's already-resolved CPU/memory usage
- * as primitives rather than the metrics map: refresh/metrics transitively imports
+ * streamrows.PodSummary row without usage: refresh/metrics transitively imports
  * resourcecontract, which imports every kind package, so a metrics import here
- * would cycle. The caller (snapshot/manager) owns the metrics lookup.
+ * would cycle. The snapshot joins usage onto served copies.
  *
  * BuildStreamSummary resolves the pod's ReplicaSet->Deployment owner map from a
  * lister (the streaming path); BuildStreamSummaryFromRSMap takes a pre-built map
@@ -32,25 +31,25 @@ type JobControllerOwnerLookup func(namespace, jobName string) (apiVersion, kind,
 const appsAPIVersion = "apps/v1"
 
 // BuildStreamSummary builds the pod row, resolving controller ancestry from the
-// supplied ReplicaSet lister and Job lookup. cpuUsageMilli/memUsageBytes are the
-// pod's current usage.
-func BuildStreamSummary(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, memUsageBytes int64, rsLister appslisters.ReplicaSetLister, jobOwnerLookup JobControllerOwnerLookup) streamrows.PodSummary {
+// supplied ReplicaSet lister and Job lookup. The row carries no usage; the snapshot
+// joins the current metrics sample onto served copies.
+func BuildStreamSummary(meta streamrows.ClusterMeta, pod *corev1.Pod, rsLister appslisters.ReplicaSetLister, jobOwnerLookup JobControllerOwnerLookup) streamrows.PodSummary {
 	if pod == nil {
 		return streamrows.PodSummary{}
 	}
-	return buildPodRow(meta, pod, cpuUsageMilli, memUsageBytes, buildReplicaSetDeploymentMapForPod(pod, rsLister), jobOwnerLookup)
+	return buildPodRow(meta, pod, buildReplicaSetDeploymentMapForPod(pod, rsLister), jobOwnerLookup)
 }
 
 // BuildStreamSummaryFromRSMap builds the pod row with a pre-built ReplicaSet->
 // Deployment owner map (the full-snapshot path shares one map across all pods).
-func BuildStreamSummaryFromRSMap(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, memUsageBytes int64, rsMap map[string]string) streamrows.PodSummary {
+func BuildStreamSummaryFromRSMap(meta streamrows.ClusterMeta, pod *corev1.Pod, rsMap map[string]string) streamrows.PodSummary {
 	if pod == nil {
 		return streamrows.PodSummary{}
 	}
-	return buildPodRow(meta, pod, cpuUsageMilli, memUsageBytes, rsMap, nil)
+	return buildPodRow(meta, pod, rsMap, nil)
 }
 
-func buildPodRow(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, memUsageBytes int64, rsMap map[string]string, jobOwnerLookup JobControllerOwnerLookup) streamrows.PodSummary {
+func buildPodRow(meta streamrows.ClusterMeta, pod *corev1.Pod, rsMap map[string]string, jobOwnerLookup JobControllerOwnerLookup) streamrows.PodSummary {
 	model := BuildResourceModel(meta.ClusterID, pod)
 	podFacts := BuildFacts(pod)
 	owner := resolvePodOwner(pod, rsMap, jobOwnerLookup)
@@ -74,12 +73,10 @@ func buildPodRow(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, me
 		DirectOwnerKind:       owner.directKind,
 		DirectOwnerName:       owner.directName,
 		DirectOwnerAPIVersion: owner.directAPIVersion,
-		CPURequest:            streamrows.FormatCPUMilli(cpuReq),
-		CPULimit:              streamrows.FormatCPUMilli(cpuLim),
-		CPUUsage:              streamrows.FormatCPUMilli(cpuUsageMilli),
-		MemRequest:            streamrows.FormatMemoryBytes(memReq),
-		MemLimit:              streamrows.FormatMemoryBytes(memLim),
-		MemUsage:              streamrows.FormatMemoryBytes(memUsageBytes),
+		CPURequestMilli:       cpuReq,
+		CPULimitMilli:         cpuLim,
+		MemoryRequestBytes:    memReq,
+		MemoryLimitBytes:      memLim,
 	}
 }
 

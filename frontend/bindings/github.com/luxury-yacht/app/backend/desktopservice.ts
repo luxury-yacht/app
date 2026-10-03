@@ -22,6 +22,9 @@ import * as capabilities$0 from "./capabilities/models.js";
 import * as objectcatalog$0 from "./objectcatalog/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as panelmetrics$0 from "./panelmetrics/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as snapshot$0 from "./refresh/snapshot/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -76,6 +79,10 @@ export function AcknowledgeWorkspaceWindowClose(callerWindowName: string): $Canc
 
 export function AddFavorite(favorite: $models.Favorite): $CancellablePromise<$models.Favorite> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AddFavorite", favorite);
+}
+
+export function AppendPanelMetricSample(clusterID: string, panelID: string, sample: panelmetrics$0.Sample): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AppendPanelMetricSample", clusterID, panelID, sample);
 }
 
 export function ApplyClusterWorkspace(command: $models.ClusterWorkspaceCommand): $CancellablePromise<$models.ClusterWorkspaceResult> {
@@ -230,7 +237,7 @@ export function GetClusterWorkspaceStateForWindow(windowID: string): $Cancellabl
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetClusterWorkspaceStateForWindow", windowID);
 }
 
-export function GetContainerLogsScopeContainers(clusterID: string, scope: string): $CancellablePromise<string[] | null> {
+export function GetContainerLogsScopeContainers(clusterID: string, scope: string): $CancellablePromise<$models.PodContainer[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetContainerLogsScopeContainers", clusterID, scope);
 }
 
@@ -262,11 +269,15 @@ export function GetObjectYAMLByGVK(clusterID: string, apiVersion: string, kind: 
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetObjectYAMLByGVK", clusterID, apiVersion, kind, $namespace, name);
 }
 
+export function GetPanelMetricSeries(clusterID: string, panelID: string, afterT: number): $CancellablePromise<panelmetrics$0.Series | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetPanelMetricSeries", clusterID, panelID, afterT);
+}
+
 export function GetPanelWorkspace(windowName: string, clusterID: string): $CancellablePromise<panelwindow$0.WorkspaceSnapshot> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetPanelWorkspace", windowName, clusterID);
 }
 
-export function GetPodContainers(clusterID: string, $namespace: string, podName: string): $CancellablePromise<string[] | null> {
+export function GetPodContainers(clusterID: string, $namespace: string, podName: string): $CancellablePromise<$models.PodContainer[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetPodContainers", clusterID, $namespace, podName);
 }
 

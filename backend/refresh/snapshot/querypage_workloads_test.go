@@ -2,9 +2,11 @@ package snapshot
 
 import (
 	"fmt"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"slices"
 	"testing"
+
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"k8s.io/utils/ptr"
 )
 
 // makeWorkloadRows builds varied WorkloadSummary rows. It sets the fields the
@@ -31,8 +33,8 @@ func makeWorkloadRows(n int) []WorkloadSummary {
 			StatusPresentation: presentations[i%len(presentations)],
 			Age:                fmt.Sprintf("%dm", i%5),
 			AgeTimestamp:       int64(1_000_000 + (i%9)*1000), // ties, non-zero so NumericSort engages
-			CPUUsage:           fmt.Sprintf("%dm", (i%6)*50),
-			MemUsage:           fmt.Sprintf("%dMi", (i%6)*64),
+			CPUUsageMilli:      ptr.To(int64((i % 6) * 50)),
+			MemoryUsageBytes:   ptr.To(int64((i % 6) * 64 << 20)),
 		}
 	}
 	return rows

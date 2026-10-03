@@ -269,8 +269,8 @@
    --------------------------------------------------------------------
    Markup that wraps a ResourceBar to form a complete "resource section":
    header (title + total), the bar, and a legend of values below. Used by
-   ClusterOverview's Resource Usage block and the object-panel Details
-   tab's Resource Utilization block. */
+   ClusterOverview's Resource Usage block and the CPU and Memory sections of
+   the object-panel Metrics tab. */
 
 .resource-bar-placeholder {
   height: 10px;
@@ -278,7 +278,7 @@
 }
 
 .resource-group {
-  margin-bottom: 0.6rem;
+  margin-bottom: 1rem;
 }
 
 .resource-group:last-child {

@@ -773,6 +773,9 @@ type typedMaintainedStore[T any] struct {
 type maintainedReconcileSource[T any] struct {
 	listRows func() []T
 	owns     func(T) bool
+	// removed, when non-nil, is told about each row the sweep deleted, after the
+	// delete, so the store's doorbell can announce rows that vanished while Cold.
+	removed func(T)
 }
 
 func newTypedMaintainedStore[T any](meta ClusterMeta, schema querypage.Schema[T], adapter typedTableQueryAdapter[T]) *typedMaintainedStore[T] {
@@ -856,46 +859,86 @@ func registerMaintainedHandlers[T any](
 // contract (events) needs this. project turns a watched object into its row + source object
 // (ok=false skips it). Handlers must be registered before the informer's factory starts so
 // the sync gate guarantees the store is populated before the first Build serves from it.
+//
+// changed, when non-nil, runs after the store has applied a real change: an add,
+// an update with a new resourceVersion, or a delete. It runs on this handler's
+// own listener, so a doorbell rung from it can never reach a reader before the
+// store holds the change. Resync echoes still re-upsert but report no change.
+//
+// The returned synced reports when this handler has applied the informer's
+// initial list. The informer's own HasSynced turns true before its handlers
+// catch up, so a builder serving from the store must gate on this instead.
 func registerMaintainedInformerHandler[T any](
 	maintained *typedMaintainedStore[T],
 	informer cache.SharedIndexInformer,
 	project func(obj interface{}) (row T, source metav1.Object, ok bool),
-) error {
-	record := func(obj interface{}) {
-		if row, src, ok := project(obj); ok {
-			maintained.upsertRow(row, src)
-		}
-	}
-	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    record,
-		UpdateFunc: func(_, newObj interface{}) { record(newObj) },
-		DeleteFunc: func(obj interface{}) {
-			if row, _, ok := project(maintainedUnwrap(obj)); ok {
-				maintained.deleteRow(row)
-			}
+	changed func(row T),
+) (cache.InformerSynced, error) {
+	handler := maintainedInformerHandler[T]{maintained: maintained, project: project, changed: changed}
+	registration, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) { handler.upsert(obj, true) },
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			handler.upsert(newObj, !informerUpdateIsEcho(oldObj, newObj))
 		},
+		DeleteFunc: handler.remove,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// This bespoke single-kind store gets no Delete on a fresh informer for an object removed
 	// while the cluster was Cold, so a row restored from a stale spill would ghost. Register a
 	// reconcile source that re-projects the informer's live set and owns the whole store (it
 	// holds exactly this one kind), so Reconcile drops ghosts on re-warm.
 	maintained.addReconcileSourceRows(
-		func() []T {
-			objs := informer.GetIndexer().List()
-			rows := make([]T, 0, len(objs))
-			for _, obj := range objs {
-				if row, _, ok := project(obj); ok {
-					rows = append(rows, row)
-				}
-			}
-			return rows
-		},
+		func() []T { return handler.rows(informer.GetIndexer().List()) },
 		func(T) bool { return true },
+		handler.report,
 	)
-	return nil
+	return registration.HasSynced, nil
+}
+
+// maintainedInformerHandler applies one informer's deliveries to its maintained
+// store and reports each applied change.
+type maintainedInformerHandler[T any] struct {
+	maintained *typedMaintainedStore[T]
+	project    func(obj interface{}) (row T, source metav1.Object, ok bool)
+	changed    func(row T)
+}
+
+func (h maintainedInformerHandler[T]) upsert(obj interface{}, report bool) {
+	row, src, ok := h.project(obj)
+	if !ok {
+		return
+	}
+	h.maintained.upsertRow(row, src)
+	if report {
+		h.report(row)
+	}
+}
+
+func (h maintainedInformerHandler[T]) remove(obj interface{}) {
+	row, _, ok := h.project(maintainedUnwrap(obj))
+	if !ok {
+		return
+	}
+	h.maintained.deleteRow(row)
+	h.report(row)
+}
+
+func (h maintainedInformerHandler[T]) report(row T) {
+	if h.changed != nil {
+		h.changed(row)
+	}
+}
+
+func (h maintainedInformerHandler[T]) rows(objs []interface{}) []T {
+	rows := make([]T, 0, len(objs))
+	for _, obj := range objs {
+		if row, _, ok := h.project(obj); ok {
+			rows = append(rows, row)
+		}
+	}
+	return rows
 }
 
 // feedMaintainedFromIngest wires each ingest-owned kind in the domain to feed the
@@ -1131,9 +1174,9 @@ func (m *typedMaintainedStore[T]) addReconcileSource(desc streamspec.Descriptor,
 // (registerMaintainedInformerHandler) rather than a descriptor's StreamRow — the CRD/event
 // stores. listRows yields its currently-live rows; owns reports which existing rows it is
 // responsible for (a single-kind bespoke store passes owns == always-true to sweep its
-// whole content).
-func (m *typedMaintainedStore[T]) addReconcileSourceRows(listRows func() []T, owns func(T) bool) {
-	m.reconcileSources = append(m.reconcileSources, maintainedReconcileSource[T]{listRows: listRows, owns: owns})
+// whole content). removed (optional) is told about each row the sweep deletes.
+func (m *typedMaintainedStore[T]) addReconcileSourceRows(listRows func() []T, owns func(T) bool, removed func(T)) {
+	m.reconcileSources = append(m.reconcileSources, maintainedReconcileSource[T]{listRows: listRows, owns: owns, removed: removed})
 }
 
 // Reconcile diff-syncs the store against the live row set of every reconcile source: it
@@ -1154,19 +1197,29 @@ func (m *typedMaintainedStore[T]) Reconcile() {
 			want[m.adapter.Key(row)] = struct{}{}
 			m.store.Upsert(row)
 		}
-		for _, existing := range m.store.Snapshot() {
-			if !src.owns(existing) {
-				continue
-			}
-			key := m.adapter.Key(existing)
-			if _, keep := want[key]; !keep {
-				m.store.Delete(key)
-			}
-		}
+		m.sweepReconcileSource(src, want)
 	}
 	// Reconcile runs only on re-warm (ReconcileMaintainedStores); a refetch is always
 	// wanted then, so advance the refetch identity once.
 	m.bumpSinkVersion()
+}
+
+// sweepReconcileSource deletes every row src owns whose key is not live, then
+// reports it through src.removed.
+func (m *typedMaintainedStore[T]) sweepReconcileSource(src maintainedReconcileSource[T], want map[string]struct{}) {
+	for _, existing := range m.store.Snapshot() {
+		if !src.owns(existing) {
+			continue
+		}
+		key := m.adapter.Key(existing)
+		if _, keep := want[key]; keep {
+			continue
+		}
+		m.store.Delete(key)
+		if src.removed != nil {
+			src.removed(existing)
+		}
+	}
 }
 
 // deleteRow removes an already-projected row by its adapter key — the bespoke-projection

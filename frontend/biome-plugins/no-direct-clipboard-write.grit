@@ -1,0 +1,19 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+// Clipboard writes go through the native desktop clipboard in core/desktop-runtime. The app's
+// WebView refuses browser clipboard writes that a click starts, so copy buttons and menu items
+// that use the browser API fail while keyboard shortcuts still work.
+or {
+  `$receiver.writeText($...)`,
+  `$receiver?.writeText($...)`,
+  `$receiver.clipboard.write($...)`,
+  `$receiver.clipboard?.write($...)`,
+  `$receiver?.clipboard?.write($...)`
+} as $call where {
+  register_diagnostic(
+    span = $call,
+    message = "Write to the clipboard with writeClipboardText from @core/desktop-runtime.",
+    severity = "error"
+  )
+}

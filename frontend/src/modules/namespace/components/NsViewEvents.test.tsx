@@ -273,13 +273,25 @@ describe('NsViewEvents', () => {
         }),
         ...ref,
       },
-      kind: 'Event',
       resourceVersion: '1',
       type: 'Warning',
       source: 'kubelet',
       reason: 'FailedScheduling',
       object: 'Pod/api',
-      objectApiVersion: 'v1',
+      objectKind: 'Pod',
+      objectName: 'api',
+      // The backend's openable link for a versioned involved object.
+      involvedObject: {
+        ref: {
+          clusterId: 'alpha:ctx',
+          group: '',
+          version: 'v1',
+          kind: 'Pod',
+          resource: 'pods',
+          namespace: 'team-a',
+          name: 'api',
+        },
+      },
       message: 'Insufficient CPU',
       objectNamespace: 'team-a',
       ageTimestamp: 42,
@@ -567,8 +579,12 @@ describe('NsViewEvents', () => {
     });
     const event = baseEvent({
       object: 'Database/primary',
+      objectKind: 'Database',
+      objectName: 'primary',
       objectUid: 'database-uid',
-      objectApiVersion: undefined,
+      involvedObject: {
+        display: { clusterId: 'alpha:ctx', kind: 'Database', name: 'primary', uid: 'database-uid' },
+      },
     });
     const props = await renderEventsView();
     const objectNameColumn = requireValue(
@@ -597,7 +613,13 @@ describe('NsViewEvents', () => {
   });
 
   it('keeps Event actions when no involved object is available', async () => {
-    const event = baseEvent({ object: undefined });
+    // An Event that names no involved object: no display text, kind, name, or link.
+    const event = baseEvent({
+      object: undefined,
+      objectKind: undefined,
+      objectName: undefined,
+      involvedObject: undefined,
+    });
     const props = await renderEventsView();
     const menu = props.getCustomContextMenuItems(event, 'objectName');
     const viewDetails = menu.find((item) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
@@ -654,47 +676,6 @@ describe('NsViewEvents', () => {
     );
     expect(fallbackAgeColumn.render(eventWithAge)).toBe('5m');
     expect(formatAgeMock).not.toHaveBeenCalled();
-  });
-
-  it('derives namespace from objectNamespace, event namespace, or component namespace', async () => {
-    const noNamespaceEvent = baseEvent({
-      ref: { namespace: undefined },
-      objectNamespace: undefined,
-    });
-    // Query-backed: feed the query the row so the involved-object action can resolve it.
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: {
-        status: 'ready',
-        data: {
-          rows: [noNamespaceEvent],
-          total: 1,
-          totalIsExact: true,
-          namespaces: ['team-a'],
-          kinds: ['Event'],
-          facetsExact: true,
-        },
-      },
-    });
-    await renderEventsView();
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    const props = gridTablePropsRef.current;
-    const menu = props.getCustomContextMenuItems(noNamespaceEvent, 'objectName');
-    await act(async () => {
-      menu.find((item) => item.actionId === OBJECT_ACTION_IDS.viewInvolvedObject)?.onClick?.();
-      await Promise.resolve();
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'Pod',
-        name: 'api',
-        namespace: 'team-a',
-        clusterId: 'alpha:ctx',
-      })
-    );
   });
 
   it('generates stable keys and omits namespace column when not requested', async () => {

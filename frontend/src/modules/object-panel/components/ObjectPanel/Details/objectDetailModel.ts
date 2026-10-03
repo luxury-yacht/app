@@ -94,7 +94,7 @@ interface DetailKindConfig {
 const DETAIL_KIND_CONFIG: Record<string, DetailKindConfig> = {
   pod: { showsContainers: true, containerNames: true, portForward: 'pods' },
   deployment: { showsContainers: true, portForward: 'pods', scalable: true, activePods: true },
-  replicaset: { showsContainers: true, portForward: 'pods', scalable: true },
+  replicaset: { showsContainers: true, portForward: 'pods', scalable: true, activePods: true },
   daemonset: { showsContainers: true, portForward: 'pods', activePods: true },
   statefulset: { showsContainers: true, portForward: 'pods', scalable: true, activePods: true },
   job: { activePods: true },
@@ -131,14 +131,15 @@ const hasForwardableContainerDetails = (
     container.ports?.some((port) => !NON_TCP_PORT_SUFFIX.test(port))
   ) ?? false;
 
+// An empty list is a workload without pods; a missing list (still loading, or
+// pods the backend could not list) is unknown.
 const extractPodNames = (pods?: Array<{ name?: string | null }> | null): string[] | null => {
-  if (!pods || pods.length === 0) {
+  if (!pods) {
     return null;
   }
-  const names = pods
+  return pods
     .map((pod) => (typeof pod.name === 'string' ? pod.name.trim() : ''))
     .filter((name) => name.length > 0);
-  return names.length > 0 ? names : null;
 };
 
 export function buildObjectDetailModel(

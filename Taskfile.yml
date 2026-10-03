@@ -142,6 +142,14 @@ tasks:
     cmds:
       - go test ./backend/resourcemodel ./backend/refresh/snapshot -run '^$' -bench 'Benchmark(ResourceRelationship|SharedModel)' -benchtime=20x
 
+  qc:benchmark-logs:
+    desc: Times how long the Logs tab takes to take in a stream batch at 1,000 and 10,000 lines
+    dir: frontend
+    env:
+      LOGS_BENCHMARK: '1'
+    cmds:
+      - npx vitest run src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.benchmark.test.tsx
+
   qc:knip:
     desc: Finds unused frontend files, dependencies, and exports
     dir: frontend

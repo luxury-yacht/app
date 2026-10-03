@@ -150,10 +150,10 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
       },
       groupsForCluster: (clusterId) =>
         current.current.groups.filter((group) => group.clusterId === clusterId),
-      readCluster: async (clusterId) =>
+      readCluster: (clusterId) =>
         current.current.selectedClusterIds.includes(clusterId)
           ? activity.run(clusterId, () => readPanelWorkspace(windowName, clusterId))
-          : null,
+          : Promise.resolve(null),
       openPanel: async (tab) => {
         const { clusterId } = panelTargetFromSnapshot(tab);
         if (!current.current.selectedClusterIds.includes(clusterId)) {

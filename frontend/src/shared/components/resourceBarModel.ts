@@ -1,8 +1,4 @@
-import {
-  formatResourceValue,
-  parseResourceValue,
-  type ResourceType,
-} from '@shared/utils/resourceCalculations';
+import { formatResourceValue, type ResourceType } from '@shared/utils/resourceCalculations';
 import {
   USAGE_CRITICAL_THRESHOLD_PERCENT,
   USAGE_HIGH_THRESHOLD_PERCENT,
@@ -44,11 +40,12 @@ export interface ResourceBarModel extends ParsedResourceValues {
   showOverLimit: boolean;
 }
 
+/** CPU values are millicores and memory values are bytes; undefined means no value. */
 export interface ResourceBarModelInput {
-  usage?: string;
-  request?: string;
-  limit?: string;
-  allocatable?: string;
+  usage?: number;
+  request?: number;
+  limit?: number;
+  allocatable?: number;
   type: ResourceType;
 }
 
@@ -109,19 +106,35 @@ const clampPercent = (value: number, maxScale: number): number => {
   return Math.min(100, Math.max(0, (value / maxScale) * 100));
 };
 
-export const createResourceBarModel = ({
-  usage: rawUsage,
-  request: rawRequest,
-  limit: rawLimit,
-  allocatable: rawAllocatable,
-  type,
-}: ResourceBarModelInput): ResourceBarModel => {
-  const values: ParsedResourceValues = {
-    usage: parseResourceValue(rawUsage, type),
-    request: parseResourceValue(rawRequest, type),
-    limit: parseResourceValue(rawLimit, type),
-    allocatable: parseResourceValue(rawAllocatable, type),
-  };
+const resolveResourceValues = (input: ResourceBarModelInput): ParsedResourceValues => ({
+  usage: input.usage ?? 0,
+  request: input.request ?? 0,
+  limit: input.limit ?? 0,
+  allocatable: input.allocatable ?? 0,
+});
+
+// Formats the inputs rather than the zero-filled values, so an absent value reads "-".
+const formatResourceBarValues = (
+  { usage, request, limit, allocatable, type }: ResourceBarModelInput,
+  overcommittedAmount: number
+): Pick<
+  ResourceBarModel,
+  | 'formattedUsage'
+  | 'formattedRequest'
+  | 'formattedLimit'
+  | 'formattedAllocatable'
+  | 'formattedOvercommitted'
+> => ({
+  formattedUsage: formatResourceValue(usage, type),
+  formattedRequest: formatResourceValue(request, type),
+  formattedLimit: formatResourceValue(limit, type),
+  formattedAllocatable: formatResourceValue(allocatable, type),
+  formattedOvercommitted:
+    limit === undefined ? '-' : formatResourceValue(overcommittedAmount, type),
+});
+
+export const createResourceBarModel = (input: ResourceBarModelInput): ResourceBarModel => {
+  const values = resolveResourceValues(input);
   const scale = calculateScale(values);
   const usageVsLimit = values.limit > 0 ? (values.usage / values.limit) * 100 : 0;
   const usageVsAllocatable = values.allocatable > 0 ? (values.usage / values.allocatable) * 100 : 0;
@@ -148,11 +161,7 @@ export const createResourceBarModel = ({
     overcommittedAmount,
     overcommittedPercent:
       values.allocatable > 0 ? Math.round((overcommittedAmount / values.allocatable) * 100) : 0,
-    formattedUsage: formatResourceValue(rawUsage, values.usage, type),
-    formattedRequest: formatResourceValue(rawRequest, values.request, type),
-    formattedLimit: formatResourceValue(rawLimit, values.limit, type),
-    formattedAllocatable: formatResourceValue(rawAllocatable, values.allocatable, type),
-    formattedOvercommitted: formatResourceValue(rawLimit, overcommittedAmount, type),
+    ...formatResourceBarValues(input, overcommittedAmount),
     showReserved: values.request > values.usage && requestPercent > usagePercent,
     showOverLimit: values.limit > 0 && values.usage > values.limit && usagePercent > limitPercent,
   };

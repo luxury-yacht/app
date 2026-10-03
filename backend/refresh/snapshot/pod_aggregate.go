@@ -43,7 +43,7 @@ func projectPodAggregate(pod *corev1.Pod, sources PodOwnerSources) streamrows.Po
 		return streamrows.PodAggregate{}
 	}
 
-	ownerSummary := podres.BuildStreamSummary(streamrows.ClusterMeta{}, pod, 0, 0, sources.ReplicaSets, jobOwnerLookupAdapter(sources.JobControllerOwner))
+	ownerSummary := podres.BuildStreamSummary(streamrows.ClusterMeta{}, pod, sources.ReplicaSets, jobOwnerLookupAdapter(sources.JobControllerOwner))
 	return projectPodAggregateFromSummary(pod, sources, ownerSummary)
 }
 

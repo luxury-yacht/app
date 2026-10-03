@@ -218,7 +218,7 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 func TestFetchContainerLogsRejectsInvalidScopeCluster(t *testing.T) {
 	app := wrapperResourceGatewayFixture(t)
 
-	resp := app.gateway.FetchContainerLogs("cluster-a", ContainerLogsFetchRequest{Container: "app"})
+	resp := app.gateway.FetchContainerLogs("cluster-a", ContainerLogsFetchRequest{SelectedFilters: []string{"container:app"}})
 	if !strings.Contains(resp.Error, "container logs scope is required") {
 		t.Fatalf("expected missing scope error, got %q", resp.Error)
 	}
@@ -283,7 +283,7 @@ func TestDeletePodEvictsDetailCache(t *testing.T) {
 	}
 
 	detailKey := objectDetailCacheKey("Pod", "ns", "pod")
-	app.gateway.responseCacheStore(clusterID, detailKey, "stale")
+	app.gateway.seedResponseCache(clusterID, detailKey, "stale")
 
 	if err := app.gateway.deletePodAction(objectActionTarget(clusterID, "", "v1", "Pod", "ns", "pod")); err != nil {
 		t.Fatalf("deletePod returned error: %v", err)
@@ -298,7 +298,7 @@ func TestClearNodeCachesEvictsDetailCache(t *testing.T) {
 	app.gateway.responseCache = newResponseCache(time.Minute, 10)
 	clusterID := "config:ctx"
 	detailKey := objectDetailCacheKey("Node", "", "node")
-	app.gateway.responseCacheStore(clusterID, detailKey, "stale")
+	app.gateway.seedResponseCache(clusterID, detailKey, "stale")
 
 	app.gateway.clearNodeCaches(clusterID, "node")
 

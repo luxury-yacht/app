@@ -195,33 +195,70 @@ const replaceKnownIdentifiers = (value: string): string => {
   );
 };
 
+// A Kubernetes kind (optionally plural or group-qualified) that precedes a resource
+// identifier, e.g. `pod payments/api` or `deployment.apps "web"`.
+const RESOURCE_PREFIX =
+  /\b(cluster|namespace|pod|deployment|statefulset|daemonset|service|secret|configmap|job|cronjob|node)s?(?:\.[a-z\d.-]+)?\s+/giu;
+const QUOTED_RESOURCE_NAME = /["'][^"']+["']/uy;
+// A namespace/name pair, a lone digit, or a token with a digit or separator after its
+// first character. Letters run up to that character, so the match cannot backtrack
+// quadratically; plain words such as "unavailable" are left alone.
+const NAME_SHAPED_RESOURCE_NAME =
+  /(?:[a-z\d][a-z\d._-]*\/[a-z\d][a-z\d._-]*|\d|[a-z\d][a-z]*[\d._-][a-z\d._-]*)\b/iuy;
+
+// A credential-like key followed by its assigned value, e.g. `token=abc` or
+// `Authorization: Bearer abc`. The key keeps capture group 1. The value part
+// starts at the assignment operator so neither part begins with a quantifier.
+const CREDENTIAL_KEY =
+  /\b(authorization|access[_-]?key|api[_-]?key|cookie|credential|password|passwd|secret|session|token)\b\s*/iu;
+const CREDENTIAL_VALUE = /(?::=|=|:)\s*(?:bearer\s+)?["']?[^\s"',;]+["']?/iu;
+const CREDENTIAL_ASSIGNMENT = new RegExp(
+  `${CREDENTIAL_KEY.source}${CREDENTIAL_VALUE.source}`,
+  'giu'
+);
+
+// Replaces `<kind> <identifier>` with `<kind> <placeholder>` where the sticky identifier
+// pattern matches right after the kind. It scans like a global replace: a failed
+// identifier resumes the search one character past the kind's start.
+const redactResourceIdentifiers = (
+  value: string,
+  identifier: RegExp,
+  placeholder: string
+): string => {
+  let result = '';
+  let copiedThrough = 0;
+  RESOURCE_PREFIX.lastIndex = 0;
+  for (let prefix = RESOURCE_PREFIX.exec(value); prefix; prefix = RESOURCE_PREFIX.exec(value)) {
+    identifier.lastIndex = RESOURCE_PREFIX.lastIndex;
+    if (identifier.test(value)) {
+      result += `${value.slice(copiedThrough, prefix.index)}${prefix[1]} ${placeholder}`;
+      copiedThrough = identifier.lastIndex;
+      RESOURCE_PREFIX.lastIndex = identifier.lastIndex;
+    } else {
+      RESOURCE_PREFIX.lastIndex = prefix.index + 1;
+    }
+  }
+  return result + value.slice(copiedThrough);
+};
+
 const sanitizeTelemetryText = (rawValue: string): string => {
   let value = replaceKnownIdentifiers(rawValue);
   value = value.replace(/\b(?:https?|wss?):\/\/[^\s"'<>]+/giu, '[url]');
   value = value.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu, '[email]');
   value = value.replace(
-    /\b(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}\b/gu,
+    /\b(?:25[0-5]|2[0-4]\d|1?\d{1,2})(?:\.(?:25[0-5]|2[0-4]\d|1?\d{1,2})){3}\b/gu,
     '[ip]'
   );
   value = value.replace(/(?:\b[0-9a-f]{1,4}(?::[0-9a-f]{0,4}){2,7}\b|\b::1\b)/giu, '[ip]');
-  value = value.replace(
-    /\b(cluster|namespace|pod|deployment|statefulset|daemonset|service|secret|configmap|job|cronjob|node)s?(?:\.[a-z0-9.-]+)?\s+["'][^"']+["']/giu,
-    '$1 "[resource]"'
-  );
-  value = value.replace(
-    /\b(cluster|namespace|pod|deployment|statefulset|daemonset|service|secret|configmap|job|cronjob|node)s?(?:\.[a-z0-9.-]+)?\s+(?:[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[0-9]|[a-z0-9][a-z0-9._-]*[0-9._-][a-z0-9._-]*)\b/giu,
-    '$1 [resource]'
-  );
+  value = redactResourceIdentifiers(value, QUOTED_RESOURCE_NAME, '"[resource]"');
+  value = redactResourceIdentifiers(value, NAME_SHAPED_RESOURCE_NAME, '[resource]');
   value = value.replace(
     /\b(?:[a-z0-9](?:[a-z0-9-]{0,62})\.)+(?:com|net|org|io|dev|cloud|local|internal|test|cluster|lan)\b/giu,
     '[host]'
   );
   value = value.replace(/(?:\/Users|\/home)\/[^\s"'<>]+/gu, '[local-path]');
   value = value.replace(/[A-Z]:\\Users\\[^\s"'<>]+/giu, '[local-path]');
-  value = value.replace(
-    /\b(authorization|access[_-]?key|api[_-]?key|cookie|credential|password|passwd|secret|session|token)\b\s*(?::=|=|:)\s*(?:bearer\s+)?["']?[^\s"',;]+["']?/giu,
-    '$1=[redacted]'
-  );
+  value = value.replace(CREDENTIAL_ASSIGNMENT, '$1=[redacted]');
   value = value.replace(/\bbearer\s+[^\s"',;]+/giu, '[redacted]');
   return value;
 };
@@ -768,11 +805,12 @@ export function setActiveViewContext(context: ActiveViewContext): void {
     ...(next.tab ? { tab: next.tab } : {}),
     objectPanelOpen: next.objectPanelOpen,
   };
+  const workspacePath = next.tab ? `${next.view}/${next.tab}` : next.view;
   Sentry.addBreadcrumb({
     type: 'navigation',
     category: 'navigation.workspace',
     level: 'info',
-    message: `Entered ${next.tab ? `${next.view}/${next.tab}` : next.view}`,
+    message: `Entered ${workspacePath}`,
     data: navigation,
   });
 }

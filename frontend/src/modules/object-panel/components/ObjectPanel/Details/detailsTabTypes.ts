@@ -28,28 +28,3 @@ export interface DetailsTabProps {
   /** Called after a successful restart/scale/trigger/suspend so the panel can refetch. */
   onAfterAction: () => void;
 }
-
-export interface UtilizationData {
-  cpu?: {
-    usage?: string;
-    request?: string;
-    limit?: string;
-    capacity?: string;
-    allocatable?: string;
-  };
-  memory?: {
-    usage?: string;
-    request?: string;
-    limit?: string;
-    capacity?: string;
-    allocatable?: string;
-  };
-  pods?: {
-    count?: string;
-    capacity?: string;
-    allocatable?: string;
-  };
-  mode?: 'nodeMetrics';
-  podCount?: number;
-  readyPodCount?: number;
-}

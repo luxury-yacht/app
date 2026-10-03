@@ -36,7 +36,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(({ error }) => {
     [selectedClusterId]
   );
 
-  const columns = useMemo(() => buildColumns({ kindAllowRowClick: false }), [buildColumns]);
+  const columns = useMemo(() => buildColumns(), [buildColumns]);
 
   const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
     ClusterEventsSnapshotPayload,
@@ -82,7 +82,6 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(({ error }) => {
         diagnosticsLabel="Cluster Events"
         diagnosticsMode="live"
         onRowClick={openEvent}
-        onRowPointerClick={openEvent}
         tableClassName="gridtable-cluster-events"
         enableContextMenu={true}
         getCustomContextMenuItems={getContextMenuItems}

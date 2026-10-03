@@ -542,14 +542,7 @@ describe('fetchTelemetrySummary', () => {
       statusText: 'OK',
       json: vi.fn().mockResolvedValue({
         snapshots: null,
-        metrics: {
-          lastCollected: 0,
-          lastDurationMs: 0,
-          consecutiveFailures: 0,
-          successCount: 0,
-          failureCount: 0,
-          active: false,
-        },
+        clusterMetrics: null,
         streams: null,
         connection: {
           retryAttempts: 0,
@@ -563,7 +556,11 @@ describe('fetchTelemetrySummary', () => {
 
     const { fetchTelemetrySummary } = await import('./client');
 
-    await expect(fetchTelemetrySummary()).resolves.toMatchObject({ snapshots: [], streams: [] });
+    await expect(fetchTelemetrySummary()).resolves.toMatchObject({
+      snapshots: [],
+      clusterMetrics: [],
+      streams: [],
+    });
   });
 
   test('throws when telemetry request fails', async () => {

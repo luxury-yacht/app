@@ -26,6 +26,10 @@ vi.mock('@core/contexts/ZoomContext', () => ({
 
 import ResourceBar from './ResourceBar';
 
+const MIB = 1024 ** 2;
+const GIB = 1024 ** 3;
+const TIB = 1024 ** 4;
+
 const renderBar = async (props: React.ComponentProps<typeof ResourceBar>) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -63,7 +67,6 @@ describe('ResourceBar', () => {
       type: 'cpu',
       metricsError: 'unable to load metrics',
       metricsStale: false,
-      showTooltip: true,
       variant: 'default',
     });
 
@@ -90,7 +93,7 @@ describe('ResourceBar', () => {
   it('forwards GridTable export text in populated and empty states', async () => {
     const { container, root, cleanup } = await renderBar({
       type: 'cpu',
-      usage: '250m',
+      usage: 250,
       'data-gridtable-export-text': '250m',
     });
 
@@ -113,10 +116,9 @@ describe('ResourceBar', () => {
   it('computes CPU usage status classes and formats output', async () => {
     const { container, cleanup } = await renderBar({
       type: 'cpu',
-      usage: '980m',
-      request: '800m',
-      limit: '1000m',
-      showTooltip: false,
+      usage: 980,
+      request: 800,
+      limit: 1000,
     });
 
     const usageBar = container.querySelector('.resource-bar-usage');
@@ -130,9 +132,9 @@ describe('ResourceBar', () => {
   it('renders stale node metrics with freshness styling', async () => {
     const { container, cleanup } = await renderBar({
       type: 'memory',
-      usage: '512Mi',
-      limit: '1024Mi',
-      allocatable: '2048Mi',
+      usage: 512 * MIB,
+      limit: 1024 * MIB,
+      allocatable: 2048 * MIB,
       metricsStale: true,
     });
 
@@ -145,11 +147,10 @@ describe('ResourceBar', () => {
   it('scales memory limit markers when cluster values are in tebibytes', async () => {
     const { container, cleanup } = await renderBar({
       type: 'memory',
-      usage: '512.0 Gi',
-      request: '1.0 Ti',
-      limit: '1.5 Ti',
-      allocatable: '2.0 Ti',
-      showTooltip: false,
+      usage: 512 * GIB,
+      request: TIB,
+      limit: 1.5 * TIB,
+      allocatable: 2 * TIB,
     });
 
     const markers = container.querySelectorAll<HTMLElement>('.resource-bar-marker');
@@ -166,10 +167,9 @@ describe('ResourceBar', () => {
     // instead. 671Mi usage vs 490Mi limit on a 708Mi scale (request*1.2).
     const { container, cleanup } = await renderBar({
       type: 'memory',
-      usage: '671.0 Mi',
-      request: '590.0 Mi',
-      limit: '490.0 Mi',
-      showTooltip: false,
+      usage: 671 * MIB,
+      request: 590 * MIB,
+      limit: 490 * MIB,
     });
 
     const overlimit = container.querySelector<HTMLElement>('.resource-bar-overlimit');
@@ -186,10 +186,9 @@ describe('ResourceBar', () => {
   it('renders no over-limit stripes while usage stays within the limit', async () => {
     const { container, cleanup } = await renderBar({
       type: 'memory',
-      usage: '100.0 Mi',
-      request: '200.0 Mi',
-      limit: '400.0 Mi',
-      showTooltip: false,
+      usage: 100 * MIB,
+      request: 200 * MIB,
+      limit: 400 * MIB,
     });
 
     expect(container.querySelector('.resource-bar-overlimit')).toBeNull();
@@ -204,10 +203,9 @@ describe('ResourceBar', () => {
     // clamped right edge (left: 100%) — invisible on the track border.
     const { container, cleanup } = await renderBar({
       type: 'memory',
-      usage: '671.0 Mi',
-      request: '590.0 Mi',
-      limit: '490.0 Mi',
-      showTooltip: false,
+      usage: 671 * MIB,
+      request: 590 * MIB,
+      limit: 490 * MIB,
     });
 
     const markers = container.querySelectorAll<HTMLElement>('.resource-bar-marker');
@@ -229,13 +227,12 @@ describe('ResourceBar', () => {
 
     const { container, root, cleanup } = await renderBar({
       type: 'cpu',
-      usage: '400m',
-      request: '600m',
-      allocatable: '1200m',
+      usage: 400,
+      request: 600,
+      allocatable: 1200,
       variant: 'compact',
       overcommitPercent: 150,
       animationScopeKey: 'scope-a',
-      showTooltip: true,
     });
 
     const compactContainer = container.querySelector('.resource-bar-container') as HTMLElement;
@@ -254,9 +251,9 @@ describe('ResourceBar', () => {
       root.render(
         <ResourceBar
           type="cpu"
-          usage="400m"
-          request="600m"
-          allocatable="1200m"
+          usage={400}
+          request={600}
+          allocatable={1200}
           variant="compact"
           overcommitPercent={150}
           animationScopeKey="scope-b"
@@ -276,7 +273,7 @@ describe('ResourceBar', () => {
 
     const { container, root, cleanup } = await renderBar({
       type: 'cpu',
-      usage: '0.25',
+      usage: 250,
       animationScopeKey: 'scope-1',
     });
 
@@ -284,7 +281,7 @@ describe('ResourceBar', () => {
     expect(containerEl.className).toContain('unbounded');
 
     await act(async () => {
-      root.render(<ResourceBar type="cpu" usage="0.25" animationScopeKey="scope-2" />);
+      root.render(<ResourceBar type="cpu" usage={250} animationScopeKey="scope-2" />);
       await Promise.resolve();
     });
 
@@ -306,13 +303,12 @@ describe('ResourceBar', () => {
 
     const { container, cleanup } = await renderBar({
       type: 'memory',
-      usage: '1024Ki',
-      request: '7Gi',
-      limit: '6GB',
-      allocatable: '4096MB',
+      usage: MIB,
+      request: 7 * GIB,
+      limit: 6 * GIB,
+      allocatable: 4096 * MIB,
       overcommitPercent: 130,
       variant: 'compact',
-      showTooltip: true,
       metricsStale: true,
     });
 
@@ -335,11 +331,9 @@ describe('ResourceBar', () => {
 
     const { container, root, cleanup } = await renderBar({
       type: 'cpu',
-      usage: '1',
-      request: '0.4',
-      limit: 'bad',
+      usage: 1000,
+      request: 400,
       variant: 'compact',
-      showTooltip: true,
     });
 
     // Trigger tooltip via the Tooltip wrapper (mouseover bubbles to .tooltip-trigger)
@@ -376,13 +370,7 @@ describe('ResourceBar', () => {
     // Re-render with memory bytes and no constraints to exercise warning branch
     await act(async () => {
       root.render(
-        <ResourceBar
-          type="memory"
-          usage="1048576"
-          variant="compact"
-          showTooltip
-          animationScopeKey="bytes"
-        />
+        <ResourceBar type="memory" usage={MIB} variant="compact" animationScopeKey="bytes" />
       );
       await Promise.resolve();
     });

@@ -41,8 +41,8 @@ Load only the sections named by the task.
 
 ## Doorbell snapshot ordering
 
-These rules apply to namespaces, namespace metrics, object events, cluster
-overview, and any new doorbell-backed snapshot domain:
+These rules apply to namespaces, namespace metrics, the three Events domains,
+cluster overview, and any new doorbell-backed snapshot domain:
 
 1. Invalidate snapshot cache before broadcast; otherwise the refetch can land
    inside cache TTL and reapply the previous payload.
@@ -60,8 +60,8 @@ overview, and any new doorbell-backed snapshot domain:
    notify ready. `startPublishedClusterReadiness` in `backend/refresh_setup.go`
    advertises loading only after route publication and repairs rings missed
    before aggregate wiring exists for every committed generation.
-6. Skip informer resync echoes through `namespaceUpdateIsEcho` in
-   `backend/refresh/snapshot/namespaces.go`.
+6. Skip informer resync echoes through `informerUpdateIsEcho` in
+   `backend/refresh/snapshot/informer_echo.go`.
 7. Derive stream health from descriptor metadata rather than hardcoded domain
    lists; the frontend calculation lives at `computeSubscriptionHealth` in
    `frontend/src/core/refresh/streaming/resourceStreamManager.ts`.

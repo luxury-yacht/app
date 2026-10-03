@@ -14,12 +14,9 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
-	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
 
 const namespaceEventsDomainName = "namespace-events"
@@ -31,8 +28,8 @@ const namespaceEventsDomainName = "namespace-events"
 type NamespaceEventsBuilder struct {
 	eventLister corelisters.EventLister
 	maintained  *typedMaintainedStore[EventSummary]
-	// eventsSynced reports whether the events informer finished its initial
-	// sync; see ClusterEventsBuilder for why listing an unsynced cache is a lie.
+	// eventsSynced reports whether the maintained store's handler has applied the
+	// Events informer's initial list; see ClusterEventsBuilder for why.
 	eventsSynced cache.InformerSynced
 }
 
@@ -45,25 +42,7 @@ func projectNamespaceEventSummary(meta ClusterMeta, event *corev1.Event) (EventS
 	if event == nil || strings.TrimSpace(event.InvolvedObject.Namespace) == "" {
 		return EventSummary{}, false
 	}
-	facts := eventres.BuildFacts(meta.ClusterID, event)
-	timestamp := eventres.EventTimestamp(event).Time
-	return EventSummary{
-		Ref:              streamrows.NewResourceRef(meta, eventres.Identity, event),
-		Metadata:         streamrows.NewResourceMetadata(event),
-		Kind:             event.InvolvedObject.Kind,
-		ResourceVersion:  event.ResourceVersion,
-		ObjectNamespace:  event.InvolvedObject.Namespace,
-		ObjectUID:        string(event.InvolvedObject.UID),
-		ObjectAPIVersion: event.InvolvedObject.APIVersion,
-		InvolvedObject:   facts.InvolvedObject,
-		Type:             facts.EventType,
-		Source:           facts.Source,
-		Reason:           facts.Reason,
-		Object:           eventres.EventObjectDisplay(event),
-		Message:          facts.Message,
-		Age:              formatAge(timestamp),
-		AgeTimestamp:     timestamp.UnixMilli(),
-	}, true
+	return projectEventRow(meta, event), true
 }
 
 // NamespaceEventsSnapshot payload for events tab.
@@ -99,38 +78,24 @@ func namespaceEventsQuerypageSchema() querypage.Schema[EventSummary] {
 	)
 }
 
-// EventSummary captures the essential event fields for display.
-type EventSummary struct {
-	Ref              resourcemodel.ResourceRef            `json:"ref"`
-	Metadata         *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
-	Kind             string                               `json:"kind"`
-	ResourceVersion  string                               `json:"resourceVersion"`
-	ObjectNamespace  string                               `json:"objectNamespace"`
-	ObjectUID        string                               `json:"objectUid"`
-	ObjectAPIVersion string                               `json:"objectApiVersion"`
-	InvolvedObject   *resourcemodel.ResourceLink          `json:"involvedObject,omitempty"`
-	Type             string                               `json:"type"`
-	Source           string                               `json:"source"`
-	Reason           string                               `json:"reason"`
-	Object           string                               `json:"object"`
-	Message          string                               `json:"message"`
-	Age              string                               `json:"age"`
-	AgeTimestamp     int64                                `json:"ageTimestamp"`
-}
-
 // RegisterNamespaceEventsDomain registers the events domain. It serves from a maintained
 // store fed by the shared Events informer (projected at intake by the same
 // projectNamespaceEventSummary the list path uses); the handler is registered before the
 // factory starts so the sync gate guarantees the store is populated before serve.
-func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.SharedInformerFactory, clusterMeta ClusterMeta) error {
+//
+// The returned notifier rings the table's doorbell for each changed involved-object
+// namespace after the store applies the change; the subsystem wires its broadcast once
+// the resource-stream manager exists.
+func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.SharedInformerFactory, clusterMeta ClusterMeta) (*EventTableChangeNotifier, error) {
 	if factory == nil {
-		return fmt.Errorf("shared informer factory is nil")
+		return nil, fmt.Errorf("shared informer factory is nil")
 	}
 	eventInformer := factory.Core().V1().Events()
 
+	notifier := newEventTableChangeNotifier(namespaceEventsDomainName, "ne")
 	maintained := newTypedMaintainedStore(clusterMeta, namespaceEventsQuerypageSchema(), namespacedEventTableQueryAdapter())
 	reg.RegisterMaintainedStore(namespaceEventsDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
-	if err := registerMaintainedInformerHandler(maintained, eventInformer.Informer(),
+	storeSynced, err := registerMaintainedInformerHandler(maintained, eventInformer.Informer(),
 		func(obj interface{}) (EventSummary, metav1.Object, bool) {
 			evt, ok := obj.(*corev1.Event)
 			if !ok {
@@ -139,19 +104,24 @@ func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.Share
 			summary, keep := projectNamespaceEventSummary(clusterMeta, evt)
 			return summary, evt, keep
 		},
-	); err != nil {
-		return err
+		func(summary EventSummary) { notifier.changed(summary.ObjectNamespace) },
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	builder := &NamespaceEventsBuilder{
 		eventLister:  eventInformer.Lister(),
 		maintained:   maintained,
-		eventsSynced: eventInformer.Informer().HasSynced,
+		eventsSynced: storeSynced,
 	}
-	return reg.Register(refresh.DomainConfig{
+	if err := reg.Register(refresh.DomainConfig{
 		Name:          namespaceEventsDomainName,
 		BuildSnapshot: builder.Build,
-	})
+	}); err != nil {
+		return nil, err
+	}
+	return notifier, nil
 }
 
 // Build assembles event summaries for a namespace.
@@ -187,7 +157,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			namespaceEventsQueryCapabilities(),
 			config.SnapshotNamespaceEventsLimit,
 			"events",
-			func(e EventSummary) string { return e.Kind },
+			func(e EventSummary) string { return e.ObjectKind },
 			nil,
 		),
 	)

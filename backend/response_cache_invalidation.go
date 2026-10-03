@@ -259,8 +259,9 @@ func (g *ResourceGateway) invalidateResponseCacheForObjectEvent(
 // shared-informer handler derived from the typed object.
 func (g *ResourceGateway) ingestResponseCacheSink(selectionKey string) ingest.Sink {
 	return ingestResponseCacheSink{
-		invalidateResource: g.invalidateResponseCacheForResource,
-		selectionKey:       selectionKey,
+		invalidateResource:    g.invalidateResponseCacheForResource,
+		invalidatePodListings: g.invalidatePodListingDetails,
+		selectionKey:          selectionKey,
 	}
 }
 
@@ -268,8 +269,9 @@ func (g *ResourceGateway) ingestResponseCacheSink(selectionKey string) ingest.Si
 // evicts on both Upsert and Delete: a cached detail is stale once the resource
 // changes or disappears.
 type ingestResponseCacheSink struct {
-	invalidateResource func(string, resourcemodel.ResourceRef)
-	selectionKey       string
+	invalidateResource    func(string, resourcemodel.ResourceRef)
+	invalidatePodListings func(selectionKey, namespace string)
+	selectionKey          string
 }
 
 func (s ingestResponseCacheSink) Upsert(row interface{}) { s.invalidate(row) }
@@ -282,6 +284,34 @@ func (s ingestResponseCacheSink) invalidate(row interface{}) {
 	}
 	if s.invalidateResource != nil {
 		s.invalidateResource(s.selectionKey, summary.Ref)
+	}
+	if s.invalidatePodListings != nil && isPodRef(summary.Ref) {
+		s.invalidatePodListings(s.selectionKey, summary.Ref.Namespace)
+	}
+}
+
+func isPodRef(ref resourcemodel.ResourceRef) bool {
+	return ref.Group == "" && ref.Kind == "Pod" && ref.Namespace != ""
+}
+
+// podListingDetailKinds are the kinds whose details embed their pods.
+var podListingDetailKinds = func() []schema.GroupVersionKind {
+	var kinds []schema.GroupVersionKind
+	for _, d := range kindregistry.All {
+		if d.DetailListsPods {
+			kinds = append(kinds, schema.GroupVersionKind{Group: d.Identity.Group, Version: d.Identity.Version, Kind: d.Identity.Kind})
+		}
+	}
+	return kinds
+}()
+
+// invalidatePodListingDetails evicts the cached details of every kind that
+// lists pods in the namespace. A pod's catalog row does not name its workload,
+// so all of them are evicted; details are fetched only for open panels.
+func (g *ResourceGateway) invalidatePodListingDetails(selectionKey, namespace string) {
+	for _, gvk := range podListingDetailKinds {
+		g.responseCacheDeletePrefix(selectionKey, objectDetailCacheKeyForGVK(gvk, namespace, ""))
+		g.responseCacheDeletePrefix(selectionKey, objectDetailCacheKey(gvk.Kind, namespace, ""))
 	}
 }
 

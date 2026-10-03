@@ -14,6 +14,7 @@ import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { formatLiveAgeText, LiveAgeText } from '@shared/components/LiveAgeText';
 import {
   type ColumnSizingMap,
+  createKindColumn,
   createTextColumn,
   withColumnSizing,
 } from '@shared/components/tables/columnFactories';
@@ -21,16 +22,14 @@ import GridTable, { type GridColumnDefinition } from '@shared/components/tables/
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { createEventTypeColumn } from '@shared/events/eventColumns';
 import {
+  eventGridObjectReference,
   eventGridRelatedObjectInput,
-  objectPanelEventGridRow,
 } from '@shared/events/eventGridModel';
 import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import {
-  buildEventObjectReference,
   canResolveEventObjectReference,
   resolveEventObjectReference,
-  splitEventObjectTarget,
 } from '@shared/utils/eventObjectIdentity';
 import { formatAge } from '@utils/ageFormatter';
 import type React from 'react';
@@ -43,8 +42,10 @@ import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
-import type { ObjectEventSummary } from '@/core/refresh/types';
+import type { CanonicalResourceRef, ObjectEventSummary, ResourceLink } from '@/core/refresh/types';
+import { useShortNames } from '@/hooks/useShortNames';
 import { errorHandler } from '@/utils/errorHandler';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 import { CLUSTER_SCOPE, getObjectEventsRefresherName, INACTIVE_SCOPE } from '../constants';
 import { useObjectPanelScopedDomainLifecycle } from '../hooks/useObjectPanelScopedDomainLifecycle';
 import type { PanelObjectData } from '../types';
@@ -64,11 +65,9 @@ interface EventsTabProps {
   panelId: string | null;
 }
 
-function normalizeEventSource(source: ObjectEventSummary['source'] | undefined): string {
-  return source?.trim() || 'Unknown';
-}
-
 interface EventDisplay {
+  // The Event's own identity, opened by Enter on the focused row.
+  eventRef: CanonicalResourceRef;
   type: string;
   source: string;
   reason: string;
@@ -80,17 +79,51 @@ interface EventDisplay {
   objectName: string;
   objectNamespace: string;
   objectUid?: string;
-  objectApiVersion?: string;
-  involvedObject?: ObjectEventSummary['involvedObject'];
+  involvedObject?: ResourceLink;
   // Per-event cluster identity from ObjectEventSummary (extends ClusterMeta).
   clusterId?: string;
   clusterName?: string;
 }
 
+// The per-event cluster name, falling back to the panel's own cluster.
+const eventClusterName = (
+  clusterId: string,
+  panel: PanelObjectData | null | undefined,
+  resolveClusterName: (clusterId: string) => string | undefined
+): string | undefined =>
+  resolveClusterName(clusterId) ??
+  (clusterId === panel?.clusterId ? (panel.clusterName ?? undefined) : undefined);
+
+const toEventDisplay = (
+  event: ObjectEventSummary,
+  panel: PanelObjectData | null | undefined,
+  resolveClusterName: (clusterId: string) => string | undefined
+): EventDisplay => {
+  const lastTime = event.lastTimestamp ? new Date(event.lastTimestamp) : new Date();
+  return {
+    eventRef: event.ref,
+    type: event.eventType ?? '',
+    source: event.source?.trim() ?? '',
+    reason: event.reason || '',
+    message: event.message || '',
+    age: formatAge(lastTime),
+    ageTimestamp: lastTime,
+    lastTime,
+    objectKind: event.involvedObjectKind ?? '',
+    objectName: event.involvedObjectName ?? '',
+    objectNamespace: event.involvedObjectNamespace ?? panel?.namespace ?? CLUSTER_SCOPE,
+    objectUid: event.involvedObjectUid,
+    involvedObject: event.involvedObject,
+    clusterId: event.ref.clusterId,
+    clusterName: eventClusterName(event.ref.clusterId, panel, resolveClusterName),
+  };
+};
+
 const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope, panelId }) => {
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const { openWithObject } = useObjectPanel();
   const { available: navigationAvailable, navigateToView } = useNavigateToView();
+  const useShortResourceNames = useShortNames();
   const resolveClusterName = useClusterNameResolver();
   const openWithObjectRef = useRef(openWithObject);
   useEffect(() => {
@@ -179,97 +212,17 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   }, [eventsScope, eventsSnapshot.data]);
 
   const buildEventObjectRefInput = useCallback(
-    (
-      event: Pick<
-        EventDisplay,
-        | 'objectKind'
-        | 'objectName'
-        | 'objectNamespace'
-        | 'objectUid'
-        | 'objectApiVersion'
-        | 'involvedObject'
-        | 'clusterId'
-        | 'clusterName'
-      >
-    ) =>
-      eventGridRelatedObjectInput(
-        objectPanelEventGridRow(
-          {
-            ...event,
-            clusterId: event.clusterId ?? objectData?.clusterId,
-            clusterName: event.clusterName ?? objectData?.clusterName,
-          },
-          CLUSTER_SCOPE
-        ),
-        {
-          fallbackKind: objectData?.kind,
-          fallbackGroup: objectData?.group,
-          fallbackVersion: objectData?.version,
-        }
-      ),
-    [
-      objectData?.clusterId,
-      objectData?.clusterName,
-      objectData?.group,
-      objectData?.kind,
-      objectData?.version,
-    ]
-  );
-
-  const projectRelatedObject = useCallback(
-    (event: ObjectEventSummary) => {
-      const relatedObject = {
-        objectKind: event.involvedObjectKind || objectData?.kind || 'Unknown',
-        objectName: event.involvedObjectName || objectData?.name || 'Unknown',
-        objectNamespace: event.involvedObjectNamespace ?? objectData?.namespace ?? CLUSTER_SCOPE,
-        objectUid: event.involvedObjectUid,
-        objectApiVersion: event.involvedObjectApiVersion,
-        involvedObject: event.involvedObject,
-        clusterId: event.ref.clusterId,
-        clusterName:
-          resolveClusterName(event.ref.clusterId) ??
-          (event.ref.clusterId === objectData?.clusterId
-            ? (objectData.clusterName ?? undefined)
-            : undefined),
-      };
-      const ref = buildEventObjectReference(buildEventObjectRefInput(relatedObject));
-      const parsed = splitEventObjectTarget(
-        `${relatedObject.objectKind}/${relatedObject.objectName}`
-      );
-      return {
-        ...relatedObject,
-        objectKind: ref?.kind ?? parsed.objectType,
-        objectName: ref?.name ?? parsed.objectName,
-      };
-    },
-    [
-      buildEventObjectRefInput,
-      objectData?.clusterId,
-      objectData?.clusterName,
-      objectData?.kind,
-      objectData?.name,
-      objectData?.namespace,
-      resolveClusterName,
-    ]
+    (event: Pick<EventDisplay, 'objectUid' | 'involvedObject' | 'clusterId' | 'clusterName'>) =>
+      eventGridRelatedObjectInput(event, {
+        selectedClusterId: objectData?.clusterId,
+        selectedClusterName: objectData?.clusterName,
+      }),
+    [objectData?.clusterId, objectData?.clusterName]
   );
 
   const events = useMemo<EventDisplay[]>(
-    () =>
-      rawEvents.map((event) => {
-        const lastTime = event.lastTimestamp ? new Date(event.lastTimestamp) : new Date();
-        const relatedObject = projectRelatedObject(event);
-        return {
-          type: event.eventType || 'Normal',
-          source: normalizeEventSource(event.source),
-          reason: event.reason || '',
-          message: event.message || '',
-          age: formatAge(lastTime),
-          ageTimestamp: lastTime,
-          lastTime,
-          ...relatedObject,
-        };
-      }),
-    [rawEvents, projectRelatedObject]
+    () => rawEvents.map((event) => toEventDisplay(event, objectData, resolveClusterName)),
+    [rawEvents, objectData, resolveClusterName]
   );
 
   const eventsLoadingState = applyPassiveLoadingPolicy({
@@ -309,6 +262,26 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     [buildEventObjectRefInput]
   );
 
+  const eventReference = useCallback(
+    (item: EventDisplay) =>
+      eventGridObjectReference(
+        { ref: item.eventRef },
+        objectData?.clusterId,
+        item.clusterName ?? objectData?.clusterName
+      ),
+    [objectData?.clusterId, objectData?.clusterName]
+  );
+
+  const openEvent = useCallback(
+    (item: EventDisplay) => openWithObjectRef.current(eventReference(item)),
+    [eventReference]
+  );
+
+  const navigateToEvent = useCallback(
+    (item: EventDisplay) => navigateToView(eventReference(item)),
+    [eventReference, navigateToView]
+  );
+
   const navigateToRelatedObject = useCallback(
     async (item: EventDisplay) => {
       const ref = await resolveEventObjectReference(buildEventObjectRefInput(item));
@@ -321,6 +294,13 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
 
   const columns = useMemo<GridColumnDefinition<EventDisplay>[]>(() => {
     const base: GridColumnDefinition<EventDisplay>[] = [
+      // The Event's own link, as in the Cluster and Namespace Events tables.
+      createKindColumn<EventDisplay>({
+        getKind: () => 'Event',
+        getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
+        onClick: openEvent,
+        onAltClick: navigationAvailable ? navigateToEvent : undefined,
+      }),
       createEventTypeColumn<EventDisplay>(),
       createTextColumn<EventDisplay>('source', EVENT_LABELS.source, (item) => item.source || '-'),
       // Split the involved object into type/name columns for readability.
@@ -344,7 +324,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
             : undefined,
           getClassName: () => 'object-panel-link',
           isInteractive: canOpenRelatedObject,
-          rowAction: true,
+          allowRowClick: false,
         }
       ),
       createTextColumn<EventDisplay>('reason', EVENT_LABELS.reason, (item) => item.reason || '-'),
@@ -381,6 +361,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     ];
 
     const sizing: ColumnSizingMap = {
+      kind: { autoWidth: true },
       type: { width: 110, minWidth: 90 },
       source: { width: 180, minWidth: 150, autoWidth: true },
       reason: { width: 160, minWidth: 130, autoWidth: true },
@@ -390,7 +371,15 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
       age: { width: 100, minWidth: 80 },
     };
     return withColumnSizing(base, sizing);
-  }, [canOpenRelatedObject, navigateToRelatedObject, navigationAvailable, openRelatedObject]);
+  }, [
+    canOpenRelatedObject,
+    navigateToEvent,
+    navigateToRelatedObject,
+    navigationAvailable,
+    openEvent,
+    openRelatedObject,
+    useShortResourceNames,
+  ]);
 
   const { sortedData, sortConfig, handleSort } = useTableSort(events, 'age', 'desc', {
     columns,
@@ -470,9 +459,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           emptyMessage="No events"
           sortConfig={sortConfig}
           onSort={handleSort}
-          onRowClick={(item) => {
-            void openRelatedObject(item);
-          }}
+          onRowClick={openEvent}
           keyExtractor={keyExtractor}
           className="gridtable-object-events"
         />

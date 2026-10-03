@@ -8,6 +8,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/panelmetrics"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/internal/panelwindow"
@@ -96,9 +97,9 @@ type ResourceCommands interface {
 	FetchNodeLogs(string, string, NodeLogFetchRequest) NodeLogFetchResponse
 	FindCatalogObjectByUID(string, string) (*objectcatalog.Summary, error)
 	FindCatalogObjectMatch(string, string, string, string, string, string) (*objectcatalog.Summary, error)
-	GetContainerLogsScopeContainers(string, string) ([]string, error)
+	GetContainerLogsScopeContainers(string, string) ([]PodContainer, error)
 	GetObjectYAMLByGVK(string, string, string, string, string) (string, error)
-	GetPodContainers(string, string, string) ([]string, error)
+	GetPodContainers(string, string, string) ([]PodContainer, error)
 	GetRevisionHistory(string, string, string, string, string, string) ([]RevisionEntry, error)
 	GetTargetPorts(string, string, string, string, string, string) ([]ContainerPortInfo, error)
 	HydrateCatalogCustomRows(string, []snapshot.ResourceQueryRow) ([]snapshot.CustomResourceSummary, error)
@@ -169,6 +170,12 @@ type PanelWindowCommands interface {
 	AcknowledgeApplicationQuitPreflight(string, string, bool) error
 }
 
+// PanelMetricsCommands is the frontend command surface owned by PanelMetricsService.
+type PanelMetricsCommands interface {
+	AppendPanelMetricSample(string, string, panelmetrics.Sample) error
+	GetPanelMetricSeries(string, string, int64) (*panelmetrics.Series, error)
+}
+
 // DesktopServiceLifecycle owns Wails service startup and shutdown.
 type DesktopServiceLifecycle interface {
 	ServiceStartup(context.Context, application.ServiceOptions) error
@@ -193,6 +200,7 @@ type DesktopServiceDependencies struct {
 	Logs           AppLogCommands
 	DesktopShell   DesktopShellCommands
 	PanelWindows   PanelWindowCommands
+	PanelMetrics   PanelMetricsCommands
 	Lifecycle      DesktopServiceLifecycle
 	HTTP           http.Handler
 }
@@ -215,6 +223,7 @@ type DesktopService struct {
 	logs           AppLogCommands
 	desktopShell   DesktopShellCommands
 	panelWindows   PanelWindowCommands
+	panelMetrics   PanelMetricsCommands
 	lifecycle      DesktopServiceLifecycle
 	http           http.Handler
 }
@@ -235,6 +244,7 @@ func NewDesktopService(dependencies DesktopServiceDependencies) *DesktopService 
 		logs:           dependencies.Logs,
 		desktopShell:   dependencies.DesktopShell,
 		panelWindows:   dependencies.PanelWindows,
+		panelMetrics:   dependencies.PanelMetrics,
 		lifecycle:      dependencies.Lifecycle,
 		http:           dependencies.HTTP,
 	}
@@ -460,7 +470,7 @@ func (s *DesktopService) FindCatalogObjectMatch(clusterID, namespace, group, ver
 	return s.resources.FindCatalogObjectMatch(clusterID, namespace, group, version, kind, name)
 }
 
-func (s *DesktopService) GetContainerLogsScopeContainers(clusterID, scope string) ([]string, error) {
+func (s *DesktopService) GetContainerLogsScopeContainers(clusterID, scope string) ([]PodContainer, error) {
 	return s.resources.GetContainerLogsScopeContainers(clusterID, scope)
 }
 
@@ -468,7 +478,7 @@ func (s *DesktopService) GetObjectYAMLByGVK(clusterID, apiVersion, kind, namespa
 	return s.resources.GetObjectYAMLByGVK(clusterID, apiVersion, kind, namespace, name)
 }
 
-func (s *DesktopService) GetPodContainers(clusterID, namespace, podName string) ([]string, error) {
+func (s *DesktopService) GetPodContainers(clusterID, namespace, podName string) ([]PodContainer, error) {
 	return s.resources.GetPodContainers(clusterID, namespace, podName)
 }
 
@@ -753,4 +763,12 @@ func (s *DesktopService) AcknowledgeApplicationQuitPreflight(ctx context.Context
 		return err
 	}
 	return s.panelWindows.AcknowledgeApplicationQuitPreflight(callerWindowName, transactionID, allowed)
+}
+
+func (s *DesktopService) AppendPanelMetricSample(clusterID, panelID string, sample panelmetrics.Sample) error {
+	return s.panelMetrics.AppendPanelMetricSample(clusterID, panelID, sample)
+}
+
+func (s *DesktopService) GetPanelMetricSeries(clusterID, panelID string, afterT int64) (*panelmetrics.Series, error) {
+	return s.panelMetrics.GetPanelMetricSeries(clusterID, panelID, afterT)
 }

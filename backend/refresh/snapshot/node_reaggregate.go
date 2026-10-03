@@ -10,8 +10,8 @@
  * capacity/allocatable, addresses, kubelet version, labels/annotations, taints). It is the
  * SAME function the projector calls at intake and the typed list-fallback serve loop calls,
  * so both converge on identical own fields. reaggregateNodeSummary overlays the only
- * serve-side additions — the pod request/limit/restart totals, the per-pod usage rows, the
- * pod-count, and the node CPU/mem usage — exactly as the pre-cut single-pass loop did,
+ * serve-side additions — the pod request/limit/restart totals, the pod-count, and the node
+ * CPU/mem usage — exactly as the pre-cut single-pass loop did,
  * proven byte-identical in node_reaggregate_test.go.
  */
 
@@ -25,6 +25,7 @@ import (
 	nodepkg "github.com/luxury-yacht/app/backend/resources/nodes"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/utils/ptr"
 )
 
 // buildNodeOwnSummary builds the OWN-fields NodeSummary for one node: every field the
@@ -53,15 +54,13 @@ func buildNodeOwnSummary(meta ClusterMeta, node *corev1.Node) streamrows.NodeSum
 
 	cpuCapacity := node.Status.Capacity[corev1.ResourceCPU]
 	cpuAlloc := node.Status.Allocatable[corev1.ResourceCPU]
-	summary.CPUCapacity = cpuCapacity.String()
-	summary.CPUAllocatable = cpuAlloc.String()
-	summary.CPU = cpuCapacity.String()
+	summary.CPUCapacityMilli = cpuCapacity.MilliValue()
+	summary.CPUAllocatableMilli = cpuAlloc.MilliValue()
 
 	memCapacity := node.Status.Capacity[corev1.ResourceMemory]
 	memAlloc := node.Status.Allocatable[corev1.ResourceMemory]
-	summary.MemoryCapacity = formatMemoryBytes(memCapacity.Value())
-	summary.MemoryAllocatable = formatMemoryBytes(memAlloc.Value())
-	summary.Memory = formatMemoryBytes(memCapacity.Value())
+	summary.MemoryCapacityBytes = memCapacity.Value()
+	summary.MemoryAllocatableBytes = memAlloc.Value()
 
 	podsCapacity := node.Status.Capacity[corev1.ResourcePods]
 	podsAlloc := node.Status.Allocatable[corev1.ResourcePods]
@@ -76,27 +75,23 @@ func buildNodeOwnSummary(meta ClusterMeta, node *corev1.Node) streamrows.NodeSum
 // reaggregateNodeSummary overlays the serve-side pod-aggregate join + metrics overlay onto
 // a projected OWN-fields node row, returning the full NodeSummary the pre-cut single-pass
 // loop produced. pods are the node's PodAggregate rows (grouped by NodeName by the caller);
-// podMetrics/nodeMetrics are the pre-resolved usage maps. The only fields written here are
-// the pod request/limit/restart totals, the per-pod metric rows, the pod-count, and the
-// node CPU/mem usage — every own field is left as buildNodeOwnSummary set it.
+// nodeMetrics is the pre-resolved usage map. The only fields written here are the pod
+// request/limit/restart totals, the pod-count, and the node CPU/mem usage — every own field
+// is left as buildNodeOwnSummary set it.
 func reaggregateNodeSummary(
 	own streamrows.NodeSummary,
 	pods []streamrows.PodAggregate,
-	podMetrics map[string]metrics.PodUsage,
 	nodeMetrics map[string]metrics.NodeUsage,
 ) streamrows.NodeSummary {
 	summary := own
 
 	cpuReq, cpuLim, memReq, memLim, restarts := aggregatePodResources(pods)
-	summary.CPURequests = formatCPUMilli(cpuReq)
-	summary.CPULimits = formatCPUMilli(cpuLim)
-	summary.MemRequests = formatMemoryBytes(memReq)
-	summary.MemLimits = formatMemoryBytes(memLim)
+	summary.CPURequestsMilli = cpuReq
+	summary.CPULimitsMilli = cpuLim
+	summary.MemoryRequestsBytes = memReq
+	summary.MemoryLimitsBytes = memLim
 	summary.Restarts = restarts
 
-	if len(pods) > 0 {
-		summary.PodMetrics = nodePodMetrics(pods, podMetrics)
-	}
 	if capacity := nodePodsCapacityValue(own.PodsCapacity); capacity > 0 {
 		summary.Pods = fmt.Sprintf("%d/%d", len(pods), capacity)
 	} else {
@@ -104,30 +99,13 @@ func reaggregateNodeSummary(
 	}
 
 	// A node with no sample, or a sample that predates the node's creation (a recreated
-	// same-name node), renders the no-data marker rather than stale or zero numbers.
-	usage, ok := nodeMetrics[own.Ref.Name]
-	summary.CPUUsage = formatNodeMetricCPU(usage, ok, own.AgeTimestamp)
-	summary.MemoryUsage = formatNodeMetricMemory(usage, ok, own.AgeTimestamp)
+	// same-name node), carries no usage rather than stale or zero numbers.
+	if usage, ok := nodeMetrics[own.Ref.Name]; metricSampleValid(ok, usage.Timestamp, own.AgeTimestamp) {
+		summary.CPUUsageMilli = ptr.To(usage.CPUUsageMilli)
+		summary.MemoryUsageBytes = ptr.To(usage.MemoryUsageBytes)
+	}
 
 	return summary
-}
-
-// formatNodeMetricCPU and formatNodeMetricMemory render a node (or per-pod) usage
-// cell: the formatted number for a valid sample (present, and not predating the
-// object's creation — see metricSampleValid), otherwise the no-data marker (never
-// "0m"/"0Mi", so "metrics unknown" is distinguishable from a real zero).
-func formatNodeMetricCPU(usage metrics.NodeUsage, ok bool, creationMillis int64) string {
-	if !metricSampleValid(ok, usage.Timestamp, creationMillis) {
-		return streamrows.MetricsNoData
-	}
-	return formatCPUMilli(usage.CPUUsageMilli)
-}
-
-func formatNodeMetricMemory(usage metrics.NodeUsage, ok bool, creationMillis int64) string {
-	if !metricSampleValid(ok, usage.Timestamp, creationMillis) {
-		return streamrows.MetricsNoData
-	}
-	return formatMemoryBytes(usage.MemoryUsageBytes)
 }
 
 // nodePodsCapacityValue parses the own row's pods-capacity string (a canonical
@@ -144,29 +122,4 @@ func nodePodsCapacityValue(podsCapacity string) int64 {
 		return 0
 	}
 	return q.Value()
-}
-
-// nodePodMetrics formats the per-pod usage rows without mutating retained summaries.
-func nodePodMetrics(pods []streamrows.PodAggregate, podMetrics map[string]metrics.PodUsage) []NodePodMetric {
-	podSummaries := make([]NodePodMetric, 0, len(pods))
-	for _, agg := range pods {
-		key := fmt.Sprintf("%s/%s", agg.Namespace, agg.Name)
-		usage, ok := podMetrics[key]
-		// PodAggregate carries no per-pod creationTimestamp, so a per-pod entry can
-		// only drop on a MISSING sample (stale-on-recreate is enforced at the node
-		// level and in the pods table where the row carries AgeTimestamp). A missing
-		// sample renders the no-data marker rather than "0m"/"0Mi".
-		cpu, mem := streamrows.MetricsNoData, streamrows.MetricsNoData
-		if ok {
-			cpu = formatCPUMilli(usage.CPUUsageMilli)
-			mem = formatMemoryBytes(usage.MemoryUsageBytes)
-		}
-		podSummaries = append(podSummaries, NodePodMetric{
-			Namespace:   agg.Namespace,
-			Name:        agg.Name,
-			CPUUsage:    cpu,
-			MemoryUsage: mem,
-		})
-	}
-	return podSummaries
 }

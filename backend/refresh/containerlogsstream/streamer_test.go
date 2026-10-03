@@ -2,25 +2,17 @@ package containerlogsstream
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
-	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
-	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +22,7 @@ func TestSelectRuntimeTargetsKeepsPerScopeCapWhenPodsGrow(t *testing.T) {
 		testLogPod("default", "web-2", corev1.PodRunning, true, "app"),
 	}
 
-	selected, total := selectRuntimeTargets(pods, containerlogs.DefaultContainerSelection(""), 2)
+	selected, total := selectRuntimeTargets(pods, containerlogs.ScopeSelection{}, 2)
 	if total != 2 {
 		t.Fatalf("expected total target count 2, got %d", total)
 	}
@@ -39,7 +31,7 @@ func TestSelectRuntimeTargetsKeepsPerScopeCapWhenPodsGrow(t *testing.T) {
 	}
 
 	pods = append(pods, testLogPod("default", "web-3", corev1.PodRunning, true, "app"))
-	selected, total = selectRuntimeTargets(pods, containerlogs.DefaultContainerSelection(""), 2)
+	selected, total = selectRuntimeTargets(pods, containerlogs.ScopeSelection{}, 2)
 	if total != 3 {
 		t.Fatalf("expected total target count 3 after pod growth, got %d", total)
 	}
@@ -58,7 +50,7 @@ func TestSelectRuntimeTargetsRefillsAfterPodRemoval(t *testing.T) {
 		testLogPod("default", "web-3", corev1.PodRunning, true, "app"),
 	}
 
-	selected, total := selectRuntimeTargets(pods, containerlogs.DefaultContainerSelection(""), 2)
+	selected, total := selectRuntimeTargets(pods, containerlogs.ScopeSelection{}, 2)
 	if total != 3 {
 		t.Fatalf("expected total target count 3, got %d", total)
 	}
@@ -66,32 +58,12 @@ func TestSelectRuntimeTargetsRefillsAfterPodRemoval(t *testing.T) {
 		t.Fatalf("unexpected initial capped target keys: %v", keys)
 	}
 
-	selected, total = selectRuntimeTargets(pods[1:], containerlogs.DefaultContainerSelection(""), 2)
+	selected, total = selectRuntimeTargets(pods[1:], containerlogs.ScopeSelection{}, 2)
 	if total != 2 {
 		t.Fatalf("expected total target count 2 after pod removal, got %d", total)
 	}
 	if keys := runtimeTargetKeys(selected); strings.Join(keys, ",") != "default/web-2/container:app,default/web-3/container:app" {
 		t.Fatalf("expected selection to refill after pod removal, got %v", keys)
-	}
-}
-
-func TestListPodsForPodKind(t *testing.T) {
-	ctx := context.Background()
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"},
-	}
-	client := fake.NewClientset(pod)
-	streamer := NewStreamer(client, nil, nil)
-
-	pods, selector, err := streamer.listPods(ctx, Options{Kind: "pod", Namespace: "default", Name: "pod-1"})
-	if err != nil {
-		t.Fatalf("listPods returned error: %v", err)
-	}
-	if selector != "" {
-		t.Fatalf("expected empty selector for pod kind, got %q", selector)
-	}
-	if len(pods) != 1 || pods[0].Name != "pod-1" {
-		t.Fatalf("expected single pod-1 result, got %#v", pods)
 	}
 }
 
@@ -108,12 +80,10 @@ func TestMatchNoneTailAndStreamDoNotTouchKubernetes(t *testing.T) {
 		MatchNone: true,
 	}
 
-	initial, err := streamer.tail(context.Background(), opts, nil)
+	initial, err := streamer.prepare(context.Background(), opts, nil)
 	require.NoError(t, err)
-	require.Empty(t, initial.entries)
-	require.Empty(t, initial.states)
 	require.Empty(t, initial.pods)
-	require.Empty(t, initial.selector)
+	require.Nil(t, initial.watch)
 	require.Empty(t, initial.warnings)
 	require.Empty(t, client.Actions())
 
@@ -125,7 +95,7 @@ func TestMatchNoneTailAndStreamDoNotTouchKubernetes(t *testing.T) {
 			ctx,
 
 			initial.pods,
-			initial.selector, containerLogRunConfig{opts: opts, states: initial.states, limiterSession: nil, initialWarnings: initial.warnings, entriesCh: make(chan Entry), warningsCh: make(chan []string), errCh: make(chan error), dropCh: make(chan int)})
+			initial.watch, containerLogRunConfig{opts: opts, limiterSession: nil, initialWarnings: initial.warnings, sink: testPending()})
 
 	}()
 	cancel()
@@ -135,226 +105,6 @@ func TestMatchNoneTailAndStreamDoNotTouchKubernetes(t *testing.T) {
 		t.Fatal("MatchNone stream did not stop after cancellation")
 	}
 	require.Empty(t, client.Actions())
-}
-
-func TestTailSortsInitialEntriesByTimestampAcrossTargets(t *testing.T) {
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "demo"},
-		Spec: corev1.PodSpec{
-			InitContainers: []corev1.Container{{Name: "init"}},
-			Containers:     []corev1.Container{{Name: "app"}},
-		},
-	}
-	baseClient := fake.NewClientset(pod)
-	delegateCore := baseClient.CoreV1()
-	origin := time.Unix(0, 0)
-	streams := []string{
-		buildContainerLogsStream(origin, []time.Duration{3 * time.Second}, []string{"init late"}),
-		buildContainerLogsStream(origin, []time.Duration{time.Second}, []string{"app early"}),
-	}
-	override := newLogPods(delegateCore.Pods("default"), "default", streams)
-	client := &stubClient{
-		Clientset: baseClient,
-		core: &logCore{
-			CoreV1Interface: delegateCore,
-			overrides:       map[string]*logPods{"default": override},
-		},
-	}
-	streamer := NewStreamer(client, applog.Noop, nil)
-
-	initial, err := streamer.tail(context.Background(), Options{
-		Namespace:        "default",
-		Kind:             "pod",
-		Name:             "demo",
-		IncludeInit:      true,
-		IncludeEphemeral: true,
-		ContainerState:   containerlogs.ContainerStateAll,
-		TailLines:        50,
-	}, nil)
-
-	require.NoError(t, err)
-	require.Len(t, initial.pods, 1)
-	require.Empty(t, initial.selector)
-	require.Empty(t, initial.warnings)
-	require.Zero(t, initial.skippedTargets)
-	require.Empty(t, initial.skipReason)
-	require.Len(t, initial.states, 2)
-	require.Len(t, initial.entries, 2)
-	require.Equal(t, []string{"app early", "init late"}, []string{initial.entries[0].Line, initial.entries[1].Line})
-	require.Less(t, initial.entries[0].Timestamp, initial.entries[1].Timestamp)
-}
-
-func TestListPodsSelectorError(t *testing.T) {
-	ctx := context.Background()
-	client := fake.NewClientset()
-	streamer := NewStreamer(client, nil, nil)
-
-	if _, _, err := streamer.listPods(ctx, Options{Kind: "unsupported", Namespace: "default", Name: "x"}); err == nil {
-		t.Fatal("expected unsupported selector error")
-	}
-}
-
-func TestListPodsForDeployment(t *testing.T) {
-	ctx := context.Background()
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web"},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
-		},
-	}
-	podMatch := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1", Labels: map[string]string{"app": "web"}},
-	}
-	podMiss := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-2", Labels: map[string]string{"app": "other"}},
-	}
-	client := fake.NewClientset([]runtime.Object{deployment, podMatch, podMiss}...)
-	streamer := NewStreamer(client, nil, nil)
-
-	pods, selector, err := streamer.listPods(ctx, Options{Kind: "deployment", Namespace: "default", Name: "web"})
-	if err != nil {
-		t.Fatalf("listPods returned error: %v", err)
-	}
-	if selector == "" {
-		t.Fatal("expected selector for deployment scope")
-	}
-	if len(pods) != 1 || pods[0].Name != "pod-1" {
-		t.Fatalf("expected pod-1 to match selector, got %#v", pods)
-	}
-}
-
-func TestListPodsAppliesPodFilter(t *testing.T) {
-	ctx := context.Background()
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web"},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
-		},
-	}
-	podOne := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web-1", Labels: map[string]string{"app": "web"}},
-	}
-	podTwo := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web-2", Labels: map[string]string{"app": "web"}},
-	}
-	client := fake.NewClientset([]runtime.Object{deployment, podOne, podTwo}...)
-	streamer := NewStreamer(client, nil, nil)
-
-	pods, selector, err := streamer.listPods(ctx, Options{
-		Kind:      "deployment",
-		Namespace: "default",
-		Name:      "web",
-		PodFilter: "web-2",
-	})
-	if err != nil {
-		t.Fatalf("listPods returned error: %v", err)
-	}
-	if selector == "" {
-		t.Fatal("expected selector for deployment scope")
-	}
-	if len(pods) != 1 || pods[0].Name != "web-2" {
-		t.Fatalf("expected only web-2 after pod filter, got %#v", pods)
-	}
-}
-
-func TestListPodsAppliesPodNameRegexFilters(t *testing.T) {
-	ctx := context.Background()
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web"},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
-		},
-	}
-	podOne := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web-api-1", Labels: map[string]string{"app": "web"}},
-	}
-	podTwo := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web-worker-1", Labels: map[string]string{"app": "web"}},
-	}
-	podThree := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web-api-canary", Labels: map[string]string{"app": "web"}},
-	}
-	client := fake.NewClientset([]runtime.Object{deployment, podOne, podTwo, podThree}...)
-	streamer := NewStreamer(client, nil, nil)
-	podNameFilter, err := containerlogs.NewPodNameFilter("api", "canary$")
-	if err != nil {
-		t.Fatalf("unexpected pod filter error: %v", err)
-	}
-
-	pods, selector, err := streamer.listPods(ctx, Options{
-		Kind:          "deployment",
-		Namespace:     "default",
-		Name:          "web",
-		PodNameFilter: podNameFilter,
-		PodInclude:    "api",
-		PodExclude:    "canary$",
-	})
-	if err != nil {
-		t.Fatalf("listPods returned error: %v", err)
-	}
-	if selector == "" {
-		t.Fatal("expected selector for deployment scope")
-	}
-	if len(pods) != 1 || pods[0].Name != "web-api-1" {
-		t.Fatalf("expected only web-api-1 after pod regex filters, got %#v", pods)
-	}
-}
-
-func TestListPodsForReplicaSet(t *testing.T) {
-	ctx := context.Background()
-	rs := &appsv1.ReplicaSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "rs1"},
-		Spec: appsv1.ReplicaSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "rs"}},
-		},
-	}
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1", Labels: map[string]string{"app": "rs"}},
-	}
-	client := fake.NewClientset(rs, pod)
-	streamer := NewStreamer(client, nil, nil)
-
-	pods, selector, err := streamer.listPods(ctx, Options{Kind: "replicaset", Namespace: "default", Name: "rs1"})
-	if err != nil {
-		t.Fatalf("listPods returned error: %v", err)
-	}
-	if selector == "" || len(pods) != 1 {
-		t.Fatalf("expected selector and single pod, got selector=%q pods=%d", selector, len(pods))
-	}
-}
-
-func TestPodBelongsToCronJob(t *testing.T) {
-	ctx := context.Background()
-	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "default",
-			Name:      "job-1",
-			OwnerReferences: []metav1.OwnerReference{
-				{Kind: "CronJob", Name: "nightly"},
-			},
-		},
-	}
-	client := fake.NewClientset(job)
-	streamer := NewStreamer(client, nil, nil)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "default",
-			Name:      "pod-1",
-			Labels:    map[string]string{"job-name": "job-1"},
-		},
-	}
-	cache := map[string]bool{}
-	if !streamer.podBelongsToCronJob(ctx, "default", "nightly", pod, cache) {
-		t.Fatal("expected pod to belong to cronjob")
-	}
-
-	if streamer.podBelongsToCronJob(ctx, "default", "other", pod, cache) {
-		t.Fatal("expected cronjob mismatch to return false")
-	}
-	if cache["job-1/nightly"] != true || cache["job-1/other"] != false {
-		t.Fatalf("expected cache to contain keyed results, got %+v", cache)
-	}
 }
 
 func testLogPod(namespace, name string, phase corev1.PodPhase, ready bool, containers ...string) *corev1.Pod {
@@ -392,33 +142,6 @@ func runtimeTargetKeys(targets []containerTarget) []string {
 	return keys
 }
 
-func TestListPodsErrorPropagates(t *testing.T) {
-	ctx := context.Background()
-	client := fake.NewClientset()
-	client.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("list failed")
-	})
-	streamer := NewStreamer(client, nil, nil)
-
-	if _, _, err := streamer.listPods(ctx, Options{Kind: "pod", Namespace: "default", Name: "pod-1"}); err == nil {
-		t.Fatal("expected error from underlying client")
-	}
-}
-
-func TestPodPointersReturnsNewSlice(t *testing.T) {
-	pods := []corev1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: "a"}}, {ObjectMeta: metav1.ObjectMeta{Name: "b"}}}
-	ptrs := podPointers(pods)
-	if len(ptrs) != 2 {
-		t.Fatalf("expected two pointers, got %d", len(ptrs))
-	}
-	if ptrs[0].Name != "a" || ptrs[1].Name != "b" {
-		t.Fatalf("unexpected pod names %#v", ptrs)
-	}
-	if ptrs[0] == &pods[0] {
-		t.Fatal("expected pointers to point to copies, not original slice elements")
-	}
-}
-
 type fakeWatch struct {
 	ch   chan watch.Event
 	once sync.Once
@@ -432,101 +155,6 @@ func (f *fakeWatch) ResultChan() <-chan watch.Event {
 	return f.ch
 }
 
-func TestConsumeWatchReturnsErrorOnWatchErrorEvent(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	streamer := NewStreamer(fake.NewClientset(), nil, nil)
-	fw := &fakeWatch{ch: make(chan watch.Event, 1)}
-	resultCh := make(chan error, 1)
-
-	go func() {
-		resultCh <- streamer.consumeWatch(
-			ctx,
-			fw,
-			Options{},
-			map[string]bool{},
-			nil, podWatchCallbacks{reconcileTargets: nil, startPod: func(*corev1.Pod) {}, stopPod: func(string) {}})
-
-	}()
-
-	fw.ch <- watch.Event{
-		Type:   watch.Error,
-		Object: &metav1.Status{Message: "boom"},
-	}
-
-	select {
-	case err := <-resultCh:
-		if err == nil || !strings.Contains(err.Error(), "boom") {
-			t.Fatalf("expected watch error to propagate, got %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for consumeWatch to return")
-	}
-}
-
-func TestConsumeWatchReportsClosedChannelAndIgnoresUnrelatedEvents(t *testing.T) {
-	streamer := NewStreamer(fake.NewClientset(), nil, nil)
-	fw := &fakeWatch{ch: make(chan watch.Event, 2)}
-	started := 0
-	stopped := 0
-	fw.ch <- watch.Event{Type: watch.Added, Object: &metav1.Status{}}
-	fw.ch <- watch.Event{Type: watch.Added, Object: testLogPod("default", "ignored", corev1.PodRunning, true, "app")}
-	close(fw.ch)
-
-	err := streamer.consumeWatch(
-		context.Background(),
-		fw,
-		Options{PodFilter: "selected"},
-		map[string]bool{},
-		nil, podWatchCallbacks{reconcileTargets: nil, startPod: func(*corev1.Pod) { started++ }, stopPod: func(string) { stopped++ }})
-
-	require.EqualError(t, err, "watch channel closed")
-	require.Zero(t, started)
-	require.Zero(t, stopped)
-}
-
-func TestContainerLogRunWatchCallbacksUpdateInventory(t *testing.T) {
-	streamer := NewStreamer(fake.NewClientset(), nil, nil)
-	warningsCh := make(chan []string, 1)
-	run := newContainerLogRun(streamer, containerLogRunConfig{
-		opts:            Options{Kind: "deployment", Namespace: "default"},
-		states:          map[string]*containerState{},
-		initialWarnings: []string{"stale warning"},
-		warningsCh:      warningsCh,
-	})
-	limiterNotify := make(chan struct{}, 1)
-	run.limiterNotify = limiterNotify
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"}}
-	fw := &fakeWatch{ch: make(chan watch.Event, 2)}
-	resultCh := make(chan error, 1)
-	go func() {
-		resultCh <- run.consumePodWatch(context.Background(), fw, map[string]bool{})
-	}()
-	limiterNotify <- struct{}{}
-	require.Empty(t, <-warningsCh)
-	fw.ch <- watch.Event{Type: watch.Added, Object: pod}
-	fw.ch <- watch.Event{Type: watch.Deleted, Object: pod}
-	close(fw.ch)
-
-	err := <-resultCh
-	require.EqualError(t, err, "watch channel closed")
-	require.Empty(t, run.currentPods)
-}
-
-func TestContainerLogRunRefreshesPodInventory(t *testing.T) {
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"}}
-	streamer := NewStreamer(fake.NewClientset(pod), nil, nil)
-	run := newContainerLogRun(streamer, containerLogRunConfig{
-		opts:   Options{Kind: "pod", Namespace: "default", Name: "pod-1"},
-		states: map[string]*containerState{},
-	})
-
-	run.refreshPodInventory(context.Background())
-
-	require.Contains(t, run.currentPods, "pod-1")
-}
-
 func TestStreamerRunCancellationBeforeAndAfterStartup(t *testing.T) {
 	streamer := NewStreamer(fake.NewClientset(), nil, nil)
 
@@ -535,7 +163,7 @@ func TestStreamerRunCancellationBeforeAndAfterStartup(t *testing.T) {
 		cancel()
 		done := make(chan struct{})
 		go func() {
-			streamer.run(ctx, nil, "", containerLogRunConfig{opts: Options{MatchNone: true}, states: nil, limiterSession: nil, initialWarnings: nil, entriesCh: nil, warningsCh: nil, errCh: nil, dropCh: nil})
+			streamer.run(ctx, nil, nil, containerLogRunConfig{opts: Options{MatchNone: true}, limiterSession: nil, initialWarnings: nil, sink: testPending()})
 			close(done)
 		}()
 		select {
@@ -549,7 +177,7 @@ func TestStreamerRunCancellationBeforeAndAfterStartup(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
 		go func() {
-			streamer.run(ctx, nil, "", containerLogRunConfig{opts: Options{Kind: "pod"}, states: map[string]*containerState{}, limiterSession: nil, initialWarnings: nil, entriesCh: nil, warningsCh: nil, errCh: nil, dropCh: nil})
+			streamer.run(ctx, nil, nil, containerLogRunConfig{opts: Options{Kind: "pod"}, limiterSession: nil, initialWarnings: nil, sink: testPending()})
 			close(done)
 		}()
 		cancel()
@@ -561,343 +189,6 @@ func TestStreamerRunCancellationBeforeAndAfterStartup(t *testing.T) {
 	})
 }
 
-func TestStreamerRunRestartsClosedWatchAndInterruptsBackoff(t *testing.T) {
-	t.Run("closed watch restarts", func(t *testing.T) {
-		client := fake.NewClientset()
-		var mu sync.Mutex
-		var watches []*fakeWatch
-		client.PrependWatchReactor("pods", func(k8stesting.Action) (bool, watch.Interface, error) {
-			fw := &fakeWatch{ch: make(chan watch.Event)}
-			mu.Lock()
-			watches = append(watches, fw)
-			mu.Unlock()
-			return true, fw, nil
-		})
-		streamer := NewStreamer(client, nil, nil)
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		done := make(chan struct{})
-		go func() {
-			streamer.run(ctx, nil, "app=test", containerLogRunConfig{opts: Options{Kind: "deployment", Namespace: "default"}, states: map[string]*containerState{}, limiterSession: nil, initialWarnings: nil, entriesCh: nil, warningsCh: nil, errCh: make(chan error, 1), dropCh: nil})
-			close(done)
-		}()
-
-		require.Eventually(t, func() bool {
-			mu.Lock()
-			defer mu.Unlock()
-			return len(watches) == 1
-		}, time.Second, 10*time.Millisecond)
-		mu.Lock()
-		first := watches[0]
-		mu.Unlock()
-		first.Stop()
-
-		require.Eventually(t, func() bool {
-			mu.Lock()
-			defer mu.Unlock()
-			return len(watches) >= 2
-		}, 2*time.Second, 20*time.Millisecond, "closed watch should reconnect after backoff")
-		cancel()
-		select {
-		case <-done:
-		case <-time.After(time.Second):
-			t.Fatal("restarted watch did not stop after cancellation")
-		}
-	})
-
-	t.Run("watch creation backoff is cancellable", func(t *testing.T) {
-		client := fake.NewClientset()
-		watchAttempted := make(chan struct{}, 1)
-		client.PrependWatchReactor("pods", func(k8stesting.Action) (bool, watch.Interface, error) {
-			select {
-			case watchAttempted <- struct{}{}:
-			default:
-			}
-			return true, nil, errors.New("watch unavailable")
-		})
-		streamer := NewStreamer(client, nil, nil)
-		ctx, cancel := context.WithCancel(context.Background())
-		done := make(chan struct{})
-		go func() {
-			streamer.run(ctx, nil, "", containerLogRunConfig{opts: Options{Kind: "deployment", Namespace: "default"}, states: map[string]*containerState{}, limiterSession: nil, initialWarnings: nil, entriesCh: nil, warningsCh: nil, errCh: make(chan error, 1), dropCh: nil})
-			close(done)
-		}()
-		select {
-		case <-watchAttempted:
-		case <-time.After(time.Second):
-			t.Fatal("watch startup was not attempted")
-		}
-		cancel()
-		select {
-		case <-done:
-		case <-time.After(250 * time.Millisecond):
-			t.Fatal("cancellation did not interrupt reconnect backoff")
-		}
-	})
-}
-
-func TestStreamerRunReconcilesContainerLossAndRestartWithCleanup(t *testing.T) {
-	pod := testLogPod("default", "web-1", corev1.PodRunning, true, "app", "sidecar")
-	baseClient := fake.NewClientset(pod)
-	delegateCore := baseClient.CoreV1()
-	logs := newLogPods(delegateCore.Pods("default"), "default", nil)
-	client := &stubClient{
-		Clientset: baseClient,
-		core: &logCore{CoreV1Interface: delegateCore, overrides: map[string]*logPods{
-			"default": logs,
-		}},
-	}
-	fw := &fakeWatch{ch: make(chan watch.Event, 4)}
-	baseClient.PrependWatchReactor("pods", func(k8stesting.Action) (bool, watch.Interface, error) {
-		return true, fw, nil
-	})
-	streamer := NewStreamer(client, nil, nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		streamer.run(
-			ctx,
-
-			nil,
-			"app=web", containerLogRunConfig{opts: Options{Kind: "deployment", Namespace: "default", IncludeInit: true, IncludeEphemeral: true, ContainerState: containerlogs.ContainerStateAll}, states: map[string]*containerState{}, limiterSession: nil, initialWarnings: nil, entriesCh: make(chan Entry, 4), warningsCh: make(chan []string, 4), errCh: make(chan error, 4), dropCh: make(chan int, 4)})
-
-		close(done)
-	}()
-
-	fw.ch <- watch.Event{Type: watch.Added, Object: pod.DeepCopy()}
-	require.Eventually(t, func() bool {
-		return logs.containerRequestCount("app") >= 1 && logs.containerRequestCount("sidecar") >= 1
-	}, time.Second, 10*time.Millisecond)
-
-	withoutSidecar := pod.DeepCopy()
-	withoutSidecar.Spec.Containers = withoutSidecar.Spec.Containers[:1]
-	fw.ch <- watch.Event{Type: watch.Modified, Object: withoutSidecar}
-	time.Sleep(25 * time.Millisecond)
-	fw.ch <- watch.Event{Type: watch.Modified, Object: pod.DeepCopy()}
-	require.Eventually(t, func() bool {
-		return logs.containerRequestCount("sidecar") >= 2
-	}, time.Second, 10*time.Millisecond, "a container that returns to inventory should get a new follower")
-
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("run returned before all restarted followers were cleaned up")
-	}
-	require.Equal(t, 1, logs.containerRequestCount("app"))
-	require.Equal(t, 2, logs.containerRequestCount("sidecar"))
-}
-
-func TestWaitForReconnect(t *testing.T) {
-	streamer := NewStreamer(nil, nil, nil)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if streamer.waitForReconnect(ctx, time.Millisecond*10) {
-		t.Fatal("expected cancelled context to return false")
-	}
-
-	start := time.Now()
-	if !streamer.waitForReconnect(context.Background(), time.Millisecond*5) {
-		t.Fatal("expected wait to complete when context is active")
-	}
-	if time.Since(start) < 4*time.Millisecond {
-		t.Fatal("expected waitForReconnect to respect the delay")
-	}
-}
-
-func TestConsumeWatchReconcilesTargetsOnLimiterNotification(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	streamer := NewStreamer(fake.NewClientset(), nil, nil)
-	fw := &fakeWatch{ch: make(chan watch.Event)}
-	limiterNotify := make(chan struct{}, 1)
-	reconciled := make(chan struct{}, 1)
-	resultCh := make(chan error, 1)
-
-	go func() {
-		resultCh <- streamer.consumeWatch(
-			ctx,
-			fw,
-			Options{},
-			map[string]bool{},
-			limiterNotify, podWatchCallbacks{reconcileTargets: func() {
-				select {
-				case reconciled <- struct{}{}:
-				default:
-				}
-			}, startPod: func(*corev1.Pod) {}, stopPod: func(string) {}})
-
-	}()
-
-	limiterNotify <- struct{}{}
-
-	select {
-	case <-reconciled:
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for limiter rebalance to trigger reconciliation")
-	}
-
-	cancel()
-
-	select {
-	case err := <-resultCh:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("expected consumeWatch to return context cancellation, got %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for consumeWatch to return")
-	}
-}
-
-func TestNextBackoff(t *testing.T) {
-	if next := nextBackoff(0); next != config.ContainerLogsStreamBackoffInitial {
-		t.Fatalf("expected initial backoff %v, got %v", config.ContainerLogsStreamBackoffInitial, next)
-	}
-
-	if next := nextBackoff(config.ContainerLogsStreamBackoffInitial); next != config.ContainerLogsStreamBackoffInitial*2 {
-		t.Fatalf("expected backoff doubling, got %v", next)
-	}
-
-	if next := nextBackoff(config.ContainerLogsStreamBackoffMax * 2); next != config.ContainerLogsStreamBackoffMax {
-		t.Fatalf("expected max backoff cap %v, got %v", config.ContainerLogsStreamBackoffMax, next)
-	}
-}
-
-func TestListPodsForCronJobBatched(t *testing.T) {
-	// Two Jobs owned by the same CronJob, each with one pod.
-	job1 := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:       "default",
-			Name:            "cron-abc",
-			OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "cron"}},
-		},
-	}
-	job2 := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:       "default",
-			Name:            "cron-def",
-			OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "cron"}},
-		},
-	}
-	pod1 := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "default",
-			Name:      "pod-abc",
-			Labels:    map[string]string{"job-name": "cron-abc"},
-		},
-	}
-	pod2 := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "default",
-			Name:      "pod-def",
-			Labels:    map[string]string{"job-name": "cron-def"},
-		},
-	}
-	// Unrelated pod in same namespace should not be returned.
-	unrelated := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "default",
-			Name:      "other-pod",
-			Labels:    map[string]string{"job-name": "unrelated-job"},
-		},
-	}
-
-	client := fake.NewClientset(job1, job2, pod1, pod2, unrelated)
-
-	// Count pod list calls to verify batching.
-	podListCalls := 0
-	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		podListCalls++
-		return false, nil, nil // pass through to default handler
-	})
-
-	streamer := NewStreamer(client, nil, nil)
-	ctx := context.Background()
-	pods, selector, err := streamer.listPods(ctx, Options{
-		Kind:      "cronjob",
-		Namespace: "default",
-		Name:      "cron",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Should return both pods in a single batched call.
-	if podListCalls != 1 {
-		t.Fatalf("expected 1 pod list call (batched), got %d", podListCalls)
-	}
-	if len(pods) != 2 {
-		t.Fatalf("expected 2 pods, got %d", len(pods))
-	}
-	names := map[string]bool{}
-	for _, p := range pods {
-		names[p.Name] = true
-	}
-	if !names["pod-abc"] || !names["pod-def"] {
-		t.Fatalf("expected pod-abc and pod-def, got %v", names)
-	}
-
-	// Selector must be empty so the watch sees pods from future Jobs.
-	if selector != "" {
-		t.Fatalf("expected empty selector for CronJob watch, got %q", selector)
-	}
-}
-
-func TestCronJobWatchPicksUpFutureJob(t *testing.T) {
-	// A new Job appears after the stream starts. The watch (empty selector)
-	// should deliver it, and consumeWatch should accept it via podBelongsToCronJob.
-	futureJob := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:       "default",
-			Name:            "cron-ghi",
-			OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "cron"}},
-		},
-	}
-	client := fake.NewClientset(futureJob)
-	streamer := NewStreamer(client, nil, nil)
-
-	futurePod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "default",
-			Name:      "pod-ghi",
-			Labels:    map[string]string{"job-name": "cron-ghi"},
-		},
-	}
-
-	fw := &fakeWatch{ch: make(chan watch.Event, 1)}
-	var started []string
-	startPod := func(pod *corev1.Pod) { started = append(started, pod.Name) }
-	stopPod := func(string) {}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	resultCh := make(chan error, 1)
-	go func() {
-		resultCh <- streamer.consumeWatch(
-			ctx,
-			fw,
-			Options{Kind: "cronjob", Namespace: "default", Name: "cron"},
-			map[string]bool{},
-			nil, podWatchCallbacks{reconcileTargets: nil, startPod: startPod, stopPod: stopPod})
-
-	}()
-
-	// Deliver a pod from the future Job via the watch.
-	fw.ch <- watch.Event{Type: watch.Added, Object: futurePod}
-
-	// Close the watch to let consumeWatch return.
-	close(fw.ch)
-
-	select {
-	case <-resultCh:
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for consumeWatch")
-	}
-
-	if len(started) != 1 || started[0] != "pod-ghi" {
-		t.Fatalf("expected future pod to be started, got %v", started)
-	}
+func testPending() *pendingEntries {
+	return newPendingEntries(1000, 1<<20)
 }

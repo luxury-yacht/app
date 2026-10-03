@@ -601,7 +601,7 @@ func TestAppSetObjPanelLogsBufferMaxSizePersistsAndClamps(t *testing.T) {
 	freshApp := newSettingsEffectsTestFixture(t)
 	settings, err := freshApp.Preferences.GetAppSettings()
 	require.NoError(t, err)
-	require.Equal(t, defaultObjPanelLogsBufferMaxSize, settings.ObjPanelLogsBufferMaxSize)
+	require.Equal(t, 5000, settings.ObjPanelLogsBufferMaxSize, "a new install keeps 5,000 lines per Logs tab")
 	require.Equal(t, defaultObjPanelLogsTargetPerScopeLimit, settings.ObjPanelLogsTargetPerScopeLimit)
 	require.Equal(t, defaultObjPanelLogsTargetGlobalLimit, settings.ObjPanelLogsTargetGlobalLimit)
 	require.Equal(t, defaultObjPanelLogsAPITimestampFormat, settings.ObjPanelLogsAPITimestampFormat)

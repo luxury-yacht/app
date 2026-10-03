@@ -1,6 +1,6 @@
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import { stripAnsi } from './ansi';
-import type { ParsedLogEntry } from './logViewerReducer';
+import type { ParsedLogEntry } from './logOptionsReducer';
 
 export const formatParsedValue = (value: unknown): string => {
   if (value === undefined || value === null) {
@@ -16,9 +16,17 @@ export const formatParsedValue = (value: unknown): string => {
   return stringified.length > 0 ? stringified : '-';
 };
 
+// Only text whose first visible character is "{" can parse to an object;
+// checking first keeps plain-text lines from throwing in JSON.parse.
+const OBJECT_START = /^\s*\{/;
+
 export const tryParseJSONObject = (line: string): Record<string, unknown> | null => {
+  const text = stripAnsi(line);
+  if (!OBJECT_START.test(text)) {
+    return null;
+  }
   try {
-    const parsed = JSON.parse(stripAnsi(line));
+    const parsed = JSON.parse(text);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       return null;
     }
@@ -42,21 +50,25 @@ export const deriveParsedLogFieldKeys = (entries: ParsedLogEntry[]): string[] =>
   return Array.from(seen).sort(compareUtf16Strings);
 };
 
+/**
+ * The line as a view shows it. Only the JSON views parse it; a caller that has
+ * already parsed the line passes the result as `parsedJson`.
+ */
 export const formatRawOrPrettyJsonLine = (
   line: string,
   displayMode: 'raw' | 'pretty' | 'structured' | 'parsed',
-  showAnsiColors: boolean
+  showAnsiColors: boolean,
+  parsedJson?: Record<string, unknown> | null
 ): string => {
-  const parsed = tryParseJSONObject(line);
   const normalizedLine = showAnsiColors ? line : stripAnsi(line);
-
-  if (displayMode === 'structured') {
-    return parsed ? JSON.stringify(parsed) : normalizedLine;
+  if (displayMode !== 'structured' && displayMode !== 'pretty') {
+    return normalizedLine;
   }
-  if (displayMode === 'pretty') {
-    return parsed ? JSON.stringify(parsed, null, 2) : normalizedLine;
+  const parsed = parsedJson === undefined ? tryParseJSONObject(line) : parsedJson;
+  if (!parsed) {
+    return normalizedLine;
   }
-  return normalizedLine;
+  return displayMode === 'pretty' ? JSON.stringify(parsed, null, 2) : JSON.stringify(parsed);
 };
 
 export const getParsedLogRowKey = (

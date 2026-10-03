@@ -13,9 +13,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"k8s.io/client-go/kubernetes/fake"
 	ktesting "k8s.io/client-go/testing"
@@ -241,39 +241,24 @@ func TestNodeBuilderBuild(t *testing.T) {
 	require.Equal(t, "10.0.0.5", summary.InternalIP)
 	require.Equal(t, "35.1.1.9", summary.ExternalIP)
 
-	require.Equal(t, "8", summary.CPUCapacity)
-	require.Equal(t, "7", summary.CPUAllocatable)
-	require.Equal(t, streamrows.MetricsNoData, summary.CPUUsage)
-	require.Equal(t, "1200m", summary.CPULimits)
-	require.Equal(t, "750m", summary.CPURequests)
+	require.Equal(t, int64(8000), summary.CPUCapacityMilli)
+	require.Equal(t, int64(7000), summary.CPUAllocatableMilli)
+	require.Nil(t, summary.CPUUsageMilli)
+	require.Equal(t, int64(1200), summary.CPULimitsMilli)
+	require.Equal(t, int64(750), summary.CPURequestsMilli)
 
-	require.Equal(t, "32.0 GB", summary.MemoryCapacity)
-	require.Equal(t, "30.0 GB", summary.MemoryAllocatable)
-	require.Equal(t, streamrows.MetricsNoData, summary.MemoryUsage)
-	require.Equal(t, "768 MB", summary.MemRequests)
-	require.Equal(t, "1.5 GB", summary.MemLimits)
+	require.Equal(t, int64(32<<30), summary.MemoryCapacityBytes)
+	require.Equal(t, int64(30<<30), summary.MemoryAllocatableBytes)
+	require.Nil(t, summary.MemoryUsageBytes)
+	require.Equal(t, int64(768<<20), summary.MemoryRequestsBytes)
+	require.Equal(t, int64(1536<<20), summary.MemoryLimitsBytes)
 
 	require.Equal(t, "2/110", summary.Pods)
 	require.Equal(t, "110", summary.PodsCapacity)
 	require.Equal(t, "100", summary.PodsAllocatable)
 	require.Equal(t, int32(3), summary.Restarts)
 	require.Equal(t, "Node", summary.Ref.Kind)
-	require.Equal(t, "8", summary.CPU)
-	require.Equal(t, "32.0 GB", summary.Memory)
 	require.True(t, summary.Unschedulable)
-	require.Len(t, summary.PodMetrics, 2)
-	require.Contains(t, summary.PodMetrics, NodePodMetric{
-		Namespace:   "default",
-		Name:        "pod-a",
-		CPUUsage:    streamrows.MetricsNoData,
-		MemoryUsage: streamrows.MetricsNoData,
-	})
-	require.Contains(t, summary.PodMetrics, NodePodMetric{
-		Namespace:   "kube-system",
-		Name:        "pod-b",
-		CPUUsage:    streamrows.MetricsNoData,
-		MemoryUsage: streamrows.MetricsNoData,
-	})
 
 	require.Len(t, summary.Taints, 1)
 	require.Equal(t, NodeTaint{
@@ -319,8 +304,7 @@ func TestNodeListFallbackKeepsRowsWhenPodListForbidden(t *testing.T) {
 	payload := snapshot.Payload.(NodeSnapshot)
 	require.Len(t, payload.Rows, 1)
 	require.Equal(t, "node-1", payload.Rows[0].Ref.Name)
-	require.Equal(t, "650m", payload.Rows[0].CPUUsage)
-	require.Empty(t, payload.Rows[0].PodMetrics)
+	require.Equal(t, ptr.To[int64](650), payload.Rows[0].CPUUsageMilli)
 	require.False(t, payload.Metrics.Stale)
 	require.Equal(t, uint64(1), payload.Metrics.SuccessCount)
 }

@@ -62,20 +62,29 @@ type MetricsStatus struct {
 	Active              bool   `json:"active"`
 }
 
+// ClusterMetricsStatus is one cluster's metrics polling status.
+type ClusterMetricsStatus struct {
+	ClusterID   string        `json:"clusterId"`
+	ClusterName string        `json:"clusterName,omitempty"`
+	Metrics     MetricsStatus `json:"metrics"`
+}
+
 // Summary aggregates the telemetry story for diagnostics.
 type Summary struct {
-	Snapshots  []SnapshotStatus `json:"snapshots"`
-	Metrics    MetricsStatus    `json:"metrics"`
-	Streams    []StreamStatus   `json:"streams"`
-	Catalog    *CatalogStatus   `json:"catalog,omitempty"`
-	Connection ConnectionStats  `json:"connection"`
+	Snapshots []SnapshotStatus `json:"snapshots"`
+	// ClusterMetrics holds each cluster's metrics polling status.
+	ClusterMetrics []ClusterMetricsStatus `json:"clusterMetrics"`
+	Streams        []StreamStatus         `json:"streams"`
+	Catalog        *CatalogStatus         `json:"catalog,omitempty"`
+	Connection     ConnectionStats        `json:"connection"`
 }
 
 // EmptySummary returns the valid zero-observation wire shape.
 func EmptySummary() Summary {
 	return Summary{
-		Snapshots: []SnapshotStatus{},
-		Streams:   []StreamStatus{},
+		Snapshots:      []SnapshotStatus{},
+		ClusterMetrics: []ClusterMetricsStatus{},
+		Streams:        []StreamStatus{},
 	}
 }
 
@@ -447,7 +456,7 @@ func (r *Recorder) SnapshotSummary() Summary {
 	defer r.mu.RUnlock()
 
 	out := EmptySummary()
-	out.Metrics = r.metrics
+	out.ClusterMetrics = []ClusterMetricsStatus{{ClusterID: r.clusterID, ClusterName: r.clusterName, Metrics: r.metrics}}
 	out.Connection = r.connection
 	out.Snapshots = make([]SnapshotStatus, 0, len(r.snapshots))
 	out.Streams = make([]StreamStatus, 0, len(r.streams))
@@ -505,7 +514,6 @@ type StreamStatus struct {
 
 // Stream name identifiers used across the backend/frontend telemetry contract.
 const (
-	StreamEvents        = "events"
 	StreamContainerLogs = "container-logs"
 	StreamResources     = "resources"
 )
@@ -521,9 +529,6 @@ const (
 	StreamLeafNone StreamLeafKind = ""
 	// StreamLeafDomain keys by refresh domain, e.g. "pods" (resources stream).
 	StreamLeafDomain StreamLeafKind = "domain"
-	// StreamLeafScope keys by event scope, e.g. "cluster" or
-	// "namespace:<name>" (events stream).
-	StreamLeafScope StreamLeafKind = "scope"
 	// StreamLeafTarget keys by container-logs target, e.g.
 	// "<namespace>/<pod>[/<container>]" (container-logs stream).
 	StreamLeafTarget StreamLeafKind = "target"
@@ -538,11 +543,6 @@ type StreamLeaf struct {
 // DomainLeaf attributes counters to a refresh domain.
 func DomainLeaf(domain string) StreamLeaf {
 	return StreamLeaf{Kind: StreamLeafDomain, Key: domain}
-}
-
-// ScopeLeaf attributes counters to an event scope.
-func ScopeLeaf(scope string) StreamLeaf {
-	return StreamLeaf{Kind: StreamLeafScope, Key: scope}
 }
 
 // TargetLeaf attributes counters to a container-logs target.

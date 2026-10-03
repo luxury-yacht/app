@@ -79,9 +79,12 @@ not re-widen them to the nullable shape. See
 
 Log viewer presentation shared by container logs and node logs lives under
 `frontend/src/modules/object-panel/components/ObjectPanel/Logs`. Keep
-transport-specific wiring in the container or node shell, and put shared search,
-CSV export, parsed JSON, ANSI rendering, scroll restoration, and terminal theme
-behavior in the shared log viewer utilities/components.
+transport-specific wiring in the container or node shell, and put shared options
+(`logOptionsReducer.ts`), presentation (`useLogPresentation`), toolbar
+(`logToolbar.tsx`), keyboard shortcuts, copy, CSV export, parsed JSON, ANSI
+rendering, scroll restoration, and terminal theme behavior in the shared log
+viewer utilities/components (see
+`docs/workflows/logs/overview.md#shared-viewer-shell`).
 
 YAML editor mechanics live in `frontend/src/shared/components/yaml/YamlEditor`.
 Use that shared component for single-document YAML viewing/editing instead of

@@ -227,16 +227,16 @@ const baseNode: ClusterNodeRow = {
   version: 'v1.28.0',
   internalIP: '10.0.0.1',
   externalIP: '',
-  cpuCapacity: '4',
-  cpuAllocatable: '4',
-  cpuRequests: '1',
-  cpuLimits: '2',
-  cpuUsage: '1',
-  memoryCapacity: '8Gi',
-  memoryAllocatable: '8Gi',
-  memRequests: '1Gi',
-  memLimits: '2Gi',
-  memoryUsage: '2Gi',
+  cpuCapacityMilli: 4000,
+  cpuAllocatableMilli: 4000,
+  cpuRequestsMilli: 1000,
+  cpuLimitsMilli: 2000,
+  cpuUsageMilli: 1000,
+  memoryCapacityBytes: 8 * 1024 ** 3,
+  memoryAllocatableBytes: 8 * 1024 ** 3,
+  memoryRequestsBytes: 1024 ** 3,
+  memoryLimitsBytes: 2 * 1024 ** 3,
+  memoryUsageBytes: 2 * 1024 ** 3,
   pods: '3',
   podsAllocatable: '50',
   podsCapacity: '50',
@@ -244,8 +244,6 @@ const baseNode: ClusterNodeRow = {
   labels: {},
   restarts: 0,
 
-  cpu: '1',
-  memory: '2Gi',
   unschedulable: false,
 
   age: '2h',
@@ -453,7 +451,7 @@ describe('ClusterViewNodes', () => {
 
     expect(podsColumn?.sortValue?.({ ...baseNode, pods: '3', podsAllocatable: '50' })).toBe(3);
     expect(cpuColumn?.sortValue?.(baseNode)).toBe(1000);
-    expect(memoryColumn?.sortValue?.(baseNode)).toBe(2048);
+    expect(memoryColumn?.sortValue?.(baseNode)).toBe(2 * 1024 ** 3);
     expect(
       Number(ageColumn?.sortValue?.({ ...baseNode, ageTimestamp: 1_700_000_000_000 }))
     ).toBeGreaterThan(

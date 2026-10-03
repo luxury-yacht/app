@@ -228,14 +228,14 @@ func TestClusterOverviewBuilder(t *testing.T) {
 	require.Equal(t, 1, overview.RestartedPods)
 	require.Equal(t, 1, overview.NotReadyPods)
 	require.Equal(t, 2, overview.TotalNamespaces)
-	require.Equal(t, "150m", overview.CPUUsage)
-	require.Equal(t, "350m", overview.CPURequests)
-	require.Equal(t, "500m", overview.CPULimits)
-	require.Equal(t, "2.50", overview.CPUAllocatable)
-	require.Equal(t, "200.0 Mi", overview.MemoryUsage)
-	require.Equal(t, "320.0 Mi", overview.MemoryRequests)
-	require.Equal(t, "512.0 Mi", overview.MemoryLimits)
-	require.Equal(t, "9.0 Gi", overview.MemoryAllocatable)
+	require.Equal(t, int64(150), overview.CPUUsageMilli)
+	require.Equal(t, int64(350), overview.CPURequestsMilli)
+	require.Equal(t, int64(500), overview.CPULimitsMilli)
+	require.Equal(t, int64(2500), overview.CPUAllocatableMilli)
+	require.Equal(t, int64(200<<20), overview.MemoryUsageBytes)
+	require.Equal(t, int64(320<<20), overview.MemoryRequestsBytes)
+	require.Equal(t, int64(512<<20), overview.MemoryLimitsBytes)
+	require.Equal(t, int64(9<<30), overview.MemoryAllocatableBytes)
 
 	metricsMeta := payload.Metrics
 	require.False(t, metricsMeta.Stale)
@@ -396,10 +396,10 @@ func TestClusterOverviewBuilderAggregatesWorkloadResourceUsage(t *testing.T) {
 	require.True(t, ok)
 
 	usage := payload.Overview.WorkloadResourceUsage
-	require.Equal(t, WorkloadTypeResourceUsage{CPUUsage: "250m", MemoryUsage: "300.0 Mi"}, usage.Deployments)
-	require.Equal(t, WorkloadTypeResourceUsage{CPUUsage: "50m", MemoryUsage: "100.0 Mi"}, usage.DaemonSets)
-	require.Equal(t, WorkloadTypeResourceUsage{CPUUsage: "75m", MemoryUsage: "120.0 Mi"}, usage.StatefulSets)
-	require.Equal(t, WorkloadTypeResourceUsage{CPUUsage: "125m", MemoryUsage: "256.0 Mi"}, usage.Jobs)
+	require.Equal(t, WorkloadTypeResourceUsage{CPUUsageMilli: 250, MemoryUsageBytes: 300 << 20}, usage.Deployments)
+	require.Equal(t, WorkloadTypeResourceUsage{CPUUsageMilli: 50, MemoryUsageBytes: 100 << 20}, usage.DaemonSets)
+	require.Equal(t, WorkloadTypeResourceUsage{CPUUsageMilli: 75, MemoryUsageBytes: 120 << 20}, usage.StatefulSets)
+	require.Equal(t, WorkloadTypeResourceUsage{CPUUsageMilli: 125, MemoryUsageBytes: 256 << 20}, usage.Jobs)
 }
 
 func TestClusterOverviewBuilderUsesCatalog(t *testing.T) {
@@ -482,10 +482,10 @@ func TestClusterOverviewBuilderUsesCatalog(t *testing.T) {
 	require.Equal(t, 1, payload.Overview.TotalPods)
 	require.Equal(t, 1, payload.Overview.TotalNamespaces)
 	require.Equal(t, "v1.28.1", payload.Overview.ClusterVersion)
-	require.Equal(t, "100m", payload.Overview.CPUUsage)
-	require.Equal(t, "200m", payload.Overview.CPURequests)
-	require.Equal(t, "256.0 Mi", payload.Overview.MemoryRequests)
-	require.Equal(t, "128.0 Mi", payload.Overview.MemoryUsage)
+	require.Equal(t, int64(100), payload.Overview.CPUUsageMilli)
+	require.Equal(t, int64(200), payload.Overview.CPURequestsMilli)
+	require.Equal(t, int64(256<<20), payload.Overview.MemoryRequestsBytes)
+	require.Equal(t, int64(128<<20), payload.Overview.MemoryUsageBytes)
 }
 
 func TestClusterOverviewBuilderSkipsOptionalCachesUntilSynced(t *testing.T) {
@@ -680,7 +680,7 @@ func TestClusterOverviewBuilderMarksRuntimeDeniedNodes(t *testing.T) {
 	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
 	require.True(t, ok)
 	require.Zero(t, payload.Overview.TotalNodes, "denied nodes must not be counted")
-	require.Equal(t, "0", payload.Overview.CPUAllocatable, "allocatable derives from nodes")
+	require.Zero(t, payload.Overview.CPUAllocatableMilli, "allocatable derives from nodes")
 	require.Equal(t, 1, payload.Overview.TotalPods)
 	require.Equal(t, 1, payload.Overview.TotalNamespaces)
 	require.Equal(t, []string{"core/nodes"}, payload.Overview.UnavailableResources)
@@ -1066,4 +1066,37 @@ func TestClusterOverviewSurfacesDisabledMetricsReason(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "Insufficient permissions for Metrics API", payload.Metrics.LastError)
 	require.True(t, payload.Metrics.Disabled)
+}
+
+// An events/v1 series keeps EventTime at its first occurrence and records each
+// recurrence in Series.LastObservedTime. Recent Events must judge recency and
+// order by the latest observation, the same time it displays: a Warning that
+// started days ago but recurred a minute ago is the most recent warning.
+func TestBuildRecentEventsUsesTheLatestObservationOfASeries(t *testing.T) {
+	now := time.Now()
+	series := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{Name: "web.series", Namespace: "default", UID: types.UID("series")},
+		Type:       corev1.EventTypeWarning,
+		Reason:     "FailedScheduling",
+		EventTime:  metav1.NewMicroTime(now.Add(-30 * time.Hour)),
+		Series: &corev1.EventSeries{
+			Count:            40,
+			LastObservedTime: metav1.NewMicroTime(now.Add(-time.Minute)),
+		},
+	}
+	legacy := &corev1.Event{
+		ObjectMeta:    metav1.ObjectMeta{Name: "api.legacy", Namespace: "default", UID: types.UID("legacy")},
+		Type:          corev1.EventTypeWarning,
+		Reason:        "BackOff",
+		LastTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+	}
+
+	recent := buildRecentEvents([]*corev1.Event{legacy, series}, ClusterMeta{ClusterID: "c1"})
+
+	uids := make([]string, 0, len(recent))
+	for _, event := range recent {
+		uids = append(uids, event.EventUID)
+	}
+	require.Equal(t, []string{"series", "legacy"}, uids)
+	require.Equal(t, series.Series.LastObservedTime.UnixMilli(), recent[0].Timestamp)
 }

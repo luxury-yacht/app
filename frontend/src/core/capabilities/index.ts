@@ -44,7 +44,6 @@ export {
 } from './permissionStore';
 export type {
   PermissionEntry,
-  PermissionKey,
   PermissionMap,
   PermissionQueryDiagnostics,
   PermissionSpec,

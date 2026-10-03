@@ -44,25 +44,22 @@ func (a *aggregateTelemetry) Update(clusterOrder []string, subsystems map[string
 	a.set(clusterOrder, subsystems)
 }
 
-// SnapshotSummary concatenates per-cluster Streams and Snapshots (already
-// cluster-tagged by each recorder). Scalar, single-valued fields
-// (Metrics/Connection/Catalog) come from the primary (first) recorder so they
-// stay well-defined; per-cluster breakdown lives in the Streams/Snapshots slices.
+// SnapshotSummary concatenates per-cluster Streams, Snapshots and ClusterMetrics
+// (each cluster-tagged by its recorder). Scalar, single-valued fields
+// (Connection/Catalog) come from the primary (first) recorder so they stay
+// well-defined.
 func (a *aggregateTelemetry) SnapshotSummary() telemetry.Summary {
 	a.mu.RLock()
 	recorders := a.recorders
 	a.mu.RUnlock()
 
-	out := telemetry.Summary{
-		Streams:   []telemetry.StreamStatus{},
-		Snapshots: []telemetry.SnapshotStatus{},
-	}
+	out := telemetry.EmptySummary()
 	for i, rec := range recorders {
 		summary := rec.SnapshotSummary()
 		out.Streams = append(out.Streams, summary.Streams...)
 		out.Snapshots = append(out.Snapshots, summary.Snapshots...)
+		out.ClusterMetrics = append(out.ClusterMetrics, summary.ClusterMetrics...)
 		if i == 0 {
-			out.Metrics = summary.Metrics
 			out.Connection = summary.Connection
 			out.Catalog = summary.Catalog
 		}

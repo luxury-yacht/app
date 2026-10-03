@@ -89,7 +89,7 @@ func TestRemainingWorkloadSummariesCarryCanonicalResourceRefs(t *testing.T) {
 	t.Run("Pod", func(t *testing.T) {
 		object := &corev1.Pod{ObjectMeta: meta}
 		podRow := pods.BuildStreamSummaryFromRSMap(
-			ClusterMeta{ClusterID: "cluster-a"}, object, 0, 0, nil,
+			ClusterMeta{ClusterID: "cluster-a"}, object, nil,
 		)
 		row := buildStandalonePodSummaryFromRows(
 			podRow,

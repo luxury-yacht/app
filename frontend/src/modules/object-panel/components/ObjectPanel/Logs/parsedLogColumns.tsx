@@ -9,7 +9,7 @@
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildCsv } from './logExport';
-import type { ParsedLogEntry } from './logViewerReducer';
+import type { ParsedLogEntry } from './logOptionsReducer';
 import { formatParsedValue } from './parsedLogUtils';
 
 // Each log source supplies its value policy; visible column order and CSV escaping are shared.
@@ -32,6 +32,8 @@ const PARSED_COLUMN_MIN_WIDTH = 50;
 export const PARSED_TIMESTAMP_MIN_WIDTH = 80;
 const PARSED_COLUMN_AUTOSIZE_MAX_WIDTH = 520;
 export const PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH = 280;
+const TIMESTAMP_FIELD_KEYS: ReadonlySet<string> = new Set(['timestamp', 'time', 'ts']);
+const LEVEL_FIELD_KEYS: ReadonlySet<string> = new Set(['level', 'severity', 'log_level']);
 
 export function buildParsedLogDataColumns(
   derivedFieldKeys: string[],
@@ -39,8 +41,7 @@ export function buildParsedLogDataColumns(
 ): GridColumnDefinition<ParsedLogEntry>[] {
   const columns: GridColumnDefinition<ParsedLogEntry>[] = [];
 
-  const timestampCandidates = ['timestamp', 'time', 'ts'];
-  const jsonTimestampKey = derivedFieldKeys.find((key) => timestampCandidates.includes(key));
+  const jsonTimestampKey = derivedFieldKeys.find((key) => TIMESTAMP_FIELD_KEYS.has(key));
   if (jsonTimestampKey) {
     columns.push({
       key: jsonTimestampKey,
@@ -52,8 +53,7 @@ export function buildParsedLogDataColumns(
     });
   }
 
-  const levelCandidates = ['level', 'severity', 'log_level'];
-  const jsonLevelKey = derivedFieldKeys.find((key) => levelCandidates.includes(key));
+  const jsonLevelKey = derivedFieldKeys.find((key) => LEVEL_FIELD_KEYS.has(key));
   if (jsonLevelKey) {
     columns.push({
       key: jsonLevelKey,

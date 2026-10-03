@@ -576,6 +576,36 @@ describe('useLogScrollRestoration', () => {
     ).toBe('paused');
   });
 
+  it('keeps a paused reading position when switching from the text to the table view', async () => {
+    let cachedPosition: LogScrollPosition | undefined;
+    getScrollPosition.mockImplementation(() => cachedPosition);
+    setScrollPosition.mockImplementation((_cacheKey, position: LogScrollPosition) => {
+      cachedPosition = position;
+    });
+
+    await act(async () => {
+      root.render(<Harness rowCount={200} tailFollowSignal={1} clampScrollTop />);
+    });
+    act(flushFrames);
+
+    const textScrollElement = container.firstElementChild as HTMLDivElement;
+    act(() => {
+      dispatchUserWheel(textScrollElement, -100);
+      textScrollElement.scrollTop = 300;
+      textScrollElement.dispatchEvent(new Event('scroll'));
+    });
+
+    await act(async () => {
+      root.render(<Harness rowCount={200} tailFollowSignal={1} clampScrollTop isParsedView />);
+    });
+    act(flushFrames);
+
+    expect(container.querySelector<HTMLDivElement>('.gridtable-wrapper')?.scrollTop).toBe(300);
+    expect(
+      container.querySelector<HTMLOutputElement>('[data-testid="tail-follow-state"]')?.textContent
+    ).toBe('paused');
+  });
+
   it('does not replace a manual position with detached zero metrics during unmount', async () => {
     let cachedPosition: LogScrollPosition | undefined;
     getScrollPosition.mockImplementation(() => cachedPosition);

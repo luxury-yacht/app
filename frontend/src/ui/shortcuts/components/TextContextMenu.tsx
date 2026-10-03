@@ -8,6 +8,7 @@
  * but both render the same ContextMenu component for visual consistency.
  */
 
+import { writeClipboardText } from '@core/desktop-runtime';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -119,7 +120,7 @@ const TextContextMenu: React.FC = () => {
             if (!selectedTextRef.current) {
               return;
             }
-            navigator.clipboard.writeText(selectedTextRef.current);
+            void writeClipboardText(selectedTextRef.current);
             focusTarget(targetRef.current);
             document.execCommand('delete');
           },
@@ -131,7 +132,7 @@ const TextContextMenu: React.FC = () => {
         disabled: !hasSelection,
         onClick: () => {
           if (selectedTextRef.current) {
-            navigator.clipboard.writeText(selectedTextRef.current);
+            void writeClipboardText(selectedTextRef.current);
           }
         },
       });

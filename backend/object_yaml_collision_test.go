@@ -425,8 +425,8 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		dynamicClient := app.clusters[clusterID].dynamicClient.(*dynamicfake.FakeDynamicClient)
 		ackCacheKey := objectDetailCacheKeyForGVK(ackDBInstanceGVK, "default", "my-db")
 		kindaCacheKey := objectDetailCacheKeyForGVK(kindaRocksDBInstanceGVK, "default", "my-db")
-		app.gateway.responseCacheStore(clusterID, ackCacheKey, "stale-ack")
-		app.gateway.responseCacheStore(clusterID, kindaCacheKey, "fresh-kinda")
+		app.gateway.seedResponseCache(clusterID, ackCacheKey, "stale-ack")
+		app.gateway.seedResponseCache(clusterID, kindaCacheKey, "fresh-kinda")
 
 		_, err := app.gateway.RunObjectAction(ObjectActionRequest{
 			Action: ObjectActionDelete,
@@ -465,8 +465,8 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		dynamicClient := app.clusters[clusterID].dynamicClient.(*dynamicfake.FakeDynamicClient)
 		ackCacheKey := objectDetailCacheKeyForGVK(ackDBInstanceGVK, "default", "my-db")
 		kindaCacheKey := objectDetailCacheKeyForGVK(kindaRocksDBInstanceGVK, "default", "my-db")
-		app.gateway.responseCacheStore(clusterID, ackCacheKey, "fresh-ack")
-		app.gateway.responseCacheStore(clusterID, kindaCacheKey, "stale-kinda")
+		app.gateway.seedResponseCache(clusterID, ackCacheKey, "fresh-ack")
+		app.gateway.seedResponseCache(clusterID, kindaCacheKey, "stale-kinda")
 
 		_, err := app.gateway.RunObjectAction(ObjectActionRequest{
 			Action: ObjectActionDelete,

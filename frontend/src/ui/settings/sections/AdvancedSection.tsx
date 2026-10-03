@@ -52,7 +52,7 @@ function AdvancedSection() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const prefs = await hydrateAppPreferences({ force: true });
         if (!cancelled) {
@@ -175,6 +175,7 @@ function AdvancedSection() {
 
       <SettingRow
         title="Client QPS"
+        controlId={`${elementIdPrefix}-settings-kubernetes-client-qps`}
         help="Sustained per-second rate for K8s API requests. This value is per-cluster."
       >
         <div className="setting-item setting-item-inline">
@@ -192,6 +193,7 @@ function AdvancedSection() {
 
       <SettingRow
         title="Client burst allowance"
+        controlId={`${elementIdPrefix}-settings-kubernetes-client-burst`}
         help="Short-term burst allowance for K8s API requests. This value is per-cluster."
       >
         <div className="setting-item setting-item-inline">
@@ -209,6 +211,7 @@ function AdvancedSection() {
 
       <SettingRow
         title="SSRR concurrency"
+        controlId={`${elementIdPrefix}-settings-permission-ssrr-concurrency`}
         help={
           <>
             Concurrent <code>SelfSubjectRulesReview</code> requests during permission checks.

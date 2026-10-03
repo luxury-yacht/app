@@ -35,13 +35,14 @@ func (p *objectDetailProvider) fetchDiscoveredResourceDetails(ctx context.Contex
 		client = resource.Namespace(namespace)
 		scope = resourcemodel.ResourceScopeNamespaced
 	}
+	since := p.gateway.responseCacheGeneration()
 	object, err := client.Get(ctx, name, v1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 	// Snapshot ETags read header metadata after details. Publish both from this
 	// live object so a prior header cache entry cannot conceal a changed spec.
-	p.gateway.responseCacheStore(resolved.selectionKey, objectHeaderMetadataCacheKey(gvk, namespace, name), objectHeaderMetadata(object))
+	p.gateway.responseCacheStore(resolved.selectionKey, objectHeaderMetadataCacheKey(gvk, namespace, name), objectHeaderMetadata(object), since)
 	descriptor := customresource.NewDescriptor(gvr.Group, gvr.Version, gvr.Resource, gvk.Kind, gvr.Resource+"."+gvr.Group)
 	clusterID := snapshot.ClusterMetaFromContext(ctx).ClusterID
 	details := customresource.BuildDetails(clusterID, object, descriptor, scope)

@@ -509,12 +509,10 @@ func (s *ProjectingStore) Add(obj interface{}) error {
 	return s.projectAndStore(obj)
 }
 
-// Update re-projects obj and replaces the projected row under its key. The
-// source object is not retained.
+// Update re-projects obj and replaces the projected row under its key. Projecting
+// and storing replaces any existing row, so it is the same operation as Add.
 func (s *ProjectingStore) Update(obj interface{}) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.projectAndStore(obj)
+	return s.Add(obj)
 }
 
 // Delete removes the projected row for obj's key, unwrapping a

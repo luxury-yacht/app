@@ -65,6 +65,7 @@ export type {
     ObjectYAMLOwnershipConflict,
     ObjectYAMLReloadMergeRequest,
     ObjectYAMLReloadMergeResponse,
+    PodContainer,
     PodDetailInfo,
     PortForwardSession,
     PortForwardStatusEvent,

@@ -158,7 +158,6 @@ vi.mock('./client', () => ({
 const containerLogsStreamMocks = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),
-  refreshOnce: vi.fn(),
 }));
 
 vi.mock('./streaming/containerLogsStreamManager', () => ({
@@ -662,6 +661,59 @@ describe('refreshOrchestrator', () => {
     clusterReadiness.endForegroundActivation(clusterId);
 
     await vi.waitFor(() => expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(2));
+  });
+
+  // Closing an object panel resets its scopes after its Logs tab stopped with
+  // its lines kept for a remount; the stream owner must drop them too, or a
+  // reopened panel shows the old lines.
+  it('resets the stream owner when a scope nobody streams is reset', () => {
+    const scope = buildClusterScope('cluster-a', 'pod:default/web/container:app');
+    refreshOrchestrator.registerDomain({
+      domain: 'container-logs',
+      refresherName: SYSTEM_REFRESHERS.containerLogs,
+      category: 'system',
+      streaming: {
+        snapshotless: true,
+        start: (streamScope) => containerLogsStreamMocks.start(streamScope),
+        stop: (streamScope, options) => containerLogsStreamMocks.stop(streamScope, options),
+      },
+    });
+    refreshOrchestrator.setScopedDomainEnabled('container-logs', scope, true, {
+      preserveState: true,
+    });
+    refreshOrchestrator.setScopedDomainEnabled('container-logs', scope, false, {
+      preserveState: true,
+    });
+    containerLogsStreamMocks.stop.mockClear();
+
+    refreshOrchestrator.resetScopedDomain('container-logs', scope);
+
+    expect(containerLogsStreamMocks.stop).toHaveBeenCalledWith(scope, { reset: true });
+  });
+
+  it('leaves a streamed scope running when its state is reset', () => {
+    const scope = buildClusterScope('cluster-a', 'pod:default/api/container:app');
+    refreshOrchestrator.registerDomain({
+      domain: 'container-logs',
+      refresherName: SYSTEM_REFRESHERS.containerLogs,
+      category: 'system',
+      streaming: {
+        snapshotless: true,
+        start: (streamScope) => containerLogsStreamMocks.start(streamScope),
+        stop: (streamScope, options) => containerLogsStreamMocks.stop(streamScope, options),
+      },
+    });
+    refreshOrchestrator.setScopedDomainEnabled('container-logs', scope, true, {
+      preserveState: true,
+    });
+    containerLogsStreamMocks.stop.mockClear();
+
+    refreshOrchestrator.resetScopedDomain('container-logs', scope);
+
+    expect(containerLogsStreamMocks.stop).not.toHaveBeenCalled();
+    refreshOrchestrator.setScopedDomainEnabled('container-logs', scope, false, {
+      preserveState: true,
+    });
   });
 
   it('holds the stream-only domain during activation and starts it on release', async () => {
@@ -2632,8 +2684,8 @@ describe('refreshOrchestrator', () => {
             namespace: 'team-a',
             name: 'pod-a',
             status: 'Running',
-            cpuUsage: '10m',
-            memUsage: '20Mi',
+            cpuUsageMilli: 10,
+            memoryUsageBytes: 20 * 1024 ** 2,
           }),
         ],
       }),
@@ -2659,8 +2711,8 @@ describe('refreshOrchestrator', () => {
               namespace: 'team-a',
               name: 'pod-a',
               status: 'Pending',
-              cpuUsage: '15m',
-              memUsage: '25Mi',
+              cpuUsageMilli: 15,
+              memoryUsageBytes: 25 * 1024 ** 2,
             }),
           ],
         },
@@ -2678,7 +2730,7 @@ describe('refreshOrchestrator', () => {
     );
     const nextPod = getScopedDomainState('pods', scope).data?.rows?.[0];
     expect(nextPod?.status).toBe('Pending');
-    expect(nextPod?.cpuUsage).toBe('15m');
+    expect(nextPod?.cpuUsageMilli).toBe(15);
 
     resetAllScopedDomainStates('pods');
   });
@@ -2813,6 +2865,40 @@ describe('refreshOrchestrator', () => {
     await Promise.resolve();
 
     expect(resourceStreamMocks.start).toHaveBeenCalledWith(scope);
+  });
+
+  // The global pause freezes an open Logs tab: its stream stops without
+  // clearing the buffer and starts again when auto-refresh returns.
+  it('stops and resumes the container-logs stream when auto-refresh is toggled', async () => {
+    containerLogsStreamMocks.start.mockClear();
+    containerLogsStreamMocks.stop.mockClear();
+    refreshOrchestrator.registerDomain({
+      domain: 'container-logs',
+      refresherName: SYSTEM_REFRESHERS.containerLogs,
+      category: 'system',
+      streaming: {
+        snapshotless: true,
+        start: (streamScope: string) => containerLogsStreamMocks.start(streamScope),
+        stop: (streamScope: string, options?: { reset?: boolean }) =>
+          containerLogsStreamMocks.stop(streamScope, options?.reset ?? false),
+      },
+      scheduled: false,
+    });
+    const scope = buildClusterScope('cluster-a', 'team-a:/v1:Pod:web-0');
+    refreshOrchestrator.setScopedDomainEnabled('container-logs', scope, true, {
+      preserveState: true,
+    });
+    await Promise.resolve();
+    expect(containerLogsStreamMocks.start).toHaveBeenCalledWith(scope);
+
+    containerLogsStreamMocks.start.mockClear();
+    setAutoRefreshEnabled(false);
+    await Promise.resolve();
+    expect(containerLogsStreamMocks.stop).toHaveBeenCalledWith(scope, false);
+
+    setAutoRefreshEnabled(true);
+    await Promise.resolve();
+    expect(containerLogsStreamMocks.start).toHaveBeenCalledWith(scope);
   });
 
   it('restarts streaming when the active scope changes', async () => {
@@ -3003,7 +3089,6 @@ describe('refreshOrchestrator', () => {
   it('starts and stops streaming managers for scoped domains', async () => {
     containerLogsStreamMocks.start.mockClear();
     containerLogsStreamMocks.stop.mockClear();
-    containerLogsStreamMocks.refreshOnce.mockClear();
     eventStreamMocks.startNamespace.mockClear();
     eventStreamMocks.stopNamespace.mockClear();
     eventStreamMocks.refreshNamespace.mockClear();
@@ -3017,15 +3102,17 @@ describe('refreshOrchestrator', () => {
         start: (scope: string) => containerLogsStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
           containerLogsStreamMocks.stop(scope, options?.reset ?? false),
-        refreshOnce: (scope: string) => containerLogsStreamMocks.refreshOnce(scope),
       },
     });
 
     await refreshOrchestrator.setScopedDomainEnabled?.('container-logs', 'team-a', true);
     expect(containerLogsStreamMocks.start).toHaveBeenCalledWith('team-a');
 
+    // Without a one-shot callback, a one-shot refresh restarts the stream.
+    containerLogsStreamMocks.start.mockClear();
     await refreshOrchestrator.refreshStreamingDomainOnce('container-logs', 'team-a');
-    expect(containerLogsStreamMocks.refreshOnce).toHaveBeenCalledWith('team-a');
+    expect(containerLogsStreamMocks.stop).toHaveBeenCalledWith('team-a', false);
+    expect(containerLogsStreamMocks.start).toHaveBeenCalledWith('team-a');
 
     await refreshOrchestrator.setScopedDomainEnabled?.('container-logs', 'team-a', false);
     expect(containerLogsStreamMocks.stop).toHaveBeenCalledWith('team-a', true);
@@ -3086,7 +3173,6 @@ describe('refreshOrchestrator', () => {
   it('handles concurrent namespace streams without leaking state', async () => {
     containerLogsStreamMocks.start.mockClear();
     containerLogsStreamMocks.stop.mockClear();
-    containerLogsStreamMocks.refreshOnce.mockClear();
     eventStreamMocks.startNamespace.mockClear();
     eventStreamMocks.stopNamespace.mockClear();
     eventStreamMocks.refreshNamespace?.mockClear?.();
@@ -3100,7 +3186,6 @@ describe('refreshOrchestrator', () => {
         start: (scope: string) => containerLogsStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
           containerLogsStreamMocks.stop(scope, options?.reset ?? false),
-        refreshOnce: (scope: string) => containerLogsStreamMocks.refreshOnce(scope),
       },
     });
 
@@ -3236,11 +3321,12 @@ describe('refreshOrchestrator', () => {
 
             objectNamespace: 'default',
             objectUid: 'web-uid',
-            objectApiVersion: 'v1',
             type: 'Normal',
             source: 'kubelet',
             reason: 'Started',
             object: 'Pod/web',
+            objectKind: 'Pod',
+            objectName: 'web',
             message: 'still here',
             age: '1m',
             ageTimestamp: 1,
@@ -3284,7 +3370,6 @@ describe('refreshOrchestrator', () => {
         start: (scope: string) => containerLogsStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
           containerLogsStreamMocks.stop(scope, options?.reset ?? false),
-        refreshOnce: (scope: string) => containerLogsStreamMocks.refreshOnce(scope),
       },
     });
 
@@ -3694,8 +3779,8 @@ describe('refreshOrchestrator', () => {
       namespace: 'default',
       name: 'pod-a',
       status: 'Running',
-      cpuUsage: '10m',
-      memUsage: '20Mi',
+      cpuUsageMilli: 10,
+      memoryUsageBytes: 20 * 1024 ** 2,
     });
     const podB = makePodSnapshotEntry({
       clusterId: 'cluster-b',
@@ -3703,8 +3788,8 @@ describe('refreshOrchestrator', () => {
       name: 'pod-b',
       node: 'node-b',
       status: 'Running',
-      cpuUsage: '30m',
-      memUsage: '40Mi',
+      cpuUsageMilli: 30,
+      memoryUsageBytes: 40 * 1024 ** 2,
     });
 
     setScopedDomainState('pods', scopeA, () => ({
@@ -3737,8 +3822,8 @@ describe('refreshOrchestrator', () => {
           rows: [
             {
               ...podB,
-              cpuUsage: '35m',
-              memUsage: '45Mi',
+              cpuUsageMilli: 35,
+              memoryUsageBytes: 45 * 1024 ** 2,
             },
           ],
         },
@@ -3759,8 +3844,8 @@ describe('refreshOrchestrator', () => {
     expect(getScopedDomainState('pods', scopeA).data?.rows?.[0]).toBe(podA);
     const nextPodB = getScopedDomainState('pods', scopeB).data?.rows?.[0];
     expect(nextPodB?.status).toBe('Running');
-    expect(nextPodB?.cpuUsage).toBe('35m');
-    expect(nextPodB?.memUsage).toBe('45Mi');
+    expect(nextPodB?.cpuUsageMilli).toBe(35);
+    expect(nextPodB?.memoryUsageBytes).toBe(45 * 1024 ** 2);
 
     resetAllScopedDomainStates('pods');
   });
@@ -3783,8 +3868,8 @@ describe('refreshOrchestrator', () => {
       namespace: 'default',
       name: 'pod-a',
       status: 'Running',
-      cpuUsage: '10m',
-      memUsage: '20Mi',
+      cpuUsageMilli: 10,
+      memoryUsageBytes: 20 * 1024 ** 2,
     });
     setScopedDomainState('pods', scope, () => ({
       status: 'ready',

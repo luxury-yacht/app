@@ -12,96 +12,27 @@ import {
   buildEventObjectReference,
   canResolveEventObjectReference,
   resolveEventObjectReference,
-  splitEventObjectTarget,
 } from './eventObjectIdentity';
 
 beforeEach(() => {
   findCatalogObjectByUIDMock.mockReset();
 });
 
-describe('splitEventObjectTarget', () => {
-  it('parses linkable involved-object values', () => {
-    expect(splitEventObjectTarget('Pod/api-123')).toEqual({
-      objectType: 'Pod',
-      objectName: 'api-123',
-      isLinkable: true,
-    });
-  });
-
-  it('marks incomplete involved-object values as non-linkable', () => {
-    expect(splitEventObjectTarget('Pod')).toEqual({
-      objectType: 'Pod',
-      objectName: '-',
-      isLinkable: false,
-    });
-  });
-});
-
 describe('buildEventObjectReference', () => {
-  it('builds a reference from the event object and apiVersion', () => {
-    expect(
-      buildEventObjectReference({
-        object: 'Widget/sample',
-        objectUid: 'widget-uid',
-        objectApiVersion: 'widgets.example.io/v1alpha1',
-        objectNamespace: 'default',
-        clusterId: 'cluster-a',
-      })
-    ).toEqual({
-      kind: 'Widget',
-      name: 'sample',
-      namespace: 'default',
-      group: 'widgets.example.io',
-      version: 'v1alpha1',
+  // Only the backend's link identifies the involved object. A group or version
+  // is never guessed from the kind, and a wire apiVersion without a link is not
+  // enough either (shared resource model: no identity guessing).
+  it('never builds a reference from the kind, name, and apiVersion fields alone', () => {
+    // A grid row carries these display fields; the resolver must ignore them.
+    const row = {
+      objectKind: 'Pod',
+      objectName: 'api',
+      objectNamespace: 'default',
       clusterId: 'cluster-a',
-      clusterName: undefined,
-      kindAlias: undefined,
-      resource: undefined,
-      uid: 'widget-uid',
-    });
-  });
+    };
 
-  it('falls back to the parent object GVK when the event omits apiVersion for the same kind', () => {
-    expect(
-      buildEventObjectReference({
-        object: 'Database/primary',
-        objectUid: 'db-uid',
-        eventNamespace: 'databases',
-        clusterId: 'cluster-a',
-        fallbackKind: 'Database',
-        fallbackGroup: 'db.example.io',
-        fallbackVersion: 'v1',
-      })
-    ).toEqual({
-      kind: 'Database',
-      name: 'primary',
-      namespace: 'databases',
-      group: 'db.example.io',
-      version: 'v1',
-      clusterId: 'cluster-a',
-      clusterName: undefined,
-      kindAlias: undefined,
-      resource: undefined,
-      uid: 'db-uid',
-    });
-  });
-
-  it('returns undefined when it cannot resolve a version', () => {
-    expect(
-      buildEventObjectReference({
-        object: 'Database/primary',
-      })
-    ).toBeUndefined();
-  });
-
-  it('returns undefined when the event object has no cluster identity', () => {
-    expect(
-      buildEventObjectReference({
-        object: 'Pod/api',
-        objectApiVersion: 'v1',
-        eventNamespace: 'default',
-      })
-    ).toBeUndefined();
+    expect(buildEventObjectReference(row)).toBeUndefined();
+    expect(canResolveEventObjectReference(row)).toBe(false);
   });
 
   it('prefers openable ResourceLink refs over legacy flat event fields', () => {
@@ -119,9 +50,6 @@ describe('buildEventObjectReference', () => {
             uid: 'deploy-uid',
           },
         },
-        object: 'Pod/stale',
-        objectApiVersion: 'v1',
-        objectNamespace: 'default',
         clusterId: 'cluster-a',
       })
     ).toEqual(
@@ -137,21 +65,51 @@ describe('buildEventObjectReference', () => {
     );
   });
 
-  it('treats display-only ResourceLink values as non-openable', () => {
+  // A display-only link is the backend saying it could not identify the object
+  // (for example an Event recorded without an apiVersion). It is never opened
+  // from a guessed group or version; only the catalog can resolve it, by UID.
+  it('opens display-only ResourceLink values only through the catalog by UID', async () => {
     const input = {
       involvedObject: {
         display: {
           clusterId: 'cluster-a',
-          group: 'example.io',
-          version: 'v1',
-          kind: 'DeletedThing',
-          name: 'gone',
+          group: '',
+          version: '',
+          kind: 'Database',
+          namespace: 'default',
+          name: 'primary',
+          uid: 'db-uid',
         },
       },
-      object: 'Pod/api',
-      objectApiVersion: 'v1',
-      objectNamespace: 'default',
-      objectUid: 'pod-uid',
+      objectUid: 'db-uid',
+      clusterId: 'cluster-a',
+    };
+    findCatalogObjectByUIDMock.mockResolvedValue({
+      ref: {
+        kind: 'Database',
+        name: 'primary',
+        namespace: 'default',
+        clusterId: 'cluster-a',
+        group: 'db.example.io',
+        version: 'v1',
+        resource: 'databases',
+        uid: 'db-uid',
+      },
+    });
+
+    expect(buildEventObjectReference(input)).toBeUndefined();
+    expect(canResolveEventObjectReference(input)).toBe(true);
+    await expect(resolveEventObjectReference(input)).resolves.toEqual(
+      expect.objectContaining({ kind: 'Database', group: 'db.example.io', version: 'v1' })
+    );
+    expect(findCatalogObjectByUIDMock).toHaveBeenCalledWith('cluster-a', 'db-uid');
+  });
+
+  it('keeps display-only ResourceLink values unopenable without a UID', () => {
+    const input = {
+      involvedObject: {
+        display: { clusterId: 'cluster-a', group: '', version: '', kind: 'Pod', name: 'gone' },
+      },
       clusterId: 'cluster-a',
     };
 
@@ -170,9 +128,6 @@ describe('buildEventObjectReference', () => {
           name: 'api',
         },
       },
-      object: 'Pod/api',
-      objectApiVersion: 'v1',
-      objectNamespace: 'default',
       objectUid: 'pod-uid',
       clusterId: 'cluster-a',
     };
@@ -186,7 +141,6 @@ describe('resolveEventObjectReference', () => {
   it('reports UID-backed targets as resolvable even when apiVersion is missing', () => {
     expect(
       canResolveEventObjectReference({
-        object: 'Database/primary',
         objectUid: 'db-uid',
         clusterId: 'cluster-a',
       })
@@ -209,7 +163,6 @@ describe('resolveEventObjectReference', () => {
 
     await expect(
       resolveEventObjectReference({
-        object: 'Database/primary',
         objectUid: 'db-uid',
         clusterId: 'cluster-a',
       })
@@ -233,7 +186,6 @@ describe('resolveEventObjectReference', () => {
 
     await expect(
       resolveEventObjectReference({
-        object: 'Database/primary',
         objectUid: 'db-uid',
         clusterId: 'cluster-a',
       })

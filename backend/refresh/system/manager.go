@@ -12,8 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,7 +34,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/refresh/eventstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
@@ -99,16 +96,16 @@ type Subsystem struct {
 	Registry         *domain.Registry        // Registry for managing domain information.
 	SnapshotService  refresh.SnapshotBuilder // Service for managing snapshots.
 	ManualQueue      refresh.ManualQueue     // Queue for manual refresh requests.
-	EventStream      *eventstream.Manager    // Manager for event streams.
 	ResourceStream   *resourcestream.Manager // Manager for resource streams.
 	ContainerLogs    *containerlogsstream.Handler
 	ClusterMeta      snapshot.ClusterMeta // Metadata about the cluster.
-	// NamespaceNotifier and ObjectEventsNotifier drive the namespaces and
-	// object-events doorbells. Teardown/cooling MUST Stop() them (via
-	// StopDoorbellNotifiers) or their debounce/rearm timers keep broadcasting
-	// into the torn-down stream manager.
+	// NamespaceNotifier, ObjectEventsNotifier, and EventTableNotifiers drive the
+	// namespaces, object-events, cluster-events, and namespace-events doorbells.
+	// Teardown/cooling MUST Stop() them (via StopDoorbellNotifiers) or their
+	// debounce/rearm timers keep broadcasting into the torn-down stream manager.
 	NamespaceNotifier    *snapshot.NamespaceChangeNotifier
 	ObjectEventsNotifier *snapshot.ObjectEventsChangeNotifier
+	EventTableNotifiers  []*snapshot.EventTableChangeNotifier
 	AttentionIndex       *snapshot.ClusterAttentionIndex
 	// NamespacesDoorbell is the post-broadcast observer slot on the namespaces
 	// doorbell; the app attaches the cluster-Ready self-build hook here (see
@@ -363,20 +360,17 @@ func registerSubsystemDomains(ctx context.Context, factory *informer.Factory, ga
 }
 
 func wireStreamObservers(
-	eventManager *eventstream.Manager,
 	resourceManager *resourcestream.Manager,
 	metricsPoller refresh.MetricsPoller,
 	snapshotService *snapshot.Service,
 	namespaceNotifier *snapshot.NamespaceChangeNotifier,
 	objectEventsNotifier *snapshot.ObjectEventsChangeNotifier,
+	eventTableNotifiers []*snapshot.EventTableChangeNotifier,
 	attentionIndex *snapshot.ClusterAttentionIndex,
 ) *NamespacesDoorbellObserver {
 	if resourceManager != nil {
 		resourceManager.SetSnapshotDomainInvalidator(snapshotService.InvalidateDomainCache)
 		wireMetricsObserver(metricsPoller, resourceManager)
-	}
-	if eventManager != nil && resourceManager != nil {
-		eventManager.SetSignalObserver(eventSignalObserver(resourceManager))
 	}
 	observer := &NamespacesDoorbellObserver{}
 	if resourceManager == nil {
@@ -387,6 +381,9 @@ func wireStreamObservers(
 	}
 	if objectEventsNotifier != nil {
 		wireObjectEventsDoorbell(objectEventsNotifier, resourceManager)
+	}
+	for _, notifier := range eventTableNotifiers {
+		wireEventTableDoorbell(notifier, resourceManager)
 	}
 	if attentionIndex != nil {
 		wireClusterAttentionDoorbell(attentionIndex, resourceManager)
@@ -427,6 +424,7 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 
 	var namespaceNotifier *snapshot.NamespaceChangeNotifier
 	var objectEventsNotifier *snapshot.ObjectEventsChangeNotifier
+	var eventTableNotifiers []*snapshot.EventTableChangeNotifier
 	var attentionIndex *snapshot.ClusterAttentionIndex
 	deps := registrationDeps{
 		registry:        registry,
@@ -440,6 +438,9 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 		},
 		noteObjectEventsNotifier: func(notifier *snapshot.ObjectEventsChangeNotifier) {
 			objectEventsNotifier = notifier
+		},
+		noteEventTableNotifier: func(notifier *snapshot.EventTableChangeNotifier) {
+			eventTableNotifiers = append(eventTableNotifiers, notifier)
 		},
 		noteAttentionIndex: func(index *snapshot.ClusterAttentionIndex) {
 			attentionIndex = index
@@ -474,7 +475,7 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 		HealthHub: informerHub,
 	})
 
-	containerLogsHandler, eventManager, resourceManager, err := registerStreamHandlers(streamDeps{
+	containerLogsHandler, resourceManager, err := registerStreamHandlers(streamDeps{
 		informerFactory: informerFactory,
 		ingestManager:   ingestManager,
 		cfg:             cfg,
@@ -485,12 +486,12 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 		return nil, err
 	}
 	namespacesDoorbellObserver := wireStreamObservers(
-		eventManager,
 		resourceManager,
 		metricsPoller,
 		snapshotService,
 		namespaceNotifier,
 		objectEventsNotifier,
+		eventTableNotifiers,
 		attentionIndex,
 	)
 
@@ -505,19 +506,19 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 		Registry:             registry,
 		SnapshotService:      snapshotService,
 		ManualQueue:          queue,
-		EventStream:          eventManager,
 		ResourceStream:       resourceManager,
 		ContainerLogs:        containerLogsHandler,
 		ClusterMeta:          clusterMeta,
 		NamespaceNotifier:    namespaceNotifier,
 		ObjectEventsNotifier: objectEventsNotifier,
+		EventTableNotifiers:  eventTableNotifiers,
 		AttentionIndex:       attentionIndex,
 		NamespacesDoorbell:   namespacesDoorbellObserver,
 	}, nil
 }
 
 // StopDoorbellNotifiers silences every doorbell notifier (namespaces,
-// object-events, cluster-attention); nil-safe for subsystems built without them (tests, failed
+// object-events, cluster/namespace events, cluster-attention); nil-safe for subsystems built without them (tests, failed
 // registration). Every teardown/cool path must call this or the notifiers'
 // debounce/rearm timers keep broadcasting into the dead stream manager.
 func (s *Subsystem) StopDoorbellNotifiers() {
@@ -529,6 +530,9 @@ func (s *Subsystem) StopDoorbellNotifiers() {
 	}
 	if s.ObjectEventsNotifier != nil {
 		s.ObjectEventsNotifier.Stop()
+	}
+	for _, notifier := range s.EventTableNotifiers {
+		notifier.Stop()
 	}
 	if s.AttentionIndex != nil {
 		s.AttentionIndex.Stop()
@@ -608,6 +612,16 @@ func wireObjectEventsDoorbell(
 	})
 }
 
+func wireEventTableDoorbell(
+	notifier *snapshot.EventTableChangeNotifier,
+	resourceManager *resourcestream.Manager,
+) {
+	domain := notifier.Domain()
+	notifier.SetBroadcast(func(version string, namespaces []string) {
+		resourceManager.BroadcastEventTableRefresh(domain, version, namespaces)
+	})
+}
+
 type attentionDoorbellNotifier interface {
 	SetBroadcast(func(version string))
 }
@@ -632,24 +646,6 @@ func metricsSignalObserver(resourceManager *resourcestream.Manager) func(metrics
 			return
 		}
 		resourceManager.BroadcastMetricsRefresh(revision)
-	}
-}
-
-func eventSignalObserver(resourceManager *resourcestream.Manager) func(scope string, sequence uint64) {
-	return func(scope string, sequence uint64) {
-		if resourceManager == nil || sequence == 0 {
-			return
-		}
-		domain := "cluster-events"
-		targetScope := ""
-		trimmed := strings.TrimSpace(scope)
-		if strings.HasPrefix(trimmed, "namespace:") {
-			domain = "namespace-events"
-			targetScope = trimmed
-		} else if trimmed != "" && trimmed != "cluster" {
-			return
-		}
-		resourceManager.BroadcastEventRefresh(domain, targetScope, strconv.FormatUint(sequence, 10))
 	}
 }
 

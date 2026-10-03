@@ -2,9 +2,11 @@ package snapshot
 
 import (
 	"fmt"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"slices"
 	"testing"
+
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"k8s.io/utils/ptr"
 )
 
 func makeNodeRows(n int) []NodeSummary {
@@ -16,15 +18,15 @@ func makeNodeRows(n int) []NodeSummary {
 		rows[i] = NodeSummary{Ref: resourcemodel.ResourceRef{Kind:
 		// unique -> unique row key
 		"node", Name: fmt.Sprintf("node-%03d", i)}, Status: statuses[i%len(statuses)],
-			Roles:        roles[i%len(roles)],
-			Version:      versions[i%len(versions)],
-			InternalIP:   fmt.Sprintf("10.0.%d.%d", i%4, i%7),
-			CPUUsage:     fmt.Sprintf("%dm", (i%6)*100), // ties, numeric sort engages
-			MemoryUsage:  fmt.Sprintf("%dMi", (i%5)*256),
-			Pods:         fmt.Sprintf("%d/110", i%9), // ties
-			Restarts:     int32(i % 4),
-			Age:          fmt.Sprintf("%dm", i%5),
-			AgeTimestamp: int64(1_000_000 + (i%9)*1000), // ties, non-zero so NumericSort engages
+			Roles:            roles[i%len(roles)],
+			Version:          versions[i%len(versions)],
+			InternalIP:       fmt.Sprintf("10.0.%d.%d", i%4, i%7),
+			CPUUsageMilli:    ptr.To(int64((i % 6) * 100)), // ties, numeric sort engages
+			MemoryUsageBytes: ptr.To(int64((i % 5) * 256 << 20)),
+			Pods:             fmt.Sprintf("%d/110", i%9), // ties
+			Restarts:         int32(i % 4),
+			Age:              fmt.Sprintf("%dm", i%5),
+			AgeTimestamp:     int64(1_000_000 + (i%9)*1000), // ties, non-zero so NumericSort engages
 		}
 	}
 	return rows

@@ -35,7 +35,6 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { podNamespacePermissionTargets, podOwnerReference } from '@shared/utils/podTableModel';
-import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   type PermissionSpecList,
@@ -276,7 +275,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getMetricsError: () => metricsStateRef.current.lastError,
           getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:cpu`,
           sortable: true,
-          sortValue: (pod) => parseCpuToMillicores(pod.cpuUsage),
+          sortValue: (pod) => pod.cpuUsageMilli ?? 0,
         }),
         cf.createResourceBarColumn<PodSnapshotEntry>({
           header: 'Memory',
@@ -289,7 +288,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getMetricsError: () => metricsStateRef.current.lastError,
           getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:memory`,
           sortable: true,
-          sortValue: (pod) => parseMemToMB(pod.memUsage),
+          sortValue: (pod) => pod.memoryUsageBytes ?? 0,
         }),
         cf.createAgeColumn(),
       ];

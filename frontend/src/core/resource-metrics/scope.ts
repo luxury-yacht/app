@@ -14,13 +14,6 @@ const resolveMetricsReference = (ref: ClusterObjectReference): ResourceMetricsRe
     return { kind: 'unsupported', reason: 'unsupported-kind' };
   }
   const kind = ref.kind.toLowerCase();
-  if (kind === 'replicaset') {
-    return {
-      kind: 'detail-exception',
-      source: 'detail-replicaset',
-      reason: 'replicaset-owner-collapse',
-    };
-  }
   if (kind === 'node') {
     return {
       kind: 'domain',

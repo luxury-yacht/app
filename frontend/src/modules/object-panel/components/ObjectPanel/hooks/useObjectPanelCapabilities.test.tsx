@@ -12,13 +12,11 @@ import type { FeatureSupport, PanelObjectData } from '../types';
 import { useObjectPanelCapabilities } from './useObjectPanelCapabilities';
 
 const mockUseCapabilities = vi.fn();
-const mockUseUserPermission = vi.fn();
 const mockDiscoverNodeLogs = vi.fn();
 const mockGetCachedNodeLogDiscovery = vi.fn();
 
 vi.mock('@/core/capabilities', () => ({
   useCapabilities: (...args: unknown[]) => mockUseCapabilities(...args),
-  useUserPermission: (...args: unknown[]) => mockUseUserPermission(...(args as [])),
 }));
 
 vi.mock('../NodeLogs/nodeLogsApi', () => ({
@@ -73,7 +71,6 @@ describe('useObjectPanelCapabilities', () => {
     root = ReactDOM.createRoot(container);
     resultRef.current = null;
     mockUseCapabilities.mockReset();
-    mockUseUserPermission.mockReset();
     mockDiscoverNodeLogs.mockReset();
     mockGetCachedNodeLogDiscovery.mockReset();
     mockGetCachedNodeLogDiscovery.mockReturnValue(null);
@@ -105,7 +102,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
     }));
-    mockUseUserPermission.mockReturnValue({ allowed: true, pending: false });
 
     const objectData: PanelObjectData = {
       kind: 'Deployment',
@@ -169,7 +165,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: (id: string) => ({ allowed: id === allowedAction, pending: false }),
     }));
-    mockUseUserPermission.mockReturnValue({ allowed: false, pending: false });
     const props: HookProps = {
       objectData: {
         kind: 'CronJob',
@@ -218,7 +213,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: () => ({ allowed: true, pending: false }),
     }));
-    mockUseUserPermission.mockReturnValue({ allowed: true, pending: false });
 
     const result = await renderHook({
       objectData: {
@@ -262,9 +256,8 @@ describe('useObjectPanelCapabilities', () => {
 
   it('disables logs when the user lacks log permissions', async () => {
     mockUseCapabilities.mockImplementation(() => ({
-      getState: () => ({ allowed: true, pending: false }),
+      getState: (id: string) => ({ allowed: id !== 'view-logs', pending: false }),
     }));
-    mockUseUserPermission.mockReturnValue({ allowed: false, pending: false });
 
     const result = await renderHook({
       objectData: {
@@ -289,7 +282,6 @@ describe('useObjectPanelCapabilities', () => {
       mockUseCapabilities.mockReturnValue({
         getState: () => ({ allowed: true, pending: false }),
       });
-      mockUseUserPermission.mockReturnValue(undefined);
       const complete: PanelObjectData = {
         clusterId: 'config:Production',
         group: '',
@@ -345,7 +337,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: () => ({ allowed: false, pending: false }),
     }));
-    mockUseUserPermission.mockReturnValue({ allowed: true, pending: false });
 
     const result = await renderHook({
       objectData: null,
@@ -399,7 +390,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
     }));
-    mockUseUserPermission.mockReturnValue({ allowed: true, pending: false });
 
     const result = await renderHook({
       objectData: {
@@ -434,7 +424,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
     }));
-    mockUseUserPermission.mockReturnValue({ allowed: true, pending: false });
 
     const result = await renderHook({
       objectData: {
@@ -475,7 +464,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
     }));
-    mockUseUserPermission.mockReturnValue({ allowed: true, pending: false });
 
     const result = await renderHook({
       objectData: {
@@ -510,7 +498,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
     }));
-    mockUseUserPermission.mockReturnValue(null);
 
     const result = await renderHook({
       objectData: {
@@ -538,7 +525,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
     }));
-    mockUseUserPermission.mockReturnValue(null);
 
     const result = await renderHook({
       objectData: {
@@ -573,7 +559,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
     }));
-    mockUseUserPermission.mockReturnValue(null);
 
     const result = await renderHook({
       objectData: {
@@ -597,7 +582,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: () => ({ allowed: false, pending: false }),
     }));
-    mockUseUserPermission.mockReturnValue({ allowed: true, pending: true });
     mockDiscoverNodeLogs.mockResolvedValue({
       supported: true,
       sources: [
@@ -635,7 +619,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: () => ({ allowed: false, pending: false }),
     }));
-    mockUseUserPermission.mockReturnValue({ allowed: false, pending: true });
     mockGetCachedNodeLogDiscovery.mockReturnValue({
       supported: true,
       sources: [
@@ -665,7 +648,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: () => ({ allowed: false, pending: false }),
     }));
-    mockUseUserPermission.mockImplementation(() => ({ allowed: true, pending: false }));
     mockGetCachedNodeLogDiscovery.mockImplementation((clusterId: string, nodeName: string) => {
       if (clusterId === 'c1' && nodeName === 'node-a') {
         return {
@@ -720,7 +702,6 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: () => ({ allowed: false, pending: false }),
     }));
-    mockUseUserPermission.mockReturnValue({ allowed: false, pending: true });
     mockDiscoverNodeLogs.mockResolvedValue({
       supported: false,
       sources: [],

@@ -23,7 +23,11 @@ import {
   buildOrchestratorSummary,
   buildPermissionRows,
   dedupeDiagnosticsRows,
+  selectCatalogStreamTelemetry,
+  selectClusterMetrics,
+  selectContainerLogsStreamTelemetry,
   selectDomainStreamTelemetry,
+  selectEventStreamTelemetry,
 } from './diagnosticsRowModel';
 
 const telemetry = (streams: TelemetrySummary['streams']): TelemetrySummary =>
@@ -145,6 +149,158 @@ describe('diagnosticsRowModel', () => {
     expect(
       selectDomainStreamTelemetry([forClusterB, forClusterA], 'resources', 'catalog', 'cluster-a')
     ).toBe(forClusterA);
+  });
+
+  // Container logs record sessions on the socket and deliveries per log
+  // target, all under one stream name; the Logs card must count every target
+  // whatever order the backend lists them in.
+  test('combines the container-logs socket and every log target for the Logs card', () => {
+    const base = {
+      name: 'container-logs',
+      clusterId: 'cluster-a',
+      activeSessions: 0,
+      totalMessages: 0,
+      droppedMessages: 0,
+      skippedTargets: 0,
+      errorCount: 0,
+      lastConnect: 0,
+      lastEvent: 0,
+    };
+    const streams = [
+      { ...base, activeSessions: 2, lastConnect: 100, skippedTargets: 1 },
+      {
+        ...base,
+        leafKind: 'target' as const,
+        leaf: 'team-a/web',
+        totalMessages: 5,
+        lastEvent: 300,
+      },
+      {
+        ...base,
+        leafKind: 'target' as const,
+        leaf: 'team-a/api',
+        totalMessages: 7,
+        droppedMessages: 1,
+        errorCount: 1,
+        lastEvent: 200,
+      },
+      { ...base, name: 'resources', activeSessions: 9, totalMessages: 99 },
+      { ...base, clusterId: 'cluster-b', activeSessions: 4, lastConnect: 900 },
+      {
+        ...base,
+        clusterId: 'cluster-b',
+        leafKind: 'target' as const,
+        leaf: 'x/y',
+        totalMessages: 40,
+      },
+    ];
+
+    for (const order of [streams, [...streams].reverse()]) {
+      expect(selectContainerLogsStreamTelemetry(order, 'cluster-a')).toMatchObject({
+        activeSessions: 2,
+        totalMessages: 12,
+        droppedMessages: 1,
+        skippedTargets: 1,
+        errorCount: 1,
+        lastConnect: 100,
+        lastEvent: 300,
+      });
+    }
+    expect(selectContainerLogsStreamTelemetry([streams[3]], 'cluster-a')).toBeUndefined();
+  });
+
+  // Each summary card shows the active cluster only, whatever other clusters
+  // are open.
+  test('counts only the active cluster in the Catalog and Events cards', () => {
+    const base = {
+      activeSessions: 0,
+      totalMessages: 0,
+      droppedMessages: 0,
+      skippedTargets: 0,
+      errorCount: 0,
+      lastConnect: 0,
+      lastEvent: 0,
+    };
+    const streams = [
+      { ...base, name: 'resources', clusterId: 'cluster-a', activeSessions: 1 },
+      {
+        ...base,
+        name: 'resources',
+        clusterId: 'cluster-a',
+        leafKind: 'domain' as const,
+        leaf: 'catalog',
+        totalMessages: 20,
+      },
+      {
+        ...base,
+        name: 'resources',
+        clusterId: 'cluster-b',
+        leafKind: 'domain' as const,
+        leaf: 'catalog',
+        totalMessages: 500,
+      },
+      // The event tables' doorbells are domains on the same resources socket.
+      {
+        ...base,
+        name: 'resources',
+        clusterId: 'cluster-a',
+        leafKind: 'domain' as const,
+        leaf: 'cluster-events',
+        totalMessages: 3,
+      },
+      {
+        ...base,
+        name: 'resources',
+        clusterId: 'cluster-a',
+        leafKind: 'domain' as const,
+        leaf: 'namespace-events',
+        totalMessages: 4,
+      },
+      {
+        ...base,
+        name: 'resources',
+        clusterId: 'cluster-a',
+        leafKind: 'domain' as const,
+        leaf: 'pods',
+        totalMessages: 90,
+      },
+      {
+        ...base,
+        name: 'resources',
+        clusterId: 'cluster-b',
+        leafKind: 'domain' as const,
+        leaf: 'namespace-events',
+        totalMessages: 600,
+      },
+    ];
+
+    expect(selectCatalogStreamTelemetry(streams, 'cluster-a')).toMatchObject({
+      activeSessions: 1,
+      totalMessages: 20,
+    });
+    // Only this cluster's event-table deliveries count, with the socket's sessions.
+    expect(selectEventStreamTelemetry(streams, 'cluster-a')).toMatchObject({
+      activeSessions: 1,
+      totalMessages: 7,
+    });
+    expect(selectEventStreamTelemetry(streams, 'cluster-c')).toBeUndefined();
+  });
+
+  test('picks the active cluster metrics', () => {
+    const metrics = (successCount: number) => ({
+      lastCollected: 0,
+      lastDurationMs: 0,
+      consecutiveFailures: 0,
+      successCount,
+      failureCount: 0,
+      active: true,
+    });
+    const clusterMetrics = [
+      { clusterId: 'cluster-a', metrics: metrics(1) },
+      { clusterId: 'cluster-b', metrics: metrics(2) },
+    ];
+    expect(selectClusterMetrics(clusterMetrics, 'cluster-b')?.successCount).toBe(2);
+    expect(selectClusterMetrics(clusterMetrics, 'cluster-c')).toBeUndefined();
   });
 
   test('builds Kubernetes API client rows and summary', () => {
@@ -483,7 +639,7 @@ describe('diagnosticsRowModel', () => {
     expect(
       buildEventStreamSummary({
         eventStreamTelemetry: {
-          name: 'events',
+          name: 'resources',
           activeSessions: 1,
           totalMessages: 12,
           droppedMessages: 1,

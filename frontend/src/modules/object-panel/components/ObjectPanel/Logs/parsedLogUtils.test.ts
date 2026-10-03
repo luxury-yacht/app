@@ -14,6 +14,12 @@ describe('parsedLogUtils', () => {
     expect(tryParseJSONObject('[]')).toBeNull();
     expect(tryParseJSONObject('{}')).toBeNull();
     expect(tryParseJSONObject('not json')).toBeNull();
+    // An object may follow whitespace or sit inside ANSI color codes.
+    expect(tryParseJSONObject('  {"a":1}')).toEqual({ a: 1 });
+    expect(tryParseJSONObject('\u001b[32m{"a":1}\u001b[0m')).toEqual({ a: 1 });
+    expect(tryParseJSONObject('42')).toBeNull();
+    expect(tryParseJSONObject('"text"')).toBeNull();
+    expect(tryParseJSONObject('{"a":1} trailing')).toBeNull();
   });
 
   it('derives stable sorted field keys', () => {

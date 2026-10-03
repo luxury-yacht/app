@@ -50,13 +50,7 @@ func canonicalObjectRowSpecs() []canonicalObjectRowSpec {
 		{name: "namespace-storage", typeOf: typeOf[streamrows.StorageSummary]()},
 		{name: "namespace-autoscaling", typeOf: typeOf[streamrows.AutoscalingSummary]()},
 		{name: "namespace-quotas", typeOf: typeOf[streamrows.QuotaSummary]()},
-		{
-			name:   "namespace-events",
-			typeOf: typeOf[snapshot.EventSummary](),
-			semanticJSONFields: map[string]string{
-				"kind": "involved-object kind used by the Event query",
-			},
-		},
+		{name: "namespace-events", typeOf: typeOf[snapshot.EventSummary]()},
 		{name: "namespace-helm", typeOf: typeOf[snapshot.NamespaceHelmSummary]()},
 		{name: "pods", typeOf: typeOf[streamrows.PodSummary]()},
 		{name: "namespace-workloads", typeOf: typeOf[streamrows.WorkloadSummary]()},

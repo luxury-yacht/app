@@ -41,6 +41,9 @@ const JobsTab = lazy(() =>
 );
 const LogViewer = lazy(() => import('@modules/object-panel/components/ObjectPanel/Logs/LogViewer'));
 const MapTab = lazy(() => import('@modules/object-panel/components/ObjectPanel/Map/MapTab'));
+const MetricsTab = lazy(
+  () => import('@modules/object-panel/components/ObjectPanel/Metrics/MetricsTab')
+);
 const NodeLogsTab = lazy(
   () => import('@modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab')
 );
@@ -88,6 +91,26 @@ const TabErrorFallback = ({ tabName, reset }: { tabName: string; reset: () => vo
         Retry
       </button>
     </div>
+  </div>
+);
+
+// Retained tabs mount on first view and then stay mounted, hidden from input and assistive tech
+// while another tab is shown, so their state survives tab switches.
+const useShownOnce = (isVisible: boolean): boolean => {
+  const shownRef = React.useRef(false);
+  if (isVisible) {
+    shownRef.current = true;
+  }
+  return shownRef.current;
+};
+
+const RetainedTabFrame = ({ isVisible, children }: { isVisible: boolean; children: ReactNode }) => (
+  <div
+    className={`object-panel-retained-tab${isVisible ? '' : ' object-panel-retained-tab--inactive'}`}
+    aria-hidden={!isVisible}
+    inert={!isVisible}
+  >
+    {children}
   </div>
 );
 
@@ -157,11 +180,8 @@ const RetainedLogsTab = ({
   nodeLogsState,
   nodeLogSources,
 }: Readonly<RetainedLogsTabProps>) => {
-  const hasRenderedRef = React.useRef(false);
-  if (isVisible) {
-    hasRenderedRef.current = true;
-  }
-  if (!hasRenderedRef.current || !isAvailable) {
+  const shown = useShownOnce(isVisible);
+  if (!shown || !isAvailable) {
     return null;
   }
 
@@ -170,11 +190,7 @@ const RetainedLogsTab = ({
   const namespace = objectData?.namespace ?? '';
   const clusterId = objectData?.clusterId ?? null;
   return (
-    <div
-      className={`object-panel-retained-tab${isVisible ? '' : ' object-panel-retained-tab--inactive'}`}
-      aria-hidden={!isVisible}
-      inert={!isVisible}
-    >
+    <RetainedTabFrame isVisible={isVisible}>
       {objectKind !== 'node' ? (
         <PanelTabBoundary
           scope="panel-logs"
@@ -208,11 +224,11 @@ const RetainedLogsTab = ({
           />
         </PanelTabBoundary>
       )}
-    </div>
+    </RetainedTabFrame>
   );
 };
 
-// Transient tabs unmount when their selection changes. Logs and YAML have separate
+// Transient tabs unmount when their selection changes. Logs, Metrics, and YAML have separate
 // retention owners below; they must never be routed through this table.
 const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentProps>>([
   [
@@ -391,10 +407,9 @@ export function ObjectPanelContent(props: Readonly<ObjectPanelContentProps>) {
   } = props;
   const logsAvailable = capabilities.hasObjPanelLogs && objectData !== null;
   const showYaml = activeTab === 'yaml';
-  const hasRenderedYamlRef = React.useRef(false);
-  if (showYaml) {
-    hasRenderedYamlRef.current = true;
-  }
+  const yamlShown = useShownOnce(showYaml);
+  const showMetrics = activeTab === 'metrics';
+  const metricsShown = useShownOnce(showMetrics);
   const scopedDomainCleanups = useMemo<readonly ObjectPanelScopedDomainRef[]>(
     () => [
       { domain: 'object-events', scope: eventsScope },
@@ -427,12 +442,25 @@ export function ObjectPanelContent(props: Readonly<ObjectPanelContentProps>) {
         nodeLogsState={nodeLogsState}
         nodeLogSources={nodeLogSources}
       />
-      {!!hasRenderedYamlRef.current && (
-        <div
-          className={`object-panel-retained-tab${showYaml ? '' : ' object-panel-retained-tab--inactive'}`}
-          aria-hidden={!showYaml}
-          inert={!showYaml}
-        >
+      {metricsShown && (
+        <RetainedTabFrame isVisible={showMetrics}>
+          <PanelTabBoundary
+            scope="panel-metrics"
+            resetKeys={[panelId]}
+            tabName="Metrics"
+            loadingName="metrics"
+          >
+            <MetricsTab
+              objectData={detailTabProps?.objectData ?? null}
+              detail={detailTabProps?.detailModel.activeDetail}
+              isPanelOpen={isPanelOpen}
+              panelId={panelId}
+            />
+          </PanelTabBoundary>
+        </RetainedTabFrame>
+      )}
+      {yamlShown && (
+        <RetainedTabFrame isVisible={showYaml}>
           <PanelTabBoundary
             scope="panel-yaml"
             resetKeys={detailScope ? [detailScope] : undefined}
@@ -447,7 +475,7 @@ export function ObjectPanelContent(props: Readonly<ObjectPanelContentProps>) {
               clusterId={objectData?.clusterId ?? null}
             />
           </PanelTabBoundary>
-        </div>
+        </RetainedTabFrame>
       )}
     </div>
   );

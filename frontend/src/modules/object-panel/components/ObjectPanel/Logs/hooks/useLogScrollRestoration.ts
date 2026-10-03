@@ -57,6 +57,68 @@ const shouldFollowTailAfterUserScroll = (
     knownPosition?.element === scrollElement &&
     knownPosition.scrollTop === scrollElement.scrollTop);
 
+// Counts consecutive frames whose content height held still with the view at
+// the bottom; reports when enough frames have settled.
+const createLayoutSettleTracker = () => {
+  let previousScrollHeight: number | undefined;
+  let stableFrames = 0;
+  return (scrollHeight: number, isAtBottom: boolean): boolean => {
+    stableFrames = previousScrollHeight === scrollHeight && isAtBottom ? stableFrames + 1 : 0;
+    previousScrollHeight = scrollHeight;
+    return stableFrames >= REQUIRED_STABLE_LAYOUT_FRAMES;
+  };
+};
+
+// Scrolls to the tail each frame until the layout settles (virtualized rows
+// change height once measured), giving up after MAX_LAYOUT_SETTLE_FRAMES.
+// Content shorter than the viewport is already settled. Returns a cancel.
+const followTailUntilLayoutSettles = ({
+  restore,
+  followTarget,
+  scrollToTail,
+  onShortContent,
+}: {
+  restore: () => boolean;
+  followTarget: () => HTMLElement | null;
+  scrollToTail: (element: HTMLElement) => void;
+  onShortContent: (element: HTMLElement) => void;
+}): (() => void) => {
+  let rafId: number | undefined;
+  let attempts = 0;
+  const layoutSettled = createLayoutSettleTracker();
+  const retryNextFrame = () => {
+    attempts += 1;
+    if (attempts < MAX_LAYOUT_SETTLE_FRAMES) {
+      rafId = requestAnimationFrame(scrollToSettledBottom);
+    }
+  };
+  const scrollToSettledBottom = () => {
+    if (!restore()) {
+      retryNextFrame();
+      return;
+    }
+    const element = followTarget();
+    if (!element) {
+      return;
+    }
+    const scrollHeight = element.scrollHeight;
+    if (scrollHeight <= element.clientHeight) {
+      onShortContent(element);
+      return;
+    }
+    scrollToTail(element);
+    if (!layoutSettled(scrollHeight, isLogScrollAtBottom(element))) {
+      retryNextFrame();
+    }
+  };
+  rafId = requestAnimationFrame(scrollToSettledBottom);
+  return () => {
+    if (rafId !== undefined) {
+      cancelAnimationFrame(rafId);
+    }
+  };
+};
+
 const isScrollKey = (event: KeyboardEvent): boolean =>
   ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ', 'Spacebar'].includes(
     event.key
@@ -126,6 +188,22 @@ export const useLogScrollRestoration = ({
     }
     return root;
   }, [isParsedView, rootRef]);
+
+  const persistScrollPosition = useCallback(
+    (scrollEl: HTMLElement, isTailFollowing: boolean) => {
+      knownScrollPositionRef.current = captureScrollPosition(scrollEl);
+      setScrollPosition(cacheKey, { scrollTop: scrollEl.scrollTop, isTailFollowing });
+    },
+    [cacheKey, setScrollPosition]
+  );
+
+  const scrollToTail = useCallback(
+    (scrollEl: HTMLElement) => {
+      scrollEl.scrollTop = scrollEl.scrollHeight;
+      persistScrollPosition(scrollEl, true);
+    },
+    [persistScrollPosition]
+  );
 
   useLayoutEffect(() => {
     // The scroll container is conditionally mounted after loading. Re-check it
@@ -264,59 +342,48 @@ export const useLogScrollRestoration = ({
     return true;
   }, [cacheKey, getScrollContainer, getScrollPosition, isActive, rowCount, setTailFollowing]);
 
+  // After a restore, pins the view to the tail, or back to the remembered
+  // offset: this container's own, else the saved one (the view mode changed).
+  const reapplyRestoredScroll = useCallback(
+    (scrollEl: HTMLElement) => {
+      if (isTailFollowingRef.current) {
+        scrollEl.scrollTop = scrollEl.scrollHeight;
+      } else {
+        const knownPosition = knownScrollPositionRef.current;
+        const rememberedScrollTop =
+          knownPosition?.element === scrollEl
+            ? knownPosition.scrollTop
+            : getScrollPosition(cacheKey)?.scrollTop;
+        if (rememberedScrollTop !== undefined) {
+          const maxScrollTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
+          scrollEl.scrollTop = Math.min(rememberedScrollTop, maxScrollTop);
+        }
+      }
+      persistScrollPosition(scrollEl, isTailFollowingRef.current);
+    },
+    [cacheKey, getScrollPosition, persistScrollPosition]
+  );
+
   useLayoutEffect(() => {
     const wasActive = previousIsActiveRef.current;
     previousIsActiveRef.current = isActive;
-    if (!isActive) {
-      pointerScrollActiveRef.current = false;
-      userScrollGestureDeadlineRef.current = 0;
-      return;
-    }
-
-    if (!wasActive) {
+    if (!isActive || !wasActive) {
+      // A hidden or just-shown tab has no scroll gesture in progress.
       pointerScrollActiveRef.current = false;
       userScrollGestureDeadlineRef.current = 0;
     }
-
-    const scrollEl = getScrollContainer();
+    const scrollEl = isActive ? getScrollContainer() : null;
     if (!scrollEl) {
       return;
     }
-    const knownPosition = knownScrollPositionRef.current;
-    const scrollContainerChanged = knownPosition?.element !== scrollEl;
-    if (wasActive && scrollRestoredRef.current && !scrollContainerChanged) {
-      return;
+    const alreadyRestoredHere =
+      wasActive &&
+      scrollRestoredRef.current &&
+      knownScrollPositionRef.current?.element === scrollEl;
+    if (!alreadyRestoredHere && restoreScrollPosition()) {
+      reapplyRestoredScroll(scrollEl);
     }
-    if (!restoreScrollPosition()) {
-      return;
-    }
-
-    if (isTailFollowingRef.current) {
-      scrollEl.scrollTop = scrollEl.scrollHeight;
-    } else {
-      const restoredPosition = knownScrollPositionRef.current;
-      const rememberedScrollTop =
-        restoredPosition?.element === scrollEl
-          ? restoredPosition.scrollTop
-          : getScrollPosition(cacheKey)?.scrollTop;
-      const maxScrollTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
-      if (rememberedScrollTop !== undefined) {
-        scrollEl.scrollTop = Math.min(rememberedScrollTop, maxScrollTop);
-      }
-    }
-    knownScrollPositionRef.current = captureScrollPosition(scrollEl);
-    setScrollPosition(cacheKey, {
-      scrollTop: scrollEl.scrollTop,
-      isTailFollowing: isTailFollowingRef.current,
-    });
-  }, [
-    cacheKey,
-    getScrollContainer,
-    getScrollPosition,
-    isActive,
-    restoreScrollPosition,
-    setScrollPosition,
-  ]);
+  }, [getScrollContainer, isActive, reapplyRestoredScroll, restoreScrollPosition]);
 
   useEffect(() => {
     void rowCount;
@@ -325,75 +392,26 @@ export const useLogScrollRestoration = ({
       return;
     }
 
-    const shouldFollowTail = () => {
-      const element = getScrollContainer();
-      if (!element || !scrollRestoredRef.current) {
-        return false;
-      }
-      return isTailFollowingRef.current;
-    };
-    if (restoreScrollPosition() && !shouldFollowTail()) {
+    // The container to keep at the tail, or null while not following it.
+    const followTarget = () =>
+      scrollRestoredRef.current && isTailFollowingRef.current ? getScrollContainer() : null;
+    if (restoreScrollPosition() && !followTarget()) {
       return;
     }
-
-    let rafId: number | undefined;
-    let attempts = 0;
-    let previousScrollHeight: number | undefined;
-    let stableLayoutFrames = 0;
-    const scrollToSettledBottom = () => {
-      if (!restoreScrollPosition()) {
-        attempts += 1;
-        if (attempts < MAX_LAYOUT_SETTLE_FRAMES) {
-          rafId = requestAnimationFrame(scrollToSettledBottom);
-        }
-        return;
-      }
-      if (!shouldFollowTail()) {
-        return;
-      }
-      const element = getScrollContainer();
-      if (!element) {
-        return;
-      }
-      const currentScrollHeight = element.scrollHeight;
-      if (currentScrollHeight <= element.clientHeight) {
+    return followTailUntilLayoutSettles({
+      restore: restoreScrollPosition,
+      followTarget,
+      scrollToTail,
+      onShortContent: (element) => {
         knownScrollPositionRef.current = captureScrollPosition(element);
-        return;
-      }
-      element.scrollTop = currentScrollHeight;
-      knownScrollPositionRef.current = captureScrollPosition(element);
-      setScrollPosition(cacheKey, {
-        scrollTop: element.scrollTop,
-        isTailFollowing: true,
-      });
-      stableLayoutFrames =
-        previousScrollHeight === currentScrollHeight && isLogScrollAtBottom(element)
-          ? stableLayoutFrames + 1
-          : 0;
-      previousScrollHeight = currentScrollHeight;
-      attempts += 1;
-      if (
-        attempts < MAX_LAYOUT_SETTLE_FRAMES &&
-        stableLayoutFrames < REQUIRED_STABLE_LAYOUT_FRAMES
-      ) {
-        rafId = requestAnimationFrame(scrollToSettledBottom);
-      }
-    };
-
-    rafId = requestAnimationFrame(scrollToSettledBottom);
-
-    return () => {
-      if (rafId !== undefined) {
-        cancelAnimationFrame(rafId);
-      }
-    };
+      },
+    });
   }, [
-    cacheKey,
     getScrollContainer,
     isActive,
     restoreScrollPosition,
     rowCount,
-    setScrollPosition,
+    scrollToTail,
     tailFollowSignal,
   ]);
 
@@ -418,15 +436,9 @@ export const useLogScrollRestoration = ({
           return;
         }
         const element = getScrollContainer();
-        if (!element) {
-          return;
+        if (element) {
+          scrollToTail(element);
         }
-        element.scrollTop = element.scrollHeight;
-        knownScrollPositionRef.current = captureScrollPosition(element);
-        setScrollPosition(cacheKey, {
-          scrollTop: element.scrollTop,
-          isTailFollowing: true,
-        });
       });
     });
 
@@ -445,7 +457,7 @@ export const useLogScrollRestoration = ({
         cancelAnimationFrame(layoutRafId);
       }
     };
-  }, [cacheKey, getScrollContainer, isActive, restoreScrollPosition, rowCount, setScrollPosition]);
+  }, [getScrollContainer, isActive, restoreScrollPosition, rowCount, scrollToTail]);
 
   const resumeTailFollowing = useCallback(() => {
     const scrollEl = getScrollContainer();
@@ -455,14 +467,9 @@ export const useLogScrollRestoration = ({
     userScrollGestureDeadlineRef.current = 0;
     pointerScrollActiveRef.current = false;
     setTailFollowing(true);
-    scrollEl.scrollTop = scrollEl.scrollHeight;
-    knownScrollPositionRef.current = captureScrollPosition(scrollEl);
     scrollRestoredRef.current = true;
-    setScrollPosition(cacheKey, {
-      scrollTop: scrollEl.scrollTop,
-      isTailFollowing: true,
-    });
-  }, [cacheKey, getScrollContainer, setScrollPosition, setTailFollowing]);
+    scrollToTail(scrollEl);
+  }, [getScrollContainer, scrollToTail, setTailFollowing]);
 
   return { getScrollContainer, resetScrollRestoration, resumeTailFollowing };
 };

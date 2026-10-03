@@ -79,6 +79,12 @@ describe('Biome architectural boundary plugins', () => {
       'triggerManualRefreshForContext',
     ],
     ['no-direct-console-error', 'console.error("load failed", error);', 'errorHandler'],
+    ['no-direct-clipboard-write', 'navigator.clipboard.writeText(text);', 'writeClipboardText'],
+    ['no-direct-clipboard-write', 'clipboard.writeText(text);', 'writeClipboardText'],
+    ['no-direct-clipboard-write', 'navigator.clipboard.write([item]);', 'writeClipboardText'],
+    ['no-direct-clipboard-write', 'navigator.clipboard?.writeText(text);', 'writeClipboardText'],
+    ['no-direct-clipboard-write', 'navigator?.clipboard?.writeText(text);', 'writeClipboardText'],
+    ['no-direct-clipboard-write', 'navigator.clipboard?.write([item]);', 'writeClipboardText'],
     [
       'no-inline-error-text',
       'const loadError = "failed"; const View = () => <div>{loadError}</div>;',
@@ -130,6 +136,7 @@ describe('Biome architectural boundary plugins', () => {
     ['no-direct-fetch', 'dataAccess.readResources();'],
     ['no-direct-permission-read', 'dataAccess.readPermissions();'],
     ['no-direct-refresh-orchestrator', 'dataAccess.refreshContext();'],
+    ['no-direct-clipboard-write', 'void writeClipboardText(text);'],
   ])('accepts boundary calls outside %s', (pluginName, source) => {
     const result = lintWithPlugin(pluginName, source);
 
@@ -155,6 +162,7 @@ describe('Biome architectural boundary plugins', () => {
     ['orchestrator.fetchScopedDomain("cluster", {});', 'fetchScopedDomain'],
     ['orchestrator.triggerManualRefreshForContext({});', 'triggerManualRefreshForContext'],
     ['console.error("load failed", error);', 'errorHandler'],
+    ['void navigator.clipboard.writeText("copied");', 'writeClipboardText'],
   ])('rejects forbidden calls through the real project config', (source, diagnostic) => {
     const result = lintWithProjectConfig(source);
 

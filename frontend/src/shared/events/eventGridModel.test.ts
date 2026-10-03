@@ -16,7 +16,6 @@ import {
   eventGridSearchText,
   eventGridStableKey,
   namespaceEventRowIdentity,
-  objectPanelEventGridRow,
 } from './eventGridModel';
 
 const eventRef = (overrides: Record<string, string> = {}) => ({
@@ -123,71 +122,51 @@ describe('eventGridModel', () => {
     );
   });
 
-  it('carries cluster identity and fallback GVK into related-object inputs', () => {
+  // The resolver gets the backend's link, the UID for the catalog fallback, and
+  // the cluster identity (the row's own, else the selected cluster's).
+  it('carries the involved-object link, UID, and cluster identity into related-object inputs', () => {
+    const involvedObject = {
+      display: { clusterId: 'cluster-a', kind: 'Database', name: 'primary', uid: 'db-uid' },
+    };
     expect(
       eventGridRelatedObjectInput(
         {
-          object: 'Database/primary',
+          objectKind: 'Database',
+          objectName: 'primary',
           objectUid: 'db-uid',
+          involvedObject,
           namespace: 'events',
           objectNamespace: 'databases',
-          clusterId: 'cluster-a',
-          clusterName: 'alpha',
         },
-        {
-          fallbackKind: 'Database',
-          fallbackGroup: 'db.example.io',
-          fallbackVersion: 'v1',
-        }
+        { selectedClusterId: 'cluster-a', selectedClusterName: 'alpha' }
       )
     ).toEqual({
-      object: 'Database/primary',
-      involvedObject: undefined,
+      involvedObject,
       objectUid: 'db-uid',
-      objectApiVersion: undefined,
-      objectNamespace: 'databases',
-      eventNamespace: 'events',
-      defaultNamespace: undefined,
       clusterId: 'cluster-a',
       clusterName: 'alpha',
-      fallbackKind: 'Database',
-      fallbackGroup: 'db.example.io',
-      fallbackVersion: 'v1',
     });
   });
 
-  it('reports direct GVK-backed related objects as openable', () => {
+  it('reports rows with an openable involved-object link as openable', () => {
     expect(
       eventGridCanOpenRelatedObject({
-        object: 'Pod/api',
-        objectApiVersion: 'v1',
-        objectNamespace: 'prod',
+        objectKind: 'Pod',
+        objectName: 'api',
+        involvedObject: {
+          ref: {
+            clusterId: 'cluster-a',
+            group: '',
+            version: 'v1',
+            kind: 'Pod',
+            resource: 'pods',
+            namespace: 'prod',
+            name: 'api',
+          },
+        },
         clusterId: 'cluster-a',
       })
     ).toBe(true);
-  });
-
-  it('normalizes object-panel event rows for the shared resolver', () => {
-    expect(
-      objectPanelEventGridRow(
-        {
-          objectKind: 'Pod',
-          objectName: 'api',
-          objectNamespace: '__cluster__',
-          objectApiVersion: 'v1',
-          clusterId: 'cluster-a',
-        },
-        '__cluster__'
-      )
-    ).toEqual({
-      object: 'Pod/api',
-      involvedObject: undefined,
-      objectUid: undefined,
-      objectApiVersion: 'v1',
-      objectNamespace: undefined,
-      clusterId: 'cluster-a',
-      clusterName: undefined,
-    });
   });
 
   it('builds object action references with Event identity and involved-object extras', () => {

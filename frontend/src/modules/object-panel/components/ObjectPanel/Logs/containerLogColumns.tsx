@@ -1,7 +1,8 @@
 /** Container-log metadata columns; transport and filter state stay in LogViewer. */
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import type React from 'react';
-import type { ParsedLogEntry } from './logViewerReducer';
+import { LogMetadataButton } from './LogMetadataButton';
+import type { ParsedLogEntry } from './logOptionsReducer';
 import {
   PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH,
   PARSED_TIMESTAMP_MIN_WIDTH,
@@ -48,6 +49,7 @@ export function buildContainerLogMetadataColumns({
   onSelectPod,
   onSelectContainer,
 }: ContainerLogColumnOptions): GridColumnDefinition<ParsedLogEntry>[] {
+  const podColorOf = (pod: string): string => podColors[pod] || podColors.__fallback__;
   const timestampValue = (item: ParsedLogEntry): string =>
     item.timestamp ? formatTimestamp(item.timestamp) : '-';
   const columns: GridColumnDefinition<ParsedLogEntry>[] = [];
@@ -72,11 +74,7 @@ export function buildContainerLogMetadataColumns({
         return (
           <span
             className="pod-color-text"
-            style={
-              {
-                '--pod-color': podColors[item.pod || ''] || podColors.__fallback__,
-              } as React.CSSProperties
-            }
+            style={{ '--pod-color': podColorOf(item.pod || '') } as React.CSSProperties}
           >
             {formatted}
           </span>
@@ -95,25 +93,15 @@ export function buildContainerLogMetadataColumns({
       render: (item: ParsedLogEntry) => {
         const pod = item.pod;
         return pod ? (
-          <button
-            type="button"
-            className="log-viewer-metadata-button pod-color-text"
-            tabIndex={-1}
-            data-focus-trap-ignore="true"
-            style={
-              {
-                '--pod-color': podColors[pod] || podColors.__fallback__,
-              } as React.CSSProperties
-            }
-            onClick={(event) => {
+          <LogMetadataButton
+            subject="pod"
+            name={pod}
+            podColor={podColorOf(pod)}
+            onSelect={(event) => {
               event.stopPropagation();
               onSelectPod(pod);
             }}
-            title={`Show only logs from pod ${pod}`}
-            aria-label={`Show only logs from pod ${pod}`}
-          >
-            {pod}
-          </button>
+          />
         ) : (
           '-'
         );
@@ -129,27 +117,17 @@ export function buildContainerLogMetadataColumns({
     autoSizeMaxWidth: PARSED_METADATA_AUTOSIZE_MAX_WIDTH,
     render: (item: ParsedLogEntry) => {
       const container = item.container;
-      const containerLabel = container ? getContainerLabel(item) : '';
       return container ? (
-        <button
-          type="button"
-          className="log-viewer-metadata-button pod-color-text"
-          tabIndex={-1}
-          data-focus-trap-ignore="true"
-          style={
-            {
-              '--pod-color': podColors[item.pod || ''] || podColors.__fallback__,
-            } as React.CSSProperties
-          }
-          onClick={(event) => {
+        <LogMetadataButton
+          subject="container"
+          name={getContainerLabel(item)}
+          text={container}
+          podColor={podColorOf(item.pod || '')}
+          onSelect={(event) => {
             event.stopPropagation();
             onSelectContainer(item);
           }}
-          title={`Show only logs from container ${containerLabel}`}
-          aria-label={`Show only logs from container ${containerLabel}`}
-        >
-          {container}
-        </button>
+        />
       ) : (
         '-'
       );

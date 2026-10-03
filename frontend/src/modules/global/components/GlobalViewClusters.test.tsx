@@ -36,14 +36,14 @@ const overview = {
     failingPods: 2,
     pendingPods: 1,
     totalNamespaces: 8,
-    cpuUsage: '1200m',
-    cpuRequests: '2400m',
-    cpuLimits: '6000m',
-    cpuAllocatable: '8000m',
-    memoryUsage: '8Gi',
-    memoryRequests: '12Gi',
-    memoryLimits: '24Gi',
-    memoryAllocatable: '32Gi',
+    cpuUsageMilli: 1200,
+    cpuRequestsMilli: 2400,
+    cpuLimitsMilli: 6000,
+    cpuAllocatableMilli: 8000,
+    memoryUsageBytes: 8 * 1024 ** 3,
+    memoryRequestsBytes: 12 * 1024 ** 3,
+    memoryLimitsBytes: 24 * 1024 ** 3,
+    memoryAllocatableBytes: 32 * 1024 ** 3,
     unavailableResources: [],
   },
   metrics: {
@@ -388,10 +388,10 @@ describe('GlobalViewClusters', () => {
       throw new Error('expected CPU ResourceBar');
     }
     expect(cpuCell.props).toMatchObject({
-      usage: '1200m',
-      request: '2400m',
-      limit: '6000m',
-      allocatable: '8000m',
+      usage: 1200,
+      request: 2400,
+      limit: 6000,
+      allocatable: 8000,
       type: 'cpu',
       variant: 'compact',
       metricsStale: false,
@@ -403,10 +403,10 @@ describe('GlobalViewClusters', () => {
       throw new Error('expected Memory ResourceBar');
     }
     expect(memoryCell.props).toMatchObject({
-      usage: '8Gi',
-      request: '12Gi',
-      limit: '24Gi',
-      allocatable: '32Gi',
+      usage: 8 * 1024 ** 3,
+      request: 12 * 1024 ** 3,
+      limit: 24 * 1024 ** 3,
+      allocatable: 32 * 1024 ** 3,
       type: 'memory',
       variant: 'compact',
       animationScopeKey: 'cluster:cluster-a:memory',
@@ -414,7 +414,7 @@ describe('GlobalViewClusters', () => {
     expect(columns.find(({ key }) => key === 'cpu')?.render?.(rows[1])).toBe('—');
     expect(columns.find(({ key }) => key === 'memory')?.render?.(rows[1])).toBe('—');
     expect(columns.find(({ key }) => key === 'cpu')?.sortValue?.(rows[0])).toBe(1200);
-    expect(columns.find(({ key }) => key === 'memory')?.sortValue?.(rows[0])).toBe(8192);
+    expect(columns.find(({ key }) => key === 'memory')?.sortValue?.(rows[0])).toBe(8 * 1024 ** 3);
     const keyExtractor = (
       tableProps.gridTableProps as {
         keyExtractor: (row: Record<string, unknown>) => string;

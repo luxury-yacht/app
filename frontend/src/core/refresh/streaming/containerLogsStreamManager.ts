@@ -1,11 +1,12 @@
 /**
  * frontend/src/core/refresh/streaming/containerLogsStreamManager.ts
  *
- * Module source for containerLogsStreamManager.
- * Implements containerLogsStreamManager logic for the core layer.
+ * Owns container-logs streams and is the only writer of `container-logs`
+ * scoped state. Each scope's connection feeds the protocol reducer; the manager
+ * applies its effects: socket work, reconnect timers, and an ordered, bounded
+ * entry buffer projected into the store.
  */
 
-import { getContainerLogsStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
 import { type JSONSocket, JSONStream } from '@wailsio/runtime';
 import { eventBus } from '@/core/events';
 import {
@@ -13,141 +14,445 @@ import {
   OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
 } from '@/core/settings/appPreferences';
 import type { SnapshotStats } from '../client';
-import { resolvePermissionDeniedMessage } from '../permissionErrors';
 import { resetScopedDomainState, setScopedDomainState } from '../store';
 import type {
   ContainerLogsEntry,
+  ContainerLogsResumePoint,
   ContainerLogsSnapshotPayload,
-  ContainerLogsStreamEventPayload,
+  ContainerLogsStreamPhase,
+  ContainerLogsStreamRequest,
+  ContainerLogsTargetIssue,
+  ContainerLogsWarning,
+  ContainerLogsWireEntry,
 } from '../types';
+import {
+  type ContainerLogsProtocolEffect,
+  type ContainerLogsProtocolEvent,
+  type ContainerLogsProtocolState,
+  initialContainerLogsProtocolState,
+  parseContainerLogsFrame,
+  transitionContainerLogsProtocol,
+} from './containerLogsStreamProtocol';
+import { getContainerLogsStreamScopeParams } from './containerLogsStreamScopeParams';
 import { StreamErrorNotifier } from './streamErrorNotifier';
 import { streamReconnectDelay } from './streamTiming';
 import { StreamVisibilityController } from './streamVisibilityController';
 
-type StreamMode = 'stream' | 'manual';
-type StreamEventPayload = ContainerLogsStreamEventPayload;
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isValidPermissionStatus = (value: unknown): boolean => {
-  if (!isRecord(value)) {
-    return false;
-  }
-  if (
-    typeof value.kind !== 'string' ||
-    typeof value.apiVersion !== 'string' ||
-    typeof value.message !== 'string' ||
-    typeof value.reason !== 'string' ||
-    typeof value.code !== 'number'
-  ) {
-    return false;
-  }
-  if (value.details === undefined) {
-    return true;
-  }
-  return (
-    isRecord(value.details) &&
-    (value.details.domain === undefined || typeof value.details.domain === 'string') &&
-    (value.details.resource === undefined || typeof value.details.resource === 'string')
-  );
-};
-
-const isValidLogEntry = (value: unknown): boolean =>
-  isRecord(value) &&
-  typeof value.timestamp === 'string' &&
-  typeof value.pod === 'string' &&
-  typeof value.container === 'string' &&
-  typeof value.line === 'string' &&
-  typeof value.isInit === 'boolean' &&
-  (value.isEphemeral === undefined || typeof value.isEphemeral === 'boolean');
-
-const hasValidRequiredPayloadFields = (value: Record<string, unknown>): boolean =>
-  typeof value.domain === 'string' &&
-  typeof value.scope === 'string' &&
-  typeof value.sequence === 'number' &&
-  typeof value.generatedAt === 'number';
-
-const hasValidWarnings = (warnings: unknown): boolean =>
-  warnings === null ||
-  warnings === undefined ||
-  (Array.isArray(warnings) && warnings.every((warning) => typeof warning === 'string'));
-
-const hasValidEntries = (entries: unknown): boolean =>
-  entries === undefined ||
-  (Array.isArray(entries) && entries.every((entry) => isValidLogEntry(entry)));
-
-const hasValidOptionalPayloadFields = (value: Record<string, unknown>): boolean =>
-  (value.reset === undefined || typeof value.reset === 'boolean') &&
-  (value.error === undefined || typeof value.error === 'string') &&
-  hasValidWarnings(value.warnings) &&
-  (value.errorDetails === undefined || isValidPermissionStatus(value.errorDetails)) &&
-  hasValidEntries(value.entries);
-
-function isValidContainerLogsStreamPayload(data: unknown): data is StreamEventPayload {
-  if (!isRecord(data)) {
-    return false;
-  }
-  return hasValidRequiredPayloadFields(data) && hasValidOptionalPayloadFields(data);
-}
-
 const DOMAIN_NAME = 'container-logs' as const;
 const CONTAINER_LOGS_STREAM_NAME = 'refresh-container-logs';
 
-const DEFAULT_PAYLOAD: ContainerLogsSnapshotPayload = {
-  entries: [],
-  sequence: 0,
-  generatedAt: 0,
-  resetCount: 0,
-  error: null,
+/** Line bytes one scope's buffer holds; the backend trims its snapshot to it. */
+export const CONTAINER_LOGS_MAX_BYTES = 64 * 1024 * 1024;
+
+// Timestamps are RFC 3339 in UTC with up to nine fraction digits. Padding the
+// fraction makes string order match time order; entries without a timestamp
+// sort after every timestamped entry, as the backend orders them.
+const TIMESTAMP_PATTERN = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z$/;
+const UNTIMED_KEY = '￿';
+
+const timestampKey = (timestamp: string): string => {
+  const match = TIMESTAMP_PATTERN.exec(timestamp);
+  return match ? `${match[1]}.${(match[2] ?? '').padEnd(9, '0')}` : UNTIMED_KEY;
 };
 
-type ProjectedLogBuffer = {
-  entries: ContainerLogsEntry[];
-  total: number;
-  truncated: boolean;
+// UTF-8 length, the unit the backend's byte limit counts.
+const utf8Length = (text: string): number => {
+  let bytes = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.codePointAt(index) ?? 0;
+    if (code < 0x80) {
+      bytes += 1;
+    } else if (code < 0x800) {
+      bytes += 2;
+    } else if (code < 0x10000) {
+      bytes += 3;
+    } else {
+      // A code point above the BMP spans two UTF-16 units.
+      bytes += 4;
+      index += 1;
+    }
+  }
+  return bytes;
 };
 
-const createManualLogRefresh = () => {
-  let resolve!: () => void;
-  let reject!: (error: Error) => void;
-  const promise = new Promise<void>((onResolve, onReject) => {
-    resolve = onResolve;
-    reject = onReject;
+// First position whose key sorts after `key`, so equal timestamps keep their
+// arrival order.
+const upperBound = (keys: string[], key: string): number => {
+  let low = 0;
+  let high = keys.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (keys[middle] <= key) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low;
+};
+
+const compareKeys = (left: string, right: string): number => {
+  if (left === right) {
+    return 0;
+  }
+  return left < right ? -1 : 1;
+};
+
+// A resume point sends the lines at a container's newest timestamp so the
+// backend can find its place; a suffix of them is enough, so the request stays
+// small.
+const RESUME_MAX_LINES = 64;
+const RESUME_MAX_BYTES = 64 * 1024;
+
+type ResumeRun = {
+  newest: ContainerLogsEntry;
+  key: string;
+  // Newest first while collecting.
+  lines: string[];
+  bytes: number;
+  closed: boolean;
+};
+
+const containerIdentity = (entry: ContainerLogsWireEntry): string =>
+  `${entry.pod}/${entry.container}/${entry.isInit}/${Boolean(entry.isEphemeral)}`;
+
+// Takes the container's next older line into its run while the line shares the
+// run's timestamp and fits the budget; the first line that does not ends it.
+const extendRun = (run: ResumeRun, entry: ContainerLogsEntry, key: string): void => {
+  const bytes = utf8Length(entry.line);
+  if (
+    key !== run.key ||
+    run.lines.length >= RESUME_MAX_LINES ||
+    run.bytes + bytes > RESUME_MAX_BYTES
+  ) {
+    run.closed = true;
+    return;
+  }
+  run.lines.push(entry.line);
+  run.bytes += bytes;
+};
+
+const toResumePoint = ({ newest, lines }: ResumeRun): ContainerLogsResumePoint => {
+  // Lines were collected newest first.
+  const oldestFirst = [...lines];
+  oldestFirst.reverse();
+  return {
+    pod: newest.pod,
+    container: newest.container,
+    isInit: newest.isInit,
+    isEphemeral: Boolean(newest.isEphemeral),
+    timestamp: newest.timestamp,
+    lines: oldestFirst,
+  };
+};
+
+/**
+ * Where the buffer ends for each container: its newest timestamped line and
+ * the lines held at that timestamp, oldest first.
+ */
+const resumePointsFor = (
+  entries: ContainerLogsEntry[],
+  keys: string[]
+): ContainerLogsResumePoint[] => {
+  const runs = new Map<string, ResumeRun>();
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    const key = keys[index];
+    if (key === UNTIMED_KEY) {
+      continue;
+    }
+    const run = runs.get(containerIdentity(entry));
+    if (!run) {
+      runs.set(containerIdentity(entry), {
+        newest: entry,
+        key,
+        lines: [entry.line],
+        bytes: utf8Length(entry.line),
+        closed: false,
+      });
+    } else if (!run.closed) {
+      extendRun(run, entry, key);
+    }
+  }
+  return Array.from(runs.values(), toResumePoint);
+};
+
+const selectionKey = (request: ContainerLogsStreamRequest): string =>
+  JSON.stringify([request.selectedFilters ?? [], request.matchNone ?? false]);
+
+/** What a buffer's history was read for: resuming is valid only for the same. */
+type BufferBasis = { selection: string; maxEntries: number };
+
+const sameEntryContent = (left: ContainerLogsEntry[], right: ContainerLogsWireEntry[]): boolean =>
+  left.length === right.length &&
+  left.every((entry, index) => {
+    const candidate = right[index];
+    return (
+      entry.timestamp === candidate.timestamp &&
+      entry.pod === candidate.pod &&
+      entry.container === candidate.container &&
+      entry.line === candidate.line &&
+      entry.isInit === candidate.isInit &&
+      Boolean(entry.isEphemeral) === Boolean(candidate.isEphemeral)
+    );
   });
-  return { promise, resolve, reject };
-};
+
+/**
+ * One scope's entries in timestamp order, bounded by count and line bytes.
+ * The oldest entries are evicted first.
+ */
+class LogBuffer {
+  entries: ContainerLogsEntry[] = [];
+  private keys: string[] = [];
+  private bytes = 0;
+  // Entries received since the last snapshot, including any not held.
+  private received = 0;
+  warnings: ContainerLogsWarning[] = [];
+  issues: ContainerLogsTargetIssue[] = [];
+  // The selection and size whose newest entries the buffer holds; null until a
+  // snapshot arrives.
+  private basis: BufferBasis | null = null;
+  // Entries held per pod, kept as entries come and go.
+  private podCounts = new Map<string, number>();
+  private podList: string[] = [];
+  private podsChanged = false;
+
+  /** The pods with lines in the buffer; the same array until that set changes. */
+  get pods(): string[] {
+    if (this.podsChanged) {
+      this.podList = Array.from(this.podCounts.keys());
+      this.podsChanged = false;
+    }
+    return this.podList;
+  }
+
+  private countPod(pod: string, delta: number): void {
+    const count = (this.podCounts.get(pod) ?? 0) + delta;
+    if (count > 0) {
+      this.podsChanged ||= !this.podCounts.has(pod);
+      this.podCounts.set(pod, count);
+    } else if (this.podCounts.delete(pod)) {
+      this.podsChanged = true;
+    }
+  }
+
+  private recountPods(): void {
+    this.podCounts = new Map();
+    this.podsChanged = true;
+    for (const entry of this.entries) {
+      this.countPod(entry.pod, 1);
+    }
+  }
+
+  /** Drops the lines of pods that no longer exist; they are not counted as received. */
+  dropPods(pods: readonly string[]): void {
+    const gone = new Set(pods.filter((pod) => this.podCounts.has(pod)));
+    if (gone.size === 0) {
+      return;
+    }
+    const entries: ContainerLogsEntry[] = [];
+    const keys: string[] = [];
+    this.entries.forEach((entry, index) => {
+      if (gone.has(entry.pod)) {
+        this.bytes -= utf8Length(entry.line);
+        this.received -= 1;
+      } else {
+        entries.push(entry);
+        keys.push(this.keys[index]);
+      }
+    });
+    this.entries = entries;
+    this.keys = keys;
+    for (const pod of gone) {
+      this.podCounts.delete(pod);
+    }
+    this.podsChanged = true;
+  }
+
+  /** Records the request whose snapshot the buffer now reflects. */
+  setBasis(request: ContainerLogsStreamRequest | null): void {
+    this.basis = request
+      ? { selection: selectionKey(request), maxEntries: request.maxEntries ?? 0 }
+      : null;
+  }
+
+  /** A smaller buffer still holds the newest entries for its new size. */
+  limitBasis(maxEntries: number): void {
+    if (this.basis) {
+      this.basis.maxEntries = Math.min(this.basis.maxEntries, maxEntries);
+    }
+  }
+
+  /**
+   * Resume points for a request, when the buffer holds the newest entries for
+   * that same selection and size; a new selection or a larger buffer needs the
+   * history read again.
+   */
+  resumePoints(request: ContainerLogsStreamRequest): ContainerLogsResumePoint[] {
+    const basis = this.basis;
+    if (
+      basis?.selection !== selectionKey(request) ||
+      (request.maxEntries ?? 0) > basis.maxEntries
+    ) {
+      return [];
+    }
+    return resumePointsFor(this.entries, this.keys);
+  }
+
+  replace(incoming: ContainerLogsWireEntry[], trimmed: number, nextSeq: () => number): void {
+    // An unchanged reconnect snapshot keeps its entries' identity, so the view
+    // does not re-render every row.
+    if (!sameEntryContent(this.entries, incoming)) {
+      this.entries = incoming.map((entry) => ({ ...entry, _seq: nextSeq() }));
+    }
+    this.keys = this.entries.map((entry) => timestampKey(entry.timestamp));
+    this.bytes = this.entries.reduce((sum, entry) => sum + utf8Length(entry.line), 0);
+    this.received = this.entries.length + trimmed;
+    this.recountPods();
+  }
+
+  /**
+   * Merges entries in timestamp order. Held entries come before new ones with
+   * the same timestamp, and new ones keep their arrival order.
+   */
+  insert(incoming: ContainerLogsWireEntry[], nextSeq: () => number): void {
+    if (incoming.length === 0) {
+      return;
+    }
+    const added = incoming
+      .map((wire) => ({ entry: { ...wire, _seq: nextSeq() }, key: timestampKey(wire.timestamp) }))
+      .sort((left, right) => compareKeys(left.key, right.key));
+    // Live lines are usually the newest, so most held entries are copied as is.
+    let held = upperBound(this.keys, added[0].key);
+    const entries = this.entries.slice(0, held);
+    const keys = this.keys.slice(0, held);
+    for (const next of added) {
+      for (; held < this.keys.length && this.keys[held] <= next.key; held += 1) {
+        entries.push(this.entries[held]);
+        keys.push(this.keys[held]);
+      }
+      entries.push(next.entry);
+      keys.push(next.key);
+      this.bytes += utf8Length(next.entry.line);
+      this.countPod(next.entry.pod, 1);
+    }
+    this.entries = entries.concat(this.entries.slice(held));
+    this.keys = keys.concat(this.keys.slice(held));
+    this.received += incoming.length;
+  }
+
+  /** Adds a resumed snapshot, counting the history the backend left out. */
+  continueWith(incoming: ContainerLogsWireEntry[], trimmed: number, nextSeq: () => number): void {
+    this.insert(incoming, nextSeq);
+    this.received += trimmed;
+  }
+
+  evict(maxEntries: number, maxBytes: number): void {
+    let drop = Math.max(0, this.entries.length - maxEntries);
+    let bytes = this.bytes;
+    for (let index = 0; index < drop; index += 1) {
+      bytes -= utf8Length(this.entries[index].line);
+    }
+    while (bytes > maxBytes && drop < this.entries.length) {
+      bytes -= utf8Length(this.entries[drop].line);
+      drop += 1;
+    }
+    if (drop === 0) {
+      return;
+    }
+    for (let index = 0; index < drop; index += 1) {
+      this.countPod(this.entries[index].pod, -1);
+    }
+    this.entries = this.entries.slice(drop);
+    this.keys = this.keys.slice(drop);
+    this.bytes = bytes;
+  }
+
+  truncation(): ContainerLogsSnapshotPayload['truncation'] {
+    return this.received > this.entries.length
+      ? { shown: this.entries.length, received: this.received }
+      : null;
+  }
+}
+
+type ManagerLimits = { maxEntries?: number; maxBytes?: number };
 
 class ContainerLogsStreamConnection {
   private readonly scope: string;
   private readonly manager: ContainerLogsStreamManager;
-  private readonly completion: ReturnType<typeof createManualLogRefresh> | null;
   private socket: JSONSocket | null = null;
   private retryTimer: number | null = null;
-  private closed = false;
-  private attempt = 0;
+  private protocol: ContainerLogsProtocolState = initialContainerLogsProtocolState();
+  private sentRequest: ContainerLogsStreamRequest | null = null;
 
-  constructor(scope: string, mode: StreamMode, manager: ContainerLogsStreamManager) {
+  constructor(scope: string, manager: ContainerLogsStreamManager) {
     this.scope = scope;
     this.manager = manager;
-    this.completion = mode === 'manual' ? createManualLogRefresh() : null;
   }
 
-  start(): Promise<void> {
-    this.closed = false;
-    this.attempt = 0;
+  start(): void {
+    this.manager.commitPhase(this.scope, this.protocol.phase);
     this.openStream();
-    return this.completion?.promise ?? Promise.resolve();
   }
 
   stop(): void {
-    this.closed = true;
-    if (this.retryTimer !== null) {
-      window.clearTimeout(this.retryTimer);
-      this.retryTimer = null;
+    this.dispatch({ type: 'stopping' });
+  }
+
+  /** The request sent on the current socket; its snapshot answers it. */
+  get request(): ContainerLogsStreamRequest | null {
+    return this.sentRequest;
+  }
+
+  private get finished(): boolean {
+    const { status } = this.protocol.phase;
+    return status === 'stopping' || status === 'failed';
+  }
+
+  private dispatch(event: ContainerLogsProtocolEvent): void {
+    const transition = transitionContainerLogsProtocol(this.protocol, event);
+    this.protocol = transition.state;
+    for (const effect of transition.effects) {
+      this.applyConnectionEffect(effect);
     }
-    this.closeStream();
-    this.completion?.resolve();
+    this.manager.applyTransition(this, this.scope, transition.state.phase, transition.effects);
+  }
+
+  private applyConnectionEffect(effect: ContainerLogsProtocolEffect): void {
+    switch (effect.type) {
+      case 'send-request':
+        this.sentRequest = this.manager.buildRequest(this.scope);
+        this.socket?.send(this.sentRequest);
+        return;
+      case 'close-connection':
+        this.clearRetryTimer();
+        this.closeStream();
+        return;
+      case 'schedule-reconnect':
+        this.scheduleReconnect(effect.attempt);
+        return;
+      default:
+        return;
+    }
+  }
+
+  private openStream(): void {
+    try {
+      const socket = JSONStream(CONTAINER_LOGS_STREAM_NAME);
+      if (this.finished) {
+        socket.close();
+        return;
+      }
+      this.socket = socket;
+      socket.onopen = () => this.dispatch({ type: 'connection-opened' });
+      socket.onmessage = this.handleMessage;
+      socket.onerror = this.handleLoss;
+      socket.onclose = this.handleLoss;
+    } catch (error) {
+      const reason =
+        error instanceof Error ? error.message : 'Failed to open container logs stream';
+      this.dispatch({ type: 'connection-lost', reason });
+    }
   }
 
   private closeStream(): void {
@@ -162,126 +467,51 @@ class ContainerLogsStreamConnection {
     this.socket = null;
   }
 
-  private openStream(): void {
-    try {
-      const socket = JSONStream(CONTAINER_LOGS_STREAM_NAME);
-      if (this.closed) {
-        socket.close();
-        return;
-      }
-      this.socket = socket;
-      socket.onopen = this.handleOpen;
-      socket.onmessage = this.handleLogEvent;
-      socket.onerror = this.handleError;
-      socket.onclose = this.handleError;
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to open container logs stream';
-      this.manager.handleStreamError(this.scope, message);
-      if (this.completion !== null) {
-        this.completion?.reject(new Error(message));
-        this.stop();
-        return;
-      }
-      this.scheduleReconnect();
-    }
-  }
-
-  private scheduleReconnect(): void {
-    if (this.closed || this.completion !== null || this.retryTimer !== null) {
-      return;
-    }
-    this.closeStream();
-    const delay = streamReconnectDelay(this.attempt);
-    this.attempt += 1;
-    this.manager.handleStreamError(
-      this.scope,
-      `Container logs stream disconnected. Reconnecting in ${Math.round(delay / 1000)}s`
-    );
+  private scheduleReconnect(attempt: number): void {
+    this.clearRetryTimer();
     this.retryTimer = window.setTimeout(() => {
       this.retryTimer = null;
-      this.openStream();
-    }, delay);
+      if (!this.finished) {
+        this.openStream();
+      }
+    }, streamReconnectDelay(attempt));
   }
 
-  private readonly handleOpen = () => {
-    if (this.closed || !this.socket) {
-      return;
-    }
-    const streamParams = getContainerLogsStreamScopeParams(this.scope);
-    this.socket.send({
-      scope: this.scope,
-      container: streamParams?.container ?? '',
-      selectedFilters: streamParams?.selectedFilters ?? [],
-      matchNone: streamParams?.matchNone ?? false,
-    });
-    this.attempt = 0;
-    this.manager.markConnected(this.scope);
-  };
-
-  private readonly handleLogEvent = (event: MessageEvent<unknown>) => {
-    if (this.closed) {
-      return;
-    }
-
-    try {
-      const parsed = event.data;
-      if (!isValidContainerLogsStreamPayload(parsed)) {
-        const error = new Error('Invalid container logs stream payload structure');
-        this.handleProtocolError('Invalid container logs stream payload', error);
-        return;
-      }
-      if (parsed.scope !== this.scope || parsed.domain !== DOMAIN_NAME) {
-        return;
-      }
-      this.manager.applyPayload(this.scope, parsed, this.completion ? 'manual' : 'stream');
-
-      if (this.completion !== null && parsed.reset) {
-        this.stop();
-      }
-    } catch (error) {
-      this.handleProtocolError('Failed to process container logs stream payload', error);
-    }
-  };
-
-  private handleProtocolError(message: string, error?: unknown): void {
-    this.manager.handleStreamError(this.scope, message, error);
-    if (this.completion !== null) {
-      this.completion?.reject(new Error(message));
-      this.stop();
+  private clearRetryTimer(): void {
+    if (this.retryTimer !== null) {
+      window.clearTimeout(this.retryTimer);
+      this.retryTimer = null;
     }
   }
 
-  private readonly handleError = () => {
-    if (this.closed) {
+  private readonly handleMessage = (event: MessageEvent<unknown>) => {
+    const frame = parseContainerLogsFrame(event.data);
+    if (!frame) {
+      this.dispatch({ type: 'connection-lost', reason: 'Invalid container logs stream payload' });
       return;
     }
-
-    const message = 'Container logs stream connection lost';
-    this.manager.handleStreamError(this.scope, message);
-
-    if (this.completion !== null) {
-      this.completion?.reject(new Error(message));
-      this.stop();
+    if (frame.scope !== this.scope || frame.domain !== DOMAIN_NAME) {
       return;
     }
+    this.dispatch({ type: 'frame-received', frame });
+  };
 
-    this.scheduleReconnect();
+  private readonly handleLoss = () => {
+    this.dispatch({ type: 'connection-lost', reason: 'Container logs stream connection lost' });
   };
 }
 
 export class ContainerLogsStreamManager {
   private readonly connections = new Map<string, ContainerLogsStreamConnection>();
-  private readonly buffers = new Map<string, ProjectedLogBuffer>();
-  private readonly backendWarnings = new Map<string, string[]>();
-  /** Monotonically increasing counter for stable entry keys across buffer truncations. */
+  private readonly buffers = new Map<string, LogBuffer>();
+  /** Monotonically increasing counter for stable entry keys across evictions. */
   private seqCounter = 0;
   private readonly errorNotifier = new StreamErrorNotifier();
   private readonly visibility = new StreamVisibilityController<string>({
     captureActive: () => Array.from(this.connections.keys()),
     suspendActive: () => {
-      for (const [scope, connection] of this.connections) {
-        connection.stop();
+      for (const scope of this.connections.keys()) {
+        this.connections.get(scope)?.stop();
         this.markIdle(scope);
       }
     },
@@ -292,103 +522,59 @@ export class ContainerLogsStreamManager {
     },
   });
   /**
-   * Maximum entries kept per scope before the front of the buffer is
-   * trimmed. User-configurable via Object Panel Logs Tab Settings;
-   * initialized from the preference cache and kept in sync via the
-   * 'settings:obj-panel-logs-buffer-size' event. Starts at the hardcoded default so
-   * the manager has a sane value even before appPreferences hydrates (the
-   * singleton is constructed at module-load time, before the backend
-   * settings round-trip completes).
+   * Maximum entries kept per scope, from the Object Panel Logs buffer setting.
+   * Starts at the default so the module-level singleton has a sane value
+   * before preferences hydrate.
    */
-  private maxBufferSize = OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE;
+  private maxEntries = OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE;
+  private readonly maxBytes: number;
+  private readonly fixedMaxEntries: number | undefined;
 
-  constructor() {
+  constructor(limits: ManagerLimits = {}) {
+    this.maxBytes = limits.maxBytes ?? CONTAINER_LOGS_MAX_BYTES;
+    this.fixedMaxEntries = limits.maxEntries;
     eventBus.on('kubeconfig:changing', () => {
       this.stopAll(true);
     });
     eventBus.on('app:visibility-hidden', this.visibility.suspend);
     eventBus.on('app:visibility-visible', this.visibility.resume);
-    // Pull the initial value from the preference cache. If hydration
-    // hasn't run yet this returns the default; the subsequent hydration
-    // will emit 'settings:obj-panel-logs-buffer-size' only if the stored value
-    // differs, so we converge either way.
-    this.maxBufferSize = getObjPanelLogsBufferMaxSize();
-    eventBus.on('settings:obj-panel-logs-buffer-size', (size) => this.setMaxBufferSize(size));
+    this.maxEntries = limits.maxEntries ?? getObjPanelLogsBufferMaxSize();
+    eventBus.on('settings:obj-panel-logs-buffer-size', (size) => this.setMaxEntries(size));
   }
 
-  /**
-   * Apply a new maximum buffer size. If the new size is smaller than an
-   * existing buffer, trim the front immediately and push the truncated
-   * snapshot to the scoped store so all open LogViewers re-render with
-   * the smaller view. Larger values take effect passively — existing
-   * buffers grow naturally as new entries arrive.
-   */
-  private setMaxBufferSize(size: number): void {
-    if (size === this.maxBufferSize) {
+  /** Shrinking the buffer trims existing buffers at once; growing applies as entries arrive. */
+  private setMaxEntries(size: number): void {
+    if (this.fixedMaxEntries !== undefined || size === this.maxEntries) {
       return;
     }
-    this.maxBufferSize = size;
+    this.maxEntries = size;
     for (const [scope, buffer] of this.buffers) {
-      const { entries } = buffer;
-      if (entries.length <= size) {
-        continue;
-      }
-      const trimmed = entries.slice(entries.length - size);
-      this.buffers.set(scope, { entries: trimmed, total: buffer.total, truncated: true });
-      const stats = this.buildStats(scope, trimmed.length);
-      setScopedDomainState(DOMAIN_NAME, scope, (previous) => {
-        const previousPayload = previous.data ?? DEFAULT_PAYLOAD;
-        return {
-          ...previous,
-          data: {
-            ...previousPayload,
-            entries: trimmed,
-          },
-          stats,
-          scope,
-        };
-      });
+      buffer.evict(this.maxEntries, this.maxBytes);
+      buffer.limitBasis(this.maxEntries);
+      this.commit(scope, {});
     }
   }
 
-  async startStream(scope: string): Promise<void> {
+  startStream(scope: string): void {
     this.stop(scope, false);
-    this.setLoading(scope, false);
-    const connection = new ContainerLogsStreamConnection(scope, 'stream', this);
+    const connection = new ContainerLogsStreamConnection(scope, this);
     this.connections.set(scope, connection);
-    await connection.start();
+    connection.start();
   }
 
   stop(scope: string, reset = false): void {
     const connection = this.connections.get(scope);
     if (connection) {
-      connection.stop();
       this.connections.delete(scope);
+      connection.stop();
     }
     if (reset) {
       this.buffers.delete(scope);
-      this.backendWarnings.delete(scope);
       resetScopedDomainState(DOMAIN_NAME, scope);
-    } else {
-      this.markIdle(scope);
+      this.errorNotifier.clear(DOMAIN_NAME, scope);
+      return;
     }
-  }
-
-  async refreshOnce(scope: string): Promise<void> {
-    this.stop(scope, false);
-    this.setLoading(scope, true);
-    const connection = new ContainerLogsStreamConnection(scope, 'manual', this);
-    this.connections.set(scope, connection);
-    try {
-      await connection.start();
-      if (this.connections.get(scope) === connection) {
-        this.markManualCompleted(scope);
-      }
-    } finally {
-      if (this.connections.get(scope) === connection) {
-        this.connections.delete(scope);
-      }
-    }
+    this.markIdle(scope);
   }
 
   stopAll(reset = false): void {
@@ -397,260 +583,199 @@ export class ContainerLogsStreamManager {
       for (const scope of this.buffers.keys()) {
         scopes.add(scope);
       }
-      for (const scope of this.backendWarnings.keys()) {
-        scopes.add(scope);
-      }
     }
     for (const scope of scopes) {
       this.stop(scope, reset);
     }
   }
 
-  private createIncomingEntries(payload: StreamEventPayload): ContainerLogsEntry[] {
-    return (payload.entries ?? []).map((entry) => ({
-      timestamp: entry.timestamp ?? '',
-      pod: entry.pod ?? '',
-      container: entry.container ?? '',
-      line: entry.line ?? '',
-      isInit: Boolean(entry.isInit),
-      isEphemeral: Boolean(entry.isEphemeral),
-      _seq: ++this.seqCounter,
-    }));
+  /**
+   * The first client frame: scope, source selection and buffer limits, plus
+   * where the buffer ends for each container when the stream can resume there.
+   */
+  buildRequest(scope: string): ContainerLogsStreamRequest {
+    const params = getContainerLogsStreamScopeParams(scope);
+    const request: ContainerLogsStreamRequest = {
+      scope,
+      selectedFilters: params?.selectedFilters ?? [],
+      matchNone: params?.matchNone ?? false,
+      maxEntries: this.maxEntries,
+      maxBytes: this.maxBytes,
+    };
+    const resume = this.buffers.get(scope)?.resumePoints(request) ?? [];
+    return resume.length > 0 ? { ...request, resume } : request;
   }
 
-  private mergeBufferEntries(
-    existing: ContainerLogsEntry[],
-    incoming: ContainerLogsEntry[],
-    reset?: boolean
-  ): ContainerLogsEntry[] {
-    if (!reset) {
-      return existing.concat(incoming);
-    }
-    if (incoming.length === 0 || this.hasSameEntryContent(existing, incoming)) {
-      return existing;
-    }
-    return incoming;
-  }
-
-  private hasSameEntryContent(
-    existing: ContainerLogsEntry[],
-    incoming: ContainerLogsEntry[]
-  ): boolean {
-    return (
-      existing.length === incoming.length &&
-      existing.every((entry, index) => {
-        const candidate = incoming[index];
-        return (
-          entry.timestamp === candidate.timestamp &&
-          entry.pod === candidate.pod &&
-          entry.container === candidate.container &&
-          entry.line === candidate.line &&
-          entry.isInit === candidate.isInit &&
-          Boolean(entry.isEphemeral) === Boolean(candidate.isEphemeral)
-        );
-      })
-    );
-  }
-
-  private resolveBufferTotal(
-    previousTotal: number,
-    incomingCount: number,
-    shouldReplace: boolean,
-    mode: StreamMode
-  ): number {
-    if (!shouldReplace) {
-      return previousTotal + incomingCount;
-    }
-    return mode === 'stream' ? Math.max(previousTotal, incomingCount) : incomingCount;
-  }
-
-  private projectBuffer(
+  /** Applies a protocol transition's data effects and projects the result. */
+  applyTransition(
+    connection: ContainerLogsStreamConnection,
     scope: string,
-    payload: StreamEventPayload,
-    mode: StreamMode
-  ): ProjectedLogBuffer {
-    const previousBuffer = this.buffers.get(scope);
-    const existing = previousBuffer?.entries ?? [];
-    const incoming = this.createIncomingEntries(payload);
-    const shouldReplace = Boolean(payload.reset && incoming.length > 0);
-    const previousTotal = previousBuffer?.total ?? existing.length;
-    let total = this.resolveBufferTotal(previousTotal, incoming.length, shouldReplace, mode);
-    let entries = this.mergeBufferEntries(existing, incoming, payload.reset);
-    let truncated = previousBuffer?.truncated ?? false;
-    if (entries.length > this.maxBufferSize) {
-      truncated = true;
-      entries = entries.slice(entries.length - this.maxBufferSize);
-    }
-    total = Math.max(total, entries.length);
-    return { entries, total, truncated };
-  }
-
-  private updateBackendWarnings(scope: string, payload: StreamEventPayload): void {
-    if (payload.warnings !== undefined) {
-      if (payload.warnings && payload.warnings.length > 0) {
-        this.backendWarnings.set(scope, payload.warnings);
-        return;
-      }
-      this.backendWarnings.delete(scope);
+    phase: ContainerLogsStreamPhase,
+    effects: ContainerLogsProtocolEffect[]
+  ): void {
+    // A replaced or stopped connection no longer writes this scope's state.
+    if (this.connections.get(scope) !== connection) {
       return;
     }
-    if (payload.reset) {
-      this.backendWarnings.delete(scope);
+    const buffer = this.bufferFor(scope);
+    let snapshotApplied = false;
+    for (const effect of effects) {
+      snapshotApplied = this.applyDataEffect(buffer, effect, connection.request) || snapshotApplied;
+    }
+    buffer.evict(this.maxEntries, this.maxBytes);
+    if (phase.status !== 'stopping') {
+      this.commit(scope, { phase, snapshotApplied });
+    }
+    this.notifyPhase(scope, phase);
+  }
+
+  private applyDataEffect(
+    buffer: LogBuffer,
+    effect: ContainerLogsProtocolEffect,
+    request: ContainerLogsStreamRequest | null
+  ): boolean {
+    const nextSeq = () => ++this.seqCounter;
+    switch (effect.type) {
+      case 'apply-snapshot':
+        if (effect.resumed) {
+          buffer.continueWith(effect.entries, effect.trimmed, nextSeq);
+          buffer.dropPods(effect.removedPods);
+        } else {
+          buffer.replace(effect.entries, effect.trimmed, nextSeq);
+        }
+        buffer.setBasis(request);
+        // The buffer may have shrunk while the snapshot was on its way.
+        buffer.limitBasis(this.maxEntries);
+        buffer.warnings = effect.warnings;
+        buffer.issues = effect.issues;
+        return true;
+      case 'append-entries':
+        buffer.insert(effect.entries, nextSeq);
+        return false;
+      case 'remove-pods':
+        buffer.dropPods(effect.pods);
+        return false;
+      case 'replace-warnings':
+        buffer.warnings = effect.warnings;
+        return false;
+      case 'replace-issues':
+        buffer.issues = effect.issues;
+        return false;
+      default:
+        return false;
     }
   }
 
-  private commitPayload(
-    scope: string,
-    payload: StreamEventPayload,
-    mode: StreamMode,
-    buffer: ProjectedLogBuffer,
-    generatedAt: number,
-    errorMessage: string | null
-  ): void {
-    const payloadSequence = payload.sequence ?? (payload.reset ? 1 : 0);
-    const isManual = mode === 'manual';
-    const stats = this.buildStats(scope, buffer.entries.length);
-    setScopedDomainState(DOMAIN_NAME, scope, (previous) => {
-      const previousPayload = previous.data ?? DEFAULT_PAYLOAD;
-      const resetCount = payload.reset
-        ? previousPayload.resetCount + 1
-        : previousPayload.resetCount;
-      // Client sequence remains monotonic when server connection counters reset.
-      const nextSequence = Math.max(payloadSequence, previousPayload.sequence ?? 0);
-      const nextPayload: ContainerLogsSnapshotPayload = {
-        entries: buffer.entries,
-        sequence: nextSequence,
-        generatedAt,
-        resetCount,
-        error: errorMessage,
-      };
+  /** Publishes a phase change before any frame arrives (a connection starting). */
+  commitPhase(scope: string, phase: ContainerLogsStreamPhase): void {
+    this.bufferFor(scope);
+    this.commit(scope, { phase });
+  }
 
+  private bufferFor(scope: string): LogBuffer {
+    let buffer = this.buffers.get(scope);
+    if (!buffer) {
+      buffer = new LogBuffer();
+      this.buffers.set(scope, buffer);
+    }
+    return buffer;
+  }
+
+  private commit(
+    scope: string,
+    update: { phase?: ContainerLogsStreamPhase; snapshotApplied?: boolean }
+  ): void {
+    const buffer = this.buffers.get(scope);
+    if (!buffer) {
+      return;
+    }
+    const now = Date.now();
+    setScopedDomainState(DOMAIN_NAME, scope, (previous) => {
+      const previousPayload = previous.data;
+      const phase = update.phase ?? previousPayload?.phase ?? { status: 'connecting' };
+      const error = phase.status === 'failed' ? phase.reason : null;
+      const data: ContainerLogsSnapshotPayload = {
+        entries: buffer.entries,
+        sequence: (previousPayload?.sequence ?? 0) + (update.snapshotApplied ? 1 : 0),
+        generatedAt: now,
+        resetCount: (previousPayload?.resetCount ?? 0) + (update.snapshotApplied ? 1 : 0),
+        error,
+        phase,
+        warnings: buffer.warnings,
+        issues: buffer.issues,
+        truncation: buffer.truncation(),
+        pods: buffer.pods,
+      };
       return {
         ...previous,
-        status: errorMessage ? 'error' : 'ready',
-        data: nextPayload,
-        stats,
-        error: errorMessage,
-        lastUpdated: generatedAt,
-        lastAutoRefresh: isManual ? previous.lastAutoRefresh : generatedAt,
-        lastManualRefresh: isManual ? generatedAt : previous.lastManualRefresh,
-        isManual,
+        status: statusFor(phase, buffer.entries.length > 0),
+        data,
+        stats: buildStats(buffer),
+        error,
+        lastUpdated: now,
+        lastAutoRefresh: now,
+        isManual: false,
         scope,
       };
     });
   }
 
-  applyPayload(scope: string, payload: StreamEventPayload, mode: StreamMode): void {
-    // Buffer replacement policy:
-    // - reset=true with non-empty incoming → preserve the existing entry
-    //   identities when its content is unchanged; otherwise replace the
-    //   buffered entries. For live streams, this frame is a fresh tail
-    //   snapshot after a reconnect/remount, not an authoritative total, so
-    //   preserve the larger running total instead of letting the count shrink
-    //   back to the tail size.
-    // - reset=true with empty incoming → PRESERVE. The server emits the
-    //   reset flag as part of its "new connection" handshake on every
-    //   stream open, before it has had a chance to tail any lines. Wiping
-    //   the buffer here used to make auto-refresh toggle and
-    //   cluster-switch remount flash the initial-load spinner even when
-    //   the client already had plenty of log history cached.
-    // - reset=false → append, unchanged.
-    const buffer = this.projectBuffer(scope, payload, mode);
-    this.buffers.set(scope, buffer);
-    const generatedAt = payload.generatedAt || Date.now();
-    const errorMessage = resolvePermissionDeniedMessage(
-      payload.error ?? null,
-      payload.errorDetails
-    );
-    this.updateBackendWarnings(scope, payload);
-    this.commitPayload(scope, payload, mode, buffer, generatedAt, errorMessage);
-    if (errorMessage) {
-      this.notifyStreamError(scope, errorMessage);
-    } else {
-      this.clearStreamError(scope);
-    }
-  }
-
-  handleStreamError(scope: string, message: string, error?: unknown): void {
-    setScopedDomainState(DOMAIN_NAME, scope, (previous) => ({
-      ...previous,
-      status: 'error',
-      error: message,
-    }));
-    this.notifyStreamError(scope, message, error);
-  }
-
-  markIdle(scope: string): void {
-    setScopedDomainState(DOMAIN_NAME, scope, (previous) => ({
-      ...previous,
-      status: previous.status === 'ready' ? 'ready' : 'idle',
-      stats: this.buildStats(scope, this.buffers.get(scope)?.entries.length ?? 0),
-      scope,
-    }));
-    this.clearStreamError(scope);
-  }
-
-  markConnected(scope: string): void {
-    setScopedDomainState(DOMAIN_NAME, scope, (previous) => ({
-      ...previous,
-      status: previous.data ? 'updating' : 'loading',
-      error: null,
-      stats: this.buildStats(scope, this.buffers.get(scope)?.entries.length ?? 0),
-      scope,
-    }));
-    this.clearStreamError(scope);
-  }
-
-  markManualCompleted(scope: string): void {
-    setScopedDomainState(DOMAIN_NAME, scope, (previous) => ({
-      ...previous,
-      scope,
-    }));
-    this.clearStreamError(scope);
-  }
-
-  private setLoading(scope: string, isManual: boolean): void {
-    setScopedDomainState(DOMAIN_NAME, scope, (previous) => ({
-      ...previous,
-      status: previous.data ? 'updating' : 'loading',
-      error: null,
-      isManual,
-      stats: this.buildStats(scope, this.buffers.get(scope)?.entries.length ?? 0),
-      scope,
-    }));
-    this.clearStreamError(scope);
-  }
-
-  private notifyStreamError(scope: string, message: string, error?: unknown): void {
-    this.errorNotifier.notify({
-      source: 'refresh-log-stream',
-      domain: DOMAIN_NAME,
-      scope: scope || 'global',
-      message,
-      ...(error !== undefined ? { error } : {}),
+  private markIdle(scope: string): void {
+    const buffer = this.buffers.get(scope);
+    setScopedDomainState(DOMAIN_NAME, scope, (previous) => {
+      const failed = previous.data?.phase.status === 'failed';
+      return {
+        ...previous,
+        status: previous.status === 'ready' || failed ? previous.status : 'idle',
+        data:
+          previous.data && !failed
+            ? { ...previous.data, phase: { status: 'stopping' } }
+            : previous.data,
+        stats: buffer ? buildStats(buffer) : previous.stats,
+        scope,
+      };
     });
   }
 
-  private clearStreamError(scope: string): void {
-    this.errorNotifier.clear(DOMAIN_NAME, scope);
-  }
-
-  private buildStats(scope: string, count: number): SnapshotStats | null {
-    const buffer = this.buffers.get(scope);
-    const total = buffer?.total ?? count;
-    const truncated = buffer?.truncated ?? false;
-    const warnings = [...(this.backendWarnings.get(scope) ?? [])];
-    if (truncated && total > count) {
-      warnings.push(`Showing most recent ${count} of ${total} log entries`);
+  private notifyPhase(scope: string, phase: ContainerLogsStreamPhase): void {
+    if (phase.status === 'failed') {
+      this.errorNotifier.notify({
+        source: 'refresh-log-stream',
+        domain: DOMAIN_NAME,
+        scope: scope || 'global',
+        message: phase.reason,
+      });
+      return;
     }
-    return {
-      itemCount: count,
-      buildDurationMs: 0,
-      totalItems: truncated || total !== count ? total : undefined,
-      truncated,
-      warnings: warnings.length > 0 ? warnings : undefined,
-    };
+    if (phase.status === 'live') {
+      this.errorNotifier.clear(DOMAIN_NAME, scope);
+    }
   }
 }
+
+const statusFor = (
+  phase: ContainerLogsStreamPhase,
+  hasEntries: boolean
+): 'loading' | 'updating' | 'ready' | 'error' => {
+  switch (phase.status) {
+    case 'live':
+    case 'stopping':
+      return 'ready';
+    case 'failed':
+      return 'error';
+    default:
+      return hasEntries ? 'updating' : 'loading';
+  }
+};
+
+const buildStats = (buffer: LogBuffer): SnapshotStats => {
+  const truncation = buffer.truncation();
+  return {
+    itemCount: buffer.entries.length,
+    buildDurationMs: 0,
+    totalItems: truncation?.received,
+    truncated: truncation !== null,
+  };
+};
 
 export const containerLogsStreamManager = new ContainerLogsStreamManager();

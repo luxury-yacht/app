@@ -1458,6 +1458,8 @@ describe('appPreferences', () => {
   it('defaults Object Panel Logs Tab buffer size when the backend payload is missing the field', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
+    // A new install keeps 5,000 lines per Logs tab.
+    expect(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE).toBe(5000);
     expect(getObjPanelLogsBufferMaxSize()).toBe(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
   });
 

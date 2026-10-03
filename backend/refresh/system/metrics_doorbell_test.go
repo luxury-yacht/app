@@ -85,3 +85,14 @@ func TestMetricsSignalObserverBroadcastsMetricDoorbells(t *testing.T) {
 	require.Equal(t, resourcestream.SourceMetric, namespaceMetricsFailure.Source)
 	require.Equal(t, "failure:1", namespaceMetricsFailure.Version)
 }
+
+func requireSystemDoorbellUpdate(t *testing.T, sub *resourcestream.Subscription) resourcestream.Update {
+	t.Helper()
+	select {
+	case update := <-sub.Updates:
+		return update
+	case <-time.After(time.Second):
+		t.Fatal("expected doorbell update")
+		return resourcestream.Update{}
+	}
+}
