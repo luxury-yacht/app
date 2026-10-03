@@ -352,7 +352,11 @@ func registerSubsystemDomains(ctx context.Context, factory *informer.Factory, ga
 		{Group: metricsAPIGroup, Resource: "nodes", Verb: "list"},
 		{Group: metricsAPIGroup, Resource: "pods", Verb: "list"},
 	})
-	_ = factory.PrimePermissions(ctx, preflight)
+	// The preflight budget bounds only priming. Reviews it leaves uncached are
+	// retried by the gate checks, so only caller cancellation aborts the build.
+	preflightCtx, cancel := context.WithTimeout(ctx, config.PermissionPreflightTimeout)
+	_ = factory.PrimePermissions(preflightCtx, preflight)
+	cancel()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -401,8 +405,6 @@ func wireMetricsObserver(metricsPoller refresh.MetricsPoller, resourceManager *r
 
 // NewSubsystemWithServices returns a fully wired refresh subsystem.
 func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, error) {
-	ctx, cancel := context.WithTimeout(ctx, config.PermissionPreflightTimeout)
-	defer cancel()
 	registry := domain.New()
 	runtimePerms, informerFactory, err := newInformerInfrastructure(ctx, cfg)
 	if err != nil {

@@ -119,6 +119,9 @@ func (a *WorkspaceCoordinator) selectionForOpenCluster(clusterID string) string 
 }
 
 func (a *WorkspaceCoordinator) ReleasePanelCluster(referenceID string) error {
+	if a == nil {
+		return fmt.Errorf("app is nil")
+	}
 	finish := a.beginSelectionMutationDrain()
 	defer finish()
 	if a.releaseOwnedPanelCluster(referenceID) {

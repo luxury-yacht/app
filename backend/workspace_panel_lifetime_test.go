@@ -81,3 +81,12 @@ func TestClosingLastAppAndPanelKeepsRestartSelections(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{selection}, reloaded.Preferences.SelectedKubeconfigs())
 }
+
+// Native panel-window callbacks may outlive the coordinator; releasing through a
+// nil coordinator must report an error like retention does, not panic.
+func TestPanelClusterReleaseRejectsNilCoordinator(t *testing.T) {
+	var coordinator *WorkspaceCoordinator
+	require.NotPanics(t, func() {
+		require.Error(t, coordinator.ReleasePanelCluster("panel-1"))
+	})
+}

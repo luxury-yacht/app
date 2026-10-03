@@ -3,17 +3,21 @@ package permissions
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/stretchr/testify/require"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/rest"
 	cgotesting "k8s.io/client-go/testing"
 )
 
@@ -460,4 +464,33 @@ func TestCheckerScopedFanOutUsesSuccessesDespitePartialErrors(t *testing.T) {
 	decision, err := checker.Can(context.Background(), "", "pods", "list")
 	require.NoError(t, err)
 	require.True(t, decision.Allowed, "one namespace erroring must not mask another namespace's allow")
+}
+
+// hungAccessReviewTransport is an API server that accepts access reviews but
+// never answers them; only the request context ends the call.
+type hungAccessReviewTransport struct{}
+
+func (hungAccessReviewTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	<-req.Context().Done()
+	return nil, req.Context().Err()
+}
+
+// Long caller budgets (the two-minute selection operation, the preflight
+// window) must not let one hung review consume them: every review stays
+// bounded by PermissionCheckTimeout while the caller's context remains live.
+func TestCheckerBoundsReviewInsideLongerCallerDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client, err := kubernetes.NewForConfig(&rest.Config{Host: "https://hung.invalid", Transport: hungAccessReviewTransport{}, QPS: -1})
+		require.NoError(t, err)
+		checker := NewChecker(client, "cluster-a", time.Minute)
+		callerCtx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+		defer cancel()
+
+		start := time.Now()
+		_, err = checker.Can(callerCtx, "", "pods", "list")
+
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.Equal(t, config.PermissionCheckTimeout, time.Since(start))
+		require.NoError(t, callerCtx.Err(), "the caller's own budget must remain available")
+	})
 }

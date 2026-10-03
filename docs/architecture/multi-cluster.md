@@ -151,10 +151,11 @@ uses the short workspace-ownership lock and does not wait for connection work.
 The ownership check and reference update are atomic: a reference cannot bypass
 retirement after the last owner has been removed. Final-reference release stays
 serialized with runtime teardown. Both paths participate in the shutdown drain.
-Runtime work retains the serialized mutation and shutdown drain; admitted tabs report subsequent connection failure
-through lifecycle state and selection diagnostics. Client construction records
-failure for its own cluster and collects batch errors without cancelling healthy
-siblings. Open, close, release, pruning, and startup use that same failure owner.
+Runtime work retains the serialized mutation and shutdown drain; admitted tabs
+report subsequent connection failure through lifecycle state and selection
+diagnostics. Client construction records failure for its own cluster and
+collects batch errors without cancelling healthy siblings. Open, close, release,
+pruning, and startup use that same failure owner.
 Refresh publication proceeds with installed clients even when another build
 fails; when none remain, it retires the previous refresh runtime. Failed tabs
 stay admitted and unavailable; their recovery guidance is to close and reopen

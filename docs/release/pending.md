@@ -14,3 +14,4 @@
 - Involved objects of events recorded without an API version now open through a lookup by UID in the Events tables, an object's Events tab, and the Overview's Recent Events; the app no longer guesses the API version from the object's kind.
 - Events that expired while the app was closed, or while a cluster was idle, no longer linger in the Events tables after reconnecting.
 - The Diagnostics Catalog and Events cards no longer turn red when a different table's live updates fail to start.
+- Resource panels for a healthy cluster no longer wait for an unreachable cluster in another tab to finish connecting, and the unreachable cluster's tab can be closed while it is still connecting.

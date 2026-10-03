@@ -88,11 +88,15 @@ payloads. `frontend/src/core/refresh/types.generated.ts` is generated; register
 Go DTOs and run `go generate ./backend` instead of editing it.
 
 Subsystem construction carries its caller's operation context through informer
-permission checks, preflight, and domain registration. The entire permission
-startup phase is bounded by `PermissionPreflightTimeout`; cancellation or expiry
-aborts construction instead of publishing permission-denied fallback domains.
-The construction context is separate from the process refresh lifetime, so
-finishing a selection operation does not stop a published subsystem.
+permission checks, preflight, and domain registration. `PermissionPrimeTimeout`
+and `PermissionPreflightTimeout` bound only their priming batches; registration
+checks any review a batch left uncached. Every review is bounded by
+`PermissionCheckTimeout`, even inside a longer caller deadline. Construction has
+no total deadline, so a slow but reachable cluster still connects. Only caller
+cancellation aborts it, and a cancelled build does not publish
+permission-denied fallback domains. The construction context is separate from
+the process refresh lifetime, so finishing a selection operation does not stop
+a published subsystem.
 
 Handler and stream replacement publish the new aggregate generation before
 stopping the old producers. Global teardown reverses that visibility first:
