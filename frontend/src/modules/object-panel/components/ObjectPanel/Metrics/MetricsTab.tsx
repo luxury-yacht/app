@@ -69,7 +69,7 @@ const podCountLabel = (podCount?: number, readyPodCount?: number): string | null
 function MetricsToolbar({ pods }: Readonly<{ pods: string | null }>) {
   return (
     <div className="metrics-tab__toolbar" data-live-badge>
-      <StatusChip variant="info">Live - data will clear when this tab is closed</StatusChip>
+      <StatusChip variant="info">Live chart data clears when this object is closed</StatusChip>
       {pods ? <span className="metrics-tab__hint">{pods}</span> : null}
     </div>
   );

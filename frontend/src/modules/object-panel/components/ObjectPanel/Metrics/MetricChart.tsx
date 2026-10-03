@@ -115,7 +115,11 @@ export function MetricChart({ graph, times, syncId }: Readonly<MetricChartProps>
           stroke="var(--color-text-secondary)"
           tick={{ fill: 'var(--color-text-secondary)' }}
         />
-        <Tooltip content={<MetricTooltip unit={graph.unit} withSeconds={withSeconds} />} />
+        <Tooltip
+          // Appear at the cursor instead of sliding in from the chart's corner.
+          isAnimationActive={false}
+          content={<MetricTooltip unit={graph.unit} withSeconds={withSeconds} />}
+        />
         {graph.series.map((series) => {
           const style = SERIES_STYLES[series.role];
           const shared = {
