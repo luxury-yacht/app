@@ -40,7 +40,6 @@ func TestBufferKeepsOneSamplePerCollection(t *testing.T) {
 	series := buffer.Since(podKey, 0)
 	require.Equal(t, []int64{1_000, 6_000}, times(series))
 	require.Equal(t, 10.0, *series.Samples[0].CPU.Usage)
-	require.Equal(t, int64(1_000), series.StartedAt)
 }
 
 func TestBufferKeepsAFixedNumberOfSamplesPerPanel(t *testing.T) {
@@ -53,7 +52,6 @@ func TestBufferKeepsAFixedNumberOfSamplesPerPanel(t *testing.T) {
 	require.Equal(t, []int64{3_000, 4_000, 5_000}, times(series))
 	// The oldest kept sample: a reader drops anything older it still holds.
 	require.Equal(t, int64(3_000), series.FirstT)
-	require.Equal(t, int64(1_000), series.StartedAt)
 }
 
 func TestBufferStoresReservationsOnlyWhenTheyChange(t *testing.T) {

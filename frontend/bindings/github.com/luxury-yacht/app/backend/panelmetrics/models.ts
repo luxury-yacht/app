@@ -18,10 +18,8 @@ export interface Sample {
  */
 export interface Series {
     /**
-     * StartedAt is the panel's first sample; FirstT is the oldest one still kept, so a reader
-     * drops anything older that it holds.
+     * FirstT is the oldest sample still kept, so a reader drops anything older that it holds.
      */
-    "startedAt": number;
     "firstT": number;
     "samples": Sample[] | null;
 }

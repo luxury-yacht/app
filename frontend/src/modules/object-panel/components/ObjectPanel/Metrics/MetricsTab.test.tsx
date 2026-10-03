@@ -15,7 +15,7 @@ const hoisted = vi.hoisted(() => ({
   autoRefresh: true,
   utilization: null as UtilizationData | null,
   utilizationCalls: [] as Array<{ objectData: unknown; detail: unknown; enabled: boolean }>,
-  series: { startedAt: null as number | null, samples: [] as LiveMetricSample[] },
+  series: { samples: [] as LiveMetricSample[] },
   seriesCalls: [] as Array<{ clusterId: string; panelId: string; enabled: boolean }>,
   live: null as ResourceMetricsResult | null,
 }));
@@ -46,8 +46,8 @@ vi.mock('./useUtilizationData', () => ({
 }));
 
 vi.mock('./ResourceUtilization', () => ({
-  default: ({ data, type }: { data: ResourceMetricValues; type: string }) => (
-    <div data-testid={`resource-bar-${type}`} data-usage={data.usage} />
+  default: ({ data, type, peak }: { data: ResourceMetricValues; type: string; peak?: number }) => (
+    <div data-testid={`resource-bar-${type}`} data-usage={data.usage} data-peak={peak} />
   ),
 }));
 
@@ -72,7 +72,6 @@ const T0 = 1_800_000_000_000;
 // What the backend buffer returns for one metrics-server collection.
 const collected = (t: number, cpu: ResourceMetricValues) => {
   hoisted.series = {
-    startedAt: hoisted.series.startedAt ?? t,
     samples: [...hoisted.series.samples, { t, cpu, memory: { usage: 64 * 1024 * 1024 } }],
   };
 };
@@ -93,7 +92,7 @@ describe('MetricsTab', () => {
     hoisted.autoRefresh = true;
     hoisted.utilization = null;
     hoisted.utilizationCalls = [];
-    hoisted.series = { startedAt: null, samples: [] };
+    hoisted.series = { samples: [] };
     hoisted.seriesCalls = [];
     hoisted.live = noMetrics;
   });
@@ -113,11 +112,6 @@ describe('MetricsTab', () => {
 
   const livePoints = () =>
     container.querySelector('[data-testid="chart-cpu"]')?.getAttribute('data-points') ?? null;
-  const tile = (graph: string) =>
-    requireValue(
-      container.querySelector<HTMLElement>(`[data-metric-tile="${graph}"]`),
-      `expected the ${graph} tile`
-    );
   const section = (graph: string) =>
     requireValue(
       container.querySelector<HTMLElement>(`[data-metric-section="${graph}"]`),
@@ -138,8 +132,6 @@ describe('MetricsTab', () => {
       enabled: true,
     });
     expect(livePoints()).toBe('2');
-    expect(tile('cpu').textContent).toContain('30m');
-    expect(tile('cpu').textContent).toContain('500m');
     expect(container.querySelector('[data-testid="chart-memory"]')).not.toBeNull();
     expect(container.querySelector('[data-live-badge]')).not.toBeNull();
     // There is no stored history, so no range to pick and no source to configure.
@@ -165,17 +157,7 @@ describe('MetricsTab', () => {
     expect(container.querySelector('[data-live-paused]')).not.toBeNull();
   });
 
-  it("shows a node's allocatable as its ceiling, not the sum of its pods' limits", async () => {
-    collected(T0, { usage: 250, request: 900, limit: 3_000, allocatable: 1_900, capacity: 2_000 });
-    await render({
-      objectData: { clusterId: pod.clusterId, group: '', version: 'v1', kind: 'Node', name: 'n1' },
-    });
-
-    expect(tile('cpu').textContent).toContain('1900m');
-    expect(tile('cpu').textContent).not.toContain('3000m');
-  });
-
-  it("groups each resource's bar and chart in its own section, after the tiles", async () => {
+  it("groups each resource's bar and chart in its own section, after the toolbar", async () => {
     hoisted.utilization = { cpu: { usage: 250, request: 500 }, memory: { usage: 64 } };
     collected(T0, { usage: 10 });
     await render();
@@ -189,8 +171,21 @@ describe('MetricsTab', () => {
     const memory = section('memory');
     expect(memory.querySelector('[data-testid="resource-bar-memory"]')).not.toBeNull();
     expect(memory.querySelector('[data-testid="chart-memory"]')).not.toBeNull();
-    expect(follows(tile('memory'), cpu)).toBe(true);
+    const toolbar = requireValue(container.querySelector('[data-live-badge]'), 'expected toolbar');
+    expect(follows(toolbar, cpu)).toBe(true);
     expect(follows(cpu, memory)).toBe(true);
+  });
+
+  it("gives each resource bar its chart's peak usage", async () => {
+    hoisted.utilization = { cpu: { usage: 20 }, memory: { usage: 64 } };
+    collected(T0, { usage: 10 });
+    collected(T0 + 5_000, { usage: 30 });
+    collected(T0 + 10_000, { usage: 20 });
+    await render();
+
+    expect(
+      section('cpu').querySelector('[data-testid="resource-bar-cpu"]')?.getAttribute('data-peak')
+    ).toBe('30');
   });
 
   it('keeps the resource bars while auto-refresh is paused', async () => {

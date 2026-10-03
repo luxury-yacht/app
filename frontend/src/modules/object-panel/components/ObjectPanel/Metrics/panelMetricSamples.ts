@@ -15,12 +15,10 @@ import { reportOperationalError } from '@/utils/errorHandler';
 import type { LiveMetricSample } from './metricsTabModel';
 
 export interface PanelMetricSeries {
-  /** When the panel started collecting, or null before its first sample. */
-  startedAt: number | null;
   samples: readonly LiveMetricSample[];
 }
 
-const NO_SERIES: PanelMetricSeries = { startedAt: null, samples: [] };
+const NO_SERIES: PanelMetricSeries = { samples: [] };
 
 // Per panel: this window just appended, so a shown Metrics tab reads the new sample.
 const appendListeners = new Map<string, Set<() => void>>();
@@ -81,10 +79,7 @@ const mergeSeries = (
 ): PanelMetricSeries => {
   const fresh = (response.samples ?? []).map(sampleFromWire);
   const kept = afterT === 0 ? [] : current.samples.filter((sample) => sample.t >= response.firstT);
-  return {
-    startedAt: response.startedAt > 0 ? response.startedAt : null,
-    samples: [...kept, ...fresh],
-  };
+  return { samples: [...kept, ...fresh] };
 };
 
 interface SeriesReader {

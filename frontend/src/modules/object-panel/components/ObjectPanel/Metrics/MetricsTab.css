@@ -1,4 +1,4 @@
-/* Metrics tab: toolbar, CPU/memory tiles, then a CPU and a Memory section (bar + chart). */
+/* Metrics tab: toolbar, then a CPU and a Memory section (bar + chart). */
 
 .metrics-tab {
   display: flex;
@@ -14,41 +14,9 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-md);
-}
-
-.metrics-tab__toolbar-start {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-}
-
-.metrics-tab__tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: var(--spacing-md);
-}
-
-.metrics-tile {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-bg-secondary);
-}
-
-.metrics-tile__label,
-.metrics-tile__detail {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-}
-
-.metrics-tile__value {
-  color: var(--color-text);
-  font-size: var(--font-size-title);
-  font-weight: var(--font-weight-bold);
-  white-space: nowrap;
+  /* The sections' outer margin, so the chip and pod count line up with their edges. */
+  margin-top: 0.4rem;
+  margin-left: var(--spacing-sm);
 }
 
 /* The chart needs a sized box (ResponsiveContainer); a fixed height also keeps the sections

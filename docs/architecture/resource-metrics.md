@@ -59,9 +59,9 @@ they are not the ongoing live source.
 
 ## Object panel Metrics tab
 
-The **Metrics** tab shows live tiles, then a CPU and a Memory section, each with
-the resource's utilization bar and its chart of the samples the panel has
-collected since it opened. The Details tab has no utilization section and holds
+The **Metrics** tab shows a CPU and a Memory section, each with the resource's
+utilization bar and its chart of the samples the panel has collected since it
+opened. The Details tab has no utilization section and holds
 no metrics lease.
 
 - **Availability.** `useObjectPanelTabs` offers the tab when
@@ -71,8 +71,11 @@ no metrics lease.
   and Helm releases get no tab. Do not gate it with a separate kind list.
 - **Utilization bars.** Each bar shows the current usage against requests,
   limits, and a Node's allocatable, using the object's detail values until the
-  first live sample arrives. The bars stay while auto-refresh is paused, and
-  their lease is held only while the panel is visible.
+  first live sample arrives. The legend lists use, peak (the highest charted
+  usage, once samples exist), request, and limit, plus allocatable and
+  overcommitted for a Node; an unset value reads `-`. The bars stay while
+  auto-refresh is paused, and their lease is held only while the panel is
+  visible.
 - **Collection.** `usePanelMetricsCollector`, mounted in `ObjectPanel`, leases
   the object's metrics scope for the panel's whole life, whatever tab it shows
   and even behind another panel of its dock group. It sends one sample each
@@ -99,12 +102,10 @@ no metrics lease.
   authentication, cluster scoping, query languages, and settings turned the tab
   into a multi-platform dashboard. On-disk storage would also have to follow
   the pure-Go rule in [data-layer.md](data-layer.md).
-- **Values.** Usage is a solid line; requests, limits, and a Node's allocatable
-  are dashed, drawn only when the object reports them. The tile ceiling is a
-  Node's allocatable, as on the Details tab, because a Node's limit is only the
-  sum of its pods' limits; other objects show their limit. Workload values are
-  sums over pods that have not finished. A missing sample is a gap, never a
-  zero.
+- **Values.** Usage is a solid line with the area under it filled; requests,
+  limits, and a Node's allocatable are dashed, drawn only when the object
+  reports them. Workload values are sums over pods that have not finished. A
+  missing sample is a gap, never a zero.
 - **Charts.** Recharts draws the charts with theme-token colors. `react-is` must
   match the installed React version, as the Recharts README requires.
 

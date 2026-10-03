@@ -36,11 +36,9 @@ type Sample struct {
 
 // Series is what a reader gets: the samples newer than its last one.
 type Series struct {
-	// StartedAt is the panel's first sample; FirstT is the oldest one still kept, so a reader
-	// drops anything older that it holds.
-	StartedAt int64    `json:"startedAt"`
-	FirstT    int64    `json:"firstT"`
-	Samples   []Sample `json:"samples"`
+	// FirstT is the oldest sample still kept, so a reader drops anything older that it holds.
+	FirstT  int64    `json:"firstT"`
+	Samples []Sample `json:"samples"`
 }
 
 // Key identifies a panel across windows.
@@ -66,9 +64,8 @@ type change struct {
 }
 
 type series struct {
-	startedAt int64
-	samples   []usage
-	changes   []change
+	samples []usage
+	changes []change
 }
 
 type Buffer struct {
@@ -94,7 +91,7 @@ func (b *Buffer) Append(key Key, sample Sample, isOpen func() bool) error {
 	}
 	current := b.series[key]
 	if current == nil {
-		current = &series{startedAt: sample.T}
+		current = &series{}
 		b.series[key] = current
 	}
 	current.add(sample, b.maxSamples)
@@ -109,7 +106,7 @@ func (b *Buffer) Since(key Key, afterT int64) Series {
 	if current == nil || len(current.samples) == 0 {
 		return Series{Samples: []Sample{}}
 	}
-	out := Series{StartedAt: current.startedAt, FirstT: current.samples[0].t, Samples: []Sample{}}
+	out := Series{FirstT: current.samples[0].t, Samples: []Sample{}}
 	next := 0
 	for _, kept := range current.samples {
 		for next < len(current.changes) && current.changes[next].t <= kept.t {

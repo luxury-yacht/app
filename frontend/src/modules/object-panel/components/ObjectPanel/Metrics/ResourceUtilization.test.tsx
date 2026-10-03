@@ -55,6 +55,19 @@ describe('ResourceUtilization', () => {
     memory.cleanup();
   });
 
+  it('shows the peak usage next to the current usage when the chart has one', async () => {
+    const withPeak = await render(<Utilization data={{ usage: 250 }} type="cpu" peak={300} />);
+    const peakItem = Array.from(withPeak.container.querySelectorAll('.metric-legend__item')).find(
+      (item) => item.textContent?.includes('peak')
+    );
+    expect(peakItem?.textContent).toContain('300m');
+    withPeak.cleanup();
+
+    const withoutPeak = await render(<Utilization data={{ usage: 250 }} type="cpu" />);
+    expect(withoutPeak.container.textContent).not.toContain('peak');
+    withoutPeak.cleanup();
+  });
+
   it('shows allocatable row for node metrics mode', async () => {
     const { container, cleanup } = await render(
       <Utilization data={{ usage: 2000, allocatable: 4000 }} type="cpu" mode="nodeMetrics" />

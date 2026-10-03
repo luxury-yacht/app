@@ -25,15 +25,18 @@ interface ResourceUtilizationProps {
   data: ResourceMetricValues;
   type: 'cpu' | 'memory';
   mode?: 'podMetrics' | 'nodeMetrics' | 'nodePods';
+  /** The highest usage among the samples charted with this bar, when there are any. */
+  peak?: number;
 }
 
 const formatPercentSuffix = (numerator: number, denominator: number): string =>
   numerator > 0 && denominator > 0 ? ` (${Math.round((numerator / denominator) * 100)}%)` : '';
 
 const LEGEND_TOOLTIPS: Record<string, React.ReactNode> = {
+  peak: 'Highest usage among the samples charted below.',
   allocatable: 'Total available to pods on this node.',
-  requests: 'Sum of the resource Requests from all containers.',
-  limits: 'Sum of the resource Limits from all containers.',
+  request: 'Sum of the resource Requests from all containers.',
+  limit: 'Sum of the resource Limits from all containers.',
   overcommitted: (
     <>
       Above 100% means the configured Limits exceeds the Allocatable resources.
@@ -121,7 +124,7 @@ const UsedLegendItem = ({ data, type, metrics, isNodeMode }: LegendProps) => {
           ) : null}
         </>
       }
-      label="used"
+      label="use"
     />
   );
 };
@@ -130,7 +133,7 @@ const UsedLegendItem = ({ data, type, metrics, isNodeMode }: LegendProps) => {
 // denominator. An unset request or limit arrives as absent (zero is omitted on the wire).
 const ReservationLegendItems = ({ data, type, metrics, isNodeMode }: LegendProps) => {
   const formatReservation = (value: number | undefined): string =>
-    value ? formatResourceValue(value, type) : 'not set';
+    value ? formatResourceValue(value, type) : '-';
   const requestSuffix = isNodeMode ? formatPercentSuffix(metrics.request, metrics.allocatable) : '';
   const limitSuffix = isNodeMode ? formatPercentSuffix(metrics.limit, metrics.allocatable) : '';
   return (
@@ -142,7 +145,7 @@ const ReservationLegendItems = ({ data, type, metrics, isNodeMode }: LegendProps
             {requestSuffix}
           </>
         }
-        label="requests"
+        label="request"
       />
       <LegendItem
         count={
@@ -155,7 +158,7 @@ const ReservationLegendItems = ({ data, type, metrics, isNodeMode }: LegendProps
             )}
           </>
         }
-        label="limits"
+        label="limit"
       />
     </>
   );
@@ -183,6 +186,7 @@ const ResourceUtilization: React.FC<ResourceUtilizationProps> = ({
   data,
   type,
   mode = 'podMetrics',
+  peak,
 }) => {
   const metrics = calculateResourceMetrics(data);
   const isNodeMode = mode === 'nodeMetrics';
@@ -216,6 +220,9 @@ const ResourceUtilization: React.FC<ResourceUtilizationProps> = ({
       <div className="metric-legend">
         <div className="metric-legend__items">
           <UsedLegendItem {...legend} />
+          {peak === undefined ? null : (
+            <LegendItem count={formatResourceValue(peak, type)} label="peak" />
+          )}
           {isNodeMode && !!data.allocatable && (
             <LegendItem count={formatResourceValue(data.allocatable, type)} label="allocatable" />
           )}

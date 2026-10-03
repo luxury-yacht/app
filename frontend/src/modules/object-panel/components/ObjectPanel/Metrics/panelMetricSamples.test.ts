@@ -60,7 +60,6 @@ describe('panel metric samples', () => {
     backend.appended = [];
     backend.reads = [];
     backend.series = {
-      startedAt: 1_000,
       firstT: 1_000,
       samples: [wire(1_000, 10), wire(6_000, 20)],
     };
@@ -73,10 +72,8 @@ describe('panel metric samples', () => {
   it('shows the series the panel collected, then reads only what this window appends', async () => {
     await render(true);
     expect(shownTimes()).toEqual([1_000, 6_000]);
-    expect(latest.current?.startedAt).toBe(1_000);
 
     backend.series = {
-      startedAt: 1_000,
       firstT: 1_000,
       samples: [wire(1_000, 10), wire(6_000, 20), wire(11_000, 30)],
     };
@@ -105,7 +102,6 @@ describe('panel metric samples', () => {
   it('drops samples the backend no longer keeps', async () => {
     await render(true);
     backend.series = {
-      startedAt: 1_000,
       firstT: 6_000,
       samples: [wire(6_000, 20), wire(11_000, 30)],
     };

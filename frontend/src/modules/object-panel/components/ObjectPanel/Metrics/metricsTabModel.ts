@@ -1,8 +1,8 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/metricsTabModel.ts
  *
- * Pure helpers for the Metrics tab: the graphs it draws from live metrics-server samples, tile
- * statistics, chart rows, time ticks, and value formatting. Values are CPU millicores and memory
+ * Pure helpers for the Metrics tab: the graphs it draws from live metrics-server samples, the peak
+ * usage, chart rows, time ticks, and value formatting. Values are CPU millicores and memory
  * bytes; a null value is a gap, never a zero.
  */
 
@@ -107,16 +107,6 @@ type Values = readonly (number | null)[];
 const seriesValues = (graph: MetricGraph, role: MetricSeriesRole): Values =>
   graph.series.find((series) => series.role === role)?.values ?? [];
 
-const lastValue = (values: Values): number | undefined => {
-  for (let index = values.length - 1; index >= 0; index--) {
-    const value = values[index];
-    if (value !== null) {
-      return value;
-    }
-  }
-  return undefined;
-};
-
 const peakValue = (values: Values): number | undefined => {
   let peak: number | undefined;
   for (const value of values) {
@@ -127,25 +117,9 @@ const peakValue = (values: Values): number | undefined => {
   return peak;
 };
 
-export interface MetricGraphStats {
-  current?: number;
-  peak?: number;
-  request?: number;
-  limit?: number;
-  allocatable?: number;
-}
-
-/** Tile numbers: the newest usage sample, the peak so far, and the newest reservations and allocatable. */
-export const graphStats = (graph: MetricGraph): MetricGraphStats => {
-  const usage = seriesValues(graph, 'usage');
-  return {
-    current: lastValue(usage),
-    peak: peakValue(usage),
-    request: lastValue(seriesValues(graph, 'request')),
-    limit: lastValue(seriesValues(graph, 'limit')),
-    allocatable: lastValue(seriesValues(graph, 'allocatable')),
-  };
-};
+/** The highest usage among the graph's samples, skipping gaps; undefined before any usage. */
+export const peakUsage = (graph: MetricGraph): number | undefined =>
+  peakValue(seriesValues(graph, 'usage'));
 
 export type MetricChartRow = { t: number } & Partial<Record<MetricSeriesRole, number | null>>;
 
@@ -186,7 +160,7 @@ export const timeTicks = (startMs: number, endMs: number): number[] => {
   return ticks;
 };
 
-/** Full display value for tiles and tooltips, using the app's resource formatting. */
+/** Full display value for chart tooltips, using the app's resource formatting. */
 export const formatMetricValue = (unit: MetricUnit, value: number | undefined): string =>
   formatResourceValue(value, unit === 'millicores' ? 'cpu' : 'memory');
 
@@ -224,7 +198,3 @@ export const formatTooltipTime = (timeMs: number, withSeconds: boolean): string 
     minute: '2-digit',
     second: withSeconds ? '2-digit' : undefined,
   });
-
-/** Clock time for the live badge, e.g. "since 14:02". */
-export const formatClockTime = (timeMs: number): string =>
-  new Date(timeMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

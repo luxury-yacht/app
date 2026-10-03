@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { graphStats, liveTimeline, type MetricGraph, timeTicks } from './metricsTabModel';
+import { liveTimeline, type MetricGraph, peakUsage, timeTicks } from './metricsTabModel';
 
 const MINUTE = 60_000;
 
@@ -15,26 +15,13 @@ const cpuGraph = (series: MetricGraph['series']): MetricGraph => ({
   series,
 });
 
-describe('graphStats', () => {
-  it('reads current as the newest sample, not a trailing gap, and the peak so far', () => {
-    const stats = graphStats(
-      cpuGraph([
-        { role: 'usage', values: [null, 4, 9, 3, null] },
-        { role: 'request', values: [50, 50, 50, 50, 50] },
-        { role: 'limit', values: [100, 200, null, null, null] },
-      ])
-    );
-    expect(stats).toEqual({ current: 3, peak: 9, request: 50, limit: 200 });
+describe('peakUsage', () => {
+  it('reads the highest usage so far, skipping gaps', () => {
+    expect(peakUsage(cpuGraph([{ role: 'usage', values: [null, 4, 9, 3, null] }]))).toBe(9);
   });
 
-  it('leaves values the metrics API never reported undefined rather than zero', () => {
-    const stats = graphStats(cpuGraph([{ role: 'usage', values: [null, null] }]));
-    expect(stats).toEqual({
-      current: undefined,
-      peak: undefined,
-      request: undefined,
-      limit: undefined,
-    });
+  it('has no peak before any usage, rather than zero', () => {
+    expect(peakUsage(cpuGraph([{ role: 'usage', values: [null, null] }]))).toBeUndefined();
   });
 });
 
@@ -88,7 +75,7 @@ describe('liveTimeline', () => {
     expect(memory.series).toEqual([{ role: 'usage', values: [2_048, null] }]);
   });
 
-  it("charts a node's allocatable as its ceiling", () => {
+  it("charts a node's allocatable as a line next to its requests and limits", () => {
     const timeline = liveTimeline([
       { t: 1_000, cpu: { usage: 250, request: 900, limit: 3_000, allocatable: 1_900 } },
       { t: 6_000, cpu: { usage: 300, request: 900, limit: 3_000, allocatable: 1_900 } },
@@ -101,7 +88,6 @@ describe('liveTimeline', () => {
       'limit',
       'allocatable',
     ]);
-    expect(graphStats(cpu)).toMatchObject({ current: 300, limit: 3_000, allocatable: 1_900 });
   });
 
   it('breaks the lines where collection paused instead of joining across the gap', () => {
@@ -118,7 +104,7 @@ describe('liveTimeline', () => {
     // A point with no values between the two runs; Recharts leaves a gap at nulls.
     expect(timeline.times).toEqual([1_000, 6_000, 11_000, 35_500, 60_000, 65_000]);
     expect(cpu.series[0].values).toEqual([10, 20, 15, null, 30, 25]);
-    expect(graphStats(cpu)).toMatchObject({ current: 25, peak: 30 });
+    expect(peakUsage(cpu)).toBe(30);
   });
 
   it('keeps an evenly collected series joined', () => {
