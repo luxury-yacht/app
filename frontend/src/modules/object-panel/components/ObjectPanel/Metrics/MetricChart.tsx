@@ -20,6 +20,7 @@ import {
   YAxis,
 } from 'recharts';
 import {
+  chartDomain,
   chartRows,
   formatAxisValue,
   formatMetricValue,
@@ -86,8 +87,8 @@ function MetricTooltip({
 }
 
 export function MetricChart({ graph, times, syncId }: Readonly<MetricChartProps>) {
-  const startMs = times[0] ?? 0;
-  const endMs = times[times.length - 1] ?? 0;
+  // At least five minutes wide, ending at the newest sample.
+  const [startMs, endMs] = useMemo(() => chartDomain(times), [times]);
   const rows = useMemo(() => chartRows(times, graph), [times, graph]);
   const ticks = useMemo(() => timeTicks(startMs, endMs), [startMs, endMs]);
   const withSeconds = times.length < 2 || times[1] - times[0] < MINUTE;

@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  chartDomain,
   formatTickTime,
   liveTimeline,
   type MetricGraph,
@@ -75,6 +76,19 @@ describe('timeTicks', () => {
   it('labels the first sample when no round step falls between two close samples', () => {
     const startMs = Date.UTC(2026, 9, 1, 14, 2, 1);
     expect(timeTicks(startMs, startMs + 1_000)).toEqual([startMs]);
+  });
+});
+
+describe('chartDomain', () => {
+  const last = Date.UTC(2026, 9, 1, 14, 2, 2);
+
+  it('keeps a short series at the right edge of a five-minute window', () => {
+    expect(chartDomain([last - 10_000, last - 5_000, last])).toEqual([last - 5 * MINUTE, last]);
+    expect(chartDomain([last])).toEqual([last - 5 * MINUTE, last]);
+  });
+
+  it('spans the samples once there are more than five minutes of them', () => {
+    expect(chartDomain([last - 12 * MINUTE, last])).toEqual([last - 12 * MINUTE, last]);
   });
 });
 

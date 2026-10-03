@@ -133,6 +133,19 @@ export const chartRows = (times: readonly number[], graph: MetricGraph): MetricC
     return row;
   });
 
+// The chart shows at least this much time, so a few samples do not stretch across it.
+const MIN_WINDOW_MS = 5 * MINUTE;
+
+/**
+ * The chart's time range: the samples' span, or a five-minute window ending at the newest sample
+ * while there is less than that, so new samples enter at the right edge.
+ */
+export const chartDomain = (times: readonly number[]): [number, number] => {
+  const first = times[0] ?? 0;
+  const last = times[times.length - 1] ?? 0;
+  return [Math.min(first, last - MIN_WINDOW_MS), last];
+};
+
 // Seconds first, so the axis has times as soon as the second sample arrives (5-second polls).
 const TICK_INTERVALS_MS = [
   5_000,
