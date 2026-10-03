@@ -101,7 +101,7 @@ describe('useObjectPanelTabs', () => {
   it('returns workload tabs excluding manifest/values for non-Helm resources', async () => {
     const { availableTabs } = await renderHook();
     const labels = availableTabs.map((tab) => tab.label);
-    expect(labels).toEqual(['Details', 'Map', 'Pods', 'Logs', 'Events', 'Metrics', 'YAML']);
+    expect(labels).toEqual(['Details', 'Map', 'Pods', 'Logs', 'Metrics', 'Events', 'YAML']);
   });
 
   it.each([
@@ -154,8 +154,8 @@ describe('useObjectPanelTabs', () => {
       'Details',
       'Map',
       'Logs',
-      'Events',
       'Metrics',
+      'Events',
       'YAML',
     ]);
   });
@@ -176,8 +176,8 @@ describe('useObjectPanelTabs', () => {
       'Details',
       'Map',
       'Logs',
-      'Events',
       'Metrics',
+      'Events',
       'YAML',
       'Shell',
     ]);
@@ -315,8 +315,8 @@ describe('useObjectPanelTabs', () => {
       'Details',
       'Map',
       'Pods',
-      'Events',
       'Metrics',
+      'Events',
       'YAML',
     ]);
   });
@@ -337,8 +337,8 @@ describe('useObjectPanelTabs', () => {
       'Map',
       'Pods',
       'Logs',
-      'Events',
       'Metrics',
+      'Events',
       'YAML',
     ]);
   });
@@ -358,7 +358,7 @@ describe('useObjectPanelTabs', () => {
     expect(hoistedShortcuts.useShortcut).not.toHaveBeenCalled();
 
     // Tab shortcuts registered via useShortcuts (plural), keyed by position.
-    // Deployment tabs: Details, Map, Pods, Logs, Events, Metrics, YAML → keys 1–7.
+    // Deployment tabs: Details, Map, Pods, Logs, Metrics, Events, YAML → keys 1–7.
     const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
       | Array<{ key: string; description: string }>
       | undefined;
@@ -368,8 +368,8 @@ describe('useObjectPanelTabs', () => {
       'Switch to Map tab',
       'Switch to Pods tab',
       'Switch to Logs tab',
-      'Switch to Events tab',
       'Switch to Metrics tab',
+      'Switch to Events tab',
       'Switch to YAML tab',
     ]);
   });
@@ -394,7 +394,7 @@ describe('useObjectPanelTabs', () => {
   });
 
   it('omits shortcuts for hidden tabs instead of disabling them', async () => {
-    // Without logs capability: Details, Map, Pods, Events, Metrics, YAML → 6 shortcuts, no gap.
+    // Without logs capability: Details, Map, Pods, Metrics, Events, YAML → 6 shortcuts, no gap.
     const { availableTabs } = await renderHook({
       capabilities: { ...baseCapabilities, hasObjPanelLogs: false },
     });
@@ -403,8 +403,8 @@ describe('useObjectPanelTabs', () => {
       'Details',
       'Map',
       'Pods',
-      'Events',
       'Metrics',
+      'Events',
       'YAML',
     ]);
 
