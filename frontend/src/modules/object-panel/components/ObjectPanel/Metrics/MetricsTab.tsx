@@ -130,9 +130,11 @@ function MetricsContent({
   panelId,
 }: Readonly<Omit<MetricsTabProps, 'objectData'> & { objectData: ObjectPanelRef }>) {
   const autoRefresh = useAutoRefreshEnabled();
-  const utilization = useUtilizationData({ objectData, detail, enabled: isPanelOpen });
+  const utilization = useUtilizationData({ objectData, detail });
   const series = usePanelMetricSeries(objectData.clusterId, panelId, isPanelOpen);
-  const live = useResourceMetrics(objectData, isPanelOpen);
+  // The panel's collector (ObjectPanel) holds the metrics lease and refetches on signals; the tab
+  // only reads, so a doorbell is not fetched once per reader.
+  const live = useResourceMetrics(objectData, false);
   const error =
     (live.status === 'error' ? live.error : null) ?? live.metrics?.freshness?.lastError ?? null;
   const timeline = useMemo(() => liveTimeline(series.samples), [series.samples]);

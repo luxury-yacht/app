@@ -1,8 +1,8 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/useUtilizationData.ts
  *
- * Derives the Metrics tab's utilization bars from live metric domains,
- * falling back to the active detail DTO while those domains load.
+ * Derives the Metrics tab's utilization bars from live metric domains (kept fresh by the panel's
+ * metrics collector), falling back to the active detail DTO while those domains load.
  */
 
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
@@ -64,8 +64,6 @@ interface UtilizationDetail {
 interface UseUtilizationDataParams {
   objectData: ObjectPanelRef | null | undefined;
   detail: unknown;
-  /** Holds the metrics lease; while false the last values stay. */
-  enabled: boolean;
 }
 
 type StandardMetricSource = Pick<
@@ -208,8 +206,9 @@ function deriveDetailUtilizationData(
 }
 
 export function useUtilizationData(params: UseUtilizationDataParams): UtilizationData | null {
-  const { objectData, detail, enabled } = params;
-  const liveMetrics = useResourceMetrics(objectData, enabled);
+  const { objectData, detail } = params;
+  // Reads the store only: the panel's collector holds the metrics lease and signal refetch.
+  const liveMetrics = useResourceMetrics(objectData, false);
   const detailMetrics = useMemo(
     () => deriveDetailUtilizationData(objectData, detail),
     [objectData, detail]

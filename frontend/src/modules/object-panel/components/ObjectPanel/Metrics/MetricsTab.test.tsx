@@ -14,7 +14,8 @@ import type { UtilizationData } from './useUtilizationData';
 const hoisted = vi.hoisted(() => ({
   autoRefresh: true,
   utilization: null as UtilizationData | null,
-  utilizationCalls: [] as Array<{ objectData: unknown; detail: unknown; enabled: boolean }>,
+  utilizationCalls: [] as Array<{ objectData: unknown; detail: unknown }>,
+  liveEnabled: [] as Array<boolean | undefined>,
   series: { samples: [] as LiveMetricSample[] },
   seriesCalls: [] as Array<{ clusterId: string; panelId: string; enabled: boolean }>,
   live: null as ResourceMetricsResult | null,
@@ -29,7 +30,10 @@ vi.mock('./panelMetricSamples', () => ({
 }));
 
 vi.mock('@/core/resource-metrics', () => ({
-  useResourceMetrics: () => hoisted.live,
+  useResourceMetrics: (_objectData: unknown, enabled?: boolean) => {
+    hoisted.liveEnabled.push(enabled);
+    return hoisted.live;
+  },
 }));
 
 vi.mock('@/core/refresh/hooks/useRefreshPreferences', () => ({
@@ -39,7 +43,7 @@ vi.mock('@/core/refresh/hooks/useRefreshPreferences', () => ({
 // Its own tests cover the live and detail sources; the tab's contract is what it feeds the hook
 // and where the section goes.
 vi.mock('./useUtilizationData', () => ({
-  useUtilizationData: (params: { objectData: unknown; detail: unknown; enabled: boolean }) => {
+  useUtilizationData: (params: { objectData: unknown; detail: unknown }) => {
     hoisted.utilizationCalls.push(params);
     return hoisted.utilization;
   },
@@ -92,6 +96,7 @@ describe('MetricsTab', () => {
     hoisted.autoRefresh = true;
     hoisted.utilization = null;
     hoisted.utilizationCalls = [];
+    hoisted.liveEnabled = [];
     hoisted.series = { samples: [] };
     hoisted.seriesCalls = [];
     hoisted.live = noMetrics;
@@ -225,17 +230,22 @@ describe('MetricsTab', () => {
     expect(toolbar().textContent).not.toContain('pods');
   });
 
-  it('feeds utilization the panel object and its details, leasing metrics only while the panel is open', async () => {
+  it('feeds utilization the panel object and its details', async () => {
     const detail = { cpuUsage: '100m' };
     await render({ detail });
 
     const lastCall = () => hoisted.utilizationCalls[hoisted.utilizationCalls.length - 1];
-    expect(lastCall()).toMatchObject({ objectData: pod, detail, enabled: true });
+    expect(lastCall()).toMatchObject({ objectData: pod, detail });
     // No utilization yet (no detail values, no live sample): no empty sections.
     expect(container.querySelector('[data-metric-section]')).toBeNull();
+  });
 
-    await render({ detail, isPanelOpen: false });
-    expect(lastCall()).toMatchObject({ enabled: false });
+  it("reads live metrics without leasing them: the panel's collector owns the lease", async () => {
+    await render();
+    await render({ isPanelOpen: false });
+
+    expect(hoisted.liveEnabled.length).toBeGreaterThan(0);
+    expect(hoisted.liveEnabled.every((enabled) => enabled === false)).toBe(true);
   });
 
   it('reports when live metrics are unavailable', async () => {

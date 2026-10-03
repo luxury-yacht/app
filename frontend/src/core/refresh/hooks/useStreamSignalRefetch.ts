@@ -100,9 +100,81 @@ export function useQueryStreamSignal(
   return identity;
 }
 
+// Several consumers often watch one scope (a panel's collector, its tab, its utilization bars;
+// two panels in one namespace). One fetch updates the store they all read, so each doorbell is
+// requested once: the first watcher to see it requests, the rest skip. Entries live only while a
+// watcher is mounted — doorbell clock values can repeat after a backend reset.
+interface SharedScopeSignal {
+  watchers: number;
+  requestedKey: string | null;
+}
+
+const sharedScopeSignals = new Map<string, SharedScopeSignal>();
+
+const sharedSignalKey = (domain: RefreshDomain, scope: string): string => `${domain}\u0000${scope}`;
+
+const watchScopes = (domain: RefreshDomain, scopes: readonly string[]): (() => void) => {
+  const keys = scopes.filter(Boolean).map((scope) => sharedSignalKey(domain, scope));
+  keys.forEach((key) => {
+    const entry = sharedScopeSignals.get(key) ?? { watchers: 0, requestedKey: null };
+    entry.watchers += 1;
+    sharedScopeSignals.set(key, entry);
+  });
+  return () => {
+    keys.forEach((key) => {
+      const entry = sharedScopeSignals.get(key);
+      if (entry && --entry.watchers <= 0) {
+        sharedScopeSignals.delete(key);
+      }
+    });
+  };
+};
+
+// True when this watcher should request the doorbell: no other watcher already has.
+const claimSignal = (domain: RefreshDomain, scope: string, signalKey: string): boolean => {
+  const entry = sharedScopeSignals.get(sharedSignalKey(domain, scope));
+  if (entry?.requestedKey === signalKey) {
+    return false;
+  }
+  if (entry) {
+    entry.requestedKey = signalKey;
+  }
+  return true;
+};
+
+// Whether this watcher should refetch the scope for its current doorbell. `dispatched` holds the
+// doorbell key this watcher last acted on, per scope.
+const shouldRequestSignal = (
+  dispatched: Map<string, string>,
+  domain: RefreshDomain,
+  scope: string,
+  state: StreamSignalState | undefined
+): boolean => {
+  // signalVersions is written ONLY by the stream manager's doorbell path;
+  // payload applies never touch it. Keying on it (never sourceVersions,
+  // which the backend back-fills with an object clock on EVERY snapshot)
+  // is what makes a fetch response invisible here — no echo refetch.
+  const { key, present: hasSignal } = readDoorbellSignal(domain, state ?? {});
+  if (!dispatched.has(scope)) {
+    // First observation: whatever doorbell values exist arrived before
+    // this consumer mounted — the data it reads was fetched at or after
+    // them, fresh by construction.
+    dispatched.set(scope, key);
+    return false;
+  }
+  if (dispatched.get(scope) === key || !hasSignal) {
+    return false;
+  }
+  dispatched.set(scope, key);
+  return claimSignal(domain, scope, key);
+};
+
 export const useStreamSignalRefetch = (domain: RefreshDomain, scopes: readonly string[]): void => {
   const domainStates = useRefreshScopedDomainStates(domain);
   const dispatchedKeysRef = useRef<Map<string, string>>(new Map());
+
+  // Registered before the dispatch effect below runs, so the first doorbell finds the entry.
+  useEffect(() => watchScopes(domain, scopes), [domain, scopes]);
 
   useEffect(() => {
     const clocks = doorbellSourceClocks(domain);
@@ -110,28 +182,13 @@ export const useStreamSignalRefetch = (domain: RefreshDomain, scopes: readonly s
       return;
     }
     scopes.forEach((scope) => {
-      if (!scope) {
-        return;
+      if (
+        scope &&
+        shouldRequestSignal(dispatchedKeysRef.current, domain, scope, domainStates[scope])
+      ) {
+        // The runtime retains failed reconciliation and owns its retry backoff.
+        void requestRefreshDomain({ domain, scope, reason: 'stream-signal' });
       }
-      // signalVersions is written ONLY by the stream manager's doorbell path;
-      // payload applies never touch it. Keying on it (never sourceVersions,
-      // which the backend back-fills with an object clock on EVERY snapshot)
-      // is what makes a fetch response invisible here — no echo refetch.
-      const { key, present: hasSignal } = readDoorbellSignal(domain, domainStates[scope] ?? {});
-      const dispatched = dispatchedKeysRef.current;
-      if (!dispatched.has(scope)) {
-        // First observation: whatever doorbell values exist arrived before
-        // this consumer mounted — the data it reads was fetched at or after
-        // them, fresh by construction.
-        dispatched.set(scope, key);
-        return;
-      }
-      if (dispatched.get(scope) === key || !hasSignal) {
-        return;
-      }
-      dispatched.set(scope, key);
-      // The runtime retains failed reconciliation and owns its retry backoff.
-      void requestRefreshDomain({ domain, scope, reason: 'stream-signal' });
     });
   }, [domainStates, scopes, domain]);
 };

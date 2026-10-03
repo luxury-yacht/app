@@ -15,6 +15,7 @@ import {
   FindCatalogObjectMatch,
   GetContainerLogsScopeContainers,
   GetObjectYAMLByGVK,
+  GetPanelMetricSeries,
   GetPodContainers,
   GetRevisionHistory,
   GetTargetPorts,
@@ -68,6 +69,10 @@ export const readTargetPortsForRef = (target: ObjectReadTarget) =>
     target.version,
     target.name
   );
+
+/** An object panel's metric samples newer than afterT (unix ms), from the backend panel buffer. */
+export const readPanelMetricSeries = (clusterId: string, panelId: string, afterT: number) =>
+  GetPanelMetricSeries(clusterId, panelId, afterT);
 
 export const readPodContainers = (clusterId: string, namespace: string, resourceName: string) =>
   GetPodContainers(clusterId, namespace, resourceName);

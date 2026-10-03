@@ -18,6 +18,31 @@ const backend = vi.hoisted(() => ({
   series: null as panelmetrics.Series | null,
 }));
 
+const broker = vi.hoisted(() => ({
+  requests: [] as Array<{ resource: string; reason: string; scope?: string }>,
+  blocked: false,
+}));
+
+// The real broker gates reads on auto-refresh; this one records each request and runs it.
+vi.mock('@/core/data-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/core/data-access')>()),
+  requestData: async (request: {
+    resource: string;
+    reason: string;
+    scope?: string;
+    read: () => Promise<unknown>;
+  }) => {
+    broker.requests.push({
+      resource: request.resource,
+      reason: request.reason,
+      scope: request.scope,
+    });
+    return broker.blocked
+      ? { status: 'blocked', blockedReason: 'auto-refresh-disabled' }
+      : { status: 'executed', data: await request.read() };
+  },
+}));
+
 vi.mock('@/core/backend-api', () => ({
   AppendPanelMetricSample: async (clusterId: string, panelId: string, sample: unknown) => {
     backend.appended.push({ clusterId, panelId, sample });
@@ -59,6 +84,8 @@ describe('panel metric samples', () => {
     root = ReactDOM.createRoot(container);
     backend.appended = [];
     backend.reads = [];
+    broker.requests = [];
+    broker.blocked = false;
     backend.series = {
       firstT: 1_000,
       samples: [wire(1_000, 10), wire(6_000, 20)],
@@ -90,6 +117,35 @@ describe('panel metric samples', () => {
     ]);
     expect(backend.reads).toEqual([0, 6_000]);
     expect(shownTimes()).toEqual([1_000, 6_000, 11_000]);
+  });
+
+  it('reads through the data broker: retained history when shown, then what this window appends', async () => {
+    await render(true);
+    await act(async () => {
+      await appendPanelMetricSample(CLUSTER, PANEL_ID, { t: 11_000, cpu: { usage: 30 } });
+    });
+
+    expect(broker.requests.map(({ resource, reason }) => ({ resource, reason }))).toEqual([
+      // Allowed while auto-refresh is paused, so the tab still shows the panel's samples.
+      { resource: 'panel-metric-series', reason: 'foreground' },
+      { resource: 'panel-metric-series', reason: 'stream-signal' },
+    ]);
+    expect(broker.requests[0].scope).toContain(PANEL_ID);
+  });
+
+  it('keeps what it shows when the broker blocks a read', async () => {
+    await render(true);
+    // The backend has a newer sample, but the broker turns the read away.
+    backend.series = {
+      firstT: 1_000,
+      samples: [wire(1_000, 10), wire(6_000, 20), wire(11_000, 30)],
+    };
+    broker.blocked = true;
+    await act(async () => {
+      await appendPanelMetricSample(CLUSTER, PANEL_ID, { t: 11_000, cpu: { usage: 30 } });
+    });
+
+    expect(shownTimes()).toEqual([1_000, 6_000]);
   });
 
   it('keeps unreported values absent rather than zero', async () => {

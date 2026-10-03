@@ -124,7 +124,9 @@ Typed tables use its identity to invalidate their declarative query; Browse
 supplies its current-page reconciliation callback. Snapshot readers continue
 using `useStreamSignalRefetch`. Both mechanisms read the declared doorbell
 clocks from the same helper; query consumers additionally include subscription
-acknowledgements and fallback reconciliation ticks.
+acknowledgements and fallback reconciliation ticks. `useStreamSignalRefetch`
+requests each doorbell once per scope however many mounted consumers watch it;
+the shared record lives only while a consumer is mounted.
 
 ### Liveness guarantees
 

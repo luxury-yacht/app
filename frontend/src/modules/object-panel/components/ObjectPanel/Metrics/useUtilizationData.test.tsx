@@ -40,13 +40,10 @@ vi.mock('@/core/settings/appPreferences', () => ({
 interface HookProps {
   objectData: ObjectPanelRef;
   detail: unknown;
-  enabled: boolean;
 }
 
-const renderUtilizationHook = async (
-  initialProps: Omit<HookProps, 'enabled'> & Partial<Pick<HookProps, 'enabled'>>
-) => {
-  const propsRef = { current: { enabled: true, ...initialProps } };
+const renderUtilizationHook = async (initialProps: HookProps) => {
+  const propsRef = { current: initialProps };
   const latest = { current: null as UtilizationData | null };
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -378,7 +375,7 @@ describe('useUtilizationData', () => {
     hook.cleanup();
   });
 
-  it('releases its metrics lease while disabled and keeps showing the last values', async () => {
+  it('never leases metrics itself: the panel collector owns the lease', async () => {
     const hook = await renderUtilizationHook({
       objectData: {
         clusterId: 'cluster-a',
@@ -390,13 +387,8 @@ describe('useUtilizationData', () => {
       },
       detail: { cpuUsage: '100m', memUsage: '128Mi' },
     });
-    expect(refreshMocks.acquireScopedDomainLease).toHaveBeenCalledTimes(1);
-    expect(refreshMocks.releaseScopedDomainLease).not.toHaveBeenCalled();
-
-    await hook.rerender({ enabled: false });
-
-    expect(refreshMocks.releaseScopedDomainLease).toHaveBeenCalledTimes(1);
-    expect(refreshMocks.acquireScopedDomainLease).toHaveBeenCalledTimes(1);
+    expect(refreshMocks.acquireScopedDomainLease).not.toHaveBeenCalled();
+    expect(refreshMocks.fetchScopedDomain).not.toHaveBeenCalled();
     expect(hook.latest.current).toMatchObject({ cpu: { usage: 100 } });
 
     hook.cleanup();

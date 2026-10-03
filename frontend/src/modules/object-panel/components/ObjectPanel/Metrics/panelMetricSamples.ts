@@ -8,8 +8,9 @@
  */
 
 import { useEffect, useState } from 'react';
-import { AppendPanelMetricSample, GetPanelMetricSeries } from '@/core/backend-api';
+import { AppendPanelMetricSample } from '@/core/backend-api';
 import type { panelmetrics } from '@/core/backend-api/models';
+import { readPanelMetricSeries, requestData } from '@/core/data-access';
 import type { ResourceMetricValues } from '@/core/resource-metrics';
 import { reportOperationalError } from '@/utils/errorHandler';
 import type { LiveMetricSample } from './metricsTabModel';
@@ -100,7 +101,17 @@ const createSeriesReader = (
 
   const readNewer = async (): Promise<void> => {
     const afterT = lastT;
-    const response = await GetPanelMetricSeries(clusterId, panelId, afterT);
+    const result = await requestData({
+      resource: 'panel-metric-series',
+      // Showing the tab reads the panel's retained samples, which the broker allows while
+      // auto-refresh is paused; the reads after each sample only happen while collecting.
+      reason: afterT === 0 ? 'foreground' : 'stream-signal',
+      adapter: 'rpc-read',
+      label: 'Panel Metric Series',
+      scope: `${clusterId}:${panelId}`,
+      read: () => readPanelMetricSeries(clusterId, panelId, afterT),
+    });
+    const response = result.status === 'executed' ? result.data : null;
     if (cancelled || !response) {
       return;
     }

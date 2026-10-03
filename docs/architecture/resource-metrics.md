@@ -74,8 +74,9 @@ no metrics lease.
   first live sample arrives. The legend lists use, peak (the highest charted
   usage, once samples exist), request, and limit, plus allocatable and
   overcommitted for a Node; an unset value reads `-`. The bars stay while
-  auto-refresh is paused, and their lease is held only while the panel is
-  visible.
+  auto-refresh is paused. They read the store without a lease of their own:
+  the panel's collector holds the one metrics lease and signal refetch, so a
+  doorbell is not fetched once per reader.
 - **Collection.** `usePanelMetricsCollector`, mounted in `ObjectPanel`, leases
   the object's metrics scope for the panel's whole life, whatever tab it shows
   and even behind another panel of its dock group. It sends one sample each
@@ -95,8 +96,11 @@ no metrics lease.
   panel between windows, or retaining it after its app window closes, keeps
   them; snapshots never carry them.
 - **Reading.** The tab reads the whole series when its panel is shown, then
-  only what is newer after each sample its window sends. A spacing over three
-  times the usual one is drawn as a gap.
+  only what is newer after each sample its window sends, through `dataAccess`
+  (`readPanelMetricSeries`). The show read uses reason `foreground`, which runs
+  while auto-refresh is paused, so retained samples stay visible; the later
+  reads use `stream-signal`. A spacing over three times the usual one is drawn
+  as a gap.
 - **No history.** There is no stored history and no external metrics provider
   (Prometheus or other). Both were built and removed in October 2026: per-store
   authentication, cluster scoping, query languages, and settings turned the tab

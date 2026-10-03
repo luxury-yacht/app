@@ -115,6 +115,74 @@ describe('useStreamSignalRefetch', () => {
     expect(requestRefreshDomainMock).toHaveBeenCalledTimes(1);
   });
 
+  it('requests one refetch per doorbell however many consumers watch the scope', async () => {
+    ringDoorbell('ns-20');
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+    act(() => {
+      root.render(
+        <>
+          <Harness scopes={[SCOPE]} />
+          <Harness scopes={[SCOPE]} />
+          <Harness scopes={[SCOPE]} />
+        </>
+      );
+    });
+    await act(async () => undefined);
+
+    ringDoorbell('ns-21');
+    await act(async () => undefined);
+    expect(requestRefreshDomainMock).toHaveBeenCalledTimes(1);
+
+    ringDoorbell('ns-22');
+    await act(async () => undefined);
+    expect(requestRefreshDomainMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps refetching for the consumers that remain when one unmounts', async () => {
+    ringDoorbell('ns-30');
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+    const Pair: React.FC<{ both: boolean }> = ({ both }) => (
+      <>
+        <Harness scopes={[SCOPE]} />
+        {both ? <Harness scopes={[SCOPE]} /> : null}
+      </>
+    );
+    act(() => {
+      root.render(<Pair both />);
+    });
+    await act(async () => undefined);
+    act(() => {
+      root.render(<Pair both={false} />);
+    });
+
+    ringDoorbell('ns-31');
+    await act(async () => undefined);
+    expect(requestRefreshDomainMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('forgets a scope once nothing watches it, so a repeated doorbell value refetches again', async () => {
+    ringDoorbell('ns-40');
+    render();
+    await act(async () => undefined);
+    ringDoorbell('ns-41');
+    await act(async () => undefined);
+    expect(requestRefreshDomainMock).toHaveBeenCalledTimes(1);
+    act(() => root.unmount());
+
+    // A backend reset can hand out the same clock values again.
+    resetAllScopedDomainStates('namespaces');
+    ringDoorbell('ns-40');
+    render();
+    await act(async () => undefined);
+    ringDoorbell('ns-41');
+    await act(async () => undefined);
+    expect(requestRefreshDomainMock).toHaveBeenCalledTimes(2);
+  });
+
   it('refetches with reason stream-signal when the doorbell clock advances', async () => {
     // A pre-mount doorbell value is consumed WITHOUT a fetch: the data this
     // scope holds came from the fetch that observed it.
