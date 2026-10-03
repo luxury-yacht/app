@@ -36,10 +36,10 @@ interface SeriesStyle {
 }
 
 const SERIES_STYLES: Record<MetricSeriesRole, SeriesStyle> = {
-  usage: { label: 'Usage', stroke: 'var(--color-accent)' },
-  request: { label: 'Request', stroke: 'var(--color-warning)', dash: '4 3' },
-  limit: { label: 'Limit', stroke: 'var(--color-error)', dash: '6 3' },
-  allocatable: { label: 'Allocatable', stroke: 'var(--color-text-secondary)', dash: '2 3' },
+  usage: { label: 'Usage', stroke: 'var(--chart-usage-color)' },
+  request: { label: 'Request', stroke: 'var(--chart-request-color)', dash: '4 3' },
+  limit: { label: 'Limit', stroke: 'var(--chart-limit-color)', dash: '6 3' },
+  allocatable: { label: 'Allocatable', stroke: 'var(--chart-allocatable-color)', dash: '2 3' },
 };
 
 const MINUTE = 60_000;

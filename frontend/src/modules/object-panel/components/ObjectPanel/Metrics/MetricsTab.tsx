@@ -1,10 +1,11 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/MetricsTab.tsx
  *
- * The object panel's Metrics tab for a Pod, Node, Deployment, StatefulSet, or DaemonSet: Resource
- * Utilization bars for the current values, then CPU and memory from the metrics API charted from
- * the samples the panel has collected since it opened, kept in backend memory while the panel is
- * open in any window. Nothing is written to disk; closing the panel discards them.
+ * The object panel's Metrics tab for a Pod, Node, Deployment, StatefulSet, or DaemonSet: the live
+ * tiles, then a CPU and a Memory section, each with its current utilization bar and its chart of
+ * the samples the panel has collected since it opened. The samples are kept in backend memory
+ * while the panel is open in any window; nothing is written to disk, and closing the panel
+ * discards them.
  */
 
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
@@ -12,7 +13,7 @@ import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { StatusChip } from '@shared/components/StatusChip';
 import { useMemo } from 'react';
 import { useAutoRefreshEnabled } from '@/core/refresh/hooks/useRefreshPreferences';
-import { useResourceMetrics } from '@/core/resource-metrics';
+import { type ResourceMetricValues, useResourceMetrics } from '@/core/resource-metrics';
 import { MetricChart } from './MetricChart';
 import {
   formatClockTime,
@@ -24,7 +25,7 @@ import {
 } from './metricsTabModel';
 import { usePanelMetricSeries } from './panelMetricSamples';
 import ResourceUtilization from './ResourceUtilization';
-import { useUtilizationData } from './useUtilizationData';
+import { type UtilizationData, useUtilizationData } from './useUtilizationData';
 import './MetricsTab.css';
 
 interface MetricsTabProps {
@@ -60,31 +61,12 @@ function MetricTile({ graph }: Readonly<{ graph: MetricGraph }>) {
   );
 }
 
-function MetricCard({
-  graph,
-  times,
-  syncId,
-}: Readonly<{ graph: MetricGraph; times: number[]; syncId: string }>) {
-  return (
-    <section className="metrics-card" data-metric-card={graph.id} aria-label={graph.title}>
-      <h4 className="metrics-card__title">{graph.title}</h4>
-      <div className="metrics-card__chart">
-        {graph.hasData ? (
-          <MetricChart graph={graph} times={times} syncId={syncId} />
-        ) : (
-          <div className="metrics-card__empty">No data</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function LiveBody({
+// Shown whatever the auto-refresh state: the live state and, once samples exist, the tiles.
+function LiveStatus({
   timeline,
   error,
   paused,
-  syncId,
-}: Readonly<{ timeline: MetricTimeline; error: string | null; paused: boolean; syncId: string }>) {
+}: Readonly<{ timeline: MetricTimeline; error: string | null; paused: boolean }>) {
   const pausedNotice = paused ? (
     <div className="metrics-tab__notice" data-live-paused>
       Collection is paused while auto-refresh is off.
@@ -113,22 +95,83 @@ function LiveBody({
           <MetricTile key={graph.id} graph={graph} />
         ))}
       </div>
-      <div className="metrics-tab__grid">
-        {timeline.graphs.map((graph) => (
-          <MetricCard key={graph.id} graph={graph} times={timeline.times} syncId={syncId} />
-        ))}
-      </div>
     </>
   );
 }
 
+const podCountLabel = (podCount?: number, readyPodCount?: number): string | null => {
+  if (!podCount) {
+    return null;
+  }
+  return readyPodCount === undefined ? `${podCount} pods` : `${readyPodCount}/${podCount} pods`;
+};
+
+function MetricsToolbar({
+  startedAt,
+  pods,
+}: Readonly<{ startedAt: number | null; pods: string | null }>) {
+  return (
+    <div className="metrics-tab__toolbar" data-live-badge>
+      <div className="metrics-tab__toolbar-start">
+        <StatusChip variant="info">
+          Live{startedAt ? ` · since ${formatClockTime(startedAt)}` : ''}
+        </StatusChip>
+        <span className="metrics-tab__hint">Not kept: cleared when you close this panel.</span>
+      </div>
+      {pods ? <span className="metrics-tab__hint">{pods}</span> : null}
+    </div>
+  );
+}
+
+// One resource's section: its current utilization bar, then its chart once samples exist.
+function ResourceMetricSection({
+  graph,
+  times,
+  usage,
+  mode,
+  syncId,
+}: Readonly<{
+  graph: MetricGraph;
+  times: number[];
+  usage: ResourceMetricValues | undefined;
+  mode: UtilizationData['mode'];
+  syncId: string;
+}>) {
+  const charted = times.length > 0;
+  if (!usage && !charted) {
+    return null;
+  }
+  return (
+    <section
+      className="object-panel-section"
+      data-metric-section={graph.id}
+      aria-label={graph.title}
+    >
+      <div className="object-panel-section-title">{graph.title}</div>
+      {usage ? <ResourceUtilization data={usage} type={graph.id} mode={mode} /> : null}
+      {charted ? (
+        <div className="metrics-section__chart">
+          {graph.hasData ? (
+            <MetricChart graph={graph} times={times} syncId={syncId} />
+          ) : (
+            <div className="metrics-section__empty">No data</div>
+          )}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 // The panel's collector (ObjectPanel) sends the samples to the backend buffer; this charts them.
-function LiveMetrics({
+// The utilization bars are current values: shown whatever the auto-refresh state.
+function MetricsContent({
   objectData,
+  detail,
   isPanelOpen,
   panelId,
-}: Readonly<{ objectData: ObjectPanelRef; isPanelOpen: boolean; panelId: string }>) {
+}: Readonly<Omit<MetricsTabProps, 'objectData'> & { objectData: ObjectPanelRef }>) {
   const autoRefresh = useAutoRefreshEnabled();
+  const utilization = useUtilizationData({ objectData, detail, enabled: isPanelOpen });
   const series = usePanelMetricSeries(objectData.clusterId, panelId, isPanelOpen);
   const live = useResourceMetrics(objectData, isPanelOpen);
   const error =
@@ -136,37 +179,22 @@ function LiveMetrics({
   const timeline = useMemo(() => liveTimeline(series.samples), [series.samples]);
   return (
     <>
-      <div className="metrics-tab__toolbar" data-live-badge>
-        <StatusChip variant="info">
-          Live{series.startedAt ? ` · since ${formatClockTime(series.startedAt)}` : ''}
-        </StatusChip>
-        <span className="metrics-tab__hint">Not kept: cleared when you close this panel.</span>
-      </div>
-      <LiveBody timeline={timeline} error={error} paused={!autoRefresh} syncId={panelId} />
+      <MetricsToolbar
+        startedAt={series.startedAt}
+        pods={podCountLabel(utilization?.podCount, utilization?.readyPodCount)}
+      />
+      <LiveStatus timeline={timeline} error={error} paused={!autoRefresh} />
+      {timeline.graphs.map((graph) => (
+        <ResourceMetricSection
+          key={graph.id}
+          graph={graph}
+          times={timeline.times}
+          usage={utilization?.[graph.id]}
+          mode={utilization?.mode}
+          syncId={panelId}
+        />
+      ))}
     </>
-  );
-}
-
-// Current values, not history: shown whatever the auto-refresh state, and the lease follows the
-// panel's visibility.
-function Utilization({
-  objectData,
-  detail,
-  isPanelOpen,
-}: Readonly<Pick<MetricsTabProps, 'objectData' | 'detail' | 'isPanelOpen'>>) {
-  const utilization = useUtilizationData({ objectData, detail, enabled: isPanelOpen });
-  if (!utilization) {
-    return null;
-  }
-  return (
-    <ResourceUtilization
-      cpu={utilization.cpu}
-      memory={utilization.memory}
-      pods={utilization.pods}
-      mode={utilization.mode}
-      podCount={utilization.podCount}
-      readyPodCount={utilization.readyPodCount}
-    />
   );
 }
 
@@ -179,10 +207,12 @@ export default function MetricsTab({
   return (
     <div className="object-panel-tab-content metrics-tab">
       {objectData ? (
-        <>
-          <Utilization objectData={objectData} detail={detail} isPanelOpen={isPanelOpen} />
-          <LiveMetrics objectData={objectData} isPanelOpen={isPanelOpen} panelId={panelId} />
-        </>
+        <MetricsContent
+          objectData={objectData}
+          detail={detail}
+          isPanelOpen={isPanelOpen}
+          panelId={panelId}
+        />
       ) : null}
     </div>
   );

@@ -1,46 +1,8 @@
-/* Utilization Component Styles
+/* Utilization bar styles
  *
- * Per-resource sections reuse the ResourceBar housing classes
- * (.resource-group / .metric-header / .resource-bar-placeholder /
- * .metric-legend*) defined in ResourceBar.css. This file only handles the
- * section's outer layout (CPU/Memory side-by-side grid) and per-tab
- * specifics. */
-
-.utilization-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  container-type: inline-size;
-}
-
-.utilization-resources-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 2rem;
-}
-
-/* Width at which the resources should switch to a single column */
-@container (max-width: 600px) {
-  .utilization-resources-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.utilization-pod-count {
-  font-weight: normal;
-  color: var(--color-text-secondary);
-  margin-left: 0.5rem;
-}
-
-.utilization-empty {
-  padding: 2rem;
-  text-align: center;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-normal);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius);
-}
+ * The bar and legend reuse the ResourceBar housing classes (.resource-group / .metric-header /
+ * .resource-bar-placeholder / .metric-legend*) defined in ResourceBar.css; the Metrics tab section
+ * around them is a standard .object-panel-section. */
 
 /* Highlight overcommitted figures within a metric-legend item.
    Standalone rule — applied to spans inside .metric-legend__count. */

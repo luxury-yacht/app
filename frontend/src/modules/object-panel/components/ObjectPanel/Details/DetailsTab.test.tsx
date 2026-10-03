@@ -179,7 +179,7 @@ describe('DetailsTab', () => {
         containers: expect.arrayContaining([{ name: 'app', image: 'example/app:1.0.0' }]),
       })
     );
-    expect(container.textContent).not.toContain('Resource Utilization');
+    expect(container.querySelector('.resource-bar-container')).toBeNull();
     expect(dataMock).not.toHaveBeenCalled();
     cleanup();
   });
@@ -235,7 +235,7 @@ describe('DetailsTab', () => {
       }
     );
     const { container, cleanup } = await renderDetailsTab(props);
-    expect(container.textContent).not.toContain('Resource Utilization');
+    expect(container.querySelector('.resource-bar-container')).toBeNull();
     expect(containersMock).not.toHaveBeenCalled();
     cleanup();
   });

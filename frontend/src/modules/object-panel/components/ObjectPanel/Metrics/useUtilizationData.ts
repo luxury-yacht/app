@@ -1,7 +1,7 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/useUtilizationData.ts
  *
- * Derives the Metrics tab's Resource Utilization data from live metric domains,
+ * Derives the Metrics tab's utilization bars from live metric domains,
  * falling back to the active detail DTO while those domains load.
  */
 

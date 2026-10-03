@@ -59,19 +59,20 @@ they are not the ongoing live source.
 
 ## Object panel Metrics tab
 
-The **Metrics** tab shows the panel's Resource Utilization bars, then charts CPU
-and memory from the samples the panel has collected since it opened. The
-Details tab has no utilization section and holds no metrics lease.
+The **Metrics** tab shows live tiles, then a CPU and a Memory section, each with
+the resource's utilization bar and its chart of the samples the panel has
+collected since it opened. The Details tab has no utilization section and holds
+no metrics lease.
 
 - **Availability.** `useObjectPanelTabs` offers the tab when
   `resolveResourceMetricsScope` serves the object from a refresh domain: Pods,
   Nodes, Deployments, StatefulSets, and DaemonSets with built-in group/version.
   ReplicaSets, other kinds, custom resources that share a built-in kind name,
   and Helm releases get no tab. Do not gate it with a separate kind list.
-- **Resource Utilization.** The bars show the current usage against requests,
+- **Utilization bars.** Each bar shows the current usage against requests,
   limits, and a Node's allocatable, using the object's detail values until the
-  first live sample arrives. They stay while auto-refresh is paused, and their
-  lease is held only while the panel is visible.
+  first live sample arrives. The bars stay while auto-refresh is paused, and
+  their lease is held only while the panel is visible.
 - **Collection.** `usePanelMetricsCollector`, mounted in `ObjectPanel`, leases
   the object's metrics scope for the panel's whole life, whatever tab it shows
   and even behind another panel of its dock group. It sends one sample each

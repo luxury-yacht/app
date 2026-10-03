@@ -46,12 +46,12 @@ vi.mock('./useUtilizationData', () => ({
 }));
 
 vi.mock('./ResourceUtilization', () => ({
-  default: (props: UtilizationData) => (
-    <section data-testid="resource-utilization" data-cpu={props.cpu?.usage} />
+  default: ({ data, type }: { data: ResourceMetricValues; type: string }) => (
+    <div data-testid={`resource-bar-${type}`} data-usage={data.usage} />
   ),
 }));
 
-// Recharts needs real layout; the tab's contract is which samples each card charts.
+// Recharts needs real layout; the tab's contract is which samples each section charts.
 vi.mock('./MetricChart', () => ({
   MetricChart: ({ graph, times }: { graph: MetricGraph; times: number[] }) => (
     <div data-testid={`chart-${graph.id}`} data-points={times.length} />
@@ -118,6 +118,13 @@ describe('MetricsTab', () => {
       container.querySelector<HTMLElement>(`[data-metric-tile="${graph}"]`),
       `expected the ${graph} tile`
     );
+  const section = (graph: string) =>
+    requireValue(
+      container.querySelector<HTMLElement>(`[data-metric-section="${graph}"]`),
+      `expected the ${graph} section`
+    );
+  const follows = (first: Element, second: Element) =>
+    Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
 
   it('opens on the samples the panel collected before the tab was shown', async () => {
     collected(T0, { usage: 10, limit: 500 });
@@ -168,26 +175,59 @@ describe('MetricsTab', () => {
     expect(tile('cpu').textContent).not.toContain('3000m');
   });
 
-  it('shows resource utilization above the live charts, even while auto-refresh is paused', async () => {
+  it("groups each resource's bar and chart in its own section, after the tiles", async () => {
     hoisted.utilization = { cpu: { usage: 250, request: 500 }, memory: { usage: 64 } };
     collected(T0, { usage: 10 });
     await render();
 
-    const utilization = requireValue(
-      container.querySelector<HTMLElement>('[data-testid="resource-utilization"]'),
-      'expected the utilization section'
+    const cpu = section('cpu');
+    expect(cpu.querySelector('[data-testid="resource-bar-cpu"]')?.getAttribute('data-usage')).toBe(
+      '250'
     );
-    expect(utilization.dataset.cpu).toBe('250');
-    const badge = requireValue(container.querySelector('[data-live-badge]'), 'expected badge');
-    expect(
-      utilization.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
+    expect(cpu.querySelector('[data-testid="chart-cpu"]')).not.toBeNull();
+    expect(cpu.querySelector('[data-testid="resource-bar-memory"]')).toBeNull();
+    const memory = section('memory');
+    expect(memory.querySelector('[data-testid="resource-bar-memory"]')).not.toBeNull();
+    expect(memory.querySelector('[data-testid="chart-memory"]')).not.toBeNull();
+    expect(follows(tile('memory'), cpu)).toBe(true);
+    expect(follows(cpu, memory)).toBe(true);
+  });
 
-    // The bars are the current values, not history, so pausing does not hide them.
+  it('keeps the resource bars while auto-refresh is paused', async () => {
+    hoisted.utilization = { cpu: { usage: 250 } };
     hoisted.autoRefresh = false;
     await render();
-    expect(container.querySelector('[data-testid="resource-utilization"]')).not.toBeNull();
+
+    // The bars are the current values, not history, so pausing does not hide them.
+    expect(section('cpu').querySelector('[data-testid="resource-bar-cpu"]')).not.toBeNull();
     expect(container.querySelector('[data-live-paused]')).not.toBeNull();
+  });
+
+  it('shows a resource bar before the first sample, without an empty section for the other', async () => {
+    hoisted.utilization = { cpu: { usage: 250 } };
+    await render();
+
+    expect(section('cpu').querySelector('[data-testid="resource-bar-cpu"]')).not.toBeNull();
+    expect(section('cpu').querySelector('[data-testid="chart-cpu"]')).toBeNull();
+    expect(container.querySelector('[data-metric-section="memory"]')).toBeNull();
+    expect(container.querySelector('[data-live-collecting]')).not.toBeNull();
+  });
+
+  it("shows the workload's ready and total pods in the toolbar", async () => {
+    hoisted.utilization = { cpu: { usage: 250 }, podCount: 3, readyPodCount: 2 };
+    await render();
+    const toolbar = () =>
+      requireValue(container.querySelector('[data-live-badge]'), 'expected toolbar');
+    expect(toolbar().textContent).toContain('2/3 pods');
+
+    hoisted.utilization = { cpu: { usage: 250 }, podCount: 5 };
+    await render();
+    expect(toolbar().textContent).toContain('5 pods');
+    expect(toolbar().textContent).not.toMatch(/\d+\/\d+ pods/);
+
+    hoisted.utilization = { cpu: { usage: 250 }, podCount: 0 };
+    await render();
+    expect(toolbar().textContent).not.toContain('pods');
   });
 
   it('feeds utilization the panel object and its details, leasing metrics only while the panel is open', async () => {
@@ -196,8 +236,8 @@ describe('MetricsTab', () => {
 
     const lastCall = () => hoisted.utilizationCalls[hoisted.utilizationCalls.length - 1];
     expect(lastCall()).toMatchObject({ objectData: pod, detail, enabled: true });
-    // No utilization yet (no detail values, no live sample): no empty section.
-    expect(container.querySelector('[data-testid="resource-utilization"]')).toBeNull();
+    // No utilization yet (no detail values, no live sample): no empty sections.
+    expect(container.querySelector('[data-metric-section]')).toBeNull();
 
     await render({ detail, isPanelOpen: false });
     expect(lastCall()).toMatchObject({ enabled: false });

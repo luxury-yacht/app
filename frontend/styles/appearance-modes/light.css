@@ -418,6 +418,12 @@
   );
   --utilization-overcommitted-text: #d97706;
 
+  /* Metrics charts (object panel Metrics tab) */
+  --chart-usage-color: var(--color-accent);
+  --chart-request-color: var(--color-warning);
+  --chart-limit-color: var(--color-error);
+  --chart-allocatable-color: var(--color-text-secondary);
+
   /* Events tab */
   --events-scroll-track: var(--editor-scroll-track);
   --events-scroll-thumb: var(--editor-scroll-thumb);

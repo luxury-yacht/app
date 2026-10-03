@@ -1,10 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/ResourceUtilization.tsx
  *
- * Per-resource utilization section. Reuses the ResourceBar housing styles
- * (.resource-group / .metric-header / .resource-bar-placeholder /
- * .metric-legend*) shipped with ResourceBar so the look matches the cluster
- * overview's Resource Usage block.
+ * One resource's utilization bar and legend, shown in that resource's Metrics tab section (which
+ * carries the CPU / Memory title). Reuses the ResourceBar housing styles (.resource-group /
+ * .metric-header / .resource-bar-placeholder / .metric-legend*) shipped with ResourceBar so the
+ * look matches the cluster overview's Resource Usage block.
  */
 
 import ResourceBarErrorBoundary from '@shared/components/errors/ResourceBarErrorBoundary';
@@ -21,24 +21,10 @@ import type { ResourceMetricValues } from '@/core/resource-metrics';
 import '../shared.css';
 import './ResourceUtilization.css';
 
-interface UtilizationProps {
-  cpu?: ResourceMetricValues;
-  memory?: ResourceMetricValues;
-  pods?: {
-    count?: string;
-    capacity?: string;
-    allocatable?: string;
-  };
-  mode?: 'podMetrics' | 'nodeMetrics' | 'nodePods';
-  podCount?: number;
-  readyPodCount?: number;
-}
-
-interface ResourceSectionProps {
-  title: string;
+interface ResourceUtilizationProps {
   data: ResourceMetricValues;
   type: 'cpu' | 'memory';
-  mode: 'podMetrics' | 'nodeMetrics' | 'nodePods';
+  mode?: 'podMetrics' | 'nodeMetrics' | 'nodePods';
 }
 
 const formatPercentSuffix = (numerator: number, denominator: number): string =>
@@ -74,33 +60,37 @@ const LegendItem: React.FC<{
   return resolvedTooltip ? <Tooltip content={resolvedTooltip}>{item}</Tooltip> : item;
 };
 
-const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mode }) => {
-  const metrics = calculateResourceMetrics(data);
-  const formatValue = type === 'cpu' ? formatCpuValue : formatMemoryValue;
-  // An unset request or limit arrives as absent (zero is omitted on the wire).
-  const formatReservation = (value: number | undefined): string =>
-    value ? formatResourceValue(value, type) : 'not set';
+type ResourceMetrics = ReturnType<typeof calculateResourceMetrics>;
 
-  const isNodeMode = mode === 'nodeMetrics';
+interface LegendProps {
+  data: ResourceMetricValues;
+  type: 'cpu' | 'memory';
+  metrics: ResourceMetrics;
+  isNodeMode: boolean;
+}
 
-  // Usage percentages: usage / requests is always meaningful when requests
-  // are set. The second percentage is usage / allocatable for nodes (a
-  // node-level concept) and usage / limits for workloads.
-  const usageRequestPct = metrics.consumption;
-  const usageSecondaryDenominator = isNodeMode ? metrics.allocatable : metrics.limit;
-  const usageSecondaryPct =
-    metrics.usage > 0 && usageSecondaryDenominator > 0
-      ? `${Math.round((metrics.usage / usageSecondaryDenominator) * 100)}%`
-      : null;
+// Usage percentages: usage / requests is always meaningful when requests are set. The second
+// percentage is usage / allocatable for nodes (a node-level concept) and usage / limits for
+// workloads. Null when there is nothing to compare usage against.
+const usagePercentages = (
+  metrics: ResourceMetrics,
+  isNodeMode: boolean
+): { request: number | null; secondary: string | null } | null => {
+  const secondaryDenominator = isNodeMode ? metrics.allocatable : metrics.limit;
+  if (metrics.usage <= 0 || (metrics.request <= 0 && secondaryDenominator <= 0)) {
+    return null;
+  }
+  return {
+    request: metrics.consumption,
+    secondary:
+      secondaryDenominator > 0
+        ? `${Math.round((metrics.usage / secondaryDenominator) * 100)}%`
+        : null,
+  };
+};
 
-  // Per-row request/limit suffixes: only meaningful for nodes, where
-  // allocatable provides a denominator.
-  const requestSuffix = isNodeMode ? formatPercentSuffix(metrics.request, metrics.allocatable) : '';
-  const limitSuffix = isNodeMode ? formatPercentSuffix(metrics.limit, metrics.allocatable) : '';
-
-  const showAllocatableRow = isNodeMode && Boolean(data.allocatable);
-  const showOvercommittedRow = isNodeMode;
-
+const UsedLegendItem = ({ data, type, metrics, isNodeMode }: LegendProps) => {
+  const percentages = usagePercentages(metrics, isNodeMode);
   const usedTooltip = (
     <>
       Current utilization. Percentages are
@@ -108,20 +98,108 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
       (% of Requests / % of {isNodeMode ? 'Allocatable' : 'Limits'}).
     </>
   );
+  return (
+    <LegendItem
+      tooltip={usedTooltip}
+      count={
+        <>
+          {formatResourceValue(data.usage, type)}
+          {percentages ? (
+            <>
+              {' ('}
+              {percentages.request === null ? (
+                '-'
+              ) : (
+                <span className={percentages.request > 100 ? 'overcommitted-text' : ''}>
+                  {percentages.request}%
+                </span>
+              )}
+              {' / '}
+              {percentages.secondary ?? '-'}
+              {')'}
+            </>
+          ) : null}
+        </>
+      }
+      label="used"
+    />
+  );
+};
+
+// Per-row request/limit suffixes: only meaningful for nodes, where allocatable provides a
+// denominator. An unset request or limit arrives as absent (zero is omitted on the wire).
+const ReservationLegendItems = ({ data, type, metrics, isNodeMode }: LegendProps) => {
+  const formatReservation = (value: number | undefined): string =>
+    value ? formatResourceValue(value, type) : 'not set';
+  const requestSuffix = isNodeMode ? formatPercentSuffix(metrics.request, metrics.allocatable) : '';
+  const limitSuffix = isNodeMode ? formatPercentSuffix(metrics.limit, metrics.allocatable) : '';
+  return (
+    <>
+      <LegendItem
+        count={
+          <>
+            {formatReservation(data.request)}
+            {requestSuffix}
+          </>
+        }
+        label="requests"
+      />
+      <LegendItem
+        count={
+          <>
+            {formatReservation(data.limit)}
+            {!!limitSuffix && (
+              <span className={metrics.limitPercent > 100 ? 'overcommitted-text' : ''}>
+                {limitSuffix}
+              </span>
+            )}
+          </>
+        }
+        label="limits"
+      />
+    </>
+  );
+};
+
+const OvercommittedLegendItem = ({ type, metrics }: Pick<LegendProps, 'type' | 'metrics'>) => {
+  const formatValue = type === 'cpu' ? formatCpuValue : formatMemoryValue;
+  return (
+    <LegendItem
+      count={
+        metrics.overcommittedAmount > 0 ? (
+          <span className="overcommitted-text">
+            {formatValue(metrics.overcommittedAmount)} ({metrics.overcommittedPercent}%)
+          </span>
+        ) : (
+          `${formatValue(0)} (0%)`
+        )
+      }
+      label="overcommitted"
+    />
+  );
+};
+
+const ResourceUtilization: React.FC<ResourceUtilizationProps> = ({
+  data,
+  type,
+  mode = 'podMetrics',
+}) => {
+  const metrics = calculateResourceMetrics(data);
+  const isNodeMode = mode === 'nodeMetrics';
+  const legend = { data, type, metrics, isNodeMode };
 
   return (
     <div className="resource-group">
-      <div className="metric-header">
-        <h3>{title}</h3>
-        {!!data.allocatable && (
+      {!!data.allocatable && (
+        <div className="metric-header">
           <div className="metric-legend__total">
             <span className="metric-legend__total-value">
               {formatResourceValue(data.allocatable, type)}
             </span>
             <span className="metric-legend__total-label"> total</span>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="resource-bar-placeholder">
         <ResourceBarErrorBoundary>
@@ -137,105 +215,13 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
 
       <div className="metric-legend">
         <div className="metric-legend__items">
-          <LegendItem
-            tooltip={usedTooltip}
-            count={
-              <>
-                {formatResourceValue(data.usage, type)}
-                {metrics.usage > 0 && (metrics.request > 0 || usageSecondaryDenominator > 0) && (
-                  <>
-                    {' ('}
-                    {usageRequestPct !== null ? (
-                      <span className={usageRequestPct > 100 ? 'overcommitted-text' : ''}>
-                        {usageRequestPct}%
-                      </span>
-                    ) : (
-                      '-'
-                    )}
-                    {' / '}
-                    {usageSecondaryPct ?? '-'}
-                    {')'}
-                  </>
-                )}
-              </>
-            }
-            label="used"
-          />
-          {!!showAllocatableRow && (
+          <UsedLegendItem {...legend} />
+          {isNodeMode && !!data.allocatable && (
             <LegendItem count={formatResourceValue(data.allocatable, type)} label="allocatable" />
           )}
-          <LegendItem
-            count={
-              <>
-                {formatReservation(data.request)}
-                {requestSuffix}
-              </>
-            }
-            label="requests"
-          />
-          <LegendItem
-            count={
-              <>
-                {formatReservation(data.limit)}
-                {!!limitSuffix && (
-                  <span className={metrics.limitPercent > 100 ? 'overcommitted-text' : ''}>
-                    {limitSuffix}
-                  </span>
-                )}
-              </>
-            }
-            label="limits"
-          />
-          {!!showOvercommittedRow && (
-            <LegendItem
-              count={
-                metrics.overcommittedAmount > 0 ? (
-                  <span className="overcommitted-text">
-                    {formatValue(metrics.overcommittedAmount)} ({metrics.overcommittedPercent}%)
-                  </span>
-                ) : (
-                  `${formatValue(0)} (0%)`
-                )
-              }
-              label="overcommitted"
-            />
-          )}
+          <ReservationLegendItems {...legend} />
+          {isNodeMode && <OvercommittedLegendItem type={type} metrics={metrics} />}
         </div>
-      </div>
-    </div>
-  );
-};
-
-const ResourceUtilization: React.FC<UtilizationProps> = ({
-  cpu,
-  memory,
-  pods,
-  mode = 'podMetrics',
-  podCount,
-  readyPodCount,
-}) => {
-  return (
-    <div className="object-panel-section">
-      <div className="object-panel-section-title">
-        Resource Utilization
-        {podCount !== null && podCount !== undefined && podCount > 0 && (
-          <span className="utilization-pod-count">
-            {readyPodCount !== null && readyPodCount !== undefined
-              ? `${readyPodCount}/${podCount} pods`
-              : `${podCount} pods`}
-          </span>
-        )}
-      </div>
-
-      <div className="utilization-content">
-        {cpu || memory || pods ? (
-          <div className="utilization-resources-grid">
-            {!!cpu && <ResourceSection title="CPU" data={cpu} type="cpu" mode={mode} />}
-            {!!memory && <ResourceSection title="Memory" data={memory} type="memory" mode={mode} />}
-          </div>
-        ) : (
-          <div className="utilization-empty">No resource utilization data available</div>
-        )}
       </div>
     </div>
   );

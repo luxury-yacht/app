@@ -1,4 +1,4 @@
-/* Metrics tab: toolbar, CPU/memory tiles, and a grid of chart cards (layout B). */
+/* Metrics tab: toolbar, CPU/memory tiles, then a CPU and a Memory section (bar + chart). */
 
 .metrics-tab {
   display: flex;
@@ -13,6 +13,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.metrics-tab__toolbar-start {
+  display: flex;
+  align-items: center;
   gap: var(--spacing-md);
 }
 
@@ -45,36 +51,17 @@
   white-space: nowrap;
 }
 
-.metrics-tab__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-  gap: var(--spacing-md);
-}
-
-.metrics-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-bg-secondary);
-}
-
-.metrics-card__title {
-  margin: 0;
-  color: var(--color-text);
-  font-size: var(--font-size-normal);
-  font-weight: var(--font-weight-bold);
-}
-
-/* A fixed height keeps cards aligned whether they hold a chart or a no-data state. */
-.metrics-card__chart {
-  height: 11rem;
+/* The chart needs a sized box (ResponsiveContainer); a fixed height also keeps the sections
+   aligned whether they hold a chart or a no-data state. */
+.metrics-section__chart {
+  height: 12rem;
   font-size: var(--font-size-xs);
+  padding-top: 0.5rem;
+  background: var(--color-bg);
+  border-radius: var(--border-radius-lg);
 }
 
-.metrics-card__empty {
+.metrics-section__empty {
   display: flex;
   align-items: center;
   justify-content: center;

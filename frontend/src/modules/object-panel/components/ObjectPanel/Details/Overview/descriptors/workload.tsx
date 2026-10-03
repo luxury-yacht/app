@@ -571,7 +571,7 @@ const POD_TEMPLATE_CONSUMES = ['serviceAccount', 'nodeSelector', 'tolerations'] 
 
 // Common count/utilization/template DTO keys covered outside the Overview schema.
 // containers/initContainers -> Containers section; cpu*/mem*/podMetricsSummary/pods -> the
-// Metrics tab's Resource Utilization (podMetricsSummary is also consumed by the pod-state widget).
+// Metrics tab's utilization bars (podMetricsSummary is also consumed by the pod-state widget).
 const COVERED_CONTAINERS = ['containers', 'initContainers'] as const;
 const COVERED_UTILIZATION = [
   'cpuRequest',
