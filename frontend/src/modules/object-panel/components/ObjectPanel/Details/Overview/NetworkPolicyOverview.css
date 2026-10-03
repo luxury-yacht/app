@@ -197,10 +197,6 @@
   border-color: var(--network-policy-color);
 }
 
-.network-policy-selected .reference-grant-namespace {
-  color: var(--network-policy-color);
-}
-
 .network-policy-muted {
   color: var(--color-text-secondary);
 }
