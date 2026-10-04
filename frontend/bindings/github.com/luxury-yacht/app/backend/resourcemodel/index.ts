@@ -4,6 +4,7 @@
 export type {
     ConditionFacts,
     DisplayRef,
+    LimitUsage,
     ResourceLink,
     ResourceRef,
     ResourceTableMetadata

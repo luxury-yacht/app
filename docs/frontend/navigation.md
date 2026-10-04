@@ -135,13 +135,17 @@ two coalesced, backend-only subsets. The first holds objects whose deletion is
 waiting on a finalizer; Attention merges that lifecycle component with health
 causes for the same concrete UID. The second holds every object that reports a
 status about itself for Attention to classify. Today those are Argo CD
-Applications (sync, health, last sync operation phase, and active conditions)
-and ApplicationSets (health and conditions whose status is True). They feed the
-`argocd-application-out-of-sync`, `argocd-application-degraded`,
+Applications (sync, health, last sync operation phase, and active conditions),
+ApplicationSets (health and conditions whose status is True), and Karpenter
+NodePools (the resources whose usage is above the Karpenter limit threshold).
+They feed the `argocd-application-out-of-sync`, `argocd-application-degraded`,
 `argocd-application-missing`, `argocd-application-sync-failed`,
-`argocd-application-error`, and `argocd-applicationset-error` findings. An
-aspect can hold several values; a rule matches when any of them does, and every
-matching rule adds its own cause. Every reporting object is
+`argocd-application-error`, `argocd-applicationset-error`, and
+`karpenter-nodepool-near-limit` findings. An aspect can hold several values; a
+rule matches when any of them does, and every matching rule adds its own cause.
+The NodePool threshold lives with the Karpenter facts, which also give the
+Karpenter table and NodePool details their usage and warning color, so all
+three flag the same pools. Every reporting object is
 published whatever its statuses, so a recovered object keeps its per-object
 ignores and only a deleted one loses them. Reported statuses carry no transition
 time, so their findings have no grace period and appear as soon as the catalog

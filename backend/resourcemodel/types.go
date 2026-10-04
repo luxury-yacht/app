@@ -117,6 +117,14 @@ type ResourceLifecycle struct {
 	FinalizerBlocked bool `json:"finalizerBlocked"`
 }
 
+// LimitUsage is how much of one configured limit an object already uses (for example a
+// Karpenter NodePool's spec.limits). Presentation flags usage that needs attention; the
+// owning kind decides the threshold.
+type LimitUsage struct {
+	Percent      float64 `json:"percent"`
+	Presentation string  `json:"presentation,omitempty"`
+}
+
 type ResourceStatusPresentation struct {
 	Label        string                 `json:"label"`
 	State        string                 `json:"state"`

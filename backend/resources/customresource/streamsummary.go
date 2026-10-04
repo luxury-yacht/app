@@ -96,7 +96,7 @@ func karpenterTableSummary(facts *karpenter.Facts) *streamrows.KarpenterSummary 
 	return &streamrows.KarpenterSummary{
 		NodePool: facts.NodePool, NodeClass: facts.NodeClass,
 		InstanceType: facts.InstanceType, CapacityType: facts.CapacityType,
-		Capacity: facts.Capacity, Limits: facts.Limits,
+		LimitUsage: facts.LimitUsage,
 	}
 }
 

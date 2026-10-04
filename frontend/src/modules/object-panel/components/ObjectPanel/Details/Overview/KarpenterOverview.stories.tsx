@@ -56,6 +56,7 @@ const pool: CustomResourceDetails = {
     weight: 10,
     capacity: { cpu: '64', memory: '256Gi', nodes: '8', pods: '880' },
     limits: { cpu: '1000', memory: '2Ti' },
+    limitUsage: { cpu: { percent: 6.4 }, memory: { percent: 12.5 } },
     requirements: [
       { key: 'kubernetes.io/arch', operator: 'In', values: ['amd64', 'arm64'] },
       { key: 'karpenter.sh/capacity-type', operator: 'In', values: ['spot', 'on-demand'] },

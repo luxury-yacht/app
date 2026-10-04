@@ -35,8 +35,7 @@ const rows: CustomResourceGridRow[] = [
     statusPresentation: 'ready',
     age: '12d',
     karpenter: {
-      capacity: { cpu: '85', memory: '768Gi' },
-      limits: { cpu: '100', memory: '1Ti' },
+      limitUsage: { cpu: { percent: 85, presentation: 'warning' }, memory: { percent: 75 } },
       nodeClass: {
         ref: nodeClassRef,
       },

@@ -127,3 +127,30 @@ func TestReportedStatusSubscriptionPublishesStatusChanges(t *testing.T) {
 	require.Equal(t, uint64(4), (<-updates).Revision)
 	require.Empty(t, service.ReportedStatuses())
 }
+
+func TestSummaryReportsKarpenterNodePoolLimitWarnings(t *testing.T) {
+	desc := builtinDescriptor("karpenter.sh", "v1", "NodePool", "nodepools", false)
+	pool := func(cpu, memory string) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "karpenter.sh/v1", "kind": "NodePool",
+			"metadata": map[string]any{"name": "general", "uid": "pool-uid", "creationTimestamp": "2026-09-01T08:00:00Z"},
+			"spec":     map[string]any{"limits": map[string]any{"cpu": "10", "memory": "100Gi"}},
+			"status":   map[string]any{"resources": map[string]any{"cpu": cpu, "memory": memory}},
+		}}
+	}
+
+	reported, ok := summaryFromObject("cluster-a", desc, pool("9", "10Gi")).ReportedStatus()
+	require.True(t, ok)
+	require.Equal(t, map[string][]string{ReportedStatusLimits: {"cpu"}}, reported.Statuses)
+
+	// A NodePool within its limits still reports, so Attention keeps tracking it.
+	within, ok := summaryFromObject("cluster-a", desc, pool("1", "10Gi")).ReportedStatus()
+	require.True(t, ok)
+	require.Empty(t, within.Statuses)
+
+	claim := builtinDescriptor("karpenter.sh", "v1", "NodeClaim", "nodeclaims", false)
+	object := pool("9", "10Gi")
+	object.SetKind("NodeClaim")
+	_, ok = summaryFromObject("cluster-a", claim, object).ReportedStatus()
+	require.False(t, ok, "only NodePools report limit usage")
+}

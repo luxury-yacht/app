@@ -69,6 +69,7 @@ type Summary struct {
 	lifecycle         resourcemodel.ResourceLifecycle
 	deletionTime      int64
 	reportedStatuses  reportedStatusValues
+	reportsStatus     bool
 	Scope             Scope        `json:"scope"`                  // resource scope
 	LabelsDigest      string       `json:"labelsDigest,omitempty"` // optional digest of resource labels
 	ActionFacts       *ActionFacts `json:"actionFacts,omitempty"`  // optional facts needed to present object actions correctly
@@ -97,9 +98,13 @@ const (
 	ReportedStatusHealth     = "health"
 	ReportedStatusOperation  = "operation"
 	ReportedStatusConditions = "conditions"
+	// ReportedStatusLimits lists the resources an object uses too much of its limit for.
+	ReportedStatusLimits = "limits"
 )
 
-var reportedAspects = [...]string{ReportedStatusSync, ReportedStatusHealth, ReportedStatusOperation, ReportedStatusConditions}
+var reportedAspects = [...]string{
+	ReportedStatusSync, ReportedStatusHealth, ReportedStatusOperation, ReportedStatusConditions, ReportedStatusLimits,
+}
 
 // reportedValueSeparator joins an aspect's values; reported values (Argo CD statuses,
 // operation phases, condition types) never contain it.
@@ -147,12 +152,12 @@ type ReportedStatus struct {
 }
 
 // ReportedStatus returns the object's identity and reported statuses only when the
-// object reports any.
+// object is a kind that reports them; its statuses may currently be empty.
 func (s Summary) ReportedStatus() (ReportedStatus, bool) {
-	statuses := s.reportedStatuses.statuses()
-	if len(statuses) == 0 {
+	if !s.reportsStatus {
 		return ReportedStatus{}, false
 	}
+	statuses := s.reportedStatuses.statuses()
 	var created int64
 	if parsed, err := time.Parse(time.RFC3339, s.CreationTimestamp); err == nil {
 		created = parsed.UnixMilli()

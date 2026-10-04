@@ -36,17 +36,16 @@ export interface ExternalSecretsSummary {
 }
 
 /**
- * KarpenterSummary contains only the facts shown in the Karpenter table.
- * Capacity and limits supply NodePool usage; scheduling and provider configuration
- * belong to the rich detail DTO.
+ * KarpenterSummary contains only the facts shown in the Karpenter table. LimitUsage
+ * supplies NodePool usage, computed by the Karpenter facts; scheduling and provider
+ * configuration belong to the rich detail DTO.
  */
 export interface KarpenterSummary {
     "nodePool"?: resourcemodel$0.ResourceLink | null;
     "nodeClass"?: resourcemodel$0.ResourceLink | null;
     "instanceType"?: string;
     "capacityType"?: string;
-    "capacity"?: { [_ in string]?: string } | null;
-    "limits"?: { [_ in string]?: string } | null;
+    "limitUsage"?: { [_ in string]?: resourcemodel$0.LimitUsage } | null;
 }
 
 export interface PrometheusSummary {

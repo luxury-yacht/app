@@ -125,6 +125,15 @@ var attentionClassificationRules = []attentionClassificationRule{
 		Kinds: []string{"ApplicationSet"}, ReportedStatus: objectcatalog.ReportedStatusConditions, Statuses: []string{"ErrorOccurred"},
 		Severity: AttentionSeverityError, FindingReason: "Error occurred",
 	},
+	{
+		// The NodePool's nodes use more than the Karpenter threshold of its CPU or memory limit
+		// (the same warning the Karpenter table and details show); Karpenter stops launching
+		// nodes for the pool once a limit is reached.
+		ID: "karpenter-nodepool-near-limit", Label: "Karpenter NodePool near its limits",
+		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{"karpenter.sh"},
+		Kinds: []string{"NodePool"}, ReportedStatus: objectcatalog.ReportedStatusLimits, Statuses: []string{"cpu", "memory"},
+		Severity: AttentionSeverityWarning,
+	},
 }
 
 // attentionReportedStatusKinds lists the kinds whose reported statuses the policy classifies.

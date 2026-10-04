@@ -1,5 +1,6 @@
 ### Added
 
+- Attention flags a Karpenter NodePool whose nodes use more than 80% of its CPU or memory limit (`spec.limits`), as "Karpenter NodePool near its limits". It uses the same calculation and threshold as the warning color in the Karpenter table and NodePool details.
 - Attention flags Argo CD Applications and ApplicationSets that need a look. Errors: an Application whose health is Degraded ("Argo CD Application degraded"), whose last sync failed ("Argo CD Application sync failed"), or that reports an error condition such as a ComparisonError when Argo CD cannot render or compare it ("Argo CD Application error"), and an ApplicationSet whose generator or template is failing ("Argo CD ApplicationSet error"). Warnings: an Application that is out of sync ("Argo CD Application out of sync") or whose resources are missing ("Argo CD Application resources missing").
 
 ### Changed

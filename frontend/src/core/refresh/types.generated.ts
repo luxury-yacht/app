@@ -1059,6 +1059,7 @@ export interface KarpenterFacts {
   replicas?: number;
   limits?: Record<string, string>;
   capacity?: Record<string, string>;
+  limitUsage?: Record<string, LimitUsage>;
   allocatable?: Record<string, string>;
   consolidationPolicy?: string;
   consolidateAfter?: string;
@@ -1096,8 +1097,7 @@ export interface KarpenterSummary {
   nodeClass?: ResourceLink;
   instanceType?: string;
   capacityType?: string;
-  capacity?: Record<string, string>;
-  limits?: Record<string, string>;
+  limitUsage?: Record<string, LimitUsage>;
 }
 
 export interface KarpenterTaint {
@@ -1109,6 +1109,11 @@ export interface KarpenterTaint {
 export interface KindInfo {
   kind: string;
   namespaced: boolean;
+}
+
+export interface LimitUsage {
+  percent: number;
+  presentation?: string;
 }
 
 export interface NamespaceAutoscalingSnapshotPayload {

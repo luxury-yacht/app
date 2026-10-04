@@ -131,3 +131,49 @@ func TestInvalidPoolOwnerRetainsLabelOnlyRelationship(t *testing.T) {
 	require.Equal(t, "cluster-a", link.Display.ClusterID)
 	require.Empty(t, link.Display.Version)
 }
+
+func karpenterLimitTestPool(kind string, limits, resources map[string]any) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "karpenter.sh/v1", "kind": kind,
+		"metadata": map[string]any{"name": "general"},
+		"spec":     map[string]any{"limits": limits},
+		"status":   map[string]any{"resources": resources},
+	}}
+}
+
+func TestNodePoolLimitUsageFlagsCPUAndMemoryAboveEightyPercent(t *testing.T) {
+	for _, test := range []struct {
+		name              string
+		resources, limits map[string]any
+		want              map[string]resourcemodel.LimitUsage
+		warnings          []string
+	}{
+		{"below threshold", map[string]any{"cpu": "1250m", "memory": "768Gi"}, map[string]any{"cpu": "2", "memory": "1Ti"},
+			map[string]resourcemodel.LimitUsage{"cpu": {Percent: 62.5}, "memory": {Percent: 75}}, nil},
+		{"exactly 80% is not flagged", map[string]any{"cpu": "8", "memory": "0"}, map[string]any{"cpu": "10", "memory": "1Ti"},
+			map[string]resourcemodel.LimitUsage{"cpu": {Percent: 80}, "memory": {Percent: 0}}, nil},
+		{"above 80% and over the limit", map[string]any{"cpu": "8500m", "memory": "1280Gi"}, map[string]any{"cpu": "10", "memory": "1Ti"},
+			map[string]resourcemodel.LimitUsage{"cpu": {Percent: 85, Presentation: "warning"}, "memory": {Percent: 125, Presentation: "warning"}},
+			[]string{"cpu", "memory"}},
+		// A zero limit or missing usage has no percentage rather than reading as 0%.
+		{"zero limit", map[string]any{"cpu": "1", "memory": "2Gi"}, map[string]any{"cpu": "0"}, nil, nil},
+		{"missing usage", map[string]any{"memory": "1Gi"}, map[string]any{"cpu": "10", "memory": "2Gi"},
+			map[string]resourcemodel.LimitUsage{"memory": {Percent: 50}}, nil},
+		{"only CPU and memory", map[string]any{"nvidia.com/gpu": "4"}, map[string]any{"nvidia.com/gpu": "4"}, nil, nil},
+	} {
+		pool := karpenterLimitTestPool("NodePool", test.limits, test.resources)
+		got := BuildFacts("cluster-a", pool).LimitUsage
+		require.Len(t, got, len(test.want), test.name)
+		for resource, want := range test.want {
+			require.InDelta(t, want.Percent, got[resource].Percent, 1e-9, "%s: %s", test.name, resource)
+			require.Equal(t, want.Presentation, got[resource].Presentation, "%s: %s", test.name, resource)
+		}
+		warnings, ok := LimitWarnings(pool)
+		require.True(t, ok, test.name)
+		require.ElementsMatch(t, test.warnings, warnings, test.name)
+	}
+
+	claim := karpenterLimitTestPool("NodeClaim", map[string]any{"cpu": "1"}, map[string]any{"cpu": "1"})
+	_, ok := LimitWarnings(claim)
+	require.False(t, ok, "only NodePools have limits")
+}

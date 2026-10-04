@@ -472,7 +472,7 @@ func argoCDStatuses(sync, health string) map[string][]string {
 	return map[string][]string{objectcatalog.ReportedStatusSync: {sync}, objectcatalog.ReportedStatusHealth: {health}}
 }
 
-func argoCDTestObject(clusterID, group, kind, name string, statuses map[string][]string) objectcatalog.ReportedStatus {
+func reportedStatusTestObject(clusterID, group, kind, name string, statuses map[string][]string) objectcatalog.ReportedStatus {
 	return objectcatalog.ReportedStatus{
 		Ref: resourcemodel.ResourceRef{
 			ClusterID: clusterID, Group: group, Version: "v1alpha1", Kind: kind, Resource: strings.ToLower(kind) + "s",
@@ -518,7 +518,7 @@ func TestClusterAttentionIndexFlagsArgoCDProblemsAsSoonAsReported(t *testing.T) 
 			map[string][]string{objectcatalog.ReportedStatusHealth: {"Degraded"}, objectcatalog.ReportedStatusConditions: {"ErrorOccurred"}},
 			AttentionSeverityError, []string{"argocd-applicationset-error"}},
 	} {
-		object := argoCDTestObject("cluster-a", "argoproj.io", test.kind, "storefront", test.statuses)
+		object := reportedStatusTestObject("cluster-a", "argoproj.io", test.kind, "storefront", test.statuses)
 		object.CreationTimestamp = now.Add(-30 * 24 * time.Hour).UnixMilli()
 		index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{object})
 		rows := index.Snapshot()
@@ -530,7 +530,7 @@ func TestClusterAttentionIndexFlagsArgoCDProblemsAsSoonAsReported(t *testing.T) 
 	}
 
 	// Several error conditions are one finding that names each of them.
-	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{argoCDTestObject("cluster-a", "argoproj.io", "Application", "storefront",
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{reportedStatusTestObject("cluster-a", "argoproj.io", "Application", "storefront",
 		withReported(healthy(), objectcatalog.ReportedStatusConditions, "ComparisonError", "SyncError"))})
 	rows := index.Snapshot()
 	require.Len(t, rows, 1)
@@ -539,13 +539,13 @@ func TestClusterAttentionIndexFlagsArgoCDProblemsAsSoonAsReported(t *testing.T) 
 	require.Contains(t, rows[0].Causes[0].Message, "SyncError")
 
 	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{
-		argoCDTestObject("cluster-a", "argoproj.io", "Application", "storefront",
+		reportedStatusTestObject("cluster-a", "argoproj.io", "Application", "storefront",
 			withReported(withReported(healthy(), objectcatalog.ReportedStatusOperation, "Succeeded"),
 				objectcatalog.ReportedStatusConditions, "SharedResourceWarning")),
-		argoCDTestObject("cluster-a", "argoproj.io", "ApplicationSet", "tenants",
+		reportedStatusTestObject("cluster-a", "argoproj.io", "ApplicationSet", "tenants",
 			map[string][]string{objectcatalog.ReportedStatusHealth: {"Healthy"}, objectcatalog.ReportedStatusConditions: {"ResourcesUpToDate"}}),
 		// Another API group's Application reporting the same words is not an Argo CD Application.
-		argoCDTestObject("cluster-a", "core.oam.dev", "Application", "storefront-vela", argoCDStatuses("OutOfSync", "Degraded")),
+		reportedStatusTestObject("cluster-a", "core.oam.dev", "Application", "storefront-vela", argoCDStatuses("OutOfSync", "Degraded")),
 	})
 	require.Empty(t, index.Snapshot())
 }
@@ -553,7 +553,7 @@ func TestClusterAttentionIndexFlagsArgoCDProblemsAsSoonAsReported(t *testing.T) 
 func TestClusterAttentionIndexDropsRestoredArgoCDFindingWhenApplicationIsDeleted(t *testing.T) {
 	now := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
 	meta := ClusterMeta{ClusterID: "cluster-a"}
-	appSet := argoCDTestObject(meta.ClusterID, "argoproj.io", "ApplicationSet", "tenants",
+	appSet := reportedStatusTestObject(meta.ClusterID, "argoproj.io", "ApplicationSet", "tenants",
 		map[string][]string{objectcatalog.ReportedStatusHealth: {"Degraded"}, objectcatalog.ReportedStatusConditions: {"ErrorOccurred"}})
 	original := newClusterAttentionIndex(meta, func() time.Time { return now })
 	original.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{appSet})
@@ -568,4 +568,27 @@ func TestClusterAttentionIndexDropsRestoredArgoCDFindingWhenApplicationIsDeleted
 	require.Len(t, restored.Snapshot(), 1)
 	restored.ReplaceReportedStatuses(nil)
 	require.Empty(t, restored.Snapshot(), "a restored finding must not outlive its deleted object")
+}
+
+func TestClusterAttentionIndexWarnsWhenKarpenterNodePoolNearsItsLimits(t *testing.T) {
+	now := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	pool := reportedStatusTestObject("cluster-a", "karpenter.sh", "NodePool", "general",
+		map[string][]string{objectcatalog.ReportedStatusLimits: {"cpu", "memory"}})
+	pool.Ref.Namespace = ""
+
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{pool})
+	rows := index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Equal(t, pool.Ref, rows[0].Ref)
+	require.Equal(t, AttentionSeverityWarning, rows[0].Severity)
+	require.Equal(t, []string{"karpenter-nodepool-near-limit"}, attentionCauseTypes(rows[0].Causes))
+	require.Contains(t, rows[0].Causes[0].Message, "cpu")
+	require.Contains(t, rows[0].Causes[0].Message, "memory")
+
+	// Back within its limits, the NodePool still reports but is not flagged.
+	pool.Statuses = nil
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{pool})
+	require.Empty(t, index.Snapshot())
 }

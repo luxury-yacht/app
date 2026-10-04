@@ -113,6 +113,7 @@ var contractTypes = []typeSpec{
 	{name: "KarpenterRequirement", typeOf: typeOf[karpenter.Requirement]()},
 	{name: "KarpenterTaint", typeOf: typeOf[karpenter.Taint]()},
 	{name: "KarpenterBudget", typeOf: typeOf[karpenter.Budget]()},
+	{name: "LimitUsage", typeOf: typeOf[resourcemodel.LimitUsage]()},
 	{name: "CustomResourceDetails", typeOf: typeOf[customresource.Details]()},
 	{name: "RefreshPermissionDeniedDetails", typeOf: typeOf[refresh.PermissionDeniedDetails]()},
 	{name: "RefreshPermissionDeniedStatus", typeOf: typeOf[refresh.PermissionDeniedStatus]()},
