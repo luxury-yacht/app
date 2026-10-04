@@ -38,6 +38,10 @@ const externalIPList = (d: ServiceDetails) => d.externalIPs ?? [];
 
 const renderEndpoints = (d: ServiceDetails): React.ReactNode => {
   const endpoints = d.endpoints ?? [];
+  // Null counts mean the EndpointSlices could not be listed, which is not the same as none.
+  if (d.readyEndpointCount === null) {
+    return 'Unknown';
+  }
   if (d.endpointCount === 0) {
     return <StatusChip variant="unhealthy">No endpoints</StatusChip>;
   }
@@ -66,8 +70,11 @@ const renderDnsName = (d: ServiceDetails): React.ReactNode => {
 };
 
 const readinessLabel = (d: ServiceDetails): string => {
+  if (d.readyEndpointCount === null) {
+    return 'readiness unknown';
+  }
   const parts = [`${d.readyEndpointCount} ready`];
-  if (d.notReadyEndpointCount > 0) {
+  if ((d.notReadyEndpointCount ?? 0) > 0) {
     parts.push(`${d.notReadyEndpointCount} not ready`);
   }
   return parts.join(', ');

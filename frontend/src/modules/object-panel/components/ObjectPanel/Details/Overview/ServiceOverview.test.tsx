@@ -183,6 +183,36 @@ describe('ServiceOverview', () => {
     expect(getValueForLabel(container, 'Status')?.textContent).toBe('ClusterIP, no endpoints');
   });
 
+  it('keeps endpoint readiness unknown when the EndpointSlices could not be listed', async () => {
+    await renderComponent({
+      serviceDetails: {
+        name: 'web',
+        namespace: 'shop',
+        status: 'ClusterIP',
+        statusPresentation: 'ready',
+        serviceType: 'ClusterIP',
+        clusterIP: '10.0.0.5',
+        sessionAffinity: 'None',
+        healthStatus: 'Unknown',
+        endpointCount: 0,
+        readyEndpointCount: null,
+        notReadyEndpointCount: null,
+        endpoints: [],
+        ports: [{ name: 'http', port: 80, protocol: 'TCP', targetPort: '8080' }],
+        selector: { app: 'web' },
+        labels: {},
+        annotations: {},
+      } as unknown,
+    });
+
+    const pods = listTexts('Backend')[0] ?? '';
+    expect(pods).toContain('readiness unknown');
+    expect(pods).not.toContain('0 ready');
+    const endpoints = getValueForLabel(container, 'Endpoints');
+    expect(endpoints?.textContent).toBe('Unknown');
+    expect(endpoints?.querySelector('.status-chip--unhealthy')).toBeNull();
+  });
+
   it('explains a headless service through its DNS name', async () => {
     await renderComponent({
       serviceDetails: {

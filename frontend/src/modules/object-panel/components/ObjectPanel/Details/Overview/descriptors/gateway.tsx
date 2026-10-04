@@ -380,7 +380,7 @@ const backendScope = (
   return parts;
 };
 
-// Weights are relative to the rule's other backends; a lone backend gets all of its traffic.
+// Weights are relative to the rule's other backends.
 const BackendEndpoint: React.FC<{
   backend: types.RouteBackendRefDetails;
   share: number | null;
@@ -405,9 +405,11 @@ const BackendEndpoint: React.FC<{
   );
 };
 
+// A lone backend gets all of its rule's traffic, so its share is only shown when its weight is 0
+// (no traffic at all); split backends always show their share.
 const trafficShares = (backends: types.RouteBackendRefDetails[]): Array<number | null> => {
   if (backends.length < 2) {
-    return backends.map(() => null);
+    return backends.map((backend) => (backend.weight > 0 ? null : 0));
   }
   const total = backends.reduce((sum, backend) => sum + backend.weight, 0);
   return backends.map((backend) => (total > 0 ? Math.round((backend.weight / total) * 100) : 0));

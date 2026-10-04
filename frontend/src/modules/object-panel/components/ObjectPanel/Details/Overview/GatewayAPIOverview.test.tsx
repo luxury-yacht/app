@@ -242,6 +242,10 @@ describe('GatewayAPIOverview', () => {
           ],
         },
         { backendRefs: [{ target: serviceRef('web-svc'), port: 80, weight: 1 }] },
+        {
+          matches: [{ path: { type: 'PathPrefix', value: '/old' } }],
+          backendRefs: [{ target: serviceRef('legacy'), port: 80, weight: 0 }],
+        },
       ],
       conditions: [{ type: 'ResolvedRefs', status: 'True', reason: 'ResolvedRefs' }],
       labels: {},
@@ -251,7 +255,7 @@ describe('GatewayAPIOverview', () => {
     expect(getValueForLabel(container, 'Hostnames')?.textContent).toBe('example.com');
     expect(getValueForLabel(container, 'Parent Refs')?.textContent).toContain('Gateway prod/edge');
 
-    const [split, catchAll] = routeRules();
+    const [split, catchAll, disabled] = routeRules();
     // Matches are alternatives; every condition inside one match applies together.
     const requests = endpointTexts(split, 'Requests');
     expect(requests).toHaveLength(2);
@@ -276,6 +280,8 @@ describe('GatewayAPIOverview', () => {
     // A rule without matches takes every request; a single backend gets no share.
     expect(endpointTexts(catchAll, 'Requests')).toEqual(['Any request']);
     expect(endpointTexts(catchAll, 'Backends')[0]).not.toContain('%');
+    // Weight 0 sends no traffic, even for a rule's only backend.
+    expect(endpointTexts(disabled, 'Backends')[0]).toContain('0% of traffic');
   });
 
   it('describes gRPC method matches and TLS hostnames as the requests a rule takes', async () => {

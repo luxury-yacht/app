@@ -114,10 +114,11 @@ func ReadyEndpointCount(slices []*discoveryv1.EndpointSlice) int {
 }
 
 // endpointsFromSlices aggregates ready/not-ready endpoint addresses from the
-// Service's EndpointSlices into "ip:port" strings + ready/not-ready counts.
+// Service's EndpointSlices into "ip:port" strings + ready/not-ready counts. A slice
+// without ports (a headless Service may define none) still counts its addresses.
 func endpointsFromSlices(slices []*discoveryv1.EndpointSlice) (endpoints []string, readyCount, notReadyCount int) {
 	for _, slice := range slices {
-		if slice == nil || len(slice.Ports) == 0 {
+		if slice == nil {
 			continue
 		}
 		sliceEndpoints, sliceReady, sliceNotReady := endpointsFromSlice(slice)
@@ -144,7 +145,11 @@ func endpointsFromSlice(slice *discoveryv1.EndpointSlice) (endpoints []string, r
 	return endpoints, readyCount, notReadyCount
 }
 
+// formatEndpointAddresses lists "ip:port" per address and port; with no ports, the bare address.
 func formatEndpointAddresses(addresses []string, ports []discoveryv1.EndpointPort) []string {
+	if len(ports) == 0 {
+		return append([]string(nil), addresses...)
+	}
 	formatted := make([]string, 0, len(addresses)*len(ports))
 	for _, address := range addresses {
 		for _, port := range ports {

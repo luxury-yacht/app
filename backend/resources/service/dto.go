@@ -28,9 +28,10 @@ type ServiceDetails struct {
 	Selector               map[string]string    `json:"selector,omitempty"`
 	Endpoints              []string             `json:"endpoints,omitempty"`
 	EndpointCount          int                  `json:"endpointCount"`
-	// Ready/not-ready backend addresses (pods), counted once each regardless of port count.
-	ReadyEndpointCount    int               `json:"readyEndpointCount"`
-	NotReadyEndpointCount int               `json:"notReadyEndpointCount"`
+	// Ready/not-ready backend addresses (pods), counted once each regardless of port count. Nil
+	// when the EndpointSlices could not be listed, so unknown readiness never reads as zero.
+	ReadyEndpointCount    *int              `json:"readyEndpointCount"`
+	NotReadyEndpointCount *int              `json:"notReadyEndpointCount"`
 	Labels                map[string]string `json:"labels,omitempty"`
 	Annotations           map[string]string `json:"annotations,omitempty"`
 	HealthStatus          string            `json:"healthStatus"`

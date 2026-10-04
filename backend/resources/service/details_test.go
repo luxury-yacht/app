@@ -351,8 +351,8 @@ func TestServiceDetailsCountReadyAddressesNotPortEntries(t *testing.T) {
 
 	detail := NewService(common.Dependencies{}).buildServiceDetails(svc, slices)
 	require.Len(t, detail.Endpoints, 6)
-	require.Equal(t, 3, detail.ReadyEndpointCount)
-	require.Equal(t, 1, detail.NotReadyEndpointCount)
+	require.Equal(t, 3, *detail.ReadyEndpointCount)
+	require.Equal(t, 1, *detail.NotReadyEndpointCount)
 }
 
 // A Service whose endpoint list is known to be empty needs attention; when the list could not be
@@ -376,4 +376,47 @@ func TestServiceStatusWarnsWhenEndpointsAreKnownEmpty(t *testing.T) {
 	unknown := m.buildServiceDetails(svc, nil)
 	require.Equal(t, "ClusterIP", unknown.Status)
 	require.Equal(t, "ready", unknown.StatusPresentation)
+}
+
+// A headless Service may define no ports, so its slices carry none; their ready addresses still
+// count, and the Service must not be reported as having no endpoints.
+func TestServiceDetailsCountPortlessEndpoints(t *testing.T) {
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "data"},
+		Spec: corev1.ServiceSpec{
+			Type:      corev1.ServiceTypeClusterIP,
+			ClusterIP: corev1.ClusterIPNone,
+			Selector:  map[string]string{"app": "db"},
+		},
+	}
+	ready := true
+	slices := []*discoveryv1.EndpointSlice{{
+		ObjectMeta: metav1.ObjectMeta{Name: "db-abc"},
+		Endpoints: []discoveryv1.Endpoint{
+			{Addresses: []string{"10.1.0.9"}, Conditions: discoveryv1.EndpointConditions{Ready: &ready}},
+		},
+	}}
+
+	detail := NewService(common.Dependencies{}).buildServiceDetails(svc, slices)
+	require.Equal(t, "ClusterIP, 1 endpoint", detail.Status)
+	require.Equal(t, []string{"10.1.0.9"}, detail.Endpoints)
+	require.NotNil(t, detail.ReadyEndpointCount)
+	require.Equal(t, 1, *detail.ReadyEndpointCount)
+}
+
+// When the EndpointSlices cannot be listed, readiness is unknown rather than zero.
+func TestServiceDetailsLeaveReadinessUnknownWhenSlicesUnavailable(t *testing.T) {
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "shop"},
+		Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP, ClusterIP: "10.0.0.5"},
+	}
+	m := NewService(common.Dependencies{})
+
+	unknown := m.buildServiceDetails(svc, nil)
+	require.Nil(t, unknown.ReadyEndpointCount)
+	require.Nil(t, unknown.NotReadyEndpointCount)
+
+	known := m.buildServiceDetails(svc, []*discoveryv1.EndpointSlice{})
+	require.NotNil(t, known.ReadyEndpointCount)
+	require.Equal(t, 0, *known.ReadyEndpointCount)
 }
