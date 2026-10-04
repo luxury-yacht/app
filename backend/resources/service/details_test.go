@@ -321,3 +321,36 @@ func TestManagerServiceErrors(t *testing.T) {
 	_, err := manager.GetService(context.Background(), "default", "web")
 	require.Error(t, err)
 }
+
+// The Overview counts the pods behind a Service: ready and not-ready addresses, not the
+// address-per-port entries of the Endpoints list.
+func TestServiceDetailsCountReadyAddressesNotPortEntries(t *testing.T) {
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "shop"},
+		Spec: corev1.ServiceSpec{
+			Type:      corev1.ServiceTypeClusterIP,
+			ClusterIP: "10.0.0.5",
+			Ports:     []corev1.ServicePort{{Name: "http", Port: 80}, {Name: "metrics", Port: 9090}},
+		},
+	}
+	httpPort, metricsPort := int32(8080), int32(9090)
+	ready, notReady := true, false
+	endpoint := func(address string, isReady *bool) discoveryv1.Endpoint {
+		return discoveryv1.Endpoint{Addresses: []string{address}, Conditions: discoveryv1.EndpointConditions{Ready: isReady}}
+	}
+	slices := []*discoveryv1.EndpointSlice{{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-abc"},
+		Ports:      []discoveryv1.EndpointPort{{Port: &httpPort}, {Port: &metricsPort}},
+		Endpoints: []discoveryv1.Endpoint{
+			endpoint("10.1.0.1", &ready),
+			endpoint("10.1.0.2", &ready),
+			endpoint("10.1.0.3", &ready),
+			endpoint("10.1.0.4", &notReady),
+		},
+	}}
+
+	detail := NewService(common.Dependencies{}).buildServiceDetails(svc, slices)
+	require.Len(t, detail.Endpoints, 6)
+	require.Equal(t, 3, detail.ReadyEndpointCount)
+	require.Equal(t, 1, detail.NotReadyEndpointCount)
+}

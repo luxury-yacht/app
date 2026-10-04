@@ -216,8 +216,47 @@ type RouteCommonFacts struct {
 }
 
 type RouteRuleFacts struct {
-	Matches  []string       `json:"matches,omitempty"`
-	Backends []ResourceLink `json:"backends,omitempty"`
+	Matches  []RouteMatchFacts   `json:"matches,omitempty"`
+	Backends []RouteBackendFacts `json:"backends,omitempty"`
+}
+
+// RouteMatchFacts is one route match; every condition it sets must hold. HTTP matches use
+// Path/Method/QueryParams, gRPC matches use GRPCMethod, and both may carry Headers. A rule with no
+// matches matches every request.
+type RouteMatchFacts struct {
+	Path        *RouteValueMatchFacts  `json:"path,omitempty"`
+	Method      string                 `json:"method,omitempty"`
+	GRPCMethod  *RouteGRPCMethodFacts  `json:"grpcMethod,omitempty"`
+	Headers     []RouteNamedMatchFacts `json:"headers,omitempty"`
+	QueryParams []RouteNamedMatchFacts `json:"queryParams,omitempty"`
+}
+
+// RouteValueMatchFacts compares a value by Type (for paths: Exact, PathPrefix, RegularExpression).
+type RouteValueMatchFacts struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
+// RouteNamedMatchFacts compares a named header or query parameter by Type (Exact, RegularExpression).
+type RouteNamedMatchFacts struct {
+	Type  string `json:"type"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// RouteGRPCMethodFacts selects gRPC calls; an empty Service or Method matches any.
+type RouteGRPCMethodFacts struct {
+	Type    string `json:"type"`
+	Service string `json:"service,omitempty"`
+	Method  string `json:"method,omitempty"`
+}
+
+// RouteBackendFacts is one backend of a rule. Weight is the backend's share of the rule's traffic
+// relative to its sibling backends (the API default is 1; 0 sends nothing).
+type RouteBackendFacts struct {
+	Link   ResourceLink `json:"link"`
+	Port   *int32       `json:"port,omitempty"`
+	Weight int32        `json:"weight"`
 }
 
 type PolicyRuleFacts struct {

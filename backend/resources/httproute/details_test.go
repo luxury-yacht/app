@@ -43,7 +43,7 @@ func TestBuildDetailsUseSharedFactsAndDisplayOnlyRefs(t *testing.T) {
 	require.Equal(t, "example.com", detail.BackendRefs[0].Display.Group)
 	require.Equal(t, "Widget", detail.BackendRefs[0].Display.Kind)
 	require.Equal(t, "backend", detail.BackendRefs[0].Display.Name)
-	require.NotNil(t, detail.Rules[0].BackendRefs[0].Display)
+	require.NotNil(t, detail.Rules[0].BackendRefs[0].Target.Display)
 }
 
 func TestBuildDetailsDoesNotInventVersionsForUnknownGatewayTargets(t *testing.T) {
@@ -66,7 +66,7 @@ func TestBuildDetailsDoesNotInventVersionsForUnknownGatewayTargets(t *testing.T)
 			detail := NewService(common.Dependencies{ClusterID: "cluster-a"}).buildDetails(route)
 			require.Nil(t, detail.ParentRefs[0].Ref)
 			require.Nil(t, detail.BackendRefs[0].Ref)
-			require.Nil(t, detail.Rules[0].BackendRefs[0].Ref)
+			require.Nil(t, detail.Rules[0].BackendRefs[0].Target.Ref)
 			display := detail.BackendRefs[0].Display
 			require.NotNil(t, display)
 			require.Equal(t, "cluster-a", display.ClusterID)

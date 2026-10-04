@@ -687,6 +687,15 @@ export interface RoleRef {
     "name": string;
 }
 
+/**
+ * RouteBackendRefDetails is one rule backend; Weight is its share relative to sibling backends.
+ */
+export interface RouteBackendRefDetails {
+    "target": RefOrDisplay;
+    "port"?: number | null;
+    "weight": number;
+}
+
 export interface RouteDetails {
     "kind": string;
     "name": string;
@@ -703,9 +712,38 @@ export interface RouteDetails {
     "annotations"?: { [_ in string]?: string } | null;
 }
 
+export interface RouteGRPCMethod {
+    "type": string;
+    "service"?: string;
+    "method"?: string;
+}
+
+/**
+ * RouteMatchDetails is one route match; every condition it sets must hold. A rule with no matches
+ * matches every request.
+ */
+export interface RouteMatchDetails {
+    "path"?: RouteValueMatch | null;
+    "method"?: string;
+    "grpcMethod"?: RouteGRPCMethod | null;
+    "headers"?: RouteNamedMatch[] | null;
+    "queryParams"?: RouteNamedMatch[] | null;
+}
+
+export interface RouteNamedMatch {
+    "type": string;
+    "name": string;
+    "value": string;
+}
+
 export interface RouteRuleDetails {
-    "matches"?: string[] | null;
-    "backendRefs"?: RefOrDisplay[] | null;
+    "matches"?: RouteMatchDetails[] | null;
+    "backendRefs"?: RouteBackendRefDetails[] | null;
+}
+
+export interface RouteValueMatch {
+    "type": string;
+    "value": string;
 }
 
 /**

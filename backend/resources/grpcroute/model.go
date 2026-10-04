@@ -8,8 +8,6 @@
 package grpcroute
 
 import (
-	"fmt"
-
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -27,29 +25,41 @@ func BuildFacts(clusterID string, route *gatewayv1.GRPCRoute) Facts {
 	for _, rule := range route.Spec.Rules {
 		ruleFacts := resourcemodel.RouteRuleFacts{}
 		for _, match := range rule.Matches {
-			ruleFacts.Matches = append(ruleFacts.Matches, grpcMatchSummary(match))
+			ruleFacts.Matches = append(ruleFacts.Matches, grpcMatchFacts(match))
 		}
 		for _, backendRef := range rule.BackendRefs {
-			link := resourcemodel.GatewayBackendRefLink(clusterID, route.Namespace, backendRef.BackendObjectReference)
-			ruleFacts.Backends = append(ruleFacts.Backends, link)
-			common.Backends = append(common.Backends, link)
+			backend := resourcemodel.GatewayRouteBackendFacts(clusterID, route.Namespace, backendRef.BackendRef)
+			ruleFacts.Backends = append(ruleFacts.Backends, backend)
+			common.Backends = append(common.Backends, backend.Link)
 		}
 		common.Rules = append(common.Rules, ruleFacts)
 	}
 	return Facts{RouteCommonFacts: common}
 }
 
-func grpcMatchSummary(match gatewayv1.GRPCRouteMatch) string {
+// grpcMatchFacts keeps every condition of a gRPC match; a missing method matches every call and a
+// missing comparison type is the API default, Exact.
+func grpcMatchFacts(match gatewayv1.GRPCRouteMatch) resourcemodel.RouteMatchFacts {
+	facts := resourcemodel.RouteMatchFacts{}
 	if match.Method != nil {
-		if match.Method.Service != nil && match.Method.Method != nil {
-			return fmt.Sprintf("%s/%s", *match.Method.Service, *match.Method.Method)
+		method := &resourcemodel.RouteGRPCMethodFacts{Type: string(gatewayv1.GRPCMethodMatchExact)}
+		if match.Method.Type != nil {
+			method.Type = string(*match.Method.Type)
 		}
 		if match.Method.Service != nil {
-			return *match.Method.Service
+			method.Service = *match.Method.Service
 		}
 		if match.Method.Method != nil {
-			return *match.Method.Method
+			method.Method = *match.Method.Method
 		}
+		facts.GRPCMethod = method
 	}
-	return "Any"
+	for _, header := range match.Headers {
+		next := resourcemodel.RouteNamedMatchFacts{Type: string(gatewayv1.GRPCHeaderMatchExact), Name: string(header.Name), Value: header.Value}
+		if header.Type != nil {
+			next.Type = string(*header.Type)
+		}
+		facts.Headers = append(facts.Headers, next)
+	}
+	return facts
 }

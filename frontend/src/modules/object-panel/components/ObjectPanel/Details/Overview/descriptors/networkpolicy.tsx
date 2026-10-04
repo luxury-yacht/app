@@ -1,20 +1,33 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/networkpolicy.tsx
  *
- * NetworkPolicy Overview descriptor. Each rule renders as a flow built from the ReferenceGrant
- * diagram boxes: allowed sources → ports → this policy's pods (Ingress), or this policy's pods →
- * ports → allowed destinations (Egress). Every peer is its own box, so separate boxes are
- * alternatives (OR) while the namespace and pod terms inside one box apply together (AND).
+ * NetworkPolicy Overview descriptor. Each rule renders as a shared traffic flow: allowed sources →
+ * ports → this policy's pods (Ingress), or this policy's pods → ports → allowed destinations
+ * (Egress). Every peer is its own box, so separate boxes are alternatives (OR) while the namespace
+ * and pod terms inside one box apply together (AND).
  */
 
 import type { networkpolicy } from '@core/backend-api/models';
 import { StatusChip } from '@shared/components/StatusChip';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
-import { Fragment } from 'react';
 import type { OverviewDescriptor } from '../schema';
 import { labelSelectorTerms } from '../shared/labelSelector';
-import '../shared/OverviewBlocks.css';
+import {
+  FlowArrow,
+  FlowDenied,
+  FlowEndpoint,
+  FlowEndpoints,
+  FlowScope,
+  FlowSubject,
+  FlowTerm,
+  FlowTermLines,
+  TrafficFlow,
+  TrafficFlowDeniedCard,
+  TrafficFlowRule,
+  TrafficFlowRules,
+  TrafficFlowSection,
+} from '../shared/TrafficFlow';
 import '../NetworkPolicyOverview.css';
 
 type NetworkPolicyDetails = networkpolicy.NetworkPolicyDetails;
@@ -30,31 +43,6 @@ const formatPort = (port: NetworkPolicyPort): string => {
   }
   return port.endPort ? `${protocol} ${port.port}-${port.endPort}` : `${protocol} ${port.port}`;
 };
-
-/** Lets a long "prefix/key=value" term wrap after "/" or "=" instead of mid-word. */
-const SelectorTerm: React.FC<{ term: string }> = ({ term }) => {
-  const parts = (term.match(/[^/=]*[/=]?/g) ?? []).filter(Boolean);
-  return (
-    <>
-      {withStableListKeys(parts, (part) => part).map(({ key, value }, index) => (
-        <Fragment key={key}>
-          {index > 0 && <wbr />}
-          {value}
-        </Fragment>
-      ))}
-    </>
-  );
-};
-
-const TermLines: React.FC<{ terms: string[] }> = ({ terms }) => (
-  <>
-    {withStableListKeys(terms, (term) => term).map(({ key, value }) => (
-      <div key={key} className="reference-grant-item">
-        <SelectorTerm term={value} />
-      </div>
-    ))}
-  </>
-);
 
 // Kubernetes sets this label on every namespace to the namespace's own name.
 const NAMESPACE_NAME_LABEL = 'kubernetes.io/metadata.name';
@@ -90,20 +78,19 @@ const NamespaceScope: React.FC<{
   const names = selector ? selectedNamespaceNames(selector) : [policyNamespace];
   if (names) {
     return (
-      <div className="network-policy-peer-scope">
-        in {names.length === 1 ? 'namespace' : 'namespaces'}{' '}
-        <span className="network-policy-term">{names.join(', ')}</span>
-      </div>
+      <FlowScope>
+        in {names.length === 1 ? 'namespace' : 'namespaces'} <FlowTerm>{names.join(', ')}</FlowTerm>
+      </FlowScope>
     );
   }
   const terms = labelSelectorTerms(selector);
   if (terms.length === 0) {
-    return <div className="network-policy-peer-scope">in any namespace</div>;
+    return <FlowScope>in any namespace</FlowScope>;
   }
   return (
     <>
-      <div className="network-policy-peer-scope">in namespaces matching</div>
-      <TermLines terms={terms} />
+      <FlowScope>in namespaces matching</FlowScope>
+      <FlowTermLines terms={terms} />
     </>
   );
 };
@@ -113,10 +100,8 @@ const PodSubject: React.FC<{ selector?: networkpolicy.LabelSelector | null }> = 
   const terms = labelSelectorTerms(selector);
   return (
     <>
-      <div className="network-policy-peer-subject">
-        {terms.length > 0 ? 'Pods matching' : 'All pods'}
-      </div>
-      <TermLines terms={terms} />
+      <FlowSubject>{terms.length > 0 ? 'Pods matching' : 'All pods'}</FlowSubject>
+      <FlowTermLines terms={terms} />
     </>
   );
 };
@@ -135,14 +120,14 @@ const PodPeer: React.FC<{ peer: NetworkPolicyPeer; policyNamespace: string }> = 
 // Except ranges are carved out of the allowed range, so they render as red exclusion chips.
 const IPBlockPeer: React.FC<{ ipBlock: networkpolicy.IPBlock }> = ({ ipBlock }) => (
   <>
-    <div className="network-policy-peer-subject">IP addresses</div>
-    <div className="network-policy-peer-scope">
-      in <span className="network-policy-term">{ipBlock.cidr}</span>
-    </div>
+    <FlowSubject>IP addresses</FlowSubject>
+    <FlowScope>
+      in <FlowTerm>{ipBlock.cidr}</FlowTerm>
+    </FlowScope>
     {!!ipBlock.except?.length && (
       <div className="network-policy-excluded">
-        <span className="network-policy-muted">excluding</span>
-        <ul className="network-policy-list network-policy-excluded-list" aria-label="Excluded">
+        <span className="traffic-flow-muted">excluding</span>
+        <ul className="traffic-flow-list network-policy-excluded-list" aria-label="Excluded">
           {withStableListKeys(ipBlock.except, (cidr) => cidr).map(({ key, value }) => (
             <li key={key}>
               <StatusChip variant="unhealthy" className="network-policy-excluded-range">
@@ -161,37 +146,37 @@ const PeerList: React.FC<{
   peers?: NetworkPolicyPeer[] | null;
   policyNamespace: string;
 }> = ({ label, peers, policyNamespace }) => (
-  <ul className="reference-grant-side-stack network-policy-list" aria-label={label}>
+  <FlowEndpoints label={label}>
     {peers && peers.length > 0 ? (
       withStableListKeys(peers, (peer) => JSON.stringify(peer)).map(({ key, value: peer }) => (
-        <li key={key} className="reference-grant-side">
+        <FlowEndpoint key={key}>
           {peer.ipBlock ? (
             <IPBlockPeer ipBlock={peer.ipBlock} />
           ) : (
             <PodPeer peer={peer} policyNamespace={policyNamespace} />
           )}
-        </li>
+        </FlowEndpoint>
       ))
     ) : (
       // No peers in a rule means traffic is allowed from (or to) anywhere.
-      <li className="reference-grant-side">
-        <div className="network-policy-peer-subject">Any pod or IP address</div>
-      </li>
+      <FlowEndpoint>
+        <FlowSubject>Any pod or IP address</FlowSubject>
+      </FlowEndpoint>
     )}
-  </ul>
+  </FlowEndpoints>
 );
 
-// The policy's own pods read like a peer; the coloured outline marks their role.
+// The policy's own pods read like a peer; the target outline marks their role.
 const SelectedPods: React.FC<{ policy: NetworkPolicyDetails }> = ({ policy }) => (
-  <ul className="reference-grant-side-stack network-policy-list" aria-label="Selected pods">
-    <li className="reference-grant-side network-policy-selected">
+  <FlowEndpoints label="Selected pods">
+    <FlowEndpoint target>
       <PodSubject selector={policy.podSelector} />
       <NamespaceScope policyNamespace={policy.namespace} />
-    </li>
-  </ul>
+    </FlowEndpoint>
+  </FlowEndpoints>
 );
 
-const Flow: React.FC<{
+const PolicyFlow: React.FC<{
   direction: Direction;
   policy: NetworkPolicyDetails;
   peers?: NetworkPolicyPeer[] | null;
@@ -207,87 +192,51 @@ const Flow: React.FC<{
   );
   const selected = <SelectedPods policy={policy} />;
   const [from, to] = ingress ? [peerList, selected] : [selected, peerList];
-  return (
-    <div className="reference-grant-diagram network-policy-flow">
-      {from}
-      {middle}
-      {to}
-    </div>
-  );
+  return <TrafficFlow from={from} middle={middle} to={to} />;
 };
 
-const RulePorts: React.FC<{ ports?: NetworkPolicyPort[] | null }> = ({ ports }) => {
-  const labels = ports && ports.length > 0 ? ports.map(formatPort) : ['All ports'];
-  return (
-    <div className="network-policy-flow-ports">
-      <span className="reference-grant-arrow" aria-hidden="true">
-        →
-      </span>
-      <ul className="network-policy-list" aria-label="Ports">
-        {withStableListKeys(labels, (label) => label).map(({ key, value }) => (
-          <li key={key}>{value}</li>
-        ))}
-      </ul>
-    </div>
-  );
-};
-
-const DeniedMarker: React.FC = () => (
-  <div className="network-policy-flow-ports network-policy-denied">
-    <span className="reference-grant-arrow" aria-hidden="true">
-      ✕
-    </span>
-    <span>denied</span>
-  </div>
-);
+const rulePorts = (ports?: NetworkPolicyPort[] | null): string[] =>
+  ports && ports.length > 0 ? ports.map(formatPort) : ['All ports'];
 
 const DirectionContent: React.FC<{ policy: NetworkPolicyDetails; direction: Direction }> = ({
   policy,
   direction,
 }) => {
   if (!policy.policyTypes?.includes(direction)) {
-    return <span className="network-policy-muted">No {direction.toLowerCase()} rules</span>;
+    return <span className="traffic-flow-muted">No {direction.toLowerCase()} rules</span>;
   }
   const rules = (direction === 'Ingress' ? policy.ingressRules : policy.egressRules) ?? [];
   // A restricted direction with no rules allows no traffic at all.
   if (rules.length === 0) {
     return (
-      <div className="network-policy-card network-policy-card--denied">
-        <Flow direction={direction} policy={policy} middle={<DeniedMarker />} />
-      </div>
+      <TrafficFlowDeniedCard>
+        <PolicyFlow direction={direction} policy={policy} middle={<FlowDenied />} />
+      </TrafficFlowDeniedCard>
     );
   }
   return (
-    <ol className="network-policy-list network-policy-rules" aria-label={`${direction} rules`}>
+    <TrafficFlowRules label={`${direction} rules`}>
       {withStableListKeys(rules, (rule) => JSON.stringify(rule)).map(
         ({ key, value: rule }, index) => (
-          <li key={key} className="network-policy-rule network-policy-card">
-            <div className="network-policy-rule-title">
-              {direction} · Rule {index + 1}
-            </div>
-            <Flow
+          <TrafficFlowRule key={key} title={`${direction} · Rule ${index + 1}`}>
+            <PolicyFlow
               direction={direction}
               policy={policy}
               peers={direction === 'Ingress' ? rule.from : rule.to}
-              middle={<RulePorts ports={rule.ports} />}
+              middle={<FlowArrow label="Ports" items={rulePorts(rule.ports)} />}
             />
-          </li>
+          </TrafficFlowRule>
         )
       )}
-    </ol>
+    </TrafficFlowRules>
   );
 };
 
 const directionSection = (direction: Direction) => (policy: NetworkPolicyDetails) => (
-  <section
-    className={`network-policy-direction network-policy-direction--${direction.toLowerCase()}`}
-    aria-label={direction}
-  >
-    <h3 className="metadata-label">{direction}</h3>
+  <TrafficFlowSection label={direction} tone={direction === 'Ingress' ? 'inbound' : 'outbound'}>
     <DirectionContent policy={policy} direction={direction} />
-  </section>
+  </TrafficFlowSection>
 );
-
 export const networkPolicyDescriptor: OverviewDescriptor<NetworkPolicyDetails> = {
   displayKind: 'NetworkPolicy',
   dtoName: 'NetworkPolicyDetails',

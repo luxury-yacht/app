@@ -111,6 +111,8 @@ func (s *Service) buildServiceDetails(svc *corev1.Service, slices []*discoveryv1
 
 	details.Endpoints = facts.Endpoints
 	details.EndpointCount = len(details.Endpoints)
+	details.ReadyEndpointCount = facts.ReadyEndpointCount
+	details.NotReadyEndpointCount = facts.NotReadyEndpointCount
 
 	switch {
 	case len(details.Endpoints) > 0:

@@ -31,6 +31,14 @@ describe('ServiceOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
+  const portsSection = () =>
+    container.querySelector<HTMLElement>('section[aria-label="Ports"]') ?? undefined;
+  const listTexts = (label: string) =>
+    Array.from(
+      portsSection()?.querySelectorAll<HTMLElement>(`ul[aria-label="${label}"] > li`) ?? [],
+      (item) => item.textContent ?? ''
+    );
+
   const renderComponent = async (props: { serviceDetails: unknown }) => {
     await act(async () => {
       root.render(
@@ -71,6 +79,8 @@ describe('ServiceOverview', () => {
         sessionAffinityTimeout: 10800,
         healthStatus: 'Healthy',
         endpointCount: 2,
+        readyEndpointCount: 2,
+        notReadyEndpointCount: 1,
         endpoints: ['10.244.0.10:80', '10.244.0.11:80'],
         ports: [
           { name: 'http', port: 80, protocol: 'TCP', targetPort: 8080, nodePort: 30080 },
@@ -97,10 +107,22 @@ describe('ServiceOverview', () => {
     // Endpoints row now shows the IP list directly (≤5 endpoints).
     expect(getValueForLabel(container, 'Endpoints')?.textContent).toContain('10.244.0.10:80');
 
-    const portsValue = getValueForLabel(container, 'Ports');
-    expect(portsValue?.textContent).toContain('http');
-    expect(portsValue?.textContent).toContain('80/TCP → 8080 (NodePort: 30080)');
-    expect(portsValue?.textContent).toContain('443/TCP');
+    // The in-cluster DNS name is shared by every port, so it is a row like the addresses.
+    expect(getValueForLabel(container, 'DNS Name')?.textContent).toBe('web-lb.prod.svc');
+
+    // All ports flow to the same pods: one chip per port, the pods once.
+    const [httpChip, httpsChip] = listTexts('Ports');
+    // A chip names the port, maps Service port to target port, and gives its node port.
+    expect(httpChip).toContain('http');
+    expect(httpChip).toContain('TCP 80:8080');
+    expect(httpChip).toContain('30080');
+    // An unset target port is the API default: the Service port itself.
+    expect(httpsChip).toBe('TCP 443:443');
+    const backends = listTexts('Backend');
+    expect(backends).toHaveLength(1);
+    expect(backends[0]).toContain('app=web');
+    expect(backends[0]).toContain('2 ready');
+    expect(backends[0]).toContain('1 not ready');
   });
 
   it('handles ExternalName services and omits optional fields when absent', async () => {
@@ -114,7 +136,7 @@ describe('ServiceOverview', () => {
         healthStatus: 'Unknown',
         endpointCount: 0,
         endpoints: [],
-        ports: [],
+        ports: [{ port: 443, protocol: 'TCP' }],
         externalName: 'api.example.com',
         labels: {},
         annotations: {},
@@ -130,5 +152,41 @@ describe('ServiceOverview', () => {
     // Zero endpoints surface as an unhealthy status chip rather than a count.
     const endpoints = getValueForLabel(container, 'Endpoints');
     expect(endpoints?.querySelector('.status-chip--unhealthy')).not.toBeNull();
+    // ExternalName is a DNS alias: clients reach the external host, not pods.
+    expect(listTexts('Backend')[0]).toContain('api.example.com');
+  });
+
+  it('explains a headless service through its DNS name', async () => {
+    await renderComponent({
+      serviceDetails: {
+        name: 'postgres',
+        namespace: 'data',
+        serviceType: 'ClusterIP',
+        clusterIP: 'None',
+        clusterIPs: ['None'],
+        sessionAffinity: 'None',
+        healthStatus: 'Healthy',
+        endpointCount: 1,
+        readyEndpointCount: 1,
+        notReadyEndpointCount: 0,
+        endpoints: ['10.244.5.2:5432'],
+        ports: [
+          { name: 'pg', port: 5432, protocol: 'TCP', targetPort: '5432' },
+          { name: 'stats', port: 9187, protocol: 'UDP', targetPort: 'metrics' },
+        ],
+        selector: { app: 'postgres' },
+        labels: {},
+        annotations: {},
+      } as unknown,
+    });
+
+    // A headless Service has no virtual IP; its DNS name returns the pods' own IPs.
+    const dnsName = getValueForLabel(container, 'DNS Name')?.textContent ?? '';
+    expect(dnsName).toContain('postgres.data.svc');
+    expect(dnsName).toContain('pod IPs');
+    // A named target port has no single number; each pod resolves it.
+    const [, namedChip] = listTexts('Ports');
+    expect(namedChip).toContain('stats');
+    expect(namedChip).toContain('UDP 9187:metrics');
   });
 });

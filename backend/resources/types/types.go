@@ -429,8 +429,42 @@ type RouteDetails struct {
 }
 
 type RouteRuleDetails struct {
-	Matches     []string       `json:"matches,omitempty"`
-	BackendRefs []RefOrDisplay `json:"backendRefs,omitempty"`
+	Matches     []RouteMatchDetails      `json:"matches,omitempty"`
+	BackendRefs []RouteBackendRefDetails `json:"backendRefs,omitempty"`
+}
+
+// RouteMatchDetails is one route match; every condition it sets must hold. A rule with no matches
+// matches every request.
+type RouteMatchDetails struct {
+	Path        *RouteValueMatch  `json:"path,omitempty"`
+	Method      string            `json:"method,omitempty"`
+	GRPCMethod  *RouteGRPCMethod  `json:"grpcMethod,omitempty"`
+	Headers     []RouteNamedMatch `json:"headers,omitempty"`
+	QueryParams []RouteNamedMatch `json:"queryParams,omitempty"`
+}
+
+type RouteValueMatch struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
+type RouteNamedMatch struct {
+	Type  string `json:"type"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type RouteGRPCMethod struct {
+	Type    string `json:"type"`
+	Service string `json:"service,omitempty"`
+	Method  string `json:"method,omitempty"`
+}
+
+// RouteBackendRefDetails is one rule backend; Weight is its share relative to sibling backends.
+type RouteBackendRefDetails struct {
+	Target RefOrDisplay `json:"target"`
+	Port   *int32       `json:"port,omitempty"`
+	Weight int32        `json:"weight"`
 }
 
 type HTTPRouteDetails = RouteDetails
