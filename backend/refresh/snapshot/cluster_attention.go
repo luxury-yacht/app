@@ -262,8 +262,8 @@ type attentionSourceRecord struct {
 	Message            string
 	AgeTimestamp       int64
 	// ReportedStatuses maps each aspect a reported-status object reports about itself (for
-	// example an Argo CD Application's sync and health) to its current value.
-	ReportedStatuses map[string]string
+	// example an Argo CD Application's sync, health, and conditions) to its current values.
+	ReportedStatuses map[string][]string
 }
 
 type attentionEvaluation struct {
@@ -837,7 +837,7 @@ func (i *clusterAttentionIndex) ReplaceFinalizerBlockers(blockers []objectcatalo
 }
 
 // ReplaceReportedStatuses replaces the catalog-owned source of statuses objects report
-// about themselves, such as every Argo CD Application's sync and health, for this cluster.
+// about themselves, such as every Argo CD Application's and ApplicationSet's, for this cluster.
 func (i *clusterAttentionIndex) ReplaceReportedStatuses(statuses []objectcatalog.ReportedStatus) {
 	records := make([]attentionSourceRecord, 0, len(statuses))
 	for _, status := range statuses {
@@ -1638,15 +1638,23 @@ func evaluateReportedStatusAttention(record attentionSourceRecord) attentionEval
 	return findingEvaluation(record, causes)
 }
 
-// reportedStatusView is the record as a reported-status rule sees it: the status the rule
-// classifies is the value of the aspect it names.
+// reportedStatusView is the record as a reported-status rule sees it. The rule applies when
+// any value of the aspect it names matches; the view's status lists every matching value
+// (for example each active error condition).
 func reportedStatusView(rule attentionClassificationRule, record attentionSourceRecord) (attentionSourceRecord, bool) {
 	if rule.ReportedStatus == "" {
 		return attentionSourceRecord{}, false
 	}
 	view := record
-	view.Status = record.ReportedStatuses[rule.ReportedStatus]
-	return view, rule.matches(view)
+	var matched []string
+	for _, value := range record.ReportedStatuses[rule.ReportedStatus] {
+		view.Status = value
+		if rule.matches(view) {
+			matched = append(matched, value)
+		}
+	}
+	view.Status = strings.Join(matched, ", ")
+	return view, len(matched) > 0
 }
 
 func evaluateNodeAttention(record attentionSourceRecord) attentionEvaluation {

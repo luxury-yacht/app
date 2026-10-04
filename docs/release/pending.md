@@ -1,6 +1,6 @@
 ### Added
 
-- Attention flags Argo CD Applications that need a look: an Application whose health is Degraded is flagged as an error ("Argo CD Application degraded"), and one that is out of sync or whose resources are missing is flagged as a warning ("Argo CD Application out of sync", "Argo CD Application resources missing").
+- Attention flags Argo CD Applications and ApplicationSets that need a look. Errors: an Application whose health is Degraded ("Argo CD Application degraded"), whose last sync failed ("Argo CD Application sync failed"), or that reports an error condition such as a ComparisonError when Argo CD cannot render or compare it ("Argo CD Application error"), and an ApplicationSet whose generator or template is failing ("Argo CD ApplicationSet error"). Warnings: an Application that is out of sync ("Argo CD Application out of sync") or whose resources are missing ("Argo CD Application resources missing").
 
 ### Changed
 

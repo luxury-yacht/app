@@ -29,12 +29,24 @@ func applicationStatus(sync, health string) map[string]any {
 	return map[string]any{"sync": map[string]any{"status": sync}, "health": map[string]any{"status": health}}
 }
 
-func TestSummaryReportsOnlyArgoCDApplicationSyncAndHealth(t *testing.T) {
+func TestSummaryReportsArgoCDApplicationSyncHealthOperationAndConditions(t *testing.T) {
+	status := applicationStatus("OutOfSync", "Degraded")
+	status["operationState"] = map[string]any{"phase": "Failed", "message": "one or more objects failed to apply"}
+	// Application conditions carry no status: each one listed is active.
+	status["conditions"] = []any{
+		map[string]any{"type": "SyncError", "message": "auto-sync failed"},
+		map[string]any{"type": "ComparisonError", "message": "repository not accessible"},
+	}
 	summary := summaryFromObject("cluster-a", argoCDApplicationDescriptor,
-		reportedStatusTestObject("argoproj.io", "Application", "1", applicationStatus("OutOfSync", "Degraded")))
+		reportedStatusTestObject("argoproj.io", "Application", "1", status))
 	reported, ok := summary.ReportedStatus()
 	require.True(t, ok)
-	require.Equal(t, map[string]string{ReportedStatusSync: "OutOfSync", ReportedStatusHealth: "Degraded"}, reported.Statuses)
+	require.Equal(t, map[string][]string{
+		ReportedStatusSync:       {"OutOfSync"},
+		ReportedStatusHealth:     {"Degraded"},
+		ReportedStatusOperation:  {"Failed"},
+		ReportedStatusConditions: {"ComparisonError", "SyncError"},
+	}, reported.Statuses)
 	require.Equal(t, summary.Ref, reported.Ref)
 	require.Equal(t, time.Date(2026, time.September, 1, 8, 0, 0, 0, time.UTC).UnixMilli(), reported.CreationTimestamp)
 
@@ -42,17 +54,37 @@ func TestSummaryReportsOnlyArgoCDApplicationSyncAndHealth(t *testing.T) {
 	pending, ok := summaryFromObject("cluster-a", argoCDApplicationDescriptor,
 		reportedStatusTestObject("argoproj.io", "Application", "1", nil)).ReportedStatus()
 	require.True(t, ok)
-	require.Equal(t, map[string]string{ReportedStatusSync: "Unknown", ReportedStatusHealth: "Unknown"}, pending.Statuses)
+	require.Equal(t, map[string][]string{ReportedStatusSync: {"Unknown"}, ReportedStatusHealth: {"Unknown"}}, pending.Statuses)
 
 	project := builtinDescriptor("argoproj.io", "v1alpha1", "AppProject", "appprojects", true)
 	_, ok = summaryFromObject("cluster-a", project,
 		reportedStatusTestObject("argoproj.io", "AppProject", "1", applicationStatus("OutOfSync", "Degraded"))).ReportedStatus()
-	require.False(t, ok, "only Applications report sync and health")
+	require.False(t, ok, "AppProjects report no status")
 
 	vela := builtinDescriptor("core.oam.dev", "v1beta1", "Application", "applications", true)
 	_, ok = summaryFromObject("cluster-a", vela,
 		reportedStatusTestObject("core.oam.dev", "Application", "1", applicationStatus("OutOfSync", "Degraded"))).ReportedStatus()
 	require.False(t, ok, "an Application from another API group is not an Argo CD Application")
+}
+
+func TestSummaryReportsArgoCDApplicationSetTrueConditions(t *testing.T) {
+	desc := builtinDescriptor("argoproj.io", "v1alpha1", "ApplicationSet", "applicationsets", true)
+	status := map[string]any{"conditions": []any{
+		map[string]any{"type": "ErrorOccurred", "status": "True", "message": "failed to list repositories"},
+		map[string]any{"type": "ResourcesUpToDate", "status": "False"},
+	}}
+	reported, ok := summaryFromObject("cluster-a", desc,
+		reportedStatusTestObject("argoproj.io", "ApplicationSet", "1", status)).ReportedStatus()
+	require.True(t, ok)
+	require.Equal(t, map[string][]string{
+		ReportedStatusHealth:     {"Degraded"},
+		ReportedStatusConditions: {"ErrorOccurred"},
+	}, reported.Statuses, "only conditions whose status is True are active")
+
+	// A healthy ApplicationSet still reports, so Attention keeps tracking it.
+	healthy, ok := summaryFromObject("cluster-a", desc, reportedStatusTestObject("argoproj.io", "ApplicationSet", "1", nil)).ReportedStatus()
+	require.True(t, ok)
+	require.Equal(t, map[string][]string{ReportedStatusHealth: {"Unknown"}}, healthy.Statuses)
 }
 
 func TestReportedStatusSubscriptionPublishesStatusChanges(t *testing.T) {
@@ -69,7 +101,7 @@ func TestReportedStatusSubscriptionPublishesStatusChanges(t *testing.T) {
 	require.Equal(t, uint64(1), (<-updates).Revision)
 	statuses := service.ReportedStatuses()
 	require.Len(t, statuses, 1)
-	require.Equal(t, "OutOfSync", statuses[0].Statuses[ReportedStatusSync])
+	require.Equal(t, []string{"OutOfSync"}, statuses[0].Statuses[ReportedStatusSync])
 
 	service.replaceAttentionSubsets(project("2", "OutOfSync", "Healthy"))
 	select {
@@ -84,12 +116,12 @@ func TestReportedStatusSubscriptionPublishesStatusChanges(t *testing.T) {
 	require.Equal(t, uint64(2), (<-updates).Revision)
 	statuses = service.ReportedStatuses()
 	require.Len(t, statuses, 1)
-	require.Equal(t, "Synced", statuses[0].Statuses[ReportedStatusSync])
+	require.Equal(t, []string{"Synced"}, statuses[0].Statuses[ReportedStatusSync])
 
 	// A health change alone is a status change.
 	service.replaceAttentionSubsets(project("4", "Synced", "Degraded"))
 	require.Equal(t, uint64(3), (<-updates).Revision)
-	require.Equal(t, "Degraded", service.ReportedStatuses()[0].Statuses[ReportedStatusHealth])
+	require.Equal(t, []string{"Degraded"}, service.ReportedStatuses()[0].Statuses[ReportedStatusHealth])
 
 	service.replaceAttentionSubsets(nil)
 	require.Equal(t, uint64(4), (<-updates).Revision)

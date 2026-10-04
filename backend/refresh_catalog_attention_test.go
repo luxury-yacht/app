@@ -22,7 +22,7 @@ import (
 
 // Replace only Kubernetes clients: the catalog's watch of a discovered Argo CD Application
 // reaches Attention through the production subsystem and catalog bridges.
-func TestCatalogFlagsDegradedAndOutOfSyncArgoCDApplication(t *testing.T) {
+func TestCatalogFlagsArgoCDApplicationProblems(t *testing.T) {
 	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
 	clients := app.ClusterRuntime.clusterClientsForID(target.meta.ID)
 	kube := clients.client.(*kubefake.Clientset)
@@ -45,6 +45,10 @@ func TestCatalogFlagsDegradedAndOutOfSyncArgoCDApplication(t *testing.T) {
 	application.SetResourceVersion("1")
 	require.NoError(t, unstructured.SetNestedField(application.Object, "OutOfSync", "status", "sync", "status"))
 	require.NoError(t, unstructured.SetNestedField(application.Object, "Degraded", "status", "health", "status"))
+	require.NoError(t, unstructured.SetNestedField(application.Object, "Failed", "status", "operationState", "phase"))
+	require.NoError(t, unstructured.SetNestedSlice(application.Object, []any{
+		map[string]any{"type": "ComparisonError", "message": "repository not accessible"},
+	}, "status", "conditions"))
 	dynamic := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gvr: "ApplicationList"}, application)
 	clients.dynamicClient = dynamic
 	ctx, cancel := context.WithCancel(t.Context())
@@ -82,7 +86,7 @@ func TestCatalogFlagsDegradedAndOutOfSyncArgoCDApplication(t *testing.T) {
 		return service.Health().Status == objectcatalog.HealthStateOK && len(service.ReportedStatuses()) == 1
 	}, 3*time.Second, time.Millisecond)
 
-	// Both problems are flagged as soon as the catalog sees them.
+	// Every problem is flagged as soon as the catalog sees it.
 	index := subsystem.AttentionIndex
 	causeTypes := func() []string {
 		rows := index.Snapshot()
@@ -95,14 +99,18 @@ func TestCatalogFlagsDegradedAndOutOfSyncArgoCDApplication(t *testing.T) {
 		}
 		return types
 	}
-	require.Eventually(t, func() bool { return len(causeTypes()) == 2 }, 3*time.Second, time.Millisecond)
-	require.ElementsMatch(t, []string{"argocd-application-degraded", "argocd-application-out-of-sync"}, causeTypes())
+	require.Eventually(t, func() bool { return len(causeTypes()) == 4 }, 3*time.Second, time.Millisecond)
+	require.ElementsMatch(t, []string{
+		"argocd-application-degraded", "argocd-application-out-of-sync", "argocd-application-sync-failed", "argocd-application-error",
+	}, causeTypes())
 
-	// Once Argo CD reports the Application synced and healthy, the watch clears the finding.
+	// Once Argo CD reports a successful sync and no conditions, the watch clears the finding.
 	synced := application.DeepCopy()
 	synced.SetResourceVersion("2")
 	require.NoError(t, unstructured.SetNestedField(synced.Object, "Synced", "status", "sync", "status"))
 	require.NoError(t, unstructured.SetNestedField(synced.Object, "Healthy", "status", "health", "status"))
+	require.NoError(t, unstructured.SetNestedField(synced.Object, "Succeeded", "status", "operationState", "phase"))
+	unstructured.RemoveNestedField(synced.Object, "status", "conditions")
 	_, err = dynamic.Resource(gvr).Namespace("argocd").Update(ctx, synced, metav1.UpdateOptions{})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool { return len(index.Snapshot()) == 0 }, 3*time.Second, time.Millisecond)

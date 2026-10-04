@@ -452,18 +452,30 @@ func summaryFromObject(clusterID string, desc Descriptor, item metav1.Object) Su
 }
 
 // reportedObjectStatuses reads the statuses an object reports for Attention. Only Argo CD
-// Applications report any (their sync and health); they are read here because the catalog
-// is the only source that watches custom resources with their full content.
+// Applications and ApplicationSets report any; they are read here because the catalog is
+// the only source that watches custom resources with their full content.
 func reportedObjectStatuses(item metav1.Object) reportedStatusValues {
 	object, ok := item.(*unstructuredv1.Unstructured)
 	if !ok {
 		return reportedStatusValues{}
 	}
-	sync, health, ok := argocd.ApplicationStatus(object)
+	status, ok := argocd.ReportedAttentionStatus(object)
 	if !ok {
 		return reportedStatusValues{}
 	}
-	return newReportedStatusValues(map[string]string{ReportedStatusSync: sync, ReportedStatusHealth: health})
+	return newReportedStatusValues(map[string][]string{
+		ReportedStatusSync:       reportedValue(status.Sync),
+		ReportedStatusHealth:     reportedValue(status.Health),
+		ReportedStatusOperation:  reportedValue(status.OperationPhase),
+		ReportedStatusConditions: status.Conditions,
+	})
+}
+
+func reportedValue(value string) []string {
+	if value == "" {
+		return nil
+	}
+	return []string{value}
 }
 
 func catalogResourceMetadata(item metav1.Object) *resourcemodel.ResourceTableMetadata {

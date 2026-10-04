@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -467,61 +468,95 @@ func TestClusterAttentionIndexRefiltersRestoredRowsWhenIgnoreRulesChange(t *test
 	require.Empty(t, restored.Snapshot())
 }
 
-func argoCDStatuses(sync, health string) map[string]string {
-	return map[string]string{objectcatalog.ReportedStatusSync: sync, objectcatalog.ReportedStatusHealth: health}
+func argoCDStatuses(sync, health string) map[string][]string {
+	return map[string][]string{objectcatalog.ReportedStatusSync: {sync}, objectcatalog.ReportedStatusHealth: {health}}
 }
 
-func argoCDTestApplication(clusterID, group, name string, statuses map[string]string) objectcatalog.ReportedStatus {
+func argoCDTestObject(clusterID, group, kind, name string, statuses map[string][]string) objectcatalog.ReportedStatus {
 	return objectcatalog.ReportedStatus{
 		Ref: resourcemodel.ResourceRef{
-			ClusterID: clusterID, Group: group, Version: "v1alpha1", Kind: "Application", Resource: "applications",
+			ClusterID: clusterID, Group: group, Version: "v1alpha1", Kind: kind, Resource: strings.ToLower(kind) + "s",
 			Namespace: "argocd", Name: name, UID: name + "-uid",
 		},
 		Statuses: statuses,
 	}
 }
 
-func TestClusterAttentionIndexFlagsArgoCDApplicationProblemsAsSoonAsReported(t *testing.T) {
+func withReported(statuses map[string][]string, aspect string, values ...string) map[string][]string {
+	statuses[aspect] = values
+	return statuses
+}
+
+func TestClusterAttentionIndexFlagsArgoCDProblemsAsSoonAsReported(t *testing.T) {
 	now := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
 	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
 	t.Cleanup(index.Stop)
+	healthy := func() map[string][]string { return argoCDStatuses("Synced", "Healthy") }
 
 	// Argo CD records no time for a sync transition, so a problem already present when the
 	// app starts is flagged at once rather than after a grace period.
 	for _, test := range []struct {
-		sync, health string
-		severity     AttentionSeverity
-		causes       []string
+		name     string
+		kind     string
+		statuses map[string][]string
+		severity AttentionSeverity
+		causes   []string
 	}{
-		{"OutOfSync", "Healthy", AttentionSeverityWarning, []string{"argocd-application-out-of-sync"}},
-		{"Synced", "Missing", AttentionSeverityWarning, []string{"argocd-application-missing"}},
-		{"Synced", "Degraded", AttentionSeverityError, []string{"argocd-application-degraded"}},
-		{"OutOfSync", "Degraded", AttentionSeverityError, []string{"argocd-application-out-of-sync", "argocd-application-degraded"}},
+		{"out of sync", "Application", argoCDStatuses("OutOfSync", "Healthy"), AttentionSeverityWarning, []string{"argocd-application-out-of-sync"}},
+		{"missing", "Application", argoCDStatuses("Synced", "Missing"), AttentionSeverityWarning, []string{"argocd-application-missing"}},
+		{"degraded", "Application", argoCDStatuses("Synced", "Degraded"), AttentionSeverityError, []string{"argocd-application-degraded"}},
+		{"out of sync and degraded", "Application", argoCDStatuses("OutOfSync", "Degraded"), AttentionSeverityError,
+			[]string{"argocd-application-out-of-sync", "argocd-application-degraded"}},
+		{"sync failed", "Application", withReported(healthy(), objectcatalog.ReportedStatusOperation, "Failed"), AttentionSeverityError,
+			[]string{"argocd-application-sync-failed"}},
+		{"sync errored", "Application", withReported(healthy(), objectcatalog.ReportedStatusOperation, "Error"), AttentionSeverityError,
+			[]string{"argocd-application-sync-failed"}},
+		{"error conditions", "Application",
+			withReported(healthy(), objectcatalog.ReportedStatusConditions, "ComparisonError", "SharedResourceWarning", "SyncError"),
+			AttentionSeverityError, []string{"argocd-application-error"}},
+		{"application set error", "ApplicationSet",
+			map[string][]string{objectcatalog.ReportedStatusHealth: {"Degraded"}, objectcatalog.ReportedStatusConditions: {"ErrorOccurred"}},
+			AttentionSeverityError, []string{"argocd-applicationset-error"}},
 	} {
-		app := argoCDTestApplication("cluster-a", "argoproj.io", "storefront", argoCDStatuses(test.sync, test.health))
-		app.CreationTimestamp = now.Add(-30 * 24 * time.Hour).UnixMilli()
-		index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{app})
+		object := argoCDTestObject("cluster-a", "argoproj.io", test.kind, "storefront", test.statuses)
+		object.CreationTimestamp = now.Add(-30 * 24 * time.Hour).UnixMilli()
+		index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{object})
 		rows := index.Snapshot()
-		require.Len(t, rows, 1, "%s/%s", test.sync, test.health)
-		require.Equal(t, app.Ref, rows[0].Ref)
-		require.Equal(t, test.severity, rows[0].Severity, "%s/%s", test.sync, test.health)
-		require.ElementsMatch(t, test.causes, attentionCauseTypes(rows[0].Causes), "%s/%s", test.sync, test.health)
-		require.Equal(t, app.CreationTimestamp, rows[0].AgeTimestamp)
+		require.Len(t, rows, 1, test.name)
+		require.Equal(t, object.Ref, rows[0].Ref, test.name)
+		require.Equal(t, test.severity, rows[0].Severity, test.name)
+		require.ElementsMatch(t, test.causes, attentionCauseTypes(rows[0].Causes), test.name)
+		require.Equal(t, object.CreationTimestamp, rows[0].AgeTimestamp, test.name)
 	}
 
-	healthy := argoCDTestApplication("cluster-a", "argoproj.io", "storefront", argoCDStatuses("Synced", "Healthy"))
-	// Another API group's Application reporting the same words is not an Argo CD Application.
-	vela := argoCDTestApplication("cluster-a", "core.oam.dev", "storefront-vela", argoCDStatuses("OutOfSync", "Degraded"))
-	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{healthy, vela})
+	// Several error conditions are one finding that names each of them.
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{argoCDTestObject("cluster-a", "argoproj.io", "Application", "storefront",
+		withReported(healthy(), objectcatalog.ReportedStatusConditions, "ComparisonError", "SyncError"))})
+	rows := index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Len(t, rows[0].Causes, 1)
+	require.Contains(t, rows[0].Causes[0].Message, "ComparisonError")
+	require.Contains(t, rows[0].Causes[0].Message, "SyncError")
+
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{
+		argoCDTestObject("cluster-a", "argoproj.io", "Application", "storefront",
+			withReported(withReported(healthy(), objectcatalog.ReportedStatusOperation, "Succeeded"),
+				objectcatalog.ReportedStatusConditions, "SharedResourceWarning")),
+		argoCDTestObject("cluster-a", "argoproj.io", "ApplicationSet", "tenants",
+			map[string][]string{objectcatalog.ReportedStatusHealth: {"Healthy"}, objectcatalog.ReportedStatusConditions: {"ResourcesUpToDate"}}),
+		// Another API group's Application reporting the same words is not an Argo CD Application.
+		argoCDTestObject("cluster-a", "core.oam.dev", "Application", "storefront-vela", argoCDStatuses("OutOfSync", "Degraded")),
+	})
 	require.Empty(t, index.Snapshot())
 }
 
 func TestClusterAttentionIndexDropsRestoredArgoCDFindingWhenApplicationIsDeleted(t *testing.T) {
 	now := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
 	meta := ClusterMeta{ClusterID: "cluster-a"}
-	app := argoCDTestApplication(meta.ClusterID, "argoproj.io", "storefront", argoCDStatuses("OutOfSync", "Healthy"))
+	appSet := argoCDTestObject(meta.ClusterID, "argoproj.io", "ApplicationSet", "tenants",
+		map[string][]string{objectcatalog.ReportedStatusHealth: {"Degraded"}, objectcatalog.ReportedStatusConditions: {"ErrorOccurred"}})
 	original := newClusterAttentionIndex(meta, func() time.Time { return now })
-	original.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{app})
+	original.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{appSet})
 	require.Len(t, original.Snapshot(), 1)
 	spillPath := t.TempDir() + "/attention.spill"
 	require.NoError(t, original.SpillTo(spillPath))
@@ -532,5 +567,5 @@ func TestClusterAttentionIndexDropsRestoredArgoCDFindingWhenApplicationIsDeleted
 	require.NoError(t, restored.RestoreFrom(spillPath))
 	require.Len(t, restored.Snapshot(), 1)
 	restored.ReplaceReportedStatuses(nil)
-	require.Empty(t, restored.Snapshot(), "a restored finding must not outlive its deleted Application")
+	require.Empty(t, restored.Snapshot(), "a restored finding must not outlive its deleted object")
 }

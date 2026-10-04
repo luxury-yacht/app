@@ -100,6 +100,31 @@ var attentionClassificationRules = []attentionClassificationRule{
 		Kinds: []string{"Application"}, ReportedStatus: objectcatalog.ReportedStatusHealth, Statuses: []string{"Missing"},
 		Severity: AttentionSeverityWarning, FindingReason: "Missing",
 	},
+	{
+		// The last sync operation, manual or automatic, did not complete. Argo CD keeps it until
+		// the next operation, so the finding clears once a later sync succeeds.
+		ID: "argocd-application-sync-failed", Label: "Argo CD Application sync failed",
+		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{"argoproj.io"},
+		Kinds: []string{"Application"}, ReportedStatus: objectcatalog.ReportedStatusOperation, Statuses: []string{"Failed", "Error"},
+		Severity: AttentionSeverityError, FindingReason: "Sync failed",
+	},
+	{
+		// Argo CD's error condition types. ComparisonError matters most: when Argo CD cannot
+		// render or compare the Application, sync and health can still look fine.
+		ID: "argocd-application-error", Label: "Argo CD Application error",
+		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{"argoproj.io"},
+		Kinds: []string{"Application"}, ReportedStatus: objectcatalog.ReportedStatusConditions,
+		Statuses: []string{"ComparisonError", "InvalidSpecError", "SyncError", "DeletionError", "UnknownError"},
+		Severity: AttentionSeverityError,
+	},
+	{
+		// A failing generator or template stops the ApplicationSet creating or updating its
+		// Applications, which nothing on the Applications themselves shows.
+		ID: "argocd-applicationset-error", Label: "Argo CD ApplicationSet error",
+		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{"argoproj.io"},
+		Kinds: []string{"ApplicationSet"}, ReportedStatus: objectcatalog.ReportedStatusConditions, Statuses: []string{"ErrorOccurred"},
+		Severity: AttentionSeverityError, FindingReason: "Error occurred",
+	},
 }
 
 // attentionReportedStatusKinds lists the kinds whose reported statuses the policy classifies.

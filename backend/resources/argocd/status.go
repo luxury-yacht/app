@@ -28,13 +28,47 @@ func statusPresentation(status string) string {
 	}
 }
 
-// ApplicationStatus returns an Argo CD Application's sync and health statuses (each "Unknown"
-// until Argo CD reports it); ok is false for every other object.
-func ApplicationStatus(object *unstructured.Unstructured) (sync, health string, ok bool) {
-	if !isArgoCD(object) || !strings.EqualFold(object.GetKind(), "application") {
-		return "", "", false
+// AttentionStatus is what an Argo CD Application or ApplicationSet reports about itself
+// for Attention. Conditions lists the active condition types: every condition an
+// Application reports (they carry no status) and each ApplicationSet condition whose
+// status is True. Fields an object does not report are empty.
+type AttentionStatus struct {
+	Sync           string
+	Health         string
+	OperationPhase string
+	Conditions     []string
+}
+
+// ReportedAttentionStatus returns the AttentionStatus of an Argo CD Application or
+// ApplicationSet; ok is false for every other object.
+func ReportedAttentionStatus(object *unstructured.Unstructured) (status AttentionStatus, ok bool) {
+	if !isArgoCD(object) {
+		return AttentionStatus{}, false
 	}
-	return applicationSyncStatus(object), applicationHealthStatus(object), true
+	switch strings.ToLower(object.GetKind()) {
+	case "application":
+		return AttentionStatus{
+			Sync:           applicationSyncStatus(object),
+			Health:         applicationHealthStatus(object),
+			OperationPhase: crdfacts.Text(object.Object, "status", "operationState", "phase"),
+			Conditions:     activeConditionTypes(conditions(object)),
+		}, true
+	case "applicationset":
+		active := conditions(object)
+		return AttentionStatus{Health: applicationSetHealth(active), Conditions: activeConditionTypes(active)}, true
+	default:
+		return AttentionStatus{}, false
+	}
+}
+
+func activeConditionTypes(conditions []Condition) []string {
+	var active []string
+	for _, condition := range conditions {
+		if condition.Status == "" || strings.EqualFold(condition.Status, "True") {
+			active = append(active, condition.Type)
+		}
+	}
+	return active
 }
 
 func applicationSyncStatus(object *unstructured.Unstructured) string {

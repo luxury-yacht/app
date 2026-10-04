@@ -134,10 +134,14 @@ informer update operational health incrementally. The object catalog publishes
 two coalesced, backend-only subsets. The first holds objects whose deletion is
 waiting on a finalizer; Attention merges that lifecycle component with health
 causes for the same concrete UID. The second holds every object that reports a
-status about itself for Attention to classify. Today that is each Argo CD
-Application's sync and health, which feed the `argocd-application-out-of-sync`,
-`argocd-application-degraded`, and `argocd-application-missing` findings; one
-object can report several aspects, and every matching rule adds its own cause. Every reporting object is
+status about itself for Attention to classify. Today those are Argo CD
+Applications (sync, health, last sync operation phase, and active conditions)
+and ApplicationSets (health and conditions whose status is True). They feed the
+`argocd-application-out-of-sync`, `argocd-application-degraded`,
+`argocd-application-missing`, `argocd-application-sync-failed`,
+`argocd-application-error`, and `argocd-applicationset-error` findings. An
+aspect can hold several values; a rule matches when any of them does, and every
+matching rule adds its own cause. Every reporting object is
 published whatever its statuses, so a recovered object keeps its per-object
 ignores and only a deleted one loses them. Reported statuses carry no transition
 time, so their findings have no grace period and appear as soon as the catalog
