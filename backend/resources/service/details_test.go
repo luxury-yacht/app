@@ -354,3 +354,26 @@ func TestServiceDetailsCountReadyAddressesNotPortEntries(t *testing.T) {
 	require.Equal(t, 3, detail.ReadyEndpointCount)
 	require.Equal(t, 1, detail.NotReadyEndpointCount)
 }
+
+// A Service whose endpoint list is known to be empty needs attention; when the list could not be
+// read, the status must not claim anything about endpoints.
+func TestServiceStatusWarnsWhenEndpointsAreKnownEmpty(t *testing.T) {
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "shop"},
+		Spec: corev1.ServiceSpec{
+			Type:      corev1.ServiceTypeClusterIP,
+			ClusterIP: "10.0.0.5",
+			Selector:  map[string]string{"app": "web"},
+			Ports:     []corev1.ServicePort{{Name: "http", Port: 80}},
+		},
+	}
+	m := NewService(common.Dependencies{})
+
+	known := m.buildServiceDetails(svc, []*discoveryv1.EndpointSlice{})
+	require.Equal(t, "ClusterIP, no endpoints", known.Status)
+	require.Equal(t, "warning", known.StatusPresentation)
+
+	unknown := m.buildServiceDetails(svc, nil)
+	require.Equal(t, "ClusterIP", unknown.Status)
+	require.Equal(t, "ready", unknown.StatusPresentation)
+}

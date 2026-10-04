@@ -10,5 +10,6 @@
 
 ### Fixed
 
+- Service details show the Status row only when the Service needs attention, and a Service whose endpoint list is empty is now flagged with "no endpoints" instead of looking healthy.
 - HTTPRoute and GRPCRoute details no longer reduce a rule's matches to a single path or method. Path match type, method, headers, and query parameters are all shown, and route backends show their port and weight.
 - NetworkPolicy details no longer drop selector expressions such as `In` or `DoesNotExist`, and no longer show an empty selector, which matches every namespace or pod, as blank.

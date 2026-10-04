@@ -161,13 +161,17 @@ export const serviceDescriptor: OverviewDescriptor<ServiceDetails> = {
     showSelector: true,
     items: [
       { field: 'serviceType', label: 'Type' },
-      { kind: 'status' },
+      // Only shown when the Service needs attention (pending load balancer, no ready endpoints,
+      // no endpoints, terminating); otherwise it would repeat the Type row and the Ports flow.
+      { kind: 'status', hidden: (d) => d.statusPresentation === 'ready' },
       {
         // "IP address" rather than "Cluster IP" — the latter collides with the ClusterIP service
         // type and reads confusingly alongside the Type field.
         field: 'clusterIPs',
         derivedFrom: ['clusterIP'],
         label: (d) => (hasMultipleClusterIPs(d) ? 'IP addresses' : 'IP address'),
+        // An ExternalName Service is a DNS alias with no cluster IP.
+        hidden: isExternalName,
         mono: true,
         fullWidth: (d) => hasMultipleClusterIPs(d),
         render: (d) => {
@@ -201,12 +205,16 @@ export const serviceDescriptor: OverviewDescriptor<ServiceDetails> = {
       {
         field: 'externalName',
         label: 'External Name',
+        // A hostname, shown in the same mono font as the DNS Name and IP address rows.
+        mono: true,
         hidden: (d) => !(isExternalName(d) && d.externalName),
       },
       {
         field: 'endpoints',
         derivedFrom: ['endpointCount'],
         label: 'Endpoints',
+        // ExternalName Services never have endpoints; a "No endpoints" warning would read as a fault.
+        hidden: isExternalName,
         render: renderEndpoints,
         fullWidth: (d) => {
           const endpoints = d.endpoints ?? [];

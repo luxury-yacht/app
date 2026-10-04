@@ -23,7 +23,7 @@ import (
 // and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, svc *corev1.Service, slices []*discoveryv1.EndpointSlice) resourcemodel.ResourceModel {
 	facts := BuildFacts(svc, slices)
-	status := statusPresentation(svc, facts)
+	status := statusPresentation(svc, facts, slices != nil)
 	return resourcemodel.KubernetesResourceModel(clusterID, Identity, svc.ObjectMeta, status)
 }
 
@@ -64,7 +64,9 @@ func BuildFacts(svc *corev1.Service, slices []*discoveryv1.EndpointSlice) Facts 
 	return facts
 }
 
-func statusPresentation(svc *corev1.Service, facts Facts) resourcemodel.ResourceStatusPresentation {
+// statusPresentation summarises the Service's health. endpointsKnown is false when the caller has no
+// EndpointSlice data (e.g. the object map), so an empty endpoint list is not reported as a problem.
+func statusPresentation(svc *corev1.Service, facts Facts, endpointsKnown bool) resourcemodel.ResourceStatusPresentation {
 	state := facts.Type
 	if state == "" {
 		state = string(corev1.ServiceTypeClusterIP)
@@ -93,6 +95,10 @@ func statusPresentation(svc *corev1.Service, facts Facts) resourcemodel.Resource
 	}
 	if facts.TotalEndpointCount > 0 {
 		return resourcemodel.ObjectSourceStatus(fmt.Sprintf("%s, no ready endpoints", state), state, "", "", "warning", signals, lifecycle)
+	}
+	// No endpoints at all: nothing can receive the Service's traffic.
+	if endpointsKnown {
+		return resourcemodel.ObjectSourceStatus(fmt.Sprintf("%s, no endpoints", state), state, "", "", "warning", signals, lifecycle)
 	}
 	return resourcemodel.ObjectSourceStatus(state, state, "", "", "ready", signals, lifecycle)
 }

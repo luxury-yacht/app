@@ -79,7 +79,7 @@ func (s *Service) buildServiceDetails(svc *corev1.Service, slices []*discoveryv1
 		Kind:             "Service",
 		Name:             svc.Name,
 		Namespace:        svc.Namespace,
-		StatusProjection: restypes.NewStatusProjection(statusPresentation(svc, facts)),
+		StatusProjection: restypes.NewStatusProjection(statusPresentation(svc, facts, slices != nil)),
 		ServiceType:      facts.Type,
 		ClusterIP:        facts.ClusterIP,
 		ClusterIPs:       facts.ClusterIPs,

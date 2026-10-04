@@ -100,9 +100,8 @@ describe('ServiceOverview', () => {
     expect(getValueForLabel(container, 'Load Balancer IP')?.textContent).toBe('35.1.2.3');
     const lbStatus = getValueForLabel(container, 'LB Status');
     expect(lbStatus?.textContent).toBe('Ready');
-    const status = getValueForLabel(container, 'Status');
-    expect(status?.textContent).toBe('LoadBalancer active');
-    expect(status?.querySelector('.status-text.ready')).not.toBeNull();
+    // A healthy Service has nothing to flag, so the Status row is omitted.
+    expect(getValueForLabel(container, 'Status')).toBeNull();
     expect(getValueForLabel(container, 'Session Timeout')?.textContent).toBe('10800 seconds');
     // Endpoints row now shows the IP list directly (≤5 endpoints).
     expect(getValueForLabel(container, 'Endpoints')?.textContent).toContain('10.244.0.10:80');
@@ -149,11 +148,39 @@ describe('ServiceOverview', () => {
     expect(container.textContent).not.toContain('External IPs');
     // Session Affinity "None" is hidden as clutter.
     expect(container.textContent).not.toContain('Session Affinity');
-    // Zero endpoints surface as an unhealthy status chip rather than a count.
-    const endpoints = getValueForLabel(container, 'Endpoints');
-    expect(endpoints?.querySelector('.status-chip--unhealthy')).not.toBeNull();
+    // An ExternalName Service has no cluster IP and never has endpoints, so neither row appears
+    // (a "No endpoints" warning would read as a fault).
+    expect(getValueForLabel(container, 'Endpoints')).toBeNull();
+    expect(getValueForLabel(container, 'IP address')).toBeNull();
+    expect(getValueForLabel(container, 'IP addresses')).toBeNull();
     // ExternalName is a DNS alias: clients reach the external host, not pods.
     expect(listTexts('Backend')[0]).toContain('api.example.com');
+  });
+
+  it('shows the Status row only when the Service needs attention', async () => {
+    await renderComponent({
+      serviceDetails: {
+        name: 'web',
+        namespace: 'shop',
+        status: 'ClusterIP, no endpoints',
+        statusState: 'ClusterIP',
+        statusPresentation: 'warning',
+        serviceType: 'ClusterIP',
+        clusterIP: '10.0.0.5',
+        sessionAffinity: 'None',
+        healthStatus: 'No endpoints',
+        endpointCount: 0,
+        readyEndpointCount: 0,
+        notReadyEndpointCount: 0,
+        endpoints: [],
+        ports: [{ name: 'http', port: 80, protocol: 'TCP', targetPort: '8080' }],
+        selector: { app: 'web' },
+        labels: {},
+        annotations: {},
+      } as unknown,
+    });
+
+    expect(getValueForLabel(container, 'Status')?.textContent).toBe('ClusterIP, no endpoints');
   });
 
   it('explains a headless service through its DNS name', async () => {
