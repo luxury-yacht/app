@@ -1,6 +1,7 @@
 import type { OperatorCondition, OperatorLabelSelector, ResourceLink } from '@core/refresh/types';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { StatusChip } from '@shared/components/StatusChip';
+import { backendStatusChipVariant } from '@shared/utils/backendStatusPresentation';
 import { resourceLinkToObjectReference } from '@shared/utils/resourceLinkIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type { ReactNode } from 'react';
@@ -101,12 +102,6 @@ export function operatorLink(link?: ResourceLink) {
   return reference ? <ObjectPanelLink objectRef={reference}>{name}</ObjectPanelLink> : name;
 }
 
-const variants: Record<string, StatusChipVariant> = {
-  ready: 'healthy',
-  error: 'unhealthy',
-  warning: 'warning',
-};
-
 export function OperatorStatus({
   status,
   presentation,
@@ -118,7 +113,7 @@ export function OperatorStatus({
         [
           'Status',
           status ? (
-            <StatusChip key="status" variant={variants[presentation ?? 'unknown'] ?? 'info'}>
+            <StatusChip key="status" variant={backendStatusChipVariant(presentation)}>
               {status}
             </StatusChip>
           ) : undefined,
@@ -129,7 +124,7 @@ export function OperatorStatus({
             <ConditionChips
               key="conditions"
               conditions={conditions}
-              variant={(condition) => variants[condition.presentation] ?? 'info'}
+              variant={(condition) => backendStatusChipVariant(condition.presentation)}
             />
           ) : undefined,
         ],

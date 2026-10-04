@@ -1,5 +1,6 @@
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { StatusChip } from '@shared/components/StatusChip';
+import { backendStatusChipVariant } from '@shared/utils/backendStatusPresentation';
 import { resourceLinkToObjectReference } from '@shared/utils/resourceLinkIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type { ReactNode } from 'react';
@@ -30,21 +31,13 @@ import {
   OperatorSection as Section,
 } from './shared/OperatorOverview';
 
-const variants: Record<string, StatusChipVariant> = {
-  ready: 'healthy',
-  error: 'unhealthy',
-  warning: 'warning',
-  progressing: 'info',
-  unknown: 'info',
-};
-
 function Badge({
   value,
   presentation,
   tooltip,
 }: Readonly<{ value?: string; presentation?: string; tooltip?: string }>) {
   return value ? (
-    <StatusChip variant={variants[presentation ?? 'unknown'] ?? 'info'} tooltip={tooltip}>
+    <StatusChip variant={backendStatusChipVariant(presentation)} tooltip={tooltip}>
       {value}
     </StatusChip>
   ) : null;
@@ -133,7 +126,7 @@ export function ArgoCDStatus({
             <ConditionChips
               key="conditions"
               conditions={facts.conditions}
-              variant={(condition) => variants[condition.presentation] ?? 'info'}
+              variant={(condition) => backendStatusChipVariant(condition.presentation)}
             />
           ) : undefined,
         ],

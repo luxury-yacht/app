@@ -7,6 +7,7 @@
 - Ingress, HTTPRoute, GRPCRoute, and TLSRoute details now show their rules in the same flow layout as NetworkPolicy: each request match leads to its backend, with ports, and for routes that split traffic, each backend's share.
 - Service details show the Service's ports flowing to the pods its selector picks. Each port chip gives its name, protocol, Service port and target port, and its node port, and the pods show their ready and not-ready counts. A new DNS name row shows the in-cluster name, a headless Service notes that its DNS name returns pod IPs, and an ExternalName Service shows the external host it aliases.
 - EndpointSlice details show the slice's ports flowing to its endpoints: ready endpoints (each pod with its address and node) and not-ready endpoints in a separate dashed box, plus a link to the Service that owns the slice.
+- The Argo CD view shows each Application's Sync and Health as status chips, matching the Application's details.
 
 ### Fixed
 
