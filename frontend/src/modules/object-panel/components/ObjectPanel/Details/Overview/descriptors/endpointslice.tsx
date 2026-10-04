@@ -14,6 +14,18 @@ import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
+import {
+  FlowArrow,
+  FlowEndpoint,
+  FlowEndpoints,
+  FlowEntries,
+  FlowEntry,
+  FlowScope,
+  FlowSubject,
+  TrafficFlow,
+  TrafficFlowCard,
+  TrafficFlowSection,
+} from '../shared/TrafficFlow';
 import '../shared/OverviewBlocks.css';
 import '../EndpointsOverview.css';
 
@@ -44,23 +56,23 @@ const TargetRefLink: React.FC<{
   );
 };
 
-const AddressRow: React.FC<{
+// One endpoint: its target (usually a Pod) above its address and the node it runs on.
+const AddressEntry: React.FC<{
   address: endpointslice.EndpointSliceAddress;
   clusterMeta: ClusterMeta;
 }> = ({ address, clusterMeta }) => (
-  <div className="address-row">
-    <span className="address-ip">{address.ip}</span>
-    {!!address.targetRef && (
-      <>
-        <span className="address-arrow">→</span>
+  <FlowEntry
+    title={
+      address.targetRef ? (
         <TargetRefLink targetRef={address.targetRef} clusterName={clusterMeta.clusterName} />
-      </>
-    )}
+      ) : undefined
+    }
+  >
+    {address.ip}
     {!!address.nodeName && (
-      <>
-        <span className="address-on">on</span>
+      <span className="traffic-flow-muted">
+        {' on '}
         <ObjectPanelLink
-          className="address-node"
           objectRef={buildRequiredObjectReference({
             kind: 'Node',
             name: address.nodeName,
@@ -69,33 +81,38 @@ const AddressRow: React.FC<{
         >
           {address.nodeName}
         </ObjectPanelLink>
-      </>
+      </span>
     )}
-  </div>
+  </FlowEntry>
 );
 
-const AddressList: React.FC<{
+// Ready endpoints take traffic (outlined); not-ready ones do not (dashed red). Long lists are capped.
+const AddressBox: React.FC<{
+  label: 'Ready' | 'Not ready';
   addresses: endpointslice.EndpointSliceAddress[];
   limit: number;
   clusterMeta: ClusterMeta;
-}> = ({ addresses, limit, clusterMeta }) => (
-  <div className="addresses-list">
-    {withStableListKeys(addresses.slice(0, limit), (address) => address.ip).map(
-      ({ key, value: addr }) => (
-        <AddressRow key={key} address={addr} clusterMeta={clusterMeta} />
-      )
-    )}
-    {addresses.length > limit && (
-      <div className="addresses-more">... and {addresses.length - limit} more</div>
-    )}
-  </div>
+}> = ({ label, addresses, limit, clusterMeta }) => (
+  <FlowEndpoint target={label === 'Ready'} warning={label === 'Not ready'}>
+    <FlowSubject>{label}</FlowSubject>
+    <FlowEntries label={label}>
+      {withStableListKeys(addresses.slice(0, limit), (address) => address.ip).map(
+        ({ key, value }) => (
+          <AddressEntry key={key} address={value} clusterMeta={clusterMeta} />
+        )
+      )}
+    </FlowEntries>
+    {addresses.length > limit && <FlowScope>… and {addresses.length - limit} more</FlowScope>}
+  </FlowEndpoint>
 );
 
-const formatPortValue = (port: endpointslice.EndpointSlicePort): string => {
-  const protocol = port.protocol ? `/${port.protocol}` : '';
-  const appProtocol = port.appProtocol ? ` (${port.appProtocol})` : '';
-  return `${port.port}${protocol}${appProtocol}`;
-};
+// A port with no number covers every port; the app protocol (e.g. http) follows when set.
+const PortEntry: React.FC<{ port: endpointslice.EndpointSlicePort }> = ({ port }) => (
+  <FlowEntry title={port.name}>
+    {`${port.protocol || 'TCP'} ${port.port || 'all ports'}`}
+    {!!port.appProtocol && <span className="traffic-flow-muted"> · {port.appProtocol}</span>}
+  </FlowEntry>
+);
 
 const clusterMetaFromContext = (context: OverviewContext): ClusterMeta => ({
   clusterId: context.clusterId,
@@ -119,6 +136,82 @@ const renderStatus = (d: EndpointSliceDetails): React.ReactNode => {
   );
 };
 
+// The kube-controller-manager labels every slice it manages with its Service's name.
+const SERVICE_NAME_LABEL = 'kubernetes.io/service-name';
+
+const renderServiceLink = (d: EndpointSliceDetails, context: OverviewContext): React.ReactNode => {
+  const name = d.labels?.[SERVICE_NAME_LABEL];
+  return (
+    <ObjectPanelLink
+      objectRef={buildRequiredObjectReference({
+        kind: 'service',
+        name,
+        namespace: d.namespace,
+        ...clusterMetaFromContext(context),
+      })}
+    >
+      {name}
+    </ObjectPanelLink>
+  );
+};
+
+// The slice's ports lead to its endpoints: ready ones take traffic, not-ready ones do not.
+const renderEndpointsSection = (
+  d: EndpointSliceDetails,
+  context: OverviewContext
+): React.ReactNode => {
+  const clusterMeta = clusterMetaFromContext(context);
+  const ports = d.ports ?? [];
+  const ready = readyList(d);
+  const notReady = notReadyList(d);
+  return (
+    <TrafficFlowSection label="Endpoints" tone="inbound">
+      <TrafficFlowCard>
+        <TrafficFlow
+          from={
+            <FlowEndpoints label="Requests" fit>
+              <FlowEndpoint>
+                {ports.length > 0 ? (
+                  <FlowEntries label="Ports">
+                    {withStableListKeys(ports, (port) => JSON.stringify(port)).map(
+                      ({ key, value }) => (
+                        <PortEntry key={key} port={value} />
+                      )
+                    )}
+                  </FlowEntries>
+                ) : (
+                  <FlowSubject>No ports defined</FlowSubject>
+                )}
+              </FlowEndpoint>
+            </FlowEndpoints>
+          }
+          middle={<FlowArrow />}
+          to={
+            <FlowEndpoints label="Endpoint addresses">
+              {ready.length > 0 && (
+                <AddressBox label="Ready" addresses={ready} limit={10} clusterMeta={clusterMeta} />
+              )}
+              {notReady.length > 0 && (
+                <AddressBox
+                  label="Not ready"
+                  addresses={notReady}
+                  limit={5}
+                  clusterMeta={clusterMeta}
+                />
+              )}
+              {ready.length + notReady.length === 0 && (
+                <FlowEndpoint warning>
+                  <FlowSubject>No endpoints</FlowSubject>
+                </FlowEndpoint>
+              )}
+            </FlowEndpoints>
+          }
+        />
+      </TrafficFlowCard>
+    </TrafficFlowSection>
+  );
+};
+
 export const endpointSliceDescriptor: OverviewDescriptor<EndpointSliceDetails> = {
   displayKind: 'EndpointSlice',
   dtoName: 'EndpointSliceDetails',
@@ -137,49 +230,14 @@ export const endpointSliceDescriptor: OverviewDescriptor<EndpointSliceDetails> =
         render: renderStatus,
       },
       {
-        // Ready addresses are also keyed off `readyAddresses` (already covered above).
-        field: 'readyAddresses',
-        label: 'Ready',
-        fullWidth: true,
-        hidden: (d) => readyList(d).length === 0,
-        render: (d, context) => (
-          <AddressList
-            addresses={readyList(d)}
-            limit={10}
-            clusterMeta={clusterMetaFromContext(context)}
-          />
-        ),
+        label: 'Service',
+        hidden: (d) => !d.labels?.[SERVICE_NAME_LABEL],
+        render: renderServiceLink,
       },
       {
-        field: 'notReadyAddresses',
-        label: 'Not Ready',
-        fullWidth: true,
-        hidden: (d) => notReadyList(d).length === 0,
-        render: (d, context) => (
-          <AddressList
-            addresses={notReadyList(d)}
-            limit={5}
-            clusterMeta={clusterMetaFromContext(context)}
-          />
-        ),
-      },
-      {
-        field: 'ports',
-        label: 'Ports',
-        fullWidth: true,
-        hidden: (d) => (d.ports ?? []).length === 0,
-        render: (d) => (
-          <div className="overview-row-list">
-            {withStableListKeys(d.ports ?? [], (port) => JSON.stringify(port)).map(
-              ({ key, value: port }) => (
-                <div key={key} className="overview-row">
-                  <span className="overview-row-label">{port.name || `port ${port.port}`}</span>
-                  <span className="overview-row-value">{formatPortValue(port)}</span>
-                </div>
-              )
-            )}
-          </div>
-        ),
+        kind: 'widget',
+        consumes: ['ports', 'readyAddresses', 'notReadyAddresses'],
+        render: renderEndpointsSection,
       },
     ],
   },

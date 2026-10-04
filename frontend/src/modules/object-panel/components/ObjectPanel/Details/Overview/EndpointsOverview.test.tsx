@@ -46,12 +46,27 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
 }));
 
+const getValueForLabel = (container: HTMLElement, label: string) => {
+  const labelElement = Array.from(container.querySelectorAll<HTMLElement>('.overview-label')).find(
+    (el) => el.textContent?.trim() === label
+  );
+  return labelElement?.parentElement?.querySelector<HTMLElement>('.overview-value') ?? null;
+};
+
 // Cluster identity threaded via the OverviewContext, matching the old useObjectPanel mock.
 const context = { clusterId: 'test-cluster', clusterName: 'test' };
 
 describe('EndpointSliceOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
+
+  const listTexts = (label: string) =>
+    Array.from(
+      container.querySelectorAll<HTMLElement>(
+        `section[aria-label="Endpoints"] ul[aria-label="${label}"] > li`
+      ),
+      (item) => item.textContent ?? ''
+    );
 
   const renderComponent = async (fixture: Record<string, unknown>) => {
     const dto = partialModelFixture<endpointslice.EndpointSliceDetails>(fixture);
@@ -107,12 +122,18 @@ describe('EndpointSliceOverview', () => {
     // The Status row reports "12 ready" and "6 not ready" via chips.
     expect(overview.textContent).toContain('12 ready');
     expect(overview.textContent).toContain('6 not ready');
-    // Section labels are unadorned; counts live in the Status row chips.
-    expect(overview.textContent).toContain('Ready');
-    expect(overview.textContent).toContain('Not Ready');
-    // Ports render as label/value rows: name on the left, port/protocol on the right.
-    expect(overview.textContent).toContain('http');
-    expect(overview.textContent).toContain('80/TCP (http)');
+    // The slice's ports flow to its endpoints; each port names itself above protocol and number.
+    const ports = listTexts('Ports');
+    expect(ports[0]).toContain('http');
+    expect(ports[0]).toContain('TCP 80');
+    expect(ports[1]).toContain('TCP 443');
+    // Long address lists are capped, with the remainder counted.
+    expect(listTexts('Ready')).toHaveLength(10);
+    expect(listTexts('Ready')[0]).toContain('pod-1');
+    expect(listTexts('Ready')[0]).toContain('10.0.0.1');
+    expect(listTexts('Not ready')).toHaveLength(5);
+    expect(overview.textContent).toContain('and 2 more');
+    expect(overview.textContent).toContain('and 1 more');
   });
 
   it('omits not ready section when no not-ready addresses', async () => {
@@ -140,10 +161,32 @@ describe('EndpointSliceOverview', () => {
 
     expect(container.textContent).toContain('IPv4');
     expect(container.textContent).toContain('2 ready');
-    // No "Not Ready" chip and no Not Ready section when there are none.
+    // No "Not Ready" chip and no not-ready endpoints when there are none.
     const unhealthyChips = container.querySelectorAll('.status-chip--unhealthy');
     expect(unhealthyChips.length).toBe(0);
-    expect(container.textContent).not.toContain('Not Ready');
+    expect(listTexts('Ready')).toHaveLength(2);
+    expect(listTexts('Not ready')).toHaveLength(0);
+  });
+
+  it('links the Service that owns the slice', async () => {
+    await renderComponent({
+      name: 'web-abc12',
+      namespace: 'shop',
+      addressType: 'IPv4',
+      readyAddresses: [],
+      notReadyAddresses: [],
+      ports: [{ name: 'http', port: 8080, protocol: 'TCP' }],
+      labels: { 'kubernetes.io/service-name': 'web' },
+      annotations: {},
+    });
+
+    const service = getValueForLabel(container, 'Service');
+    expect(service?.textContent).toBe('web');
+    expect(service?.querySelector('.object-panel-link')).not.toBeNull();
+    // A slice without endpoints says so in the flow.
+    expect(container.querySelector('section[aria-label="Endpoints"]')?.textContent).toContain(
+      'No endpoints'
+    );
   });
 
   it('displays address with target and node', async () => {

@@ -1,54 +1,10 @@
-/* EndpointsOverview-specific styles
-   Most layout comes from the standard OverviewItem rows; these styles cover
-   the inline address row (IP → target on node) and the small wrapper for the
-   Status row's chip group. */
+/* EndpointSlice Overview
+   The endpoints flow uses the shared traffic-flow styles (shared/TrafficFlow.css); this file only
+   lays out the Status row's chip group. */
 
 /* The Status row may show one or two chips side by side. */
 .endpoint-status-chips {
   display: inline-flex;
   align-items: baseline;
   gap: var(--spacing-sm);
-}
-
-.addresses-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.address-row {
-  font-size: var(--font-size-sm);
-  display: flex;
-  align-items: baseline;
-  gap: var(--spacing-xs);
-  flex-wrap: wrap;
-}
-
-.address-ip {
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-mono);
-  color: var(--color-text);
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.address-arrow,
-.address-on {
-  color: var(--color-text-tertiary);
-  font-size: 0.75rem;
-  padding: 0 0.2rem;
-}
-
-.address-target,
-.address-node {
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-mono);
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.addresses-more {
-  color: var(--color-text-tertiary);
-  font-style: italic;
-  font-size: var(--font-size-xs);
 }

@@ -91,6 +91,17 @@ export const FlowEndpoints: React.FC<{
   </ul>
 );
 
+/** One entry in a FlowEntries list: an optional title line above a mono detail line. */
+export const FlowEntry: React.FC<{ title?: React.ReactNode; children: React.ReactNode }> = ({
+  title,
+  children,
+}) => (
+  <li>
+    {!!title && <FlowSubject>{title}</FlowSubject>}
+    <div className="reference-grant-item">{children}</div>
+  </li>
+);
+
 /** A list of entries inside one endpoint box (e.g. every port of a Service). */
 export const FlowEntries: React.FC<{ label: string; children: React.ReactNode }> = ({
   label,
@@ -101,15 +112,23 @@ export const FlowEntries: React.FC<{ label: string; children: React.ReactNode }>
   </ul>
 );
 
-/** An endpoint box; `target` outlines it in the section's tone (the object's own side). */
-export const FlowEndpoint: React.FC<{ target?: boolean; children: React.ReactNode }> = ({
-  target,
-  children,
-}) => (
-  <li className={target ? 'reference-grant-side traffic-flow-target' : 'reference-grant-side'}>
-    {children}
-  </li>
-);
+/**
+ * An endpoint box. `target` outlines it in the section's tone (the object's own side); `warning`
+ * marks endpoints that do not take traffic (e.g. not-ready addresses) with a dashed red edge.
+ */
+export const FlowEndpoint: React.FC<{
+  target?: boolean;
+  warning?: boolean;
+  children: React.ReactNode;
+}> = ({ target, warning, children }) => {
+  let className = 'reference-grant-side';
+  if (warning) {
+    className += ' traffic-flow-warning';
+  } else if (target) {
+    className += ' traffic-flow-target';
+  }
+  return <li className={className}>{children}</li>;
+};
 
 export const FlowSubject: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="traffic-flow-subject">{children}</div>

@@ -14,6 +14,7 @@ import {
   FlowEndpoint,
   FlowEndpoints,
   FlowEntries,
+  FlowEntry,
   FlowScope,
   FlowSubject,
   FlowTerm,
@@ -110,18 +111,15 @@ const ExternalNameTarget: React.FC<{ d: ServiceDetails }> = ({ d }) => (
 // when it has one. An unset target port is the API default (the Service port itself); a named
 // target port has no single number because each pod resolves it, so its name stands in.
 const PortEntry: React.FC<{ port: ServicePort }> = ({ port }) => (
-  <li>
-    {!!port.name && <FlowSubject>{port.name}</FlowSubject>}
-    <div className="reference-grant-item">
-      {`${port.protocol || 'TCP'} ${port.port}:${port.targetPort || port.port}`}
-      {!!port.nodePort && (
-        <span className="traffic-flow-muted">
-          {' · '}
-          <span className="traffic-flow-nowrap">node port {port.nodePort}</span>
-        </span>
-      )}
-    </div>
-  </li>
+  <FlowEntry title={port.name}>
+    {`${port.protocol || 'TCP'} ${port.port}:${port.targetPort || port.port}`}
+    {!!port.nodePort && (
+      <span className="traffic-flow-muted">
+        {' · '}
+        <span className="traffic-flow-nowrap">node port {port.nodePort}</span>
+      </span>
+    )}
+  </FlowEntry>
 );
 
 // Every port leads to the same pods, so one tile lists the ports on one side of a single flow.

@@ -165,6 +165,15 @@
   border-color: var(--traffic-flow-color);
 }
 
+.traffic-flow-warning {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-error) 60%, transparent);
+}
+
+.traffic-flow-warning > .traffic-flow-subject {
+  color: var(--color-error);
+}
+
 /* A backend's configured share of a rule's traffic (route weights), as a proportion bar. */
 .traffic-flow-share {
   height: 4px;
