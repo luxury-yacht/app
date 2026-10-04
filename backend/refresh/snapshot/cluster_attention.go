@@ -41,6 +41,11 @@ const (
 	attentionSourceWorkload attentionSource = "workload"
 	attentionSourceNode     attentionSource = "node"
 	attentionSourceEvent    attentionSource = "event"
+	// attentionSourceReportedStatus is a status an object reports about itself, published
+	// by the object catalog (for example an Argo CD Application's sync status).
+	attentionSourceReportedStatus attentionSource = "reported-status"
+
+	attentionReportedStatusOwner = "reported-status"
 )
 
 // AttentionFinding is one Kubernetes object that currently warrants operator
@@ -256,6 +261,9 @@ type attentionSourceRecord struct {
 	DeletionTimestamp  int64
 	Message            string
 	AgeTimestamp       int64
+	// ReportedStatuses maps each aspect a reported-status object reports about itself (for
+	// example an Argo CD Application's sync and health) to its current value.
+	ReportedStatuses map[string]string
 }
 
 type attentionEvaluation struct {
@@ -341,6 +349,9 @@ func newClusterAttentionIndex(meta ClusterMeta, now func() time.Time) *clusterAt
 	}
 	index.maintained = newTypedMaintainedStore(meta, attentionQuerypageSchema(), attentionTableQueryAdapter())
 	heap.Init(&index.deadlines)
+	for _, kind := range attentionReportedStatusKinds() {
+		index.registerOwnerKind(attentionReportedStatusOwner, kind)
+	}
 	return index
 }
 
@@ -823,6 +834,19 @@ func (i *clusterAttentionIndex) ReplaceFinalizerBlockers(blockers []objectcatalo
 	pruner := i.ignoredObjectPruner
 	i.mu.Unlock()
 	pruneAttentionRefs(pruner, pruned)
+}
+
+// ReplaceReportedStatuses replaces the catalog-owned source of statuses objects report
+// about themselves, such as every Argo CD Application's sync and health, for this cluster.
+func (i *clusterAttentionIndex) ReplaceReportedStatuses(statuses []objectcatalog.ReportedStatus) {
+	records := make([]attentionSourceRecord, 0, len(statuses))
+	for _, status := range statuses {
+		records = append(records, attentionSourceRecord{
+			Ref: status.Ref, Metadata: status.Metadata, Source: attentionSourceReportedStatus,
+			ReportedStatuses: status.Statuses, AgeTimestamp: status.CreationTimestamp,
+		})
+	}
+	i.ReplaceSource(attentionReportedStatusOwner, records)
 }
 
 func attentionRefBelongsToCluster(ref resourcemodel.ResourceRef, clusterID string) bool {
@@ -1438,6 +1462,8 @@ func evaluateAttentionSource(record attentionSourceRecord, now time.Time) attent
 		return evaluateNodeAttention(record)
 	case attentionSourceEvent:
 		return evaluateEventAttention(record, now)
+	case attentionSourceReportedStatus:
+		return evaluateReportedStatusAttention(record)
 	default:
 		return attentionEvaluation{}
 	}
@@ -1598,6 +1624,29 @@ func appendGraceAwareCause(
 		return causes, true
 	}
 	return appendAttentionCause(causes, cause), false
+}
+
+// Every matching reported-status rule contributes a cause, since an object can report
+// several problems at once (an Application out of sync and degraded).
+func evaluateReportedStatusAttention(record attentionSourceRecord) attentionEvaluation {
+	causes := make([]AttentionCause, 0, len(record.ReportedStatuses))
+	for _, rule := range attentionClassificationRules {
+		if view, applies := reportedStatusView(rule, record); applies {
+			causes = appendAttentionCause(causes, classificationCause(rule, view))
+		}
+	}
+	return findingEvaluation(record, causes)
+}
+
+// reportedStatusView is the record as a reported-status rule sees it: the status the rule
+// classifies is the value of the aspect it names.
+func reportedStatusView(rule attentionClassificationRule, record attentionSourceRecord) (attentionSourceRecord, bool) {
+	if rule.ReportedStatus == "" {
+		return attentionSourceRecord{}, false
+	}
+	view := record
+	view.Status = record.ReportedStatuses[rule.ReportedStatus]
+	return view, rule.matches(view)
 }
 
 func evaluateNodeAttention(record attentionSourceRecord) attentionEvaluation {

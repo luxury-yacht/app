@@ -107,11 +107,8 @@ type Service struct {
 	streamSubscribers map[int]chan StreamingUpdate
 	nextStreamSubID   int
 
-	finalizerMu          sync.RWMutex
-	finalizerBlockers    map[string]FinalizerBlocker
-	finalizerRevision    uint64
-	finalizerSubscribers map[int]chan FinalizerBlockerUpdate
-	nextFinalizerSubID   int
+	finalizerBlockers catalogSubset[FinalizerBlocker]
+	reportedStatuses  catalogSubset[ReportedStatus]
 }
 
 // NewService constructs a catalog service with the provided dependencies and options.
@@ -124,17 +121,15 @@ func NewService(deps Dependencies, opts *Options) *Service {
 	}
 
 	service := &Service{
-		deps:                 deps,
-		opts:                 serviceOpts,
-		clusterID:            deps.ClusterID,
-		catalogIndex:         newCatalogIndex(),
-		identity:             newResourceIdentityResolver(deps.Common, deps.Logger),
-		health:               healthStatus{State: HealthStateUnknown},
-		doneCh:               make(chan struct{}),
-		now:                  nowFn,
-		streamSubscribers:    make(map[int]chan StreamingUpdate),
-		finalizerBlockers:    make(map[string]FinalizerBlocker),
-		finalizerSubscribers: make(map[int]chan FinalizerBlockerUpdate),
+		deps:              deps,
+		opts:              serviceOpts,
+		clusterID:         deps.ClusterID,
+		catalogIndex:      newCatalogIndex(),
+		identity:          newResourceIdentityResolver(deps.Common, deps.Logger),
+		health:            healthStatus{State: HealthStateUnknown},
+		doneCh:            make(chan struct{}),
+		now:               nowFn,
+		streamSubscribers: make(map[int]chan StreamingUpdate),
 	}
 	service.queryStore = serviceOpts.QueryStore
 	if service.queryStore == nil {

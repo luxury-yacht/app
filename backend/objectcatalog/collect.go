@@ -19,6 +19,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/argocd"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -438,6 +439,7 @@ func summaryFromObject(clusterID string, desc Descriptor, item metav1.Object) Su
 		CreationTimestamp: creationTimestamp,
 		lifecycle:         resourcemodel.ObjectLifecycleWithFinalizers(meta, additionalObjectFinalizers(desc, item)),
 		deletionTime:      deletionTime,
+		reportedStatuses:  reportedObjectStatuses(item),
 		Scope:             desc.Scope,
 	}
 
@@ -447,6 +449,21 @@ func summaryFromObject(clusterID string, desc Descriptor, item metav1.Object) Su
 	summary.ActionFacts = buildSummaryActionFacts(desc, item)
 
 	return summary
+}
+
+// reportedObjectStatuses reads the statuses an object reports for Attention. Only Argo CD
+// Applications report any (their sync and health); they are read here because the catalog
+// is the only source that watches custom resources with their full content.
+func reportedObjectStatuses(item metav1.Object) reportedStatusValues {
+	object, ok := item.(*unstructuredv1.Unstructured)
+	if !ok {
+		return reportedStatusValues{}
+	}
+	sync, health, ok := argocd.ApplicationStatus(object)
+	if !ok {
+		return reportedStatusValues{}
+	}
+	return newReportedStatusValues(map[string]string{ReportedStatusSync: sync, ReportedStatusHealth: health})
 }
 
 func catalogResourceMetadata(item metav1.Object) *resourcemodel.ResourceTableMetadata {

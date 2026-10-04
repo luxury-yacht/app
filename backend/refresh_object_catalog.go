@@ -212,14 +212,9 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 			runCatalogDoorbellBridge(ctx, catalogUpdates, subsystem.ResourceStream)
 		}()
 	}
-	if subsystem.AttentionIndex != nil {
-		finalizerUpdates, cancelFinalizerUpdates := svc.SubscribeFinalizerBlockers()
-		bridges.Add(1)
-		go func() {
-			defer bridges.Done()
-			defer cancelFinalizerUpdates()
-			runCatalogFinalizerBridge(ctx, finalizerUpdates, svc.FinalizerBlockers, subsystem.AttentionIndex)
-		}()
+	if index := subsystem.AttentionIndex; index != nil {
+		startCatalogSubsetBridge(ctx, &bridges, svc.SubscribeFinalizerBlockers, svc.FinalizerBlockers, index.ReplaceFinalizerBlockers)
+		startCatalogSubsetBridge(ctx, &bridges, svc.SubscribeReportedStatuses, svc.ReportedStatuses, index.ReplaceReportedStatuses)
 	}
 
 	a.storeObjectCatalogEntry(target.meta.ID, &objectCatalogEntry{
@@ -251,13 +246,31 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 	return nil
 }
 
-func runCatalogFinalizerBridge(
+// startCatalogSubsetBridge forwards one of the catalog's Attention subsets to the
+// Attention index whenever it changes, until ctx ends or the subscription closes.
+func startCatalogSubsetBridge[T any](
 	ctx context.Context,
-	updates <-chan objectcatalog.FinalizerBlockerUpdate,
-	blockers func() []objectcatalog.FinalizerBlocker,
-	index *snapshot.ClusterAttentionIndex,
+	bridges *sync.WaitGroup,
+	subscribe func() (<-chan objectcatalog.SubsetUpdate, func()),
+	read func() []T,
+	apply func([]T),
 ) {
-	if blockers == nil || index == nil {
+	updates, cancelUpdates := subscribe()
+	bridges.Add(1)
+	go func() {
+		defer bridges.Done()
+		defer cancelUpdates()
+		runCatalogSubsetBridge(ctx, updates, read, apply)
+	}()
+}
+
+func runCatalogSubsetBridge[T any](
+	ctx context.Context,
+	updates <-chan objectcatalog.SubsetUpdate,
+	read func() []T,
+	apply func([]T),
+) {
+	if read == nil || apply == nil {
 		return
 	}
 	for {
@@ -268,7 +281,7 @@ func runCatalogFinalizerBridge(
 			if !ok {
 				return
 			}
-			index.ReplaceFinalizerBlockers(blockers())
+			apply(read())
 		}
 	}
 }

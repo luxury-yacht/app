@@ -28,6 +28,23 @@ func statusPresentation(status string) string {
 	}
 }
 
+// ApplicationStatus returns an Argo CD Application's sync and health statuses (each "Unknown"
+// until Argo CD reports it); ok is false for every other object.
+func ApplicationStatus(object *unstructured.Unstructured) (sync, health string, ok bool) {
+	if !isArgoCD(object) || !strings.EqualFold(object.GetKind(), "application") {
+		return "", "", false
+	}
+	return applicationSyncStatus(object), applicationHealthStatus(object), true
+}
+
+func applicationSyncStatus(object *unstructured.Unstructured) string {
+	return statusOrUnknown(crdfacts.Text(object.Object, "status", "sync", "status"))
+}
+
+func applicationHealthStatus(object *unstructured.Unstructured) string {
+	return statusOrUnknown(crdfacts.Text(object.Object, "status", "health", "status"))
+}
+
 // PrimaryStatus keeps Argo's health semantics in every custom-resource projection.
 // Sync remains a separate signal: a synced Application can still be degraded.
 func PrimaryStatus(object *unstructured.Unstructured) (state, label, presentation string, ok bool) {
@@ -36,7 +53,7 @@ func PrimaryStatus(object *unstructured.Unstructured) (state, label, presentatio
 	}
 	switch strings.ToLower(object.GetKind()) {
 	case "application":
-		state = statusOrUnknown(crdfacts.Text(object.Object, "status", "health", "status"))
+		state = applicationHealthStatus(object)
 	case "applicationset":
 		state = applicationSetHealth(conditions(object))
 	default:

@@ -148,7 +148,7 @@ func isArgoCD(object *unstructured.Unstructured) bool {
 }
 
 func applicationFacts(clusterID string, object *unstructured.Unstructured) *ApplicationFacts {
-	facts := &ApplicationFacts{Spec: applicationSpec(object.Object, "spec"), Sync: statusOrUnknown(crdfacts.Text(object.Object, "status", "sync", "status")), Health: statusOrUnknown(crdfacts.Text(object.Object, "status", "health", "status")), HealthMessage: crdfacts.Text(object.Object, "status", "health", "message"), Operation: read[Operation](object.Object, "status", "operationState")}
+	facts := &ApplicationFacts{Spec: applicationSpec(object.Object, "spec"), Sync: applicationSyncStatus(object), Health: applicationHealthStatus(object), HealthMessage: crdfacts.Text(object.Object, "status", "health", "message"), Operation: read[Operation](object.Object, "status", "operationState")}
 	facts.SyncPresentation = statusPresentation(facts.Sync)
 	facts.HealthPresentation = statusPresentation(facts.Health)
 	if facts.Operation != nil {

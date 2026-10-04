@@ -67,6 +67,7 @@ type Summary struct {
 	CreationTimestamp string                               `json:"creationTimestamp"` // resource creation timestamp
 	lifecycle         resourcemodel.ResourceLifecycle
 	deletionTime      int64
+	reportedStatuses  reportedStatusValues
 	Scope             Scope        `json:"scope"`                  // resource scope
 	LabelsDigest      string       `json:"labelsDigest,omitempty"` // optional digest of resource labels
 	ActionFacts       *ActionFacts `json:"actionFacts,omitempty"`  // optional facts needed to present object actions correctly
@@ -87,6 +88,66 @@ func (s Summary) FinalizerBlocker() (FinalizerBlocker, bool) {
 		return FinalizerBlocker{}, false
 	}
 	return FinalizerBlocker{Ref: s.Ref, Metadata: s.Metadata, DeletionTimestamp: s.deletionTime}, true
+}
+
+// Aspects an object can report about itself in ReportedStatus.Statuses.
+const (
+	ReportedStatusSync   = "sync"
+	ReportedStatusHealth = "health"
+)
+
+var reportedAspects = [...]string{ReportedStatusSync, ReportedStatusHealth}
+
+// reportedStatusValues holds one value per reportedAspects entry ("" when not reported).
+// It is an array rather than a map so Summary stays comparable.
+type reportedStatusValues [len(reportedAspects)]string
+
+func newReportedStatusValues(statuses map[string]string) reportedStatusValues {
+	var values reportedStatusValues
+	for index, aspect := range reportedAspects {
+		values[index] = statuses[aspect]
+	}
+	return values
+}
+
+func (v reportedStatusValues) statuses() map[string]string {
+	var statuses map[string]string
+	for index, value := range v {
+		if value == "" {
+			continue
+		}
+		if statuses == nil {
+			statuses = make(map[string]string, len(v))
+		}
+		statuses[reportedAspects[index]] = value
+	}
+	return statuses
+}
+
+// ReportedStatus is the catalog's backend-only projection of the statuses an object
+// reports about itself for Attention to classify, such as an Argo CD Application's sync
+// and health. Statuses maps each aspect to its current value. Every reporting object is
+// included whatever its statuses, so Attention can tell an object that recovered from one
+// that was deleted.
+type ReportedStatus struct {
+	Ref               resourcemodel.ResourceRef
+	Metadata          *resourcemodel.ResourceTableMetadata
+	CreationTimestamp int64
+	Statuses          map[string]string
+}
+
+// ReportedStatus returns the object's identity and reported statuses only when the
+// object reports any.
+func (s Summary) ReportedStatus() (ReportedStatus, bool) {
+	statuses := s.reportedStatuses.statuses()
+	if len(statuses) == 0 {
+		return ReportedStatus{}, false
+	}
+	var created int64
+	if parsed, err := time.Parse(time.RFC3339, s.CreationTimestamp); err == nil {
+		created = parsed.UnixMilli()
+	}
+	return ReportedStatus{Ref: s.Ref, Metadata: s.Metadata, CreationTimestamp: created, Statuses: statuses}, true
 }
 
 // ActionFacts carries lightweight, action-relevant state for catalog rows.

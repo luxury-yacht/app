@@ -477,7 +477,7 @@ func (s *Service) registerIngestCatalogSinks() func() {
 	s.mu.Lock()
 	s.cacheRebuilds.Add(1)
 	s.catalogIndex.rebuildCacheFromItems(s.items, s.catalogIndex.descriptors())
-	s.replaceFinalizerBlockers(s.items)
+	s.replaceAttentionSubsets(s.items)
 	s.suspendPublication.Store(false)
 	s.mu.Unlock()
 	s.broadcastStreaming(true)

@@ -466,3 +466,71 @@ func TestClusterAttentionIndexRefiltersRestoredRowsWhenIgnoreRulesChange(t *test
 
 	require.Empty(t, restored.Snapshot())
 }
+
+func argoCDStatuses(sync, health string) map[string]string {
+	return map[string]string{objectcatalog.ReportedStatusSync: sync, objectcatalog.ReportedStatusHealth: health}
+}
+
+func argoCDTestApplication(clusterID, group, name string, statuses map[string]string) objectcatalog.ReportedStatus {
+	return objectcatalog.ReportedStatus{
+		Ref: resourcemodel.ResourceRef{
+			ClusterID: clusterID, Group: group, Version: "v1alpha1", Kind: "Application", Resource: "applications",
+			Namespace: "argocd", Name: name, UID: name + "-uid",
+		},
+		Statuses: statuses,
+	}
+}
+
+func TestClusterAttentionIndexFlagsArgoCDApplicationProblemsAsSoonAsReported(t *testing.T) {
+	now := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+
+	// Argo CD records no time for a sync transition, so a problem already present when the
+	// app starts is flagged at once rather than after a grace period.
+	for _, test := range []struct {
+		sync, health string
+		severity     AttentionSeverity
+		causes       []string
+	}{
+		{"OutOfSync", "Healthy", AttentionSeverityWarning, []string{"argocd-application-out-of-sync"}},
+		{"Synced", "Missing", AttentionSeverityWarning, []string{"argocd-application-missing"}},
+		{"Synced", "Degraded", AttentionSeverityError, []string{"argocd-application-degraded"}},
+		{"OutOfSync", "Degraded", AttentionSeverityError, []string{"argocd-application-out-of-sync", "argocd-application-degraded"}},
+	} {
+		app := argoCDTestApplication("cluster-a", "argoproj.io", "storefront", argoCDStatuses(test.sync, test.health))
+		app.CreationTimestamp = now.Add(-30 * 24 * time.Hour).UnixMilli()
+		index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{app})
+		rows := index.Snapshot()
+		require.Len(t, rows, 1, "%s/%s", test.sync, test.health)
+		require.Equal(t, app.Ref, rows[0].Ref)
+		require.Equal(t, test.severity, rows[0].Severity, "%s/%s", test.sync, test.health)
+		require.ElementsMatch(t, test.causes, attentionCauseTypes(rows[0].Causes), "%s/%s", test.sync, test.health)
+		require.Equal(t, app.CreationTimestamp, rows[0].AgeTimestamp)
+	}
+
+	healthy := argoCDTestApplication("cluster-a", "argoproj.io", "storefront", argoCDStatuses("Synced", "Healthy"))
+	// Another API group's Application reporting the same words is not an Argo CD Application.
+	vela := argoCDTestApplication("cluster-a", "core.oam.dev", "storefront-vela", argoCDStatuses("OutOfSync", "Degraded"))
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{healthy, vela})
+	require.Empty(t, index.Snapshot())
+}
+
+func TestClusterAttentionIndexDropsRestoredArgoCDFindingWhenApplicationIsDeleted(t *testing.T) {
+	now := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
+	meta := ClusterMeta{ClusterID: "cluster-a"}
+	app := argoCDTestApplication(meta.ClusterID, "argoproj.io", "storefront", argoCDStatuses("OutOfSync", "Healthy"))
+	original := newClusterAttentionIndex(meta, func() time.Time { return now })
+	original.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{app})
+	require.Len(t, original.Snapshot(), 1)
+	spillPath := t.TempDir() + "/attention.spill"
+	require.NoError(t, original.SpillTo(spillPath))
+	original.Stop()
+
+	restored := newClusterAttentionIndex(meta, func() time.Time { return now })
+	t.Cleanup(restored.Stop)
+	require.NoError(t, restored.RestoreFrom(spillPath))
+	require.Len(t, restored.Snapshot(), 1)
+	restored.ReplaceReportedStatuses(nil)
+	require.Empty(t, restored.Snapshot(), "a restored finding must not outlive its deleted Application")
+}

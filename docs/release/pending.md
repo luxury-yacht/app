@@ -1,5 +1,7 @@
 ### Added
 
+- Attention flags Argo CD Applications that need a look: an Application whose health is Degraded is flagged as an error ("Argo CD Application degraded"), and one that is out of sync or whose resources are missing is flagged as a warning ("Argo CD Application out of sync", "Argo CD Application resources missing").
+
 ### Changed
 
 - On the object map, the mouse wheel now zooms in and out around the pointer instead of scrolling the map. Trackpad two-finger scrolling zooms too; drag the background to move the map.

@@ -131,14 +131,22 @@ filter state use stable finding type IDs.
 The backend owns the Attention finding set in a per-cluster maintained query
 store. Existing Pod, workload, and Node reflector bundles plus the shared Event
 informer update operational health incrementally. The object catalog publishes
-a coalesced, backend-only subset of objects whose deletion is waiting on a
-finalizer; Attention merges that lifecycle component with health causes for the
-same concrete UID. This keeps catalog scans off the render path and preserves
-the maintained-store spill/Cold-serving contract. A domain-owned timer advances
-grace periods and event expiry. The distinct `attention` stream clock remains
-the only change signal: catalog lifecycle changes update the Attention index,
-which rings that clock; the frontend refetches the current query page, with
-polling only as the stream-down fallback.
+two coalesced, backend-only subsets. The first holds objects whose deletion is
+waiting on a finalizer; Attention merges that lifecycle component with health
+causes for the same concrete UID. The second holds every object that reports a
+status about itself for Attention to classify. Today that is each Argo CD
+Application's sync and health, which feed the `argocd-application-out-of-sync`,
+`argocd-application-degraded`, and `argocd-application-missing` findings; one
+object can report several aspects, and every matching rule adds its own cause. Every reporting object is
+published whatever its statuses, so a recovered object keeps its per-object
+ignores and only a deleted one loses them. Reported statuses carry no transition
+time, so their findings have no grace period and appear as soon as the catalog
+sees the status. Both subsets keep catalog scans off the
+render path and preserve the maintained-store spill/Cold-serving contract. A
+domain-owned timer advances grace periods and event expiry. The distinct
+`attention` stream clock remains the only change signal: catalog subset changes
+update the Attention index, which rings that clock; the frontend refetches the
+current query page, with polling only as the stream-down fallback.
 
 Attention severity is a closed `info`, `warning`, or `error` vocabulary. The
 ordered status rules, restart/replica signal policies, severity precedence, and

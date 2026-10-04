@@ -1,8 +1,11 @@
 package snapshot
 
 import (
+	"slices"
 	"strings"
 	"time"
+
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 )
 
 // AttentionSeverity is the closed, ordered vocabulary used by every Attention
@@ -19,10 +22,14 @@ const (
 // Attention findings. Rules are evaluated in order, so specific intentional
 // states precede the generic unhealthy-presentation rules.
 type attentionClassificationRule struct {
-	ID                    string
-	Label                 string
-	Sources               []attentionSource
-	Kinds                 []string
+	ID      string
+	Label   string
+	Sources []attentionSource
+	Groups  []string
+	Kinds   []string
+	// ReportedStatus names the reported aspect (objectcatalog.ReportedStatus*) whose value
+	// Statuses match; it is set only on reported-status rules.
+	ReportedStatus        string
 	Presentations         []string
 	ExcludedPresentations []string
 	Statuses              []string
@@ -72,6 +79,38 @@ var attentionClassificationRules = []attentionClassificationRule{
 		ID: "warning-event", Label: "Warning events", Sources: []attentionSource{attentionSourceEvent},
 		Statuses: []string{"Warning"}, Severity: AttentionSeverityWarning,
 	},
+	{
+		// Reported-status rules have no grace period: Argo CD records no time for a sync
+		// transition, so there is nothing to measure one from.
+		ID: "argocd-application-out-of-sync", Label: "Argo CD Application out of sync",
+		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{"argoproj.io"},
+		Kinds: []string{"Application"}, ReportedStatus: objectcatalog.ReportedStatusSync, Statuses: []string{"OutOfSync"},
+		Severity: AttentionSeverityWarning, FindingReason: "Out of sync",
+	},
+	{
+		ID: "argocd-application-degraded", Label: "Argo CD Application degraded",
+		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{"argoproj.io"},
+		Kinds: []string{"Application"}, ReportedStatus: objectcatalog.ReportedStatusHealth, Statuses: []string{"Degraded"},
+		Severity: AttentionSeverityError, FindingReason: "Degraded",
+	},
+	{
+		// Missing health means resources the Application defines do not exist in the cluster.
+		ID: "argocd-application-missing", Label: "Argo CD Application resources missing",
+		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{"argoproj.io"},
+		Kinds: []string{"Application"}, ReportedStatus: objectcatalog.ReportedStatusHealth, Statuses: []string{"Missing"},
+		Severity: AttentionSeverityWarning, FindingReason: "Missing",
+	},
+}
+
+// attentionReportedStatusKinds lists the kinds whose reported statuses the policy classifies.
+func attentionReportedStatusKinds() []string {
+	var kinds []string
+	for _, rule := range attentionClassificationRules {
+		if slices.Contains(rule.Sources, attentionSourceReportedStatus) {
+			kinds = append(kinds, rule.Kinds...)
+		}
+	}
+	return kinds
 }
 
 type attentionSignal string
@@ -162,6 +201,7 @@ func classifyAttentionSource(record attentionSourceRecord) (attentionClassificat
 
 func (r attentionClassificationRule) matches(record attentionSourceRecord) bool {
 	return attentionRuleValueMatches(string(record.Source), r.Sources) &&
+		attentionRuleValueMatches(record.Ref.Group, r.Groups) &&
 		attentionRuleValueMatches(record.Ref.Kind, r.Kinds) &&
 		attentionRuleValueMatches(record.StatusPresentation, r.Presentations) &&
 		!attentionRuleValueExcluded(record.StatusPresentation, r.ExcludedPresentations) &&
