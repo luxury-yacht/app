@@ -81,16 +81,16 @@ func TestSummarySegments(t *testing.T) {
 	require.Equal(t, []resourcemodel.DetailSegment{
 		{Slot: resourcemodel.DetailSlotReference, Label: "Type", Value: "ClusterIP"},
 		{Slot: resourcemodel.DetailSlotAddress, Label: "Cluster IP", Value: "10.0.0.1"},
-		{Slot: resourcemodel.DetailSlotAddress, Label: "Ports", Value: "443,80/TCP"},
+		{Slot: resourcemodel.DetailSlotAddress, Label: "Ports", Value: "443/TCP +1", Search: "443/TCP, 80/TCP"},
 		{Slot: resourcemodel.DetailSlotCounts, Label: "Endpoints", Value: "2"},
 	}, SummarySegments(facts))
 
-	// Mixed protocols keep the protocol per port.
+	// Each port keeps its protocol.
 	mixed := Facts{Type: "ClusterIP", ClusterIP: "10.0.0.1", Ports: []PortFacts{{Port: 443, Protocol: "TCP"}, {Port: 53, Protocol: "UDP"}}}
 	require.Equal(t, []resourcemodel.DetailSegment{
 		{Slot: resourcemodel.DetailSlotReference, Label: "Type", Value: "ClusterIP"},
 		{Slot: resourcemodel.DetailSlotAddress, Label: "Cluster IP", Value: "10.0.0.1"},
-		{Slot: resourcemodel.DetailSlotAddress, Label: "Ports", Value: "443/TCP,53/UDP"},
+		{Slot: resourcemodel.DetailSlotAddress, Label: "Ports", Value: "443/TCP +1", Search: "443/TCP, 53/UDP"},
 	}, SummarySegments(mixed))
 
 	require.Equal(t, []resourcemodel.DetailSegment{

@@ -141,40 +141,21 @@ func FirstLinkDetailSegment(label string, links []ResourceLink) DetailSegment {
 	return segment
 }
 
-// PortProtocol is one port/protocol pair for FormatPortsSummary.
+// PortProtocol is one port/protocol pair for PortsDetailSegment.
 type PortProtocol struct {
 	Port     int32
 	Protocol string
 }
 
-// FormatPortsSummary renders a port list compactly for an address-slot
-// segment: ports sharing one protocol group as "443,80/TCP"; mixed protocols
-// stay per-port "443/TCP,53/UDP".
-func FormatPortsSummary(ports []PortProtocol) string {
-	if len(ports) == 0 {
-		return ""
-	}
-	protocol := ports[0].Protocol
-	uniformProtocol := true
-	for _, port := range ports[1:] {
-		if port.Protocol != protocol {
-			uniformProtocol = false
-			break
-		}
-	}
-	parts := make([]string, 0, len(ports))
+// PortsDetailSegment renders a port list as an address-slot segment that collapses like
+// every other list there ("443/TCP +1"), so a long list never outgrows its column; the
+// full list stays in Search for the tooltip and search.
+func PortsDetailSegment(ports []PortProtocol) DetailSegment {
+	values := make([]string, 0, len(ports))
 	for _, port := range ports {
-		if uniformProtocol {
-			parts = append(parts, strconv.Itoa(int(port.Port)))
-		} else {
-			parts = append(parts, strconv.Itoa(int(port.Port))+"/"+port.Protocol)
-		}
+		values = append(values, strconv.Itoa(int(port.Port))+"/"+port.Protocol)
 	}
-	joined := strings.Join(parts, ",")
-	if uniformProtocol {
-		return joined + "/" + protocol
-	}
-	return joined
+	return ListDetailSegment(DetailSlotAddress, "Ports", values)
 }
 
 // AppendDetailSegment returns a NEW slice with segment appended; it never

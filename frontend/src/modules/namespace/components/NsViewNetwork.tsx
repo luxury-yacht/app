@@ -66,7 +66,8 @@ const networkSpec: AggregatedResourceGridViewSpec<NetworkData> = {
       slot: 'address',
       sortable: true,
       getSegments: (resource) => resource.details,
-      autoSizeMaxWidth: 320,
+      // Fits a Service's "Cluster IP: <IPv4> · Ports: <port> +N" in full.
+      autoSizeMaxWidth: 360,
     }),
     createDetailSegmentsColumn<NetworkData>({
       key: 'summary',

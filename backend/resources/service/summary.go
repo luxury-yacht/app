@@ -14,7 +14,7 @@ import (
 )
 
 // SummarySegments renders the Service summary segments from its facts: the
-// service type (reference slot), the cluster IP and protocol-grouped ports
+// service type (reference slot), the cluster IP and collapsed port list
 // (address slot), and the ready endpoint count (counts slot). The own-fields
 // segments are independent of the Service's EndpointSlices; the Endpoints
 // segment is the ONLY endpoint-join part, so it is applied by
@@ -31,20 +31,18 @@ func SummarySegments(facts Facts) []resourcemodel.DetailSegment {
 		clusterIP = "None"
 	}
 	segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotAddress, Label: "Cluster IP", Value: clusterIP})
-	if ports := formatSummaryPorts(facts.Ports); ports != "" {
-		segments = append(segments, resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotAddress, Label: "Ports", Value: ports})
+	if ports := summaryPortsSegment(facts.Ports); ports.Value != "" {
+		segments = append(segments, ports)
 	}
 	return AppendEndpointsSegment(segments, facts.ReadyEndpointCount)
 }
 
-// formatSummaryPorts renders the port list compactly via the shared
-// resourcemodel.FormatPortsSummary grouping.
-func formatSummaryPorts(ports []PortFacts) string {
+func summaryPortsSegment(ports []PortFacts) resourcemodel.DetailSegment {
 	pairs := make([]resourcemodel.PortProtocol, 0, len(ports))
 	for _, port := range ports {
 		pairs = append(pairs, resourcemodel.PortProtocol{Port: port.Port, Protocol: port.Protocol})
 	}
-	return resourcemodel.FormatPortsSummary(pairs)
+	return resourcemodel.PortsDetailSegment(pairs)
 }
 
 // AppendEndpointsSegment appends the Service summary's ready-endpoint count

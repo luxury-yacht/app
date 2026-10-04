@@ -8,6 +8,7 @@
 
 .detail-segments {
   display: inline-flex;
+  align-items: baseline;
   gap: 0;
   max-width: 100%;
   min-width: 0;
@@ -22,11 +23,11 @@
    (gridtable-cell-button + gridtable-link + object-panel-link, exactly like
    Name columns) — no bespoke link styling here. */
 
+/* Each separator, label, and value is a flex item of the cell itself, so only values
+   shrink. A wrapper box per segment could shrink below its label, which then painted
+   over the next segment. */
 .detail-segments .detail-segment-text {
-  display: inline-flex;
-  align-items: baseline;
-  max-width: 100%;
-  min-width: 0;
+  display: contents;
 }
 
 .detail-segment-separator {
