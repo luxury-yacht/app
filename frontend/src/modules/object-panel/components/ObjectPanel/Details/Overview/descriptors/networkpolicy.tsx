@@ -233,7 +233,11 @@ const DirectionContent: React.FC<{ policy: NetworkPolicyDetails; direction: Dire
 };
 
 const directionSection = (direction: Direction) => (policy: NetworkPolicyDetails) => (
-  <TrafficFlowSection label={direction} tone={direction === 'Ingress' ? 'inbound' : 'outbound'}>
+  <TrafficFlowSection
+    label={direction}
+    tone={direction === 'Ingress' ? 'inbound' : 'outbound'}
+    directional
+  >
     <DirectionContent policy={policy} direction={direction} />
   </TrafficFlowSection>
 );

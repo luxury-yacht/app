@@ -1,10 +1,10 @@
 /* Traffic flow
  *
- * Shared by NetworkPolicy, Ingress, and Gateway API route Overviews (TrafficFlow.tsx). Each rule is
- * a card; inside it a flow is built from the ReferenceGrant diagram boxes in OverviewBlocks.css with
- * an arrow between the two sides. The section tone (inbound blue, outbound purple) colours the
- * heading dot, the card edge and badge, the arrow, its label pills, and the target outline; a
- * direction that allows nothing gets a red edge and marker. */
+ * Shared by NetworkPolicy, Ingress, Gateway API route, and Service Overviews (TrafficFlow.tsx). Each
+ * rule is a card; inside it a flow is built from the ReferenceGrant diagram boxes in OverviewBlocks.css
+ * with an arrow between the two sides. The section tone (inbound blue, outbound purple) colours the
+ * card edge and badge, the arrow, its label pills, the target outline, and — on views with more than
+ * one direction — a heading dot; a direction that allows nothing gets a red edge and marker. */
 
 .traffic-flow-section {
   display: flex;
@@ -31,7 +31,8 @@
   margin: 0;
 }
 
-.traffic-flow-section > h3::before {
+/* Views with more than one direction (NetworkPolicy) mark each heading with its tone. */
+.traffic-flow-section--directional > h3::before {
   content: "";
   display: inline-block;
   width: 0.6rem;
@@ -186,6 +187,10 @@
   justify-content: center;
   gap: 2px;
   flex-shrink: 0;
+}
+
+/* Labels under the arrow (e.g. ports) get a steady column width so rule cards line up. */
+.traffic-flow-arrow--labelled {
   min-width: 4.5rem;
 }
 

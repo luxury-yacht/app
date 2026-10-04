@@ -17,12 +17,17 @@ import './TrafficFlow.css';
 /** Inbound traffic (ingress, routed requests) is blue; outbound (egress) is purple. */
 export type TrafficFlowTone = 'inbound' | 'outbound';
 
+/** `directional` marks the heading with the tone's dot, for views that show more than one direction. */
 export const TrafficFlowSection: React.FC<{
   label: string;
   tone: TrafficFlowTone;
+  directional?: boolean;
   children: React.ReactNode;
-}> = ({ label, tone, children }) => (
-  <section className={`traffic-flow-section traffic-flow-section--${tone}`} aria-label={label}>
+}> = ({ label, tone, directional, children }) => (
+  <section
+    className={`traffic-flow-section traffic-flow-section--${tone}${directional ? ' traffic-flow-section--directional' : ''}`}
+    aria-label={label}
+  >
     <h3 className="metadata-label">{label}</h3>
     {children}
   </section>
@@ -153,7 +158,11 @@ export const FlowTermLines: React.FC<{ terms: string[] }> = ({ terms }) => (
 
 /** The arrow between the two sides, with optional labels (e.g. ports) as pills under it. */
 export const FlowArrow: React.FC<{ label?: string; items?: string[] }> = ({ label, items }) => (
-  <div className="traffic-flow-arrow">
+  <div
+    className={
+      items?.length ? 'traffic-flow-arrow traffic-flow-arrow--labelled' : 'traffic-flow-arrow'
+    }
+  >
     <span className="reference-grant-arrow" aria-hidden="true">
       →
     </span>
