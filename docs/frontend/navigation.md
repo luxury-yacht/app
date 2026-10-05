@@ -152,8 +152,10 @@ Neither subset publishes before the catalog's first full sync: until then the
 catalog holds a partial view, and an object missing from it would read as
 deleted. Even afterwards, an object missing from the catalog's view is not proof
 of deletion (its listing may have failed or been denied, or its CRD removed), so
-catalog-owned findings never prune a saved per-object ignore on absence; only a
-recreated object (same name, new UID) drops the old object's ignores. Both subsets keep catalog scans off the
+catalog-owned findings never prune a saved per-object ignore on absence. A
+recreated object (same name, new UID) drops the old object's ignores as soon as
+any source observes it, even when the index never saw the old object, because
+Kubernetes allows only one object per name at a time. Both subsets keep catalog scans off the
 render path and preserve the maintained-store spill/Cold-serving contract. A
 domain-owned timer advances grace periods and event expiry. The distinct
 `attention` stream clock remains the only change signal: catalog subset changes

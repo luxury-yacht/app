@@ -566,9 +566,7 @@ func (i *clusterAttentionIndex) UpsertSource(owner string, record attentionSourc
 	pruner := i.ignoredObjectPruner
 	i.armTimerLocked()
 	i.mu.Unlock()
-	if pruned != nil && pruner != nil {
-		pruner(*pruned)
-	}
+	pruneAttentionRefs(pruner, pruned)
 }
 
 func (i *clusterAttentionIndex) ReplaceSource(owner string, records []attentionSourceRecord) {
@@ -630,9 +628,7 @@ func (i *clusterAttentionIndex) upsertReplacementRecords(
 		key := attentionRefKey(record.Ref)
 		replacement.want[key] = struct{}{}
 		replacement.presentIgnoredKeys[attentionIgnoredObjectKey(record.Ref)] = struct{}{}
-		if replaced := i.upsertSourceLocked(owner, record, replacement.now); replaced != nil {
-			replacement.pruned = append(replacement.pruned, *replaced)
-		}
+		replacement.pruned = append(replacement.pruned, i.upsertSourceLocked(owner, record, replacement.now)...)
 	}
 }
 
@@ -844,7 +840,8 @@ func (i *clusterAttentionIndex) ReplaceFinalizerBlockers(blockers []objectcatalo
 // about themselves, such as every Argo CD Application's and ApplicationSet's, for this cluster.
 // Like the catalog's finalizer findings, an object missing from the catalog's view is not
 // proof of deletion (its listing may have failed or been denied, or its CRD removed), so
-// saved ignores survive; a recreated object (new UID) still drops the old one's ignores.
+// saved ignores survive; a recreated object (same name, new UID) drops the old one's
+// ignores as soon as it is observed.
 func (i *clusterAttentionIndex) ReplaceReportedStatuses(statuses []objectcatalog.ReportedStatus) {
 	records := make([]attentionSourceRecord, 0, len(statuses))
 	for _, status := range statuses {
@@ -886,14 +883,13 @@ func finalizerAttentionFinding(blocker objectcatalog.FinalizerBlocker) Attention
 	}
 }
 
-func (i *clusterAttentionIndex) upsertSourceLocked(owner string, record attentionSourceRecord, now time.Time) *resourcemodel.ResourceRef {
+func (i *clusterAttentionIndex) upsertSourceLocked(owner string, record attentionSourceRecord, now time.Time) []resourcemodel.ResourceRef {
 	key := attentionRefKey(record.Ref)
 	previous := i.sources[key]
-	var pruned *resourcemodel.ResourceRef
+	pruned := i.pruneSupersededIgnoresLocked(record.Ref)
 	if previous.owner != "" && attentionIgnoredObjectKey(previous.record.Ref) != attentionIgnoredObjectKey(record.Ref) &&
 		i.pruneIgnoredObjectLocked(previous.record.Ref) {
-		removed := previous.record.Ref
-		pruned = &removed
+		pruned = append(pruned, previous.record.Ref)
 	}
 	if previous.owner != "" && previous.owner != owner {
 		delete(i.owners[previous.owner], key)
@@ -913,6 +909,28 @@ func (i *clusterAttentionIndex) upsertSourceLocked(owner string, record attentio
 		heap.Push(&i.deadlines, attentionDeadline{key: key, generation: state.generation, at: state.deadline})
 	}
 	return pruned
+}
+
+// pruneSupersededIgnoresLocked drops saved ignores of an earlier object with the live
+// object's identity coordinates. Kubernetes allows one object per name at a time, so a
+// different UID proves the ignored object is gone, even when the index never saw it.
+func (i *clusterAttentionIndex) pruneSupersededIgnoresLocked(live resourcemodel.ResourceRef) []resourcemodel.ResourceRef {
+	if len(i.ignoreRules.ObjectFindings) == 0 || strings.TrimSpace(live.UID) == "" {
+		return nil
+	}
+	var pruned []resourcemodel.ResourceRef
+	for _, ignored := range append([]AttentionObjectFindingIgnore(nil), i.ignoreRules.ObjectFindings...) {
+		if supersededAttentionObject(ignored.Ref, live) && i.pruneIgnoredObjectLocked(ignored.Ref) {
+			pruned = append(pruned, ignored.Ref)
+		}
+	}
+	return pruned
+}
+
+func supersededAttentionObject(ignored, live resourcemodel.ResourceRef) bool {
+	return strings.TrimSpace(ignored.UID) != "" && ignored.UID != live.UID &&
+		ignored.ClusterID == live.ClusterID && ignored.Group == live.Group && ignored.Kind == live.Kind &&
+		ignored.Namespace == live.Namespace && ignored.Name == live.Name
 }
 
 func (i *clusterAttentionIndex) deleteSourceLocked(owner, key string) {

@@ -623,3 +623,50 @@ func TestClusterAttentionIndexKeepsSavedIgnoresForReportedObjectsMissingFromACat
 	require.Equal(t, []resourcemodel.ResourceRef{app.Ref}, persistedPrunes)
 	require.Len(t, index.Snapshot(), 1)
 }
+
+// Kubernetes allows one object per name at a time, so a live object with the same identity
+// coordinates and a different UID proves the ignored object is gone, however the index
+// learned about it.
+func TestClusterAttentionIndexPrunesIgnoresOfARecreatedObjectWhenItIsFirstObserved(t *testing.T) {
+	now := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
+	old := reportedStatusTestObject("cluster-a", "argoproj.io", "Application", "storefront", argoCDStatuses("OutOfSync", "Healthy"))
+	recreated := old
+	recreated.Ref.UID = "new-uid"
+	ignore := AttentionObjectFindingIgnore{Ref: old.Ref, FindingType: "argocd-application-out-of-sync"}
+	// Ignores of other objects that merely share part of the identity are kept.
+	otherNamespace, otherKind := old, old
+	otherNamespace.Ref.Namespace, otherNamespace.Ref.UID = "team-b", "other-namespace-uid"
+	otherKind.Ref.Kind, otherKind.Ref.UID = "ApplicationSet", "other-kind-uid"
+	kept := []AttentionObjectFindingIgnore{
+		{Ref: otherNamespace.Ref, FindingType: "argocd-application-out-of-sync"},
+		{Ref: otherKind.Ref, FindingType: "argocd-applicationset-error"},
+	}
+
+	for _, test := range []struct {
+		name    string
+		observe func(index *clusterAttentionIndex)
+	}{
+		{"recreated after dropping out of a catalog view", func(index *clusterAttentionIndex) {
+			index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{old})
+			index.ReplaceReportedStatuses(nil)
+			index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{recreated})
+		}},
+		{"saved ignore from an earlier session", func(index *clusterAttentionIndex) {
+			index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{recreated})
+		}},
+	} {
+		index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+		var persistedPrunes []resourcemodel.ResourceRef
+		index.SetIgnoredObjectPruner(func(ref resourcemodel.ResourceRef) { persistedPrunes = append(persistedPrunes, ref) })
+		index.SetIgnoreRules(AttentionIgnoreRules{ObjectFindings: append([]AttentionObjectFindingIgnore{ignore}, kept...)})
+
+		test.observe(index)
+
+		require.ElementsMatch(t, kept, index.IgnoreRules().ObjectFindings, test.name)
+		require.Equal(t, []resourcemodel.ResourceRef{old.Ref}, persistedPrunes, test.name)
+		rows := index.Snapshot()
+		require.Len(t, rows, 1, test.name)
+		require.Equal(t, recreated.Ref, rows[0].Ref, "the recreated object's finding is not suppressed: %s", test.name)
+		index.Stop()
+	}
+}
