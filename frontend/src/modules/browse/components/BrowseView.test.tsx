@@ -951,7 +951,6 @@ describe('BrowseView', () => {
       });
 
       expect(gridTablePropsRef.current.data).toHaveLength(1);
-      expect(gridTablePropsRef.current.filters.options.customActions).toBeUndefined();
       // Pagination totals live in the footer; the filter chip's "Showing N of M items"
       // banner renders only while a narrowing filter is active (complementary, not
       // a duplicate top count) — consistent with every other view.
@@ -1106,8 +1105,8 @@ describe('BrowseView', () => {
         await Promise.resolve();
       });
 
-      // Export is now the unified frontend Copy/Export cluster (wired by the GridTable filter
-      // bar from this fetcher), not a server-side per-action catalog export.
+      // Download (wired by the GridTable filter bar from this fetcher) writes every matching
+      // row; there is no server-side per-action catalog export.
       expect(typeof gridTablePropsRef.current?.fetchAllRows).toBe('function');
     });
   });

@@ -44,7 +44,7 @@ export interface GridColumnMeasurementElement {
 export interface GridColumnDefinition<T> extends GridColumnAlignmentOptions {
   key: string;
   header: string;
-  /** Header written by Copy/Export when the exported values need a unit the screen omits. */
+  /** Header written by Download when the downloaded values need a unit the screen omits. */
   exportHeader?: string;
   render: (item: T) => React.ReactNode;
   /** Whether the user may hide this column. Defaults to true. */
@@ -145,9 +145,6 @@ export interface GridTableFilterOptions {
    * Favorite, in that order.
    */
   preActions?: IconBarItem[];
-  /** Arbitrary ReactNode content rendered after the IconBar (e.g. text toggle buttons). */
-  customActions?: React.ReactNode;
-  /** Controls whether the filter bar renders the displayed/total row count. */
   /** Override the total item count shown in the filter bar (e.g. server-side total for paginated views). */
   totalCount?: number;
   /**
@@ -207,7 +204,7 @@ export interface GridTableProps<T> {
   keyExtractor: (item: T, index: number) => string;
   /** Fetch every matching row (all pages); the Download button then copies or saves all of them. */
   fetchAllRows?: () => Promise<T[]>;
-  /** Default filename offered by the file Export action. */
+  /** Base of the file name Download → Save to File offers. */
   exportFilename?: string;
   diagnosticsLabel?: string;
   diagnosticsMode?: GridTableDiagnosticsMode;
@@ -283,7 +280,6 @@ export interface InternalFilterOptions {
   clusterDropdownBulkActions?: boolean;
   beforeNamespaceActions?: IconBarItem[];
   preActions?: IconBarItem[];
-  customActions?: React.ReactNode;
   totalIsExact?: boolean;
   partialDataLabel?: string;
 }

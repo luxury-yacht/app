@@ -526,7 +526,7 @@
   flex: 0 0 auto;
 }
 
-/* Scoped to dropdown bulk actions so the app's other icon bars keep their 26px. */
+/* Scoped to dropdown bulk actions so the app's other icon bars keep their 24px. */
 .dropdown-bulk-action.icon-bar-button {
   width: 20px;
   height: 20px;

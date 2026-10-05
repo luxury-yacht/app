@@ -532,6 +532,7 @@ type matchValues struct {
 	normalizedFacets      map[string]string   // normalized once at ingest for facets with a normalizer
 	normalizedMultiFacets map[string][]string // normalized once at ingest for multi-facets with a normalizer
 	searchText            string              // lowercased SearchText(row)
+	metadataText          string              // lowercased MetadataText(row), when the schema has one
 }
 
 // columnStore holds rows for one kind in interned columnar form.
@@ -665,6 +666,9 @@ func extractMatchValues[R any](schema Schema[R], r R) matchValues {
 	}
 	if schema.SearchText != nil {
 		mv.searchText = strings.ToLower(schema.SearchText(r))
+	}
+	if schema.MetadataText != nil {
+		mv.metadataText = strings.ToLower(schema.MetadataText(r))
 	}
 	return mv
 }

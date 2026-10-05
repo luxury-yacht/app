@@ -28,6 +28,10 @@ type Schema[R any] struct {
 	MultiFacets      map[string]func(R) []string
 	FacetNormalizers map[string]func(string) string
 	SearchText       func(R) string
+	// MetadataText, when set, is extra text (e.g. labels and annotations) that a
+	// search matches only when the query sets IncludeMetadata. It is not
+	// trigram-indexed, so it costs nothing for ordinary searches.
+	MetadataText func(R) string
 }
 
 func uniqueFacetValues(values []string) []string {
@@ -54,6 +58,8 @@ type Query struct {
 	Filters   map[string][]string // facet filters: facet name -> allowed values (set membership; OR within, AND across facets)
 	MatchNone bool                // explicit empty multiselect: no row can match
 	Cursor    string              // opaque continueToken from a previous Page
+	// IncludeMetadata lets Search also match the row's MetadataText.
+	IncludeMetadata bool
 }
 
 // Page is one page of results plus the (unfiltered) facet counts, the total number
@@ -445,6 +451,14 @@ func (s *Store[R]) searchMatches(rowID uint32, text, searchLower string, candida
 	return strings.Contains(text, searchLower)
 }
 
+// metadataMatches reports a search the row's metadata text satisfies, when the
+// query includes metadata. The trigram candidates cover only SearchText, so this
+// check is a plain substring scan.
+func (s *Store[R]) metadataMatches(text, searchLower string, includeMetadata bool) bool {
+	return includeMetadata && searchLower != "" && s.schema.MetadataText != nil &&
+		strings.Contains(text, searchLower)
+}
+
 // Scope returns, over the rows matching `base` filters + `search`, the per-facet
 // value→count map and the total — computed from the by-rowId match cache WITHOUT
 // reconstructing any row. Same filter/search semantics as Query (OR within a facet,
@@ -452,11 +466,11 @@ func (s *Store[R]) searchMatches(rowID uint32, text, searchLower string, candida
 // raw values the schema's facet extractor produced (e.g. lowercased), matching the
 // stored match cache. This is the cheap O(N)-no-reconstruction count a direct serve
 // uses for facets + UnfilteredTotal.
-func (s *Store[R]) Scope(base map[string][]string, search string) (map[string]map[string]int, int) {
+func (s *Store[R]) Scope(base map[string][]string, search string, includeMetadata bool) (map[string]map[string]int, int) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	matches := s.matcherFor(Query{Filters: base, Search: search})
+	matches := s.matcherFor(Query{Filters: base, Search: search, IncludeMetadata: includeMetadata})
 	counts := make(map[string]map[string]int, len(s.facets))
 	for name := range s.facets {
 		counts[name] = make(map[string]int)
@@ -619,7 +633,8 @@ func (s *Store[R]) matcherFor(q Query) queryMatcher {
 	candidates, narrow := s.searchCandidates(searchLower)
 	byRow := func(rowID uint32, values matchValues) bool {
 		return !q.MatchNone && s.filtersMatch(values, filters) &&
-			s.searchMatches(rowID, values.searchText, searchLower, candidates, narrow)
+			(s.searchMatches(rowID, values.searchText, searchLower, candidates, narrow) ||
+				s.metadataMatches(values.metadataText, searchLower, q.IncludeMetadata))
 	}
 	return queryMatcher{
 		byRow: byRow,

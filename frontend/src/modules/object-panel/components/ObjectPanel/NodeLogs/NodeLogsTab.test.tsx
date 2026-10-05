@@ -527,7 +527,7 @@ describe('NodeLogsTab', () => {
     expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
   });
 
-  it('shows an error for invalid regex filters when regex mode is enabled', async () => {
+  it('shows an invalid regex error only when the filter would hide lines', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       status: 'executed',
       data: {
@@ -555,7 +555,13 @@ describe('NodeLogsTab', () => {
 
     await setFilterValue('[');
 
+    // All only highlights matches, so the lines stay readable.
+    expect(container.textContent).not.toContain('Enter a valid regular expression.');
+    expect(container.textContent).toContain('error failed to reconcile');
+
+    await chooseFilterMode('Filtered');
     expect(container.textContent).toContain('Enter a valid regular expression.');
+    expect(container.textContent).not.toContain('error failed to reconcile');
   });
 
   it('can pretty-print JSON logs from the icon bar', async () => {
@@ -1350,7 +1356,6 @@ describe('NodeLogsTab', () => {
       const logs = shortcutHelp.current?.().find(({ category }) => category === 'Logs');
       const keys = logs?.shortcuts.map(({ key }) => key) ?? [];
       expect(keys).toEqual(expect.arrayContaining(['r', 'i', 'x', 'w', 'Home', 'End']));
-      expect(keys).not.toContain('h');
       expect(keys).not.toContain('t');
       expect(keys).not.toContain('v');
     });

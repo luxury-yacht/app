@@ -189,7 +189,6 @@ export function useGridTableFiltersPresentation<T>({
   const searchShortcutPriority = searchShortcut?.priority ?? 5;
   const showColumnsDropdown = Boolean(columnsDropdown);
   const resolvedPreActions = resolvedFilterOptions.preActions;
-  const resolvedCustomActions = resolvedFilterOptions.customActions;
 
   // Download copies or saves every matching row when the view can fetch all pages.
   // Otherwise it takes this local row set; local presentation pagination still
@@ -286,7 +285,6 @@ export function useGridTableFiltersPresentation<T>({
       searchShortcutPriority,
       preActions: resolvedPreActions,
       postActions: resolvedPostActions,
-      customActions: resolvedCustomActions,
       resultCount,
     }),
     [
@@ -316,7 +314,6 @@ export function useGridTableFiltersPresentation<T>({
       searchShortcutPriority,
       resolvedPreActions,
       resolvedPostActions,
-      resolvedCustomActions,
       resultCount,
       filtersContainerRef,
     ]

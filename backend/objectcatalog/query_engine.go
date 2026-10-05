@@ -552,7 +552,7 @@ func catalogEngineStructuralFilters(opts QueryOptions) map[string][]string {
 // inside the view's structural scope, before user search/kind/namespace/group/scope
 // filters. It uses the query store's column-only scope scan, so no rows are rebuilt.
 func catalogEngineStructuralMetadata(store *querypage.Store[Summary], opts QueryOptions) (int, []string, []Scope) {
-	facets, total := store.Scope(catalogEngineStructuralFilters(opts), "")
+	facets, total := store.Scope(catalogEngineStructuralFilters(opts), "", false)
 
 	groups := make([]string, 0, len(facets[catalogEngineFacetAPIGroup]))
 	for group, count := range facets[catalogEngineFacetAPIGroup] {

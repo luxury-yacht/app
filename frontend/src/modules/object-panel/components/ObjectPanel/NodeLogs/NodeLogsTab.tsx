@@ -511,10 +511,14 @@ const nodeLogStatusMessage = ({
   if (!hasContent) {
     return 'No logs returned for this source.';
   }
-  if (hasInvalidRegex) {
-    return 'Enter a valid regular expression.';
+  if (hasFilteredLines) {
+    return null;
   }
-  return hasFilteredLines ? null : 'No log lines match the current filter.';
+  // All mode keeps every line on an invalid regex, so this only shows when a
+  // filtering mode has nothing left to show.
+  return hasInvalidRegex
+    ? 'Enter a valid regular expression.'
+    : 'No log lines match the current filter.';
 };
 
 // Dropped lines show as the buffer-full indicator beside the toolbar, as in

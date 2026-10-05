@@ -706,7 +706,6 @@ describe('LogViewer active pod synchronisation', () => {
   it('registers log tab shortcuts with appropriate availability', async () => {
     await renderViewer({ activePodNames: ['web-1'], isActive: true });
     expect(getLatestShortcut('r')).toBeTruthy();
-    expect(getLatestShortcut('h')).toBeUndefined();
     expect(getLatestShortcut('i')).toBeTruthy();
     expect(getLatestShortcut('x')).toBeTruthy();
     expect(getLatestShortcut('t')).toBeTruthy();
@@ -2087,17 +2086,26 @@ describe('LogViewer active pod synchronisation', () => {
     const latestSearchTarget = () =>
       shortcutMocks.useSearchShortcutTarget.mock.calls[
         shortcutMocks.useSearchShortcutTarget.mock.calls.length - 1
-      ]?.[0] as { isActive: boolean } | undefined;
+      ]?.[0] as { isActive: boolean; focus: () => void } | undefined;
     const labels = ['Search logs', 'Show timestamps from the Kubernetes API', 'Wrap text'];
+    const searchKeys = ['t', 'w', 'i', 'x', 'c'];
 
     seedLogSnapshot([]);
     await renderViewer();
     for (const label of labels) {
       expect(control(label)?.disabled, label).toBe(true);
     }
-    expect(getLatestShortcut('t')?.enabled).toBe(false);
-    expect(getLatestShortcut('w')?.enabled).toBe(false);
-    expect(latestSearchTarget()?.isActive).toBe(false);
+    for (const key of searchKeys) {
+      expect(getLatestShortcut(key)?.enabled, key).toBe(false);
+    }
+    // The logs tab still claims the search shortcut, so it can't reach a table
+    // behind the panel, but it opens nothing.
+    expect(latestSearchTarget()?.isActive).toBe(true);
+    await act(async () => {
+      requireValue(latestSearchTarget(), 'expected a search shortcut target').focus();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('input[placeholder="Filter"]')).toBeNull();
 
     seedLogSnapshot([
       {
@@ -2112,9 +2120,34 @@ describe('LogViewer active pod synchronisation', () => {
     for (const label of labels) {
       expect(control(label)?.disabled, label).toBe(false);
     }
-    expect(getLatestShortcut('t')?.enabled).toBe(true);
-    expect(getLatestShortcut('w')?.enabled).toBe(true);
+    for (const key of searchKeys) {
+      expect(getLatestShortcut(key)?.enabled, key).toBe(true);
+    }
     expect(latestSearchTarget()?.isActive).toBe(true);
+  });
+
+  it('keeps an open search row closable when the logs empty out', async () => {
+    await renderViewer();
+    await openSearch();
+    const searchButton = () =>
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Search logs"]'),
+        'expected the search button'
+      );
+
+    seedLogSnapshot([]);
+    await renderViewer();
+    expect(container.querySelector('input[placeholder="Filter"]')).not.toBeNull();
+    expect(searchButton().disabled).toBe(false);
+    expect(getLatestShortcut('i')?.enabled).toBe(true);
+
+    await act(async () => {
+      searchButton().click();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('input[placeholder="Filter"]')).toBeNull();
+    expect(searchButton().disabled).toBe(true);
+    expect(getLatestShortcut('i')?.enabled).toBe(false);
   });
 
   it('applies a time zone picked from the timestamp menu app-wide and shows timestamps', async () => {
@@ -4020,7 +4053,6 @@ describe('LogViewer active pod synchronisation', () => {
     });
     expect(getLogViewerPrefs(panelId)?.showPreviousContainerLogs).toBe(false);
     const chipStrip = container.querySelector('[aria-label="Active log filters"]');
-    expect(chipStrip?.textContent ?? '').not.toContain('Highlight');
     expect(chipStrip?.textContent ?? '').not.toContain('Showing previous logs');
   });
 

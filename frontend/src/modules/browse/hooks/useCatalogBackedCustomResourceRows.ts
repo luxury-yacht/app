@@ -61,8 +61,8 @@ export function useCatalogBackedCustomResourceRows({
 
   const rows = useHydratedCustomCatalogRows(clusterId, catalogItems);
 
-  // Export source for the Copy/Export "all matching rows" scope: every matching catalog item
-  // (all pages) hydrated into rows, so the CSV matches the columns shown on screen.
+  // Download source: every matching catalog item (all pages) hydrated into rows, so the
+  // CSV matches the columns shown on screen.
   const fetchAllRows = useCallback(
     () => fetchAllCatalogItems().then((items) => hydrateCustomCatalogRows(clusterId, items)),
     [clusterId, fetchAllCatalogItems]

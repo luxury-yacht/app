@@ -448,15 +448,14 @@ func clusterEventTableQueryAdapter() typedTableQueryAdapter[ClusterEventEntry] {
 	}
 }
 
-// metadataSearchText flattens label/annotation maps into searchable strings — the key,
-// the value, and "key: value" — mirroring the frontend metadata-search accessor so
-// server-side search (query-backed tables) matches the same text as the old client-side
-// "Include metadata" toggle did.
+// metadataSearchText flattens label/annotation maps into "key: value" strings. Search
+// is a substring match, so these also match any part of a key or a value alone — the
+// same text the frontend metadata-search accessor matches.
 func metadataSearchText(maps ...map[string]string) []string {
 	var out []string
 	for _, m := range maps {
 		for key, value := range m {
-			out = append(out, key, value, key+": "+value)
+			out = append(out, key+": "+value)
 		}
 	}
 	return out

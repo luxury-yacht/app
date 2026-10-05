@@ -129,7 +129,6 @@ const buildBaseFilterOptions = (options: GridTableFilterOptions | undefined) => 
   queryFacets: options?.searchBehavior === 'query' ? (options.queryFacets ?? []) : [],
   beforeNamespaceActions: options?.beforeNamespaceActions,
   preActions: options?.preActions,
-  customActions: options?.customActions,
   totalIsExact: options?.totalIsExact ?? true,
   partialDataLabel: options?.partialDataLabel,
 });

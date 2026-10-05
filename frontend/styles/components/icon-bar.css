@@ -26,9 +26,9 @@
     background-color 0.15s ease;
 }
 
+/* Hover only brightens the icon; the fill means "on". */
 .icon-bar-button:hover {
   color: var(--color-text);
-  background: var(--color-bg-tertiary);
 }
 
 /* Only keyboard focus is emphasized; a clicked toggle keeps its on/off look. */
@@ -68,10 +68,6 @@
   background: transparent;
 }
 
-.icon-bar-button:disabled:hover {
-  background: transparent;
-}
-
 /* Instant-action button feedback states (e.g. copy success/failure) */
 .icon-bar-button.feedback-success {
   color: var(--color-success);
@@ -103,11 +99,12 @@
   border-color: transparent;
 }
 
+/* Hovering either half brightens both, so the pair reads as one control. */
 .icon-bar-split:hover .icon-bar-button:not(:disabled) {
-  background: var(--color-bg-tertiary);
+  color: var(--color-text);
 }
 
-.icon-bar-split:hover .icon-bar-split-caret:not(:disabled),
+/* An "on" toggle drops its border, so the caret draws the line between them. */
 .icon-bar-split .icon-bar-button.active:not(:disabled) + .icon-bar-split-caret {
   box-shadow: inset 1px 0 0 var(--color-border);
 }
@@ -116,13 +113,15 @@
   background: var(--color-bg-tertiary);
 }
 
-.icon-bar-split .icon-bar-split-caret:focus-visible:not(:disabled) {
+/* Matches the divider rule above and comes after it, so a caret beside an "on"
+   toggle still shows the focus ring. */
+.icon-bar-split .icon-bar-button + .icon-bar-split-caret:focus-visible:not(:disabled) {
   box-shadow: 0 0 0 2px var(--color-accent);
 }
 
 /* A menu button or split caret keeps its hover look while its menu shows. */
 .icon-bar-button[aria-haspopup="menu"][aria-expanded="true"] {
-  background: var(--color-bg-tertiary);
+  color: var(--color-text);
 }
 
 /* An icon bar menu is as wide as its choices, not the context-menu minimum. */

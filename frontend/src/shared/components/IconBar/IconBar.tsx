@@ -2,7 +2,7 @@
  * frontend/src/shared/components/IconBar/IconBar.tsx
  *
  * Reusable toolbar of flat icon buttons with optional group separators.
- * Supports three button types:
+ * Supports these button types:
  * - Toggle: has an on/off state, shows active styling when on
  * - Split: a toggle or cycle button with a caret beside it that opens a menu of related choices
  * - Disclosure: shows or hides a related section, such as a row of extra controls

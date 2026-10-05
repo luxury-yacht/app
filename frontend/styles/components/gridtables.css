@@ -885,12 +885,6 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-pagination {
   gap: 0.5rem;
 }
 
-.gridtable-filter-custom-actions {
-  display: flex;
-  align-items: center;
-  margin-left: var(--spacing-lg);
-}
-
 .gridtable-filter-result-tooltip-paragraph {
   margin: 0;
 }

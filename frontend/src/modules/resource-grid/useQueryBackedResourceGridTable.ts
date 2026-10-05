@@ -448,9 +448,9 @@ function useQueryBackedGridResult<
   loaded: boolean;
   error: string | null;
 }): QueryBackedNamespaceGridResult<TRow, TPayload> {
-  // Full-result fetcher for the Copy/Export "all matching rows" scope: walks the query's pages.
-  // Threaded onto gridTableProps so the GridTable filter bar wires the scope toggle + Copy +
-  // Export cluster itself (no per-view export action here).
+  // Fetches every matching row by walking the query's pages. Threaded onto gridTableProps so
+  // the GridTable filter bar's Download button copies or saves all of them (no per-view
+  // download action here).
   const fetchAllRows = useCallback((): Promise<TRow[]> => query.fetchAllRows(), [query]);
 
   const gridTableProps = useMemo(() => {

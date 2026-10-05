@@ -167,7 +167,6 @@ vi.mock('@shared/components/tables/GridTable', () => ({
               </button>
             );
           })}
-          {props.filters?.options?.customActions ?? null}
         </div>
         <table data-testid="grid-table">
           <tbody>

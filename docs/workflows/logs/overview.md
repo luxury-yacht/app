@@ -28,7 +28,7 @@ Container and Node Logs share one viewer shell under
 keeps its own source selection and transport.
 
 - `logOptionsReducer.ts`: search (text, filter mode, case, regex), display
-  (wrap, ANSI, raw/pretty/parsed), row expansion, copy feedback and
+  (wrap, ANSI, raw/pretty/parsed), row expansion and
   auto-refresh. The container reducer composes it with its source fields. The
   filter mode decides what the text does: All (the default) keeps every line,
   Filtered keeps only matching lines, and Invert keeps only the others. Matches
@@ -62,7 +62,7 @@ keeps its own source selection and transport.
   ANSI and format buttons are hidden until a line has color codes or JSON.
   Timestamps and previous logs are optional icon bar features; Node Logs
   passes neither. The timestamps button is a split toggle: the icon shows or
-  hides timestamps and is labeled with the zone in use (UTC or LOC), and its
+  hides timestamps and is labeled with the zone in use (UTC or LOCAL), and its
   caret menu picks UTC or local time. The time zone
   is the app-wide Settings → Logs setting, so a choice applies to every Logs
   tab; picking a zone also shows timestamps. When the logs contain JSON, the

@@ -600,11 +600,11 @@ func maintainedScopeEmpty(filters map[string][]string) bool {
 	return false
 }
 
-func maintainedScopeCounts[T any](store *querypage.Store[T], filters map[string][]string, search string, matchNone bool) (map[string]map[string]int, int) {
+func maintainedScopeCounts[T any](store *querypage.Store[T], filters map[string][]string, search string, includeMetadata, matchNone bool) (map[string]map[string]int, int) {
 	if matchNone {
 		return nil, 0
 	}
-	return store.Scope(filters, search)
+	return store.Scope(filters, search, includeMetadata)
 }
 
 type typedSnapshotPageConfig[T any] struct {
@@ -650,6 +650,7 @@ func resolveMaintainedDirect[T any](store *querypage.Store[T], query typedTableQ
 	// This store retains all rows, so the engine applies the request filters
 	// and owns the found/filtered/not-found anchor result.
 	engineQuery.Search = query.Request.Search
+	engineQuery.IncludeMetadata = query.Request.IncludeMetadata
 	engineQuery.Filters = pageBase
 	engineQuery.MatchNone = matchNone
 	page, anchorResult := executeTypedEngineQuery(store, engineQuery, query.Request, typedAnchorKey(adapter, query.Request.Anchor))
@@ -657,10 +658,10 @@ func resolveMaintainedDirect[T any](store *querypage.Store[T], query typedTableQ
 	// Facets + Total are over the user-matched set (page query's scope). UnfilteredTotal
 	// is over the scope-only set (available kinds + namespace, NO user filters/search) —
 	// the count of in-scope rows the list path passed in as `items`.
-	matchedFacets, matchedTotal := maintainedScopeCounts(store, pageBase, strings.ToLower(strings.TrimSpace(query.Request.Search)), matchNone)
+	matchedFacets, matchedTotal := maintainedScopeCounts(store, pageBase, strings.ToLower(strings.TrimSpace(query.Request.Search)), query.Request.IncludeMetadata, matchNone)
 	scopeOnlyBase := maintainedScopeBase(scope.availableKinds, scope.namespace, nil, nil, false)
 	maps.Copy(scopeOnlyBase, scope.filters)
-	scopeOnlyFacets, unfilteredTotal := maintainedScopeCounts(store, scopeOnlyBase, "", maintainedScopeEmpty(scopeOnlyBase))
+	scopeOnlyFacets, unfilteredTotal := maintainedScopeCounts(store, scopeOnlyBase, "", false, maintainedScopeEmpty(scopeOnlyBase))
 
 	// availableKinds keys are the original-cased Kind the rows carry (the descriptor
 	// identity), so lowered facet value -> original casing for the kind facet list.
@@ -779,6 +780,14 @@ type maintainedReconcileSource[T any] struct {
 }
 
 func newTypedMaintainedStore[T any](meta ClusterMeta, schema querypage.Schema[T], adapter typedTableQueryAdapter[T]) *typedMaintainedStore[T] {
+	// The maintained store answers searches itself, so it carries the adapter's
+	// metadata text for queries that include metadata. Per-build stores don't
+	// need it: their rows are matched by the typed matcher before they're built.
+	if adapter.MetadataText != nil {
+		schema.MetadataText = func(row T) string {
+			return strings.Join(adapter.MetadataText(row), "\x00")
+		}
+	}
 	return &typedMaintainedStore[T]{
 		store:   querypage.NewStore(schema),
 		meta:    meta,

@@ -49,12 +49,13 @@ Read the shared contract and the sections matching the changed data path.
   backend budgets. The catalog query path stops exact total/facet metadata above
   its backend exact-metadata budget and emits `totalIsExact: false` /
   `facetsExact: false`; the UI renders that count as approximate.
-- CSV/copy actions operate on the current page by default; the "all matching
-  rows" scope is a client-driven walk over the query cursor (the same bounded
-  query path the table uses), and it fails loudly on a failed page rather than
-  saving a partial result. Destructive object actions must operate on concrete
-  visible-row refs with full `clusterId`, GVK, namespace, and name — never on a
-  query-wide selector.
+- Download (copy or save as CSV) writes every matching row when the view can
+  fetch all pages: a client-driven walk over the query cursor (the same bounded
+  query path the table uses) that fails loudly on a failed page rather than
+  writing a partial result. Views that can't fetch pages write the rows they
+  hold. Destructive object actions must operate on concrete visible-row refs
+  with full `clusterId`, GVK, namespace, and name — never on a query-wide
+  selector.
 - Keep large text surfaces such as logs bounded, searchable, and copyable
   without forcing the full buffer into expensive React rendering.
 

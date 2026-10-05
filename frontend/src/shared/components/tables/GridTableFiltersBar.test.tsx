@@ -523,18 +523,6 @@ describe('GridTableFiltersBar', () => {
     expect(finalInput?.value).toBe('po');
   });
 
-  // Search ignores letter case on every table, so no table offers Match case.
-  it.each(['local', 'query'] as const)(
-    'offers no Match case toggle for %s search',
-    async (searchBehavior) => {
-      await renderFilters({
-        resolvedFilterOptions: { kinds: [], namespaces: [], searchBehavior },
-      });
-
-      expect(container.querySelector('.icon-bar-button[title="Match case"]')).toBeNull();
-    }
-  );
-
   it('marks approximate backend totals with visible copy', async () => {
     vi.useFakeTimers();
     await renderFilters({

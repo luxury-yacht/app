@@ -70,8 +70,6 @@ interface GridTableFiltersBarProps {
   preActions?: IconBarItem[];
   /** IconBar items rendered after a separator following the preceding actions (e.g. Load More). */
   postActions?: IconBarItem[];
-  /** Arbitrary content rendered after the IconBar (e.g. text toggle buttons). */
-  customActions?: React.ReactNode;
   /** Filter feedback shown after the active filter chips: N matching of M in scope. */
   resultCount?: {
     /** N — items matching the active filters (a total, not the current page). */
@@ -368,7 +366,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   containerRef,
   preActions,
   postActions,
-  customActions,
   resultCount,
 }) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -601,14 +598,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
             </div>
             <div className="gridtable-filter-actions">
               {!!iconBarItems.length && <IconBar items={iconBarItems} />}
-              {!!customActions && (
-                <div
-                  className="gridtable-filter-custom-actions"
-                  data-gridtable-filter-role="custom-actions"
-                >
-                  {customActions}
-                </div>
-              )}
             </div>
           </div>
         </div>

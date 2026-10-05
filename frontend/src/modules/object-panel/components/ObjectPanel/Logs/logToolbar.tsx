@@ -297,6 +297,13 @@ export const closeLogSearch = (dispatch: Dispatch<LogOptionsAction>, searchRowId
   dispatch({ type: 'SET_SEARCH_OPEN', payload: false });
 };
 
+/**
+ * Search, and the filter options in its row, need a log line to search. A row
+ * that is already open stays usable so it can be closed after the logs empty out.
+ */
+export const logSearchAvailable = (hasLogs: boolean, searchOpen: boolean): boolean =>
+  hasLogs || searchOpen;
+
 const searchButton = ({
   options,
   dispatch,
@@ -317,7 +324,7 @@ const searchButton = ({
       : openLogSearch(dispatch, filterInputRef),
   title: `Search logs (${isMacPlatform() ? '⌘F' : 'Ctrl+F'})`,
   ariaLabel: 'Search logs',
-  disabled: !hasLogs,
+  disabled: !logSearchAvailable(hasLogs, options.searchOpen),
 });
 
 /** Builds the log viewer icon bar: auto-refresh, search, source and display, actions. */
