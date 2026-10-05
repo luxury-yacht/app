@@ -23,8 +23,8 @@ import {
   logSourceGroupLabel,
   logSourceGroupValues,
 } from './logFilterSelection';
-import type { ParsedLogEntry } from './logOptionsReducer';
-import { LogMatchCount, LogTextFilter } from './logToolbar';
+import type { LogOptionsState, ParsedLogEntry } from './logOptionsReducer';
+import { LogMatchCount, LogSearchRow } from './logToolbar';
 import type { LogViewerAction } from './logViewerReducer';
 import ParsedLogTable from './ParsedLogTable';
 import RawLogViewer from './RawLogViewer';
@@ -157,7 +157,8 @@ type LogViewerControlsProps = {
   containerOptions: DropdownOption[];
   selectedFilters: MultiSelectFilterSelection;
   filterInputRef: React.RefObject<HTMLInputElement | null>;
-  textFilter: string;
+  searchRowId: string;
+  searchOptions: LogOptionsState;
   iconItems: IconBarItem[];
   hasActiveResultFilter: boolean;
   matchCount: number;
@@ -171,7 +172,8 @@ export const LogViewerControls = ({
   containerOptions,
   selectedFilters,
   filterInputRef,
-  textFilter,
+  searchRowId,
+  searchOptions,
   iconItems,
   hasActiveResultFilter,
   matchCount,
@@ -208,16 +210,19 @@ export const LogViewerControls = ({
             )}
           </div>
         )}
-        <LogTextFilter
-          inputRef={filterInputRef}
-          value={textFilter}
-          dispatch={dispatch}
-          title="Filter logs by text (searches in log lines, pods, and containers)"
-        />
         <IconBar items={iconItems} />
         <LogBufferFullIndicator shown={bufferFullShown} />
         <LogMatchCount count={matchCount} filtered={hasActiveResultFilter} />
       </div>
+      {searchOptions.searchOpen ? (
+        <LogSearchRow
+          id={searchRowId}
+          inputRef={filterInputRef}
+          options={searchOptions}
+          dispatch={dispatch}
+          title="Filter logs by text (searches in log lines, pods, and containers)"
+        />
+      ) : null}
     </div>
   );
 };

@@ -41,8 +41,14 @@ keeps its own source selection and transport.
   Container Logs builds its rows from the entries, so the pod, container and
   timestamp a row shows come from the entry and never from its message text. `useRawViewFallback` returns the JSON views to raw only when lines are
   shown and none is JSON; an empty log keeps the view.
-- `logToolbar.tsx`: the text filter box (`LogTextFilter`), the icon bar, and
-  the match count (`LogMatchCount`), shown only while a filter narrows the logs.
+- `logToolbar.tsx`: the icon bar, the search row (`LogSearchRow`), and the
+  match count (`LogMatchCount`), shown only while a filter narrows the logs.
+  The icon bar's search button opens the search row below the main controls:
+  the text filter box and the highlight, invert, case and regex options. ⌘F /
+  Ctrl+F opens it and focuses the box. Closing the row keeps its filter applied,
+  and the search button stays highlighted while a filter is typed. Container
+  Logs remembers whether the row is open with the tab's other options; Node Logs
+  keeps it with its in-memory options, like its filter text.
   Timestamps and previous logs are optional icon bar features; Node Logs
   passes neither. The timestamps button is a split toggle: the icon shows or
   hides timestamps, and its caret menu picks UTC or local time. The time zone

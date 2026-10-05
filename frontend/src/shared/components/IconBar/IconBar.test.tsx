@@ -180,3 +180,43 @@ it('steps a cycle split button without reporting a pressed state', () => {
     container.remove();
   }
 });
+
+it('reports a disclosure button as expanding the section it controls', () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const onToggle = vi.fn();
+  const render = (expanded: boolean) =>
+    act(() =>
+      root.render(
+        <IconBar
+          items={[
+            {
+              type: 'disclosure',
+              id: 'search',
+              icon: 'S',
+              title: 'Search logs',
+              expanded,
+              controls: 'search-row',
+              active: expanded,
+              onClick: onToggle,
+            },
+          ]}
+        />
+      )
+    );
+  try {
+    render(false);
+    const button = container.querySelector<HTMLButtonElement>('[aria-label="Search logs"]');
+    expect(button?.getAttribute('aria-expanded')).toBe('false');
+    expect(button?.getAttribute('aria-controls')).toBe('search-row');
+    expect(button?.hasAttribute('aria-pressed')).toBe(false);
+    act(() => button?.click());
+    expect(onToggle).toHaveBeenCalledOnce();
+    render(true);
+    expect(button?.getAttribute('aria-expanded')).toBe('true');
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+  }
+});

@@ -21,7 +21,7 @@ export type LogPresentationSource<T> = {
   entries: T[];
   options: Pick<
     LogOptionsState,
-    'textFilter' | 'inverseMatches' | 'caseSensitiveMatches' | 'regexMatches' | 'displayMode'
+    'textFilter' | 'filterMode' | 'caseSensitiveMatches' | 'regexMatches' | 'displayMode'
   >;
   /** The texts the filter matches for an entry; any match keeps it. */
   searchTexts: (entry: T) => string[];
@@ -76,7 +76,8 @@ const buildTableColumns = (
 
 type JsonObject = Record<string, unknown> | null;
 
-// Filters on the deferred text so typing stays responsive on large buffers.
+// Filters on the deferred text so typing stays responsive on large buffers. In
+// All mode the text only finds matches (the viewer highlights them); no line is hidden.
 const useTextFilter = <T>({
   entries,
   options,
@@ -87,7 +88,7 @@ const useTextFilter = <T>({
   hasInvalidRegex: boolean;
 } => {
   const textFilter = useDeferredValue(options.textFilter);
-  const { inverseMatches, caseSensitiveMatches, regexMatches } = options;
+  const { filterMode, caseSensitiveMatches, regexMatches } = options;
   return useMemo(() => {
     if (!textFilter.trim()) {
       return { filterText: textFilter, filteredEntries: entries, hasInvalidRegex: false };
@@ -95,6 +96,9 @@ const useTextFilter = <T>({
     const regex = regexMatches
       ? buildLogSearchRegex(textFilter, { regexMode: true, caseSensitive: caseSensitiveMatches })
       : null;
+    if (filterMode === 'all') {
+      return { filterText: textFilter, filteredEntries: entries, hasInvalidRegex: regexMatches && !regex };
+    }
     if (regexMatches && !regex) {
       return { filterText: textFilter, filteredEntries: [], hasInvalidRegex: true };
     }
@@ -109,11 +113,11 @@ const useTextFilter = <T>({
     return {
       filterText: textFilter,
       filteredEntries: entries.filter(
-        (entry) => searchTexts(entry).some(matches) !== inverseMatches
+        (entry) => searchTexts(entry).some(matches) !== (filterMode === 'invert')
       ),
       hasInvalidRegex: false,
     };
-  }, [caseSensitiveMatches, entries, inverseMatches, regexMatches, searchTexts, textFilter]);
+  }, [caseSensitiveMatches, entries, filterMode, regexMatches, searchTexts, textFilter]);
 };
 
 const detectObjectLine = (

@@ -8,10 +8,11 @@
 import { useSearchShortcutTarget, useShortcut } from '@ui/shortcuts';
 import { type Dispatch, type RefObject, useCallback } from 'react';
 import type { LogOptionsAction, LogOptionsState } from '../logOptionsReducer';
+import { openLogSearch } from '../logToolbar';
 
 interface UseLogKeyboardShortcutsParams {
   isActive: boolean;
-  options: Pick<LogOptionsState, 'displayMode' | 'regexMatches'>;
+  options: Pick<LogOptionsState, 'displayMode' | 'regexMatches' | 'filterMode'>;
   hasAnsiLogEntries: boolean;
   hasCopyableContent: boolean;
   canParseLogs: boolean;
@@ -36,7 +37,7 @@ export function useLogKeyboardShortcuts({
   timestamps,
   previousLogs,
 }: UseLogKeyboardShortcutsParams) {
-  const { displayMode, regexMatches } = options;
+  const { displayMode, regexMatches, filterMode } = options;
   const isParsedView = displayMode === 'parsed';
   const toggleTimestamps = timestamps?.toggle;
   const togglePreviousLogs = previousLogs?.toggle;
@@ -90,30 +91,14 @@ export function useLogKeyboardShortcuts({
   });
 
   useShortcut({
-    key: 'h',
-    handler: useCallback(() => {
-      if (!isActive) {
-        return false;
-      }
-      dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' });
-      return true;
-    }, [isActive, dispatch]),
-    description: 'Toggle match highlighting',
-    category: 'Logs',
-    helpOrder: 50,
-    enabled: isActive,
-    priority: 20,
-  });
-
-  useShortcut({
     key: 'i',
     handler: useCallback(() => {
       if (!isActive) {
         return false;
       }
-      dispatch({ type: 'TOGGLE_INVERSE_MATCHES' });
+      dispatch({ type: 'SET_FILTER_MODE', payload: filterMode === 'invert' ? 'all' : 'invert' });
       return true;
-    }, [isActive, dispatch]),
+    }, [isActive, dispatch, filterMode]),
     description: 'Toggle inverse filtering',
     category: 'Logs',
     helpOrder: 51,
@@ -298,11 +283,11 @@ export function useLogKeyboardShortcuts({
     priority: 500,
   });
 
-  // Focus filter input shortcut
-  const focusFilterInput = useCallback(() => {
-    filterInputRef.current?.focus();
-    filterInputRef.current?.select();
-  }, [filterInputRef]);
+  // The search shortcut opens the search row and focuses its filter box.
+  const focusFilterInput = useCallback(
+    () => openLogSearch(dispatch, filterInputRef),
+    [dispatch, filterInputRef]
+  );
 
   useSearchShortcutTarget({
     isActive,

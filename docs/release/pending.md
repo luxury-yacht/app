@@ -9,6 +9,7 @@
 - The timestamp button in container logs has a menu for switching between UTC and local time.
 - The Pretty JSON and table buttons in the Logs tab are now one format button. Click it to cycle through Raw, Pretty, and Table, or pick one from its menu.
 - The Pods, Containers, and Node Logs source dropdowns in the Logs tab now size to fit their contents.
+- Search in the Logs tab now opens in its own row from the search button, or with ⌘F / Ctrl+F. Closing the row keeps the filter applied.
 - The mouse wheel now zooms instead of scrolling in the Object Map.
 - NetworkPolicy, Ingress, route, Service, and EndpointSlice details now show traffic as a simple flow diagram.
 - The Argo CD view shows Sync and Health as colored status chips.

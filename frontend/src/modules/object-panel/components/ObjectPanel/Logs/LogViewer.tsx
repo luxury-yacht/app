@@ -14,7 +14,7 @@ import {
   filterSelectionValues,
   isNarrowingFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
-import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useReducer, useRef } from 'react';
 import { readContainerLogsScopeContainers, requestData } from '@/core/data-access';
 import { useContainerLogsStream } from './hooks/useContainerLogsStream';
 import { useLogCopyAction, useLogSelectionCopy } from './hooks/useLogCopyAction';
@@ -42,6 +42,7 @@ import {
 } from '@/core/settings/appPreferences';
 import { formatObjPanelLogsApiTimestamp } from '@/utils/objPanelLogsApiTimestampFormat';
 import { INACTIVE_SCOPE } from '../constants';
+import type { LogFilterMode } from '../types';
 import { containsAnsi } from './ansi';
 import { buildContainerLogMetadataColumns, containerLogExportValue } from './containerLogColumns';
 import {
@@ -372,10 +373,14 @@ const hasCopyableContainerLogs = (
   filteredCount: number
 ): boolean => (isParsedView ? parsedCount > 0 : filteredCount > 0);
 
+// In All mode the text filter hides no line, so only the source selection narrows.
 const hasActiveLogResultFilter = (
   selectedFilters: Parameters<typeof isNarrowingFilterSelection>[0],
-  textFilter: string
-): boolean => isNarrowingFilterSelection(selectedFilters) || textFilter.trim().length > 0;
+  textFilter: string,
+  filterMode: LogFilterMode
+): boolean =>
+  isNarrowingFilterSelection(selectedFilters) ||
+  (filterMode !== 'all' && textFilter.trim().length > 0);
 
 const LogViewerInner: React.FC<LogViewerProps> = ({
   resourceKind,
@@ -413,8 +418,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     wrapText,
     showAnsiColors,
     textFilter,
-    highlightMatches,
-    inverseMatches,
+    filterMode,
     caseSensitiveMatches,
     regexMatches,
     displayMode,
@@ -443,6 +447,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // Refs
   const logsContentRef = useRef<HTMLElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
+  const searchRowId = useId();
   const terminalTheme = useTerminalTheme(logsContentRef);
 
   useEffect(
@@ -680,12 +685,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // Highlighting follows the filter as applied, so it never runs ahead of it.
   const highlightRegex = useMemo(
     () =>
-      buildLogSearchRegex(highlightMatches && !inverseMatches ? filterText : '', {
+      buildLogSearchRegex(filterMode === 'invert' ? '' : filterText, {
         regexMode: regexMatches,
         caseSensitive: caseSensitiveMatches,
         global: true,
       }),
-    [caseSensitiveMatches, filterText, highlightMatches, inverseMatches, regexMatches]
+    [caseSensitiveMatches, filterMode, filterText, regexMatches]
   );
 
   // A new source selection restarts the live stream; previous logs refetch on
@@ -787,17 +792,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       showPreviousContainerLogs,
       selectedFilterValues,
       selectorOptionLabelsByValue,
-      highlightMatches,
-      inverseMatches,
+      filterMode,
       caseSensitiveMatches,
       dispatch,
       stopPreviousLogs: () => dispatch({ type: 'STOP_PREVIOUS_LOGS' }),
     });
   }, [
     caseSensitiveMatches,
+    filterMode,
     hasInvalidRegex,
-    highlightMatches,
-    inverseMatches,
     regexMatches,
     selectedFilterValues,
     selectorOptionLabelsByValue,
@@ -810,25 +813,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     if (showPreviousContainerLogs) {
       dispatch({ type: 'STOP_PREVIOUS_LOGS' });
     }
-    if (highlightMatches) {
-      dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' });
-    }
-    if (inverseMatches) {
-      dispatch({ type: 'TOGGLE_INVERSE_MATCHES' });
-    }
+    dispatch({ type: 'SET_FILTER_MODE', payload: 'all' });
     if (caseSensitiveMatches) {
       dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' });
     }
     if (regexMatches) {
       dispatch({ type: 'TOGGLE_REGEX_MATCHES' });
     }
-  }, [
-    caseSensitiveMatches,
-    highlightMatches,
-    inverseMatches,
-    regexMatches,
-    showPreviousContainerLogs,
-  ]);
+  }, [caseSensitiveMatches, regexMatches, showPreviousContainerLogs]);
 
   useEffect(() => {
     const nextSelection = pruneLogFilterSelectionToOptions(selectedFilters, selectorOptions);
@@ -896,7 +888,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     () => logEntries.some((entry) => containsAnsi(entry.line)),
     [logEntries]
   );
-  const hasActiveResultFilter = hasActiveLogResultFilter(selectedFilters, textFilter);
+  const hasActiveResultFilter = hasActiveLogResultFilter(selectedFilters, textFilter, filterMode);
 
   useRawViewFallback({
     displayMode,
@@ -1047,6 +1039,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     canParseLogs: canParseContainerLogs,
     hasCopyableContent,
     copyLogs: handleCopyContainerLogs,
+    filterInputRef,
+    searchRowId,
     previousLogs: previousLogsFeature,
     timestamps: {
       active: showTimestamps,
@@ -1062,7 +1056,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       containerOptions={containerOptions}
       selectedFilters={selectedFilters}
       filterInputRef={filterInputRef}
-      textFilter={textFilter}
+      searchRowId={searchRowId}
+      searchOptions={state}
       iconItems={iconItems}
       hasActiveResultFilter={hasActiveResultFilter}
       matchCount={filteredEntries.length}

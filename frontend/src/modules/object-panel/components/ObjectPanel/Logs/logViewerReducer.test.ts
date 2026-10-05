@@ -101,8 +101,7 @@ describe('logViewerReducer state transitions', () => {
       { type: 'TOGGLE_WRAP_TEXT' as const },
       { type: 'TOGGLE_SHOW_ANSI_COLORS' as const },
       { type: 'SET_TEXT_FILTER' as const, payload: 'error' },
-      { type: 'TOGGLE_HIGHLIGHT_MATCHES' as const },
-      { type: 'TOGGLE_INVERSE_MATCHES' as const },
+      { type: 'SET_FILTER_MODE' as const, payload: 'invert' as const },
       { type: 'TOGGLE_CASE_SENSITIVE_MATCHES' as const },
       { type: 'TOGGLE_REGEX_MATCHES' as const },
     ];
@@ -114,8 +113,7 @@ describe('logViewerReducer state transitions', () => {
       wrapText: false,
       showAnsiColors: false,
       textFilter: 'error',
-      highlightMatches: false,
-      inverseMatches: true,
+      filterMode: 'invert',
       caseSensitiveMatches: false,
       regexMatches: true,
     });

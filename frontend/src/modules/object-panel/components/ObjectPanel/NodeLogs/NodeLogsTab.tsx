@@ -8,6 +8,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useReducer,
   useRef,
@@ -22,7 +23,7 @@ import {
 } from '../Logs/logOptionsReducer';
 import { findLogOverlap } from '../Logs/logOverlap';
 import { buildLogSearchRegex } from '../Logs/logSearch';
-import { buildLogToolbarItems, LogMatchCount, LogTextFilter } from '../Logs/logToolbar';
+import { buildLogToolbarItems, LogMatchCount, LogSearchRow } from '../Logs/logToolbar';
 import {
   getLogViewerScrollPosition,
   setLogViewerScrollPosition,
@@ -609,8 +610,7 @@ const NodeLogsTab = ({
     autoRefresh,
     wrapText,
     showAnsiColors,
-    highlightMatches,
-    inverseMatches,
+    filterMode,
     caseSensitiveMatches,
     regexMatches,
     displayMode,
@@ -618,6 +618,7 @@ const NodeLogsTab = ({
   } = options;
   const logsContentRef = useRef<HTMLElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
+  const searchRowId = useId();
   const terminalTheme = useTerminalTheme(logsContentRef);
   const sourceOptions = useMemo<DropdownOption[]>(
     () => buildNodeLogSourceOptions(sources),
@@ -666,14 +667,14 @@ const NodeLogsTab = ({
   });
   const highlightRegex = useMemo(
     () =>
-      highlightMatches && !inverseMatches
+      filterMode !== 'invert'
         ? buildLogSearchRegex(filterText, {
             regexMode: regexMatches,
             caseSensitive: caseSensitiveMatches,
             global: true,
           })
         : null,
-    [caseSensitiveMatches, filterText, highlightMatches, inverseMatches, regexMatches]
+    [caseSensitiveMatches, filterMode, filterText, regexMatches]
   );
   const isParsedView = displayMode === 'parsed';
 
@@ -790,6 +791,8 @@ const NodeLogsTab = ({
     canParseLogs,
     hasCopyableContent,
     copyLogs: handleCopyLogs,
+    filterInputRef,
+    searchRowId,
   });
 
   return (
@@ -812,18 +815,23 @@ const NodeLogsTab = ({
               />
             </div>
 
-            <LogTextFilter
-              inputRef={filterInputRef}
-              value={textFilter}
-              dispatch={dispatch}
-              ariaLabel="Filter node logs"
-            />
-
             <IconBar items={iconItems} />
             <LogBufferFullIndicator shown={notices.bufferFullShown} />
 
-            <LogMatchCount count={displayedLogCount} filtered={textFilter.trim().length > 0} />
+            <LogMatchCount
+              count={displayedLogCount}
+              filtered={filterMode !== 'all' && textFilter.trim().length > 0}
+            />
           </div>
+          {options.searchOpen ? (
+            <LogSearchRow
+              id={searchRowId}
+              inputRef={filterInputRef}
+              options={options}
+              dispatch={dispatch}
+              ariaLabel="Filter node logs"
+            />
+          ) : null}
         </div>
 
         <LogWarningBar warnings={notices.warnings} />

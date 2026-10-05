@@ -236,13 +236,31 @@ export const HighlightSearchIcon: React.FC<IconProps> = ({
     height={height}
     fill={fill}
   >
-    <g transform="translate(0 -0.7">
+    <g transform="translate(0 -0.7)">
       <path
         fillRule="evenodd"
         d="M2 14.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75m1.5-3.252V9.112l1.29-1.258L6.6 9.688l-1.268 1.31zM7.645 8.61l4.715-4.866a.5.5 0 0 0-.028-.722l-1.01-.895l.995-1.123l1.01.895a2 2 0 0 1 .11 2.889l-7.47 7.71H2V8.48l7.594-7.41a2 2 0 0 1 2.723-.066l-.995 1.123a.5.5 0 0 0-.68.016L5.863 6.806z"
         clipRule="evenodd"
       />
     </g>
+  </svg>
+);
+
+/** Funnel — show only the lines that match the text filter */
+export const FilterModeIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 16 16"
+    width={width}
+    height={height}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinejoin="round"
+  >
+    <path d="M2.25 3h11.5l-4.5 5.25v4.5l-2.5 1.25V8.25z" />
   </svg>
 );
 

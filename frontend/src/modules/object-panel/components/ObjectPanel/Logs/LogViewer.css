@@ -7,10 +7,11 @@
   overflow: hidden;
 }
 
+/* Rows: the main controls, then the search row while it is open. */
 .logs-viewer-controls {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: var(--spacing-md);
   padding: 0.75rem;
   border-bottom: 1px solid var(--log-controls-border);
   background-color: var(--log-controls-bg);
@@ -26,12 +27,12 @@
   --active-filter-chips-border: var(--log-controls-border);
 }
 
-.logs-viewer-controls-left {
+.logs-viewer-controls-left,
+.logs-viewer-search-row {
   display: flex;
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
-  flex: 1;
 }
 
 .logs-viewer-control-group {

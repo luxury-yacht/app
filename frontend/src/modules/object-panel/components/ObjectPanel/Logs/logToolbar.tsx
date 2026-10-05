@@ -1,16 +1,18 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/logToolbar.tsx
  *
- * The toolbar controls shared by Container Logs and Node Logs: the text filter
- * box, the icon bar and the match count. Timestamps and previous logs are
- * optional icon bar features a viewer passes when it has them.
+ * The toolbar controls shared by Container Logs and Node Logs: the icon bar, the
+ * search row its search button opens (the text filter box and the search
+ * options), and the match count. Timestamps and previous logs are optional icon
+ * bar features a viewer passes when it has them.
  */
 
-import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import {
   AnsiColorIcon,
   AutoRefreshIcon,
   CopyIcon,
+  FilterModeIcon,
   HighlightSearchIcon,
   InverseSearchIcon,
   ParseJsonIcon,
@@ -21,9 +23,11 @@ import {
   TimestampIcon,
   WrapTextIcon,
 } from '@shared/components/icons/LogIcons';
-import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
+import { CaseSensitiveIcon, SearchIcon } from '@shared/components/icons/SharedIcons';
 import type { Dispatch, ReactNode, RefObject } from 'react';
-import type { LogDisplayMode } from '../types';
+import { flushSync } from 'react-dom';
+import { isMacPlatform } from '@/utils/platform';
+import type { LogDisplayMode, LogFilterMode } from '../types';
 import type { CopyFeedback, LogOptionsAction, LogOptionsState } from './logOptionsReducer';
 
 type ToggleFeature = { active: boolean; toggle: () => void };
@@ -41,6 +45,9 @@ export type LogToolbarOptions = {
   canParseLogs: boolean;
   hasCopyableContent: boolean;
   copyLogs: () => void;
+  filterInputRef: RefObject<HTMLInputElement | null>;
+  /** Id of the viewer's search row, which the search button shows and hides. */
+  searchRowId: string;
   previousLogs?: ToggleFeature;
   timestamps?: TimestampsFeature;
 };
@@ -52,26 +59,73 @@ const copyIconFeedback = (feedback: CopyFeedback): 'success' | 'error' | null =>
   return feedback === 'error' ? 'error' : null;
 };
 
-const searchItems = ({ options, dispatch }: LogToolbarOptions): IconBarItem[] => [
-  {
-    type: 'toggle',
-    id: 'highlightSearch',
-    icon: <HighlightSearchIcon width={16} height={16} />,
-    active: options.highlightMatches,
-    onClick: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
-    title: 'Highlight matching text - disabled when Invert is enabled (H)',
-    ariaLabel: 'Highlight matching text - disabled when Invert is enabled',
-    disabled: options.inverseMatches,
-  },
-  {
-    type: 'toggle',
-    id: 'inverseSearch',
-    icon: <InverseSearchIcon width={18} height={18} />,
-    active: options.inverseMatches,
-    onClick: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
-    title: 'Invert the text filter to show only non-matching logs (I)',
-    ariaLabel: 'Invert the text filter to show only non-matching logs',
-  },
+// One choice of a cycle button, and the choice a click on the button moves to.
+type CycleChoice<M extends string> = { label: string; icon: ReactNode; next: M };
+
+// A split button that steps through its choices on click; its menu, listing the
+// choices in table order, picks one. It is highlighted away from its idle choice.
+const cycleSplitItem = <M extends string>({
+  id,
+  name,
+  menuHeader,
+  choices,
+  current,
+  idle,
+  select,
+  shortcutHint,
+}: {
+  id: string;
+  name: string;
+  menuHeader: string;
+  choices: Record<M, CycleChoice<M>>;
+  current: M;
+  idle: M;
+  select: (choice: M) => void;
+  shortcutHint: string;
+}): IconBarItem => {
+  const choice = choices[current];
+  return {
+    type: 'split',
+    behavior: 'cycle',
+    id,
+    icon: choice.icon,
+    active: current !== idle,
+    onClick: () => select(choice.next),
+    title: `${name}: ${choice.label} - click for ${choices[choice.next].label} ${shortcutHint}`,
+    ariaLabel: `${name}: ${choice.label}`,
+    menuLabel: `Choose ${name.toLowerCase()}`,
+    menuItems: [
+      { header: true, label: menuHeader },
+      ...(Object.keys(choices) as M[]).map((mode) => ({
+        label: choices[mode].label,
+        checked: mode === current,
+        onClick: () => select(mode),
+      })),
+    ],
+  };
+};
+
+// Matches are highlighted in every mode except Invert, which shows the other lines.
+const FILTER_MODES: Record<LogFilterMode, CycleChoice<LogFilterMode>> = {
+  all: { label: 'All', icon: <HighlightSearchIcon width={16} height={16} />, next: 'filtered' },
+  filtered: { label: 'Filtered', icon: <FilterModeIcon width={16} height={16} />, next: 'invert' },
+  invert: { label: 'Invert', icon: <InverseSearchIcon width={18} height={18} />, next: 'all' },
+};
+
+const searchItems = ({
+  options,
+  dispatch,
+}: Pick<LogToolbarOptions, 'options' | 'dispatch'>): IconBarItem[] => [
+  cycleSplitItem({
+    id: 'filterMode',
+    name: 'Filter mode',
+    menuHeader: 'Mode',
+    choices: FILTER_MODES,
+    current: options.filterMode,
+    idle: 'all',
+    select: (mode) => dispatch({ type: 'SET_FILTER_MODE', payload: mode }),
+    shortcutHint: '(I invert)',
+  }),
   {
     type: 'toggle',
     id: 'caseSensitiveSearch',
@@ -135,42 +189,26 @@ const sourceItems = ({ previousLogs, timestamps }: LogToolbarOptions): IconBarIt
   return items;
 };
 
-// Every format in menu order, and the one a click on the format button moves to.
-const LOG_FORMATS: Record<
-  LogDisplayMode,
-  { label: string; icon: ReactNode; next: LogDisplayMode }
-> = {
+const LOG_FORMATS: Record<LogDisplayMode, CycleChoice<LogDisplayMode>> = {
   raw: { label: 'Raw', icon: <RawLogIcon width={18} height={18} />, next: 'pretty' },
   pretty: { label: 'Pretty', icon: <PrettyJsonIcon width={18} height={18} />, next: 'parsed' },
   parsed: { label: 'Table', icon: <ParseJsonIcon width={16} height={16} />, next: 'raw' },
 };
-const LOG_FORMAT_MODES = Object.keys(LOG_FORMATS) as LogDisplayMode[];
 
 const logFormatItem = (
   displayMode: LogDisplayMode,
   dispatch: Dispatch<LogOptionsAction>
-): IconBarItem => {
-  const current = LOG_FORMATS[displayMode];
-  return {
-    type: 'split',
-    behavior: 'cycle',
+): IconBarItem =>
+  cycleSplitItem({
     id: 'logFormat',
-    icon: current.icon,
-    active: displayMode !== 'raw',
-    onClick: () => dispatch({ type: 'SET_DISPLAY_MODE', payload: current.next }),
-    title: `Log format: ${current.label} - click for ${LOG_FORMATS[current.next].label} (J pretty, P table)`,
-    ariaLabel: `Log format: ${current.label}`,
-    menuLabel: 'Choose log format',
-    menuItems: [
-      { header: true, label: 'Format' },
-      ...LOG_FORMAT_MODES.map((mode) => ({
-        label: LOG_FORMATS[mode].label,
-        checked: mode === displayMode,
-        onClick: () => dispatch({ type: 'SET_DISPLAY_MODE', payload: mode }),
-      })),
-    ],
-  };
-};
+    name: 'Log format',
+    menuHeader: 'Format',
+    choices: LOG_FORMATS,
+    current: displayMode,
+    idle: 'raw',
+    select: (mode) => dispatch({ type: 'SET_DISPLAY_MODE', payload: mode }),
+    shortcutHint: '(J pretty, P table)',
+  });
 
 const displayItems = ({
   options,
@@ -227,9 +265,41 @@ const actionItems = ({
   return items;
 };
 
+/** Opens the search row and puts the cursor in its filter box. */
+export const openLogSearch = (
+  dispatch: Dispatch<LogOptionsAction>,
+  inputRef: RefObject<HTMLInputElement | null>
+): void => {
+  // The box exists only once the row renders, so render it before focusing.
+  flushSync(() => dispatch({ type: 'SET_SEARCH_OPEN', payload: true }));
+  inputRef.current?.focus();
+  inputRef.current?.select();
+};
+
+const searchButton = ({
+  options,
+  dispatch,
+  filterInputRef,
+  searchRowId,
+}: LogToolbarOptions): IconBarItem => ({
+  type: 'disclosure',
+  id: 'search',
+  icon: <SearchIcon width={16} height={16} />,
+  expanded: options.searchOpen,
+  controls: searchRowId,
+  // A closed row's filter still narrows the logs, so the button stays highlighted.
+  active: options.searchOpen || options.textFilter.trim().length > 0,
+  onClick: () =>
+    options.searchOpen
+      ? dispatch({ type: 'SET_SEARCH_OPEN', payload: false })
+      : openLogSearch(dispatch, filterInputRef),
+  title: `Search logs (${isMacPlatform() ? '⌘F' : 'Ctrl+F'})`,
+  ariaLabel: 'Search logs',
+});
+
 /** Builds the log viewer icon bar: search, auto-refresh, source, display, actions. */
 export const buildLogToolbarItems = (toolbar: LogToolbarOptions): IconBarItem[] => [
-  ...searchItems(toolbar),
+  searchButton(toolbar),
   { type: 'separator' },
   {
     type: 'toggle',
@@ -246,7 +316,7 @@ export const buildLogToolbarItems = (toolbar: LogToolbarOptions): IconBarItem[] 
 ];
 
 /** The text filter box, with a button that clears it. */
-export const LogTextFilter = ({
+const LogTextFilter = ({
   inputRef,
   value,
   dispatch,
@@ -291,3 +361,31 @@ export const LogMatchCount = ({ count, filtered }: { count: number; filtered: bo
       {count} matching {count === 1 ? 'log' : 'logs'}
     </span>
   ) : null;
+
+/** The search row: the text filter box and the search options. */
+export const LogSearchRow = ({
+  id,
+  inputRef,
+  options,
+  dispatch,
+  ariaLabel,
+  title,
+}: {
+  id: string;
+  inputRef: RefObject<HTMLInputElement | null>;
+  options: LogOptionsState;
+  dispatch: Dispatch<LogOptionsAction>;
+  ariaLabel?: string;
+  title?: string;
+}) => (
+  <div className="logs-viewer-search-row" id={id}>
+    <LogTextFilter
+      inputRef={inputRef}
+      value={options.textFilter}
+      dispatch={dispatch}
+      ariaLabel={ariaLabel}
+      title={title}
+    />
+    <IconBar items={searchItems({ options, dispatch })} />
+  </div>
+);

@@ -133,6 +133,7 @@ vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
   useKeyboardSurface: vi.fn(),
+  useSearchShortcutTarget: vi.fn(),
 }));
 
 const contextMocks = vi.hoisted(() => ({
@@ -152,7 +153,7 @@ vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
   useKeyboardSurface: (...args: unknown[]) => shortcutMocks.useKeyboardSurface(...args),
   useKeyboardContext: () => contextMocks,
-  useSearchShortcutTarget: () => undefined,
+  useSearchShortcutTarget: (...args: unknown[]) => shortcutMocks.useSearchShortcutTarget(...args),
 }));
 
 vi.mock('@core/contexts/ZoomContext', () => ({
@@ -511,6 +512,21 @@ describe('LogViewer active pod synchronisation', () => {
     throw new Error(`format ${label} was not reached`);
   };
 
+  // Opens the search row (filter box and search options) unless it is already open.
+  const openSearch = async () => {
+    const button = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Search logs"]'),
+      'expected the search button'
+    );
+    if (button.getAttribute('aria-expanded') === 'true') {
+      return;
+    }
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+  };
+
   const getLatestShortcut = (key: string) => {
     for (let i = shortcutMocks.useShortcut.mock.calls.length - 1; i >= 0; i -= 1) {
       const config = shortcutMocks.useShortcut.mock.calls[i][0] as { key: string };
@@ -631,7 +647,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('registers log tab shortcuts with appropriate availability', async () => {
     await renderViewer({ activePodNames: ['web-1'], isActive: true });
     expect(getLatestShortcut('r')).toBeTruthy();
-    expect(getLatestShortcut('h')).toBeTruthy();
+    expect(getLatestShortcut('h')).toBeUndefined();
     expect(getLatestShortcut('i')).toBeTruthy();
     expect(getLatestShortcut('x')).toBeTruthy();
     expect(getLatestShortcut('t')).toBeTruthy();
@@ -665,7 +681,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(getLatestShortcut('v')?.enabled).toBe(true);
   });
 
-  it('toggles highlight, inverse, regex, and previous logs from keyboard shortcuts', async () => {
+  it('toggles inverse filtering, regex, and previous logs from keyboard shortcuts', async () => {
     seedLogSnapshot(
       [
         {
@@ -685,6 +701,7 @@ describe('LogViewer active pod synchronisation', () => {
       resourceKind: 'Pod',
       panelId: 'obj:test:shortcut-toggles',
     });
+    await openSearch();
 
     const filterInput = await waitForElement(() =>
       container.querySelector<HTMLInputElement>('input[placeholder="Filter"]')
@@ -697,11 +714,6 @@ describe('LogViewer active pod synchronisation', () => {
     await act(async () => {
       nativeValueSetter?.call(filterInput, 'panic');
       filterInput.dispatchEvent(new Event('input', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      expect(getLatestShortcut('h')?.handler()).toBe(true);
       await Promise.resolve();
     });
 
@@ -720,20 +732,7 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
 
-    expect(
-      container
-        .querySelector<HTMLButtonElement>(
-          'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-        )
-        ?.getAttribute('aria-pressed')
-    ).toBe('false');
-    expect(
-      container
-        .querySelector<HTMLButtonElement>(
-          'button[aria-label="Invert the text filter to show only non-matching logs"]'
-        )
-        ?.getAttribute('aria-pressed')
-    ).toBe('true');
+    expect(container.querySelector('button[aria-label="Filter mode: Invert"]')).not.toBeNull();
     expect(
       container
         .querySelector<HTMLButtonElement>(
@@ -806,7 +805,6 @@ describe('LogViewer active pod synchronisation', () => {
     };
 
     expectDisabledShortcut('r');
-    expectDisabledShortcut('h');
     expectDisabledShortcut('i');
     expectDisabledShortcut('x');
     expectDisabledShortcut('t');
@@ -1140,10 +1138,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'unmatched',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
@@ -1231,10 +1229,10 @@ describe('LogViewer active pod synchronisation', () => {
         selectedFilters: [],
         autoRefresh: true,
         showTimestamps: true,
+        searchOpen: false,
         wrapText: false,
         textFilter: '',
-        highlightMatches: false,
-        inverseMatches: false,
+        filterMode: 'filtered',
         caseSensitiveMatches: false,
         regexMatches: false,
         displayMode: 'pretty',
@@ -1505,10 +1503,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'parsed',
@@ -1954,6 +1952,190 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).toContain('2024-05-01T11:00:00.123Z');
   });
 
+  it('shows all, matching, or non-matching lines from the filter mode button', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'panic in worker',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'steady state',
+        timestamp: '2024-05-01T11:00:01Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer();
+    await openSearch();
+    const input = requireValue(
+      container.querySelector<HTMLInputElement>('input[placeholder="Filter"]'),
+      'expected the filter box'
+    );
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        input,
+        'panic'
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const modeButton = () =>
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label^="Filter mode:"]'),
+        'expected the filter mode button'
+      );
+    const click = (element: Element) =>
+      act(async () => {
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    const highlighted = () =>
+      Array.from(container.querySelectorAll('.log-viewer-line mark.log-viewer-highlight')).map(
+        (mark) => mark.textContent
+      );
+
+    // All, the default: every line, with the match highlighted.
+    expect(modeButton().getAttribute('aria-label')).toBe('Filter mode: All');
+    expect(container.textContent).toContain('panic in worker');
+    expect(container.textContent).toContain('steady state');
+    expect(highlighted()).toEqual(['panic']);
+
+    // Filtered: only matching lines, still highlighted.
+    await click(modeButton());
+    expect(modeButton().getAttribute('aria-label')).toBe('Filter mode: Filtered');
+    expect(container.textContent).toContain('panic in worker');
+    expect(container.textContent).not.toContain('steady state');
+    expect(highlighted()).toEqual(['panic']);
+
+    // Invert: only the lines that do not match, nothing highlighted.
+    await click(modeButton());
+    expect(modeButton().getAttribute('aria-label')).toBe('Filter mode: Invert');
+    expect(container.textContent).not.toContain('panic in worker');
+    expect(container.textContent).toContain('steady state');
+    expect(highlighted()).toEqual([]);
+
+    // The menu offers every mode, marks the current one, and jumps straight to a pick.
+    await click(
+      requireValue(
+        container.querySelector('button[aria-label="Choose filter mode"]'),
+        'expected the filter mode menu button'
+      )
+    );
+    const choices = Array.from(document.body.querySelectorAll('[role="menuitemradio"]'));
+    expect(choices.map((item) => [item.textContent, item.getAttribute('aria-checked')])).toEqual([
+      ['All', 'false'],
+      ['Filtered', 'false'],
+      ['Invert', 'true'],
+    ]);
+    await click(requireValue(choices[0], 'expected the All choice'));
+    expect(modeButton().getAttribute('aria-label')).toBe('Filter mode: All');
+    expect(container.textContent).toContain('panic in worker');
+    expect(container.textContent).toContain('steady state');
+  });
+
+  it('opens search from the search button and keeps filtering after the row closes', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'panic in worker',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'steady state',
+        timestamp: '2024-05-01T11:00:01Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer();
+
+    const searchButton = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Search logs"]'),
+      'expected the search button'
+    );
+    const filterInput = () =>
+      container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
+    const clickSearch = () =>
+      act(async () => {
+        searchButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    expect(searchButton.getAttribute('aria-expanded')).toBe('false');
+    expect(filterInput()).toBeNull();
+
+    await clickSearch();
+    expect(searchButton.getAttribute('aria-expanded')).toBe('true');
+    const input = requireValue(filterInput(), 'expected the filter box');
+    expect(document.activeElement).toBe(input);
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        input,
+        'panic'
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain('panic in worker');
+    expect(container.textContent).not.toContain('steady state');
+
+    // Closing the row only hides it: the logs stay filtered.
+    await clickSearch();
+    expect(searchButton.getAttribute('aria-expanded')).toBe('false');
+    expect(filterInput()).toBeNull();
+    expect(container.textContent).toContain('panic in worker');
+    expect(container.textContent).not.toContain('steady state');
+  });
+
+  it('opens the search row from the search shortcut and focuses the filter', async () => {
+    await renderViewer();
+    expect(container.querySelector('input[placeholder="Filter"]')).toBeNull();
+
+    const target = shortcutMocks.useSearchShortcutTarget.mock.calls[
+      shortcutMocks.useSearchShortcutTarget.mock.calls.length - 1
+    ]?.[0] as { focus: () => void } | undefined;
+    await act(async () => {
+      requireValue(target, 'expected a search shortcut target').focus();
+      await Promise.resolve();
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
+    expect(input).not.toBeNull();
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('remembers an open search row when the viewer remounts', async () => {
+    await renderViewer();
+    await act(async () => {
+      requireValue(
+        container.querySelector('button[aria-label="Search logs"]'),
+        'expected the search button'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    act(() => {
+      root.unmount();
+    });
+    root = ReactDOM.createRoot(container);
+    await renderViewer();
+
+    expect(
+      container.querySelector('button[aria-label="Search logs"]')?.getAttribute('aria-expanded')
+    ).toBe('true');
+    expect(container.querySelector('input[placeholder="Filter"]')).not.toBeNull();
+  });
+
   it('does not duplicate the workload pod/container label when timestamps are hidden', async () => {
     seedLogSnapshot([
       {
@@ -2091,10 +2273,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'INFO',
-      highlightMatches: true,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: true,
       regexMatches: false,
       displayMode: 'raw',
@@ -2135,10 +2317,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: true,
+      searchOpen: false,
       wrapText: false,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
@@ -2334,10 +2516,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
@@ -2607,10 +2789,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: false,
+      searchOpen: false,
       wrapText: true,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
@@ -2695,10 +2877,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: false,
+      searchOpen: false,
       wrapText: true,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'pretty',
@@ -2877,10 +3059,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'panic',
-      highlightMatches: true,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
@@ -2905,11 +3087,6 @@ describe('LogViewer active pod synchronisation', () => {
       activePodNames: ['web-1'],
       panelId: 'obj:test:highlight',
     });
-
-    const highlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-    );
-    expect(highlightButton?.getAttribute('aria-pressed')).toBe('true');
     expect(getContainerLogsStreamScopeParams(defaultScope)).toBeUndefined();
 
     const highlights = Array.from(container.querySelectorAll('.log-viewer-highlight')).map(
@@ -2917,61 +3094,6 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(highlights).toEqual(['panic']);
     expect(container.textContent).toContain('timeout while waiting for panic handler');
-  });
-
-  it('can invert the text filter to keep only non-matching logs', async () => {
-    seedLogSnapshot([
-      {
-        pod: 'web-1',
-        container: 'app',
-        line: 'panic in worker',
-        timestamp: '2024-05-01T11:00:00Z',
-        isInit: false,
-      },
-      {
-        pod: 'web-1',
-        container: 'app',
-        line: 'steady state',
-        timestamp: '2024-05-01T11:00:01Z',
-        isInit: false,
-      },
-    ]);
-
-    await renderViewer();
-
-    const filterInput = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
-    expect(filterInput).toBeTruthy();
-    const nativeValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype,
-      'value'
-    )?.set;
-
-    await act(async () => {
-      nativeValueSetter?.call(filterInput, 'panic');
-      requireValue(filterInput, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new Event('input', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toContain('panic in worker');
-    expect(container.textContent).not.toContain('steady state');
-
-    const inverseButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Invert the text filter to show only non-matching logs"]'
-    );
-    expect(inverseButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(inverseButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(inverseButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(container.textContent).not.toContain('panic in worker');
-    expect(container.textContent).toContain('steady state');
   });
 
   it('supports case-sensitive matching from the iconbar', async () => {
@@ -2993,6 +3115,7 @@ describe('LogViewer active pod synchronisation', () => {
     ]);
 
     await renderViewer();
+    await openSearch();
 
     const filterInput = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
     const caseSensitiveButton = container.querySelector<HTMLButtonElement>(
@@ -3045,7 +3168,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(caseSensitiveButton?.hasAttribute('disabled')).toBe(true);
   });
 
-  it('supports regex mode and disables highlight while inverse regex filtering is active', async () => {
+  it('highlights regex matches, and none once the filter is inverted', async () => {
     seedLogSnapshot([
       {
         pod: 'web-1',
@@ -3071,6 +3194,7 @@ describe('LogViewer active pod synchronisation', () => {
     ]);
 
     await renderViewer();
+    await openSearch();
 
     const filterInput = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
     expect(filterInput).toBeTruthy();
@@ -3090,21 +3214,10 @@ describe('LogViewer active pod synchronisation', () => {
     const regexButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Enable regular expression support for the text filter"]'
     );
-    const highlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-    );
-    const inverseButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Invert the text filter to show only non-matching logs"]'
-    );
     expect(regexButton).toBeTruthy();
-    expect(highlightButton).toBeTruthy();
-    expect(inverseButton).toBeTruthy();
 
     await act(async () => {
       requireValue(regexButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      requireValue(highlightButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
         new MouseEvent('click', { bubbles: true })
       );
       await Promise.resolve();
@@ -3116,65 +3229,19 @@ describe('LogViewer active pod synchronisation', () => {
     expect(highlights).toEqual(['panic', 'timeout']);
     expect(container.textContent).not.toContain('steady state');
 
+    // Filtered → Invert.
     await act(async () => {
-      requireValue(inverseButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
+      requireValue(
+        container.querySelector('button[aria-label="Filter mode: Filtered"]'),
+        'expected the filter mode button'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
 
-    expect(inverseButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(highlightButton?.getAttribute('aria-pressed')).toBe('false');
-    expect(highlightButton?.hasAttribute('disabled')).toBe(true);
     expect(container.querySelectorAll('.log-viewer-highlight')).toHaveLength(0);
     expect(container.textContent).toContain('steady state');
     expect(container.textContent).not.toContain('panic in worker');
     expect(container.textContent).not.toContain('timeout waiting on cache');
-  });
-
-  it('allows highlight and inverse toggles before any text filter is entered', async () => {
-    seedLogSnapshot([
-      {
-        pod: 'web-1',
-        container: 'app',
-        line: 'steady state',
-        timestamp: '2024-05-01T11:00:00Z',
-        isInit: false,
-      },
-    ]);
-
-    await renderViewer();
-
-    const highlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-    );
-    const inverseButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Invert the text filter to show only non-matching logs"]'
-    );
-
-    expect(highlightButton).toBeTruthy();
-    expect(inverseButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(highlightButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(highlightButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(highlightButton?.hasAttribute('disabled')).toBe(false);
-
-    await act(async () => {
-      requireValue(inverseButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(inverseButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(highlightButton?.getAttribute('aria-pressed')).toBe('false');
-    expect(highlightButton?.hasAttribute('disabled')).toBe(true);
   });
 
   it('shows previous logs without touching the live buffer', async () => {
@@ -3291,10 +3358,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: ['pod:web-1'],
       autoRefresh: false,
       showTimestamps: false,
+      searchOpen: true,
       wrapText: false,
       textFilter: 'panic',
-      highlightMatches: true,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
@@ -3305,10 +3372,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({ panelId });
     await flushAsync();
-    const highlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-    );
-    expect(highlightButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('button[aria-label="Filter mode: Filtered"]')).not.toBeNull();
     expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
       mode: 'some',
       values: ['pod:web-1'],
@@ -3321,6 +3385,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('writes prefs back to the cache as the user toggles them', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
     await renderViewer({ panelId });
+    await openSearch();
 
     // Defaults are written immediately on first mount via the writeback
     // effect — verify by reading back through the cache helper.
@@ -3328,8 +3393,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(initial).toBeDefined();
     expect(initial?.textFilter).toBe('');
     expect(initial?.selectedFilters).toEqual({ mode: 'all' });
-    expect(initial?.highlightMatches).toBe(false);
-    expect(initial?.inverseMatches).toBe(false);
+    expect(initial?.filterMode).toBe('all');
     expect(initial?.caseSensitiveMatches).toBe(false);
     expect(initial?.regexMatches).toBe(false);
 
@@ -3353,31 +3417,15 @@ describe('LogViewer active pod synchronisation', () => {
 
     expect(getLogViewerPrefs(panelId)?.textFilter).toBe('fatal');
 
-    const highlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-    );
-    expect(highlightButton).toBeTruthy();
     await act(async () => {
-      requireValue(highlightButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
+      requireValue(
+        container.querySelector('button[aria-label="Filter mode: All"]'),
+        'expected the filter mode button'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
 
-    expect(getLogViewerPrefs(panelId)?.highlightMatches).toBe(true);
-
-    const inverseButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Invert the text filter to show only non-matching logs"]'
-    );
-    expect(inverseButton).toBeTruthy();
-    await act(async () => {
-      requireValue(inverseButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(getLogViewerPrefs(panelId)?.inverseMatches).toBe(true);
+    expect(getLogViewerPrefs(panelId)?.filterMode).toBe('filtered');
 
     const caseSensitiveButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Case-sensitive search - disabled when regex is enabled"]'
@@ -3491,10 +3539,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'a-only',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
@@ -3506,10 +3554,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: true,
+      searchOpen: true,
       wrapText: true,
       textFilter: 'b-only',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
@@ -3532,10 +3580,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: false,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'error',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
@@ -3552,6 +3600,7 @@ describe('LogViewer active pod synchronisation', () => {
     );
 
     await renderViewer({ activePodNames: ['web-1'], panelId });
+    await openSearch();
     expect(container.textContent).not.toContain('info two');
 
     const clearButton = requireValue(
@@ -3578,10 +3627,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: ['pod:web-1', 'container:app'],
       autoRefresh: true,
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'panic',
-      highlightMatches: true,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: true,
       displayMode: 'raw',
@@ -3609,10 +3658,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: '[',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: true,
       displayMode: 'raw',
@@ -3633,10 +3682,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
@@ -3679,10 +3728,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'panic',
-      highlightMatches: true,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
@@ -3701,12 +3750,12 @@ describe('LogViewer active pod synchronisation', () => {
     const removeTextFilterButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Clear text filter"]'
     );
-    const removeHighlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Disable highlight matches"]'
+    const removeFilterModeButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Show all lines"]'
     );
 
     expect(removeTextFilterButton).toBeTruthy();
-    expect(removeHighlightButton).toBeTruthy();
+    expect(removeFilterModeButton).toBeTruthy();
 
     await act(async () => {
       requireValue(
@@ -3719,12 +3768,12 @@ describe('LogViewer active pod synchronisation', () => {
 
     await act(async () => {
       requireValue(
-        removeHighlightButton,
+        removeFilterModeButton,
         'expected test value in LogViewer.test.tsx'
       ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
-    expect(getLogViewerPrefs(panelId)?.highlightMatches).toBe(false);
+    expect(getLogViewerPrefs(panelId)?.filterMode).toBe('all');
     const clearAllButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Clear all filters"]'
     );
@@ -3800,10 +3849,10 @@ describe('LogViewer active pod synchronisation', () => {
       selectedFilters: [],
       autoRefresh: true,
       showTimestamps: true,
+      searchOpen: false,
       wrapText: false,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'pretty',

@@ -5,6 +5,7 @@
  * Supports three button types:
  * - Toggle: has an on/off state, shows active styling when on
  * - Split: a toggle or cycle button with a caret beside it that opens a menu of related choices
+ * - Disclosure: shows or hides a related section, such as a row of extra controls
  * - Action: fires once on click, optionally shows brief feedback (success/error)
  */
 
@@ -47,6 +48,16 @@ export interface IconBarSplit extends IconBarButton {
   menuItems: ContextMenuItem[];
 }
 
+/** A button that shows or hides the section it controls. */
+export interface IconBarDisclosure extends IconBarButton {
+  type: 'disclosure';
+  expanded: boolean;
+  /** Id of the section the button shows. */
+  controls: string;
+  /** Highlights the button, for example while a hidden section's settings still apply. */
+  active: boolean;
+}
+
 /** An action button that fires once and optionally shows feedback. */
 export interface IconBarAction extends IconBarButton {
   type: 'action';
@@ -59,7 +70,12 @@ export interface IconBarSeparator {
   type: 'separator';
 }
 
-export type IconBarItem = IconBarToggle | IconBarSplit | IconBarAction | IconBarSeparator;
+export type IconBarItem =
+  | IconBarToggle
+  | IconBarSplit
+  | IconBarDisclosure
+  | IconBarAction
+  | IconBarSeparator;
 
 interface IconBarProps {
   items: IconBarItem[];
@@ -119,8 +135,8 @@ const SplitButton = ({ item }: { item: IconBarSplit }) => {
   );
 };
 
-const buttonClassName = (item: IconBarToggle | IconBarAction): string => {
-  if (item.type === 'toggle') {
+const buttonClassName = (item: IconBarToggle | IconBarDisclosure | IconBarAction): string => {
+  if (item.type !== 'action') {
     return item.active ? 'icon-bar-button active' : 'icon-bar-button';
   }
   return item.feedback ? `icon-bar-button feedback-${item.feedback}` : 'icon-bar-button';
@@ -151,6 +167,8 @@ const IconBar: React.FC<IconBarProps> = ({ items, className }) => {
             title={item.title}
             aria-label={item.ariaLabel ?? item.title}
             aria-pressed={item.type === 'toggle' ? item.active : undefined}
+            aria-expanded={item.type === 'disclosure' ? item.expanded : undefined}
+            aria-controls={item.type === 'disclosure' ? item.controls : undefined}
           >
             {item.icon}
           </button>

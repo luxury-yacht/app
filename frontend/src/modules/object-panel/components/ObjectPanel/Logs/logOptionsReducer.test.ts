@@ -16,17 +16,6 @@ const apply = (...actions: LogOptionsAction[]) =>
   actions.reduce(logOptionsReducer, initialLogOptionsState);
 
 describe('logOptionsReducer', () => {
-  it('turns highlighting off when the filter is inverted, and keeps it off', () => {
-    const inverted = apply(
-      { type: 'TOGGLE_HIGHLIGHT_MATCHES' },
-      { type: 'TOGGLE_INVERSE_MATCHES' }
-    );
-    expect(inverted).toMatchObject({ inverseMatches: true, highlightMatches: false });
-    expect(logOptionsReducer(inverted, { type: 'TOGGLE_HIGHLIGHT_MATCHES' }).highlightMatches).toBe(
-      false
-    );
-  });
-
   it('turns case-sensitive matching off in regex mode, and keeps it off', () => {
     const regex = apply(
       { type: 'TOGGLE_CASE_SENSITIVE_MATCHES' },

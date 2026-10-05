@@ -33,7 +33,11 @@ describe('log viewer shortcuts', () => {
       getAvailable = useKeyboardContext().getAvailableShortcuts;
       useLogKeyboardShortcuts({
         isActive,
-        options: { displayMode: isParsedView ? 'parsed' : 'raw', regexMatches: false },
+        options: {
+          displayMode: isParsedView ? 'parsed' : 'raw',
+          regexMatches: false,
+          filterMode: 'filtered',
+        },
         hasAnsiLogEntries: true,
         hasCopyableContent: true,
         canParseLogs: true,
@@ -84,7 +88,6 @@ describe('log viewer shortcuts', () => {
       ['End', 'Scroll logs to bottom'],
       ['t', 'Toggle API timestamps'],
       ['v', 'Toggle previous logs'],
-      ['h', 'Toggle match highlighting'],
       ['i', 'Toggle inverse filtering'],
       ['x', 'Toggle regex filtering'],
       ['c', 'Toggle case-sensitive matching'],
@@ -95,14 +98,13 @@ describe('log viewer shortcuts', () => {
       ['c', 'Copy logs to clipboard'],
     ]);
 
-    for (const key of ['r', 't', 'v', 'h', 'i', 'x', 'c', 'p', 'j', 'o', 'w', 'Home', 'End']) {
+    for (const key of ['r', 't', 'v', 'i', 'x', 'c', 'p', 'j', 'o', 'w', 'Home', 'End']) {
       press(key);
     }
     press('c', true);
     expect(dispatch.mock.calls.map(([action]) => action)).toEqual([
       { type: 'TOGGLE_AUTO_REFRESH' },
-      { type: 'TOGGLE_HIGHLIGHT_MATCHES' },
-      { type: 'TOGGLE_INVERSE_MATCHES' },
+      { type: 'SET_FILTER_MODE', payload: 'invert' },
       { type: 'TOGGLE_REGEX_MATCHES' },
       { type: 'TOGGLE_CASE_SENSITIVE_MATCHES' },
       { type: 'TOGGLE_PARSED_VIEW' },

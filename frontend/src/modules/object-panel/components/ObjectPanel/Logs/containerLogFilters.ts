@@ -10,6 +10,7 @@ import type { ActiveFilterChip } from '@shared/components/ActiveFilterChips';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { ALL_MULTISELECT_FILTER } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type React from 'react';
+import type { LogFilterMode } from '../types';
 import { logFilterSelectionLabel } from './logFilterSelection';
 import type { LogViewerAction } from './logViewerReducer';
 
@@ -161,8 +162,7 @@ export const buildActiveLogFilterChips = ({
   showPreviousContainerLogs,
   selectedFilterValues,
   selectorOptionLabelsByValue,
-  highlightMatches,
-  inverseMatches,
+  filterMode,
   caseSensitiveMatches,
   dispatch,
   stopPreviousLogs,
@@ -173,8 +173,7 @@ export const buildActiveLogFilterChips = ({
   showPreviousContainerLogs: boolean;
   selectedFilterValues: string[];
   selectorOptionLabelsByValue: Map<string, string>;
-  highlightMatches: boolean;
-  inverseMatches: boolean;
+  filterMode: LogFilterMode;
   caseSensitiveMatches: boolean;
   dispatch: React.Dispatch<LogViewerAction>;
   stopPreviousLogs: () => void;
@@ -188,17 +187,12 @@ export const buildActiveLogFilterChips = ({
       onRemove: stopPreviousLogs,
     }),
     ...buildSelectedFilterChips(selectedFilterValues, selectorOptionLabelsByValue, dispatch),
-    optionalActiveFilterChip(highlightMatches, {
-      key: 'highlight',
-      label: 'Highlight',
-      removeLabel: 'Disable highlight matches',
-      onRemove: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
-    }),
-    optionalActiveFilterChip(inverseMatches, {
-      key: 'invert',
-      label: 'Invert',
-      removeLabel: 'Disable invert filter',
-      onRemove: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
+    // All lines is the default, so only Filtered and Invert show a chip.
+    optionalActiveFilterChip(filterMode !== 'all', {
+      key: 'filter-mode',
+      label: filterMode === 'filtered' ? 'Filtered' : 'Invert',
+      removeLabel: 'Show all lines',
+      onRemove: () => dispatch({ type: 'SET_FILTER_MODE', payload: 'all' }),
     }),
     optionalActiveFilterChip(caseSensitiveMatches, {
       key: 'case-sensitive',
