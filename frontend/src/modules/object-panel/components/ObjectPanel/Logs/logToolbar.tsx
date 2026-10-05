@@ -48,6 +48,8 @@ export type LogToolbarOptions = {
   hasAnsiLogEntries: boolean;
   canParseLogs: boolean;
   hasCopyableContent: boolean;
+  /** A log line has arrived. Until then search, timestamps and wrap are disabled. */
+  hasLogs: boolean;
   copyLogs: () => void;
   saveLogs: () => void;
   filterInputRef: RefObject<HTMLInputElement | null>;
@@ -68,7 +70,8 @@ const downloadIconFeedback = (feedback: DownloadFeedback): 'success' | 'error' |
 type CycleChoice<M extends string> = { label: string; icon: ReactNode; next: M };
 
 // A split button that steps through its choices on click; its menu, listing the
-// choices in table order, picks one. It is highlighted away from its idle choice.
+// choices in table order, picks one. Given an idle choice, it is highlighted away
+// from it; without one it is never highlighted.
 const cycleSplitItem = <M extends string>({
   id,
   name,
@@ -84,7 +87,7 @@ const cycleSplitItem = <M extends string>({
   menuHeader: string;
   choices: Record<M, CycleChoice<M>>;
   current: M;
-  idle: M;
+  idle?: M;
   select: (choice: M) => void;
   shortcutHint: string;
 }): IconBarItem => {
@@ -94,7 +97,7 @@ const cycleSplitItem = <M extends string>({
     behavior: 'cycle',
     id,
     icon: choice.icon,
-    active: current !== idle,
+    active: idle !== undefined && current !== idle,
     onClick: () => select(choice.next),
     title: `${name}: ${choice.label} - click for ${choices[choice.next].label} ${shortcutHint}`,
     ariaLabel: `${name}: ${choice.label}`,
@@ -152,7 +155,7 @@ const searchItems = ({
   },
 ];
 
-const sourceItems = ({ previousLogs, timestamps }: LogToolbarOptions): IconBarItem[] => {
+const sourceItems = ({ previousLogs, timestamps, hasLogs }: LogToolbarOptions): IconBarItem[] => {
   const items: IconBarItem[] = [];
   if (previousLogs) {
     items.push({
@@ -176,6 +179,7 @@ const sourceItems = ({ previousLogs, timestamps }: LogToolbarOptions): IconBarIt
       onClick: timestamps.toggle,
       title: 'Show timestamps from the Kubernetes API (T)',
       ariaLabel: 'Show timestamps from the Kubernetes API',
+      disabled: !hasLogs,
       menuLabel: 'Timestamp time zone',
       menuItems: [
         { header: true, label: 'Time zone' },
@@ -211,7 +215,6 @@ const logFormatItem = (
     menuHeader: 'Format',
     choices: LOG_FORMATS,
     current: displayMode,
-    idle: 'raw',
     select: (mode) => dispatch({ type: 'SET_DISPLAY_MODE', payload: mode }),
     shortcutHint: '(J pretty, P table)',
   });
@@ -221,6 +224,7 @@ const displayItems = ({
   dispatch,
   hasAnsiLogEntries,
   canParseLogs,
+  hasLogs,
 }: LogToolbarOptions): IconBarItem[] => {
   const isParsedView = options.displayMode === 'parsed';
   const items: IconBarItem[] = [];
@@ -247,7 +251,8 @@ const displayItems = ({
     onClick: () => dispatch({ type: 'TOGGLE_WRAP_TEXT' }),
     title: 'Wrap text (W)',
     ariaLabel: 'Wrap text',
-    disabled: isParsedView,
+    // Wrapping has no effect in Table view.
+    disabled: isParsedView || !hasLogs,
   });
   return items;
 };
@@ -265,7 +270,11 @@ const actionItems = ({
     icon: <DownloadIcon width={18} height={18} />,
     title: 'Download logs',
     menuItems: [
-      { label: 'Copy to Clipboard', onClick: copyLogs, tooltip: 'Copy logs to clipboard (Shift+C)' },
+      {
+        label: 'Copy to Clipboard',
+        onClick: copyLogs,
+        tooltip: 'Copy logs to clipboard (Shift+C)',
+      },
       { label: 'Save to File', onClick: saveLogs },
     ],
     disabled: !hasCopyableContent,
@@ -297,6 +306,7 @@ const searchButton = ({
   dispatch,
   filterInputRef,
   searchRowId,
+  hasLogs,
 }: LogToolbarOptions): IconBarItem => ({
   type: 'disclosure',
   id: 'search',
@@ -311,6 +321,7 @@ const searchButton = ({
       : openLogSearch(dispatch, filterInputRef),
   title: `Search logs (${isMacPlatform() ? '⌘F' : 'Ctrl+F'})`,
   ariaLabel: 'Search logs',
+  disabled: !hasLogs,
 });
 
 /** Builds the log viewer icon bar: auto-refresh, search, source and display, actions. */

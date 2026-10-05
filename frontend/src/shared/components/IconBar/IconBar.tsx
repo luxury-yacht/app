@@ -200,6 +200,22 @@ const buttonClassName = (item: IconBarToggle | IconBarDisclosure | IconBarAction
   return feedbackClassName(item.feedback);
 };
 
+const PlainButton = ({ item }: { item: IconBarToggle | IconBarDisclosure | IconBarAction }) => (
+  <button
+    type="button"
+    className={buttonClassName(item)}
+    onClick={item.onClick}
+    disabled={item.disabled}
+    title={item.title}
+    aria-label={item.ariaLabel ?? item.title}
+    aria-pressed={item.type === 'toggle' ? item.active : undefined}
+    aria-expanded={item.type === 'disclosure' ? item.expanded : undefined}
+    aria-controls={item.type === 'disclosure' ? item.controls : undefined}
+  >
+    {item.icon}
+  </button>
+);
+
 const IconBar: React.FC<IconBarProps> = ({ items, className }) => {
   const wrapperClass = ['icon-bar', className].filter(Boolean).join(' ');
 
@@ -208,32 +224,16 @@ const IconBar: React.FC<IconBarProps> = ({ items, className }) => {
       {withStableListKeys(items, (item) =>
         item.type === 'separator' ? 'separator' : `button:${item.id}`
       ).map(({ key, value: item }) => {
-        if (item.type === 'separator') {
-          return <IconBarSeparatorIcon key={key} />;
+        switch (item.type) {
+          case 'separator':
+            return <IconBarSeparatorIcon key={key} />;
+          case 'split':
+            return <SplitButton key={key} item={item} />;
+          case 'menu':
+            return <MenuButton key={key} item={item} />;
+          default:
+            return <PlainButton key={key} item={item} />;
         }
-        if (item.type === 'split') {
-          return <SplitButton key={key} item={item} />;
-        }
-        if (item.type === 'menu') {
-          return <MenuButton key={key} item={item} />;
-        }
-
-        return (
-          <button
-            key={key}
-            type="button"
-            className={buttonClassName(item)}
-            onClick={item.onClick}
-            disabled={item.disabled}
-            title={item.title}
-            aria-label={item.ariaLabel ?? item.title}
-            aria-pressed={item.type === 'toggle' ? item.active : undefined}
-            aria-expanded={item.type === 'disclosure' ? item.expanded : undefined}
-            aria-controls={item.type === 'disclosure' ? item.controls : undefined}
-          >
-            {item.icon}
-          </button>
-        );
       })}
     </div>
   );

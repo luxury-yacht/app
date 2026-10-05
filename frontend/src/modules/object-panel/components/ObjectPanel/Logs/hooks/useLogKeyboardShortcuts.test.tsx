@@ -43,6 +43,7 @@ describe('log viewer shortcuts', () => {
         hasAnsiLogEntries: true,
         hasCopyableContent: true,
         canParseLogs: true,
+        hasLogs: true,
         dispatch,
         copyLogs: copy,
         filterInputRef,

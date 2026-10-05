@@ -19,6 +19,10 @@ placement and zoom follow [interaction boundaries](gridtable-interaction.md#inte
   Namespace rather than forcing the action into the post-search action cluster.
   A table without a Kind filter may use this as its leftmost filter-bar control;
   the Workloads/Pods composite uses it for the expanded Pods collapse control.
+- The post-search icon group starts with one Download button
+  (`useGridTableDownloadAction`). Its menu copies the rows to the clipboard as
+  CSV or saves them to a CSV file. Both take every matching row when the view
+  supplies `fetchAllRows`, and otherwise the local filtered rows.
 - Every multi-select Kinds dropdown exposes search plus `Select all` and
   `Select none`. GridTable owns this as an invariant of a visible Kind filter;
   views may decide whether the filter is present but cannot disable its controls.

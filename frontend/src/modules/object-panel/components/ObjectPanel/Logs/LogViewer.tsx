@@ -873,6 +873,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     parsedRows.length,
     filteredEntries.length
   );
+  const hasLogs = logEntries.length > 0;
   const hasAnsiLogEntries = useMemo(
     () => logEntries.some((entry) => containsAnsi(entry.line)),
     [logEntries]
@@ -990,6 +991,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     options: state,
     hasAnsiLogEntries,
     hasCopyableContent,
+    hasLogs,
     canParseLogs: canParseContainerLogs,
     dispatch,
     copyLogs: handleCopyContainerLogs,
@@ -1032,6 +1034,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     hasAnsiLogEntries,
     canParseLogs: canParseContainerLogs,
     hasCopyableContent,
+    hasLogs,
     copyLogs: handleCopyContainerLogs,
     saveLogs: handleSaveContainerLogs,
     filterInputRef,

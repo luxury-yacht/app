@@ -2013,6 +2013,42 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).toContain('2024-05-01T11:00:00.123Z');
   });
 
+  it('disables search, timestamps and wrap, and their shortcuts, until a log line arrives', async () => {
+    const control = (label: string) =>
+      container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    const latestSearchTarget = () =>
+      shortcutMocks.useSearchShortcutTarget.mock.calls[
+        shortcutMocks.useSearchShortcutTarget.mock.calls.length - 1
+      ]?.[0] as { isActive: boolean } | undefined;
+    const labels = ['Search logs', 'Show timestamps from the Kubernetes API', 'Wrap text'];
+
+    seedLogSnapshot([]);
+    await renderViewer();
+    for (const label of labels) {
+      expect(control(label)?.disabled, label).toBe(true);
+    }
+    expect(getLatestShortcut('t')?.enabled).toBe(false);
+    expect(getLatestShortcut('w')?.enabled).toBe(false);
+    expect(latestSearchTarget()?.isActive).toBe(false);
+
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'ready',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+    ]);
+    await renderViewer();
+    for (const label of labels) {
+      expect(control(label)?.disabled, label).toBe(false);
+    }
+    expect(getLatestShortcut('t')?.enabled).toBe(true);
+    expect(getLatestShortcut('w')?.enabled).toBe(true);
+    expect(latestSearchTarget()?.isActive).toBe(true);
+  });
+
   it('applies a time zone picked from the timestamp menu app-wide and shows timestamps', async () => {
     seedLogSnapshot([
       {

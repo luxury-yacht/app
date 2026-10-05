@@ -13,12 +13,12 @@
   width: 24px;
   height: 24px;
   padding: 0;
-  /* Outlined while off so the button stays visible; the "on" fill replaces it. */
+  /* Outlined at rest: an off toggle and a ready button look the same. The "on" fill
+     replaces the outline, and only a disabled button is dimmed. */
   border: 1px solid var(--color-border);
   border-radius: 4px;
   background: transparent;
-  color: var(--color-text);
-  opacity: 0.4;
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition:
     opacity 0.15s ease,
@@ -27,7 +27,7 @@
 }
 
 .icon-bar-button:hover {
-  opacity: 0.7;
+  color: var(--color-text);
   background: var(--color-bg-tertiary);
 }
 
@@ -38,7 +38,6 @@
 
 .icon-bar-button:focus-visible {
   box-shadow: 0 0 0 2px var(--color-accent);
-  opacity: 1;
 }
 
 /* A button with text beside its icon widens to fit it. */
@@ -55,9 +54,8 @@
   white-space: nowrap;
 }
 
-/* Toggle button in the "on" state */
-.icon-bar-button.active {
-  opacity: 1;
+/* Toggle button in the "on" state. A disabled button looks disabled whether on or off. */
+.icon-bar-button.active:not(:disabled) {
   color: var(--color-text);
   background: var(--color-bg-tertiary);
   border-color: transparent;
@@ -76,12 +74,10 @@
 
 /* Instant-action button feedback states (e.g. copy success/failure) */
 .icon-bar-button.feedback-success {
-  opacity: 1;
   color: var(--color-success);
 }
 
 .icon-bar-button.feedback-error {
-  opacity: 1;
   color: var(--color-error);
 }
 
@@ -103,7 +99,7 @@
 }
 
 /* The caret joins its "on" toggle's fill, so it drops its outline too. */
-.icon-bar-split .icon-bar-button.active + .icon-bar-split-caret {
+.icon-bar-split .icon-bar-button.active:not(:disabled) + .icon-bar-split-caret {
   border-color: transparent;
 }
 
@@ -112,12 +108,11 @@
 }
 
 .icon-bar-split:hover .icon-bar-split-caret:not(:disabled),
-.icon-bar-split .icon-bar-button.active + .icon-bar-split-caret {
+.icon-bar-split .icon-bar-button.active:not(:disabled) + .icon-bar-split-caret {
   box-shadow: inset 1px 0 0 var(--color-border);
 }
 
-.icon-bar-split .icon-bar-button.active + .icon-bar-split-caret:not(:disabled) {
-  opacity: 0.7;
+.icon-bar-split .icon-bar-button.active:not(:disabled) + .icon-bar-split-caret:not(:disabled) {
   background: var(--color-bg-tertiary);
 }
 
@@ -127,7 +122,6 @@
 
 /* A menu button or split caret keeps its hover look while its menu shows. */
 .icon-bar-button[aria-haspopup="menu"][aria-expanded="true"] {
-  opacity: 1;
   background: var(--color-bg-tertiary);
 }
 

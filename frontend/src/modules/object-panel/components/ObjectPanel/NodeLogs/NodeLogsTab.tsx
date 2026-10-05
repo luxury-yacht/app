@@ -758,6 +758,7 @@ const NodeLogsTab = ({
     options,
     hasAnsiLogEntries,
     hasCopyableContent,
+    hasLogs: totalLogCount > 0,
     canParseLogs,
     dispatch,
     copyLogs: handleCopyLogs,
@@ -784,6 +785,7 @@ const NodeLogsTab = ({
     hasAnsiLogEntries,
     canParseLogs,
     hasCopyableContent,
+    hasLogs: totalLogCount > 0,
     copyLogs: handleCopyLogs,
     saveLogs: handleSaveLogs,
     filterInputRef,
@@ -795,6 +797,7 @@ const NodeLogsTab = ({
       <div className="logs-viewer-display" ref={viewerRef}>
         <div className="logs-viewer-controls">
           <div className="logs-viewer-controls-left">
+            <LogBufferFullIndicator shown={notices.bufferFullShown} />
             <div className="logs-viewer-control-group">
               <Dropdown
                 options={sourceOptions}
@@ -811,7 +814,6 @@ const NodeLogsTab = ({
             </div>
 
             <IconBar items={iconItems} />
-            <LogBufferFullIndicator shown={notices.bufferFullShown} />
           </div>
           {options.searchOpen ? (
             <LogSearchRow

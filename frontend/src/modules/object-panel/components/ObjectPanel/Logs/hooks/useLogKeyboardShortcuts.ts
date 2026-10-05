@@ -16,6 +16,8 @@ interface UseLogKeyboardShortcutsParams {
   hasAnsiLogEntries: boolean;
   hasCopyableContent: boolean;
   canParseLogs: boolean;
+  /** A log line has arrived; the T, W and search shortcuts wait for one, like their buttons. */
+  hasLogs: boolean;
   dispatch: Dispatch<LogOptionsAction>;
   copyLogs: () => void;
   filterInputRef: RefObject<HTMLInputElement | null>;
@@ -33,6 +35,7 @@ export function useLogKeyboardShortcuts({
   hasAnsiLogEntries,
   hasCopyableContent,
   canParseLogs,
+  hasLogs,
   dispatch,
   copyLogs,
   filterInputRef,
@@ -66,16 +69,16 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 't',
     handler: useCallback(() => {
-      if (!isActive || !toggleTimestamps) {
+      if (!isActive || !hasLogs || !toggleTimestamps) {
         return false;
       }
       toggleTimestamps();
       return true;
-    }, [isActive, toggleTimestamps]),
+    }, [isActive, hasLogs, toggleTimestamps]),
     description: 'Toggle API timestamps',
     category: 'Logs',
     helpOrder: 30,
-    enabled: isActive && Boolean(toggleTimestamps),
+    enabled: isActive && hasLogs && Boolean(toggleTimestamps),
     priority: 20,
   });
 
@@ -216,16 +219,16 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'w',
     handler: useCallback(() => {
-      if (!isActive || isParsedView) {
+      if (!isActive || !hasLogs || isParsedView) {
         return false;
       }
       dispatch({ type: 'TOGGLE_WRAP_TEXT' });
       return true;
-    }, [isActive, isParsedView, dispatch]),
+    }, [isActive, hasLogs, isParsedView, dispatch]),
     description: 'Toggle text wrap',
     category: 'Logs',
     helpOrder: 63,
-    enabled: isActive && !isParsedView,
+    enabled: isActive && hasLogs && !isParsedView,
     priority: 20,
   });
 
@@ -295,7 +298,7 @@ export function useLogKeyboardShortcuts({
   );
 
   useSearchShortcutTarget({
-    isActive,
+    isActive: isActive && hasLogs,
     focus: focusFilterInput,
     priority: 25,
     label: 'Logs filter',

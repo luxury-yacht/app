@@ -60,7 +60,9 @@ describe('table Download button', () => {
     )();
 
   const written = (destination: Destination) =>
-    destination === 'Copy to Clipboard' ? writeText.mock.calls[0]?.[0] : mocks.save.mock.calls[0]?.[1];
+    destination === 'Copy to Clipboard'
+      ? writeText.mock.calls[0]?.[0]
+      : mocks.save.mock.calls[0]?.[1];
 
   it('offers both destinations from one menu button', async () => {
     await renderAction();

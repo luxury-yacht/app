@@ -3,6 +3,9 @@
 
 ### Changed
 
+- Toolbar buttons are dimmed only when they are unavailable. An off toggle and a ready button look the same, and a filled button is on.
+- In the Logs tab, search, timestamps and wrap are unavailable until a log line arrives, and the format button is no longer highlighted for Pretty or Table.
+- Tables and the Logs tab have one Download button in place of the separate copy and export buttons. Its menu offers Copy to Clipboard and Save to File, so every table can now save its rows to a CSV file, and the Logs tab can save the shown logs to a file.
 - The timestamp button in container logs has a menu for switching between UTC and local time, and shows which one is in use (UTC or LOC).
 - The Pretty JSON and table buttons in the Logs tab are now one format button. Click it to cycle through Raw, Pretty, and Table, or pick one from its menu.
 - The Pods, Containers, and Node Logs source dropdowns in the Logs tab now size to fit their contents.

@@ -57,7 +57,9 @@ keeps its own source selection and transport.
   filter applied, and the search button stays highlighted while a filter is
   typed. Container
   Logs remembers whether the row is open with the tab's other options; Node Logs
-  keeps it with its in-memory options, like its filter text.
+  keeps it with its in-memory options, like its filter text. Search, timestamps
+  and wrap, and their shortcuts, are unavailable until a log line arrives; the
+  ANSI and format buttons are hidden until a line has color codes or JSON.
   Timestamps and previous logs are optional icon bar features; Node Logs
   passes neither. The timestamps button is a split toggle: the icon shows or
   hides timestamps and is labeled with the zone in use (UTC or LOC), and its
@@ -70,11 +72,13 @@ keeps its own source selection and transport.
   Settings → Logs.
 - `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts. `T` (timestamps) and
   `V` (previous logs) exist only when the viewer passes those features.
-- `hooks/useLogCopyAction.ts`: the copy action and selection copy; clipboard
-  failures are reported, never swallowed.
+- `hooks/useLogDownloadActions.ts`: the Download button's Copy to Clipboard
+  and Save to File, and selection copy. Both choices take the same text: CSV in
+  Table view, saved as a .csv file, and the shown lines otherwise, saved as a
+  .log file. `Shift+C` still copies. Failures are reported, never swallowed.
 - `LogStatus.tsx`: the error block, the warning bar and the buffer-full
-  indicator (a warning icon beside the icon bar whose tooltip says which logs
-  are shown). Both viewers show loading with the shared spinner and their empty
+  indicator (a warning icon at the start of the controls row whose tooltip says
+  which logs are shown). Both viewers show loading with the shared spinner and their empty
   messages as the log's only line; a failure that leaves lines keeps them and
   reports in the warning bar.
 

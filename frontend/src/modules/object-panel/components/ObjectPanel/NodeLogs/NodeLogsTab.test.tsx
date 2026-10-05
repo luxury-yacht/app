@@ -1097,6 +1097,22 @@ describe('NodeLogsTab', () => {
     }
   });
 
+  it('disables search and wrap until the source returns a log line', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      status: 'executed',
+      data: { source: sources[0], sourcePath: sources[0].path, content: '' },
+    });
+    await renderTab();
+    await selectSource('kubelet');
+
+    for (const label of ['Search logs', 'Wrap text']) {
+      expect(
+        container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.disabled,
+        label
+      ).toBe(true);
+    }
+  });
+
   // Node Logs keep as many lines as the Object Panel Logs buffer setting allows
   // and say so the same way Container Logs do.
   describe('log buffer', () => {

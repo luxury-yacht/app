@@ -15,8 +15,8 @@ completeness changes also use [large data](../architecture/large-data.md).
   result fits on one page.
 - Complete or explicitly partial local row sets may use `localPagination` for
   presentation paging. `GridTable` applies it after local filter and sort, shows
-  an exact filtered range and total, and keeps Copy scoped to every locally
-  matching row rather than the displayed page. Do not combine `localPagination`
+  an exact filtered range and total, and keeps Download (copy and save) scoped
+  to every locally matching row rather than the displayed page. Do not combine `localPagination`
   with externally supplied `paginationControls`.
 - Rows-per-page is persisted table state. Store it with the same
   cluster/view/namespace persistence key as sort, filters, widths, and column

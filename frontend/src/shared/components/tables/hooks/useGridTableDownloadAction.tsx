@@ -67,7 +67,10 @@ export function useGridTableDownloadAction<T>({
     return async () => {
       const csv = await buildCsv();
       // Stamp the name at export time, after acquiring the rows.
-      const result = await saveCsvFile(buildExportFilename(defaultFilename, new Date(), 'csv'), csv);
+      const result = await saveCsvFile(
+        buildExportFilename(defaultFilename, new Date(), 'csv'),
+        csv
+      );
       return Boolean(result?.path);
     };
   }, [buildCsv, defaultFilename]);

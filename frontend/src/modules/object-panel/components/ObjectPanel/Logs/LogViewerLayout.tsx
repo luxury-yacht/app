@@ -182,6 +182,7 @@ export const LogViewerControls = ({
       className={`logs-viewer-controls${activeFilterChips.length > 0 ? ' logs-viewer-controls--with-active-filters' : ''}`}
     >
       <div className="logs-viewer-controls-left">
+        <LogBufferFullIndicator shown={bufferFullShown} />
         {(podOptions.length > 0 || containerOptions.length > 0) && (
           <div className="logs-viewer-control-group">
             {podOptions.length > 0 && (
@@ -207,7 +208,6 @@ export const LogViewerControls = ({
           </div>
         )}
         <IconBar items={iconItems} />
-        <LogBufferFullIndicator shown={bufferFullShown} />
       </div>
       {searchOptions.searchOpen ? (
         <LogSearchRow
