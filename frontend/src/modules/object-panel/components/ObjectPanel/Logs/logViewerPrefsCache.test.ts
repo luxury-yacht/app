@@ -16,7 +16,6 @@ import {
 const samplePrefs = (overrides: Partial<LogViewerPrefs> = {}): LogViewerPrefs => ({
   selectedFilters: { mode: 'all' },
   autoRefresh: true,
-  timestampMode: 'default',
   showTimestamps: true,
   wrapText: false,
   textFilter: 'error',

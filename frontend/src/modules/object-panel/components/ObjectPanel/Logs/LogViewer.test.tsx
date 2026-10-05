@@ -1139,7 +1139,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: true,
       textFilter: 'unmatched',
@@ -1231,7 +1230,6 @@ describe('LogViewer active pod synchronisation', () => {
       setLogViewerPrefs(panelId, {
         selectedFilters: [],
         autoRefresh: true,
-        timestampMode: 'default',
         showTimestamps: true,
         wrapText: false,
         textFilter: '',
@@ -1506,7 +1504,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: true,
       textFilter: '',
@@ -2093,7 +2090,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: true,
       textFilter: 'INFO',
@@ -2138,7 +2134,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: false,
       textFilter: '',
@@ -2338,7 +2333,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs('obj:test:deployment:team-a:api', {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: true,
       textFilter: '',
@@ -2612,7 +2606,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'hidden',
       showTimestamps: false,
       wrapText: true,
       textFilter: '',
@@ -2701,7 +2694,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'hidden',
       showTimestamps: false,
       wrapText: true,
       textFilter: '',
@@ -2884,7 +2876,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs('obj:test:highlight', {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: true,
       textFilter: 'panic',
@@ -3299,7 +3290,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedFilters: ['pod:web-1'],
       autoRefresh: false,
-      timestampMode: 'hidden',
       showTimestamps: false,
       wrapText: false,
       textFilter: 'panic',
@@ -3500,7 +3490,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelA, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: true,
       textFilter: 'a-only',
@@ -3516,7 +3505,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelB, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: true,
       textFilter: 'b-only',
@@ -3543,7 +3531,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'hidden',
       showTimestamps: false,
       wrapText: true,
       textFilter: 'error',
@@ -3590,7 +3577,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedFilters: ['pod:web-1', 'container:app'],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: true,
       textFilter: 'panic',
@@ -3622,7 +3608,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: true,
       textFilter: '[',
@@ -3647,7 +3632,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: true,
       textFilter: '',
@@ -3694,7 +3678,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: true,
       textFilter: 'panic',
@@ -3816,7 +3799,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: false,
       textFilter: '',

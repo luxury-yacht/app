@@ -141,9 +141,7 @@ export type ViewType =
   | 'manifest'
   | 'values';
 
-export type LogDisplayMode = 'raw' | 'structured' | 'pretty' | 'parsed';
-
-export type LogTimestampMode = 'hidden' | 'default' | 'short' | 'localized';
+export type LogDisplayMode = 'raw' | 'pretty' | 'parsed';
 
 export interface LogScrollPosition {
   scrollTop: number;
@@ -166,7 +164,6 @@ export interface LogScrollPosition {
 export interface LogViewerPrefs {
   selectedFilters: MultiSelectFilterSelection;
   autoRefresh: boolean;
-  timestampMode: LogTimestampMode;
   showTimestamps: boolean;
   wrapText: boolean;
   showAnsiColors?: boolean;

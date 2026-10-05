@@ -8,13 +8,13 @@
 import type React from 'react';
 import { useMemo, useRef } from 'react';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
-import type { LogDisplayMode, LogTimestampMode } from '../types';
+import { formatObjPanelLogsApiTimestamp } from '@/utils/objPanelLogsApiTimestampFormat';
+import type { LogDisplayMode } from '../types';
 import {
   formatContainerLabel,
   type LogContainerKind,
   logContainerKind,
 } from './containerLogFilters';
-import { formatTimestampForMode } from './containerLogTimestamps';
 import { LogMetadataButton } from './LogMetadataButton';
 import { formatRawOrPrettyJsonLine } from './parsedLogUtils';
 import type { RenderedLogRow } from './RawLogViewer';
@@ -31,7 +31,7 @@ export const shouldDisplayPodContainerMetadata = (
 export type ContainerLogFormatOptions = {
   displayMode: LogDisplayMode;
   showAnsiColors: boolean;
-  timestampMode: LogTimestampMode;
+  showTimestamps: boolean;
   apiTimestampFormat: string;
   apiTimestampUseLocalTimeZone: boolean;
   isWorkload: boolean;
@@ -65,12 +65,13 @@ const containerLogRowMetadata = (
   entry: ContainerLogsEntry,
   options: ContainerLogFormatOptions
 ): ContainerLogRowMetadata => ({
-  timestamp: formatTimestampForMode(
-    entry.timestamp ?? '',
-    options.timestampMode,
-    options.apiTimestampFormat,
-    options.apiTimestampUseLocalTimeZone
-  ),
+  timestamp: options.showTimestamps
+    ? formatObjPanelLogsApiTimestamp(
+        entry.timestamp ?? '',
+        options.apiTimestampFormat,
+        options.apiTimestampUseLocalTimeZone
+      )
+    : '',
   source:
     options.isWorkload || options.showContainerMetadata
       ? {
@@ -81,9 +82,6 @@ const containerLogRowMetadata = (
       : null,
 });
 
-const isJsonView = (displayMode: LogDisplayMode) =>
-  displayMode === 'pretty' || displayMode === 'structured';
-
 const containerLogMessage = (
   entry: ContainerLogsEntry,
   options: ContainerLogFormatOptions,
@@ -93,7 +91,7 @@ const containerLogMessage = (
     entry.line,
     options.displayMode,
     options.showAnsiColors,
-    isJsonView(options.displayMode) ? jsonOf(entry) : null
+    options.displayMode === 'pretty' ? jsonOf(entry) : null
   );
   return content.trim().length > 0 ? content : EMPTY_CONTAINER_LOG_PLACEHOLDER;
 };

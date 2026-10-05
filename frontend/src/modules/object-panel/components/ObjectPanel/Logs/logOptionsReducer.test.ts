@@ -56,6 +56,6 @@ describe('logOptionsReducer', () => {
 
   it('recognizes its own actions only', () => {
     expect(isLogOptionsAction({ type: 'TOGGLE_WRAP_TEXT' })).toBe(true);
-    expect(isLogOptionsAction({ type: 'SET_TIMESTAMP_MODE' })).toBe(false);
+    expect(isLogOptionsAction({ type: 'SET_SHOW_TIMESTAMPS' })).toBe(false);
   });
 });

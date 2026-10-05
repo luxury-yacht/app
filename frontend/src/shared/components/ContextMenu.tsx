@@ -33,6 +33,8 @@ interface ContextMenuProps {
   items: ContextMenuItem[];
   position: { x: number; y: number };
   onClose: () => void;
+  /** Additional CSS class applied to the menu. */
+  className?: string;
 }
 
 // A choice keeps its icon slot when unchecked so the labels of a set stay aligned.
@@ -40,7 +42,7 @@ const renderItemIcon = (item: ContextMenuItem): React.ReactNode => {
   if (item.checked !== undefined) {
     return (
       <span className="context-menu-icon">
-        {item.checked ? <CheckIcon width={14} height={14} /> : null}
+        {item.checked ? <CheckIcon width={12} height={12} /> : null}
       </span>
     );
   }
@@ -104,7 +106,7 @@ const ContextMenuOption = ({
   );
 };
 
-const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) => {
+const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, className }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   // Capture before focusing the menu. Effect replay must not replace the
   // invoker with this menu itself.
@@ -277,7 +279,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
   return createPortal(
     <div
       ref={menuRef}
-      className="context-menu"
+      className={className ? `context-menu ${className}` : 'context-menu'}
       style={{
         left: initialX,
         top: initialY,

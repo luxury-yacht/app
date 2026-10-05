@@ -135,36 +135,38 @@ const sourceItems = ({ previousLogs, timestamps }: LogToolbarOptions): IconBarIt
   return items;
 };
 
-// Clicking the format button steps through these in order; its menu picks one.
-const LOG_FORMATS: { mode: LogDisplayMode; label: string; icon: ReactNode }[] = [
-  { mode: 'raw', label: 'Raw', icon: <RawLogIcon width={18} height={18} /> },
-  { mode: 'pretty', label: 'Pretty', icon: <PrettyJsonIcon width={18} height={18} /> },
-  { mode: 'parsed', label: 'Table', icon: <ParseJsonIcon width={16} height={16} /> },
-];
+// Every format in menu order, and the one a click on the format button moves to.
+const LOG_FORMATS: Record<
+  LogDisplayMode,
+  { label: string; icon: ReactNode; next: LogDisplayMode }
+> = {
+  raw: { label: 'Raw', icon: <RawLogIcon width={18} height={18} />, next: 'pretty' },
+  pretty: { label: 'Pretty', icon: <PrettyJsonIcon width={18} height={18} />, next: 'parsed' },
+  parsed: { label: 'Table', icon: <ParseJsonIcon width={16} height={16} />, next: 'raw' },
+};
+const LOG_FORMAT_MODES = Object.keys(LOG_FORMATS) as LogDisplayMode[];
 
 const logFormatItem = (
   displayMode: LogDisplayMode,
   dispatch: Dispatch<LogOptionsAction>
 ): IconBarItem => {
-  const index = LOG_FORMATS.findIndex((format) => format.mode === displayMode);
-  const current = LOG_FORMATS[Math.max(index, 0)];
-  const next = LOG_FORMATS[(index + 1) % LOG_FORMATS.length];
+  const current = LOG_FORMATS[displayMode];
   return {
     type: 'split',
     behavior: 'cycle',
     id: 'logFormat',
     icon: current.icon,
     active: displayMode !== 'raw',
-    onClick: () => dispatch({ type: 'SET_DISPLAY_MODE', payload: next.mode }),
-    title: `Log format: ${current.label} - click for ${next.label} (J pretty, P table)`,
+    onClick: () => dispatch({ type: 'SET_DISPLAY_MODE', payload: current.next }),
+    title: `Log format: ${current.label} - click for ${LOG_FORMATS[current.next].label} (J pretty, P table)`,
     ariaLabel: `Log format: ${current.label}`,
     menuLabel: 'Choose log format',
     menuItems: [
       { header: true, label: 'Format' },
-      ...LOG_FORMATS.map((format) => ({
-        label: format.label,
-        checked: format.mode === displayMode,
-        onClick: () => dispatch({ type: 'SET_DISPLAY_MODE', payload: format.mode }),
+      ...LOG_FORMAT_MODES.map((mode) => ({
+        label: LOG_FORMATS[mode].label,
+        checked: mode === displayMode,
+        onClick: () => dispatch({ type: 'SET_DISPLAY_MODE', payload: mode }),
       })),
     ],
   };
@@ -177,18 +179,7 @@ const displayItems = ({
   canParseLogs,
 }: LogToolbarOptions): IconBarItem[] => {
   const isParsedView = options.displayMode === 'parsed';
-  const items: IconBarItem[] = [
-    {
-      type: 'toggle',
-      id: 'wrapText',
-      icon: <WrapTextIcon width={20} height={20} />,
-      active: options.wrapText,
-      onClick: () => dispatch({ type: 'TOGGLE_WRAP_TEXT' }),
-      title: 'Wrap text (W)',
-      ariaLabel: 'Wrap text',
-      disabled: isParsedView,
-    },
-  ];
+  const items: IconBarItem[] = [];
   if (hasAnsiLogEntries) {
     items.push({
       type: 'toggle',
@@ -204,6 +195,16 @@ const displayItems = ({
   if (canParseLogs) {
     items.push(logFormatItem(options.displayMode, dispatch));
   }
+  items.push({
+    type: 'toggle',
+    id: 'wrapText',
+    icon: <WrapTextIcon width={20} height={20} />,
+    active: options.wrapText,
+    onClick: () => dispatch({ type: 'TOGGLE_WRAP_TEXT' }),
+    title: 'Wrap text (W)',
+    ariaLabel: 'Wrap text',
+    disabled: isParsedView,
+  });
   return items;
 };
 

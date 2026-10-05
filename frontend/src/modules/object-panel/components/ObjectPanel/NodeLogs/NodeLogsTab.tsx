@@ -680,10 +680,10 @@ const NodeLogsTab = ({
   useRawViewFallback({ displayMode, hasVisibleLines, canParseLogs, dispatch });
 
   const displayLines = useMemo(() => {
-    // The JSON views reuse each line's cached parse instead of parsing again.
-    const jsonView = displayMode === 'pretty' || displayMode === 'structured';
+    // The Pretty view reuses each line's cached parse instead of parsing again.
+    const prettyView = displayMode === 'pretty';
     return filteredLines.map((line) =>
-      formatRawOrPrettyJsonLine(line, displayMode, showAnsiColors, jsonView ? jsonOf(line) : null)
+      formatRawOrPrettyJsonLine(line, displayMode, showAnsiColors, prettyView ? jsonOf(line) : null)
     );
   }, [displayMode, filteredLines, jsonOf, showAnsiColors]);
 

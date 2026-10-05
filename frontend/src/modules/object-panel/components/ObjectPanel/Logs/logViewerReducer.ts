@@ -10,7 +10,7 @@ import {
   ALL_MULTISELECT_FILTER,
   type MultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
-import type { LogTimestampMode, LogViewerPrefs } from '../types';
+import type { LogViewerPrefs } from '../types';
 import {
   initialLogOptionsState,
   isLogOptionsAction,
@@ -29,8 +29,6 @@ export type LogViewMode = { kind: 'live' } | { kind: 'previous' };
 export const LIVE_MODE: LogViewMode = { kind: 'live' };
 const PREVIOUS_MODE: LogViewMode = { kind: 'previous' };
 
-const TIMESTAMP_MODE_ORDER: LogTimestampMode[] = ['hidden', 'default', 'short', 'localized'];
-
 /**
  * LogViewer state: the shared options plus the container viewer's own fields.
  */
@@ -40,7 +38,7 @@ export interface LogViewerState extends LogOptionsState {
   // Pods and the pod/container source selection (workload view)
   availablePods: string[];
   selectedFilters: MultiSelectFilterSelection;
-  timestampMode: LogTimestampMode;
+  showTimestamps: boolean;
   mode: LogViewMode;
 }
 
@@ -49,8 +47,7 @@ export type LogViewerAction =
   | { type: 'SET_CONTAINERS'; payload: types.PodContainer[] }
   | { type: 'SET_AVAILABLE_PODS'; payload: string[] }
   | { type: 'SET_SELECTED_FILTERS'; payload: MultiSelectFilterSelection }
-  | { type: 'CYCLE_TIMESTAMP_MODE' }
-  | { type: 'SET_TIMESTAMP_MODE'; payload: LogTimestampMode }
+  | { type: 'SET_SHOW_TIMESTAMPS'; payload: boolean }
   | { type: 'SET_SHOW_PREVIOUS_LOGS'; payload: boolean }
   | { type: 'RESET_FOR_NEW_SCOPE' }
   | { type: 'START_PREVIOUS_LOGS' }
@@ -61,7 +58,7 @@ export const initialLogViewerState: LogViewerState = {
   containers: [],
   availablePods: [],
   selectedFilters: ALL_MULTISELECT_FILTER,
-  timestampMode: 'default',
+  showTimestamps: true,
   mode: LIVE_MODE,
 };
 
@@ -74,8 +71,7 @@ export const initialLogViewerState: LogViewerState = {
 export const extractLogViewerPrefs = (state: LogViewerState): LogViewerPrefs => ({
   selectedFilters: state.selectedFilters,
   autoRefresh: state.autoRefresh,
-  timestampMode: state.timestampMode,
-  showTimestamps: state.timestampMode !== 'hidden',
+  showTimestamps: state.showTimestamps,
   wrapText: state.wrapText,
   showAnsiColors: state.showAnsiColors,
   textFilter: state.textFilter,
@@ -101,7 +97,7 @@ export const applyLogViewerPrefs = (
   ...base,
   selectedFilters: prefs.selectedFilters ?? ALL_MULTISELECT_FILTER,
   autoRefresh: prefs.autoRefresh,
-  timestampMode: prefs.timestampMode ?? (prefs.showTimestamps ? 'default' : 'hidden'),
+  showTimestamps: prefs.showTimestamps,
   wrapText: prefs.wrapText,
   showAnsiColors: prefs.showAnsiColors ?? true,
   textFilter: prefs.textFilter,
@@ -115,14 +111,6 @@ export const applyLogViewerPrefs = (
   // mount); otherwise the default live mode.
   mode: prefs.showPreviousContainerLogs ? PREVIOUS_MODE : LIVE_MODE,
 });
-
-const cycleTimestampMode = (state: LogViewerState): LogViewerState => {
-  const currentIndex = TIMESTAMP_MODE_ORDER.indexOf(state.timestampMode);
-  return {
-    ...state,
-    timestampMode: TIMESTAMP_MODE_ORDER[(currentIndex + 1) % TIMESTAMP_MODE_ORDER.length],
-  };
-};
 
 const setPreviousLogsMode = (state: LogViewerState, visible: boolean): LogViewerState => {
   const kind = visible ? 'previous' : 'live';
@@ -153,10 +141,8 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
       return { ...state, availablePods: action.payload };
     case 'SET_SELECTED_FILTERS':
       return { ...state, selectedFilters: action.payload };
-    case 'CYCLE_TIMESTAMP_MODE':
-      return cycleTimestampMode(state);
-    case 'SET_TIMESTAMP_MODE':
-      return { ...state, timestampMode: action.payload };
+    case 'SET_SHOW_TIMESTAMPS':
+      return { ...state, showTimestamps: action.payload };
     case 'SET_SHOW_PREVIOUS_LOGS':
       return setPreviousLogsMode(state, action.payload);
     case 'RESET_FOR_NEW_SCOPE':

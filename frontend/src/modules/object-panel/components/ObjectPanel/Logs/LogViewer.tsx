@@ -40,6 +40,7 @@ import {
   getObjPanelLogsApiTimestampUseLocalTimeZone,
   setObjPanelLogsApiTimestampUseLocalTimeZone,
 } from '@/core/settings/appPreferences';
+import { formatObjPanelLogsApiTimestamp } from '@/utils/objPanelLogsApiTimestampFormat';
 import { INACTIVE_SCOPE } from '../constants';
 import { containsAnsi } from './ansi';
 import { buildContainerLogMetadataColumns, containerLogExportValue } from './containerLogColumns';
@@ -67,7 +68,6 @@ import {
   shouldDisplayPodContainerMetadata,
   useContainerLogDisplay,
 } from './containerLogRows';
-import { formatTimestampForMode } from './containerLogTimestamps';
 import { getWorkloadPodNames, useActivePodSet, useHiddenPods } from './hooks/useActivePodSet';
 import { useAnchoredLogEntries } from './hooks/useAnchoredLogEntries';
 import { useLogMessageRenderer } from './hooks/useLogMessageRenderer';
@@ -409,7 +409,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     availablePods,
     selectedFilters,
     autoRefresh,
-    timestampMode,
+    showTimestamps,
     wrapText,
     showAnsiColors,
     textFilter,
@@ -421,7 +421,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     expandedRows,
   } = state;
   const showPreviousContainerLogs = state.mode.kind === 'previous';
-  const showTimestamps = timestampMode !== 'hidden';
   const isParsedView = displayMode === 'parsed';
 
   // Push the persistent subset of state into the panel-scoped prefs
@@ -622,22 +621,24 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     const fallbackColor = styles.getPropertyValue('--hash-color-fallback').trim();
     return buildStablePodColorMap(availablePods, palette, fallbackColor);
   }, [availablePods]);
+  // Hidden timestamps format as empty, which the CSV export keeps for its reserved column.
   const formatApiTimestamp = useCallback(
     (timestamp: string) =>
-      formatTimestampForMode(
-        timestamp,
-        timestampMode,
-        apiTimestampFormat,
-        apiTimestampUseLocalTimeZone
-      ),
-    [apiTimestampFormat, apiTimestampUseLocalTimeZone, timestampMode]
+      showTimestamps
+        ? formatObjPanelLogsApiTimestamp(
+            timestamp,
+            apiTimestampFormat,
+            apiTimestampUseLocalTimeZone
+          )
+        : '',
+    [apiTimestampFormat, apiTimestampUseLocalTimeZone, showTimestamps]
   );
   // The table view's pod, container and timestamp columns, ahead of the JSON fields.
   const metadataColumns = useMemo(
     () =>
       buildContainerLogMetadataColumns({
         isWorkload,
-        showTimestamp: timestampMode !== 'hidden',
+        showTimestamp: showTimestamps,
         podColors,
         formatTimestamp: formatApiTimestamp,
         getContainerLabel: (entry) =>
@@ -652,7 +653,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       handleSelectPodFilter,
       isWorkload,
       podColors,
-      timestampMode,
+      showTimestamps,
     ]
   );
   const exportTableValue = useCallback(
@@ -863,7 +864,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     () => ({
       displayMode,
       showAnsiColors,
-      timestampMode,
+      showTimestamps,
       apiTimestampFormat,
       apiTimestampUseLocalTimeZone,
       isWorkload,
@@ -876,7 +877,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       isWorkload,
       showAnsiColors,
       showContainerMetadata,
-      timestampMode,
+      showTimestamps,
     ]
   );
   const { rows: displayRows, copyText } = useContainerLogDisplay({
@@ -984,7 +985,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   useLogSelectionCopy({ rootRef: logsContentRef, active: isActive, source: 'LogViewer' });
 
   const toggleTimestamps = useCallback(
-    () => dispatch({ type: 'SET_TIMESTAMP_MODE', payload: showTimestamps ? 'hidden' : 'default' }),
+    () => dispatch({ type: 'SET_SHOW_TIMESTAMPS', payload: !showTimestamps }),
     [showTimestamps]
   );
   // The zone is the app-wide setting. Picking one also shows timestamps.
@@ -992,7 +993,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     (useLocalTimeZone: boolean) => {
       setObjPanelLogsApiTimestampUseLocalTimeZone(useLocalTimeZone);
       if (!showTimestamps) {
-        dispatch({ type: 'SET_TIMESTAMP_MODE', payload: 'default' });
+        dispatch({ type: 'SET_SHOW_TIMESTAMPS', payload: true });
       }
     },
     [showTimestamps]

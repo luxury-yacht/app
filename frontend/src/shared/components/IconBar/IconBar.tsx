@@ -112,6 +112,7 @@ const SplitButton = ({ item }: { item: IconBarSplit }) => {
           items={item.menuItems}
           position={menuPosition}
           onClose={() => setMenuPosition(null)}
+          className="icon-bar-split-menu"
         />
       ) : null}
     </div>

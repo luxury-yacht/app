@@ -94,6 +94,12 @@ button.context-menu-item {
   flex-shrink: 0;
 }
 
+/* A choice's check needs less room than an action icon. */
+.context-menu-item[role="menuitemradio"] .context-menu-icon {
+  width: 12px;
+  margin-right: 6px;
+}
+
 .context-menu-item.danger .context-menu-icon {
   color: var(--color-error, #ef4444);
 }

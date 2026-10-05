@@ -143,7 +143,6 @@ describe.runIf(process.env.LOGS_BENCHMARK === '1')('Logs tab stream-batch benchm
     setLogViewerPrefs(panelId, {
       selectedFilters: [],
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
       wrapText: true,
       textFilter: '',

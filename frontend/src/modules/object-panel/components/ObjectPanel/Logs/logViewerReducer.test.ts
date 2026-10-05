@@ -97,8 +97,7 @@ describe('logViewerReducer state transitions', () => {
   it('applies every display preference transition', () => {
     const actions = [
       { type: 'TOGGLE_AUTO_REFRESH' as const },
-      { type: 'CYCLE_TIMESTAMP_MODE' as const },
-      { type: 'SET_TIMESTAMP_MODE' as const, payload: 'hidden' as const },
+      { type: 'SET_SHOW_TIMESTAMPS' as const, payload: false },
       { type: 'TOGGLE_WRAP_TEXT' as const },
       { type: 'TOGGLE_SHOW_ANSI_COLORS' as const },
       { type: 'SET_TEXT_FILTER' as const, payload: 'error' },
@@ -111,7 +110,7 @@ describe('logViewerReducer state transitions', () => {
 
     expect(result).toMatchObject({
       autoRefresh: false,
-      timestampMode: 'hidden',
+      showTimestamps: false,
       wrapText: false,
       showAnsiColors: false,
       textFilter: 'error',
