@@ -2021,10 +2021,13 @@ describe('LogViewer active pod synchronisation', () => {
     await pickZone(/^Local/);
     expect(getObjPanelLogsApiTimestampUseLocalTimeZone()).toBe(true);
     expect(timestampButton.getAttribute('aria-pressed')).toBe('true');
+    // The toggle names the zone in use.
+    expect(timestampButton.textContent).toBe('LOCAL');
     expect(container.textContent).toMatch(/\d{4}-\d\d-\d\dT\d\d:\d\d:00\.123[+-]\d\d:\d\d/);
 
     await pickZone(/^UTC$/);
     expect(getObjPanelLogsApiTimestampUseLocalTimeZone()).toBe(false);
+    expect(timestampButton.textContent).toBe('UTC');
     expect(container.textContent).toContain('2024-05-01T11:00:00.123Z');
   });
 

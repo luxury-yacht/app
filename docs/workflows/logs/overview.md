@@ -60,7 +60,8 @@ keeps its own source selection and transport.
   keeps it with its in-memory options, like its filter text.
   Timestamps and previous logs are optional icon bar features; Node Logs
   passes neither. The timestamps button is a split toggle: the icon shows or
-  hides timestamps, and its caret menu picks UTC or local time. The time zone
+  hides timestamps and is labeled with the zone in use (UTC or LOC), and its
+  caret menu picks UTC or local time. The time zone
   is the app-wide Settings → Logs setting, so a choice applies to every Logs
   tab; picking a zone also shows timestamps. When the logs contain JSON, the
   format button cycles Raw → Pretty → Table on click, and its caret menu picks

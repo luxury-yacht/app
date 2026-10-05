@@ -46,6 +46,8 @@ export interface IconBarSplit extends IconBarButton {
   /** Accessible label and tooltip of the caret that opens the menu. */
   menuLabel: string;
   menuItems: ContextMenuItem[];
+  /** Short text beside the icon, such as the current choice. */
+  label?: string;
 }
 
 /** A button that shows or hides the section it controls. */
@@ -95,7 +97,7 @@ const SplitButton = ({ item }: { item: IconBarSplit }) => {
     <div className="icon-bar-split" ref={groupRef}>
       <button
         type="button"
-        className={`icon-bar-button${item.active ? ' active' : ''}`}
+        className={`icon-bar-button${item.label ? ' icon-bar-button--labeled' : ''}${item.active ? ' active' : ''}`}
         onClick={item.onClick}
         disabled={item.disabled}
         title={item.title}
@@ -103,6 +105,7 @@ const SplitButton = ({ item }: { item: IconBarSplit }) => {
         aria-pressed={item.behavior === 'toggle' ? item.active : undefined}
       >
         {item.icon}
+        {item.label ? <span className="icon-bar-button-label">{item.label}</span> : null}
       </button>
       <button
         type="button"
