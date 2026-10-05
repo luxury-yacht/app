@@ -227,7 +227,7 @@
   --log-surface-maximized-bg: var(--color-base-950);
   --log-text-primary: var(--color-base-200);
   --log-metadata-text: var(--color-base-500);
-  --log-controls-bg: var(--color-base-800);
+  --log-controls-bg: var(--color-bg-secondary);
   --log-controls-border: var(--color-base-700);
   --log-controls-shadow: none;
   --log-controls-maximized-bg: var(--color-base-800);

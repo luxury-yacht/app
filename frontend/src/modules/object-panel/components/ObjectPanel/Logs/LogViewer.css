@@ -51,6 +51,15 @@
   color: var(--color-warning);
 }
 
+/* The auto-refresh icon: red stop while logs refresh, green play while they are stopped. */
+.logs-viewer-stop-icon {
+  color: var(--color-error);
+}
+
+.logs-viewer-play-icon {
+  color: var(--color-success);
+}
+
 /* The summary style sets the text; even-width digits stop it jittering as logs stream in. */
 .logs-viewer-count {
   font-variant-numeric: tabular-nums;

@@ -937,7 +937,8 @@ describe('LogViewer active pod synchronisation', () => {
 
       expect(container.textContent).toContain('cannot list resource "pods"');
       expect(container.querySelector('button[aria-label="Show previous logs (V)"]')).not.toBeNull();
-      expect(container.querySelector('button[aria-label="Toggle auto-refresh"]')).not.toBeNull();
+      // The failure turned auto-refresh off; its button offers to start it again.
+      expect(container.querySelector('button[aria-label="Start auto-refresh"]')).not.toBeNull();
     } finally {
       await stream.close();
     }
@@ -1422,20 +1423,21 @@ describe('LogViewer active pod synchronisation', () => {
         'button[aria-label="Resume scrolling"]'
       );
       expect(resumeButton).not.toBeNull();
+      // The button is named for what a click does; like the other choice buttons it has no pressed state.
       const autoRefreshButton = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Toggle auto-refresh"]'
+        'button[aria-label="Stop auto-refresh"]'
       );
-      expect(autoRefreshButton?.getAttribute('aria-pressed')).toBe('true');
+      expect(autoRefreshButton?.hasAttribute('aria-pressed')).toBe(false);
       await act(async () => {
         autoRefreshButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
-      expect(autoRefreshButton?.getAttribute('aria-pressed')).toBe('false');
+      expect(autoRefreshButton?.getAttribute('aria-label')).toBe('Start auto-refresh');
       await act(async () => {
         resumeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         await Promise.resolve();
       });
 
-      expect(autoRefreshButton?.getAttribute('aria-pressed')).toBe('true');
+      expect(autoRefreshButton?.getAttribute('aria-label')).toBe('Stop auto-refresh');
       expect(container.textContent).not.toContain('anchored line 1');
       expect(container.textContent).toContain('anchored line 4');
       expect(content.scrollTop).toBe(400);

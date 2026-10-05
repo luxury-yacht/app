@@ -323,18 +323,18 @@ const searchButton = ({
 /** Builds the log viewer icon bar: auto-refresh, search, source and display, actions. */
 export const buildLogToolbarItems = (toolbar: LogToolbarOptions): IconBarItem[] => [
   {
-    type: 'toggle',
+    // Like the other choice buttons it is never highlighted: the icon and name say what a click does.
+    type: 'action',
     id: 'autoRefresh',
     // The icon shows what a click does: stop while refreshing, play while stopped.
     icon: toolbar.options.autoRefresh ? (
-      <StopOutlineIcon width={18} height={18} />
+      <StopOutlineIcon width={18} height={18} className="logs-viewer-stop-icon" />
     ) : (
-      <PlayOutlineIcon width={18} height={18} />
+      <PlayOutlineIcon width={18} height={18} className="logs-viewer-play-icon" />
     ),
-    active: toolbar.options.autoRefresh,
     onClick: () => toolbar.dispatch({ type: 'TOGGLE_AUTO_REFRESH' }),
     title: `${toolbar.options.autoRefresh ? 'Stop' : 'Start'} auto-refresh (R)`,
-    ariaLabel: 'Toggle auto-refresh',
+    ariaLabel: `${toolbar.options.autoRefresh ? 'Stop' : 'Start'} auto-refresh`,
   },
   { type: 'separator' },
   searchButton(toolbar),
