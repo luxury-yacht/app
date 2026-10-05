@@ -592,3 +592,34 @@ func TestClusterAttentionIndexWarnsWhenKarpenterNodePoolNearsItsLimits(t *testin
 	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{pool})
 	require.Empty(t, index.Snapshot())
 }
+
+func TestClusterAttentionIndexKeepsSavedIgnoresForReportedObjectsMissingFromACatalogView(t *testing.T) {
+	now := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	var persistedPrunes []resourcemodel.ResourceRef
+	index.SetIgnoredObjectPruner(func(ref resourcemodel.ResourceRef) { persistedPrunes = append(persistedPrunes, ref) })
+	app := reportedStatusTestObject("cluster-a", "argoproj.io", "Application", "storefront", argoCDStatuses("OutOfSync", "Healthy"))
+	index.SetIgnoreRules(AttentionIgnoreRules{ObjectFindings: []AttentionObjectFindingIgnore{{
+		Ref: app.Ref, FindingType: "argocd-application-out-of-sync",
+	}}})
+
+	// A catalog view without the object (a failed or denied listing, a removed CRD) is not
+	// proof that it was deleted, so the saved ignore survives it.
+	index.ReplaceReportedStatuses(nil)
+	require.Len(t, index.IgnoreRules().ObjectFindings, 1)
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{app})
+	require.Empty(t, index.Snapshot(), "the saved ignore still applies")
+	index.ReplaceReportedStatuses(nil)
+	require.Len(t, index.IgnoreRules().ObjectFindings, 1)
+	require.Empty(t, persistedPrunes)
+
+	// A recreated object (same name, new UID) does not inherit the old object's ignore.
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{app})
+	recreated := app
+	recreated.Ref.UID = "recreated-uid"
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{recreated})
+	require.Empty(t, index.IgnoreRules().ObjectFindings)
+	require.Equal(t, []resourcemodel.ResourceRef{app.Ref}, persistedPrunes)
+	require.Len(t, index.Snapshot(), 1)
+}

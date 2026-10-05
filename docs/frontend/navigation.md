@@ -145,11 +145,15 @@ They feed the `argocd-application-out-of-sync`, `argocd-application-degraded`,
 rule matches when any of them does, and every matching rule adds its own cause.
 The NodePool threshold lives with the Karpenter facts, which also give the
 Karpenter table and NodePool details their usage and warning color, so all
-three flag the same pools. Every reporting object is
-published whatever its statuses, so a recovered object keeps its per-object
-ignores and only a deleted one loses them. Reported statuses carry no transition
-time, so their findings have no grace period and appear as soon as the catalog
-sees the status. Both subsets keep catalog scans off the
+three flag the same pools. Reported statuses carry no transition time, so their
+findings have no grace period and appear as soon as the catalog sees the status.
+
+Neither subset publishes before the catalog's first full sync: until then the
+catalog holds a partial view, and an object missing from it would read as
+deleted. Even afterwards, an object missing from the catalog's view is not proof
+of deletion (its listing may have failed or been denied, or its CRD removed), so
+catalog-owned findings never prune a saved per-object ignore on absence; only a
+recreated object (same name, new UID) drops the old object's ignores. Both subsets keep catalog scans off the
 render path and preserve the maintained-store spill/Cold-serving contract. A
 domain-owned timer advances grace periods and event expiry. The distinct
 `attention` stream clock remains the only change signal: catalog subset changes

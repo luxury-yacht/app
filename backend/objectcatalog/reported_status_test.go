@@ -91,19 +91,18 @@ func TestReportedStatusSubscriptionPublishesStatusChanges(t *testing.T) {
 	service := NewService(Dependencies{ClusterID: "cluster-a"}, nil)
 	updates, unsubscribe := service.SubscribeReportedStatuses()
 	defer unsubscribe()
-	require.Zero(t, (<-updates).Revision)
 
 	project := func(resourceVersion, sync, health string) map[string]Summary {
 		return map[string]Summary{"app": summaryFromObject("cluster-a", argoCDApplicationDescriptor,
 			reportedStatusTestObject("argoproj.io", "Application", resourceVersion, applicationStatus(sync, health)))}
 	}
-	service.replaceAttentionSubsets(project("1", "OutOfSync", "Healthy"))
+	service.publishSyncedAttentionSubsets(project("1", "OutOfSync", "Healthy"))
 	require.Equal(t, uint64(1), (<-updates).Revision)
 	statuses := service.ReportedStatuses()
 	require.Len(t, statuses, 1)
 	require.Equal(t, []string{"OutOfSync"}, statuses[0].Statuses[ReportedStatusSync])
 
-	service.replaceAttentionSubsets(project("2", "OutOfSync", "Healthy"))
+	service.publishSyncedAttentionSubsets(project("2", "OutOfSync", "Healthy"))
 	select {
 	case unexpected := <-updates:
 		t.Fatalf("resource-version-only update emitted reported-status revision %d", unexpected.Revision)
@@ -112,18 +111,18 @@ func TestReportedStatusSubscriptionPublishesStatusChanges(t *testing.T) {
 
 	// A synced Application stays published so Attention keeps tracking the object (and its
 	// per-object ignores) while it is healthy.
-	service.replaceAttentionSubsets(project("3", "Synced", "Healthy"))
+	service.publishSyncedAttentionSubsets(project("3", "Synced", "Healthy"))
 	require.Equal(t, uint64(2), (<-updates).Revision)
 	statuses = service.ReportedStatuses()
 	require.Len(t, statuses, 1)
 	require.Equal(t, []string{"Synced"}, statuses[0].Statuses[ReportedStatusSync])
 
 	// A health change alone is a status change.
-	service.replaceAttentionSubsets(project("4", "Synced", "Degraded"))
+	service.publishSyncedAttentionSubsets(project("4", "Synced", "Degraded"))
 	require.Equal(t, uint64(3), (<-updates).Revision)
 	require.Equal(t, []string{"Degraded"}, service.ReportedStatuses()[0].Statuses[ReportedStatusHealth])
 
-	service.replaceAttentionSubsets(nil)
+	service.publishSyncedAttentionSubsets(nil)
 	require.Equal(t, uint64(4), (<-updates).Revision)
 	require.Empty(t, service.ReportedStatuses())
 }
@@ -153,4 +152,43 @@ func TestSummaryReportsKarpenterNodePoolLimitWarnings(t *testing.T) {
 	object.SetKind("NodeClaim")
 	_, ok = summaryFromObject("cluster-a", claim, object).ReportedStatus()
 	require.False(t, ok, "only NodePools report limit usage")
+}
+
+func requireNoSubsetUpdate(t *testing.T, updates <-chan SubsetUpdate) {
+	t.Helper()
+	select {
+	case update := <-updates:
+		t.Fatalf("subset published revision %d before the first full catalog sync", update.Revision)
+	default:
+	}
+}
+
+// Before the first full sync the catalog has not listed everything, so an empty or partial
+// subset would read to Attention as objects having been deleted.
+func TestAttentionSubsetsStaySilentUntilTheFirstFullSync(t *testing.T) {
+	service := NewService(Dependencies{ClusterID: "cluster-a"}, nil)
+	statuses, unsubscribeStatuses := service.SubscribeReportedStatuses()
+	defer unsubscribeStatuses()
+	blockers, unsubscribeBlockers := service.SubscribeFinalizerBlockers()
+	defer unsubscribeBlockers()
+	app := summaryFromObject("cluster-a", argoCDApplicationDescriptor,
+		reportedStatusTestObject("argoproj.io", "Application", "1", applicationStatus("OutOfSync", "Healthy")))
+
+	// Rows replayed or watched before the first full sync are a partial view.
+	service.replaceAttentionSubsets(map[string]Summary{"app": app})
+	service.updateAttentionSubsets([]catalogChange{{next: &app}})
+	requireNoSubsetUpdate(t, statuses)
+	requireNoSubsetUpdate(t, blockers)
+
+	service.publishSyncedAttentionSubsets(map[string]Summary{"app": app})
+	require.Equal(t, uint64(1), (<-statuses).Revision)
+	require.Equal(t, uint64(1), (<-blockers).Revision, "an empty subset is published once the catalog has synced")
+	require.Len(t, service.ReportedStatuses(), 1)
+
+	// Once synced, later subscribers get the current revision at once, and changes publish.
+	late, unsubscribeLate := service.SubscribeReportedStatuses()
+	defer unsubscribeLate()
+	require.Equal(t, uint64(1), (<-late).Revision)
+	service.replaceAttentionSubsets(nil)
+	require.Equal(t, uint64(2), (<-statuses).Revision)
 }

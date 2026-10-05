@@ -15,19 +15,22 @@ type SubsetUpdate struct {
 	Revision uint64
 }
 
-// catalogSubsetItem is one entry of a catalog subset, keyed by its object identity.
-type catalogSubsetItem interface {
-	subsetRef() resourcemodel.ResourceRef
+// objectRefer is one entry of a catalog subset, keyed by its object identity.
+type objectRefer interface {
+	objectRef() resourcemodel.ResourceRef
 }
 
 // catalogSubset is a coalesced, backend-only projection of the catalog rows that
 // Attention consumes (objects blocked on finalizers, objects reporting a status).
 // Subscribers are told only when the projected subset itself changes, so catalog
-// churn such as resource-version bumps never reaches them. The zero value is ready.
-type catalogSubset[T catalogSubsetItem] struct {
+// churn such as resource-version bumps never reaches them. Nothing is published before
+// the catalog's first full sync: until then the subset is a partial view, and an object
+// missing from it would read as deleted. The zero value is ready to use.
+type catalogSubset[T objectRefer] struct {
 	mu          sync.RWMutex
 	items       map[string]T
 	revision    uint64
+	synced      bool
 	subscribers map[int]chan SubsetUpdate
 	nextSubID   int
 }
@@ -48,7 +51,8 @@ func (c *catalogSubset[T]) snapshot() []T {
 	return items
 }
 
-// subscribe registers a coalescing subscriber and immediately sends the current revision.
+// subscribe registers a coalescing subscriber. Once the catalog has synced it immediately
+// sends the current revision; before that the first update arrives with the first sync.
 func (c *catalogSubset[T]) subscribe() (<-chan SubsetUpdate, func()) {
 	ch := make(chan SubsetUpdate, 1)
 	c.mu.Lock()
@@ -58,7 +62,9 @@ func (c *catalogSubset[T]) subscribe() (<-chan SubsetUpdate, func()) {
 		c.subscribers = make(map[int]chan SubsetUpdate)
 	}
 	c.subscribers[id] = ch
-	ch <- SubsetUpdate{Revision: c.revision}
+	if c.synced {
+		ch <- SubsetUpdate{Revision: c.revision}
+	}
 	c.mu.Unlock()
 
 	unsubscribe := func() {
@@ -135,7 +141,21 @@ func (c *catalogSubset[T]) applyChangesLocked(next map[string]*T) bool {
 	return changed
 }
 
+// markSynced records the catalog's first full sync and publishes the subset, changed or not.
+func (c *catalogSubset[T]) markSynced() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.synced {
+		return
+	}
+	c.synced = true
+	c.publishLocked()
+}
+
 func (c *catalogSubset[T]) publishLocked() {
+	if !c.synced {
+		return
+	}
 	c.revision++
 	update := SubsetUpdate{Revision: c.revision}
 	for _, subscriber := range c.subscribers {
@@ -150,8 +170,8 @@ func (c *catalogSubset[T]) publishLocked() {
 	}
 }
 
-func catalogSubsetKey(item catalogSubsetItem) string {
-	ref := item.subsetRef()
+func catalogSubsetKey(item objectRefer) string {
+	ref := item.objectRef()
 	return strings.ToLower(strings.Join([]string{
 		ref.ClusterID, ref.Group, ref.Version, ref.Kind, ref.Resource, ref.Namespace, ref.Name, ref.UID,
 	}, "\x00"))

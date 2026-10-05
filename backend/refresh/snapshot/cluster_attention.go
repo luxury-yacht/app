@@ -584,7 +584,7 @@ func (i *clusterAttentionIndex) replaceSource(owner string, records []attentionS
 		i.mu.Unlock()
 		return
 	}
-	replacement := newAttentionSourceReplacement(records, i.now())
+	replacement := newAttentionSourceReplacement(records, i.now(), pruneMissingIgnores)
 	i.upsertReplacementRecords(owner, records, replacement)
 	i.removeMissingReplacementSources(owner, replacement)
 	i.removeMissingReplacementFindings(owner, replacement)
@@ -599,14 +599,18 @@ func (i *clusterAttentionIndex) replaceSource(owner string, records []attentionS
 }
 
 type attentionSourceReplacement struct {
+	// pruneIgnores is false when an object's absence from the records does not prove it
+	// was deleted, so saved ignores must survive the replacement.
+	pruneIgnores       bool
 	want               map[string]struct{}
 	presentIgnoredKeys map[string]struct{}
 	pruned             []resourcemodel.ResourceRef
 	now                time.Time
 }
 
-func newAttentionSourceReplacement(records []attentionSourceRecord, now time.Time) *attentionSourceReplacement {
+func newAttentionSourceReplacement(records []attentionSourceRecord, now time.Time, pruneIgnores bool) *attentionSourceReplacement {
 	return &attentionSourceReplacement{
+		pruneIgnores:       pruneIgnores,
 		want:               make(map[string]struct{}, len(records)),
 		presentIgnoredKeys: make(map[string]struct{}, len(records)),
 		pruned:             make([]resourcemodel.ResourceRef, 0),
@@ -642,7 +646,7 @@ func (i *clusterAttentionIndex) removeMissingReplacementSources(
 		}
 		state := i.sources[key]
 		i.deleteSourceLocked(owner, key)
-		if !i.finalizerConfirmsObjectLocked(state.record.Ref) && i.pruneIgnoredObjectLocked(state.record.Ref) {
+		if replacement.pruneIgnores && !i.finalizerConfirmsObjectLocked(state.record.Ref) && i.pruneIgnoredObjectLocked(state.record.Ref) {
 			replacement.pruned = append(replacement.pruned, state.record.Ref)
 		}
 	}
@@ -838,6 +842,9 @@ func (i *clusterAttentionIndex) ReplaceFinalizerBlockers(blockers []objectcatalo
 
 // ReplaceReportedStatuses replaces the catalog-owned source of statuses objects report
 // about themselves, such as every Argo CD Application's and ApplicationSet's, for this cluster.
+// Like the catalog's finalizer findings, an object missing from the catalog's view is not
+// proof of deletion (its listing may have failed or been denied, or its CRD removed), so
+// saved ignores survive; a recreated object (new UID) still drops the old one's ignores.
 func (i *clusterAttentionIndex) ReplaceReportedStatuses(statuses []objectcatalog.ReportedStatus) {
 	records := make([]attentionSourceRecord, 0, len(statuses))
 	for _, status := range statuses {
@@ -846,7 +853,7 @@ func (i *clusterAttentionIndex) ReplaceReportedStatuses(statuses []objectcatalog
 			ReportedStatuses: status.Statuses, AgeTimestamp: status.CreationTimestamp,
 		})
 	}
-	i.ReplaceSource(attentionReportedStatusOwner, records)
+	i.replaceSource(attentionReportedStatusOwner, records, false)
 }
 
 func attentionRefBelongsToCluster(ref resourcemodel.ResourceRef, clusterID string) bool {

@@ -40,6 +40,9 @@ type attentionClassificationRule struct {
 	FindingReason         string
 }
 
+// argoCDGroup is the API group of the Argo CD objects that report statuses.
+const argoCDGroup = "argoproj.io"
+
 var attentionClassificationRules = []attentionClassificationRule{
 	{
 		ID: "workload-scaled-to-zero", Label: "Scaled to zero", Sources: []attentionSource{attentionSourceWorkload},
@@ -83,20 +86,20 @@ var attentionClassificationRules = []attentionClassificationRule{
 		// Reported-status rules have no grace period: Argo CD records no time for a sync
 		// transition, so there is nothing to measure one from.
 		ID: "argocd-application-out-of-sync", Label: "Argo CD Application out of sync",
-		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{"argoproj.io"},
+		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{argoCDGroup},
 		Kinds: []string{"Application"}, ReportedStatus: objectcatalog.ReportedStatusSync, Statuses: []string{"OutOfSync"},
 		Severity: AttentionSeverityWarning, FindingReason: "Out of sync",
 	},
 	{
 		ID: "argocd-application-degraded", Label: "Argo CD Application degraded",
-		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{"argoproj.io"},
+		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{argoCDGroup},
 		Kinds: []string{"Application"}, ReportedStatus: objectcatalog.ReportedStatusHealth, Statuses: []string{"Degraded"},
 		Severity: AttentionSeverityError, FindingReason: "Degraded",
 	},
 	{
 		// Missing health means resources the Application defines do not exist in the cluster.
 		ID: "argocd-application-missing", Label: "Argo CD Application resources missing",
-		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{"argoproj.io"},
+		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{argoCDGroup},
 		Kinds: []string{"Application"}, ReportedStatus: objectcatalog.ReportedStatusHealth, Statuses: []string{"Missing"},
 		Severity: AttentionSeverityWarning, FindingReason: "Missing",
 	},
@@ -104,7 +107,7 @@ var attentionClassificationRules = []attentionClassificationRule{
 		// The last sync operation, manual or automatic, did not complete. Argo CD keeps it until
 		// the next operation, so the finding clears once a later sync succeeds.
 		ID: "argocd-application-sync-failed", Label: "Argo CD Application sync failed",
-		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{"argoproj.io"},
+		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{argoCDGroup},
 		Kinds: []string{"Application"}, ReportedStatus: objectcatalog.ReportedStatusOperation, Statuses: []string{"Failed", "Error"},
 		Severity: AttentionSeverityError, FindingReason: "Sync failed",
 	},
@@ -112,7 +115,7 @@ var attentionClassificationRules = []attentionClassificationRule{
 		// Argo CD's error condition types. ComparisonError matters most: when Argo CD cannot
 		// render or compare the Application, sync and health can still look fine.
 		ID: "argocd-application-error", Label: "Argo CD Application error",
-		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{"argoproj.io"},
+		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{argoCDGroup},
 		Kinds: []string{"Application"}, ReportedStatus: objectcatalog.ReportedStatusConditions,
 		Statuses: []string{"ComparisonError", "InvalidSpecError", "SyncError", "DeletionError", "UnknownError"},
 		Severity: AttentionSeverityError,
@@ -121,7 +124,7 @@ var attentionClassificationRules = []attentionClassificationRule{
 		// A failing generator or template stops the ApplicationSet creating or updating its
 		// Applications, which nothing on the Applications themselves shows.
 		ID: "argocd-applicationset-error", Label: "Argo CD ApplicationSet error",
-		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{"argoproj.io"},
+		Sources: []attentionSource{attentionSourceReportedStatus}, Groups: []string{argoCDGroup},
 		Kinds: []string{"ApplicationSet"}, ReportedStatus: objectcatalog.ReportedStatusConditions, Statuses: []string{"ErrorOccurred"},
 		Severity: AttentionSeverityError, FindingReason: "Error occurred",
 	},
