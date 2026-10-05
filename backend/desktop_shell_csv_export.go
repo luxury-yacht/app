@@ -83,7 +83,7 @@ func (s *DesktopShell) saveExportFile(kind exportFileKind, defaultFilename, cont
 	}
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return empty, fmt.Errorf("%s canceled", kind.noun)
+		return CatalogQueryCSVExport{Canceled: true}, nil
 	}
 
 	info, err := writeExportFileAtomically(path, content)

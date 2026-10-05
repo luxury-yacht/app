@@ -79,6 +79,8 @@ type CatalogHealth struct {
 type CatalogQueryCSVExport struct {
 	Path  string `json:"path"`
 	Bytes int64  `json:"bytes"`
+	// Canceled is set when the user dismissed the save dialog; nothing was written.
+	Canceled bool `json:"canceled,omitempty"`
 }
 
 type objectCatalogEntry struct {

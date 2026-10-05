@@ -226,6 +226,11 @@ export interface BackendErrorEvent {
 export interface CatalogQueryCSVExport {
     "path": string;
     "bytes": number;
+
+    /**
+     * Canceled is set when the user dismissed the save dialog; nothing was written.
+     */
+    "canceled"?: boolean;
 }
 
 export interface ClusterAuthEvent {

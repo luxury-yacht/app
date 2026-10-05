@@ -12,7 +12,7 @@ import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { DownloadIcon } from '@shared/components/icons/SharedIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { buildGridTableCsv } from '@shared/components/tables/gridTableCsv';
-import { buildExportFilename } from '@shared/utils/exportFilename';
+import { buildExportFilename, type DownloadOutcome } from '@shared/utils/exportFilename';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useGridTableExportAction } from './useGridTableExportAction';
@@ -50,13 +50,13 @@ export function useGridTableDownloadAction<T>({
     if (!buildCsv) {
       return null;
     }
-    return async () => {
+    return async (): Promise<DownloadOutcome> => {
       const csv = await buildCsv();
       if (!csv) {
-        return false;
+        return 'failed';
       }
       await writeClipboardText(csv);
-      return true;
+      return 'done';
     };
   }, [buildCsv]);
 
@@ -64,14 +64,17 @@ export function useGridTableDownloadAction<T>({
     if (!buildCsv) {
       return null;
     }
-    return async () => {
+    return async (): Promise<DownloadOutcome> => {
       const csv = await buildCsv();
       // Stamp the name at export time, after acquiring the rows.
       const result = await saveCsvFile(
         buildExportFilename(defaultFilename, new Date(), 'csv'),
         csv
       );
-      return Boolean(result?.path);
+      if (result?.canceled) {
+        return 'canceled';
+      }
+      return result?.path ? 'done' : 'failed';
     };
   }, [buildCsv, defaultFilename]);
 

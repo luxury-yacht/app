@@ -1761,6 +1761,27 @@ describe('LogViewer active pod synchronisation', () => {
     expect(writeTextMock.mock.calls[1]?.[0]).toContain('level,count,message');
   });
 
+  // Dismissing the save dialog is not a failure, so the button shows no feedback.
+  it('shows no feedback when the save dialog is dismissed', async () => {
+    saveFileMocks.SaveLogFile.mockResolvedValue({ path: '', bytes: 0, canceled: true });
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'ready',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+    ]);
+    await renderViewer();
+
+    await downloadLogs('Save to File');
+    expect(saveFileMocks.SaveLogFile).toHaveBeenCalledOnce();
+    const download = container.querySelector('button[aria-label="Download logs"]');
+    expect(download?.classList.contains('feedback-error')).toBe(false);
+    expect(download?.classList.contains('feedback-success')).toBe(false);
+  });
+
   it('keeps reserved metadata values in CSV when pod and timestamp columns are hidden', async () => {
     const scope = buildContainerLogsScope('team-a:/v1:pod:api');
     seedLogSnapshot(

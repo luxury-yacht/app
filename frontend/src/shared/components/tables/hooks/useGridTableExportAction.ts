@@ -1,3 +1,4 @@
+import type { DownloadOutcome } from '@shared/utils/exportFilename';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { reportOperationalError } from '@/utils/errorHandler';
 
@@ -29,22 +30,31 @@ export function useGridTableExportAction() {
   );
 
   const run = useCallback(
-    async (action: 'copyCsv' | 'exportCsvFile', operation: (() => Promise<boolean>) | null) => {
+    async (
+      action: 'copyCsv' | 'exportCsvFile',
+      operation: (() => Promise<DownloadOutcome>) | null
+    ) => {
       if (!operation) {
         setFeedback('error');
         scheduleReset();
         return;
       }
       setExporting(true);
+      let outcome: DownloadOutcome;
       try {
-        setFeedback((await operation()) ? 'success' : 'error');
+        outcome = await operation();
       } catch (error) {
         reportOperationalError(error, { source: 'GridTable', action });
-        setFeedback('error');
+        outcome = 'failed';
       } finally {
         setExporting(false);
-        scheduleReset();
       }
+      // A canceled save leaves the button as it was.
+      if (outcome === 'canceled') {
+        return;
+      }
+      setFeedback(outcome === 'done' ? 'success' : 'error');
+      scheduleReset();
     },
     [scheduleReset]
   );

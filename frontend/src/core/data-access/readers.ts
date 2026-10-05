@@ -118,6 +118,8 @@ export const readCatalogObjectByUID = (clusterId: string, uid: string) =>
 export interface CatalogQueryCSVExport {
   path: string;
   bytes: number;
+  /** The user dismissed the save dialog; nothing was written. */
+  canceled?: boolean;
 }
 
 /** Save a frontend-built CSV string to a user-selected file (returns the chosen path). */

@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -52,6 +53,41 @@ func TestSaveLogFileOffersALogFileAndWritesSelection(t *testing.T) {
 	contents, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, "line one\nline two", string(contents))
+}
+
+// Dismissing the save dialog is not a failure. macOS and Linux report it as an
+// empty selection; Windows as Wails' "cancelled by user" error. Either way the
+// save reports a cancel and writes nothing.
+func TestSaveExportFileReportsADismissedDialogAsCanceled(t *testing.T) {
+	dismissals := map[string]func(*application.SaveFileDialogOptions) (string, error){
+		"empty selection": func(*application.SaveFileDialogOptions) (string, error) { return "", nil },
+		"windows cancel":  func(*application.SaveFileDialogOptions) (string, error) { return "", errors.New("cancelled by user") },
+	}
+	for name, dialog := range dismissals {
+		t.Run(name, func(t *testing.T) {
+			shell := NewDesktopShell(nil, func() bool { return true }, nil, NewLogger(10))
+			shell.saveFileDialog = dialog
+
+			csv, err := shell.SaveCsvFile("pods", "name\n")
+			require.NoError(t, err)
+			require.Equal(t, CatalogQueryCSVExport{Canceled: true}, csv)
+
+			logs, err := shell.SaveLogFile("pod-logs", "line")
+			require.NoError(t, err)
+			require.Equal(t, CatalogQueryCSVExport{Canceled: true}, logs)
+		})
+	}
+}
+
+// A dialog that fails for another reason is still an error.
+func TestSaveExportFileReportsAFailedDialog(t *testing.T) {
+	shell := NewDesktopShell(nil, func() bool { return true }, nil, NewLogger(10))
+	shell.saveFileDialog = func(*application.SaveFileDialogOptions) (string, error) {
+		return "", errors.New("no window")
+	}
+
+	_, err := shell.SaveCsvFile("pods", "name\n")
+	require.ErrorContains(t, err, "no window")
 }
 
 // The atomic write must produce an owner-only file with the full content

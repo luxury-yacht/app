@@ -133,6 +133,17 @@ describe('table Download button', () => {
     expect(item.feedback).toBe('error');
   });
 
+  // Dismissing the save dialog is not a failure: no feedback, nothing reported.
+  it('treats a dismissed save dialog as nothing happened', async () => {
+    mocks.save.mockResolvedValue({ path: '', bytes: 0, canceled: true });
+    await renderAction();
+    await act(async () => choose('Save to File'));
+    expect(mocks.save).toHaveBeenCalledOnce();
+    expect(item.feedback).toBeNull();
+    expect(item.disabled).toBe(false);
+    expect(mocks.report).not.toHaveBeenCalled();
+  });
+
   it('saves with an export-time-stamped file name', async () => {
     await renderAction();
     await act(async () => choose('Save to File'));

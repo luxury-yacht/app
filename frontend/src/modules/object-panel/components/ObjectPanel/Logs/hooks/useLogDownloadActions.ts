@@ -9,7 +9,7 @@
 
 import { saveCsvFile, saveLogFile } from '@core/data-access';
 import { writeClipboardText } from '@core/desktop-runtime';
-import { buildExportFilename } from '@shared/utils/exportFilename';
+import { buildExportFilename, type DownloadOutcome } from '@shared/utils/exportFilename';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import { type Dispatch, type RefObject, useCallback, useEffect, useRef } from 'react';
 import { reportOperationalError } from '@/utils/errorHandler';
@@ -64,17 +64,22 @@ export function useLogDownloadActions({
 
   // Runs one destination's write for the built text and reports how it went.
   const download = useCallback(
-    async (action: 'copyLogs' | 'saveLogs', write: (text: string) => Promise<boolean>) => {
+    async (action: 'copyLogs' | 'saveLogs', write: (text: string) => Promise<DownloadOutcome>) => {
       const text = getText();
       if (!text) {
         showFeedback('error');
         return;
       }
+      let outcome: DownloadOutcome;
       try {
-        showFeedback((await write(text)) ? 'done' : 'error');
+        outcome = await write(text);
       } catch (error) {
         reportOperationalError(error, { source, action });
-        showFeedback('error');
+        outcome = 'failed';
+      }
+      // A canceled save leaves the button as it was.
+      if (outcome !== 'canceled') {
+        showFeedback(outcome === 'done' ? 'done' : 'error');
       }
     },
     [getText, showFeedback, source]
@@ -84,7 +89,7 @@ export function useLogDownloadActions({
     () =>
       download('copyLogs', async (text) => {
         await writeClipboardText(text);
-        return true;
+        return 'done';
       }),
     [download]
   );
@@ -95,7 +100,10 @@ export function useLogDownloadActions({
         const save = isTableView ? saveCsvFile : saveLogFile;
         const extension = isTableView ? 'csv' : 'log';
         const result = await save(buildExportFilename(fileBase, new Date(), extension), text);
-        return Boolean(result?.path);
+        if (result?.canceled) {
+          return 'canceled';
+        }
+        return result?.path ? 'done' : 'failed';
       }),
     [download, fileBase, isTableView]
   );
