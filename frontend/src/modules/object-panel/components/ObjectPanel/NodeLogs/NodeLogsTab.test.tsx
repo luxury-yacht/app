@@ -388,6 +388,7 @@ describe('NodeLogsTab', () => {
   });
 
   // As in Container Logs, the shown/total count shows only while a filter narrows the logs.
+  // Node Logs has no filter chips, so without the count the strip takes no space.
   it('shows the log count only while a text filter is applied', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       status: 'executed',
@@ -398,24 +399,17 @@ describe('NodeLogsTab', () => {
       },
     });
 
+    const strip = () => container.querySelector('[aria-label="Active log filters"]');
     await renderTab();
-    expect(
-      container.querySelector('[aria-label="Active log filters"] .logs-viewer-count')
-    ).toBeNull();
+    expect(strip()).toBeNull();
     await selectSource('kubelet');
-    expect(
-      container.querySelector('[aria-label="Active log filters"] .logs-viewer-count')
-    ).toBeNull();
+    expect(strip()).toBeNull();
 
     await filterLogsBy('error');
-    expect(
-      container.querySelector('[aria-label="Active log filters"] .logs-viewer-count')?.textContent
-    ).toBe('1/2 logs');
+    expect(strip()?.querySelector('.logs-viewer-count')?.textContent).toBe('1/2 logs');
 
     await filterLogsBy('  ');
-    expect(
-      container.querySelector('[aria-label="Active log filters"] .logs-viewer-count')
-    ).toBeNull();
+    expect(strip()).toBeNull();
   });
 
   it('clears the text filter from the filter box and shows every line again', async () => {

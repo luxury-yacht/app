@@ -2015,6 +2015,51 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).toContain('2024-05-01T11:00:00.123Z');
   });
 
+  it('shows the active-filters strip only while a chip or the log count has something to show', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'panic in worker',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'steady state',
+        timestamp: '2024-05-01T11:00:01Z',
+        isInit: false,
+      },
+    ]);
+    await renderViewer();
+    const strip = () => container.querySelector('[aria-label="Active log filters"]');
+    expect(strip()).toBeNull();
+
+    await openSearch();
+    const input = requireValue(
+      container.querySelector<HTMLInputElement>('input[placeholder="Filter"]'),
+      'expected the filter box'
+    );
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setValue?.call(input, 'panic');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await chooseFilterMode('Filtered');
+    expect(strip()?.querySelector('.logs-viewer-count')?.textContent).toBe('1/2 logs');
+
+    await act(async () => {
+      requireValue(
+        strip()?.querySelector<HTMLButtonElement>('button[aria-label="Clear all filters"]'),
+        'expected Clear all'
+      ).click();
+      await Promise.resolve();
+    });
+    expect(strip()).toBeNull();
+  });
+
   it('disables search, timestamps and wrap, and their shortcuts, until a log line arrives', async () => {
     const control = (label: string) =>
       container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);

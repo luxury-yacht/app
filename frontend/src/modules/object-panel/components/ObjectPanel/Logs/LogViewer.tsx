@@ -94,7 +94,7 @@ import {
 } from './logFilterSelection';
 import type { ParsedLogEntry } from './logOptionsReducer';
 import { isValidRegexPattern } from './logSearch';
-import { buildLogToolbarItems, LogCount } from './logToolbar';
+import { buildLogToolbarItems, renderLogCount } from './logToolbar';
 import {
   getLogViewerPrefs,
   getLogViewerScrollPosition,
@@ -1067,13 +1067,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       controls={controls}
       activeFilterChips={activeFilterChips}
       clearAllFilters={handleClearAllFilters}
-      logCount={
-        <LogCount
-          shown={filteredEntries.length}
-          total={logEntries.length}
-          filtered={hasActiveResultFilter}
-        />
-      }
+      logCount={renderLogCount(filteredEntries.length, logEntries.length, hasActiveResultFilter)}
       visibleLogWarnings={visibleLogWarnings}
       logsContentRef={logsContentRef}
       renderedLogContent={renderedLogContent}

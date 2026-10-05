@@ -44,7 +44,7 @@ keeps its own source selection and transport.
   timestamp a row shows come from the entry and never from its message text. `useRawViewFallback` returns the JSON views to raw only when lines are
   shown and none is JSON; an empty log keeps the view.
 - `logToolbar.tsx`: the icon bar, the search row (`LogSearchRow`), and the
-  log count (`LogCount`, "shown/total logs"), shown only while a filter hides
+  log count (`renderLogCount`, "shown/total logs"), shown only while a filter hides
   lines. It sits in the active-filters strip, left of Clear all; Node Logs has
   no filter chips, so its strip holds only the count.
   The icon bar's search button opens the search row below the main controls:

@@ -23,7 +23,7 @@ import {
   type ParsedLogEntry,
 } from '../Logs/logOptionsReducer';
 import { findLogOverlap } from '../Logs/logOverlap';
-import { buildLogToolbarItems, LogCount, LogSearchRow } from '../Logs/logToolbar';
+import { buildLogToolbarItems, LogSearchRow, renderLogCount } from '../Logs/logToolbar';
 import {
   getLogViewerScrollPosition,
   setLogViewerScrollPosition,
@@ -831,13 +831,7 @@ const NodeLogsTab = ({
           chips={NO_FILTER_CHIPS}
           onClearAll={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
           className="logs-viewer-active-filters"
-          summary={
-            <LogCount
-              shown={displayedLogCount}
-              total={totalLogCount}
-              filtered={textFilterHidesLines}
-            />
-          }
+          summary={renderLogCount(displayedLogCount, totalLogCount, textFilterHidesLines)}
         />
         <LogWarningBar warnings={notices.warnings} />
 

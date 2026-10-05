@@ -383,16 +383,11 @@ const LogTextFilter = ({
   </div>
 );
 
-/** How many logs are shown out of the total; only while a filter hides some. */
-export const LogCount = ({
-  shown,
-  total,
-  filtered,
-}: {
-  shown: number;
-  total: number;
-  filtered: boolean;
-}) =>
+/**
+ * How many logs are shown out of the total, while a filter hides some; otherwise
+ * null, so the active-filters strip disappears when it has no chips either.
+ */
+export const renderLogCount = (shown: number, total: number, filtered: boolean): ReactNode =>
   filtered ? (
     <span className="active-filter-chips__summary logs-viewer-count">
       {shown}/{total} logs
