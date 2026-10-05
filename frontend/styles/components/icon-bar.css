@@ -75,6 +75,44 @@
   color: var(--color-error);
 }
 
+/* Split toggle — the toggle and the caret that opens its menu read as one control */
+.icon-bar-split {
+  display: flex;
+  align-items: center;
+}
+
+.icon-bar-split .icon-bar-button {
+  border-radius: 4px 0 0 4px;
+}
+
+.icon-bar-split .icon-bar-split-caret {
+  width: 14px;
+  border-radius: 0 4px 4px 0;
+}
+
+.icon-bar-split:hover .icon-bar-button:not(:disabled),
+.icon-bar-split .icon-bar-split-caret[aria-expanded="true"] {
+  background: var(--color-bg-tertiary);
+}
+
+.icon-bar-split:hover .icon-bar-split-caret:not(:disabled),
+.icon-bar-split .icon-bar-button.active + .icon-bar-split-caret {
+  box-shadow: inset 1px 0 0 var(--color-border);
+}
+
+.icon-bar-split .icon-bar-button.active + .icon-bar-split-caret:not(:disabled) {
+  opacity: 0.7;
+  background: var(--color-bg-tertiary);
+}
+
+.icon-bar-split .icon-bar-split-caret[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.icon-bar-split .icon-bar-split-caret:focus-visible:not(:disabled) {
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
 /* Separator between button groups — invisible but preserves spacing */
 .icon-bar-separator {
   margin: 0 0.25em;

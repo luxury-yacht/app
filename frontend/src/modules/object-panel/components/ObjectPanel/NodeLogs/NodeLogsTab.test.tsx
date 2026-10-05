@@ -122,6 +122,25 @@ describe('NodeLogsTab', () => {
     });
   };
 
+  // Clicks the format button until the logs show the given format.
+  const showLogFormat = async (label: 'Pretty' | 'Table'): Promise<void> => {
+    for (let step = 0; step < 3; step += 1) {
+      const button = requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label^="Log format:"]'),
+        'expected the format button'
+      );
+      if (button.getAttribute('aria-label') === `Log format: ${label}`) {
+        return;
+      }
+      await act(async () => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    }
+    throw new Error(`format ${label} was not reached`);
+  };
+
   const selectSource = async (label: string): Promise<void> => {
     const trigger = container.querySelector('button[aria-label="Node log source"]');
     await act(async () => {
@@ -540,17 +559,7 @@ describe('NodeLogsTab', () => {
     await renderTab();
     await selectSource('kubelet');
 
-    const prettyButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Show pretty JSON"]'
-    );
-    expect(prettyButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(prettyButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await showLogFormat('Pretty');
 
     const logLines = Array.from(container.querySelectorAll('.log-viewer-line')).map(
       (element) => element.textContent
@@ -573,18 +582,7 @@ describe('NodeLogsTab', () => {
     await renderTab();
     await selectSource('kubelet');
 
-    const parsedButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Parse the JSON into a table"]'
-    );
-    expect(parsedButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(parsedButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await showLogFormat('Table');
 
     expect(container.querySelector('.parsed-logs-table')).toBeTruthy();
     expect(container.textContent).toContain('level');
@@ -610,12 +608,7 @@ describe('NodeLogsTab', () => {
     });
     await renderTab();
     await selectSource('kubelet');
-    await act(async () => {
-      requireValue(
-        container.querySelector('button[aria-label="Parse the JSON into a table"]'),
-        'parse control'
-      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    await showLogFormat('Table');
     await act(async () => {
       requireValue(
         container.querySelector('button[aria-label="Copy to clipboard"]'),
@@ -640,18 +633,7 @@ describe('NodeLogsTab', () => {
     await renderTab();
     await selectSource('kubelet');
 
-    const parsedButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Parse the JSON into a table"]'
-    );
-    expect(parsedButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(parsedButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await showLogFormat('Table');
 
     const row = container.querySelector<HTMLElement>('.parsed-logs-table .gridtable-row');
     expect(row).toBeTruthy();

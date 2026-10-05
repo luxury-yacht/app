@@ -44,8 +44,14 @@ keeps its own source selection and transport.
 - `logToolbar.tsx`: the text filter box (`LogTextFilter`), the icon bar, and
   the match count (`LogMatchCount`), shown only while a filter narrows the logs.
   Timestamps and previous logs are optional icon bar features; Node Logs
-  passes neither. The log settings both viewers share (buffer size, container
-  limits, API timestamps) live in Settings → Logs, not in the Logs tab.
+  passes neither. The timestamps button is a split toggle: the icon shows or
+  hides timestamps, and its caret menu picks UTC or local time. The time zone
+  is the app-wide Settings → Logs setting, so a choice applies to every Logs
+  tab; picking a zone also shows timestamps. When the logs contain JSON, the
+  format button cycles Raw → Pretty → Table on click, and its caret menu picks
+  one directly; `J` and `P` still toggle Pretty and Table. The other log settings both
+  viewers share (buffer size, container limits, timestamp format) live only in
+  Settings → Logs.
 - `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts. `T` (timestamps) and
   `V` (previous logs) exist only when the viewer passes those features.
 - `hooks/useLogCopyAction.ts`: the copy action and selection copy; clipboard

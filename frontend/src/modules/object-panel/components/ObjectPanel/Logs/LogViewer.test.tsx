@@ -31,6 +31,7 @@ import type {
   ContainerLogsWarning,
 } from '@/core/refresh/types';
 import {
+  getObjPanelLogsApiTimestampUseLocalTimeZone,
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
@@ -492,6 +493,24 @@ describe('LogViewer active pod synchronisation', () => {
     });
   };
 
+  // Clicks the format button until the logs show the given format.
+  const showLogFormat = async (label: 'Pretty' | 'Table') => {
+    for (let step = 0; step < 3; step += 1) {
+      const button = requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label^="Log format:"]'),
+        'expected the format button'
+      );
+      if (button.getAttribute('aria-label') === `Log format: ${label}`) {
+        return;
+      }
+      await act(async () => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    }
+    throw new Error(`format ${label} was not reached`);
+  };
+
   const getLatestShortcut = (key: string) => {
     for (let i = shortcutMocks.useShortcut.mock.calls.length - 1; i >= 0; i -= 1) {
       const config = shortcutMocks.useShortcut.mock.calls[i][0] as { key: string };
@@ -755,11 +774,7 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
 
-    expect(
-      container
-        .querySelector<HTMLButtonElement>('button[aria-label="Show pretty JSON"]')
-        ?.getAttribute('aria-pressed')
-    ).toBe('true');
+    expect(container.querySelector('button[aria-label="Log format: Pretty"]')).not.toBeNull();
   });
 
   it('disables handlers when the tab is inactive', async () => {
@@ -1558,7 +1573,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.querySelector('[data-testid="gridtable-parsed-logs"]')).toBeFalsy();
   });
 
-  it('switches between raw, pretty JSON, and parsed output modes from the icon bar', async () => {
+  it('cycles raw, pretty JSON, and table output from the format button and its menu', async () => {
     seedLogSnapshot([
       {
         pod: 'web-1',
@@ -1571,42 +1586,49 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer();
 
-    const prettyButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Show pretty JSON"]'
-    );
-    const parsedButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Parse the JSON into a table"]'
-    );
-    expect(prettyButton).toBeTruthy();
-    expect(parsedButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(prettyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
+    const formatButton = () =>
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label^="Log format:"]'),
+        'expected the format button'
       );
-      await Promise.resolve();
-    });
-    expect(prettyButton?.getAttribute('aria-pressed')).toBe('true');
+    const click = (element: Element) =>
+      act(async () => {
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    const parsedTable = () => container.querySelector('[data-testid="gridtable-parsed-logs"]');
+
+    expect(formatButton().getAttribute('aria-label')).toBe('Log format: Raw');
+
+    await click(formatButton());
+    expect(formatButton().getAttribute('aria-label')).toBe('Log format: Pretty');
     expect(container.textContent).toContain('"nested": {');
 
-    await act(async () => {
-      requireValue(parsedButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-    expect(prettyButton?.getAttribute('aria-pressed')).toBe('false');
-    expect(parsedButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(container.querySelector('[data-testid="gridtable-parsed-logs"]')).toBeTruthy();
+    await click(formatButton());
+    expect(formatButton().getAttribute('aria-label')).toBe('Log format: Table');
+    expect(parsedTable()).toBeTruthy();
 
-    await act(async () => {
-      requireValue(parsedButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-    expect(parsedButton?.getAttribute('aria-pressed')).toBe('false');
-    expect(container.querySelector('[data-testid="gridtable-parsed-logs"]')).toBeFalsy();
+    await click(formatButton());
+    expect(formatButton().getAttribute('aria-label')).toBe('Log format: Raw');
+    expect(parsedTable()).toBeFalsy();
+    expect(container.textContent).not.toContain('"nested": {');
+
+    // The menu offers every format, marks the current one, and jumps straight to a pick.
+    await click(
+      requireValue(
+        container.querySelector('button[aria-label="Choose log format"]'),
+        'expected the format menu button'
+      )
+    );
+    const choices = Array.from(document.body.querySelectorAll('[role="menuitemradio"]'));
+    expect(choices.map((item) => [item.textContent, item.getAttribute('aria-checked')])).toEqual([
+      ['Raw', 'true'],
+      ['Pretty', 'false'],
+      ['Table', 'false'],
+    ]);
+    await click(requireValue(choices[2], 'expected the Table choice'));
+    expect(formatButton().getAttribute('aria-label')).toBe('Log format: Table');
+    expect(parsedTable()).toBeTruthy();
   });
 
   it('hides pretty JSON and parsed JSON buttons when logs are not parseable', async () => {
@@ -1622,8 +1644,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer();
 
-    expect(container.querySelector('button[aria-label="Show pretty JSON"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="Parse the JSON into a table"]')).toBeNull();
+    expect(container.querySelector('button[aria-label^="Log format:"]')).toBeNull();
   });
 
   it('copies parsed logs as CSV using the visible parsed columns', async () => {
@@ -1639,21 +1660,12 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer();
 
-    const parsedButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Parse the JSON into a table"]'
-    );
     const copyButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Copy to clipboard"]'
     );
-    expect(parsedButton).toBeTruthy();
     expect(copyButton).toBeTruthy();
 
-    await act(async () => {
-      requireValue(parsedButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await showLogFormat('Table');
 
     await act(async () => {
       requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
@@ -1686,19 +1698,17 @@ describe('LogViewer active pod synchronisation', () => {
     );
     await renderViewer({ resourceKind: 'pod', containerLogsScope: scope });
 
-    for (const label of [
-      'Show timestamps from the Kubernetes API',
-      'Parse the JSON into a table',
-      'Copy to clipboard',
-    ]) {
-      await act(async () => {
+    const clickControl = (label: string) =>
+      act(async () => {
         requireValue(
           container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`),
           `expected ${label} control`
         ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
         await Promise.resolve();
       });
-    }
+    await clickControl('Show timestamps from the Kubernetes API');
+    await showLogFormat('Table');
+    await clickControl('Copy to clipboard');
 
     expect(writeTextMock).toHaveBeenCalledWith('Container,_pod,_timestamp\napp,-,');
   });
@@ -1797,11 +1807,7 @@ describe('LogViewer active pod synchronisation', () => {
     const copyButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Copy to clipboard"]'
     );
-    const parsedButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Parse the JSON into a table"]'
-    );
     expect(copyButton).toBeTruthy();
-    expect(parsedButton).toBeTruthy();
 
     await act(async () => {
       requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
@@ -1813,12 +1819,7 @@ describe('LogViewer active pod synchronisation', () => {
       '[11:00:00.123] [web-1/app] {"level":"info","message":"hello"}'
     );
 
-    await act(async () => {
-      requireValue(parsedButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await showLogFormat('Table');
     await act(async () => {
       requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
         new MouseEvent('click', { bubbles: true })
@@ -1903,6 +1904,56 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
     expect(timestampButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.textContent).toContain('2024-05-01T11:00:00.123Z');
+  });
+
+  it('applies a time zone picked from the timestamp menu app-wide and shows timestamps', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'hello world',
+        timestamp: '2024-05-01T11:00:00.123Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer();
+
+    const timestampButton = requireValue(
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show timestamps from the Kubernetes API"]'
+      ),
+      'expected the timestamp toggle'
+    );
+    const zoneButton = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Timestamp time zone"]'),
+      'expected the time zone menu button'
+    );
+    const click = (element: Element) =>
+      act(async () => {
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    const pickZone = async (label: RegExp) => {
+      await click(zoneButton);
+      const choice = Array.from(document.body.querySelectorAll('[role="menuitemradio"]')).find(
+        (item) => label.test(item.textContent ?? '')
+      );
+      await click(requireValue(choice, `expected the ${label} choice`));
+    };
+
+    // Picking a zone while timestamps are hidden shows them again.
+    await click(timestampButton);
+    expect(container.textContent).not.toContain('2024-05-01T11:00:00.123Z');
+
+    await pickZone(/^Local/);
+    expect(getObjPanelLogsApiTimestampUseLocalTimeZone()).toBe(true);
+    expect(timestampButton.getAttribute('aria-pressed')).toBe('true');
+    expect(container.textContent).toMatch(/\d{4}-\d\d-\d\dT\d\d:\d\d:00\.123[+-]\d\d:\d\d/);
+
+    await pickZone(/^UTC$/);
+    expect(getObjPanelLogsApiTimestampUseLocalTimeZone()).toBe(false);
     expect(container.textContent).toContain('2024-05-01T11:00:00.123Z');
   });
 

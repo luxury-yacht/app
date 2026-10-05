@@ -183,6 +183,25 @@ export const PrettyJsonIcon: React.FC<IconProps> = ({
   </svg>
 );
 
+/** Flush-left lines — raw, unformatted log text */
+export const RawLogIcon: React.FC<IconProps> = ({
+  width = 24,
+  height = 24,
+  fill = 'currentColor',
+}) => (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 16 16"
+    width={width}
+    height={height}
+    fill={fill}
+  >
+    <path d="M1.75 2.5a.75.75 0 0 0 0 1.5h11.5a.75.75 0 0 0 0-1.5zm0 3a.75.75 0 0 0 0 1.5h8a.75.75 0 0 0 0-1.5zm0 3a.75.75 0 0 0 0 1.5h12a.75.75 0 0 0 0-1.5zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5z" />
+  </svg>
+);
+
 /** Clipboard — copy to clipboard */
 export const CopyIcon: React.FC<IconProps> = ({
   width = 24,

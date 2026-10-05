@@ -38,6 +38,7 @@ import type {
 import {
   getObjPanelLogsApiTimestampFormat,
   getObjPanelLogsApiTimestampUseLocalTimeZone,
+  setObjPanelLogsApiTimestampUseLocalTimeZone,
 } from '@/core/settings/appPreferences';
 import { INACTIVE_SCOPE } from '../constants';
 import { containsAnsi } from './ansi';
@@ -986,6 +987,16 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     () => dispatch({ type: 'SET_TIMESTAMP_MODE', payload: showTimestamps ? 'hidden' : 'default' }),
     [showTimestamps]
   );
+  // The zone is the app-wide setting. Picking one also shows timestamps.
+  const chooseTimeZone = useCallback(
+    (useLocalTimeZone: boolean) => {
+      setObjPanelLogsApiTimestampUseLocalTimeZone(useLocalTimeZone);
+      if (!showTimestamps) {
+        dispatch({ type: 'SET_TIMESTAMP_MODE', payload: 'default' });
+      }
+    },
+    [showTimestamps]
+  );
   const previousLogsFeature = supportsPreviousContainerLogs
     ? { active: showPreviousContainerLogs, toggle: handleTogglePreviousContainerLogs }
     : undefined;
@@ -1036,7 +1047,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     hasCopyableContent,
     copyLogs: handleCopyContainerLogs,
     previousLogs: previousLogsFeature,
-    timestamps: { active: showTimestamps, toggle: toggleTimestamps },
+    timestamps: {
+      active: showTimestamps,
+      toggle: toggleTimestamps,
+      useLocalTimeZone: apiTimestampUseLocalTimeZone,
+      chooseTimeZone,
+    },
   });
   const controls = (
     <LogViewerControls

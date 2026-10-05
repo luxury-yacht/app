@@ -16,15 +16,23 @@ import {
   ParseJsonIcon,
   PrettyJsonIcon,
   PreviousLogsIcon,
+  RawLogIcon,
   RegexSearchIcon,
   TimestampIcon,
   WrapTextIcon,
 } from '@shared/components/icons/LogIcons';
 import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
-import type { Dispatch, RefObject } from 'react';
+import type { Dispatch, ReactNode, RefObject } from 'react';
+import type { LogDisplayMode } from '../types';
 import type { CopyFeedback, LogOptionsAction, LogOptionsState } from './logOptionsReducer';
 
 type ToggleFeature = { active: boolean; toggle: () => void };
+
+// The time zone is the app-wide Logs setting; the viewer applies the choice.
+type TimestampsFeature = ToggleFeature & {
+  useLocalTimeZone: boolean;
+  chooseTimeZone: (useLocalTimeZone: boolean) => void;
+};
 
 export type LogToolbarOptions = {
   options: LogOptionsState;
@@ -34,7 +42,7 @@ export type LogToolbarOptions = {
   hasCopyableContent: boolean;
   copyLogs: () => void;
   previousLogs?: ToggleFeature;
-  timestamps?: ToggleFeature;
+  timestamps?: TimestampsFeature;
 };
 
 const copyIconFeedback = (feedback: CopyFeedback): 'success' | 'error' | null => {
@@ -100,16 +108,66 @@ const sourceItems = ({ previousLogs, timestamps }: LogToolbarOptions): IconBarIt
   }
   if (timestamps) {
     items.push({
-      type: 'toggle',
+      type: 'split',
+      behavior: 'toggle',
       id: 'apiTimestamps',
       icon: <TimestampIcon width={18} height={18} />,
       active: timestamps.active,
       onClick: timestamps.toggle,
       title: 'Show timestamps from the Kubernetes API (T)',
       ariaLabel: 'Show timestamps from the Kubernetes API',
+      menuLabel: 'Timestamp time zone',
+      menuItems: [
+        { header: true, label: 'Time zone' },
+        {
+          label: 'UTC',
+          checked: !timestamps.useLocalTimeZone,
+          onClick: () => timestamps.chooseTimeZone(false),
+        },
+        {
+          label: `Local (${Intl.DateTimeFormat().resolvedOptions().timeZone})`,
+          checked: timestamps.useLocalTimeZone,
+          onClick: () => timestamps.chooseTimeZone(true),
+        },
+      ],
     });
   }
   return items;
+};
+
+// Clicking the format button steps through these in order; its menu picks one.
+const LOG_FORMATS: { mode: LogDisplayMode; label: string; icon: ReactNode }[] = [
+  { mode: 'raw', label: 'Raw', icon: <RawLogIcon width={18} height={18} /> },
+  { mode: 'pretty', label: 'Pretty', icon: <PrettyJsonIcon width={18} height={18} /> },
+  { mode: 'parsed', label: 'Table', icon: <ParseJsonIcon width={16} height={16} /> },
+];
+
+const logFormatItem = (
+  displayMode: LogDisplayMode,
+  dispatch: Dispatch<LogOptionsAction>
+): IconBarItem => {
+  const index = LOG_FORMATS.findIndex((format) => format.mode === displayMode);
+  const current = LOG_FORMATS[Math.max(index, 0)];
+  const next = LOG_FORMATS[(index + 1) % LOG_FORMATS.length];
+  return {
+    type: 'split',
+    behavior: 'cycle',
+    id: 'logFormat',
+    icon: current.icon,
+    active: displayMode !== 'raw',
+    onClick: () => dispatch({ type: 'SET_DISPLAY_MODE', payload: next.mode }),
+    title: `Log format: ${current.label} - click for ${next.label} (J pretty, P table)`,
+    ariaLabel: `Log format: ${current.label}`,
+    menuLabel: 'Choose log format',
+    menuItems: [
+      { header: true, label: 'Format' },
+      ...LOG_FORMATS.map((format) => ({
+        label: format.label,
+        checked: format.mode === displayMode,
+        onClick: () => dispatch({ type: 'SET_DISPLAY_MODE', payload: format.mode }),
+      })),
+    ],
+  };
 };
 
 const displayItems = ({
@@ -144,31 +202,7 @@ const displayItems = ({
     });
   }
   if (canParseLogs) {
-    items.push(
-      {
-        type: 'toggle',
-        id: 'prettyJson',
-        icon: <PrettyJsonIcon width={18} height={18} />,
-        active: options.displayMode === 'pretty',
-        onClick: () =>
-          dispatch({
-            type: 'SET_DISPLAY_MODE',
-            payload: options.displayMode === 'pretty' ? 'raw' : 'pretty',
-          }),
-        title: 'Show pretty JSON (J)',
-        ariaLabel: 'Show pretty JSON',
-      },
-      {
-        type: 'toggle',
-        id: 'parsedJson',
-        icon: <ParseJsonIcon width={16} height={16} />,
-        active: isParsedView,
-        onClick: () =>
-          dispatch({ type: 'SET_DISPLAY_MODE', payload: isParsedView ? 'raw' : 'parsed' }),
-        title: 'Parse the JSON into a table (P)',
-        ariaLabel: 'Parse the JSON into a table',
-      }
-    );
+    items.push(logFormatItem(options.displayMode, dispatch));
   }
   return items;
 };
