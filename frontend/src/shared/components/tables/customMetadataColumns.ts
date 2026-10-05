@@ -23,6 +23,17 @@ export interface CustomMetadataColumnRow {
   annotations?: Record<string, string>;
 }
 
+/** A row's labels and annotations: in `metadata` for most resources, on the row itself for nodes. */
+export const rowMetadataMaps = (
+  row: unknown
+): { labels?: Record<string, string>; annotations?: Record<string, string> } => {
+  const metadataRow = row as CustomMetadataColumnRow;
+  return {
+    labels: metadataRow.metadata?.labels ?? metadataRow.labels,
+    annotations: metadataRow.metadata?.annotations ?? metadataRow.annotations,
+  };
+};
+
 interface CreateCustomMetadataColumnDefinitionInput {
   source: CustomMetadataColumnSource;
   metadataKey: string;
@@ -102,9 +113,9 @@ export const collectAvailableCustomMetadataKeys = <T>(rows: T[]): AvailableCusto
   };
 
   for (const row of rows) {
-    const metadataRow = row as CustomMetadataColumnRow;
-    collectMap('label', metadataRow.metadata?.labels ?? metadataRow.labels);
-    collectMap('annotation', metadataRow.metadata?.annotations ?? metadataRow.annotations);
+    const { labels, annotations } = rowMetadataMaps(row);
+    collectMap('label', labels);
+    collectMap('annotation', annotations);
   }
 
   return (['label', 'annotation'] as const).flatMap((source) =>
@@ -122,13 +133,8 @@ export const buildCustomMetadataGridColumns = <T>(
       definition.key,
       definition.header,
       (row) => {
-        const metadataRow = row as CustomMetadataColumnRow;
-        const metadataMaps = metadataRow.metadata;
-        const values =
-          definition.source === 'label'
-            ? (metadataMaps?.labels ?? metadataRow.labels)
-            : (metadataMaps?.annotations ?? metadataRow.annotations);
-        return values?.[definition.metadataKey];
+        const { labels, annotations } = rowMetadataMaps(row);
+        return (definition.source === 'label' ? labels : annotations)?.[definition.metadataKey];
       },
       { sortable: false, autoWidth: true }
     )

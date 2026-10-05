@@ -338,7 +338,6 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   filterAccessors,
   leadingFilterActions = [],
   filterOptionOverrides,
-  metadataSearch,
   onTableStateChange,
   rowIdentity,
   keyExtractor,
@@ -441,33 +440,13 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     persistenceHydrated,
   ]);
 
-  const useMetadata = Boolean(metadataSearch);
-  const getDefaultMetadataSearchValues = useCallback(
-    (row: T) => metadataSearch?.getDefaultValues(row) ?? [],
-    [metadataSearch]
-  );
-  const getMetadataSearchMaps = useCallback(
-    (row: T) => metadataSearch?.getMetadataMaps(row) ?? [],
-    [metadataSearch]
-  );
-  const metadata = useMetadataSearch<T>({
-    enabled: useMetadata,
-    getDefaultValues: getDefaultMetadataSearchValues,
-    getMetadataMaps: getMetadataSearchMaps,
+  // Rows that carry labels and annotations (the data behind custom metadata
+  // columns) can include them in the search.
+  const metadataToggle = useMetadataSearch({
+    enabled: supportsCustomMetadataColumns,
     filters: persistence.filters,
     onFiltersChange: persistence.setFilters,
   });
-  const metadataToggle = useMetadata ? metadata.metadataToggle : null;
-  const effectiveFilterAccessors = useMemo<GridTableFilterConfig<T>['accessors']>(
-    () =>
-      useMetadata
-        ? {
-            ...filterAccessors,
-            getSearchText: metadata.getSearchText,
-          }
-        : filterAccessors,
-    [filterAccessors, metadata.getSearchText, useMetadata]
-  );
 
   const favoriteFilterOptions = useMemo(
     () => ({
@@ -523,7 +502,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     () => ({
       enabled: true,
       value: filterValue,
-      accessors: effectiveFilterAccessors,
+      accessors: filterAccessors,
       onChange: handleFiltersChange,
       onReset: persistence.resetState,
       options: {
@@ -535,7 +514,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
       },
     }),
     [
-      effectiveFilterAccessors,
+      filterAccessors,
       filterValue,
       handleFiltersChange,
       favoriteFilterOptions,

@@ -119,6 +119,7 @@ vi.mock('@shared/components/icons/SharedIcons', () => ({
   OpenIcon: () => <span>open</span>,
   ObjectMapIcon: () => <span>map</span>,
   DeleteIcon: () => <span>delete</span>,
+  MetadataIcon: () => <span>metadata</span>,
 }));
 
 vi.mock('@/core/capabilities', () => ({

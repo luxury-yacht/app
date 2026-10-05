@@ -86,7 +86,6 @@ export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   filterOptions?: GridTableFilterPersistenceOptions;
   pageSizeOptions?: readonly number[];
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
-  metadataSearch?: ResourceGridMetadataSearchParams<T>;
   onTableStateChange?: (state: {
     filters: GridTableFilterState;
     sortConfig: SortConfig | null;
@@ -101,11 +100,6 @@ export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   showFavoriteToggle?: boolean;
   /** Named route-level favorite pane; omitted for ordinary one-table views. */
   favoritePane?: { id: string; label: string };
-}
-
-export interface ResourceGridMetadataSearchParams<T extends ResourceGridTableRow> {
-  getDefaultValues: (row: T) => string[];
-  getMetadataMaps: (row: T) => (Record<string, string> | undefined)[];
 }
 
 export interface ClusterResourceGridTableParams<T extends ResourceGridTableRow>

@@ -1184,9 +1184,10 @@ func attentionResourceKey(row AttentionFinding) string {
 
 func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 	return typedTableQueryAdapter[AttentionFinding]{
-		Key:       func(row AttentionFinding) string { return attentionRefKey(row.Ref) },
-		Namespace: func(row AttentionFinding) string { return row.Namespace },
-		Kind:      func(row AttentionFinding) string { return row.Ref.Kind },
+		MetadataText: func(row AttentionFinding) []string { return tableMetadataSearchText(row.Metadata) },
+		Key:          func(row AttentionFinding) string { return attentionRefKey(row.Ref) },
+		Namespace:    func(row AttentionFinding) string { return row.Namespace },
+		Kind:         func(row AttentionFinding) string { return row.Ref.Kind },
 		Facets: []typedTableQueryFacet[AttentionFinding]{
 			{
 				Descriptor: ResourceQueryFacetDescriptor{Key: "severities", Label: "Severity", Placeholder: "All severities", BulkActions: true},

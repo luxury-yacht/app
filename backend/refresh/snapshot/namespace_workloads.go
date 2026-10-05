@@ -500,6 +500,7 @@ func workloadsQuerypageSchema() querypage.Schema[WorkloadSummary] {
 
 func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 	return typedTableQueryAdapter[WorkloadSummary]{
+		MetadataText: func(row WorkloadSummary) []string { return tableMetadataSearchText(row.Metadata) },
 		Key: func(row WorkloadSummary) string {
 			return fmt.Sprintf("%s/%s/%s", strings.ToLower(row.Ref.Kind), strings.ToLower(row.Ref.Namespace), strings.ToLower(row.Ref.Name))
 		},

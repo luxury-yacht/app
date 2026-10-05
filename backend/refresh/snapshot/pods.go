@@ -431,6 +431,7 @@ func overlayPodMetrics(rows []PodSummary, podUsage map[string]metrics.PodUsage) 
 
 func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 	return typedTableQueryAdapter[PodSummary]{
+		MetadataText: func(row PodSummary) []string { return tableMetadataSearchText(row.Metadata) },
 		Key: func(pod PodSummary) string {
 			return fmt.Sprintf("%s/%s", strings.ToLower(pod.Ref.Namespace), strings.ToLower(pod.Ref.Name))
 		},

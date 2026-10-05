@@ -283,13 +283,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
     columns: tableColumns,
     keyExtractor,
     showKindDropdown: false,
-    // Restores the "Include metadata" search toggle: the default search is name/kind,
-    // and toggling metadata also matches labels/annotations. For this query-backed view
-    // the match runs server-side (the toggle sets `includeMetadata` in the query scope).
-    metadataSearch: {
-      getDefaultValues: (row) => [row.ref.name, row.ref.kind],
-      getMetadataMaps: (row) => [row.labels, row.annotations],
-    },
     diagnosticsLabel: 'Cluster Nodes',
     filterOptions: { isNamespaceScoped: false },
   });

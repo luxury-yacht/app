@@ -1,5 +1,6 @@
 ### Added
 
+- The Include metadata search toggle, which also matches labels and annotations, is available on every table whose rows have them, not just Nodes.
 
 ### Changed
 

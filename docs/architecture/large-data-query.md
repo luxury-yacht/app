@@ -57,11 +57,15 @@ are no separate metric-domain query contracts; the payload's `metrics` block
 carries the poller freshness/error metadata
 (see [`resource-metrics.md`](resource-metrics.md)).
 
-Metadata label/annotation search is not implicitly global for query-backed
-typed tables. A typed table may expose metadata search globally only after that
-metadata is indexed by the backend query implementation. Until then, metadata
-search remains Local Complete-only, or the large-scope table must show an
-explicit degraded/disabled state.
+Metadata label/annotation search for query-backed typed tables runs in the
+backend query: an adapter whose rows carry labels and annotations supplies
+`MetadataText`, which is matched only when the request sets `includeMetadata`,
+and the cursor and store keys include that flag. A new typed table whose rows
+carry metadata must supply it. The frontend offers the Include metadata toggle
+on every table whose rows carry labels and annotations
+(`supportsCustomMetadataColumns`); local tables match them in the filter
+engine. Catalog-backed tables (Browse and custom resources) do not support
+metadata search yet, so they do not offer the toggle.
 
 Metric sorts run server-side on the joined usage values through the same
 keyset cursor as every other sort (`usageSortValue` over the exact millicore
