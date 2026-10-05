@@ -118,7 +118,6 @@ describe('GridTableFiltersBar', () => {
               kinds: { mode: 'all' },
               namespaces: { mode: 'all' },
               clusters: { mode: 'all' },
-              caseSensitive: false,
               includeMetadata: false,
             }}
             resolvedFilterOptions={{
@@ -146,7 +145,6 @@ describe('GridTableFiltersBar', () => {
             onFiltersChange={vi.fn()}
             onSearchChange={vi.fn()}
             onReset={vi.fn()}
-            onToggleCaseSensitive={vi.fn()}
             renderOption={(option) => option.label}
             {...props}
           />
@@ -169,7 +167,6 @@ describe('GridTableFiltersBar', () => {
         kinds: { mode: 'all' },
         namespaces: { mode: 'all' },
         clusters: { mode: 'all' },
-        caseSensitive: false,
         includeMetadata: false,
       },
       onKindsChange,
@@ -234,7 +231,6 @@ describe('GridTableFiltersBar', () => {
           kinds: { mode: 'all' },
           namespaces: { mode: 'all' },
           clusters: mode === 'some' ? { mode, values } : { mode },
-          caseSensitive: false,
           includeMetadata: false,
         },
         resolvedFilterOptions: {
@@ -261,7 +257,6 @@ describe('GridTableFiltersBar', () => {
         namespaces: { mode: 'all' },
         clusters: { mode: 'all' },
         queryFacets: { apiGroups: { mode: 'some', values: ['apps'] } },
-        caseSensitive: false,
         includeMetadata: false,
       },
       resolvedFilterOptions: {
@@ -306,7 +301,6 @@ describe('GridTableFiltersBar', () => {
         kinds: { mode: 'some', values: ['Pod', 'Kind no longer available'] },
         namespaces: { mode: 'none' },
         clusters: { mode: 'all' },
-        caseSensitive: false,
         includeMetadata: false,
       },
       onFiltersChange,
@@ -338,7 +332,6 @@ describe('GridTableFiltersBar', () => {
           status: { mode: 'some', values: ['Running', 'Pending'] },
           owner: { mode: 'none' },
         },
-        caseSensitive: false,
         includeMetadata: false,
       },
       resolvedFilterOptions: {
@@ -389,7 +382,6 @@ describe('GridTableFiltersBar', () => {
         kinds: { mode: 'all' },
         namespaces: { mode: 'all' },
         clusters: { mode: 'all' },
-        caseSensitive: true,
         includeMetadata: true,
       },
       onFiltersChange,
@@ -398,7 +390,6 @@ describe('GridTableFiltersBar', () => {
 
     const chips = container.querySelector('[aria-label="Active GridTable filters"]');
     expect(chips?.textContent).toContain('Text: web');
-    expect(chips?.textContent).toContain('Match case');
     expect(chips?.textContent).toContain('Include metadata');
 
     await act(async () => {
@@ -449,7 +440,6 @@ describe('GridTableFiltersBar', () => {
               kinds: { mode: 'all' },
               namespaces: { mode: 'all' },
               clusters: { mode: 'all' },
-              caseSensitive: false,
               includeMetadata: false,
             }}
             resolvedFilterOptions={{
@@ -467,7 +457,6 @@ describe('GridTableFiltersBar', () => {
             onFiltersChange={vi.fn()}
             onSearchChange={setSearch}
             onReset={vi.fn()}
-            onToggleCaseSensitive={vi.fn()}
             renderOption={(option) => option.label}
           />
         </ZoomProvider>
@@ -508,17 +497,17 @@ describe('GridTableFiltersBar', () => {
     expect(finalInput?.value).toBe('po');
   });
 
-  it('hides the case-sensitive toggle for query-backed search', async () => {
-    await renderFilters({
-      resolvedFilterOptions: {
-        kinds: [],
-        namespaces: [],
-        searchBehavior: 'query',
-      },
-    });
+  // Search ignores letter case on every table, so no table offers Match case.
+  it.each(['local', 'query'] as const)(
+    'offers no Match case toggle for %s search',
+    async (searchBehavior) => {
+      await renderFilters({
+        resolvedFilterOptions: { kinds: [], namespaces: [], searchBehavior },
+      });
 
-    expect(container.querySelector('.icon-bar-button[title="Match case"]')).toBeNull();
-  });
+      expect(container.querySelector('.icon-bar-button[title="Match case"]')).toBeNull();
+    }
+  );
 
   it('marks approximate backend totals with visible copy', async () => {
     vi.useFakeTimers();
@@ -528,7 +517,6 @@ describe('GridTableFiltersBar', () => {
         kinds: { mode: 'all' },
         namespaces: { mode: 'all' },
         clusters: { mode: 'all' },
-        caseSensitive: false,
         includeMetadata: false,
       },
       resolvedFilterOptions: {
@@ -566,7 +554,6 @@ describe('GridTableFiltersBar', () => {
         kinds: { mode: 'all' },
         namespaces: { mode: 'all' },
         clusters: { mode: 'all' },
-        caseSensitive: false,
         includeMetadata: false,
       },
       resolvedFilterOptions: {
@@ -603,7 +590,6 @@ describe('GridTableFiltersBar', () => {
         kinds: { mode: 'all' },
         namespaces: { mode: 'all' },
         clusters: { mode: 'all' },
-        caseSensitive: false,
         includeMetadata: false,
       },
       resultCount: { filtered: 12, unfiltered: 100 },
@@ -635,7 +621,6 @@ describe('GridTableFiltersBar', () => {
         kinds: { mode: 'all' },
         namespaces: { mode: 'all' },
         clusters: { mode: 'all' },
-        caseSensitive: false,
         includeMetadata: false,
       },
       resultCount: {

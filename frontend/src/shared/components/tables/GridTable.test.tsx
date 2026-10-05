@@ -998,7 +998,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     };
 
@@ -1049,7 +1048,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     });
 
@@ -1074,7 +1072,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     });
 
@@ -1090,7 +1087,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     };
 
@@ -1147,7 +1143,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     };
 
@@ -1231,7 +1226,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'some', values: ['Pod', 'Deployment'] },
       namespaces: { mode: 'some', values: ['team-a', 'team-b', 'team-c'] },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     };
 
@@ -1271,7 +1265,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     };
     await act(async () => {
@@ -1714,7 +1707,6 @@ it('keeps local pagination on the first page after a filter is applied and remov
     kinds: { mode: 'all' },
     namespaces: { mode: 'all' },
     clusters: { mode: 'all' },
-    caseSensitive: false,
     includeMetadata: false,
   };
   const filters = (): GridTableFilterConfig<SimpleRow> => ({

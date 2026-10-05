@@ -477,8 +477,8 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     availableFilterNamespaces: showNamespaceFilters ? availableFilterNamespaces : undefined,
     filterOptions: favoriteFilterOptions,
   });
-  // One icon bar: the search options, the view's own icons, then Favorite. The filter
-  // bar puts Match case first and Download after a separator.
+  // One icon bar: Include metadata, the view's own icons, then Favorite. The filter
+  // bar puts Download after a separator.
   const filterPreActions = useMemo(
     () => [
       ...(metadataToggle ? [metadataToggle] : []),

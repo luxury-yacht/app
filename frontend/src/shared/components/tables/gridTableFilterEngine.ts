@@ -263,8 +263,7 @@ const matchesRowSearch = <T>(
     if (typeof candidate !== 'string') {
       return false;
     }
-    const comparable = matcher.activeFilters.caseSensitive ? candidate : candidate.toLowerCase();
-    return comparable.includes(matcher.searchNeedle);
+    return candidate.toLowerCase().includes(matcher.searchNeedle);
   });
 };
 
@@ -327,9 +326,8 @@ export function applyGridTableFilters<T>({
     return [];
   }
 
-  const searchNeedle = activeFilters.caseSensitive
-    ? activeFilters.search.trim()
-    : activeFilters.search.trim().toLowerCase();
+  // Search ignores letter case.
+  const searchNeedle = activeFilters.search.trim().toLowerCase();
   const kindSet = new Set(
     activeFilters.kinds.mode === 'some'
       ? activeFilters.kinds.values.map((value) => value.toLowerCase())

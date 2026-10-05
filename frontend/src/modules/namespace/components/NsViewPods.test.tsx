@@ -79,7 +79,6 @@ const {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     } as GridTableFilterState,
   },
@@ -363,7 +362,6 @@ describe('NsViewPods', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     };
     useTableSortMock.mockReset();
@@ -721,7 +719,6 @@ describe('NsViewPods', () => {
           values: ['["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]'],
         },
       },
-      caseSensitive: false,
       includeMetadata: false,
     });
     expect(container.querySelector('.metrics-warning-banner')).toBeNull();
@@ -764,7 +761,6 @@ describe('NsViewPods', () => {
           values: ['["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]'],
         },
       },
-      caseSensitive: false,
       includeMetadata: false,
     };
 

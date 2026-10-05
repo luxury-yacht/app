@@ -221,7 +221,6 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
         search: '',
         kinds: [],
         namespaces: [],
-        caseSensitive: false,
         includeMetadata: false,
       },
       setFilters: vi.fn(),
@@ -595,7 +594,6 @@ describe('GlobalViewNamespaces', () => {
         kinds: { mode: 'some', values: kinds },
         namespaces: { mode: 'some', values: ['payments'] },
         clusters: { mode: 'all' },
-        caseSensitive: false,
         includeMetadata: false,
       },
     });

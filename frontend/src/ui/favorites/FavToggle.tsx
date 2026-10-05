@@ -65,7 +65,7 @@ type ActiveViewType = ReturnType<typeof useViewState>['viewType'];
 export interface FavToggleState {
   /** Embedded surfaces can opt out when they do not own a workspace route. */
   enabled?: boolean;
-  /** Current grid table filter state (search, kinds, namespaces, caseSensitive). */
+  /** Current grid table filter state (search, kinds, namespaces, metadata search). */
   filters: GridTableFilterState;
   /** Current sort column key, or null if unsorted. */
   sortColumn: string | null;
@@ -165,7 +165,6 @@ const snapshotFavoritePane = (state: FavToggleState): FavoritePaneState => {
       namespaces: normalizeMultiSelectFilterSelection(state.filters.namespaces),
       clusters: normalizeExactMultiSelectFilterSelection(state.filters.clusters),
       queryFacets: Object.keys(queryFacets).length > 0 ? queryFacets : undefined,
-      caseSensitive: state.filters.caseSensitive ?? false,
       includeMetadata: state.filters.includeMetadata ?? false,
     },
     tableState: {
@@ -533,7 +532,6 @@ export function useFavToggle(state: FavToggleState): {
           isNarrowingFilterSelection(pane.filters.namespaces) ||
           isNarrowingFilterSelection(pane.filters.clusters) ||
           Object.keys(normalizeGridTableQueryFacets(pane.filters.queryFacets)).length > 0 ||
-          pane.filters.caseSensitive ||
           pane.filters.includeMetadata)
     );
     return hasActiveFilters ? `${base} (filtered)` : base;

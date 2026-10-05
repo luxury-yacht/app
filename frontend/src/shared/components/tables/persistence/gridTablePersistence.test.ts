@@ -92,7 +92,6 @@ describe('gridTablePersistence', () => {
             apiGroups: ['apps', 'batch'],
             resourceScopes: ['Namespace'],
           },
-          caseSensitive: false,
           includeMetadata: false,
         },
         pageSize: 250,
@@ -125,7 +124,6 @@ describe('gridTablePersistence', () => {
         apiGroups: { mode: 'some', values: ['apps'] },
         resourceScopes: { mode: 'some', values: ['Namespace'] },
       },
-      caseSensitive: false,
       includeMetadata: false,
     });
     expect(pruned?.pageSize).toBe(250);
@@ -193,7 +191,6 @@ describe('gridTablePersistence', () => {
         kinds: { mode: 'some', values: ['Pod'] },
         namespaces: { mode: 'some', values: ['team-a'] },
         clusters: { mode: 'some', values: ['cluster-a'] },
-        caseSensitive: false,
         includeMetadata: false,
       },
       filterOptions: { isNamespaceScoped: true },
@@ -212,7 +209,6 @@ describe('gridTablePersistence', () => {
         kinds: { mode: 'some', values: ['Pod'] },
         namespaces: { mode: 'all' },
         clusters: { mode: 'some', values: ['cluster-a'] },
-        caseSensitive: false,
         includeMetadata: false,
       },
       pageSize: 100,
@@ -225,7 +221,6 @@ describe('gridTablePersistence', () => {
       kinds: { mode: 'all' as const },
       namespaces: { mode: 'some' as const, values: [''] },
       clusters: { mode: 'all' as const },
-      caseSensitive: false,
       includeMetadata: true,
     };
 
@@ -260,7 +255,6 @@ describe('gridTablePersistence', () => {
       kinds: { mode: 'all' as const },
       namespaces: { mode: 'all' as const },
       clusters: { mode: 'some' as const, values: ['config:Production', 'config:production'] },
-      caseSensitive: false,
       includeMetadata: false,
     };
     const context = {

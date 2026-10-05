@@ -128,7 +128,6 @@ export function useGridTableFiltersPresentation<T>({
     handleFilterQueryFacetChange,
     handleFiltersChange,
     handleFilterReset,
-    toggleCaseSensitive,
   } = filterModel;
 
   const handleKindDropdownChange = useCallback(
@@ -266,7 +265,6 @@ export function useGridTableFiltersPresentation<T>({
       onQueryFacetChange: handleQueryFacetDropdownChange,
       onFiltersChange: handleFiltersChange,
       onReset: handleFilterReset,
-      onToggleCaseSensitive: toggleCaseSensitive,
       showKindDropdown,
       showNamespaceDropdown,
       showClusterDropdown,
@@ -307,7 +305,6 @@ export function useGridTableFiltersPresentation<T>({
       handleQueryFacetDropdownChange,
       handleFiltersChange,
       handleFilterReset,
-      toggleCaseSensitive,
       showKindDropdown,
       showNamespaceDropdown,
       showClusterDropdown,

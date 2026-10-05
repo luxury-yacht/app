@@ -87,7 +87,6 @@ const fromBackendFilters = (
           ])
         )
       : undefined,
-    caseSensitive: filters.caseSensitive ?? false,
     includeMetadata: filters.includeMetadata ?? false,
   };
 };
@@ -102,7 +101,6 @@ const fromBackendPane = (pane: backend.FavoritePaneState): FavoritePaneState => 
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     },
     tableState: {

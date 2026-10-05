@@ -14,11 +14,14 @@ placement and zoom follow [interaction boundaries](gridtable-interaction.md#inte
   order. Provider query facets participate in that order alongside structural
   filters, search, actions, and Columns; adding a facet must not create a
   keyboard focus trap.
-- Every table has one icon bar after the search box, in this order: Match case
-  (local search only), Include metadata, the view's own icons (`viewActions`,
-  such as Collapse Pods or Manage ignored findings), Favorite, a separator, and
-  Download. A view adds icons only through `viewActions`; there is no other
-  slot before the filters or after Download.
+- Every table has one icon bar after the search box, in this order: Include
+  metadata, the view's own icons (`viewActions`, such as Collapse Pods or Manage
+  ignored findings), Favorite, a separator, and Download. A view adds icons only
+  through `viewActions`; there is no other slot before the filters or after
+  Download.
+- Search ignores letter case on every table, local and query-backed; there is
+  no case-sensitive option. Saved table state and favorites that still carry the
+  old `caseSensitive` flag load normally and drop it.
 - The Download button's menu (`useGridTableDownloadAction`) copies the rows to
   the clipboard as CSV or saves them to a CSV file. Both take every matching row
   when the view supplies `fetchAllRows`, and otherwise the local filtered rows.

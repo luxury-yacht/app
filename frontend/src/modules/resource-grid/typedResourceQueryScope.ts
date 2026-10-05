@@ -100,7 +100,6 @@ export const typedResourceQueryIdentity = ({
 }: Pick<TypedResourceQueryDescriptor, 'filters' | 'sortConfig' | 'predicates'>) =>
   JSON.stringify({
     search: filters.search,
-    caseSensitive: filters.caseSensitive,
     includeMetadata: filters.includeMetadata,
     matchNone: hasExplicitNoneResourceQueryFilter(filters),
     kinds: stableTypedQuerySelection(filters.kinds),

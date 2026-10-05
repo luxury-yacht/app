@@ -453,7 +453,6 @@ export interface FavoriteFilters {
     "namespaces": FavoriteFilterSelection;
     "clusters": FavoriteFilterSelection;
     "queryFacets"?: { [_ in string]?: FavoriteFilterSelection } | null;
-    "caseSensitive": boolean;
     "includeMetadata": boolean;
 }
 

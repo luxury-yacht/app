@@ -210,7 +210,6 @@ const migratePersistedFilters = (value: unknown): GridTableFilterState | undefin
     namespaces: migrateLegacyMultiSelectFilterSelection(legacy.namespaces),
     clusters: migrateLegacyExactMultiSelectFilterSelection(legacy.clusters),
     queryFacets: migratePersistedQueryFacets(legacy.queryFacets),
-    caseSensitive: legacy.caseSensitive === true,
     includeMetadata: legacy.includeMetadata === true,
   });
 };
@@ -522,7 +521,6 @@ const pruneFilters = (
       : pruneFilterSelection(normalized.namespaces, filterOptions?.namespaces),
     clusters: pruneFilterSelection(normalized.clusters, filterOptions?.clusters, true),
     ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
-    caseSensitive: normalized.caseSensitive,
     includeMetadata: normalized.includeMetadata,
   };
   return hasNonDefaultGridTableFilters(pruned) ? pruned : undefined;

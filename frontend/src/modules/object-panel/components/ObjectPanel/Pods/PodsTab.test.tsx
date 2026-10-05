@@ -296,7 +296,7 @@ describe('PodsTab (query-backed)', () => {
       setColumnWidths: vi.fn(),
       columnVisibility: null,
       setColumnVisibility: vi.fn(),
-      filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+      filters: { search: '', kinds: [], namespaces: [] },
       setFilters: vi.fn(),
       pageSize: null,
       setPageSize: vi.fn(),

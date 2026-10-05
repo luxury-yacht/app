@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Table search always ignores letter case, so the Match case button and its favorite option are gone; most tables already searched this way. Saved favorites still restore.
 - Table toolbars keep every icon in one place after the search box: search options, the view's own icons (such as Collapse Pods, Clear selected workload, or Manage ignored findings), Favorite, then Download.
 - Toolbar buttons are dimmed only when they are unavailable. An off toggle and a ready button look the same, and a filled button is on.
 - In the Logs tab, search, timestamps and wrap are unavailable until a log line arrives. The format and filter mode buttons are never highlighted.

@@ -72,7 +72,6 @@ describe('GridTableKeys filter target selectors', () => {
   // These selectors identify the controls whose keyboard order the tests exercise.
   const SELECTORS = {
     search: '[data-gridtable-filter-role="search"] input',
-    caseSensitive: '.icon-bar-button[title="Match case"]',
     kind: '[data-gridtable-filter-role="kind"] .dropdown-trigger',
     namespace: '[data-gridtable-filter-role="namespace"] .dropdown-trigger',
     cluster: '[data-gridtable-filter-role="cluster"] .dropdown-trigger',
@@ -89,7 +88,6 @@ describe('GridTableKeys filter target selectors', () => {
         kinds: { mode: 'all' },
         namespaces: { mode: 'all' },
         clusters: { mode: 'all' },
-        caseSensitive: false,
         includeMetadata: false,
       },
       resolvedFilterOptions: {
@@ -107,7 +105,6 @@ describe('GridTableKeys filter target selectors', () => {
       onFiltersChange: vi.fn(),
       onSearchChange: vi.fn(),
       onReset: vi.fn(),
-      onToggleCaseSensitive: vi.fn(),
       renderOption: (opt) => opt.label,
       showKindDropdown: true,
       showNamespaceDropdown: true,
@@ -207,7 +204,6 @@ describe('GridTableKeys filter target selectors', () => {
               namespaces: { mode: 'all' },
               clusters: { mode: 'all' },
               queryFacets: { apiGroups: { mode: 'all' } },
-              caseSensitive: false,
               includeMetadata: false,
             }}
             resolvedFilterOptions={{
@@ -235,7 +231,6 @@ describe('GridTableKeys filter target selectors', () => {
             onFiltersChange={vi.fn()}
             onSearchChange={vi.fn()}
             onReset={vi.fn()}
-            onToggleCaseSensitive={vi.fn()}
             renderOption={(option) => option.label}
             showKindDropdown
           />
@@ -320,7 +315,6 @@ describe('GridTableKeys filter target selectors', () => {
               kinds: { mode: 'all' },
               namespaces: { mode: 'all' },
               clusters: { mode: 'all' },
-              caseSensitive: false,
               includeMetadata: false,
             }}
             resolvedFilterOptions={{
@@ -338,7 +332,6 @@ describe('GridTableKeys filter target selectors', () => {
             onFiltersChange={vi.fn()}
             onSearchChange={vi.fn()}
             onReset={vi.fn()}
-            onToggleCaseSensitive={vi.fn()}
             renderOption={(option) => option.label}
             renderColumnsValue={() => 'Columns'}
             showColumnsDropdown
@@ -413,9 +406,6 @@ describe('GridTableKeys filter target selectors', () => {
         await Promise.resolve();
       });
     };
-
-    await dispatchFilterTab();
-    expect(document.activeElement?.getAttribute('title')).toBe('Match case');
 
     await dispatchFilterTab();
     expect(document.activeElement?.getAttribute('title')).toBe('Favorite');

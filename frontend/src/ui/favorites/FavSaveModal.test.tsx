@@ -283,7 +283,6 @@ const defaultFilters: FavoriteFilters = {
     apiGroups: { mode: 'some', values: ['apps'] },
     resourceScopes: { mode: 'some', values: ['Namespace'] },
   },
-  caseSensitive: false,
   includeMetadata: false,
 };
 

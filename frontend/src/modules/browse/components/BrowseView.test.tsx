@@ -82,7 +82,6 @@ const makePersistenceFilters = (
   kinds: ALL_MULTISELECT_FILTER,
   namespaces: ALL_MULTISELECT_FILTER,
   clusters: ALL_MULTISELECT_FILTER,
-  caseSensitive: false,
   includeMetadata: false,
   ...overrides,
 });

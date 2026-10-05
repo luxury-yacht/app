@@ -98,7 +98,6 @@ export interface GridTableFilterState {
   clusters: MultiSelectFilterSelection;
   /** Backend-owned query facet selections keyed by the provider's facet name. */
   queryFacets?: Record<string, MultiSelectFilterSelection>;
-  caseSensitive: boolean;
   includeMetadata: boolean;
 }
 
@@ -140,8 +139,8 @@ export interface GridTableFilterOptions {
   clusterDropdownBulkActions?: boolean;
   includeClusterScopedSyntheticNamespace?: boolean;
   /**
-   * IconBar items after the built-in Match case toggle and before Download: the search
-   * options, the view's own icons, and Favorite, in that order.
+   * IconBar items before Download: Include metadata, the view's own icons, and
+   * Favorite, in that order.
    */
   preActions?: IconBarItem[];
   /** Arbitrary ReactNode content rendered after the IconBar (e.g. text toggle buttons). */

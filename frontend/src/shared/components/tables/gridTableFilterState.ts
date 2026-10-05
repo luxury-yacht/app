@@ -13,7 +13,6 @@ export const DEFAULT_GRID_TABLE_FILTER_STATE: GridTableFilterState = {
   kinds: ALL_MULTISELECT_FILTER,
   namespaces: ALL_MULTISELECT_FILTER,
   clusters: ALL_MULTISELECT_FILTER,
-  caseSensitive: false,
   includeMetadata: false,
 };
 
@@ -47,7 +46,6 @@ export const normalizeGridTableFilterState = (
     namespaces: normalizeMultiSelectFilterSelection(state?.namespaces ?? ALL_MULTISELECT_FILTER),
     clusters: normalizeExactMultiSelectFilterSelection(state?.clusters ?? ALL_MULTISELECT_FILTER),
     ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
-    caseSensitive: state?.caseSensitive ?? false,
     includeMetadata: state?.includeMetadata ?? false,
   };
 };
@@ -57,7 +55,6 @@ export const areGridTableFilterStatesEqual = (
   b: GridTableFilterState
 ): boolean =>
   a.search === b.search &&
-  a.caseSensitive === b.caseSensitive &&
   a.includeMetadata === b.includeMetadata &&
   JSON.stringify(normalizeMultiSelectFilterSelection(a.kinds)) ===
     JSON.stringify(normalizeMultiSelectFilterSelection(b.kinds)) &&
@@ -76,4 +73,4 @@ export const hasNarrowingGridTableFilters = (state: GridTableFilterState): boole
   Object.keys(normalizeGridTableQueryFacets(state.queryFacets)).length > 0;
 
 export const hasNonDefaultGridTableFilters = (state: GridTableFilterState): boolean =>
-  hasNarrowingGridTableFilters(state) || state.caseSensitive || state.includeMetadata;
+  hasNarrowingGridTableFilters(state) || state.includeMetadata;

@@ -228,18 +228,6 @@ const FavoritePaneFilters: React.FC<FavoritePaneFiltersProps> = ({
           <label className="modal-checkbox-label">
             <input
               type="checkbox"
-              checked={state.filters.caseSensitive}
-              onChange={(event) =>
-                onChange({ ...state.filters, caseSensitive: event.target.checked })
-              }
-            />
-            {'Match case'}
-          </label>
-        </div>
-        <div className="modal-form-field">
-          <label className="modal-checkbox-label">
-            <input
-              type="checkbox"
               checked={state.filters.includeMetadata}
               onChange={(event) =>
                 onChange({ ...state.filters, includeMetadata: event.target.checked })
