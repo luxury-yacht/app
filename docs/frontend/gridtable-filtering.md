@@ -116,6 +116,10 @@ placement and zoom follow [interaction boundaries](gridtable-interaction.md#inte
 
 ### Favorite snapshots
 
+- A favorite is a main-window route (cluster, view tab, namespace) plus its
+  tables' state. Every main-window table view offers exactly one favorite
+  action; tables inside an object panel offer none, in the main window as in a
+  panel window, because the route they would save is not theirs.
 - A favorite snapshots the complete `GridTableFilterState` and table display
   state as one named pane. Favorites code must compare, edit, save, and restore
   the state object as a whole; it must not maintain a separate allowlist of

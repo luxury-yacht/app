@@ -18,5 +18,6 @@
 
 ### Fixed
 
+- The Pods tab in the object panel no longer shows a Favorite button. Favorites save main-window views, so saving one there recorded the wrong view.
 - The Download button in tables says "all matching rows" whenever it downloads every row the filters match. Only a table showing a partial window says "visible rows".
 - Copying or saving the object panel Jobs tab now includes only the jobs that match its search; it used to include every job.
