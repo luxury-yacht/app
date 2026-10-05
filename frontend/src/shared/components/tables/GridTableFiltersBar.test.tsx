@@ -154,6 +154,32 @@ describe('GridTableFiltersBar', () => {
     });
   };
 
+  // A pane's structural control (e.g. Collapse Pods) sits before the Namespace dropdown.
+  it('renders before-Namespace icons ahead of the Namespace dropdown', async () => {
+    await renderFilters({
+      showNamespaceDropdown: true,
+      resolvedFilterOptions: {
+        searchBehavior: 'local',
+        kinds: [],
+        namespaces: [{ label: 'team-a', value: 'team-a' }],
+        beforeNamespaceActions: [
+          { type: 'action', id: 'pane', icon: null, title: 'Collapse Pods', onClick: vi.fn() },
+        ],
+      },
+    });
+
+    const paneButton = container.querySelector('button[title="Collapse Pods"]');
+    const namespaceDropdown = container.querySelector('[data-gridtable-filter-role="namespace"]');
+    expect(paneButton).not.toBeNull();
+    expect(
+      Boolean(
+        requireValue(paneButton, 'pane button').compareDocumentPosition(
+          requireValue(namespaceDropdown, 'namespace dropdown')
+        ) & Node.DOCUMENT_POSITION_FOLLOWING
+      )
+    ).toBe(true);
+  });
+
   it('renders dropdowns and propagates changes', async () => {
     const onKindsChange = vi.fn();
     const onNamespacesChange = vi.fn();

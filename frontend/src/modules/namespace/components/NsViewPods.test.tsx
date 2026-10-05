@@ -561,18 +561,22 @@ describe('NsViewPods', () => {
     }
   };
 
-  it('puts the Pods collapse action in the main icon bar after the search options', async () => {
+  it('puts the Pods collapse action left of the Namespace dropdown', async () => {
     const onPodsCollapsedChange = vi.fn();
     await renderPods({ onPodsCollapsedChange });
 
+    // The pane's collapse control stays left of the Namespace dropdown, out of the main icon bar.
     const options = gridTablePropsRef.current.filters?.options;
-    expect(options && 'beforeNamespaceActions' in options).toBe(false);
-    const iconBarActions = options?.preActions ?? [];
-    // Rendered on its own here, so the pane also shows Favorite; under Workloads it shares that one.
+    const paneActions = options?.beforeNamespaceActions ?? [];
     expect(
-      iconBarActions.map((action) => (action.type === 'separator' ? null : action.title))
-    ).toEqual(['Include metadata', 'Collapse Pods', 'Save as favorite']);
-    const collapseAction = iconBarActions[1];
+      paneActions.map((action) => (action.type === 'separator' ? null : action.title))
+    ).toEqual(['Collapse Pods']);
+    expect(
+      (options?.preActions ?? []).some(
+        (action) => action.type !== 'separator' && action.title === 'Collapse Pods'
+      )
+    ).toBe(false);
+    const collapseAction = paneActions[0];
     if (!collapseAction || collapseAction.type !== 'action') {
       throw new Error('Expected the Collapse Pods action');
     }

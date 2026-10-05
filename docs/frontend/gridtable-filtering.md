@@ -15,10 +15,12 @@ placement and zoom follow [interaction boundaries](gridtable-interaction.md#inte
   filters, search, actions, and Columns; adding a facet must not create a
   keyboard focus trap.
 - Every table has one icon bar after the search box, in this order: Include
-  metadata, the view's own icons (`viewActions`, such as Collapse Pods or Manage
-  ignored findings), Favorite, a separator, and Download. A view adds icons only
-  through `viewActions`; there is no other slot before the filters or after
-  Download.
+  metadata, the view's own icons (`viewActions`, such as Clear selected workload
+  or Manage ignored findings), Favorite, a separator, and Download. The one
+  exception is a pane's structural control: it uses `beforeNamespaceActions`,
+  which GridTable renders as its own icon bar after Kind and before Namespace.
+  The Workloads/Pods composite uses it for the Pods pane's collapse control,
+  which the Pods pane (no Kind filter) shows as its leftmost control.
 - Search ignores letter case on every table, local and query-backed; there is
   no case-sensitive option. Saved table state and favorites that still carry the
   old `caseSensitive` flag load normally and drop it.

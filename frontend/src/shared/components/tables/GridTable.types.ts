@@ -138,6 +138,8 @@ export interface GridTableFilterOptions {
   clusterDropdownSearchable?: boolean;
   clusterDropdownBulkActions?: boolean;
   includeClusterScopedSyntheticNamespace?: boolean;
+  /** A pane's structural control (e.g. Collapse Pods), rendered immediately before Namespace. */
+  beforeNamespaceActions?: IconBarItem[];
   /**
    * IconBar items before Download: Include metadata, the view's own icons, and
    * Favorite, in that order.
@@ -279,6 +281,7 @@ export interface InternalFilterOptions {
   namespaceDropdownBulkActions?: boolean;
   clusterDropdownSearchable?: boolean;
   clusterDropdownBulkActions?: boolean;
+  beforeNamespaceActions?: IconBarItem[];
   preActions?: IconBarItem[];
   customActions?: React.ReactNode;
   totalIsExact?: boolean;
