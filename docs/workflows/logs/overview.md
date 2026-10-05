@@ -51,8 +51,11 @@ keeps its own source selection and transport.
   the text filter box, the filter mode button (click cycles All → Filtered →
   Invert; its menu picks one; `I` switches between Invert and All), and the
   case and regex options. ⌘F /
-  Ctrl+F opens it and focuses the box. Closing the row keeps its filter applied,
-  and the search button stays highlighted while a filter is typed. Container
+  Ctrl+F opens it and focuses the box. While it is open, Escape with focus in
+  the Logs tab closes it before the object panel's Escape can close the tab;
+  focus in the row moves to the search button first. Closing the row keeps its
+  filter applied, and the search button stays highlighted while a filter is
+  typed. Container
   Logs remembers whether the row is open with the tab's other options; Node Logs
   keeps it with its in-memory options, like its filter text.
   Timestamps and previous logs are optional icon bar features; Node Logs

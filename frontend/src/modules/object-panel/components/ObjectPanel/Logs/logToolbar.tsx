@@ -280,6 +280,14 @@ export const openLogSearch = (
   inputRef.current?.select();
 };
 
+/** Closes the search row, first moving focus inside it to the search button. */
+export const closeLogSearch = (dispatch: Dispatch<LogOptionsAction>, searchRowId: string): void => {
+  if (document.getElementById(searchRowId)?.contains(document.activeElement)) {
+    document.querySelector<HTMLElement>(`[aria-controls="${searchRowId}"]`)?.focus();
+  }
+  dispatch({ type: 'SET_SEARCH_OPEN', payload: false });
+};
+
 const searchButton = ({
   options,
   dispatch,

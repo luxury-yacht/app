@@ -5,14 +5,14 @@
  * and previous logs (V) are optional features a viewer passes when it has them.
  */
 
-import { useSearchShortcutTarget, useShortcut } from '@ui/shortcuts';
+import { useKeyboardSurface, useSearchShortcutTarget, useShortcut } from '@ui/shortcuts';
 import { type Dispatch, type RefObject, useCallback } from 'react';
 import type { LogOptionsAction, LogOptionsState } from '../logOptionsReducer';
-import { openLogSearch } from '../logToolbar';
+import { closeLogSearch, openLogSearch } from '../logToolbar';
 
 interface UseLogKeyboardShortcutsParams {
   isActive: boolean;
-  options: Pick<LogOptionsState, 'displayMode' | 'regexMatches' | 'filterMode'>;
+  options: Pick<LogOptionsState, 'displayMode' | 'regexMatches' | 'filterMode' | 'searchOpen'>;
   hasAnsiLogEntries: boolean;
   hasCopyableContent: boolean;
   canParseLogs: boolean;
@@ -20,6 +20,9 @@ interface UseLogKeyboardShortcutsParams {
   copyLogs: () => void;
   filterInputRef: RefObject<HTMLInputElement | null>;
   logsContentRef: RefObject<HTMLElement | null>;
+  /** The whole viewer: controls, search row and log output. */
+  viewerRef: RefObject<HTMLElement | null>;
+  searchRowId: string;
   timestamps?: { toggle: () => void };
   previousLogs?: { toggle: () => void };
 }
@@ -34,10 +37,12 @@ export function useLogKeyboardShortcuts({
   copyLogs,
   filterInputRef,
   logsContentRef,
+  viewerRef,
+  searchRowId,
   timestamps,
   previousLogs,
 }: UseLogKeyboardShortcutsParams) {
-  const { displayMode, regexMatches, filterMode } = options;
+  const { displayMode, regexMatches, filterMode, searchOpen } = options;
   const isParsedView = displayMode === 'parsed';
   const toggleTimestamps = timestamps?.toggle;
   const togglePreviousLogs = previousLogs?.toggle;
@@ -294,5 +299,20 @@ export function useLogKeyboardShortcuts({
     focus: focusFilterInput,
     priority: 25,
     label: 'Logs filter',
+  });
+
+  // While the search row is open, Escape with focus in the viewer closes it.
+  // The viewer sits inside the object panel, so it is asked before the panel
+  // closes its tab.
+  const closeSearch = useCallback(() => {
+    closeLogSearch(dispatch, searchRowId);
+    return true;
+  }, [dispatch, searchRowId]);
+
+  useKeyboardSurface({
+    kind: 'region',
+    rootRef: viewerRef,
+    active: isActive && searchOpen,
+    onEscape: closeSearch,
   });
 }

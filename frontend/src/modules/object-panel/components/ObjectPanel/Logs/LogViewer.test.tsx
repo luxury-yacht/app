@@ -82,19 +82,30 @@ const waitForElement = async <T extends Element>(
   throw new Error('Timed out waiting for element');
 };
 
-const getLatestKeyboardSurfaceConfig = () => {
+type KeyboardSurfaceConfig = {
+  active?: boolean;
+  rootRef?: React.RefObject<HTMLElement | null>;
+  onEscape?: () => boolean;
+  onNativeAction?: (context: {
+    action: 'copy' | 'selectAll' | 'paste';
+    activeElement: Element | null;
+    selection: Selection | null;
+    text?: string;
+  }) => boolean;
+};
+
+// The latest registration of the keyboard surface that has the given handler.
+const getLatestKeyboardSurfaceConfig = (
+  handler: 'onNativeAction' | 'onEscape' = 'onNativeAction'
+): KeyboardSurfaceConfig | undefined => {
   const calls = shortcutMocks.useKeyboardSurface.mock.calls;
-  const call = calls[calls.length - 1];
-  return call?.[0] as
-    | {
-        onNativeAction?: (context: {
-          action: 'copy' | 'selectAll' | 'paste';
-          activeElement: Element | null;
-          selection: Selection | null;
-          text?: string;
-        }) => boolean;
-      }
-    | undefined;
+  for (let i = calls.length - 1; i >= 0; i -= 1) {
+    const config = calls[i][0] as KeyboardSurfaceConfig;
+    if (config[handler] !== undefined) {
+      return config;
+    }
+  }
+  return undefined;
 };
 
 const mockModules = vi.hoisted(() => {
@@ -2178,6 +2189,39 @@ describe('LogViewer active pod synchronisation', () => {
     const input = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
     expect(input).not.toBeNull();
     expect(document.activeElement).toBe(input);
+  });
+
+  it('closes the open search row on Escape from anywhere in the viewer', async () => {
+    await renderViewer();
+    await openSearch();
+    const input = requireValue(
+      container.querySelector<HTMLInputElement>('input[placeholder="Filter"]'),
+      'expected the filter box'
+    );
+    expect(document.activeElement).toBe(input);
+
+    const surface = requireValue(
+      getLatestKeyboardSurfaceConfig('onEscape'),
+      'expected an Escape surface'
+    );
+    expect(surface.active).toBe(true);
+    // The surface covers the search row and the log output, not just the box.
+    expect(surface.rootRef?.current?.contains(input)).toBe(true);
+    expect(
+      surface.rootRef?.current?.contains(container.querySelector('.logs-viewer-content'))
+    ).toBe(true);
+
+    let handled = false;
+    await act(async () => {
+      handled = requireValue(surface.onEscape, 'expected an Escape handler')();
+      await Promise.resolve();
+    });
+    expect(handled).toBe(true);
+    const searchButton = container.querySelector('button[aria-label="Search logs"]');
+    expect(searchButton?.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('input[placeholder="Filter"]')).toBeNull();
+    expect(document.activeElement).toBe(searchButton);
+    expect(getLatestKeyboardSurfaceConfig('onEscape')?.active).toBe(false);
   });
 
   it('remembers an open search row when the viewer remounts', async () => {

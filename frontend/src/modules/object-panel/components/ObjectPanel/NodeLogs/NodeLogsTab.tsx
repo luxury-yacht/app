@@ -609,6 +609,7 @@ const NodeLogsTab = ({
   const [options, dispatch] = useReducer(logOptionsReducer, initialLogOptionsState);
   const { autoRefresh, wrapText, showAnsiColors, displayMode, expandedRows } = options;
   const logsContentRef = useRef<HTMLElement>(null);
+  const viewerRef = useRef<HTMLDivElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
   const searchRowId = useId();
   const terminalTheme = useTerminalTheme(logsContentRef);
@@ -754,6 +755,8 @@ const NodeLogsTab = ({
     copyLogs: handleCopyLogs,
     filterInputRef,
     logsContentRef,
+    viewerRef,
+    searchRowId,
   });
 
   const renderMessageContent = useLogMessageRenderer({
@@ -780,7 +783,7 @@ const NodeLogsTab = ({
 
   return (
     <div className="object-panel-tab-content">
-      <div className="logs-viewer-display">
+      <div className="logs-viewer-display" ref={viewerRef}>
         <div className="logs-viewer-controls">
           <div className="logs-viewer-controls-left">
             <div className="logs-viewer-control-group">

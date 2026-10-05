@@ -1,7 +1,8 @@
 import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
-import { KeyboardProvider } from '@ui/shortcuts';
+import { KeyboardProvider, useKeyboardSurface } from '@ui/shortcuts';
+import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { Clipboard } from '@wailsio/runtime';
-import { act } from 'react';
+import { act, useRef } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
@@ -1386,6 +1387,95 @@ describe('NodeLogsTab', () => {
         failure,
         expect.objectContaining({ action: 'copyLogs' })
       );
+    });
+
+    describe('Escape while the search row is open', () => {
+      const closeTab = vi.fn(() => true);
+      // Stands in for the object panel, which closes its tab on Escape.
+      const ObjectPanelEscape = ({ children }: { children: React.ReactNode }) => {
+        const panelRef = useRef<HTMLDivElement>(null);
+        useKeyboardSurface({
+          kind: 'panel',
+          rootRef: panelRef,
+          priority: KeyboardScopePriority.OBJECT_PANEL,
+          captureWhenActive: true,
+          onEscape: closeTab,
+        });
+        return <div ref={panelRef}>{children}</div>;
+      };
+
+      const renderInPanel = async () => {
+        await act(async () => {
+          root.render(
+            <PanelLayoutTestProvider>
+              <KeyboardProvider>
+                <ObjectPanelEscape>
+                  <NodeLogsTab
+                    panelId="panel-1"
+                    nodeName="node-a"
+                    clusterId="alpha:ctx"
+                    isActive
+                    availability={{ allowed: true, pending: false }}
+                    sources={sources}
+                  />
+                </ObjectPanelEscape>
+              </KeyboardProvider>
+            </PanelLayoutTestProvider>
+          );
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+        await selectSource('kubelet');
+        await openSearch();
+      };
+
+      const pressEscape = async () => {
+        await act(async () => {
+          (document.activeElement ?? document.body).dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+          );
+          await Promise.resolve();
+        });
+      };
+
+      const searchButton = () =>
+        requireValue(
+          container.querySelector<HTMLButtonElement>('button[aria-label="Search logs"]'),
+          'expected the search button'
+        );
+      const filterInput = () =>
+        container.querySelector<HTMLInputElement>('input[aria-label="Filter node logs"]');
+
+      beforeEach(() => closeTab.mockClear());
+
+      it('closes the search row instead of the tab, then the next Escape closes the tab', async () => {
+        await renderInPanel();
+        expect(document.activeElement).toBe(filterInput());
+
+        await pressEscape();
+        expect(filterInput()).toBeNull();
+        expect(searchButton().getAttribute('aria-expanded')).toBe('false');
+        expect(closeTab).not.toHaveBeenCalled();
+        // The focused box is gone, so focus returns to the button that opens it.
+        expect(document.activeElement).toBe(searchButton());
+
+        await pressEscape();
+        expect(closeTab).toHaveBeenCalledOnce();
+      });
+
+      it('closes the search row from the log output and leaves focus there', async () => {
+        await renderInPanel();
+        const output = requireValue(
+          container.querySelector<HTMLElement>('.logs-viewer-content'),
+          'node log output'
+        );
+        await act(async () => output.focus());
+
+        await pressEscape();
+        expect(filterInput()).toBeNull();
+        expect(closeTab).not.toHaveBeenCalled();
+        expect(document.activeElement).toBe(output);
+      });
     });
   });
 });

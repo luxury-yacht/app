@@ -29,6 +29,7 @@ describe('log viewer shortcuts', () => {
   const render = async (isActive = true, isParsedView = false) => {
     const filterInputRef = createRef<HTMLInputElement>();
     const logsContentRef = createRef<HTMLDivElement>();
+    const viewerRef = createRef<HTMLDivElement>();
     const Harness = () => {
       getAvailable = useKeyboardContext().getAvailableShortcuts;
       useLogKeyboardShortcuts({
@@ -37,6 +38,7 @@ describe('log viewer shortcuts', () => {
           displayMode: isParsedView ? 'parsed' : 'raw',
           regexMatches: false,
           filterMode: 'filtered',
+          searchOpen: false,
         },
         hasAnsiLogEntries: true,
         hasCopyableContent: true,
@@ -45,16 +47,18 @@ describe('log viewer shortcuts', () => {
         copyLogs: copy,
         filterInputRef,
         logsContentRef,
+        viewerRef,
+        searchRowId: 'log-search',
         timestamps: { toggle: timestamps },
         previousLogs: { toggle: previousLogs },
       });
       return (
-        <>
+        <div ref={viewerRef}>
           <input ref={filterInputRef} aria-label="Filter logs" />
           <div ref={logsContentRef}>
             <div className="gridtable-wrapper" />
           </div>
-        </>
+        </div>
       );
     };
     await act(async () => {

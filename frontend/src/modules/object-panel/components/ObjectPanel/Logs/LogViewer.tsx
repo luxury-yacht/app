@@ -441,6 +441,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   // Refs
   const logsContentRef = useRef<HTMLElement>(null);
+  const viewerRef = useRef<HTMLDivElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
   const searchRowId = useId();
   const terminalTheme = useTerminalTheme(logsContentRef);
@@ -988,6 +989,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     copyLogs: handleCopyContainerLogs,
     filterInputRef,
     logsContentRef,
+    viewerRef,
+    searchRowId,
     timestamps: { toggle: toggleTimestamps },
     previousLogs: previousLogsFeature,
   });
@@ -1050,6 +1053,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   );
   return (
     <LogViewerReadyView
+      viewerRef={viewerRef}
       controls={controls}
       activeFilterChips={activeFilterChips}
       clearAllFilters={handleClearAllFilters}

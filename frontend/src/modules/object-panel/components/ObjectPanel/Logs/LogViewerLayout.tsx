@@ -223,6 +223,7 @@ export const LogViewerControls = ({
 };
 
 type LogViewerReadyViewProps = {
+  viewerRef: React.RefObject<HTMLDivElement | null>;
   controls: React.ReactNode;
   activeFilterChips: ActiveFilterChip[];
   clearAllFilters: () => void;
@@ -237,6 +238,7 @@ type LogViewerReadyViewProps = {
 };
 
 export const LogViewerReadyView = ({
+  viewerRef,
   controls,
   activeFilterChips,
   clearAllFilters,
@@ -249,7 +251,7 @@ export const LogViewerReadyView = ({
   resumeScrolling,
 }: LogViewerReadyViewProps) => (
   <div className="object-panel-tab-content">
-    <div className="logs-viewer-display">
+    <div className="logs-viewer-display" ref={viewerRef}>
       {controls}
       <ActiveFilterChips
         ariaLabel="Active log filters"
