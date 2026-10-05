@@ -120,7 +120,8 @@ export const ForceDeleteIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-export const ExpandIcon: React.FC<IconProps> = ({
+/** Chevron pointing up. */
+export const ChevronUpIcon: React.FC<IconProps> = ({
   width = 24,
   height = 24,
   fill = 'currentColor',
@@ -136,11 +137,12 @@ export const ExpandIcon: React.FC<IconProps> = ({
     width={width}
     height={height}
   >
-    <path d="M11.9999 13.1714L16.9497 8.22168L18.3639 9.63589L11.9999 15.9999L5.63599 9.63589L7.0502 8.22168L11.9999 13.1714Z" />
+    <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" />
   </svg>
 );
 
-export const CollapseIcon: React.FC<IconProps> = ({
+/** Chevron pointing down. */
+export const ChevronDownIcon: React.FC<IconProps> = ({
   width = 24,
   height = 24,
   fill = 'currentColor',
@@ -156,7 +158,7 @@ export const CollapseIcon: React.FC<IconProps> = ({
     width={width}
     height={height}
   >
-    <path d="M11.9999 10.8284L7.0502 15.7782L5.63599 14.364L11.9999 8L18.3639 14.364L16.9497 15.7782L11.9999 10.8284Z" />
+    <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
   </svg>
 );
 

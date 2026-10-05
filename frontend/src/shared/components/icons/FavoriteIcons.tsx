@@ -72,39 +72,3 @@ export const FavoritePinIcon: React.FC<IconProps> = ({ width = 24, height = 24 }
     <path d="M17 4a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2.5L5.5 8 4 9.5V12h7v8l1 1 1-1v-8h7V9.5L18.5 8 17 6.5V4z" />
   </svg>
 );
-
-export const ChevronUpIcon: React.FC<IconProps> = ({
-  width = 24,
-  height = 24,
-  fill = 'currentColor',
-}) => (
-  <svg
-    aria-hidden="true"
-    focusable="false"
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill={fill}
-    width={width}
-    height={height}
-  >
-    <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" />
-  </svg>
-);
-
-export const ChevronDownIcon: React.FC<IconProps> = ({
-  width = 24,
-  height = 24,
-  fill = 'currentColor',
-}) => (
-  <svg
-    aria-hidden="true"
-    focusable="false"
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill={fill}
-    width={width}
-    height={height}
-  >
-    <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
-  </svg>
-);

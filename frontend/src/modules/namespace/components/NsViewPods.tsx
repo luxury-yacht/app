@@ -24,7 +24,7 @@ import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid
 import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CollapseIcon, ExpandIcon } from '@shared/components/icons/SharedIcons';
+import { ChevronDownIcon, ChevronUpIcon } from '@shared/components/icons/SharedIcons';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
@@ -338,10 +338,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
               {
                 type: 'action',
                 id: 'pods-pane',
+                // The chevron points the way the pane moves: down to collapse, up to expand.
                 icon: collapsed ? (
-                  <CollapseIcon width={18} height={18} />
+                  <ChevronUpIcon width={18} height={18} />
                 ) : (
-                  <ExpandIcon width={18} height={18} />
+                  <ChevronDownIcon width={18} height={18} />
                 ),
                 onClick: () => onPodsCollapsedChange(!collapsed),
                 title: collapsed ? 'Expand Pods' : 'Collapse Pods',

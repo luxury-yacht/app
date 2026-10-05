@@ -6,7 +6,7 @@
  */
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { CollapseIcon, ExpandIcon } from '@shared/components/icons/SharedIcons';
+import { ChevronDownIcon, ChevronUpIcon } from '@shared/components/icons/SharedIcons';
 import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import type { GridTableFilterState, GridTableProps } from '@shared/components/tables/GridTable';
 import { getTextContent } from '@shared/components/tables/GridTable.utils';
@@ -577,7 +577,7 @@ describe('NsViewPods', () => {
       throw new Error('Expected the Collapse Pods action');
     }
     expect(requireReactElement(collapseAction.icon, 'expected collapse icon').type).toBe(
-      ExpandIcon
+      ChevronDownIcon
     );
 
     act(() => {
@@ -601,9 +601,9 @@ describe('NsViewPods', () => {
       '.gridtable-filter-bar button[title="Expand Pods"]'
     );
     expect(expandButton).not.toBeNull();
-    const renderedCollapseIcon = CollapseIcon({});
+    const renderedCollapseIcon = ChevronUpIcon({});
     if (renderedCollapseIcon instanceof Promise) {
-      throw new Error('Expected CollapseIcon to render synchronously');
+      throw new Error('Expected ChevronUpIcon to render synchronously');
     }
     const collapseSvg = requireReactElement<{ children: React.ReactNode }>(
       renderedCollapseIcon,
