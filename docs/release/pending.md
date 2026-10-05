@@ -20,6 +20,7 @@
 
 ### Fixed
 
+- Selecting a workload no longer reopens a collapsed Pods pane. The pane shows that workload's pods when you expand it.
 - Canceling the save dialog from a Download button no longer flashes an error or reports one. On Windows, canceling a settings or favorites export no longer reports an error either.
 - The Pods tab in the object panel no longer shows a Favorite button. Favorites save main-window views, so saving one there recorded the wrong view.
 - The Download button in tables says "all matching rows" whenever it downloads every row the filters match. Only a table showing a partial window says "visible rows".

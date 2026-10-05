@@ -297,8 +297,8 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
         { fallbackClusterId: selectedClusterId }
       );
       setSelectedWorkload(ref);
+      // A collapsed Pods pane stays collapsed; it shows this workload's pods once expanded.
       setPodFilterRequest({ type: 'set', workload: ref });
-      setPodsCollapsed(false);
     },
     [selectedClusterId, selectedClusterName]
   );

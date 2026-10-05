@@ -752,6 +752,41 @@ describe('NsViewPods', () => {
     expect(setFiltersMock).toHaveBeenCalledOnce();
   });
 
+  // A workload selected while the pane is collapsed is applied by the time it expands.
+  it('applies a workload selection made while the pane was collapsed', async () => {
+    const workloadFilterRequest = {
+      type: 'set' as const,
+      workload: {
+        clusterId: 'alpha:ctx',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'team-a',
+        name: 'api',
+      },
+    };
+    const props = {
+      namespace: ALL_NAMESPACES_SCOPE,
+      workloadFilterRequest,
+      onWorkloadFilterMismatch: vi.fn(),
+      onPodsCollapsedChange: vi.fn(),
+    };
+    await renderPods({ ...props, collapsed: true });
+    await renderPods({ ...props, collapsed: false });
+
+    expect(setFiltersMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespaces: { mode: 'some', values: ['team-a'] },
+        queryFacets: {
+          owners: {
+            mode: 'some',
+            values: ['["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]'],
+          },
+        },
+      })
+    );
+  });
+
   it('preserves a persisted owner facet when the embedded pane has no workload selection', async () => {
     persistedFiltersRef.current = {
       search: '',

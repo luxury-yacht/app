@@ -405,8 +405,13 @@ describe('NsViewWorkloads', () => {
       onPodsCollapsedChange(true);
     });
     expect(podsViewPropsRef.current).toMatchObject({ collapsed: true });
+    // Selecting a workload while Pods is collapsed leaves it collapsed but still
+    // filters the pane, so expanding it later shows that workload's pods.
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-    expect(podsViewPropsRef.current).toMatchObject({ collapsed: false });
+    expect(podsViewPropsRef.current).toMatchObject({
+      collapsed: true,
+      workloadFilterRequest: { type: 'set', workload: expect.objectContaining({ name: 'api' }) },
+    });
   });
 
   it('clears the selected workload when GridTable reports an unused-body click', async () => {
