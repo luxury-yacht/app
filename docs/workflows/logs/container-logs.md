@@ -22,6 +22,11 @@ Panel. They are not Application Logs and they are not Node Logs.
   containers reads nothing (`logFilterSelection.ts`). A dropdown with no
   options has not listed its sources yet (no pod list and no lines, or no
   container inventory) and keeps its choice.
+- Raw rows name their source: workload views name the pod, and both views
+  name the container only when more than one is in view. One selected
+  container, or no selection and a single container in the inventory, leaves
+  it out (`shouldDisplayPodContainerMetadata`). The table always keeps its
+  Container column.
 - Previous logs, history size, follow, timestamps, and target caps are backend
   log query concerns.
 - Live logs come only from the stream; there is no fetch fallback and no

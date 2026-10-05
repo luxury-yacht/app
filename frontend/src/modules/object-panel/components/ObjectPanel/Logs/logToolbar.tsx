@@ -301,10 +301,8 @@ const searchButton = ({
   ariaLabel: 'Search logs',
 });
 
-/** Builds the log viewer icon bar: search, auto-refresh, source, display, actions. */
+/** Builds the log viewer icon bar: auto-refresh, search, source and display, actions. */
 export const buildLogToolbarItems = (toolbar: LogToolbarOptions): IconBarItem[] => [
-  searchButton(toolbar),
-  { type: 'separator' },
   {
     type: 'toggle',
     id: 'autoRefresh',
@@ -319,6 +317,9 @@ export const buildLogToolbarItems = (toolbar: LogToolbarOptions): IconBarItem[] 
     title: `${toolbar.options.autoRefresh ? 'Stop' : 'Start'} auto-refresh (R)`,
     ariaLabel: 'Toggle auto-refresh',
   },
+  { type: 'separator' },
+  searchButton(toolbar),
+  { type: 'separator' },
   ...sourceItems(toolbar),
   ...displayItems(toolbar),
   ...actionItems(toolbar),

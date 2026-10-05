@@ -38,8 +38,15 @@ export type ContainerLogFormatOptions = {
   showContainerMetadata: boolean;
 };
 
-/** Where a line came from; workload views also name the pod. */
-type ContainerLogSource = { pod: string | null; container: string; kind: LogContainerKind };
+type LogContainerRef = { name: string; kind: LogContainerKind };
+
+/**
+ * Where a line came from. Pod views name the container; workload views name the
+ * pod, and the container too when there is more than one.
+ */
+type ContainerLogSource =
+  | { pod: null; container: LogContainerRef }
+  | { pod: string; container: LogContainerRef | null };
 
 type ContainerLogRowMetadata = { timestamp: string; source: ContainerLogSource | null };
 
@@ -61,6 +68,17 @@ type EntryDisplay = { rows: ContainerLogRow[]; copyLine: string };
 
 type JsonOf = (entry: ContainerLogsEntry) => Record<string, unknown> | null;
 
+const containerLogSource = (
+  entry: ContainerLogsEntry,
+  { isWorkload, showContainerMetadata }: ContainerLogFormatOptions
+): ContainerLogSource | null => {
+  const container = { name: entry.container, kind: logContainerKind(entry) };
+  if (isWorkload) {
+    return { pod: entry.pod, container: showContainerMetadata ? container : null };
+  }
+  return showContainerMetadata ? { pod: null, container } : null;
+};
+
 const containerLogRowMetadata = (
   entry: ContainerLogsEntry,
   options: ContainerLogFormatOptions
@@ -72,14 +90,7 @@ const containerLogRowMetadata = (
         options.apiTimestampUseLocalTimeZone
       )
     : '',
-  source:
-    options.isWorkload || options.showContainerMetadata
-      ? {
-          pod: options.isWorkload ? entry.pod : null,
-          container: entry.container,
-          kind: logContainerKind(entry),
-        }
-      : null,
+  source: containerLogSource(entry, options),
 });
 
 const containerLogMessage = (
@@ -96,10 +107,10 @@ const containerLogMessage = (
   return content.trim().length > 0 ? content : EMPTY_CONTAINER_LOG_PLACEHOLDER;
 };
 
-const formatContainerLogSource = (source: ContainerLogSource): string => {
-  const label = formatContainerLabel(source.container, source.kind);
-  return source.pod === null ? label : `${source.pod}/${label}`;
-};
+const formatContainerLogSource = ({ pod, container }: ContainerLogSource): string =>
+  [pod, container && formatContainerLabel(container.name, container.kind)]
+    .filter(Boolean)
+    .join('/');
 
 // The copied line reads like the row: `[timestamp] [pod/container] message`.
 const formatContainerLogCopyLine = (
@@ -218,8 +229,7 @@ const renderContainerLogSource = ({
   selectPod: (pod: string) => void;
   selectContainer: SelectContainerFilter;
 }): React.ReactNode => {
-  const { pod } = source;
-  const label = formatContainerLabel(source.container, source.kind);
+  const { pod, container } = source;
   return (
     <span
       className={
@@ -229,22 +239,22 @@ const renderContainerLogSource = ({
     >
       {'['}
       {pod !== null && (
-        <>
-          <LogMetadataButton
-            subject="pod"
-            name={pod}
-            podColor={podColor}
-            onSelect={() => selectPod(pod)}
-          />
-          {'/'}
-        </>
+        <LogMetadataButton
+          subject="pod"
+          name={pod}
+          podColor={podColor}
+          onSelect={() => selectPod(pod)}
+        />
       )}
-      <LogMetadataButton
-        subject="container"
-        name={label}
-        podColor={podColor}
-        onSelect={() => selectContainer(source.container, source.kind)}
-      />
+      {pod !== null && container !== null && '/'}
+      {container !== null && (
+        <LogMetadataButton
+          subject="container"
+          name={formatContainerLabel(container.name, container.kind)}
+          podColor={podColor}
+          onSelect={() => selectContainer(container.name, container.kind)}
+        />
+      )}
       {']'}
     </span>
   );

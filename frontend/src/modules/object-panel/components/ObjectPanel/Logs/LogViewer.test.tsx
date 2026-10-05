@@ -1782,7 +1782,52 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({ activePodNames: ['web-1'] });
 
-    expect(container.textContent).toContain('[11:00:00.123] [web-1/app] hello');
+    expect(container.textContent).toContain('[11:00:00.123] [web-1] hello');
+  });
+
+  it('names the container on workload lines only when there is more than one container', async () => {
+    setAppPreferencesForTesting({ objPanelLogsApiTimestampFormat: 'HH:mm:ss.SSS' });
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'hello',
+        timestamp: '2024-05-01T11:00:00.000Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-2',
+        container: 'app',
+        line: 'world',
+        timestamp: '2024-05-01T11:00:01.000Z',
+        isInit: false,
+      },
+    ]);
+    const lines = () =>
+      Array.from(container.querySelectorAll('.log-viewer-line')).map((element) =>
+        element.textContent?.replace(/\s+/g, ' ').trim()
+      );
+    const containersMock = GetContainerLogsScopeContainers as unknown as ViMock;
+
+    // One container: the pod is enough.
+    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+    await waitForMockCalls(containersMock, 1);
+    await flushAsync();
+    expect(lines()).toEqual(['[11:00:00.000] [web-1] hello', '[11:00:01.000] [web-2] world']);
+
+    // A second container: lines name the container again.
+    act(() => {
+      root.unmount();
+    });
+    containersMock.mockResolvedValue([scopeContainer('app'), scopeContainer('sidecar')]);
+    root = ReactDOM.createRoot(container);
+    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+    await waitForMockCalls(containersMock, 2);
+    await flushAsync();
+    expect(lines()).toEqual([
+      '[11:00:00.000] [web-1/app] hello',
+      '[11:00:01.000] [web-2/app] world',
+    ]);
   });
 
   it('keeps the workload pod metadata when the log line is empty', async () => {
@@ -1802,7 +1847,7 @@ describe('LogViewer active pod synchronisation', () => {
     const lines = Array.from(container.querySelectorAll('.log-viewer-line')).map((element) =>
       element.textContent?.replace(/\s+/g, ' ').trim()
     );
-    expect(lines).toEqual(['[11:00:00.123] [web-1/app] [container emitted an empty log]']);
+    expect(lines).toEqual(['[11:00:00.123] [web-1] [container emitted an empty log]']);
   });
 
   it('copies the configured API timestamp format in raw and parsed views', async () => {
@@ -1831,7 +1876,7 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
     expect(writeTextMock).toHaveBeenLastCalledWith(
-      '[11:00:00.123] [web-1/app] {"level":"info","message":"hello"}'
+      '[11:00:00.123] [web-1] {"level":"info","message":"hello"}'
     );
 
     await showLogFormat('Table');
@@ -1878,7 +1923,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({ activePodNames: ['web-1'] });
 
-    expect(container.textContent).toContain(`[${expectedTimestamp}] [web-1/app] hello`);
+    expect(container.textContent).toContain(`[${expectedTimestamp}] [web-1] hello`);
   });
 
   it('toggles API timestamps from the icon bar', async () => {
@@ -2186,7 +2231,7 @@ describe('LogViewer active pod synchronisation', () => {
       .querySelector('.log-viewer-line')
       ?.textContent?.replace(/\s+/g, ' ')
       .trim();
-    expect(line).toBe('[web-1/app] matched log');
+    expect(line).toBe('[web-1] matched log');
   });
 
   it('only shows the ANSI colors button when the current logs contain ANSI codes', async () => {
@@ -2285,7 +2330,7 @@ describe('LogViewer active pod synchronisation', () => {
     const lines = Array.from(container.querySelectorAll('.log-viewer-line')).map((el) =>
       el.textContent?.replace(/\s+/g, ' ').trim()
     );
-    expect(lines).toEqual(['[2024-05-01T10:00:00Z] [web-1/app] matched log']);
+    expect(lines).toEqual(['[2024-05-01T10:00:00Z] [web-1] matched log']);
   });
 
   it('supports highlighting ANSI-colored log text in the DOM renderer', async () => {
@@ -2617,7 +2662,7 @@ describe('LogViewer active pod synchronisation', () => {
       el.textContent?.replace(/\s+/g, ' ').trim()
     );
     expect(filteredLines).toHaveLength(1);
-    expect(filteredLines[0]).toContain('[web-1/app] matched log');
+    expect(filteredLines[0]).toContain('[web-1] matched log');
     expect(getContainerLogsStreamScopeParams(defaultScope)).toEqual({
       selectedFilters: ['pod:web-1', 'container:app'],
     });
@@ -2703,6 +2748,11 @@ describe('LogViewer active pod synchronisation', () => {
       defaultScope
     );
 
+    // Two containers, so lines name (and link) the container.
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
+      scopeContainer('app'),
+      scopeContainer('sidecar'),
+    ]);
     await renderViewer({ activePodNames: ['web-1', 'web-2'], panelId });
 
     const podButton = await waitForElement(() =>
@@ -2843,7 +2893,7 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(container.querySelector('button[aria-label="Show only logs from pod main"]')).toBeNull();
     expect(container.querySelector('.log-viewer-line')?.textContent).toBe(
-      '[web-1/app] [main/INFO] Server started'
+      '[web-1] [main/INFO] Server started'
     );
     await act(async () => podButton.click());
     expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
@@ -2926,7 +2976,7 @@ describe('LogViewer active pod synchronisation', () => {
     const rows = Array.from(container.querySelectorAll('.log-viewer-line')).map(
       (row) => row.textContent
     );
-    expect(rows).toEqual(['[web-1/app] {', '  "msg": "[a/b] ready"', '}']);
+    expect(rows).toEqual(['[web-1] {', '  "msg": "[a/b] ready"', '}']);
     expect(
       container.querySelectorAll('button[aria-label^="Show only logs from pod"]')
     ).toHaveLength(1);
@@ -2938,7 +2988,7 @@ describe('LogViewer active pod synchronisation', () => {
       copyButton.click();
       await Promise.resolve();
     });
-    expect(writeTextMock).toHaveBeenCalledWith('[web-1/app] {\n  "msg": "[a/b] ready"\n}');
+    expect(writeTextMock).toHaveBeenCalledWith('[web-1] {\n  "msg": "[a/b] ready"\n}');
   });
 
   it('excludes parsed metadata from Tab while retaining its filter actions', async () => {
