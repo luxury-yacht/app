@@ -75,8 +75,6 @@ type UseGridTableFiltersPresentationOptions<T> = {
   fetchAllRows?: () => Promise<T[]>;
   /** Base of the file name Download's Save to File offers. */
   exportFilename?: string;
-  /** The local data contains every filter match before presentation pagination. */
-  hasAllLocalMatches?: boolean;
   /** IconBar items rendered before the built-in Reset action. */
   preActions?: IconBarItem[];
   /** IconBar items rendered after a separator following Reset. */
@@ -120,7 +118,6 @@ export function useGridTableFiltersPresentation<T>({
   getTextContent,
   fetchAllRows,
   exportFilename,
-  hasAllLocalMatches,
   preActions,
   postActions,
 }: UseGridTableFiltersPresentationOptions<T>): ReactNode {
@@ -204,12 +201,15 @@ export function useGridTableFiltersPresentation<T>({
   // Download copies or saves every matching row when the view can fetch all pages.
   // Otherwise it takes this local row set; local presentation pagination still
   // supplies every filtered row here because pagination is applied downstream.
+  // That set is every matching row unless it is a backend page or a partial window.
   const downloadAction = useGridTableDownloadAction({
     data: tableData,
     columns: exportColumns,
     getTextContent,
     fetchAllRows,
-    hasAllLocalMatches,
+    allMatchingRows:
+      Boolean(fetchAllRows) ||
+      (filters?.options?.searchBehavior !== 'query' && !filters?.options?.partialDataLabel),
     defaultFilename: exportFilename ?? 'export',
   });
 

@@ -46,6 +46,7 @@ describe('table Download button', () => {
         columns: exportColumns,
         getTextContent: String,
         fetchAllRows: canFetchAllPages ? fetchRows : undefined,
+        allMatchingRows: true,
         defaultFilename: 'cluster-crds',
       }) as IconBarMenu;
       return null;

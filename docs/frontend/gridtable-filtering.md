@@ -22,7 +22,9 @@ placement and zoom follow [interaction boundaries](gridtable-interaction.md#inte
 - The post-search icon group starts with one Download button
   (`useGridTableDownloadAction`). Its menu copies the rows to the clipboard as
   CSV or saves them to a CSV file. Both take every matching row when the view
-  supplies `fetchAllRows`, and otherwise the local filtered rows.
+  supplies `fetchAllRows`, and otherwise the local filtered rows. Its label says
+  "all matching rows" unless the rows are a backend page without `fetchAllRows`
+  or a partial window (`partialDataLabel`), which say "visible rows".
 - Every multi-select Kinds dropdown exposes search plus `Select all` and
   `Select none`. GridTable owns this as an invariant of a visible Kind filter;
   views may decide whether the filter is present but cannot disable its controls.

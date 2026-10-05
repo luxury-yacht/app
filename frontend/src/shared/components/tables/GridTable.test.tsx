@@ -1766,6 +1766,28 @@ it('keeps local pagination on the first page after a filter is applied and remov
   cleanup();
 });
 
+// The Download button names its scope: a complete local table holds every matching
+// row even without paging, while a partial window holds only what it shows.
+it('names the Download scope from whether the table holds every matching row', () => {
+  const downloadLabel = (partialDataLabel?: string) => {
+    const { container, cleanup } = renderGridTable({
+      data: createRows(3),
+      virtualization: { enabled: false },
+      filters: { enabled: true, options: { partialDataLabel } },
+    });
+    const label = container
+      .querySelector('.icon-bar-button[aria-haspopup="menu"]')
+      ?.getAttribute('aria-label');
+    cleanup();
+    return label;
+  };
+
+  expect(downloadLabel()).toBe('Download all matching rows');
+  expect(downloadLabel('This table is showing a bounded or recent local window.')).toBe(
+    'Download visible rows'
+  );
+});
+
 // A local table without an all-rows fetcher downloads the rows its filters match.
 it('downloads only the local rows that match the active search', async () => {
   const clipboardWriteText = runtimeMocks.writeClipboardText;
@@ -1786,7 +1808,7 @@ it('downloads only the local rows that match the active search', async () => {
   });
   cleanupRoot = cleanup;
 
-  await chooseDownload(container, 'Download visible rows', 'Copy to Clipboard');
+  await chooseDownload(container, 'Download all matching rows', 'Copy to Clipboard');
 
   expect(clipboardWriteText).toHaveBeenCalledWith('Label\nRow 1\nRow 10\nRow 11');
   cleanup();
@@ -1934,7 +1956,7 @@ it('ignores wrapper context menus when no empty-area items are exposed', async (
   cleanup();
 });
 
-it('copies the current visible table contents as CSV from the filter icon bar', async () => {
+it('copies the table contents as CSV from the filter icon bar', async () => {
   const clipboardWriteText = runtimeMocks.writeClipboardText;
   clipboardWriteText.mockReset().mockResolvedValue(undefined);
 
@@ -1990,7 +2012,7 @@ it('copies the current visible table contents as CSV from the filter icon bar', 
 
   await flushAsync();
 
-  await chooseDownload(container, 'Download visible rows', 'Copy to Clipboard');
+  await chooseDownload(container, 'Download all matching rows', 'Copy to Clipboard');
 
   expect(clipboardWriteText).toHaveBeenCalledWith(
     'Label,Notes\n' + '"Alpha,One","He said ""hi"""\n' + 'Beta,"Line\nBreak"'
@@ -2057,7 +2079,7 @@ it('copies resource-bar columns as plain millicores and KiB under unit headers',
 
   await flushAsync();
 
-  await chooseDownload(container, 'Download visible rows', 'Copy to Clipboard');
+  await chooseDownload(container, 'Download all matching rows', 'Copy to Clipboard');
 
   expect(clipboardWriteText).toHaveBeenCalledWith(
     'Label,CPU (m),Memory (KiB)\nAlpha,250,524288\nBeta,1000,2097152'

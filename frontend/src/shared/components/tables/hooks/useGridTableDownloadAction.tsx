@@ -23,8 +23,8 @@ interface UseGridTableDownloadActionOptions<T> {
   getTextContent?: (node: ReactNode) => string;
   /** Fetch every matching row (all pages). Without it, both choices take `data`. */
   fetchAllRows?: () => Promise<T[]>;
-  /** `data` holds every filtered match, even if the table renders one page. */
-  hasAllLocalMatches?: boolean;
+  /** The rows downloaded are every row the filters match, not just those shown. */
+  allMatchingRows: boolean;
   /** Base of the saved file's name: `luxury-yacht-<base>-<YYYYMMDDHHmmss>.csv`. */
   defaultFilename: string;
 }
@@ -34,7 +34,7 @@ export function useGridTableDownloadAction<T>({
   columns,
   getTextContent,
   fetchAllRows,
-  hasAllLocalMatches = false,
+  allMatchingRows,
   defaultFilename,
 }: UseGridTableDownloadActionOptions<T>): IconBarItem {
   // The CSV both choices write, built only when one runs.
@@ -76,8 +76,7 @@ export function useGridTableDownloadAction<T>({
   }, [buildCsv, defaultFilename]);
 
   const { feedback, exporting, run } = useGridTableExportAction();
-  const title =
-    fetchAllRows || hasAllLocalMatches ? 'Download all matching rows' : 'Download visible rows';
+  const title = allMatchingRows ? 'Download all matching rows' : 'Download visible rows';
 
   return useMemo<IconBarItem>(
     () => ({
