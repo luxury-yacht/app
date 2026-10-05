@@ -221,12 +221,8 @@ export const CopyIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-/** Magnifier with star — highlight matching search terms */
-export const HighlightSearchIcon: React.FC<IconProps> = ({
-  width = 24,
-  height = 24,
-  fill = 'currentColor',
-}) => (
+/** Bulleted list — show every log line */
+export const AllLinesIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     aria-hidden="true"
     focusable="false"
@@ -234,15 +230,13 @@ export const HighlightSearchIcon: React.FC<IconProps> = ({
     viewBox="0 0 16 16"
     width={width}
     height={height}
-    fill={fill}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
   >
-    <g transform="translate(0 -0.7)">
-      <path
-        fillRule="evenodd"
-        d="M2 14.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75m1.5-3.252V9.112l1.29-1.258L6.6 9.688l-1.268 1.31zM7.645 8.61l4.715-4.866a.5.5 0 0 0-.028-.722l-1.01-.895l.995-1.123l1.01.895a2 2 0 0 1 .11 2.889l-7.47 7.71H2V8.48l7.594-7.41a2 2 0 0 1 2.723-.066l-.995 1.123a.5.5 0 0 0-.68.016L5.863 6.806z"
-        clipRule="evenodd"
-      />
-    </g>
+    <path d="M6 4h7.5M6 8h7.5M6 12h7.5" />
+    <path d="M2.5 4h.01M2.5 8h.01M2.5 12h.01" strokeWidth="2" />
   </svg>
 );
 
@@ -264,23 +258,22 @@ export const FilterModeIcon: React.FC<IconProps> = ({ width = 24, height = 24 })
   </svg>
 );
 
-/** Magnifier with slash — invert the text filter */
-export const InverseSearchIcon: React.FC<IconProps> = ({
-  width = 24,
-  height = 24,
-  fill = 'currentColor',
-}) => (
+/** Circle with a slash — show only the lines that do not match the text filter */
+export const InvertFilterIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
     aria-hidden="true"
     focusable="false"
     xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
+    viewBox="0 0 16 16"
     width={width}
     height={height}
-    fill={fill}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
   >
-    <path d="M19 10.5C19 5.81 15.19 2 10.5 2S2 5.81 2 10.5S5.81 19 10.5 19c1.98 0 3.81-.69 5.25-1.83L20 21.42l1.41-1.41l-4.25-4.25a8.47 8.47 0 0 0 1.83-5.25Zm-15 0C4 6.92 6.92 4 10.5 4S17 6.92 17 10.5S14.08 17 10.5 17S4 14.08 4 10.5" />
-    <path d="m12.79 6.79l-2.29 2.3l-2.29-2.3l-1.42 1.42l2.3 2.29l-2.3 2.29l1.42 1.42l2.29-2.3l2.29 2.3l1.42-1.42l-2.3-2.29l2.3-2.29z" />
+    <circle cx="8" cy="8" r="5.75" />
+    <path d="M3.95 12.05l8.1-8.1" />
   </svg>
 );
 

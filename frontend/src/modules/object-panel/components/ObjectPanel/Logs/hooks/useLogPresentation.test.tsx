@@ -51,8 +51,10 @@ describe('useLogPresentation', () => {
     return result as ReturnType<typeof useLogPresentation<T>>;
   };
 
+  // These cases filter, so they start in Filtered mode; the default, All, hides nothing.
   const options = (overrides: Partial<LogOptionsState> = {}): LogOptionsState => ({
     ...initialLogOptionsState,
+    filterMode: 'filtered',
     ...overrides,
   });
 

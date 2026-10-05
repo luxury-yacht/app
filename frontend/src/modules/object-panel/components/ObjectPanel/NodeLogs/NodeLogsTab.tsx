@@ -22,7 +22,6 @@ import {
   type ParsedLogEntry,
 } from '../Logs/logOptionsReducer';
 import { findLogOverlap } from '../Logs/logOverlap';
-import { buildLogSearchRegex } from '../Logs/logSearch';
 import { buildLogToolbarItems, LogMatchCount, LogSearchRow } from '../Logs/logToolbar';
 import {
   getLogViewerScrollPosition,
@@ -605,17 +604,7 @@ const NodeLogsTab = ({
 }: NodeLogsTabProps) => {
   const [selectedSourcePath, setSelectedSourcePath] = useState('');
   const [options, dispatch] = useReducer(logOptionsReducer, initialLogOptionsState);
-  const {
-    textFilter,
-    autoRefresh,
-    wrapText,
-    showAnsiColors,
-    filterMode,
-    caseSensitiveMatches,
-    regexMatches,
-    displayMode,
-    expandedRows,
-  } = options;
+  const { autoRefresh, wrapText, showAnsiColors, displayMode, expandedRows } = options;
   const logsContentRef = useRef<HTMLElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
   const searchRowId = useId();
@@ -650,11 +639,12 @@ const NodeLogsTab = ({
 
   const lines = useMemo(() => content.split('\n'), [content]);
   const {
-    filterText,
     filteredEntries: filteredLines,
     hasVisibleLines,
     canParseLogs,
     hasInvalidRegex,
+    textFilterHidesLines,
+    highlightRegex,
     parsedRows,
     tableColumns,
     getParsedCsv,
@@ -665,17 +655,6 @@ const NodeLogsTab = ({
     searchTexts: nodeLogSearchTexts,
     lineOf: nodeLogLine,
   });
-  const highlightRegex = useMemo(
-    () =>
-      filterMode !== 'invert'
-        ? buildLogSearchRegex(filterText, {
-            regexMode: regexMatches,
-            caseSensitive: caseSensitiveMatches,
-            global: true,
-          })
-        : null,
-    [caseSensitiveMatches, filterMode, filterText, regexMatches]
-  );
   const isParsedView = displayMode === 'parsed';
 
   useRawViewFallback({ displayMode, hasVisibleLines, canParseLogs, dispatch });
@@ -818,10 +797,7 @@ const NodeLogsTab = ({
             <IconBar items={iconItems} />
             <LogBufferFullIndicator shown={notices.bufferFullShown} />
 
-            <LogMatchCount
-              count={displayedLogCount}
-              filtered={filterMode !== 'all' && textFilter.trim().length > 0}
-            />
+            <LogMatchCount count={displayedLogCount} filtered={textFilterHidesLines} />
           </div>
           {options.searchOpen ? (
             <LogSearchRow

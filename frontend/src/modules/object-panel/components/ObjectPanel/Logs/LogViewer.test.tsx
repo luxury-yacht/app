@@ -527,6 +527,24 @@ describe('LogViewer active pod synchronisation', () => {
     });
   };
 
+  // Clicks the filter mode button until it shows the given mode.
+  const chooseFilterMode = async (label: 'All' | 'Filtered' | 'Invert') => {
+    for (let step = 0; step < 3; step += 1) {
+      const button = requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label^="Filter mode:"]'),
+        'expected the filter mode button'
+      );
+      if (button.getAttribute('aria-label') === `Filter mode: ${label}`) {
+        return;
+      }
+      await act(async () => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    }
+    throw new Error(`filter mode ${label} was not reached`);
+  };
+
   const getLatestShortcut = (key: string) => {
     for (let i = shortcutMocks.useShortcut.mock.calls.length - 1; i >= 0; i -= 1) {
       const config = shortcutMocks.useShortcut.mock.calls[i][0] as { key: string };
@@ -2086,6 +2104,7 @@ describe('LogViewer active pod synchronisation', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
       await Promise.resolve();
     });
+    await chooseFilterMode('Filtered');
     expect(container.textContent).toContain('panic in worker');
     expect(container.textContent).not.toContain('steady state');
 
@@ -3116,6 +3135,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer();
     await openSearch();
+    await chooseFilterMode('Filtered');
 
     const filterInput = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
     const caseSensitiveButton = container.querySelector<HTMLButtonElement>(
@@ -3195,6 +3215,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer();
     await openSearch();
+    await chooseFilterMode('Filtered');
 
     const filterInput = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
     expect(filterInput).toBeTruthy();
@@ -3229,14 +3250,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(highlights).toEqual(['panic', 'timeout']);
     expect(container.textContent).not.toContain('steady state');
 
-    // Filtered → Invert.
-    await act(async () => {
-      requireValue(
-        container.querySelector('button[aria-label="Filter mode: Filtered"]'),
-        'expected the filter mode button'
-      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
+    await chooseFilterMode('Invert');
 
     expect(container.querySelectorAll('.log-viewer-highlight')).toHaveLength(0);
     expect(container.textContent).toContain('steady state');
@@ -3648,7 +3662,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(chipStrip?.textContent).toContain('Regex: panic');
     expect(chipStrip?.textContent).toContain('web-1');
     expect(chipStrip?.textContent).toContain('app');
-    expect(chipStrip?.textContent).toContain('Highlight');
+    expect(chipStrip?.textContent).toContain('Filtered');
     expect(chipStrip?.textContent).toContain('Regex: panic');
   });
 

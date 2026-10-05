@@ -42,7 +42,6 @@ import {
 } from '@/core/settings/appPreferences';
 import { formatObjPanelLogsApiTimestamp } from '@/utils/objPanelLogsApiTimestampFormat';
 import { INACTIVE_SCOPE } from '../constants';
-import type { LogFilterMode } from '../types';
 import { containsAnsi } from './ansi';
 import { buildContainerLogMetadataColumns, containerLogExportValue } from './containerLogColumns';
 import {
@@ -94,7 +93,7 @@ import {
   pruneLogFilterSelectionToOptions,
 } from './logFilterSelection';
 import type { ParsedLogEntry } from './logOptionsReducer';
-import { buildLogSearchRegex, isValidRegexPattern } from './logSearch';
+import { isValidRegexPattern } from './logSearch';
 import { buildLogToolbarItems } from './logToolbar';
 import {
   getLogViewerPrefs,
@@ -373,14 +372,10 @@ const hasCopyableContainerLogs = (
   filteredCount: number
 ): boolean => (isParsedView ? parsedCount > 0 : filteredCount > 0);
 
-// In All mode the text filter hides no line, so only the source selection narrows.
 const hasActiveLogResultFilter = (
   selectedFilters: Parameters<typeof isNarrowingFilterSelection>[0],
-  textFilter: string,
-  filterMode: LogFilterMode
-): boolean =>
-  isNarrowingFilterSelection(selectedFilters) ||
-  (filterMode !== 'all' && textFilter.trim().length > 0);
+  textFilterHidesLines: boolean
+): boolean => isNarrowingFilterSelection(selectedFilters) || textFilterHidesLines;
 
 const LogViewerInner: React.FC<LogViewerProps> = ({
   resourceKind,
@@ -666,9 +661,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [formatApiTimestamp]
   );
   const {
-    filterText,
     filteredEntries,
     hasVisibleLines,
+    textFilterHidesLines,
+    highlightRegex,
     canParseLogs: canParseContainerLogs,
     parsedRows,
     tableColumns,
@@ -682,17 +678,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     metadataColumns,
     exportValue: exportTableValue,
   });
-  // Highlighting follows the filter as applied, so it never runs ahead of it.
-  const highlightRegex = useMemo(
-    () =>
-      buildLogSearchRegex(filterMode === 'invert' ? '' : filterText, {
-        regexMode: regexMatches,
-        caseSensitive: caseSensitiveMatches,
-        global: true,
-      }),
-    [caseSensitiveMatches, filterMode, filterText, regexMatches]
-  );
-
   // A new source selection restarts the live stream; previous logs refetch on
   // their own, and a stopped stream picks the selection up when it starts.
   useEffect(() => {
@@ -888,7 +873,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     () => logEntries.some((entry) => containsAnsi(entry.line)),
     [logEntries]
   );
-  const hasActiveResultFilter = hasActiveLogResultFilter(selectedFilters, textFilter, filterMode);
+  const hasActiveResultFilter = hasActiveLogResultFilter(selectedFilters, textFilterHidesLines);
 
   useRawViewFallback({
     displayMode,

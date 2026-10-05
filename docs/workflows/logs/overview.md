@@ -27,11 +27,13 @@ Container and Node Logs share one viewer shell under
 `frontend/src/modules/object-panel/components/ObjectPanel/Logs`. Each viewer
 keeps its own source selection and transport.
 
-- `logOptionsReducer.ts`: search (text, highlight, invert, case, regex),
-  display (wrap, ANSI, raw/pretty/parsed), row expansion, copy feedback and
-  auto-refresh. The container reducer composes it with its source
-  fields. Highlighting is off while the filter is inverted; case sensitivity is
-  off in regex mode.
+- `logOptionsReducer.ts`: search (text, filter mode, case, regex), display
+  (wrap, ANSI, raw/pretty/parsed), row expansion, copy feedback and
+  auto-refresh. The container reducer composes it with its source fields. The
+  filter mode decides what the text does: All (the default) keeps every line,
+  Filtered keeps only matching lines, and Invert keeps only the others. Matches
+  are highlighted in All and Filtered, never in Invert. Case sensitivity is off
+  in regex mode.
 - `hooks/useLogPresentation.ts`: the deferred text filter (a viewer supplies the
   texts an entry matches; container search also matches pod and container
   names), JSON detection cached per line, the parsed JSON table (rows, columns
@@ -44,7 +46,9 @@ keeps its own source selection and transport.
 - `logToolbar.tsx`: the icon bar, the search row (`LogSearchRow`), and the
   match count (`LogMatchCount`), shown only while a filter narrows the logs.
   The icon bar's search button opens the search row below the main controls:
-  the text filter box and the highlight, invert, case and regex options. ⌘F /
+  the text filter box, the filter mode button (click cycles All → Filtered →
+  Invert; its menu picks one; `I` switches between Invert and All), and the
+  case and regex options. ⌘F /
   Ctrl+F opens it and focuses the box. Closing the row keeps its filter applied,
   and the search button stays highlighted while a filter is typed. Container
   Logs remembers whether the row is open with the tab's other options; Node Logs

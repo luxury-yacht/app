@@ -44,6 +44,10 @@ export type LogPresentation<T> = {
   /** At least one shown line is a JSON object, so the JSON views are available. */
   canParseLogs: boolean;
   hasInvalidRegex: boolean;
+  /** Whether the text filter hides lines: it is set, and the mode is not All. */
+  textFilterHidesLines: boolean;
+  /** Matches to highlight in the shown lines; none in Invert, which shows the others. */
+  highlightRegex: RegExp | null;
   /** The parsed JSON table, only in the table view: rows and columns. */
   parsedRows: ParsedLogEntry[];
   tableColumns: GridColumnDefinition<ParsedLogEntry>[];
@@ -97,7 +101,11 @@ const useTextFilter = <T>({
       ? buildLogSearchRegex(textFilter, { regexMode: true, caseSensitive: caseSensitiveMatches })
       : null;
     if (filterMode === 'all') {
-      return { filterText: textFilter, filteredEntries: entries, hasInvalidRegex: regexMatches && !regex };
+      return {
+        filterText: textFilter,
+        filteredEntries: entries,
+        hasInvalidRegex: regexMatches && !regex,
+      };
     }
     if (regexMatches && !regex) {
       return { filterText: textFilter, filteredEntries: [], hasInvalidRegex: true };
@@ -183,7 +191,20 @@ export function useLogPresentation<T>(source: LogPresentationSource<T>): LogPres
     metadataColumns = NO_COLUMNS,
     exportValue = jsonFieldValue,
   } = source;
-  const isParsedView = source.options.displayMode === 'parsed';
+  const { displayMode, filterMode, regexMatches, caseSensitiveMatches } = source.options;
+  const isParsedView = displayMode === 'parsed';
+  // Highlighting follows the filter as applied, so it never runs ahead of it.
+  const highlightRegex = useMemo(
+    () =>
+      filterMode === 'invert'
+        ? null
+        : buildLogSearchRegex(filterText, {
+            regexMode: regexMatches,
+            caseSensitive: caseSensitiveMatches,
+            global: true,
+          }),
+    [caseSensitiveMatches, filterMode, filterText, regexMatches]
+  );
   const { detectAll, jsonOf } = useJsonDetection(lineOf);
   const detected = useMemo(() => detectAll(filteredEntries), [detectAll, filteredEntries]);
   // Table rows are built only for the table view.
@@ -225,6 +246,8 @@ export function useLogPresentation<T>(source: LogPresentationSource<T>): LogPres
     hasVisibleLines,
     canParseLogs: detected.some((json) => json !== null),
     hasInvalidRegex,
+    textFilterHidesLines: filterMode !== 'all' && filterText.trim().length > 0,
+    highlightRegex,
     parsedRows,
     tableColumns,
     getParsedCsv,

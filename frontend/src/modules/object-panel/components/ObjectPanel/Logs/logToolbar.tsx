@@ -9,12 +9,12 @@
 
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import {
+  AllLinesIcon,
   AnsiColorIcon,
   AutoRefreshIcon,
   CopyIcon,
   FilterModeIcon,
-  HighlightSearchIcon,
-  InverseSearchIcon,
+  InvertFilterIcon,
   ParseJsonIcon,
   PrettyJsonIcon,
   PreviousLogsIcon,
@@ -107,9 +107,9 @@ const cycleSplitItem = <M extends string>({
 
 // Matches are highlighted in every mode except Invert, which shows the other lines.
 const FILTER_MODES: Record<LogFilterMode, CycleChoice<LogFilterMode>> = {
-  all: { label: 'All', icon: <HighlightSearchIcon width={16} height={16} />, next: 'filtered' },
+  all: { label: 'All', icon: <AllLinesIcon width={16} height={16} />, next: 'filtered' },
   filtered: { label: 'Filtered', icon: <FilterModeIcon width={16} height={16} />, next: 'invert' },
-  invert: { label: 'Invert', icon: <InverseSearchIcon width={18} height={18} />, next: 'all' },
+  invert: { label: 'Invert', icon: <InvertFilterIcon width={16} height={16} />, next: 'all' },
 };
 
 const searchItems = ({
