@@ -197,7 +197,11 @@ export const CopyIcon: React.FC<IconProps> = ({
 );
 
 /** Bulleted list — show every log line */
-export const AllLinesIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
+export const AllLinesIcon: React.FC<IconProps> = ({
+  width = 24,
+  height = 24,
+  fill = 'currentColor',
+}) => (
   <svg
     aria-hidden="true"
     focusable="false"
@@ -206,7 +210,7 @@ export const AllLinesIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) =
     width={width}
     height={height}
     fill="none"
-    stroke="currentColor"
+    stroke={fill}
     strokeWidth="1.5"
     strokeLinecap="round"
   >
@@ -216,7 +220,11 @@ export const AllLinesIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) =
 );
 
 /** Funnel — show only the lines that match the text filter */
-export const FilterModeIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
+export const FilterModeIcon: React.FC<IconProps> = ({
+  width = 24,
+  height = 24,
+  fill = 'currentColor',
+}) => (
   <svg
     aria-hidden="true"
     focusable="false"
@@ -225,7 +233,7 @@ export const FilterModeIcon: React.FC<IconProps> = ({ width = 24, height = 24 })
     width={width}
     height={height}
     fill="none"
-    stroke="currentColor"
+    stroke={fill}
     strokeWidth="1.5"
     strokeLinejoin="round"
   >
@@ -234,7 +242,11 @@ export const FilterModeIcon: React.FC<IconProps> = ({ width = 24, height = 24 })
 );
 
 /** Circle with a slash — show only the lines that do not match the text filter */
-export const InvertFilterIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
+export const InvertFilterIcon: React.FC<IconProps> = ({
+  width = 24,
+  height = 24,
+  fill = 'currentColor',
+}) => (
   <svg
     aria-hidden="true"
     focusable="false"
@@ -243,7 +255,7 @@ export const InvertFilterIcon: React.FC<IconProps> = ({ width = 24, height = 24 
     width={width}
     height={height}
     fill="none"
-    stroke="currentColor"
+    stroke={fill}
     strokeWidth="1.5"
     strokeLinecap="round"
   >
