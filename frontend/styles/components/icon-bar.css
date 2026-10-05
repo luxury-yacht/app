@@ -3,15 +3,15 @@
 .icon-bar {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 0.4rem;
 }
 
 .icon-bar-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: none;
   border-radius: 4px;
@@ -30,18 +30,12 @@
   background: var(--color-bg-tertiary);
 }
 
+/* Only keyboard focus is emphasized; a clicked toggle keeps its on/off look. */
 .icon-bar-button:focus {
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
-  opacity: 1;
-}
-
-.icon-bar-button:focus:not(:focus-visible) {
-  box-shadow: none;
 }
 
 .icon-bar-button:focus-visible {
-  outline: none;
   box-shadow: 0 0 0 2px var(--color-accent);
   opacity: 1;
 }
