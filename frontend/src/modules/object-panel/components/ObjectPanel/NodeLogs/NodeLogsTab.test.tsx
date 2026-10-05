@@ -123,7 +123,7 @@ describe('NodeLogsTab', () => {
   };
 
   const selectSource = async (label: string): Promise<void> => {
-    const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
+    const trigger = container.querySelector('button[aria-label="Node log source"]');
     await act(async () => {
       requireValue(trigger, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
         new MouseEvent('click', { bubbles: true })
@@ -166,7 +166,7 @@ describe('NodeLogsTab', () => {
     expect(mockFetchNodeLogs).not.toHaveBeenCalled();
     expect(container.textContent).toContain('Select a log source to view logs.');
     expect(
-      container.querySelector('.logs-viewer-selector-dropdown .dropdown-value')?.textContent
+      container.querySelector('button[aria-label="Node log source"] .dropdown-value')?.textContent
     ).toBe('Select source');
   });
 
@@ -284,10 +284,10 @@ describe('NodeLogsTab', () => {
       ],
     });
 
-    const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
+    const trigger = container.querySelector('button[aria-label="Node log source"]');
     expect(trigger).toBeTruthy();
     expect(
-      container.querySelector('.logs-viewer-selector-dropdown .dropdown-value')?.textContent
+      container.querySelector('button[aria-label="Node log source"] .dropdown-value')?.textContent
     ).toBe('Select source');
 
     await act(async () => {
@@ -730,9 +730,7 @@ describe('NodeLogsTab', () => {
 
     expect(container.textContent).toContain('Error: node log access denied');
     // Another source must stay selectable when this one cannot be read.
-    expect(
-      container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger')
-    ).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Node log source"]')).not.toBeNull();
     expect(handleInlineMock).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'node log access denied' }),
       {
@@ -873,7 +871,7 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
+    const trigger = container.querySelector('button[aria-label="Node log source"]');
     expect(trigger).toBeTruthy();
     await selectSource('containerd');
     await waitForAnimationFrames(6);
@@ -920,7 +918,7 @@ describe('NodeLogsTab', () => {
     );
 
     await act(async () => {
-      const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
+      const trigger = container.querySelector('button[aria-label="Node log source"]');
       requireValue(trigger, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
         new MouseEvent('click', { bubbles: true })
       );

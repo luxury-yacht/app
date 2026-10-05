@@ -40,18 +40,6 @@
   gap: var(--spacing-sm);
 }
 
-.logs-viewer-selector-dropdown .dropdown-trigger {
-  width: 130px;
-  min-width: 130px;
-  max-width: 130px;
-}
-
-.logs-viewer-selector-dropdown .dropdown-value {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* "42 of 100" counter rendered immediately after the IconBar in the
    controls row. Uses tabular-nums so the value doesn't jitter as
    entries stream in, and the secondary text color so it reads as

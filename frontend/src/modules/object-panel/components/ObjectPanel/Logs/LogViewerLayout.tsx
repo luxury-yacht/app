@@ -148,7 +148,6 @@ const LogSourceDropdown = ({
     renderValue={(value) =>
       logSourceGroupLabel(label, selectedFilters, group, normalizeDropdownValue(value))
     }
-    className="logs-viewer-selector-dropdown"
   />
 );
 
