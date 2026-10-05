@@ -126,7 +126,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
     const showNamespaceFilter = isAllNamespaces;
     const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Workloads' : 'Namespace Workloads';
-    const beforeNamespaceActions = useMemo<IconBarItem[]>(
+    const viewActions = useMemo<IconBarItem[]>(
       () => [
         ...(selectedWorkloadKey && onWorkloadSelectionClear
           ? [
@@ -177,8 +177,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       showNamespaceFilters: showNamespaceFilter,
       diagnosticsLabel,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-      filterOptionOverrides:
-        beforeNamespaceActions.length > 0 ? { beforeNamespaceActions } : undefined,
+      viewActions,
       favoritePane: { id: 'workloads', label: 'Workloads' },
     });
 

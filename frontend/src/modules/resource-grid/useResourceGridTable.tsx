@@ -336,7 +336,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   availableKinds: kindOptions,
   diagnosticsLabel,
   filterAccessors,
-  leadingFilterActions = [],
+  viewActions = [],
   filterOptionOverrides,
   onTableStateChange,
   rowIdentity,
@@ -347,7 +347,6 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   namespace = '',
   showNamespaceFilters = false,
   showKindDropdown = false,
-  getTrailingFilterActions,
   transformSortedData,
   showFavoriteToggle = true,
   favoritePane,
@@ -478,20 +477,15 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     availableFilterNamespaces: showNamespaceFilters ? availableFilterNamespaces : undefined,
     filterOptions: favoriteFilterOptions,
   });
-  const trailingFilterActions = useMemo(
-    () => getTrailingFilterActions?.(sortedData) ?? [],
-    [getTrailingFilterActions, sortedData]
-  );
-  // Filter-related actions and the favorite (save) toggle all live on the left, separate
-  // from the right-side copy/export cluster (the scope toggle + Copy + Export).
+  // One icon bar: the search options, the view's own icons, then Favorite. The filter
+  // bar puts Match case first and Download after a separator.
   const filterPreActions = useMemo(
     () => [
       ...(metadataToggle ? [metadataToggle] : []),
-      ...leadingFilterActions,
-      ...trailingFilterActions,
+      ...viewActions,
       ...(favToggle ? [favToggle] : []),
     ],
-    [favToggle, leadingFilterActions, metadataToggle, trailingFilterActions]
+    [favToggle, metadataToggle, viewActions]
   );
   const displayData = useMemo(
     () => (transformSortedData ? transformSortedData(sortedData) : sortedData),

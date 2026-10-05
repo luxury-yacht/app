@@ -14,17 +14,17 @@ placement and zoom follow [interaction boundaries](gridtable-interaction.md#inte
   order. Provider query facets participate in that order alongside structural
   filters, search, actions, and Columns; adding a facet must not create a
   keyboard focus trap.
-- A feature-owned structural action that must precede Namespace uses
-  `beforeNamespaceActions`; GridTable renders that IconBar after Kind and before
-  Namespace rather than forcing the action into the post-search action cluster.
-  A table without a Kind filter may use this as its leftmost filter-bar control;
-  the Workloads/Pods composite uses it for the expanded Pods collapse control.
-- The post-search icon group starts with one Download button
-  (`useGridTableDownloadAction`). Its menu copies the rows to the clipboard as
-  CSV or saves them to a CSV file. Both take every matching row when the view
-  supplies `fetchAllRows`, and otherwise the local filtered rows. Its label says
-  "all matching rows" unless the rows are a backend page without `fetchAllRows`
-  or a partial window (`partialDataLabel`), which say "visible rows".
+- Every table has one icon bar after the search box, in this order: Match case
+  (local search only), Include metadata, the view's own icons (`viewActions`,
+  such as Collapse Pods or Manage ignored findings), Favorite, a separator, and
+  Download. A view adds icons only through `viewActions`; there is no other
+  slot before the filters or after Download.
+- The Download button's menu (`useGridTableDownloadAction`) copies the rows to
+  the clipboard as CSV or saves them to a CSV file. Both take every matching row
+  when the view supplies `fetchAllRows`, and otherwise the local filtered rows.
+  Its label says "all matching rows" unless the rows are a backend page without
+  `fetchAllRows` or a partial window (`partialDataLabel`), which say "visible
+  rows".
 - Every multi-select Kinds dropdown exposes search plus `Select all` and
   `Select none`. GridTable owns this as an invariant of a visible Kind filter;
   views may decide whether the filter is present but cannot disable its controls.

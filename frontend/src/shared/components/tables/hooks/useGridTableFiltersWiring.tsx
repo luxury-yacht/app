@@ -75,10 +75,6 @@ type UseGridTableFiltersPresentationOptions<T> = {
   fetchAllRows?: () => Promise<T[]>;
   /** Base of the file name Download's Save to File offers. */
   exportFilename?: string;
-  /** IconBar items rendered before the built-in Reset action. */
-  preActions?: IconBarItem[];
-  /** IconBar items rendered after a separator following Reset. */
-  postActions?: IconBarItem[];
 };
 
 export function useGridTableFilterModel<T>({
@@ -118,8 +114,6 @@ export function useGridTableFiltersPresentation<T>({
   getTextContent,
   fetchAllRows,
   exportFilename,
-  preActions,
-  postActions,
 }: UseGridTableFiltersPresentationOptions<T>): ReactNode {
   const {
     filteringEnabled,
@@ -195,7 +189,7 @@ export function useGridTableFiltersPresentation<T>({
   const searchShortcutActive = searchShortcut?.active ?? filteringEnabled;
   const searchShortcutPriority = searchShortcut?.priority ?? 5;
   const showColumnsDropdown = Boolean(columnsDropdown);
-  const resolvedPreActions = preActions ?? resolvedFilterOptions.preActions;
+  const resolvedPreActions = resolvedFilterOptions.preActions;
   const resolvedCustomActions = resolvedFilterOptions.customActions;
 
   // Download copies or saves every matching row when the view can fetch all pages.
@@ -213,18 +207,8 @@ export function useGridTableFiltersPresentation<T>({
     defaultFilename: exportFilename ?? 'export',
   });
 
-  const resolvedPostActions = useMemo<IconBarItem[]>(() => {
-    const items: IconBarItem[] = [downloadAction];
-
-    if (resolvedFilterOptions.postActions?.length) {
-      items.push(...resolvedFilterOptions.postActions);
-    }
-    if (postActions?.length) {
-      items.push(...postActions);
-    }
-
-    return items;
-  }, [downloadAction, postActions, resolvedFilterOptions.postActions]);
+  // Download ends the icon bar, after a separator.
+  const resolvedPostActions = useMemo<IconBarItem[]>(() => [downloadAction], [downloadAction]);
 
   // Filter feedback for the bar: N (items matching the active filters) of M (items in scope before
   // them). Both are TOTALS, never the current page. Server-paginated tables get them from the

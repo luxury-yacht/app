@@ -112,10 +112,6 @@ interface ResolvedMultiselectFilterControl {
   onClear: () => void;
 }
 
-type PrimaryFilterItem =
-  | { type: 'control'; control: ResolvedMultiselectFilterControl }
-  | { type: 'before-namespace-actions'; items: IconBarItem[] };
-
 function formatResultCountLabel(
   resultCount: NonNullable<GridTableFiltersBarProps['resultCount']>
 ): string {
@@ -489,35 +485,12 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   const controlsAt = (placement: FilterControlPlacement): ResolvedMultiselectFilterControl[] =>
     filterControls.filter((control) => control.visible && control.placement === placement);
 
-  const primaryFilterItems: PrimaryFilterItem[] = [
-    ...controlsAt('before-kinds').map((control) => ({
-      type: 'control' as const,
-      control,
-    })),
-    ...controlsAt('kind').map((control) => ({
-      type: 'control' as const,
-      control,
-    })),
-    ...(resolvedFilterOptions.beforeNamespaceActions?.length
-      ? [
-          {
-            type: 'before-namespace-actions' as const,
-            items: resolvedFilterOptions.beforeNamespaceActions,
-          },
-        ]
-      : []),
-    ...controlsAt('namespace').map((control) => ({
-      type: 'control' as const,
-      control,
-    })),
-    ...controlsAt('cluster').map((control) => ({
-      type: 'control' as const,
-      control,
-    })),
-    ...controlsAt('after-clusters').map((control) => ({
-      type: 'control' as const,
-      control,
-    })),
+  const primaryFilterControls: ResolvedMultiselectFilterControl[] = [
+    ...controlsAt('before-kinds'),
+    ...controlsAt('kind'),
+    ...controlsAt('namespace'),
+    ...controlsAt('cluster'),
+    ...controlsAt('after-clusters'),
   ];
 
   const activeFilterChips = buildActiveFilterChips(activeFilters, filterControls, onFiltersChange);
@@ -615,21 +588,9 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
     <div className="gridtable-filter-container">
       <div className="gridtable-filter-bar" ref={containerRef}>
         <div className="gridtable-filter-cluster" data-gridtable-filter-cluster="primary">
-          {!!primaryFilterItems.length && (
+          {!!primaryFilterControls.length && (
             <div className="gridtable-filter-subcluster">
-              {primaryFilterItems.map((item) =>
-                item.type === 'control' ? (
-                  renderFilterControl(item.control)
-                ) : (
-                  <div
-                    key="before-namespace-actions"
-                    className="gridtable-filter-group"
-                    data-gridtable-filter-role="before-namespace-actions"
-                  >
-                    <IconBar items={item.items} />
-                  </div>
-                )
-              )}
+              {primaryFilterControls.map(renderFilterControl)}
             </div>
           )}
           <div className="gridtable-filter-subcluster">

@@ -82,7 +82,8 @@ export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   availableKinds?: string[];
   diagnosticsLabel?: string;
   filterAccessors?: GridTableFilterAccessors<T>;
-  leadingFilterActions?: IconBarItem[];
+  /** The view's own icons, shown in the filter bar between the search options and Favorite. */
+  viewActions?: IconBarItem[];
   filterOptions?: GridTableFilterPersistenceOptions;
   pageSizeOptions?: readonly number[];
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
@@ -94,7 +95,6 @@ export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   persistenceData?: T[];
   rowIdentity?: (item: T, index: number) => string;
   showKindDropdown?: boolean;
-  getTrailingFilterActions?: (sortedData: T[]) => IconBarItem[];
   transformSortedData?: (sortedData: T[]) => T[];
   /** Surfaces without a workspace route can omit the workspace favorite control. */
   showFavoriteToggle?: boolean;

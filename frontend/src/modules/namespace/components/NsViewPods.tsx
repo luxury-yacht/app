@@ -376,8 +376,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       // Workload selection rewrites this pane's Namespace filter.
       sharesAllNamespacesFilter: false,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-      filterOptionOverrides:
-        podsPaneActions.length > 0 ? { beforeNamespaceActions: podsPaneActions } : undefined,
+      viewActions: podsPaneActions,
       favoritePane: { id: 'pods', label: 'Pods' },
     });
 

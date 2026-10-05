@@ -563,15 +563,18 @@ describe('NsViewPods', () => {
     }
   };
 
-  it('owns the Pods collapse action as the first structural filter action', async () => {
+  it('puts the Pods collapse action in the main icon bar after the search options', async () => {
     const onPodsCollapsedChange = vi.fn();
     await renderPods({ onPodsCollapsedChange });
 
-    const structuralActions = gridTablePropsRef.current.filters?.options?.beforeNamespaceActions;
+    const options = gridTablePropsRef.current.filters?.options;
+    expect(options && 'beforeNamespaceActions' in options).toBe(false);
+    const iconBarActions = options?.preActions ?? [];
+    // Rendered on its own here, so the pane also shows Favorite; under Workloads it shares that one.
     expect(
-      structuralActions?.map((action) => (action.type === 'separator' ? null : action.title))
-    ).toEqual(['Collapse Pods']);
-    const collapseAction = structuralActions?.[0];
+      iconBarActions.map((action) => (action.type === 'separator' ? null : action.title))
+    ).toEqual(['Include metadata', 'Collapse Pods', 'Save as favorite']);
+    const collapseAction = iconBarActions[1];
     if (!collapseAction || collapseAction.type !== 'action') {
       throw new Error('Expected the Collapse Pods action');
     }

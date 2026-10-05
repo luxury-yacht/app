@@ -373,16 +373,16 @@ describe('NsViewWorkloads', () => {
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
 
-    const structuralActions = (
-      gridTablePropsRef.current.filters?.options as
-        | { beforeNamespaceActions?: Array<{ title: string; onClick: () => void }> }
-        | undefined
-    )?.beforeNamespaceActions;
-    const clearAction = structuralActions?.find(
-      (action) => action.title === 'Clear selected workload'
+    // The view's own icon sits in the main icon bar, with the search options and Favorite.
+    const clearAction = gridTablePropsRef.current.filters?.options?.preActions?.find(
+      (action) => action.type !== 'separator' && action.title === 'Clear selected workload'
     );
-    expect(clearAction).toBeTruthy();
-    act(() => clearAction?.onClick());
+    expect(clearAction?.type).toBe('action');
+    act(() => {
+      if (clearAction?.type === 'action') {
+        clearAction.onClick();
+      }
+    });
     expect(podsViewPropsRef.current).toMatchObject({
       namespace: 'team-a',
       workloadFilterRequest: { type: 'clear' },
@@ -391,7 +391,7 @@ describe('NsViewWorkloads', () => {
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
     expect(
-      gridTablePropsRef.current.filters?.options?.beforeNamespaceActions?.find(
+      gridTablePropsRef.current.filters?.options?.preActions?.find(
         (action) => action.type !== 'separator' && action.title === 'Collapse Pods'
       )
     ).toBeUndefined();

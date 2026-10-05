@@ -156,16 +156,11 @@ const finding: ClusterAttentionFinding = {
   age: '2m',
 };
 
-const getManageIgnoredFindingsAction = () => {
-  const postActions = (
-    queryParamsRef.current?.filterOptionOverrides as
-      | {
-          postActions?: Array<{ id?: string; onClick?: () => void }>;
-        }
-      | undefined
-  )?.postActions;
-  return postActions?.find((item) => item.id === 'attention-ignored-findings');
-};
+// The view passes its own icon in the view-actions slot of the main icon bar.
+const getManageIgnoredFindingsAction = () =>
+  (
+    queryParamsRef.current?.viewActions as Array<{ id?: string; onClick?: () => void }> | undefined
+  )?.find((item) => item.id === 'attention-ignored-findings');
 
 const openIgnoredFindings = () => {
   const manageAction = getManageIgnoredFindingsAction();

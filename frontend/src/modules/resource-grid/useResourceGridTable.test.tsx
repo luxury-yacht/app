@@ -278,6 +278,22 @@ describe('useNamespaceResourceGridTable', () => {
     harness.cleanup();
   });
 
+  it("puts a view's own icons between the search options and Favorite", () => {
+    const harness = renderNamespaceGrid({
+      viewActions: [
+        { type: 'action', id: 'view-action', icon: null, title: 'View action', onClick: vi.fn() },
+      ],
+    });
+    const preActions = harness.result.current?.gridTableProps.filters?.options?.preActions ?? [];
+    harness.cleanup();
+
+    expect(preActions.map((item) => ('id' in item ? item.id : item.type))).toEqual([
+      'include-metadata',
+      'view-action',
+      'favorite',
+    ]);
+  });
+
   it('offers Include metadata exactly when rows carry labels and annotations', () => {
     const hasToggle = (supportsCustomMetadataColumns: boolean) => {
       const harness = renderNamespaceGrid({ supportsCustomMetadataColumns });

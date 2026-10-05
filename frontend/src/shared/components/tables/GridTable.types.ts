@@ -139,12 +139,11 @@ export interface GridTableFilterOptions {
   clusterDropdownSearchable?: boolean;
   clusterDropdownBulkActions?: boolean;
   includeClusterScopedSyntheticNamespace?: boolean;
-  /** Icon actions rendered with structural filters immediately before Namespace. */
-  beforeNamespaceActions?: IconBarItem[];
-  /** IconBar items rendered before the built-in Reset action (e.g. Favorite toggle). */
+  /**
+   * IconBar items after the built-in Match case toggle and before Download: the search
+   * options, the view's own icons, and Favorite, in that order.
+   */
   preActions?: IconBarItem[];
-  /** IconBar items rendered after a separator following Reset (e.g. Load More). */
-  postActions?: IconBarItem[];
   /** Arbitrary ReactNode content rendered after the IconBar (e.g. text toggle buttons). */
   customActions?: React.ReactNode;
   /** Controls whether the filter bar renders the displayed/total row count. */
@@ -281,9 +280,7 @@ export interface InternalFilterOptions {
   namespaceDropdownBulkActions?: boolean;
   clusterDropdownSearchable?: boolean;
   clusterDropdownBulkActions?: boolean;
-  beforeNamespaceActions?: IconBarItem[];
   preActions?: IconBarItem[];
-  postActions?: IconBarItem[];
   customActions?: React.ReactNode;
   totalIsExact?: boolean;
   partialDataLabel?: string;
