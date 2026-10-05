@@ -33,16 +33,37 @@ func TestSaveCSVFileUsesWailsDialogOptionsAndWritesSelection(t *testing.T) {
 	require.Equal(t, "name\npod-a\n", string(contents))
 }
 
+func TestSaveLogFileOffersALogFileAndWritesSelection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pod-api-logs.log")
+	shell := NewDesktopShell(nil, func() bool { return true }, nil, NewLogger(10))
+	var options application.SaveFileDialogOptions
+	shell.saveFileDialog = func(input *application.SaveFileDialogOptions) (string, error) {
+		options = *input
+		return path, nil
+	}
+
+	result, err := shell.SaveLogFile("pod-api-logs", "line one\nline two")
+
+	require.NoError(t, err)
+	require.Equal(t, "Save Logs", options.Title)
+	require.Equal(t, "pod-api-logs.log", options.Filename)
+	require.Equal(t, []application.FileFilter{{DisplayName: "Log files (*.log)", Pattern: "*.log"}}, options.Filters)
+	require.Equal(t, path, result.Path)
+	contents, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "line one\nline two", string(contents))
+}
+
 // The atomic write must produce an owner-only file with the full content
 // durably written. Exports carry cluster resource data, so they stay unreadable
 // to other local accounts; the exporting user keeps read/write and can relax
 // the mode themselves.
-func TestWriteCSVFileAtomically(t *testing.T) {
+func TestWriteExportFileAtomically(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "export.csv")
 
-	info, err := writeCSVFileAtomically(path, "a,b\n1,2\n")
+	info, err := writeExportFileAtomically(path, "a,b\n1,2\n")
 	if err != nil {
-		t.Fatalf("writeCSVFileAtomically failed: %v", err)
+		t.Fatalf("writeExportFileAtomically failed: %v", err)
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -65,7 +86,7 @@ func TestWriteCSVFileAtomically(t *testing.T) {
 	}
 }
 
-func TestSanitizeCsvFilename(t *testing.T) {
+func TestSanitizeExportFilename(t *testing.T) {
 	cases := []struct {
 		in   string
 		want string
@@ -79,8 +100,11 @@ func TestSanitizeCsvFilename(t *testing.T) {
 		{"cluster nodes", "cluster nodes.csv"},
 	}
 	for _, c := range cases {
-		if got := sanitizeCsvFilename(c.in); got != c.want {
-			t.Errorf("sanitizeCsvFilename(%q) = %q, want %q", c.in, got, c.want)
+		if got := sanitizeExportFilename(c.in, ".csv"); got != c.want {
+			t.Errorf("sanitizeExportFilename(%q, .csv) = %q, want %q", c.in, got, c.want)
 		}
+	}
+	if got := sanitizeExportFilename("node/a.LOG", ".log"); got != "node-a.LOG" {
+		t.Errorf("sanitizeExportFilename(node/a.LOG, .log) = %q", got)
 	}
 }

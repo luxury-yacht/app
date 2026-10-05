@@ -952,6 +952,31 @@ export const PlusIcon: React.FC<FixedColorIconProps> = ({ width = 24, height = 2
   </svg>
 );
 
+/** Arrow down onto a line (download). */
+export const DownloadIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
+  <svg
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    className={className}
+    aria-hidden="true"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    focusable="false"
+  >
+    <path d="M12 4v11" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M5 20h14" />
+  </svg>
+);
+
 /** Plain magnifying glass (search). Same geometry as ZoomInIcon minus the plus. */
 export const SearchIcon: React.FC<FixedColorIconProps> = ({
   width = 24,

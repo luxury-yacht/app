@@ -102,6 +102,7 @@ export {
   RetryClusterAuth,
   RunObjectAction,
   SaveCsvFile,
+  SaveLogFile,
   SaveTheme,
   SendShellInput,
   SetAppLogsPanelVisible,

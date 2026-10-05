@@ -20,7 +20,7 @@ export interface ParsedLogEntry {
   seq?: number;
 }
 
-export type CopyFeedback = 'idle' | 'copied' | 'error';
+export type DownloadFeedback = 'idle' | 'done' | 'error';
 
 export interface LogOptionsState {
   autoRefresh: boolean;
@@ -34,7 +34,7 @@ export interface LogOptionsState {
   showAnsiColors: boolean;
   displayMode: LogDisplayMode;
   expandedRows: Set<string>;
-  copyFeedback: CopyFeedback;
+  downloadFeedback: DownloadFeedback;
 }
 
 export type LogOptionsAction =
@@ -50,7 +50,7 @@ export type LogOptionsAction =
   | { type: 'TOGGLE_PARSED_VIEW' }
   | { type: 'SET_DISPLAY_MODE'; payload: LogDisplayMode }
   | { type: 'TOGGLE_ROW_EXPANSION'; payload: string }
-  | { type: 'SET_COPY_FEEDBACK'; payload: CopyFeedback };
+  | { type: 'SET_DOWNLOAD_FEEDBACK'; payload: DownloadFeedback };
 
 const LOG_OPTIONS_ACTION_TYPES = new Set<string>(
   Object.keys({
@@ -66,7 +66,7 @@ const LOG_OPTIONS_ACTION_TYPES = new Set<string>(
     TOGGLE_PARSED_VIEW: true,
     SET_DISPLAY_MODE: true,
     TOGGLE_ROW_EXPANSION: true,
-    SET_COPY_FEEDBACK: true,
+    SET_DOWNLOAD_FEEDBACK: true,
   } satisfies Record<LogOptionsAction['type'], true>)
 );
 
@@ -84,7 +84,7 @@ export const initialLogOptionsState: LogOptionsState = {
   showAnsiColors: true,
   displayMode: 'raw',
   expandedRows: new Set<string>(),
-  copyFeedback: 'idle',
+  downloadFeedback: 'idle',
 };
 
 // Regex patterns carry their own case handling.
@@ -149,8 +149,8 @@ export function logOptionsReducer<S extends LogOptionsState>(
       return setDisplayMode(state, action.payload);
     case 'TOGGLE_ROW_EXPANSION':
       return toggleRowExpansion(state, action.payload);
-    case 'SET_COPY_FEEDBACK':
-      return { ...state, copyFeedback: action.payload };
+    case 'SET_DOWNLOAD_FEEDBACK':
+      return { ...state, downloadFeedback: action.payload };
     default:
       return toggleSearchOption(state, action);
   }

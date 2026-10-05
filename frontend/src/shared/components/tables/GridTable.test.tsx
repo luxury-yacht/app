@@ -154,6 +154,32 @@ const flushAsync = async () => {
   });
 };
 
+// Opens the table's Download button (named for its row scope) and chooses where the rows go.
+const chooseDownload = async (
+  container: HTMLElement,
+  scope: 'Download all matching rows' | 'Download visible rows',
+  choice: 'Copy to Clipboard' | 'Save to File'
+) => {
+  const button = requireValue(
+    container.querySelector<HTMLButtonElement>(`.icon-bar-button[aria-label="${scope}"]`),
+    `expected the ${scope} button`
+  );
+  await act(async () => {
+    button.click();
+    await Promise.resolve();
+  });
+  const item = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
+    (element) => element.textContent === choice
+  );
+  await act(async () => {
+    requireValue(item, `expected ${choice}`).dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+};
+
 describe('GridTable virtualization', () => {
   let originalClientHeightDescriptor: PropertyDescriptor | undefined;
   let originalScrollTo: typeof Element.prototype.scrollTo | undefined;
@@ -281,7 +307,7 @@ describe('GridTable virtualization', () => {
     expect(resultCount?.classList.contains('active-filter-chip')).toBe(false);
   });
 
-  it('renders the Copy · Export pair acting on all matching rows (no scope toggle)', () => {
+  it('offers Copy to Clipboard and Save to File from one Download button', async () => {
     const { container, cleanup } = renderGridTable({
       data: createRows(3),
       virtualization: { enabled: false },
@@ -303,18 +329,20 @@ describe('GridTable virtualization', () => {
         '[aria-label="Toggle copy and export scope between current page and all matching rows"]'
       )
     ).toBeNull();
-    const copy = container.querySelector('[aria-label="Copy all matching rows to clipboard"]');
-    const exportBtn = container.querySelector('[aria-label="Export all matching rows to file"]');
-    expect(copy).toBeTruthy();
-    expect(exportBtn).toBeTruthy();
-    // Order: Copy · Export.
+    const download = requireValue(
+      container.querySelector<HTMLButtonElement>('[aria-label="Download all matching rows"]'),
+      'expected the Download button'
+    );
+    expect(download.getAttribute('aria-haspopup')).toBe('menu');
+    await act(async () => {
+      download.click();
+      await Promise.resolve();
+    });
     expect(
-      Boolean(
-        requireValue(copy, 'expected test value in GridTable.test.tsx').compareDocumentPosition(
-          requireValue(exportBtn, 'expected test value in GridTable.test.tsx')
-        ) & Node.DOCUMENT_POSITION_FOLLOWING
+      Array.from(document.body.querySelectorAll('[role="menuitem"]')).map(
+        (item) => item.textContent
       )
-    ).toBe(true);
+    ).toEqual(['Copy to Clipboard', 'Save to File']);
 
     cleanup();
   });
@@ -339,16 +367,7 @@ describe('GridTable virtualization', () => {
     });
     cleanupRoot = cleanup;
 
-    const copy = container.querySelector(
-      '[aria-label="Copy all matching rows to clipboard"]'
-    ) as HTMLElement;
-    expect(copy).toBeTruthy();
-
-    await act(async () => {
-      copy.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await chooseDownload(container, 'Download all matching rows', 'Copy to Clipboard');
 
     expect(fetchAllRows).toHaveBeenCalledTimes(1);
     expect(writeText).toHaveBeenCalledTimes(1);
@@ -1765,15 +1784,7 @@ it('copies every filtered local row when only one local page is rendered', async
   cleanupRoot = cleanup;
 
   expect(container.querySelectorAll('.gridtable-row')).toHaveLength(2);
-  const copyButton = container.querySelector<HTMLButtonElement>(
-    '.icon-bar-button[aria-label="Copy all matching rows as CSV"]'
-  );
-  expect(copyButton).not.toBeNull();
-
-  await act(async () => {
-    requireValue(copyButton, 'expected local pagination copy action').click();
-    await Promise.resolve();
-  });
+  await chooseDownload(container, 'Download all matching rows', 'Copy to Clipboard');
 
   expect(clipboardWriteText).toHaveBeenCalledWith('Label\nRow 0\nRow 1\nRow 2\nRow 3\nRow 4');
 
@@ -1953,15 +1964,7 @@ it('copies the current visible table contents as CSV from the filter icon bar', 
 
   await flushAsync();
 
-  const copyButton = container.querySelector<HTMLButtonElement>(
-    '.icon-bar-button[aria-label="Copy visible rows as CSV"]'
-  );
-  expect(copyButton).not.toBeNull();
-
-  await act(async () => {
-    requireValue(copyButton, 'expected test value in GridTable.test.tsx').click();
-    await Promise.resolve();
-  });
+  await chooseDownload(container, 'Download visible rows', 'Copy to Clipboard');
 
   expect(clipboardWriteText).toHaveBeenCalledWith(
     'Label,Notes\n' + '"Alpha,One","He said ""hi"""\n' + 'Beta,"Line\nBreak"'
@@ -2028,15 +2031,7 @@ it('copies resource-bar columns as plain millicores and KiB under unit headers',
 
   await flushAsync();
 
-  const copyButton = container.querySelector<HTMLButtonElement>(
-    '.icon-bar-button[aria-label="Copy visible rows as CSV"]'
-  );
-  expect(copyButton).not.toBeNull();
-
-  await act(async () => {
-    requireValue(copyButton, 'expected test value in GridTable.test.tsx').click();
-    await Promise.resolve();
-  });
+  await chooseDownload(container, 'Download visible rows', 'Copy to Clipboard');
 
   expect(clipboardWriteText).toHaveBeenCalledWith(
     'Label,CPU (m),Memory (KiB)\nAlpha,250,524288\nBeta,1000,2097152'

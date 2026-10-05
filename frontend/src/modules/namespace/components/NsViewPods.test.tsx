@@ -162,7 +162,7 @@ vi.mock('@shared/components/tables/GridTable', () => ({
                 title={item.title}
                 aria-label={item.ariaLabel ?? item.title}
                 aria-pressed={item.type === 'toggle' ? item.active : undefined}
-                onClick={item.onClick}
+                onClick={item.type === 'menu' ? undefined : item.onClick}
               >
                 {item.icon}
               </button>
@@ -572,7 +572,7 @@ describe('NsViewPods', () => {
       structuralActions?.map((action) => (action.type === 'separator' ? null : action.title))
     ).toEqual(['Collapse Pods']);
     const collapseAction = structuralActions?.[0];
-    if (!collapseAction || collapseAction.type === 'separator') {
+    if (!collapseAction || collapseAction.type !== 'action') {
       throw new Error('Expected the Collapse Pods action');
     }
     expect(requireReactElement(collapseAction.icon, 'expected collapse icon').type).toBe(

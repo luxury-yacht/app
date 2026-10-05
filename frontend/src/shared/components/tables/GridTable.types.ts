@@ -205,7 +205,7 @@ export interface GridTableProps<T> {
     onChange: (definitions: CustomMetadataColumnDefinition[]) => void;
   };
   keyExtractor: (item: T, index: number) => string;
-  /** Fetch every matching row (all pages) — enables the Copy/Export "all matching rows" scope. */
+  /** Fetch every matching row (all pages); the Download button then copies or saves all of them. */
   fetchAllRows?: () => Promise<T[]>;
   /** Default filename offered by the file Export action. */
   exportFilename?: string;

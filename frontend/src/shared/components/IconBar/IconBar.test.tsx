@@ -220,3 +220,84 @@ it('reports a disclosure button as expanding the section it controls', () => {
     container.remove();
   }
 });
+
+it('opens a menu button whose items run the chosen action', async () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const copy = vi.fn();
+  const save = vi.fn();
+  const render = async (
+    options: { disabled?: boolean; feedback?: 'success' | 'error' | null } = {}
+  ) =>
+    act(async () => {
+      root.render(
+        <ZoomProvider>
+          <KeyboardProvider>
+            <IconBar
+              items={[
+                {
+                  type: 'menu',
+                  id: 'download',
+                  icon: 'D',
+                  title: 'Download rows',
+                  menuItems: [
+                    { label: 'Copy to Clipboard', onClick: copy },
+                    { label: 'Save to File', onClick: save },
+                  ],
+                  ...options,
+                },
+              ]}
+            />
+          </KeyboardProvider>
+        </ZoomProvider>
+      );
+      await Promise.resolve();
+    });
+  const menu = () => document.body.querySelector('[role="menu"]');
+  const press = (button: HTMLButtonElement) =>
+    act(async () => {
+      button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      button.click();
+      await Promise.resolve();
+    });
+  const choose = (label: string) =>
+    act(async () => {
+      Array.from(menu()?.querySelectorAll('[role="menuitem"]') ?? [])
+        .find((item) => item.textContent === label)
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+  try {
+    await render();
+    const button = container.querySelector<HTMLButtonElement>('[aria-label="Download rows"]');
+    if (!button) {
+      throw new Error('menu button not rendered');
+    }
+    expect(button.getAttribute('aria-haspopup')).toBe('menu');
+    expect(button.hasAttribute('aria-pressed')).toBe(false);
+    expect(menu()).toBeNull();
+
+    await press(button);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    await choose('Save to File');
+    expect(save).toHaveBeenCalledOnce();
+    expect(copy).not.toHaveBeenCalled();
+    expect(menu()).toBeNull();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+
+    // A second press on the button closes the open menu instead of reopening it.
+    await press(button);
+    expect(menu()).not.toBeNull();
+    await press(button);
+    expect(menu()).toBeNull();
+
+    await render({ feedback: 'success' });
+    expect(button.classList.contains('feedback-success')).toBe(true);
+    await render({ disabled: true });
+    expect(button.disabled).toBe(true);
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+  }
+});

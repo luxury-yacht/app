@@ -7,6 +7,7 @@
  * - Split: a toggle or cycle button with a caret beside it that opens a menu of related choices
  * - Disclosure: shows or hides a related section, such as a row of extra controls
  * - Action: fires once on click, optionally shows brief feedback (success/error)
+ * - Menu: opens a menu of actions, optionally shows brief feedback (success/error)
  */
 
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
@@ -14,7 +15,7 @@ import { DropdownArrowIcon } from '@shared/components/icons/DropdownIcons';
 import { IconBarSeparatorIcon } from '@shared/components/icons/SharedIcons';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
-import { useRef, useState } from 'react';
+import { type RefObject, useRef, useState } from 'react';
 
 interface IconBarButton {
   /** Unique key for React rendering. */
@@ -67,6 +68,14 @@ export interface IconBarAction extends IconBarButton {
   feedback?: 'success' | 'error' | null;
 }
 
+/** A button that opens a menu of actions. */
+export interface IconBarMenu extends Omit<IconBarButton, 'onClick'> {
+  type: 'menu';
+  menuItems: ContextMenuItem[];
+  /** Brief feedback after a menu action: 'success' or 'error'. Omit or null for default. */
+  feedback?: 'success' | 'error' | null;
+}
+
 /** A visual separator between groups of buttons. */
 export interface IconBarSeparator {
   type: 'separator';
@@ -77,6 +86,7 @@ export type IconBarItem =
   | IconBarSplit
   | IconBarDisclosure
   | IconBarAction
+  | IconBarMenu
   | IconBarSeparator;
 
 interface IconBarProps {
@@ -85,13 +95,29 @@ interface IconBarProps {
   className?: string;
 }
 
+/** Opens a menu below the anchor element, and closes it. */
+const useAnchoredMenu = (anchorRef: RefObject<HTMLElement | null>) => {
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  return {
+    position,
+    toggle: () => {
+      const rect = anchorRef.current?.getBoundingClientRect();
+      setPosition(position || !rect ? null : { x: rect.left, y: rect.bottom + 4 });
+    },
+    close: () => setPosition(null),
+    // The open menu closes on any mousedown outside it; keep the button's from
+    // reaching it so the click that follows closes the menu instead of reopening it.
+    onButtonMouseDown: (event: React.MouseEvent) => {
+      if (position) {
+        event.stopPropagation();
+      }
+    },
+  };
+};
+
 const SplitButton = ({ item }: { item: IconBarSplit }) => {
   const groupRef = useRef<HTMLDivElement>(null);
-  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
-  const toggleMenu = () => {
-    const rect = groupRef.current?.getBoundingClientRect();
-    setMenuPosition(menuPosition || !rect ? null : { x: rect.left, y: rect.bottom + 4 });
-  };
+  const menu = useAnchoredMenu(groupRef);
 
   return (
     <div className="icon-bar-split" ref={groupRef}>
@@ -110,31 +136,60 @@ const SplitButton = ({ item }: { item: IconBarSplit }) => {
       <button
         type="button"
         className="icon-bar-button icon-bar-split-caret"
-        // The open menu closes on any mousedown outside it; keep this one from
-        // reaching it so the click below closes the menu instead of reopening it.
-        onMouseDown={(event) => {
-          if (menuPosition) {
-            event.stopPropagation();
-          }
-        }}
-        onClick={toggleMenu}
+        onMouseDown={menu.onButtonMouseDown}
+        onClick={menu.toggle}
         disabled={item.disabled}
         title={item.menuLabel}
         aria-label={item.menuLabel}
         aria-haspopup="menu"
-        aria-expanded={menuPosition !== null}
+        aria-expanded={menu.position !== null}
       >
         <DropdownArrowIcon width={12} height={12} />
       </button>
-      {menuPosition ? (
+      {menu.position ? (
         <ContextMenu
           items={item.menuItems}
-          position={menuPosition}
-          onClose={() => setMenuPosition(null)}
-          className="icon-bar-split-menu"
+          position={menu.position}
+          onClose={menu.close}
+          className="icon-bar-menu"
         />
       ) : null}
     </div>
+  );
+};
+
+const feedbackClassName = (feedback: 'success' | 'error' | null | undefined): string =>
+  feedback ? `icon-bar-button feedback-${feedback}` : 'icon-bar-button';
+
+const MenuButton = ({ item }: { item: IconBarMenu }) => {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menu = useAnchoredMenu(buttonRef);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={feedbackClassName(item.feedback)}
+        onMouseDown={menu.onButtonMouseDown}
+        onClick={menu.toggle}
+        disabled={item.disabled}
+        title={item.title}
+        aria-label={item.ariaLabel ?? item.title}
+        aria-haspopup="menu"
+        aria-expanded={menu.position !== null}
+      >
+        {item.icon}
+      </button>
+      {menu.position ? (
+        <ContextMenu
+          items={item.menuItems}
+          position={menu.position}
+          onClose={menu.close}
+          className="icon-bar-menu"
+        />
+      ) : null}
+    </>
   );
 };
 
@@ -142,7 +197,7 @@ const buttonClassName = (item: IconBarToggle | IconBarDisclosure | IconBarAction
   if (item.type !== 'action') {
     return item.active ? 'icon-bar-button active' : 'icon-bar-button';
   }
-  return item.feedback ? `icon-bar-button feedback-${item.feedback}` : 'icon-bar-button';
+  return feedbackClassName(item.feedback);
 };
 
 const IconBar: React.FC<IconBarProps> = ({ items, className }) => {
@@ -158,6 +213,9 @@ const IconBar: React.FC<IconBarProps> = ({ items, className }) => {
         }
         if (item.type === 'split') {
           return <SplitButton key={key} item={item} />;
+        }
+        if (item.type === 'menu') {
+          return <MenuButton key={key} item={item} />;
         }
 
         return (

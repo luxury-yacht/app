@@ -128,9 +128,16 @@ const autoRefreshLoadingState = vi.hoisted(() => ({
   suppressPassiveLoading: false,
 }));
 
+const saveFileMocks = vi.hoisted(() => ({
+  SaveCsvFile: vi.fn(),
+  SaveLogFile: vi.fn(),
+}));
+
 vi.mock('@core/backend-api', () => ({
   FetchContainerLogs: vi.fn(),
   GetContainerLogsScopeContainers: vi.fn(),
+  SaveCsvFile: saveFileMocks.SaveCsvFile,
+  SaveLogFile: saveFileMocks.SaveLogFile,
 }));
 
 vi.mock('@/core/refresh/orchestrator', () => ({
@@ -488,6 +495,7 @@ describe('LogViewer active pod synchronisation', () => {
       // keep working without per-test plumbing.
       containerLogsScope = activeScope,
       panelId = 'obj:test:deployment:team-a:api',
+      objectName = 'api',
     } = overrides;
 
     await act(async () => {
@@ -499,8 +507,30 @@ describe('LogViewer active pod synchronisation', () => {
           activePodNames={activePodNames}
           clusterId={clusterId}
           panelId={panelId}
+          objectName={objectName}
         />
       );
+      await Promise.resolve();
+    });
+  };
+
+  // Opens the Download button and chooses where the shown logs go.
+  const downloadLogs = async (choice: 'Copy to Clipboard' | 'Save to File') => {
+    await act(async () => {
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Download logs"]'),
+        'expected the Download button'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    const item = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
+      (element) => element.textContent === choice
+    );
+    await act(async () => {
+      requireValue(item, `expected ${choice}`).dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+      await Promise.resolve();
       await Promise.resolve();
     });
   };
@@ -1685,20 +1715,8 @@ describe('LogViewer active pod synchronisation', () => {
     ]);
 
     await renderViewer();
-
-    const copyButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Copy to clipboard"]'
-    );
-    expect(copyButton).toBeTruthy();
-
     await showLogFormat('Table');
-
-    await act(async () => {
-      requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await downloadLogs('Copy to Clipboard');
 
     expect(writeTextMock).toHaveBeenCalledWith(
       [
@@ -1706,6 +1724,39 @@ describe('LogViewer active pod synchronisation', () => {
         '2024-05-01T11:00:00Z,web-1,app,info,2,"hello, world"',
       ].join('\n')
     );
+  });
+
+  it('saves the same logs Copy takes: a .log file, or a .csv file in Table view', async () => {
+    saveFileMocks.SaveLogFile.mockResolvedValue({ path: '/tmp/api.log', bytes: 1 });
+    saveFileMocks.SaveCsvFile.mockResolvedValue({ path: '/tmp/api.csv', bytes: 1 });
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: '{"level":"info","message":"hello, world","count":2}',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+    ]);
+    await renderViewer();
+    const download = () => container.querySelector('button[aria-label="Download logs"]');
+
+    await downloadLogs('Copy to Clipboard');
+    await downloadLogs('Save to File');
+    expect(saveFileMocks.SaveLogFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^luxury-yacht-deployment-api-logs-\d{14}\.log$/),
+      writeTextMock.mock.calls[0]?.[0]
+    );
+    expect(download()?.classList.contains('feedback-success')).toBe(true);
+
+    await showLogFormat('Table');
+    await downloadLogs('Copy to Clipboard');
+    await downloadLogs('Save to File');
+    expect(saveFileMocks.SaveCsvFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^luxury-yacht-deployment-api-logs-\d{14}\.csv$/),
+      writeTextMock.mock.calls[1]?.[0]
+    );
+    expect(writeTextMock.mock.calls[1]?.[0]).toContain('level,count,message');
   });
 
   it('keeps reserved metadata values in CSV when pod and timestamp columns are hidden', async () => {
@@ -1734,7 +1785,7 @@ describe('LogViewer active pod synchronisation', () => {
       });
     await clickControl('Show timestamps from the Kubernetes API');
     await showLogFormat('Table');
-    await clickControl('Copy to clipboard');
+    await downloadLogs('Copy to Clipboard');
 
     expect(writeTextMock).toHaveBeenCalledWith('Container,_pod,_timestamp\napp,-,');
   });
@@ -1874,29 +1925,13 @@ describe('LogViewer active pod synchronisation', () => {
     ]);
 
     await renderViewer({ activePodNames: ['web-1'] });
-
-    const copyButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Copy to clipboard"]'
-    );
-    expect(copyButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await downloadLogs('Copy to Clipboard');
     expect(writeTextMock).toHaveBeenLastCalledWith(
       '[11:00:00.123] [web-1] {"level":"info","message":"hello"}'
     );
 
     await showLogFormat('Table');
-    await act(async () => {
-      requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await downloadLogs('Copy to Clipboard');
 
     expect(writeTextMock).toHaveBeenLastCalledWith(
       ['API Timestamp,Pod,Container,level,message', '11:00:00.123,web-1,app,info,hello'].join('\n')
@@ -2489,18 +2524,7 @@ describe('LogViewer active pod synchronisation', () => {
     });
     await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
     await flushAsync();
-
-    const copyButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Copy to clipboard"]'
-    );
-    expect(copyButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await downloadLogs('Copy to Clipboard');
 
     expect(writeTextMock).toHaveBeenLastCalledWith(
       '[2024-05-01T10:00:00Z] \u001b[31merror\u001b[0m happened'
@@ -3027,14 +3051,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(
       container.querySelectorAll('button[aria-label^="Show only logs from pod"]')
     ).toHaveLength(1);
-    const copyButton = requireValue(
-      container.querySelector<HTMLButtonElement>('button[aria-label="Copy to clipboard"]'),
-      'copy button'
-    );
-    await act(async () => {
-      copyButton.click();
-      await Promise.resolve();
-    });
+    await downloadLogs('Copy to Clipboard');
     expect(writeTextMock).toHaveBeenCalledWith('[web-1] {\n  "msg": "[a/b] ready"\n}');
   });
 

@@ -107,8 +107,7 @@
   border-color: transparent;
 }
 
-.icon-bar-split:hover .icon-bar-button:not(:disabled),
-.icon-bar-split .icon-bar-split-caret[aria-expanded="true"] {
+.icon-bar-split:hover .icon-bar-button:not(:disabled) {
   background: var(--color-bg-tertiary);
 }
 
@@ -122,16 +121,18 @@
   background: var(--color-bg-tertiary);
 }
 
-.icon-bar-split .icon-bar-split-caret[aria-expanded="true"] {
-  opacity: 1;
-}
-
 .icon-bar-split .icon-bar-split-caret:focus-visible:not(:disabled) {
   box-shadow: 0 0 0 2px var(--color-accent);
 }
 
-/* A split button's menu is as wide as its choices, not the context-menu minimum. */
-.context-menu.icon-bar-split-menu {
+/* A menu button or split caret keeps its hover look while its menu shows. */
+.icon-bar-button[aria-haspopup="menu"][aria-expanded="true"] {
+  opacity: 1;
+  background: var(--color-bg-tertiary);
+}
+
+/* An icon bar menu is as wide as its choices, not the context-menu minimum. */
+.context-menu.icon-bar-menu {
   min-width: 0;
 }
 

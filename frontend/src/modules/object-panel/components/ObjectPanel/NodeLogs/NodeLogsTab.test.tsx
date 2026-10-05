@@ -629,9 +629,18 @@ describe('NodeLogsTab', () => {
     await showLogFormat('Table');
     await act(async () => {
       requireValue(
-        container.querySelector('button[aria-label="Copy to clipboard"]'),
-        'copy control'
+        container.querySelector('button[aria-label="Download logs"]'),
+        'download control'
       ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await act(async () => {
+      requireValue(
+        Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
+          (item) => item.textContent === 'Copy to Clipboard'
+        ),
+        'copy choice'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
     });
     expect(Clipboard.SetText).toHaveBeenCalledWith(
       'level,_pod,count,enabled,extra,message\ninfo,literal,0,false,"{""value"":""x""}","boot, complete"'

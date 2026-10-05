@@ -23,6 +23,7 @@ import {
   IsWorkloadHPAManaged,
   QueryPermissions,
   SaveCsvFile,
+  SaveLogFile,
 } from '@/core/backend-api';
 import { desktopRuntimeAvailable } from '@/core/desktop-runtime';
 
@@ -122,6 +123,10 @@ export interface CatalogQueryCSVExport {
 /** Save a frontend-built CSV string to a user-selected file (returns the chosen path). */
 export const saveCsvFile = (defaultFilename: string, content: string) =>
   SaveCsvFile(defaultFilename, content) as Promise<CatalogQueryCSVExport>;
+
+/** Save log text to a user-selected .log file (returns the chosen path). */
+export const saveLogFile = (defaultFilename: string, content: string) =>
+  SaveLogFile(defaultFilename, content) as Promise<CatalogQueryCSVExport>;
 
 export interface CustomCatalogHydrationRow {
   clusterId: string;

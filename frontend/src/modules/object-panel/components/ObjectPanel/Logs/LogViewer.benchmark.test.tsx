@@ -170,6 +170,7 @@ describe.runIf(process.env.LOGS_BENCHMARK === '1')('Logs tab stream-batch benchm
           activePodNames={PODS}
           clusterId="alpha:ctx"
           panelId={panelId}
+          objectName="web"
         />
       );
       await Promise.resolve();

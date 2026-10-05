@@ -11,7 +11,6 @@ import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import {
   AllLinesIcon,
   AnsiColorIcon,
-  CopyIcon,
   FilterModeIcon,
   InvertFilterIcon,
   ParseJsonIcon,
@@ -24,6 +23,7 @@ import {
 } from '@shared/components/icons/LogIcons';
 import {
   CaseSensitiveIcon,
+  DownloadIcon,
   PlayOutlineIcon,
   SearchIcon,
   StopOutlineIcon,
@@ -32,7 +32,7 @@ import type { Dispatch, ReactNode, RefObject } from 'react';
 import { flushSync } from 'react-dom';
 import { isMacPlatform } from '@/utils/platform';
 import type { LogDisplayMode, LogFilterMode } from '../types';
-import type { CopyFeedback, LogOptionsAction, LogOptionsState } from './logOptionsReducer';
+import type { DownloadFeedback, LogOptionsAction, LogOptionsState } from './logOptionsReducer';
 
 type ToggleFeature = { active: boolean; toggle: () => void };
 
@@ -49,6 +49,7 @@ export type LogToolbarOptions = {
   canParseLogs: boolean;
   hasCopyableContent: boolean;
   copyLogs: () => void;
+  saveLogs: () => void;
   filterInputRef: RefObject<HTMLInputElement | null>;
   /** Id of the viewer's search row, which the search button shows and hides. */
   searchRowId: string;
@@ -56,8 +57,8 @@ export type LogToolbarOptions = {
   timestamps?: TimestampsFeature;
 };
 
-const copyIconFeedback = (feedback: CopyFeedback): 'success' | 'error' | null => {
-  if (feedback === 'copied') {
+const downloadIconFeedback = (feedback: DownloadFeedback): 'success' | 'error' | null => {
+  if (feedback === 'done') {
     return 'success';
   }
   return feedback === 'error' ? 'error' : null;
@@ -255,20 +256,22 @@ const actionItems = ({
   options,
   hasCopyableContent,
   copyLogs,
-}: LogToolbarOptions): IconBarItem[] => {
-  const items: IconBarItem[] = [{ type: 'separator' }];
-  items.push({
-    type: 'action',
-    id: 'copy',
-    icon: <CopyIcon width={18} height={18} />,
-    onClick: copyLogs,
-    title: 'Copy logs to clipboard (Shift+C)',
-    ariaLabel: 'Copy to clipboard',
+  saveLogs,
+}: LogToolbarOptions): IconBarItem[] => [
+  { type: 'separator' },
+  {
+    type: 'menu',
+    id: 'download',
+    icon: <DownloadIcon width={18} height={18} />,
+    title: 'Download logs',
+    menuItems: [
+      { label: 'Copy to Clipboard', onClick: copyLogs, tooltip: 'Copy logs to clipboard (Shift+C)' },
+      { label: 'Save to File', onClick: saveLogs },
+    ],
     disabled: !hasCopyableContent,
-    feedback: copyIconFeedback(options.copyFeedback),
-  });
-  return items;
-};
+    feedback: downloadIconFeedback(options.downloadFeedback),
+  },
+];
 
 /** Opens the search row and puts the cursor in its filter box. */
 export const openLogSearch = (

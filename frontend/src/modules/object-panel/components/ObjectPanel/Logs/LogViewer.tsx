@@ -17,7 +17,7 @@ import {
 import React, { useCallback, useEffect, useId, useMemo, useReducer, useRef } from 'react';
 import { readContainerLogsScopeContainers, requestData } from '@/core/data-access';
 import { useContainerLogsStream } from './hooks/useContainerLogsStream';
-import { useLogCopyAction, useLogSelectionCopy } from './hooks/useLogCopyAction';
+import { useLogDownloadActions, useLogSelectionCopy } from './hooks/useLogDownloadActions';
 import { useLogFiltering } from './hooks/useLogFiltering';
 import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import { logCopyText, useRawViewFallback } from './hooks/useLogPresentation';
@@ -129,6 +129,8 @@ interface LogViewerProps {
    * ObjectPanelContent unmount/remount caused by cluster switches.
    */
   panelId: string;
+  /** Name of the object whose logs these are; it names a saved log file. */
+  objectName: string;
 }
 
 const CONTAINER_LOGS_DOMAIN = 'container-logs' as const;
@@ -384,6 +386,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   activePodNames = null,
   clusterId,
   panelId,
+  objectName,
 }) => {
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   // Lazy reducer init: rehydrate from the panel-scoped prefs cache so a
@@ -955,11 +958,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     () => logCopyText(displayMode, copyText, getParsedCsv),
     [copyText, displayMode, getParsedCsv]
   );
-  const handleCopyContainerLogs = useLogCopyAction({
-    getText: getCopyText,
-    dispatch,
-    source: 'LogViewer',
-  });
+  const { copyLogs: handleCopyContainerLogs, saveLogs: handleSaveContainerLogs } =
+    useLogDownloadActions({
+      getText: getCopyText,
+      isTableView: isParsedView,
+      fileBase: [resourceKindKey, objectName, 'logs'].filter(Boolean).join('-'),
+      dispatch,
+      source: 'LogViewer',
+    });
   useLogSelectionCopy({ rootRef: logsContentRef, active: isActive, source: 'LogViewer' });
 
   const toggleTimestamps = useCallback(
@@ -1027,6 +1033,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     canParseLogs: canParseContainerLogs,
     hasCopyableContent,
     copyLogs: handleCopyContainerLogs,
+    saveLogs: handleSaveContainerLogs,
     filterInputRef,
     searchRowId,
     previousLogs: previousLogsFeature,

@@ -205,6 +205,7 @@ const RetainedLogsTab = ({
             activePodNames={activePodNames}
             clusterId={clusterId}
             panelId={panelId}
+            objectName={name}
           />
         </PanelTabBoundary>
       ) : (

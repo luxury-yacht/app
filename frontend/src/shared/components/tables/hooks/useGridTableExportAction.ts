@@ -3,11 +3,11 @@ import { reportOperationalError } from '@/utils/errorHandler';
 
 const FEEDBACK_RESET_MS = 750;
 
-/** Shared operation lifetime for table CSV actions; each destination owns its write policy. */
-export function useGridTableExportAction(
-  action: 'copyCsv' | 'exportCsvFile',
-  operation: (() => Promise<boolean>) | null
-) {
+/**
+ * Operation lifetime of the table Download button: busy while a choice runs, then
+ * brief success or error feedback. Each destination owns its write policy.
+ */
+export function useGridTableExportAction() {
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [feedback, setFeedback] = useState<'success' | 'error' | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -28,23 +28,26 @@ export function useGridTableExportAction(
     []
   );
 
-  const handleExport = useCallback(async () => {
-    if (!operation) {
-      setFeedback('error');
-      scheduleReset();
-      return;
-    }
-    setExporting(true);
-    try {
-      setFeedback((await operation()) ? 'success' : 'error');
-    } catch (error) {
-      reportOperationalError(error, { source: 'GridTable', action });
-      setFeedback('error');
-    } finally {
-      setExporting(false);
-      scheduleReset();
-    }
-  }, [action, operation, scheduleReset]);
+  const run = useCallback(
+    async (action: 'copyCsv' | 'exportCsvFile', operation: (() => Promise<boolean>) | null) => {
+      if (!operation) {
+        setFeedback('error');
+        scheduleReset();
+        return;
+      }
+      setExporting(true);
+      try {
+        setFeedback((await operation()) ? 'success' : 'error');
+      } catch (error) {
+        reportOperationalError(error, { source: 'GridTable', action });
+        setFeedback('error');
+      } finally {
+        setExporting(false);
+        scheduleReset();
+      }
+    },
+    [scheduleReset]
+  );
 
-  return { feedback, exporting, handleExport };
+  return { feedback, exporting, run };
 }

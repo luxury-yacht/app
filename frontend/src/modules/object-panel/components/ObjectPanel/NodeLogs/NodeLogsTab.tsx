@@ -36,7 +36,7 @@ import './NodeLogsTab.css';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
 import { getObjPanelLogsBufferMaxSize } from '@/core/settings/appPreferences';
-import { useLogCopyAction, useLogSelectionCopy } from '../Logs/hooks/useLogCopyAction';
+import { useLogDownloadActions, useLogSelectionCopy } from '../Logs/hooks/useLogDownloadActions';
 import { useLogKeyboardShortcuts } from '../Logs/hooks/useLogKeyboardShortcuts';
 import { useLogMessageRenderer } from '../Logs/hooks/useLogMessageRenderer';
 import {
@@ -63,6 +63,12 @@ const getNodeLogSourceLeafLabel = (label: string): string => {
   const segments = label.split(' / ');
   return segments[segments.length - 1] || label;
 };
+
+// Names a saved log file: node-<node>-<source>-logs.
+const nodeLogsFileBase = (nodeName: string, source: NodeLogSource | null | undefined): string =>
+  ['node', nodeName, source ? getNodeLogSourceLeafLabel(source.label) : '', 'logs']
+    .filter(Boolean)
+    .join('-');
 
 const buildNodeLogSinceTime = (lastSuccessfulFetchAt: string | null): string | undefined => {
   if (!lastSuccessfulFetchAt) {
@@ -739,8 +745,10 @@ const NodeLogsTab = ({
     }
   }, []);
 
-  const handleCopyLogs = useLogCopyAction({
+  const { copyLogs: handleCopyLogs, saveLogs: handleSaveLogs } = useLogDownloadActions({
     getText: getCopyText,
+    isTableView: isParsedView,
+    fileBase: nodeLogsFileBase(nodeName, selectedSource),
     dispatch,
     source: 'NodeLogsTab',
   });
@@ -777,6 +785,7 @@ const NodeLogsTab = ({
     canParseLogs,
     hasCopyableContent,
     copyLogs: handleCopyLogs,
+    saveLogs: handleSaveLogs,
     filterInputRef,
     searchRowId,
   });

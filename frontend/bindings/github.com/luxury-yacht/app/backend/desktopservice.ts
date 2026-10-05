@@ -433,6 +433,10 @@ export function SaveCsvFile(defaultFilename: string, content: string): $Cancella
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveCsvFile", defaultFilename, content);
 }
 
+export function SaveLogFile(defaultFilename: string, content: string): $CancellablePromise<$models.CatalogQueryCSVExport> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveLogFile", defaultFilename, content);
+}
+
 export function SaveTheme(theme: $models.Theme): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveTheme", theme);
 }

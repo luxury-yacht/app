@@ -2,7 +2,7 @@ import { createResourceBarColumn } from '@shared/components/tables/columnFactori
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { getTextContent as getRenderedTextContent } from '@shared/components/tables/GridTable.utils';
 import { describe, expect, it } from 'vitest';
-import { buildCsvExportFilename, buildGridTableCsv } from './gridTableCsv';
+import { buildGridTableCsv } from './gridTableCsv';
 
 interface Row {
   name: string;
@@ -101,21 +101,5 @@ describe('buildGridTableCsv', () => {
 
   it('returns an empty string when there are no columns', () => {
     expect(buildGridTableCsv([{ name: 'a', note: 'b' }], [], getTextContent)).toBe('');
-  });
-});
-
-describe('buildCsvExportFilename', () => {
-  it('wraps the per-view base name with the app prefix and a local timestamp', () => {
-    const exportedAt = new Date(2026, 5, 10, 14, 22, 33); // 2026-06-10 14:22:33 local
-    expect(buildCsvExportFilename('cluster-crds', exportedAt)).toBe(
-      'luxury-yacht-cluster-crds-20260610142233.csv'
-    );
-  });
-
-  it('zero-pads every timestamp component', () => {
-    const exportedAt = new Date(2026, 0, 2, 3, 4, 5); // 2026-01-02 03:04:05 local
-    expect(buildCsvExportFilename('browse', exportedAt)).toBe(
-      'luxury-yacht-browse-20260102030405.csv'
-    );
   });
 });

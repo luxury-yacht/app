@@ -147,6 +147,7 @@ type DesktopShellCommands interface {
 	ExecuteApplicationMenuCommand(string, ApplicationMenuCommand) error
 	OpenKubeconfigSearchPathDialog() (string, error)
 	SaveCsvFile(string, string) (CatalogQueryCSVExport, error)
+	SaveLogFile(string, string) (CatalogQueryCSVExport, error)
 	SetAppLogsPanelVisible(bool)
 	SetSidebarVisible(bool)
 }
@@ -616,6 +617,10 @@ func (s *DesktopService) ExecuteApplicationMenuCommand(
 
 func (s *DesktopService) SaveCsvFile(defaultFilename, content string) (CatalogQueryCSVExport, error) {
 	return s.desktopShell.SaveCsvFile(defaultFilename, content)
+}
+
+func (s *DesktopService) SaveLogFile(defaultFilename, content string) (CatalogQueryCSVExport, error) {
+	return s.desktopShell.SaveLogFile(defaultFilename, content)
 }
 
 func (s *DesktopService) SetAppLogsPanelVisible(visible bool) {
