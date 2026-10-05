@@ -1766,6 +1766,32 @@ it('keeps local pagination on the first page after a filter is applied and remov
   cleanup();
 });
 
+// A local table without an all-rows fetcher downloads the rows its filters match.
+it('downloads only the local rows that match the active search', async () => {
+  const clipboardWriteText = runtimeMocks.writeClipboardText;
+  clipboardWriteText.mockReset().mockResolvedValue(undefined);
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(12),
+    virtualization: { enabled: false },
+    filters: {
+      enabled: true,
+      initial: { search: 'Row 1' },
+      accessors: {
+        getKind: () => '',
+        getNamespace: () => '',
+        getSearchText: (row) => [row.label],
+      },
+    },
+  });
+  cleanupRoot = cleanup;
+
+  await chooseDownload(container, 'Download visible rows', 'Copy to Clipboard');
+
+  expect(clipboardWriteText).toHaveBeenCalledWith('Label\nRow 1\nRow 10\nRow 11');
+  cleanup();
+});
+
 it('copies every filtered local row when only one local page is rendered', async () => {
   const clipboardWriteText = runtimeMocks.writeClipboardText;
   clipboardWriteText.mockReset().mockResolvedValue(undefined);

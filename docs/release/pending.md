@@ -16,3 +16,5 @@
 - Log search has a filter mode: All (the default) highlights matches without hiding any lines, Filtered shows only matching lines, and Invert shows only the others. Matches are always highlighted except in Invert, so the separate Highlight button and its H shortcut are gone.
 
 ### Fixed
+
+- Copying or saving the object panel Jobs tab now includes only the jobs that match its search; it used to include every job.
