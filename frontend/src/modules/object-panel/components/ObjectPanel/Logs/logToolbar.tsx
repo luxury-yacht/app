@@ -70,15 +70,13 @@ const downloadIconFeedback = (feedback: DownloadFeedback): 'success' | 'error' |
 type CycleChoice<M extends string> = { label: string; icon: ReactNode; next: M };
 
 // A split button that steps through its choices on click; its menu, listing the
-// choices in table order, picks one. Given an idle choice, it is highlighted away
-// from it; without one it is never highlighted.
+// choices in table order, picks one. No choice is "on", so it is never highlighted.
 const cycleSplitItem = <M extends string>({
   id,
   name,
   menuHeader,
   choices,
   current,
-  idle,
   select,
   shortcutHint,
 }: {
@@ -87,7 +85,6 @@ const cycleSplitItem = <M extends string>({
   menuHeader: string;
   choices: Record<M, CycleChoice<M>>;
   current: M;
-  idle?: M;
   select: (choice: M) => void;
   shortcutHint: string;
 }): IconBarItem => {
@@ -97,7 +94,7 @@ const cycleSplitItem = <M extends string>({
     behavior: 'cycle',
     id,
     icon: choice.icon,
-    active: idle !== undefined && current !== idle,
+    active: false,
     onClick: () => select(choice.next),
     title: `${name}: ${choice.label} - click for ${choices[choice.next].label} ${shortcutHint}`,
     ariaLabel: `${name}: ${choice.label}`,
@@ -130,7 +127,6 @@ const searchItems = ({
     menuHeader: 'Mode',
     choices: FILTER_MODES,
     current: options.filterMode,
-    idle: 'all',
     select: (mode) => dispatch({ type: 'SET_FILTER_MODE', payload: mode }),
     shortcutHint: '(I invert)',
   }),
