@@ -3,7 +3,7 @@
  *
  * The toolbar controls shared by Container Logs and Node Logs: the icon bar, the
  * search row its search button opens (the text filter box and the search
- * options), and the match count. Timestamps and previous logs are optional icon
+ * options), and the shown/total log count. Timestamps and previous logs are optional icon
  * bar features a viewer passes when it has them.
  */
 
@@ -11,7 +11,6 @@ import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import {
   AllLinesIcon,
   AnsiColorIcon,
-  AutoRefreshIcon,
   CopyIcon,
   FilterModeIcon,
   InvertFilterIcon,
@@ -23,7 +22,12 @@ import {
   TimestampIcon,
   WrapTextIcon,
 } from '@shared/components/icons/LogIcons';
-import { CaseSensitiveIcon, SearchIcon } from '@shared/components/icons/SharedIcons';
+import {
+  CaseSensitiveIcon,
+  PlayOutlineIcon,
+  SearchIcon,
+  StopOutlineIcon,
+} from '@shared/components/icons/SharedIcons';
 import type { Dispatch, ReactNode, RefObject } from 'react';
 import { flushSync } from 'react-dom';
 import { isMacPlatform } from '@/utils/platform';
@@ -304,10 +308,15 @@ export const buildLogToolbarItems = (toolbar: LogToolbarOptions): IconBarItem[] 
   {
     type: 'toggle',
     id: 'autoRefresh',
-    icon: <AutoRefreshIcon width={18} height={18} />,
+    // The icon shows what a click does: stop while refreshing, play while stopped.
+    icon: toolbar.options.autoRefresh ? (
+      <StopOutlineIcon width={18} height={18} />
+    ) : (
+      <PlayOutlineIcon width={18} height={18} />
+    ),
     active: toolbar.options.autoRefresh,
     onClick: () => toolbar.dispatch({ type: 'TOGGLE_AUTO_REFRESH' }),
-    title: 'Toggle auto-refresh (R)',
+    title: `${toolbar.options.autoRefresh ? 'Stop' : 'Start'} auto-refresh (R)`,
     ariaLabel: 'Toggle auto-refresh',
   },
   ...sourceItems(toolbar),
@@ -354,11 +363,19 @@ const LogTextFilter = ({
   </div>
 );
 
-/** How many logs match; shown only while a filter narrows the logs. */
-export const LogMatchCount = ({ count, filtered }: { count: number; filtered: boolean }) =>
+/** How many logs are shown out of the total; only while a filter hides some. */
+export const LogCount = ({
+  shown,
+  total,
+  filtered,
+}: {
+  shown: number;
+  total: number;
+  filtered: boolean;
+}) =>
   filtered ? (
-    <span className="logs-viewer-count">
-      {count} matching {count === 1 ? 'log' : 'logs'}
+    <span className="active-filter-chips__summary logs-viewer-count">
+      {shown}/{total} logs
     </span>
   ) : null;
 

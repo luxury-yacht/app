@@ -898,6 +898,47 @@ export const StopSquareIcon: React.FC<FixedColorIconProps> = ({
   </svg>
 );
 
+export const PlayOutlineIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
+  <svg
+    className={className}
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinejoin="round"
+    width={width}
+    height={height}
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d="M5 3.25v9.5l7.75-4.75z" />
+  </svg>
+);
+
+export const StopOutlineIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
+  <svg
+    className={className}
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    width={width}
+    height={height}
+    aria-hidden="true"
+    focusable="false"
+  >
+    <rect x="3.75" y="3.75" width="8.5" height="8.5" rx="1.25" />
+  </svg>
+);
+
 export const PlusIcon: React.FC<FixedColorIconProps> = ({ width = 24, height = 24, className }) => (
   <svg
     viewBox="0 0 16 16"

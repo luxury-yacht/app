@@ -35,31 +35,6 @@ export const AutoScrollIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-/** Circular arrows — auto-refresh */
-export const AutoRefreshIcon: React.FC<IconProps> = ({
-  width = 24,
-  height = 24,
-  fill = 'currentColor',
-}) => (
-  <svg
-    aria-hidden="true"
-    focusable="false"
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    width={width}
-    height={height}
-    fill="none"
-    stroke={fill}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth={2}
-  >
-    <path d="M3 12a9 9 0 0 1 9-9a9.75 9.75 0 0 1 6.74 2.74L21 8" />
-    <path d="M21 3v5h-5m5 4a9 9 0 0 1-9 9a9.75 9.75 0 0 1-6.74-2.74L3 16" />
-    <path d="M8 16H3v5" />
-  </svg>
-);
-
 /** Skip-back / rewind — previous logs */
 export const PreviousLogsIcon: React.FC<IconProps> = ({
   width = 24,

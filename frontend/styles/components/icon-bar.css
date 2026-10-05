@@ -13,7 +13,8 @@
   width: 24px;
   height: 24px;
   padding: 0;
-  border: none;
+  /* Outlined while off so the button stays visible; the "on" fill replaces it. */
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   background: transparent;
   color: var(--color-text);
@@ -45,6 +46,7 @@
   opacity: 1;
   color: var(--color-text);
   background: var(--color-bg-tertiary);
+  border-color: transparent;
 }
 
 .icon-bar-button:disabled {
@@ -81,7 +83,14 @@
 
 .icon-bar-split .icon-bar-split-caret {
   width: 14px;
+  /* Shares the toggle's right border instead of doubling it. */
+  border-left-width: 0;
   border-radius: 0 4px 4px 0;
+}
+
+/* The caret joins its "on" toggle's fill, so it drops its outline too. */
+.icon-bar-split .icon-bar-button.active + .icon-bar-split-caret {
+  border-color: transparent;
 }
 
 .icon-bar-split:hover .icon-bar-button:not(:disabled),

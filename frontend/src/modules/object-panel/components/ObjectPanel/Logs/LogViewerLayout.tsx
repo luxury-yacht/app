@@ -24,7 +24,7 @@ import {
   logSourceGroupValues,
 } from './logFilterSelection';
 import type { LogOptionsState, ParsedLogEntry } from './logOptionsReducer';
-import { LogMatchCount, LogSearchRow } from './logToolbar';
+import { LogSearchRow } from './logToolbar';
 import type { LogViewerAction } from './logViewerReducer';
 import ParsedLogTable from './ParsedLogTable';
 import RawLogViewer from './RawLogViewer';
@@ -160,8 +160,6 @@ type LogViewerControlsProps = {
   searchRowId: string;
   searchOptions: LogOptionsState;
   iconItems: IconBarItem[];
-  hasActiveResultFilter: boolean;
-  matchCount: number;
   bufferFullShown: number | null;
   dispatch: React.Dispatch<LogViewerAction>;
 };
@@ -175,8 +173,6 @@ export const LogViewerControls = ({
   searchRowId,
   searchOptions,
   iconItems,
-  hasActiveResultFilter,
-  matchCount,
   bufferFullShown,
   dispatch,
 }: LogViewerControlsProps) => {
@@ -212,7 +208,6 @@ export const LogViewerControls = ({
         )}
         <IconBar items={iconItems} />
         <LogBufferFullIndicator shown={bufferFullShown} />
-        <LogMatchCount count={matchCount} filtered={hasActiveResultFilter} />
       </div>
       {searchOptions.searchOpen ? (
         <LogSearchRow
@@ -231,6 +226,8 @@ type LogViewerReadyViewProps = {
   controls: React.ReactNode;
   activeFilterChips: ActiveFilterChip[];
   clearAllFilters: () => void;
+  /** Shown beside the Clear all button: the shown/total log count. */
+  logCount: React.ReactNode;
   visibleLogWarnings: string[];
   logsContentRef: React.RefObject<HTMLElement | null>;
   renderedLogContent: React.ReactNode;
@@ -243,6 +240,7 @@ export const LogViewerReadyView = ({
   controls,
   activeFilterChips,
   clearAllFilters,
+  logCount,
   visibleLogWarnings,
   logsContentRef,
   renderedLogContent,
@@ -258,6 +256,7 @@ export const LogViewerReadyView = ({
         chips={activeFilterChips}
         onClearAll={clearAllFilters}
         className="logs-viewer-active-filters"
+        summary={logCount}
       />
       <LogWarningBar warnings={visibleLogWarnings} />
       <div className="logs-viewer-content-frame">

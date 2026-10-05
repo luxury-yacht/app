@@ -10,6 +10,7 @@
 - The Pretty JSON and table buttons in the Logs tab are now one format button. Click it to cycle through Raw, Pretty, and Table, or pick one from its menu.
 - The Pods, Containers, and Node Logs source dropdowns in the Logs tab now size to fit their contents.
 - Search in the Logs tab now opens in its own row from the search button, or with ⌘F / Ctrl+F. Closing the row keeps the filter applied.
+- While a filter hides lines, the Logs tab shows how many logs are visible out of the total, for example "12/200 logs", next to Clear all.
 - Log search has a filter mode: All (the default) highlights matches without hiding any lines, Filtered shows only matching lines, and Invert shows only the others. Matches are always highlighted except in Invert, so the separate Highlight button and its H shortcut are gone.
 - The mouse wheel now zooms instead of scrolling in the Object Map.
 - NetworkPolicy, Ingress, route, Service, and EndpointSlice details now show traffic as a simple flow diagram.

@@ -51,11 +51,9 @@
   color: var(--color-warning);
 }
 
+/* The summary style sets the text; even-width digits stop it jittering as logs stream in. */
 .logs-viewer-count {
-  font-size: var(--font-size-small, 0.75rem);
-  color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
   user-select: none;
 }
 

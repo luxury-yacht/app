@@ -1174,9 +1174,11 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.querySelector('[aria-label="Active log filters"]')?.textContent).toContain(
       'Text: unmatched'
     );
-    expect(container.querySelector('.logs-viewer-count')?.textContent?.trim()).toBe(
-      '0 matching logs'
-    );
+    expect(
+      container
+        .querySelector('[aria-label="Active log filters"] .logs-viewer-count')
+        ?.textContent?.trim()
+    ).toBe('0/2 logs');
   });
 
   it('virtualizes large raw log buffers instead of rendering every row at once', async () => {

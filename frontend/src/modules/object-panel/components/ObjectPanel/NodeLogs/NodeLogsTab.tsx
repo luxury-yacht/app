@@ -1,3 +1,4 @@
+import ActiveFilterChips, { type ActiveFilterChip } from '@shared/components/ActiveFilterChips';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar from '@shared/components/IconBar/IconBar';
@@ -22,7 +23,7 @@ import {
   type ParsedLogEntry,
 } from '../Logs/logOptionsReducer';
 import { findLogOverlap } from '../Logs/logOverlap';
-import { buildLogToolbarItems, LogMatchCount, LogSearchRow } from '../Logs/logToolbar';
+import { buildLogToolbarItems, LogCount, LogSearchRow } from '../Logs/logToolbar';
 import {
   getLogViewerScrollPosition,
   setLogViewerScrollPosition,
@@ -55,6 +56,8 @@ const nodeLogSearchTexts = (line: string): string[] => [line];
 const nodeLogLine = (line: string): string => line;
 const NODE_LOG_AUTO_REFRESH_MS = 5000;
 const NODE_LOG_APPEND_OVERLAP_MS = 5000;
+// Node Logs has no filter chips; its strip shows only the log count.
+const NO_FILTER_CHIPS: ActiveFilterChip[] = [];
 
 const getNodeLogSourceLeafLabel = (label: string): string => {
   const segments = label.split(' / ');
@@ -701,6 +704,7 @@ const NodeLogsTab = ({
   const displayedLogCount = isParsedView
     ? parsedRows.length
     : filteredLines.filter((line) => line.length > 0).length;
+  const totalLogCount = useMemo(() => lines.filter((line) => line.length > 0).length, [lines]);
   const rowCount = getNodeLogRowCount(
     content,
     isParsedView,
@@ -796,8 +800,6 @@ const NodeLogsTab = ({
 
             <IconBar items={iconItems} />
             <LogBufferFullIndicator shown={notices.bufferFullShown} />
-
-            <LogMatchCount count={displayedLogCount} filtered={textFilterHidesLines} />
           </div>
           {options.searchOpen ? (
             <LogSearchRow
@@ -810,6 +812,19 @@ const NodeLogsTab = ({
           ) : null}
         </div>
 
+        <ActiveFilterChips
+          ariaLabel="Active log filters"
+          chips={NO_FILTER_CHIPS}
+          onClearAll={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
+          className="logs-viewer-active-filters"
+          summary={
+            <LogCount
+              shown={displayedLogCount}
+              total={totalLogCount}
+              filtered={textFilterHidesLines}
+            />
+          }
+        />
         <LogWarningBar warnings={notices.warnings} />
 
         <ScrollableRegion

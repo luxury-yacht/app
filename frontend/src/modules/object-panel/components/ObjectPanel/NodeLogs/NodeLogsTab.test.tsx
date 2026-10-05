@@ -386,8 +386,8 @@ describe('NodeLogsTab', () => {
     );
   });
 
-  // As in Container Logs, the count shows only while a filter narrows the logs.
-  it('shows the match count only while a text filter is applied', async () => {
+  // As in Container Logs, the shown/total count shows only while a filter narrows the logs.
+  it('shows the log count only while a text filter is applied', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       status: 'executed',
       data: {
@@ -398,15 +398,23 @@ describe('NodeLogsTab', () => {
     });
 
     await renderTab();
-    expect(container.querySelector('.logs-viewer-count')).toBeNull();
+    expect(
+      container.querySelector('[aria-label="Active log filters"] .logs-viewer-count')
+    ).toBeNull();
     await selectSource('kubelet');
-    expect(container.querySelector('.logs-viewer-count')).toBeNull();
+    expect(
+      container.querySelector('[aria-label="Active log filters"] .logs-viewer-count')
+    ).toBeNull();
 
     await filterLogsBy('error');
-    expect(container.querySelector('.logs-viewer-count')?.textContent).toBe('1 matching log');
+    expect(
+      container.querySelector('[aria-label="Active log filters"] .logs-viewer-count')?.textContent
+    ).toBe('1/2 logs');
 
     await filterLogsBy('  ');
-    expect(container.querySelector('.logs-viewer-count')).toBeNull();
+    expect(
+      container.querySelector('[aria-label="Active log filters"] .logs-viewer-count')
+    ).toBeNull();
   });
 
   it('clears the text filter from the filter box and shows every line again', async () => {
@@ -1084,7 +1092,8 @@ describe('NodeLogsTab', () => {
   describe('log buffer', () => {
     const numberedLines = (from: number, to: number) =>
       Array.from({ length: to - from + 1 }, (_, index) => `line ${from + index}`).join('\n');
-    const countLabel = () => container.querySelector('.logs-viewer-count')?.textContent;
+    const countLabel = () =>
+      container.querySelector('[aria-label="Active log filters"] .logs-viewer-count')?.textContent;
     const bufferFullMessage = async (): Promise<string | null | undefined> => {
       const indicator = container.querySelector<HTMLElement>(
         '.logs-viewer-controls [aria-label="Log buffer is full"]'
@@ -1126,7 +1135,7 @@ describe('NodeLogsTab', () => {
       await selectSource('kubelet');
       await filterLogsBy('line');
 
-      expect(countLabel()).toBe(`${bufferSize} matching logs`);
+      expect(countLabel()).toBe(`${bufferSize}/${bufferSize} logs`);
       expect(await bufferFullMessage()).toBe(
         `Log buffer is full. Only showing the most recent ${bufferSize} logs.`
       );
@@ -1186,7 +1195,7 @@ describe('NodeLogsTab', () => {
       }
       await filterLogsBy('line');
 
-      expect(countLabel()).toBe('3 matching logs');
+      expect(countLabel()).toBe('3/3 logs');
       expect(await bufferFullMessage()).toBe(
         'Log buffer is full. Only showing the most recent 3 logs.'
       );
