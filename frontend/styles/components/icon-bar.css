@@ -94,19 +94,16 @@
   border-radius: 0 4px 4px 0;
 }
 
-/* The caret joins its "on" toggle's fill, so it drops its outline too. */
+/* The caret joins its "on" toggle's fill, so it drops its outline too. The
+   toggle drops its border, so the caret draws the line between them. */
 .icon-bar-split .icon-bar-button.active:not(:disabled) + .icon-bar-split-caret {
   border-color: transparent;
+  box-shadow: inset 1px 0 0 var(--color-border);
 }
 
 /* Hovering either half brightens both, so the pair reads as one control. */
 .icon-bar-split:hover .icon-bar-button:not(:disabled) {
   color: var(--color-text);
-}
-
-/* An "on" toggle drops its border, so the caret draws the line between them. */
-.icon-bar-split .icon-bar-button.active:not(:disabled) + .icon-bar-split-caret {
-  box-shadow: inset 1px 0 0 var(--color-border);
 }
 
 .icon-bar-split .icon-bar-button.active:not(:disabled) + .icon-bar-split-caret:not(:disabled) {

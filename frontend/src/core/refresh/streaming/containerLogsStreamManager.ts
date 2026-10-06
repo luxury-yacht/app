@@ -276,8 +276,8 @@ class LogBuffer {
   // snapshot arrives.
   private basis: BufferBasis | null = null;
   // The pods and containers with lines in the buffer, kept as entries come and go.
-  private heldPods = new HeldValues(podOf, podOf);
-  private heldContainers = new HeldValues(containerKeyOf, containerOf);
+  private readonly heldPods = new HeldValues(podOf, podOf);
+  private readonly heldContainers = new HeldValues(containerKeyOf, containerOf);
 
   /** The pods with lines in the buffer; the same array until that set changes. */
   get pods(): string[] {
