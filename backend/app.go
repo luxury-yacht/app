@@ -126,7 +126,9 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		options.ApplicationUpdates, updateCheck,
 	)
 	installationTelemetry := &installationTelemetryPort{}
-	errorReporting := NewErrorReportingService(options.Reporter, signals.CtxOrBackground, appLogs.Logger(), installationTelemetry)
+	errorReporting := NewErrorReportingService(
+		options.Reporter, signals.CtxOrBackground, appLogs.Logger(), Version, installationTelemetry,
+	)
 	refreshSettings := newRefreshSettingBridge(
 		defaultObjPanelLogsTargetGlobalLimit,
 		defaultMetricsIntervalMs(),

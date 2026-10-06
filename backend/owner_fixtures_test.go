@@ -60,7 +60,7 @@ func newClusterRuntimeTestFixture(t testing.TB, reporters ...sentryreporting.Rep
 	refreshSettings := newRefreshSettingBridge(defaultObjPanelLogsTargetGlobalLimit, defaultMetricsIntervalMs())
 	installationTelemetry := &installationTelemetryPort{}
 	errorReporting := NewErrorReportingService(
-		firstReporter(reporters), base.signals.CtxOrBackground, base.AppLogs.Logger(), installationTelemetry,
+		firstReporter(reporters), base.signals.CtxOrBackground, base.AppLogs.Logger(), Version, installationTelemetry,
 	)
 	preferences := NewPreferencesService(
 		base.DesktopShell,

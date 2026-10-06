@@ -80,6 +80,9 @@ type settingsFile struct {
 type settingsTelemetry struct {
 	AnonymizedID               string `json:"anonymizedId"`
 	InstallationMetricReported bool   `json:"installationMetricReported,omitempty"`
+	// ReportedVersion is the highest release version Sentry confirmed receiving
+	// for this anonymizedId; a newer running release reports an upgrade.
+	ReportedVersion string `json:"reportedVersion,omitempty"`
 }
 
 type settingsGlobalAttentionRules struct {

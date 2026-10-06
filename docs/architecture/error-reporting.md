@@ -210,30 +210,40 @@ safe operation identity, Kubernetes reason/status/fields, installation ID.
 
 ## Telemetry Cadence
 
-Installation registration, Release Health sessions, and error events are
-separate signals, never interchangeable counts.
+Installation registration, upgrades, Release Health sessions, and error events
+are separate signals, never interchangeable counts.
 
 | Signal | When sent | Measures |
 | --- | --- | --- |
-| `app.installation.registered` | Once per `anonymizedId` after Sentry confirms delivery; cancellable background work after the Wails startup callback; failures retry on a later startup. | Approximate installations. |
+| `app.installation.registered` | Once per `anonymizedId` after Sentry confirms delivery; cancellable background work after the Wails startup callback; failures retry on a later startup. | Approximate new installations. |
+| `app.installation.upgraded` | On the same background path, once per newer release a registered installation runs; `from.version` is the last reported release, `unknown` for installations registered before upgrade tracking. | Upgrade events, not distinct installations; the destination is the metric's `sentry.release`. |
 | Frontend Release Health session | At frontend page-lifecycle start: once per launch, again after a hard reload such as Factory Reset. | Successful loads; no heartbeat, duration, or actions. |
 | Error event | A reportable exception crosses an owned boundary while enabled. | A failure, independent of the other counts. |
 
-- A confirmed flush records `installationMetricReported: true`; later launches
-  skip the metric.
-- Factory Reset deletes `anonymizedId` and that flag; the reload creates a new
-  ID and session, and the backend's next startup callback (normally the next
-  launch) registers it as a new installation. Factory Reset waits for any
-  in-flight registration and its acknowledgement write before deleting
-  settings, so the worker cannot restore the old ID.
+- A confirmed flush records `installationMetricReported: true` and
+  `reportedVersion`, the running release; later launches skip registration.
+  A launch sends registration or an upgrade, never both.
+- `reportedVersion` only moves forward: a relaunch or downgrade sends nothing,
+  so returning to an already reported release is not a second upgrade.
+  Development and other non-release builds (rejected by
+  `updateidentity.ParseReleaseVersion`) register but never report upgrades or
+  record a version.
+- Sentry keeps application metrics for 30 days on every plan, so both
+  installation metrics are counts within that window; all-time totals must be
+  accumulated outside Sentry.
+- Factory Reset deletes `anonymizedId`, that flag, and `reportedVersion`; the
+  reload creates a new ID and session, and the backend's next startup callback
+  (normally the next launch) registers it as a new installation. Factory Reset
+  waits for any in-flight registration and its acknowledgement write before
+  deleting settings, so the worker cannot restore the old ID.
 - The flush has a two-second deadline but never runs before `app.Run`, so it
   cannot delay launch; shutdown cancels it. Runtime enabling schedules the same
   background path without blocking the settings RPC.
 - Sessions come only from the React page-lifecycle browser-session integration
   while reporting is enabled (user ID, release, environment). The Go SDK sends no sessions, so 0% backend
   adoption is not disuse. Use frontend **Users** for active installations,
-  **Sessions** for approximate loads, and `app.installation.registered` for
-  cumulative registrations.
+  **Sessions** for approximate loads, `app.installation.registered` for new
+  registrations, and `app.installation.upgraded` for upgrades.
 - Sessions are Release Health, not Session Replay: exceptions mark them errored
   and unhandled failures crashed.
 

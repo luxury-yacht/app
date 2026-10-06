@@ -124,6 +124,7 @@ func TestAppCreatesAndPersistsAnonymizedID(t *testing.T) {
 func TestCreatingReplacementAnonymizedIDResetsInstallationMetricAcknowledgement(t *testing.T) {
 	settings := defaultSettingsFile()
 	settings.Telemetry.InstallationMetricReported = true
+	settings.Telemetry.ReportedVersion = "2.5.2"
 
 	created, err := ensureAnonymizedID(settings)
 
@@ -131,6 +132,7 @@ func TestCreatingReplacementAnonymizedIDResetsInstallationMetricAcknowledgement(
 	require.True(t, created)
 	require.NotEmpty(t, settings.Telemetry.AnonymizedID)
 	require.False(t, settings.Telemetry.InstallationMetricReported)
+	require.Empty(t, settings.Telemetry.ReportedVersion)
 }
 
 func TestMalformedAnonymizedIDIsReplacedInsteadOfReportedAsUserData(t *testing.T) {
@@ -398,3 +400,153 @@ func TestInstallationTelemetryWarningIsLocalOnly(t *testing.T) {
 var _ sentryreporting.MetricReporter = (*recordingInstallationReporter)(nil)
 var _ sentryreporting.MetricReporter = (*blockingInstallationReporter)(nil)
 var _ sentryreporting.MetricReporter = (*coordinatedInstallationReporter)(nil)
+
+// launchInstallationTelemetry starts one app launch of the given build version
+// against the test's settings directory, without scheduling the background
+// registration so each test drives the worker explicitly.
+func launchInstallationTelemetry(t *testing.T, version string, reporter sentryreporting.Reporter) *settingsEffectsTestFixture {
+	t.Helper()
+	original := Version
+	Version = version
+	t.Cleanup(func() { Version = original })
+	app := newSettingsEffectsTestFixture(t, reporter)
+	require.NoError(t, app.ErrorReporting.WithInstallationTelemetryQuiesced(func() error {
+		return InitializeErrorReporting(app.Preferences, app.ErrorReporting)
+	}))
+	return app
+}
+
+// seedRegisteredInstallation records a registration from an earlier launch.
+func seedRegisteredInstallation(t *testing.T, app *settingsEffectsTestFixture, reportedVersion string) {
+	t.Helper()
+	settings, err := app.Preferences.loadSettingsFile()
+	require.NoError(t, err)
+	settings.Telemetry.InstallationMetricReported = true
+	settings.Telemetry.ReportedVersion = reportedVersion
+	require.NoError(t, app.Preferences.saveSettingsFile(settings))
+}
+
+func savedInstallationTelemetry(t *testing.T, app *settingsEffectsTestFixture) settingsTelemetry {
+	t.Helper()
+	settings, err := app.Preferences.loadSettingsFile()
+	require.NoError(t, err)
+	return settings.Telemetry
+}
+
+func recordedInstallationMetrics(reporter *recordingInstallationReporter) []recordedCountMetric {
+	reporter.metricMu.Lock()
+	defer reporter.metricMu.Unlock()
+	return append([]recordedCountMetric(nil), reporter.metrics...)
+}
+
+func expectedRegistrationMetric() recordedCountMetric {
+	return recordedCountMetric{
+		name:  installationRegisteredMetric,
+		count: 1,
+		attributes: map[string]string{
+			"app.type": "desktop",
+			"os.name":  runtime.GOOS,
+			"os.arch":  runtime.GOARCH,
+		},
+		hasDeadline: true,
+	}
+}
+
+func expectedUpgradeMetric(fromVersion string) recordedCountMetric {
+	return recordedCountMetric{
+		name:  installationUpgradedMetric,
+		count: 1,
+		attributes: map[string]string{
+			"app.type":     "desktop",
+			"os.name":      runtime.GOOS,
+			"os.arch":      runtime.GOARCH,
+			"from.version": fromVersion,
+		},
+		hasDeadline: true,
+	}
+}
+
+func TestInstallationUpgradeReportsPreviousVersionOnce(t *testing.T) {
+	setTestConfigEnv(t)
+	reporter := newRecordingInstallationReporter()
+
+	installed := launchInstallationTelemetry(t, "v2.5.2", reporter)
+	installed.ErrorReporting.reportInstallationMetricIfNeeded(context.Background())
+	require.Equal(t, "2.5.2", savedInstallationTelemetry(t, installed).ReportedVersion)
+
+	upgraded := launchInstallationTelemetry(t, "v2.6.0", reporter)
+	upgraded.ErrorReporting.reportInstallationMetricIfNeeded(context.Background())
+	upgraded.ErrorReporting.reportInstallationMetricIfNeeded(context.Background())
+
+	require.Equal(t, []recordedCountMetric{
+		expectedRegistrationMetric(),
+		expectedUpgradeMetric("2.5.2"),
+	}, recordedInstallationMetrics(reporter))
+	require.Equal(t, "2.6.0", savedInstallationTelemetry(t, upgraded).ReportedVersion)
+}
+
+func TestInstallationRegisteredBeforeUpgradeTrackingReportsUpgradeFromUnknown(t *testing.T) {
+	setTestConfigEnv(t)
+	reporter := newRecordingInstallationReporter()
+	app := launchInstallationTelemetry(t, "v2.6.0", reporter)
+	seedRegisteredInstallation(t, app, "")
+
+	app.ErrorReporting.reportInstallationMetricIfNeeded(context.Background())
+
+	require.Equal(t, []recordedCountMetric{expectedUpgradeMetric("unknown")}, recordedInstallationMetrics(reporter))
+	require.Equal(t, "2.6.0", savedInstallationTelemetry(t, app).ReportedVersion)
+}
+
+func TestInstallationUpgradeIgnoresSameAndOlderVersions(t *testing.T) {
+	tests := []struct {
+		name           string
+		runningVersion string
+	}{
+		{name: "same version relaunch", runningVersion: "v2.6.0"},
+		{name: "downgrade", runningVersion: "v2.5.2"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setTestConfigEnv(t)
+			reporter := newRecordingInstallationReporter()
+			app := launchInstallationTelemetry(t, test.runningVersion, reporter)
+			seedRegisteredInstallation(t, app, "2.6.0")
+
+			app.ErrorReporting.reportInstallationMetricIfNeeded(context.Background())
+
+			require.Empty(t, recordedInstallationMetrics(reporter))
+			require.Equal(t, "2.6.0", savedInstallationTelemetry(t, app).ReportedVersion)
+		})
+	}
+}
+
+func TestDevelopmentBuildRegistersWithoutReportingUpgrades(t *testing.T) {
+	setTestConfigEnv(t)
+	reporter := newRecordingInstallationReporter()
+	app := launchInstallationTelemetry(t, "dev", reporter)
+
+	app.ErrorReporting.reportInstallationMetricIfNeeded(context.Background())
+	app.ErrorReporting.reportInstallationMetricIfNeeded(context.Background())
+
+	require.Equal(t, []recordedCountMetric{expectedRegistrationMetric()}, recordedInstallationMetrics(reporter))
+	saved := savedInstallationTelemetry(t, app)
+	require.True(t, saved.InstallationMetricReported)
+	require.Empty(t, saved.ReportedVersion)
+}
+
+func TestInstallationUpgradeRetriesAfterFlushFailure(t *testing.T) {
+	setTestConfigEnv(t)
+	reporter := newRecordingInstallationReporter(false, true)
+	app := launchInstallationTelemetry(t, "v2.6.0", reporter)
+	seedRegisteredInstallation(t, app, "2.5.2")
+
+	app.ErrorReporting.reportInstallationMetricIfNeeded(context.Background())
+	require.Equal(t, "2.5.2", savedInstallationTelemetry(t, app).ReportedVersion)
+
+	app.ErrorReporting.reportInstallationMetricIfNeeded(context.Background())
+	require.Equal(t, "2.6.0", savedInstallationTelemetry(t, app).ReportedVersion)
+	require.Equal(t, []recordedCountMetric{
+		expectedUpgradeMetric("2.5.2"),
+		expectedUpgradeMetric("2.5.2"),
+	}, recordedInstallationMetrics(reporter))
+}
