@@ -1,170 +1,126 @@
 # Auth Contract
 
-Auth state is per cluster. An auth failure, retry, or recovery in one cluster
-must not poison other selected clusters.
+Auth state is per cluster. A failure, retry, or recovery in one cluster never
+poisons other selected clusters.
 
 ## Agent Contract
 
-- Track auth state by `clusterId`.
-- Surface auth failure without clearing unrelated cluster data.
-- Pause or block only the affected cluster's refresh, streams, actions, and
-  diagnostics.
-- Recovery rebuilds the affected cluster client and dependent subsystems before
-  normal refresh resumes.
-- Do not treat transport errors, missing clusters, and auth failures as the
-  same state.
-- UI overlays and events must include enough cluster metadata to identify the
-  affected cluster.
+- Surface auth failure without clearing unrelated cluster data; pause or block
+  only the affected cluster's refresh, streams, actions, and diagnostics.
+- Recovery rebuilds the affected cluster's client and dependent subsystems
+  before normal refresh resumes.
+- Transport errors, missing clusters, and auth failures are distinct states.
+- Tests cover failure, retry/progress, recovery, and cluster removal during
+  failure, and show unrelated clusters keep refreshing and accepting actions.
 
 ## Ownership
 
-- Backend auth state manager: `backend/internal/authstate`
-- Cluster client auth wiring: `backend/cluster_runtime_clients.go` and
-  `backend/cluster_client_contract.go`
-- Auth events and recovery lifecycle: `backend/cluster_runtime_auth.go`,
-  `backend/refresh_auth.go`, `backend/workspace_auth.go`, and application
-  lifecycle/refresh setup paths
-- Frontend cluster/auth state: the cluster-workspace store in
-  `frontend/src/core/cluster-workspace`; `AuthErrorContext.tsx` is its React
-  selector facade
-- Refresh pause/recovery behavior: `frontend/src/core/refresh`
+- Auth state manager: `backend/internal/authstate`.
+- Client auth wiring and error classifier: `backend/cluster_runtime_clients.go`,
+  `backend/cluster_client_contract.go`.
+- Events and recovery lifecycle: `backend/cluster_runtime_auth.go`,
+  `backend/refresh_auth.go`, `backend/workspace_auth.go`.
+- Frontend: the cluster-workspace store (`frontend/src/core/cluster-workspace`)
+  with `AuthErrorContext.tsx` as its selector facade; refresh pause/recovery in
+  `frontend/src/core/refresh`.
 
 ## State Model
 
-Use explicit states such as valid, invalid, recovering, and unknown instead of
-deriving behavior from error strings alone. Error capture may detect auth-like
-stderr, but durable state belongs to the per-cluster auth manager.
-
-Backend auth events are `cluster:auth:failed`, `cluster:auth:recovering`,
-`cluster:auth:recovered`, and `cluster:auth:progress`. Payloads must include
-`clusterId` and enough cluster metadata for the frontend to update only the
-affected cluster.
-
-The cluster-workspace store subscribes before reading the authoritative
-workspace snapshot. Per-field live-event markers prevent a late hydration
-response from overwriting newer auth state. New frontend consumers read auth
-through the store or the context facade; they must not install another set of
-Wails auth listeners or maintain another cluster-keyed auth map.
-
-Recovery must prove both sides of the gate:
-
-- invalid early state is blocked for the affected cluster
-- the operation required to recover can still run
+- Durable state lives in the per-cluster auth manager as explicit states
+  (valid, invalid, recovering, unknown), never derived from error strings. Error
+  capture may detect auth-like stderr only as input.
+- Events: `cluster:auth:failed`, `cluster:auth:recovering`,
+  `cluster:auth:recovered`, `cluster:auth:progress`. Payloads and overlays carry
+  `clusterId` and enough cluster metadata to identify and update only the
+  affected cluster.
+- Frontend consumers read auth through the store or its facade; never install
+  another set of Wails auth listeners or another cluster-keyed auth map
+  ([state plane](multi-cluster.md#cluster-workspace-state-plane)).
 
 ### Recovery error classification
 
-One continuous recovery loop owns the retry cadence; it exits only on a
-successful probe or cancellation. Probe failures are classified
-(`authstate.ErrorClass`, classifier in `backend/cluster_client_contract.go`):
+One continuous recovery loop owns retry cadence and exits only on a successful
+probe or cancellation. Probe failures are classified (`authstate.ErrorClass`):
 
-- **auth** — the cluster rejected the credentials (HTTP 401/403) or the exec
-  credential plugin failed. The initial burst probes on the backoff schedule;
-  `MaxAttempts` auth verdicts settle the state to `invalid` — a settled
-  verdict, **not** a stop: the loop continues probing at
-  `ClusterAuthSteadyRetryInterval`, so externally fixed credentials (a fresh
-  SSO login) are picked up without user action.
-- **connectivity** — the cluster could not be reached (refused, timeout, DNS,
-  TLS). These say nothing about credential validity, so they never consume
-  attempts; the loop probes at `ClusterAuthConnectivityRetryInterval` and the
-  cluster reconnects on its own when it answers. This is what keeps a cluster
-  upgrade (multi-minute outage, often with transient 401s) from stranding the
-  cluster in `invalid`.
+- **auth**: the cluster rejected credentials (HTTP 401/403) or the exec
+  credential plugin failed. The initial burst follows the backoff schedule;
+  `MaxAttempts` auth verdicts settle the state to `invalid`, which is not a
+  stop: probing continues at `ClusterAuthSteadyRetryInterval`, so externally
+  fixed credentials (fresh SSO login) recover without user action.
+- **connectivity**: unreachable (refused, timeout, DNS, TLS). Never consumes
+  attempts; probes at `ClusterAuthConnectivityRetryInterval` and reconnects when
+  the cluster answers. This keeps a cluster upgrade (multi-minute outage, often
+  with transient 401s) from stranding the cluster in `invalid`.
 
-These expected auth and connectivity outcomes stay in the local application log
-and lifecycle UI instead of creating Sentry issues. Telemetry suppression uses
-only positively recognized conditions; an unrelated error remains reportable.
-Client-side `context.DeadlineExceeded` also remains reportable even though a
-deadline is a connectivity verdict for recovery.
+Rules:
 
-State transitions are driven only by probe results: `ReportFailure` moves
-valid → recovering; the loop settles recovering → invalid and recovers any
-non-valid state → valid. `TriggerRetry` restarts the loop (immediate probe)
-without touching the state. There is no attempt counter in the public surface —
-progress events and the combined cluster-workspace snapshot carry
-`secondsUntilRetry` (live in both recovering and invalid) and the sticky
-`errorClass` verdict.
-
-The frontend shows the blocking auth overlay only for confirmed auth verdicts
-(settled `invalid`, or a probe rejected by the cluster) with a single message
-and a next-recheck countdown; connectivity-class recovery presents as
-"Reconnecting" in the connectivity indicator instead.
-
-Recovery probes always build a fresh client from kubeconfig — they must never
-run through the cluster's wrapped transport, which blocks requests while auth
-is not valid.
+- Only probe results drive transitions: `ReportFailure` moves valid →
+  recovering; the loop settles recovering → invalid and recovers any non-valid
+  state → valid. `TriggerRetry` restarts the loop (immediate probe) without
+  touching state.
+- No public attempt counter. Progress events and the workspace snapshot carry
+  `secondsUntilRetry` (live in recovering and invalid) and the sticky
+  `errorClass` verdict.
+- The blocking auth overlay appears only for confirmed auth verdicts (settled
+  `invalid`, or a probe rejected by the cluster), with one message and a
+  next-recheck countdown. Connectivity recovery shows as "Reconnecting" in the
+  connectivity indicator.
+- Recovery probes always build a fresh client from kubeconfig, never through the
+  cluster's wrapped transport, which blocks requests while auth is not valid.
+- Expected auth and connectivity outcomes stay in the local log and lifecycle
+  UI, not Sentry. Suppression uses only positively recognized conditions;
+  unrelated errors and client-side `context.DeadlineExceeded` stay reportable
+  even though a deadline is a connectivity verdict for recovery.
 
 ### Startup and credential-helper diagnostics
 
-Auth and namespace callbacks queue at both the workspace and per-cluster
-operation boundaries. They must not cancel client construction that produced
-the callback. Foreground selection changes retain cancellation ownership;
-ownership-only panel and duplicate-view changes do not replace the connection
-generation. Regression tests restore saved clusters while ownership commands
-and auth callbacks arrive, and exercise real helper processes through startup,
-failure projection, and credential refresh.
-
-The exec wrapper preserves credential stdout and forwards stderr while retaining
-a bounded stderr tail. It writes only a recognized diagnostic kind to a private
-temporary file scoped to the cluster. Client-go discards stderr from its returned
-exec errors; preflight reads this scoped result to preserve expiry information.
-File identity stays stable for the process so client-go's authenticator cache
-does not grow on each probe. Auth shutdown removes the diagnostic directory;
-late helpers cannot recreate it. Diagnostic storage failure preserves ordinary
-authentication, with a local warning and the original client-go diagnostic.
-
-Restricted exec plugin policies remain under client-go's original command check
-and are not rewritten for diagnostic capture. Their errors retain the available
-client-go detail. Process-global stderr must never supply a cluster's diagnosis.
-Installation guidance requires `missing-helper`; a configured exec command or
-a helper exit code alone does not prove the executable is missing. Expiry
-diagnostics retain refresh guidance even when the kubeconfig uses an exec helper.
-An AWS SSO token reported as nonexistent is `missing-credentials`, with explicit
-credential-refresh guidance. It remains distinct from an expired token and from
-a missing executable. The real subprocess/startup tests cover both expired and
-removed SSO tokens, a healthy sibling, and recovery after credentials change.
+- Auth and namespace callbacks queue at both the workspace and per-cluster
+  operation boundaries and never cancel the client construction that produced
+  them.
+- The exec wrapper preserves credential stdout and forwards stderr, keeping a
+  bounded tail. Because client-go discards stderr from exec errors, it writes
+  only a recognized diagnostic kind to a private cluster-scoped temp file that
+  preflight reads to preserve expiry information. File identity is stable per
+  process so client-go's authenticator cache does not grow per probe. Auth
+  shutdown removes the directory and late helpers cannot recreate it. Storage
+  failure keeps ordinary auth, with a local warning and the original diagnostic.
+- Restricted exec plugin policies keep client-go's original command check and
+  are not rewritten for capture; their errors keep the available client-go
+  detail. Process-global stderr never supplies a cluster's diagnosis.
+- Installation guidance requires `missing-helper`; an exec command or helper
+  exit code alone does not prove the executable is missing. Expiry diagnostics
+  keep refresh guidance even with an exec helper. A nonexistent AWS SSO token is
+  `missing-credentials` (credential-refresh guidance), distinct from expiry and
+  a missing executable.
+- Proof: real-helper subprocess/startup tests cover saved-cluster restore while
+  ownership commands and auth callbacks arrive, expired and removed SSO tokens,
+  a healthy sibling, and recovery after credentials change.
 
 ### Rebuild wiring invariant
 
-`rebuildClusterSubsystem` must wire rebuilt client transports to the cluster's
-EXISTING auth manager (`buildClusterClientsWithManager`). Building around a
-fresh manager and swapping afterwards leaves the transports reporting to a
-discarded manager — auth failures then block all traffic forever while the
-tracked manager stays valid and `RetryClusterAuth` no-ops. Pinned by
+`rebuildClusterSubsystem` wires rebuilt client transports to the cluster's
+EXISTING auth manager (`buildClusterClientsWithManager`). Rejected: building
+around a fresh manager and swapping afterwards — transports then report to a
+discarded manager, auth failures block all traffic forever while the tracked
+manager stays valid, and `RetryClusterAuth` no-ops. Pinned by
 `TestRebuildClusterSubsystemPreservesAuthManagerWiring`.
 
 ### Refresh runtime invariant
 
-An initial authentication failure can abort cluster selection before normal
-refresh setup creates its process-level context. Recovery may establish that
-never-started shared refresh context and heartbeat before scheduling the rebuilt
-cluster manager. A deliberately stopped process runtime is instead a teardown
-boundary: recovery must abort before publishing the rebuilt subsystem, and only
-normal selection setup may reopen the runtime. Recovery must successfully
-schedule the rebuilt manager before aggregate routing and catalog collection may
-expose the recovered subsystem; inability to schedule it aborts publication.
-Informer and ingest startup then runs concurrently with downstream readiness
-gates. A namespace snapshot whose workload stores have not completed a real
-initial sync remains Loading (or Loading Slowly), even after the ingest liveness
-deadline releases domain requests. The readiness sweep or namespace doorbell
-rebuilds it after those stores actually sync, or are explicitly permission-skipped,
-and transitions the cluster to Ready. Pinned by
-`TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness`,
-`TestClusterSubsystemRebuildDoesNotPublishWhenRefreshRuntimeStopped`, and
-`TestTeardownRefreshSubsystemBlocksRuntimeResurrectionUntilSetup`.
-
-## Change Checklist
-
-When changing auth behavior:
-
-1. Trace the failing cluster from backend detection to frontend presentation.
-2. Confirm unrelated clusters continue refreshing and accepting actions.
-3. Confirm recovery rebuilds clients, establishes a never-started refresh runtime,
-   schedules the rebuilt manager, updates aggregate routing, and starts catalog
-   state and streams in that order; after deliberate runtime teardown, confirm it
-   aborts before subsystem publication instead.
-4. Test failure, retry/progress, recovery, and cluster removal during failure.
-
-## Validation
-
-Run targeted auth, cluster lifecycle, and refresh recovery tests. For
-non-documentation work, finish with `wails3 task qc:prerelease`.
+- Recovery order: rebuild clients → establish a never-started refresh runtime →
+  schedule the rebuilt manager → update aggregate routing → start catalog state
+  and streams.
+- An initial auth failure can abort selection before refresh setup creates its
+  process-level context; recovery may then establish that shared refresh context
+  and heartbeat before scheduling the rebuilt manager.
+- A deliberately stopped process runtime is a teardown boundary: recovery aborts
+  before publishing the rebuilt subsystem, and only normal selection setup may
+  reopen the runtime.
+- Failure to schedule the rebuilt manager aborts publication; aggregate routing
+  and catalog collection never expose an unscheduled subsystem.
+- Informer/ingest startup then runs concurrently with readiness gates; the
+  recovered cluster's loading → degraded → ready progression follows
+  [refresh-system](refresh-system.md#permission-and-readiness).
+- Pinned by `TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness`,
+  `TestClusterSubsystemRebuildDoesNotPublishWhenRefreshRuntimeStopped`, and
+  `TestTeardownRefreshSubsystemBlocksRuntimeResurrectionUntilSetup`.

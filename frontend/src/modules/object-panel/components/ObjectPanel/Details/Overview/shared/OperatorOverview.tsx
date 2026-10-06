@@ -1,11 +1,13 @@
 import type { OperatorCondition, OperatorLabelSelector, ResourceLink } from '@core/refresh/types';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { StatusChip } from '@shared/components/StatusChip';
+import { backendStatusChipVariant } from '@shared/utils/backendStatusPresentation';
 import { resourceLinkToObjectReference } from '@shared/utils/resourceLinkIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type { ReactNode } from 'react';
 import { formatFullDate } from '@/utils/ageFormatter';
 import { ConditionChips } from './ConditionChips';
+import { labelSelectorTerms } from './labelSelector';
 import { OverviewItem } from './OverviewItem';
 import './OverviewBlocks.css';
 import './OperatorOverview.css';
@@ -100,12 +102,6 @@ export function operatorLink(link?: ResourceLink) {
   return reference ? <ObjectPanelLink objectRef={reference}>{name}</ObjectPanelLink> : name;
 }
 
-const variants: Record<string, StatusChipVariant> = {
-  ready: 'healthy',
-  error: 'unhealthy',
-  warning: 'warning',
-};
-
 export function OperatorStatus({
   status,
   presentation,
@@ -117,7 +113,7 @@ export function OperatorStatus({
         [
           'Status',
           status ? (
-            <StatusChip key="status" variant={variants[presentation ?? 'unknown'] ?? 'info'}>
+            <StatusChip key="status" variant={backendStatusChipVariant(presentation)}>
               {status}
             </StatusChip>
           ) : undefined,
@@ -128,7 +124,7 @@ export function OperatorStatus({
             <ConditionChips
               key="conditions"
               conditions={conditions}
-              variant={(condition) => variants[condition.presentation] ?? 'info'}
+              variant={(condition) => backendStatusChipVariant(condition.presentation)}
             />
           ) : undefined,
         ],
@@ -143,14 +139,7 @@ export const operatorSelectorValues = (
   selector: OperatorLabelSelector | null | undefined,
   { absent = 'None', empty = 'All' }: { absent?: string; empty?: string } = {}
 ): string[] => {
-  const values = Object.entries(selector?.matchLabels ?? {}).map(
-    ([key, value]) => `${key}=${value}`
-  );
-  for (const expression of selector?.matchExpressions ?? []) {
-    values.push(
-      [expression.key, expression.operator, expression.values?.join(', ')].filter(Boolean).join(' ')
-    );
-  }
+  const values = labelSelectorTerms(selector);
   return values.length ? values : [selector ? empty : absent];
 };
 

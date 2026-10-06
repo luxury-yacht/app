@@ -526,7 +526,7 @@
   flex: 0 0 auto;
 }
 
-/* Scoped to dropdown bulk actions so the app's other icon bars keep their 26px. */
+/* Scoped to dropdown bulk actions so the app's other icon bars keep their 24px. */
 .dropdown-bulk-action.icon-bar-button {
   width: 20px;
   height: 20px;
@@ -553,7 +553,7 @@
   opacity: 0.5;
 }
 
-/* Labeled toolbar actions stay visible instead of inheriting the icon button's idle dimming. */
+/* Labeled toolbar actions size to their text. */
 .dropdown-bulk-action.icon-bar-button.dropdown-bulk-action--labeled {
   display: inline-flex;
   align-items: center;
@@ -564,7 +564,6 @@
   padding: 0 0.3125rem;
   gap: 0.25rem;
   white-space: nowrap;
-  opacity: 1;
 }
 
 .dropdown-bulk-action.icon-bar-button.dropdown-bulk-action--labeled .dropdown-bulk-action-label {

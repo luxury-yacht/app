@@ -1,7 +1,8 @@
 import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
-import { KeyboardProvider } from '@ui/shortcuts';
+import { KeyboardProvider, useKeyboardSurface } from '@ui/shortcuts';
+import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { Clipboard } from '@wailsio/runtime';
-import { act } from 'react';
+import { act, useRef } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
@@ -105,7 +106,23 @@ describe('NodeLogsTab', () => {
     });
   };
 
+  // Opens the search row (filter box and search options) unless it is already open.
+  const openSearch = async (): Promise<void> => {
+    const button = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Search logs"]'),
+      'expected the search button'
+    );
+    if (button.getAttribute('aria-expanded') === 'true') {
+      return;
+    }
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+  };
+
   const setFilterValue = async (value: string): Promise<void> => {
+    await openSearch();
     const filterInput = container.querySelector<HTMLInputElement>(
       'input[aria-label="Filter node logs"]'
     );
@@ -122,8 +139,51 @@ describe('NodeLogsTab', () => {
     });
   };
 
+  // Clicks the filter mode button until it shows the given mode.
+  const chooseFilterMode = async (label: 'All' | 'Filtered' | 'Invert'): Promise<void> => {
+    for (let step = 0; step < 3; step += 1) {
+      const button = requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label^="Filter mode:"]'),
+        'expected the filter mode button'
+      );
+      if (button.getAttribute('aria-label') === `Filter mode: ${label}`) {
+        return;
+      }
+      await act(async () => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    }
+    throw new Error(`filter mode ${label} was not reached`);
+  };
+
+  // Shows only the lines that match; the default mode, All, only highlights them.
+  const filterLogsBy = async (value: string): Promise<void> => {
+    await setFilterValue(value);
+    await chooseFilterMode('Filtered');
+  };
+
+  // Clicks the format button until the logs show the given format.
+  const showLogFormat = async (label: 'Pretty' | 'Table'): Promise<void> => {
+    for (let step = 0; step < 3; step += 1) {
+      const button = requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label^="Log format:"]'),
+        'expected the format button'
+      );
+      if (button.getAttribute('aria-label') === `Log format: ${label}`) {
+        return;
+      }
+      await act(async () => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    }
+    throw new Error(`format ${label} was not reached`);
+  };
+
   const selectSource = async (label: string): Promise<void> => {
-    const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
+    const trigger = container.querySelector('button[aria-label="Node log source"]');
     await act(async () => {
       requireValue(trigger, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
         new MouseEvent('click', { bubbles: true })
@@ -166,7 +226,7 @@ describe('NodeLogsTab', () => {
     expect(mockFetchNodeLogs).not.toHaveBeenCalled();
     expect(container.textContent).toContain('Select a log source to view logs.');
     expect(
-      container.querySelector('.logs-viewer-selector-dropdown .dropdown-value')?.textContent
+      container.querySelector('button[aria-label="Node log source"] .dropdown-value')?.textContent
     ).toBe('Select source');
   });
 
@@ -284,10 +344,10 @@ describe('NodeLogsTab', () => {
       ],
     });
 
-    const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
+    const trigger = container.querySelector('button[aria-label="Node log source"]');
     expect(trigger).toBeTruthy();
     expect(
-      container.querySelector('.logs-viewer-selector-dropdown .dropdown-value')?.textContent
+      container.querySelector('button[aria-label="Node log source"] .dropdown-value')?.textContent
     ).toBe('Select source');
 
     await act(async () => {
@@ -320,15 +380,15 @@ describe('NodeLogsTab', () => {
 
     await renderTab();
     await selectSource('kubelet');
-    await setFilterValue('error');
+    await filterLogsBy('error');
 
     expect(container.querySelector('.logs-viewer-text')?.textContent).toBe(
       'error failed to reconcile'
     );
   });
 
-  // As in Container Logs, the count shows only while a filter narrows the logs.
-  it('shows the match count only while a text filter is applied', async () => {
+  // As in Container Logs, the shown/total count shows only while a filter narrows the logs.
+  it('shows the log count only while a text filter is applied', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       status: 'executed',
       data: {
@@ -338,16 +398,59 @@ describe('NodeLogsTab', () => {
       },
     });
 
+    const strip = () => container.querySelector('[aria-label="Active log filters"]');
     await renderTab();
-    expect(container.querySelector('.logs-viewer-count')).toBeNull();
+    expect(strip()).toBeNull();
     await selectSource('kubelet');
-    expect(container.querySelector('.logs-viewer-count')).toBeNull();
+    expect(strip()).toBeNull();
 
-    await setFilterValue('error');
-    expect(container.querySelector('.logs-viewer-count')?.textContent).toBe('1 matching log');
+    await filterLogsBy('error');
+    expect(strip()?.querySelector('.logs-viewer-count')?.textContent).toBe('1/2 logs');
 
-    await setFilterValue('  ');
-    expect(container.querySelector('.logs-viewer-count')).toBeNull();
+    await filterLogsBy('  ');
+    expect(strip()?.querySelector('.logs-viewer-count') ?? null).toBeNull();
+  });
+
+  // The search chips are Container Logs' chips: the text filter and each search
+  // option that differs from its default. Clear all resets them all.
+  it('shows the search chips and clears them all', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'info boot complete\nerror failed to reconcile',
+      },
+    });
+    const chipLabels = () =>
+      Array.from(
+        container.querySelectorAll('[aria-label="Active log filters"] .active-filter-chip__label')
+      ).map((label) => label.textContent);
+
+    await renderTab();
+    await selectSource('kubelet');
+    await filterLogsBy('error');
+    await act(async () => {
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label^="Case-sensitive search"]'),
+        'expected the Match case button'
+      ).click();
+      await Promise.resolve();
+    });
+    expect(chipLabels()).toEqual(['Text: error', 'Filtered', 'Match case']);
+
+    await act(async () => {
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Clear all filters"]'),
+        'expected Clear all'
+      ).click();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[aria-label="Active log filters"]')).toBeNull();
+    expect(
+      container.querySelector('button[aria-label^="Filter mode:"]')?.getAttribute('aria-label')
+    ).toBe('Filter mode: All');
+    expect(container.textContent).toContain('info boot complete');
   });
 
   it('clears the text filter from the filter box and shows every line again', async () => {
@@ -378,7 +481,7 @@ describe('NodeLogsTab', () => {
     expect(container.querySelector('button[aria-label="Clear filter"]')).toBeNull();
   });
 
-  it('can invert the filter from the icon bar', async () => {
+  it('can invert the filter from the filter mode button', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       status: 'executed',
       data: {
@@ -392,22 +495,12 @@ describe('NodeLogsTab', () => {
     await selectSource('kubelet');
     await setFilterValue('error');
 
-    const inverseButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Invert the text filter to show only non-matching logs"]'
-    );
-    expect(inverseButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(inverseButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await chooseFilterMode('Invert');
 
     expect(container.querySelector('.logs-viewer-text')?.textContent).toBe('info boot complete');
   });
 
-  it('can highlight matches from the icon bar', async () => {
+  it('highlights matches without hiding other lines by default', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       status: 'executed',
       data: {
@@ -421,20 +514,10 @@ describe('NodeLogsTab', () => {
     await selectSource('kubelet');
     await setFilterValue('error');
 
-    const highlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-    );
-    expect(highlightButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(highlightButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
+    // All, the default, keeps every line and highlights the match.
     const highlightedMatch = container.querySelector('mark.log-viewer-highlight');
     expect(highlightedMatch?.textContent).toBe('error');
+    expect(container.textContent).toContain('info boot complete');
   });
 
   it('highlights ANSI-colored node log text in the DOM renderer', async () => {
@@ -450,18 +533,6 @@ describe('NodeLogsTab', () => {
     await renderTab();
     await selectSource('kubelet');
     await setFilterValue('error');
-
-    const highlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-    );
-    expect(highlightButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(highlightButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
 
     const highlightedMatch = container.querySelector('.log-viewer-line mark.log-viewer-highlight');
     expect(highlightedMatch?.textContent).toBe('error');
@@ -497,7 +568,7 @@ describe('NodeLogsTab', () => {
     expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
   });
 
-  it('shows an error for invalid regex filters when regex mode is enabled', async () => {
+  it('shows an invalid regex error only when the filter would hide lines', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       status: 'executed',
       data: {
@@ -509,6 +580,7 @@ describe('NodeLogsTab', () => {
 
     await renderTab();
     await selectSource('kubelet');
+    await openSearch();
 
     const regexButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Enable regular expression support for the text filter"]'
@@ -524,7 +596,18 @@ describe('NodeLogsTab', () => {
 
     await setFilterValue('[');
 
+    // All only highlights matches, so the lines stay readable and the chip says
+    // the expression is invalid.
+    expect(container.textContent).not.toContain('Enter a valid regular expression.');
+    expect(container.textContent).toContain('error failed to reconcile');
+    expect(
+      container.querySelector('[aria-label="Active log filters"] .active-filter-chip__label')
+        ?.textContent
+    ).toBe('Regex: [ (invalid expression)');
+
+    await chooseFilterMode('Filtered');
     expect(container.textContent).toContain('Enter a valid regular expression.');
+    expect(container.textContent).not.toContain('error failed to reconcile');
   });
 
   it('can pretty-print JSON logs from the icon bar', async () => {
@@ -540,17 +623,7 @@ describe('NodeLogsTab', () => {
     await renderTab();
     await selectSource('kubelet');
 
-    const prettyButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Show pretty JSON"]'
-    );
-    expect(prettyButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(prettyButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await showLogFormat('Pretty');
 
     const logLines = Array.from(container.querySelectorAll('.log-viewer-line')).map(
       (element) => element.textContent
@@ -573,18 +646,7 @@ describe('NodeLogsTab', () => {
     await renderTab();
     await selectSource('kubelet');
 
-    const parsedButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Parse the JSON into a table"]'
-    );
-    expect(parsedButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(parsedButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await showLogFormat('Table');
 
     expect(container.querySelector('.parsed-logs-table')).toBeTruthy();
     expect(container.textContent).toContain('level');
@@ -610,17 +672,21 @@ describe('NodeLogsTab', () => {
     });
     await renderTab();
     await selectSource('kubelet');
+    await showLogFormat('Table');
     await act(async () => {
       requireValue(
-        container.querySelector('button[aria-label="Parse the JSON into a table"]'),
-        'parse control'
+        container.querySelector('button[aria-label="Download logs"]'),
+        'download control'
       ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await act(async () => {
       requireValue(
-        container.querySelector('button[aria-label="Copy to clipboard"]'),
-        'copy control'
+        Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
+          (item) => item.textContent === 'Copy to Clipboard'
+        ),
+        'copy choice'
       ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
     });
     expect(Clipboard.SetText).toHaveBeenCalledWith(
       'level,_pod,count,enabled,extra,message\ninfo,literal,0,false,"{""value"":""x""}","boot, complete"'
@@ -640,18 +706,7 @@ describe('NodeLogsTab', () => {
     await renderTab();
     await selectSource('kubelet');
 
-    const parsedButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Parse the JSON into a table"]'
-    );
-    expect(parsedButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(parsedButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await showLogFormat('Table');
 
     const row = container.querySelector<HTMLElement>('.parsed-logs-table .gridtable-row');
     expect(row).toBeTruthy();
@@ -730,9 +785,7 @@ describe('NodeLogsTab', () => {
 
     expect(container.textContent).toContain('Error: node log access denied');
     // Another source must stay selectable when this one cannot be read.
-    expect(
-      container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger')
-    ).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Node log source"]')).not.toBeNull();
     expect(handleInlineMock).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'node log access denied' }),
       {
@@ -873,7 +926,7 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
+    const trigger = container.querySelector('button[aria-label="Node log source"]');
     expect(trigger).toBeTruthy();
     await selectSource('containerd');
     await waitForAnimationFrames(6);
@@ -920,7 +973,7 @@ describe('NodeLogsTab', () => {
     );
 
     await act(async () => {
-      const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
+      const trigger = container.querySelector('button[aria-label="Node log source"]');
       requireValue(trigger, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
         new MouseEvent('click', { bubbles: true })
       );
@@ -1090,12 +1143,29 @@ describe('NodeLogsTab', () => {
     }
   });
 
+  it('disables search and wrap until the source returns a log line', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      status: 'executed',
+      data: { source: sources[0], sourcePath: sources[0].path, content: '' },
+    });
+    await renderTab();
+    await selectSource('kubelet');
+
+    for (const label of ['Search logs', 'Wrap text']) {
+      expect(
+        container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.disabled,
+        label
+      ).toBe(true);
+    }
+  });
+
   // Node Logs keep as many lines as the Object Panel Logs buffer setting allows
   // and say so the same way Container Logs do.
   describe('log buffer', () => {
     const numberedLines = (from: number, to: number) =>
       Array.from({ length: to - from + 1 }, (_, index) => `line ${from + index}`).join('\n');
-    const countLabel = () => container.querySelector('.logs-viewer-count')?.textContent;
+    const countLabel = () =>
+      container.querySelector('[aria-label="Active log filters"] .logs-viewer-count')?.textContent;
     const bufferFullMessage = async (): Promise<string | null | undefined> => {
       const indicator = container.querySelector<HTMLElement>(
         '.logs-viewer-controls [aria-label="Log buffer is full"]'
@@ -1135,9 +1205,9 @@ describe('NodeLogsTab', () => {
 
       await renderTab();
       await selectSource('kubelet');
-      await setFilterValue('line');
+      await filterLogsBy('line');
 
-      expect(countLabel()).toBe(`${bufferSize} matching logs`);
+      expect(countLabel()).toBe(`${bufferSize}/${bufferSize} logs`);
       expect(await bufferFullMessage()).toBe(
         `Log buffer is full. Only showing the most recent ${bufferSize} logs.`
       );
@@ -1195,9 +1265,9 @@ describe('NodeLogsTab', () => {
       } finally {
         vi.useRealTimers();
       }
-      await setFilterValue('line');
+      await filterLogsBy('line');
 
-      expect(countLabel()).toBe('3 matching logs');
+      expect(countLabel()).toBe('3/3 logs');
       expect(await bufferFullMessage()).toBe(
         'Log buffer is full. Only showing the most recent 3 logs.'
       );
@@ -1312,6 +1382,8 @@ describe('NodeLogsTab', () => {
       await renderWithProbe();
       await selectSource('kubelet');
       await setFilterValue('error');
+      // Opening search puts the cursor in the filter box, where keys type text.
+      act(() => (document.activeElement as HTMLElement | null)?.blur());
 
       await press('i');
       expect(container.querySelector('.logs-viewer-text')?.textContent).toBe('info boot complete');
@@ -1329,7 +1401,7 @@ describe('NodeLogsTab', () => {
 
       const logs = shortcutHelp.current?.().find(({ category }) => category === 'Logs');
       const keys = logs?.shortcuts.map(({ key }) => key) ?? [];
-      expect(keys).toEqual(expect.arrayContaining(['r', 'h', 'i', 'x', 'w', 'Home', 'End']));
+      expect(keys).toEqual(expect.arrayContaining(['r', 'i', 'x', 'w', 'Home', 'End']));
       expect(keys).not.toContain('t');
       expect(keys).not.toContain('v');
     });
@@ -1385,6 +1457,95 @@ describe('NodeLogsTab', () => {
         failure,
         expect.objectContaining({ action: 'copyLogs' })
       );
+    });
+
+    describe('Escape while the search row is open', () => {
+      const closeTab = vi.fn(() => true);
+      // Stands in for the object panel, which closes its tab on Escape.
+      const ObjectPanelEscape = ({ children }: { children: React.ReactNode }) => {
+        const panelRef = useRef<HTMLDivElement>(null);
+        useKeyboardSurface({
+          kind: 'panel',
+          rootRef: panelRef,
+          priority: KeyboardScopePriority.OBJECT_PANEL,
+          captureWhenActive: true,
+          onEscape: closeTab,
+        });
+        return <div ref={panelRef}>{children}</div>;
+      };
+
+      const renderInPanel = async () => {
+        await act(async () => {
+          root.render(
+            <PanelLayoutTestProvider>
+              <KeyboardProvider>
+                <ObjectPanelEscape>
+                  <NodeLogsTab
+                    panelId="panel-1"
+                    nodeName="node-a"
+                    clusterId="alpha:ctx"
+                    isActive
+                    availability={{ allowed: true, pending: false }}
+                    sources={sources}
+                  />
+                </ObjectPanelEscape>
+              </KeyboardProvider>
+            </PanelLayoutTestProvider>
+          );
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+        await selectSource('kubelet');
+        await openSearch();
+      };
+
+      const pressEscape = async () => {
+        await act(async () => {
+          (document.activeElement ?? document.body).dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+          );
+          await Promise.resolve();
+        });
+      };
+
+      const searchButton = () =>
+        requireValue(
+          container.querySelector<HTMLButtonElement>('button[aria-label="Search logs"]'),
+          'expected the search button'
+        );
+      const filterInput = () =>
+        container.querySelector<HTMLInputElement>('input[aria-label="Filter node logs"]');
+
+      beforeEach(() => closeTab.mockClear());
+
+      it('closes the search row instead of the tab, then the next Escape closes the tab', async () => {
+        await renderInPanel();
+        expect(document.activeElement).toBe(filterInput());
+
+        await pressEscape();
+        expect(filterInput()).toBeNull();
+        expect(searchButton().getAttribute('aria-expanded')).toBe('false');
+        expect(closeTab).not.toHaveBeenCalled();
+        // The focused box is gone, so focus returns to the button that opens it.
+        expect(document.activeElement).toBe(searchButton());
+
+        await pressEscape();
+        expect(closeTab).toHaveBeenCalledOnce();
+      });
+
+      it('closes the search row from the log output and leaves focus there', async () => {
+        await renderInPanel();
+        const output = requireValue(
+          container.querySelector<HTMLElement>('.logs-viewer-content'),
+          'node log output'
+        );
+        await act(async () => output.focus());
+
+        await pressEscape();
+        expect(filterInput()).toBeNull();
+        expect(closeTab).not.toHaveBeenCalled();
+        expect(document.activeElement).toBe(output);
+      });
     });
   });
 });

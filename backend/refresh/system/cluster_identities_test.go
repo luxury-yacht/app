@@ -31,7 +31,7 @@ import (
 )
 
 func TestIdentitiesRegistrationAcceptsAnyReadableSource(t *testing.T) {
-	registrations := domainRegistrations(registrationDeps{cfg: Config{ClusterID: "cluster-a"}})
+	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{ClusterID: "cluster-a"}})
 	for _, registration := range registrations {
 		if registration.name != "cluster-identities" {
 			continue
@@ -57,7 +57,7 @@ func TestIdentitiesProductionIngestInvalidatesBeforeSignaling(t *testing.T) {
 	config := &rest.Config{Host: server.URL, QPS: -1, ContentConfig: rest.ContentConfig{ContentType: "application/json", AcceptContentTypes: "application/json"}}
 	client, err := kubernetes.NewForConfig(config)
 	require.NoError(t, err)
-	subsystem, err := NewSubsystemWithServices(Config{KubernetesClient: client, RestConfig: config, ClusterID: "identity-cluster", Logger: applog.Noop,
+	subsystem, err := NewSubsystemWithServices(context.Background(), Config{KubernetesClient: client, RestConfig: config, ClusterID: "identity-cluster", Logger: applog.Noop,
 		ObjectDetailsProvider: noopObjectDetailProvider{}, NodeMaintenanceStore: nodemaintenance.NewStore(5), ResyncInterval: time.Hour})
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())

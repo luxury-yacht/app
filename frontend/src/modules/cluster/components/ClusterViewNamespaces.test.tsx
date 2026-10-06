@@ -100,7 +100,6 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
         search: '',
         kinds: [],
         namespaces: [],
-        caseSensitive: false,
         includeMetadata: false,
       },
       setFilters: vi.fn(),

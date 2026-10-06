@@ -51,8 +51,6 @@ export interface UseGridTableFiltersResult<T> {
   handleFilterQueryFacetChange: (key: string, values: string[]) => void;
   handleFiltersChange: (changes: Partial<GridTableFilterState>) => void;
   handleFilterReset: () => void;
-  /** Toggle the built-in case-sensitive search state. */
-  toggleCaseSensitive: () => void;
 }
 
 export function useGridTableFilters<T>({
@@ -121,15 +119,6 @@ export function useGridTableFilters<T>({
     },
     [filters, isControlled]
   );
-
-  // Toggle the case-sensitive flag through the shared filter state.
-  const toggleCaseSensitive = useCallback(() => {
-    const next = normalizeGridTableFilterState({
-      ...activeFilters,
-      caseSensitive: !activeFilters.caseSensitive,
-    });
-    setFiltersState(next);
-  }, [activeFilters, setFiltersState]);
 
   const filterAccessors = useMemo(
     () =>
@@ -314,6 +303,5 @@ export function useGridTableFilters<T>({
     handleFilterQueryFacetChange,
     handleFiltersChange: updateFilters,
     handleFilterReset,
-    toggleCaseSensitive,
   };
 }

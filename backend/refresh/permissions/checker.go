@@ -90,12 +90,10 @@ func NewChecker(client kubernetes.Interface, clusterID string, ttl time.Duration
 		if client == nil {
 			return false, fmt.Errorf("kubernetes client not initialized")
 		}
-		ctx = ensureContext(ctx)
-		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, config.PermissionCheckTimeout)
-			defer cancel()
-		}
+		// Bound every review, even inside a longer caller budget; an earlier
+		// caller deadline or cancellation still wins.
+		ctx, cancel := context.WithTimeout(ensureContext(ctx), config.PermissionCheckTimeout)
+		defer cancel()
 
 		var resp *authorizationv1.SelfSubjectAccessReview
 		err := k8sretry.Do(ctx, permissionReviewRetryPolicy(), func(callCtx context.Context) error {

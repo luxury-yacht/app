@@ -373,7 +373,6 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
           kinds: ALL_MULTISELECT_FILTER,
           namespaces: ALL_MULTISELECT_FILTER,
           clusters: ALL_MULTISELECT_FILTER,
-          caseSensitive: false,
           includeMetadata: false,
         },
         sortConfig: null,

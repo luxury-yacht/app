@@ -123,7 +123,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+    filters: { search: '', kinds: [], namespaces: [] },
     setFilters: setFiltersMock,
     resetState: vi.fn(),
     hydrated: true,
@@ -530,11 +530,6 @@ describe('ClusterViewCustom', () => {
     // Export is now the unified frontend fetcher (the GridTable filter bar wires the Copy/Export
     // cluster from it), not a server-side per-action catalog export.
     expect(typeof props?.fetchAllRows).toBe('function');
-    expect(
-      (props?.filters?.options?.postActions ?? []).some(
-        (item) => 'id' in item && item.id === 'copy-cluster-custom-query-csv'
-      )
-    ).toBe(false);
   });
 
   it('uses catalog facet metadata instead of deriving kinds from loaded rows', async () => {

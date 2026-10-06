@@ -1,6 +1,7 @@
 package system
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -41,7 +42,7 @@ func permissionGateFixture(t *testing.T, allow map[string]bool, errOn map[string
 	})
 
 	checker := permissions.NewChecker(client, "test-cluster", time.Minute)
-	factory := informer.New(client, nil, 0, checker)
+	factory := informer.New(context.Background(), client, nil, 0, checker)
 	registry := domain.New()
 	gate := newPermissionGate(registry, factory,
 		func(domain, resource string, errs ...error) {},
@@ -60,7 +61,7 @@ func TestRegisterListWatchDomainFallbackAllowAnyRegistersOnSingleAllowedResource
 
 	informerRegistered := false
 	fallbackRegistered := false
-	err := gate.registerListWatchDomain(listWatchDomainConfig{
+	err := gate.registerListWatchDomain(context.Background(), listWatchDomainConfig{
 		name:   "test-overview",
 		checks: []listWatchCheck{{group: "", resource: "namespaces"}},
 		registerInformer: func() error {
@@ -95,7 +96,7 @@ func TestRegisterListWatchDomainFallbackAllowAnyToleratesOtherResourceErrors(t *
 	)
 
 	fallbackRegistered := false
-	err := gate.registerListWatchDomain(listWatchDomainConfig{
+	err := gate.registerListWatchDomain(context.Background(), listWatchDomainConfig{
 		name:   "test-overview",
 		checks: []listWatchCheck{{group: "", resource: "namespaces"}},
 		registerInformer: func() error {
@@ -124,7 +125,7 @@ func TestRegisterListWatchDomainFallbackAllowAnyDeniesWhenNothingAllowed(t *test
 	gate, registry := permissionGateFixture(t, nil, nil)
 
 	fallbackRegistered := false
-	err := gate.registerListWatchDomain(listWatchDomainConfig{
+	err := gate.registerListWatchDomain(context.Background(), listWatchDomainConfig{
 		name:   "test-overview",
 		checks: []listWatchCheck{{group: "", resource: "namespaces"}},
 		registerInformer: func() error {
@@ -152,7 +153,7 @@ func TestRegisterListDomainKeepsCatalogBackedDomainWhenOptionalSourcesAreDenied(
 	gate, registry := permissionGateFixture(t, nil, nil)
 	registered := false
 
-	err := gate.registerListDomain(listDomainConfig{
+	err := gate.registerListDomain(context.Background(), listDomainConfig{
 		name:           "catalog-backed",
 		checks:         []listCheck{{group: "", resource: "pods"}, {group: "apps", resource: "deployments"}},
 		alwaysRegister: true,
@@ -179,7 +180,7 @@ func TestRegisterListWatchDomainFallbackDefaultStillRequiresAllResources(t *test
 	)
 
 	fallbackRegistered := false
-	err := gate.registerListWatchDomain(listWatchDomainConfig{
+	err := gate.registerListWatchDomain(context.Background(), listWatchDomainConfig{
 		name:   "test-nodes",
 		checks: []listWatchCheck{{group: "", resource: "nodes"}, {group: "", resource: "pods"}},
 		registerInformer: func() error {

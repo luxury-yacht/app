@@ -79,7 +79,7 @@ func (s *Service) buildServiceDetails(svc *corev1.Service, slices []*discoveryv1
 		Kind:             "Service",
 		Name:             svc.Name,
 		Namespace:        svc.Namespace,
-		StatusProjection: restypes.NewStatusProjection(statusPresentation(svc, facts)),
+		StatusProjection: restypes.NewStatusProjection(statusPresentation(svc, facts, slices != nil)),
 		ServiceType:      facts.Type,
 		ClusterIP:        facts.ClusterIP,
 		ClusterIPs:       facts.ClusterIPs,
@@ -111,6 +111,11 @@ func (s *Service) buildServiceDetails(svc *corev1.Service, slices []*discoveryv1
 
 	details.Endpoints = facts.Endpoints
 	details.EndpointCount = len(details.Endpoints)
+	if slices != nil {
+		ready, notReady := facts.ReadyEndpointCount, facts.NotReadyEndpointCount
+		details.ReadyEndpointCount = &ready
+		details.NotReadyEndpointCount = &notReady
+	}
 
 	switch {
 	case len(details.Endpoints) > 0:

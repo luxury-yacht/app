@@ -29,12 +29,15 @@ func TestKarpenterDetailsAndTableProjectionParity(t *testing.T) {
 	require.Equal(t, row.Conditions, detail.Conditions)
 	require.Equal(t, "infra", detail.Labels["team"])
 	require.Equal(t, karpenterTableSummary(detail.Karpenter), row.Karpenter)
+	// The table shows the same backend-computed usage as the details, not its own calculation.
+	require.NotEmpty(t, detail.Karpenter.LimitUsage)
+	require.Equal(t, detail.Karpenter.LimitUsage, row.Karpenter.LimitUsage)
 	encoded, err := json.Marshal(row.Karpenter)
 	require.NoError(t, err)
-	var wire map[string]map[string]string
+	var wire map[string]any
 	require.NoError(t, json.Unmarshal(encoded, &wire))
-	require.Equal(t, detail.Karpenter.Capacity, wire["capacity"], "table usage must preserve source units and match details")
-	require.Equal(t, detail.Karpenter.Limits, wire["limits"])
+	require.NotContains(t, wire, "capacity", "the table row carries computed usage, not the raw quantities")
+	require.NotContains(t, wire, "limits")
 	require.Equal(t, "warning", row.StatusPresentation)
 	require.NoError(t, resourcemodel.ValidateResourceRef(detail.Ref))
 }

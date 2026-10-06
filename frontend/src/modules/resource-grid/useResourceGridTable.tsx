@@ -6,6 +6,7 @@
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
+import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import type { CustomMetadataColumnDefinition } from '@shared/components/tables/customMetadataColumns';
 import {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -247,6 +248,17 @@ export function useObjectPanelResourceGridTable<T extends ResourceGridTableRow>(
   };
 }
 
+// Favorite follows a table's other icons after a separator, and leads without one.
+const withFavorite = (
+  items: readonly IconBarItem[],
+  favorite: IconBarItem | null | undefined
+): IconBarItem[] => {
+  if (!favorite) {
+    return [...items];
+  }
+  return items.length > 0 ? [...items, { type: 'separator' }, favorite] : [favorite];
+};
+
 export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
   tableMode,
   supportsCustomMetadataColumns,
@@ -302,7 +314,7 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
           ? 'query'
           : (filterOptions.searchBehavior ?? 'local'),
         partialDataLabel: filterOptions.partialDataLabel ?? resourceGridPartialDataLabel(tableMode),
-        preActions: [...(filterOptions.preActions ?? []), ...(favToggle ? [favToggle] : [])],
+        preActions: withFavorite(filterOptions.preActions ?? [], favToggle),
       },
     }),
     [
@@ -336,9 +348,8 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   availableKinds: kindOptions,
   diagnosticsLabel,
   filterAccessors,
-  leadingFilterActions = [],
+  viewActions = [],
   filterOptionOverrides,
-  metadataSearch,
   onTableStateChange,
   rowIdentity,
   keyExtractor,
@@ -348,7 +359,6 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   namespace = '',
   showNamespaceFilters = false,
   showKindDropdown = false,
-  getTrailingFilterActions,
   transformSortedData,
   showFavoriteToggle = true,
   favoritePane,
@@ -441,33 +451,13 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     persistenceHydrated,
   ]);
 
-  const useMetadata = Boolean(metadataSearch);
-  const getDefaultMetadataSearchValues = useCallback(
-    (row: T) => metadataSearch?.getDefaultValues(row) ?? [],
-    [metadataSearch]
-  );
-  const getMetadataSearchMaps = useCallback(
-    (row: T) => metadataSearch?.getMetadataMaps(row) ?? [],
-    [metadataSearch]
-  );
-  const metadata = useMetadataSearch<T>({
-    enabled: useMetadata,
-    getDefaultValues: getDefaultMetadataSearchValues,
-    getMetadataMaps: getMetadataSearchMaps,
+  // Rows that carry labels and annotations (the data behind custom metadata
+  // columns) can include them in the search.
+  const metadataToggle = useMetadataSearch({
+    enabled: supportsCustomMetadataColumns,
     filters: persistence.filters,
     onFiltersChange: persistence.setFilters,
   });
-  const metadataToggle = useMetadata ? metadata.metadataToggle : null;
-  const effectiveFilterAccessors = useMemo<GridTableFilterConfig<T>['accessors']>(
-    () =>
-      useMetadata
-        ? {
-            ...filterAccessors,
-            getSearchText: metadata.getSearchText,
-          }
-        : filterAccessors,
-    [filterAccessors, metadata.getSearchText, useMetadata]
-  );
 
   const favoriteFilterOptions = useMemo(
     () => ({
@@ -499,20 +489,11 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     availableFilterNamespaces: showNamespaceFilters ? availableFilterNamespaces : undefined,
     filterOptions: favoriteFilterOptions,
   });
-  const trailingFilterActions = useMemo(
-    () => getTrailingFilterActions?.(sortedData) ?? [],
-    [getTrailingFilterActions, sortedData]
-  );
-  // Filter-related actions and the favorite (save) toggle all live on the left, separate
-  // from the right-side copy/export cluster (the scope toggle + Copy + Export).
+  // One icon bar: Include metadata, the view's own icons, a separator, then
+  // Favorite. The filter bar puts Download after another separator.
   const filterPreActions = useMemo(
-    () => [
-      ...(metadataToggle ? [metadataToggle] : []),
-      ...leadingFilterActions,
-      ...trailingFilterActions,
-      ...(favToggle ? [favToggle] : []),
-    ],
-    [favToggle, leadingFilterActions, metadataToggle, trailingFilterActions]
+    () => withFavorite([...(metadataToggle ? [metadataToggle] : []), ...viewActions], favToggle),
+    [favToggle, metadataToggle, viewActions]
   );
   const displayData = useMemo(
     () => (transformSortedData ? transformSortedData(sortedData) : sortedData),
@@ -523,7 +504,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     () => ({
       enabled: true,
       value: filterValue,
-      accessors: effectiveFilterAccessors,
+      accessors: filterAccessors,
       onChange: handleFiltersChange,
       onReset: persistence.resetState,
       options: {
@@ -535,7 +516,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
       },
     }),
     [
-      effectiveFilterAccessors,
+      filterAccessors,
       filterValue,
       handleFiltersChange,
       favoriteFilterOptions,

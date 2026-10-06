@@ -32,7 +32,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, listenerSet *gatewayv1.List
 }
 
 // listenerAddressSegment fills the address slot from the listeners: distinct
-// hostnames when any listener names one, otherwise the compact port list.
+// hostnames when any listener names one, otherwise the collapsed port list.
 func listenerAddressSegment(listeners []resourcemodel.GatewayListenerFacts) resourcemodel.DetailSegment {
 	hostnames := []string{}
 	seen := map[string]bool{}
@@ -49,8 +49,5 @@ func listenerAddressSegment(listeners []resourcemodel.GatewayListenerFacts) reso
 	for _, listener := range listeners {
 		ports = append(ports, resourcemodel.PortProtocol{Port: listener.Port, Protocol: listener.Protocol})
 	}
-	if summary := resourcemodel.FormatPortsSummary(ports); summary != "" {
-		return resourcemodel.DetailSegment{Slot: resourcemodel.DetailSlotAddress, Label: "Ports", Value: summary}
-	}
-	return resourcemodel.DetailSegment{}
+	return resourcemodel.PortsDetailSegment(ports)
 }

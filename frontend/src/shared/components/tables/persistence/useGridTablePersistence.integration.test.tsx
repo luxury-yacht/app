@@ -173,7 +173,6 @@ describe('useGridTablePersistence integration', () => {
         kinds: { mode: 'some', values: ['Pod'] },
         namespaces: { mode: 'all' },
         clusters: { mode: 'all' },
-        caseSensitive: false,
         includeMetadata: false,
       });
     });
@@ -190,7 +189,6 @@ describe('useGridTablePersistence integration', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     });
 

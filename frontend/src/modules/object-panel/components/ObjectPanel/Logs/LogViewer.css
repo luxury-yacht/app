@@ -7,10 +7,11 @@
   overflow: hidden;
 }
 
+/* Rows: the main controls, then the search row while it is open. */
 .logs-viewer-controls {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: var(--spacing-md);
   padding: 0.75rem;
   border-bottom: 1px solid var(--log-controls-border);
   background-color: var(--log-controls-bg);
@@ -26,30 +27,18 @@
   --active-filter-chips-border: var(--log-controls-border);
 }
 
-.logs-viewer-controls-left {
+.logs-viewer-controls-left,
+.logs-viewer-search-row {
   display: flex;
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
-  flex: 1;
 }
 
 .logs-viewer-control-group {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-}
-
-.logs-viewer-selector-dropdown .dropdown-trigger {
-  width: 130px;
-  min-width: 130px;
-  max-width: 130px;
-}
-
-.logs-viewer-selector-dropdown .dropdown-value {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* "42 of 100" counter rendered immediately after the IconBar in the
@@ -62,11 +51,18 @@
   color: var(--color-warning);
 }
 
+/* The auto-refresh icon: red stop while logs refresh, green play while they are stopped. */
+.logs-viewer-stop-icon {
+  color: var(--color-error);
+}
+
+.logs-viewer-play-icon {
+  color: var(--color-success);
+}
+
+/* The summary style sets the text; even-width digits stop it jittering as logs stream in. */
 .logs-viewer-count {
-  font-size: var(--font-size-small, 0.75rem);
-  color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
   user-select: none;
 }
 

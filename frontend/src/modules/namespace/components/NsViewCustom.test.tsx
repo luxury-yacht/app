@@ -127,7 +127,7 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
       setColumnWidths: vi.fn(),
       columnVisibility: null,
       setColumnVisibility: vi.fn(),
-      filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+      filters: { search: '', kinds: [], namespaces: [] },
       setFilters: vi.fn(),
       pageSize: null,
       setPageSize: vi.fn(),
@@ -543,11 +543,6 @@ describe('NsViewCustom', () => {
     expect(gridProps.filters.options.showKindDropdown).toBe(true);
     // Export is now the unified frontend fetcher, not a server-side per-action catalog export.
     expect(typeof gridProps.fetchAllRows).toBe('function');
-    expect(
-      (gridProps.filters.options.postActions ?? []).some(
-        (item) => 'id' in item && item.id === 'copy-namespace-custom-query-csv'
-      )
-    ).toBe(false);
   });
 
   it('uses catalog facet metadata instead of deriving kinds from loaded rows', async () => {
@@ -1057,7 +1052,7 @@ describe('NsViewCustom', () => {
       expect(rendered).toBe('-');
     });
 
-    it('renders hydrated Argo CD sync and health independently with the backend presentation', async () => {
+    it('renders hydrated Argo CD sync and health as independent chips with the backend presentation', async () => {
       const resource: CustomResourceData = {
         ...baseResource,
         ref: { ...baseResource.ref, group: 'argoproj.io', kind: 'Application' },
@@ -1074,18 +1069,36 @@ describe('NsViewCustom', () => {
       useHydratedCustomCatalogRowsMock.mockReturnValue([resource]);
       await renderComponent({ resourceFamily: 'argocd' });
       const props = requireValue(getLastGridProps(), 'Argo CD table props');
-      for (const [key, value, presentation] of [
-        ['sync', 'Synced', 'status-text ready'],
-        ['health', 'Degraded', 'status-text error'],
+      // A synced Application can still be degraded: each signal keeps its own severity.
+      for (const [key, value, chip] of [
+        ['sync', 'Synced', 'status-chip--healthy'],
+        ['health', 'Degraded', 'status-chip--unhealthy'],
         ['project', 'production', undefined],
         ['destination', 'remote-prod', undefined],
         ['destinationNamespace', 'store', undefined],
       ] as const) {
         const rendered = renderToStaticMarkup(findColumn(props, key).render(props.data[0]));
         expect(rendered).toContain(value);
-        if (presentation) {
-          expect(rendered).toContain(presentation);
+        if (chip) {
+          expect(rendered).toContain(chip);
         }
+      }
+    });
+
+    it('leaves Argo CD sync and health empty for objects that do not report them', async () => {
+      const resource: CustomResourceData = {
+        ...baseResource,
+        ref: { ...baseResource.ref, group: 'argoproj.io', kind: 'ApplicationSet' },
+        argoCD: { project: 'production' },
+      };
+      useHydratedCustomCatalogRowsMock.mockReturnValue([resource]);
+      await renderComponent({ resourceFamily: 'argocd' });
+      const props = requireValue(getLastGridProps(), 'Argo CD table props');
+      // No chip may claim a sync or health state the object does not have.
+      for (const key of ['sync', 'health']) {
+        const rendered = renderToStaticMarkup(findColumn(props, key).render(props.data[0]));
+        expect(rendered).not.toContain('status-chip');
+        expect(rendered).toContain('-');
       }
     });
 

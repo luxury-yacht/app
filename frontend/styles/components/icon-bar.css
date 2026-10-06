@@ -3,21 +3,22 @@
 .icon-bar {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 0.4rem;
 }
 
 .icon-bar-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   padding: 0;
-  border: none;
+  /* Outlined at rest: an off toggle and a ready button look the same. The "on" fill
+     replaces the outline, and only a disabled button is dimmed. */
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   background: transparent;
-  color: var(--color-text);
-  opacity: 0.4;
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition:
     opacity 0.15s ease,
@@ -25,32 +26,39 @@
     background-color 0.15s ease;
 }
 
+/* Hover only brightens the icon; the fill means "on". */
 .icon-bar-button:hover {
-  opacity: 0.7;
-  background: var(--color-bg-tertiary);
+  color: var(--color-text);
 }
 
+/* Only keyboard focus is emphasized; a clicked toggle keeps its on/off look. */
 .icon-bar-button:focus {
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
-  opacity: 1;
-}
-
-.icon-bar-button:focus:not(:focus-visible) {
-  box-shadow: none;
 }
 
 .icon-bar-button:focus-visible {
-  outline: none;
   box-shadow: 0 0 0 2px var(--color-accent);
-  opacity: 1;
 }
 
-/* Toggle button in the "on" state */
-.icon-bar-button.active {
-  opacity: 1;
+/* A button with text beside its icon widens to fit it. */
+.icon-bar-button--labeled {
+  width: max-content;
+  min-width: max-content;
+  padding: 0 0.3125rem;
+  gap: 0.25rem;
+}
+
+.icon-bar-button-label {
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Toggle button in the "on" state. A disabled button looks disabled whether on or off. */
+.icon-bar-button.active:not(:disabled) {
   color: var(--color-text);
   background: var(--color-bg-tertiary);
+  border-color: transparent;
 }
 
 .icon-bar-button:disabled {
@@ -60,23 +68,65 @@
   background: transparent;
 }
 
-.icon-bar-button:disabled:hover {
-  background: transparent;
-}
-
 /* Instant-action button feedback states (e.g. copy success/failure) */
 .icon-bar-button.feedback-success {
-  opacity: 1;
   color: var(--color-success);
 }
 
 .icon-bar-button.feedback-error {
-  opacity: 1;
   color: var(--color-error);
+}
+
+/* Split toggle — the toggle and the caret that opens its menu read as one control */
+.icon-bar-split {
+  display: flex;
+  align-items: center;
+}
+
+.icon-bar-split .icon-bar-button {
+  border-radius: 4px 0 0 4px;
+}
+
+.icon-bar-split .icon-bar-split-caret {
+  width: 14px;
+  /* Shares the toggle's right border instead of doubling it. */
+  border-left-width: 0;
+  border-radius: 0 4px 4px 0;
+}
+
+/* The caret joins its "on" toggle's fill, so it drops its outline too. The
+   toggle drops its border, so the caret draws the line between them. */
+.icon-bar-split .icon-bar-button.active:not(:disabled) + .icon-bar-split-caret {
+  border-color: transparent;
+  box-shadow: inset 1px 0 0 var(--color-border);
+}
+
+/* Hovering either half brightens both, so the pair reads as one control. */
+.icon-bar-split:hover .icon-bar-button:not(:disabled) {
+  color: var(--color-text);
+}
+
+.icon-bar-split .icon-bar-button.active:not(:disabled) + .icon-bar-split-caret:not(:disabled) {
+  background: var(--color-bg-tertiary);
+}
+
+/* Matches the divider rule above and comes after it, so a caret beside an "on"
+   toggle still shows the focus ring. */
+.icon-bar-split .icon-bar-button + .icon-bar-split-caret:focus-visible:not(:disabled) {
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+/* A menu button or split caret keeps its hover look while its menu shows. */
+.icon-bar-button[aria-haspopup="menu"][aria-expanded="true"] {
+  color: var(--color-text);
+}
+
+/* An icon bar menu is as wide as its choices, not the context-menu minimum. */
+.context-menu.icon-bar-menu {
+  min-width: 0;
 }
 
 /* Separator between button groups — invisible but preserves spacing */
 .icon-bar-separator {
-  margin: 0 0.25em;
   visibility: hidden;
 }

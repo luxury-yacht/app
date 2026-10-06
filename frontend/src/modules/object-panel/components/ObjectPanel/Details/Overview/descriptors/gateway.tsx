@@ -28,9 +28,22 @@ import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChi
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
-import type { OverviewDescriptor } from '../schema';
+import type { OverviewContext, OverviewDescriptor } from '../schema';
 import { ExternalHostLinks } from '../shared/ExternalHostLinks';
 import { listenerScheme } from '../shared/hostLink';
+import {
+  FlowArrow,
+  FlowEndpoint,
+  FlowEndpoints,
+  FlowScope,
+  FlowSubject,
+  FlowTerm,
+  FlowTermLines,
+  TrafficFlow,
+  TrafficFlowRule,
+  TrafficFlowRules,
+  TrafficFlowSection,
+} from '../shared/TrafficFlow';
 import '../shared/OverviewBlocks.css';
 
 type GatewayDetails = gateway.GatewayDetails;
@@ -55,11 +68,26 @@ const conditionVariant = (status: string): StatusChipVariant => {
 
 const namespacePrefix = (namespace?: string): string => (namespace ? `${namespace}/` : '');
 
-const objectRefLabel = (ref: ObjectRef): string =>
-  `${ref.kind} ${namespacePrefix(ref.namespace)}${ref.name ?? '*'}`;
+interface RefLabelOptions {
+  omitNamespace?: boolean;
+  nameOnly?: boolean;
+}
 
-const displayRefLabel = (ref: DisplayRef): string =>
-  `${ref.kind} ${namespacePrefix(ref.namespace)}${ref.name || '*'}`;
+// `Kind namespace/name` by default; shorter when the surrounding context already shows the rest.
+const refLabel = (
+  kind: string,
+  namespace: string | undefined,
+  name: string,
+  { omitNamespace, nameOnly }: RefLabelOptions
+): string => {
+  if (nameOnly) {
+    return name;
+  }
+  if (omitNamespace) {
+    return `${kind}/${name}`;
+  }
+  return `${kind} ${namespacePrefix(namespace)}${name}`;
+};
 
 const formatAttachedRoutes = (count: number): string =>
   `${count} ${count === 1 ? 'route' : 'routes'}`;
@@ -93,14 +121,16 @@ const RefLink: React.FC<{
   /** Render as `Kind/name` (no namespace) when the surrounding context
    *  already shows the namespace — e.g., inside a per-namespace card. */
   omitNamespace?: boolean;
-}> = ({ value, clusterName, omitNamespace }) => {
+  /** Render only the name when the surrounding context already shows kind and namespace. */
+  nameOnly?: boolean;
+}> = ({ value, clusterName, omitNamespace, nameOnly }) => {
   const { ref, display } = getRefParts(value);
 
   if (ref) {
     if (!ref.name) {
       return null;
     }
-    const label = omitNamespace ? `${ref.kind}/${ref.name}` : objectRefLabel(ref);
+    const label = refLabel(ref.kind, ref.namespace, ref.name, { omitNamespace, nameOnly });
     return (
       <ObjectPanelLink
         objectRef={buildRequiredObjectReference({
@@ -119,9 +149,10 @@ const RefLink: React.FC<{
   }
 
   if (display) {
-    const label = omitNamespace
-      ? `${display.kind}/${display.name || '*'}`
-      : displayRefLabel(display);
+    const label = refLabel(display.kind, display.namespace, display.name || '*', {
+      omitNamespace,
+      nameOnly,
+    });
     return <span>{label}</span>;
   }
 
@@ -218,49 +249,244 @@ const RefList: React.FC<{
   );
 };
 
-const RouteRulesList: React.FC<{
-  rules?: types.RouteRuleDetails[] | null;
-  clusterName?: string;
-}> = ({ rules, clusterName }) => {
-  if (!rules || rules.length === 0) {
-    return null;
+// ---------- Route rules as traffic flows ----------
+
+const PATH_SUBJECTS: Record<string, string> = {
+  Exact: 'Path exactly',
+  PathPrefix: 'Paths starting with',
+  RegularExpression: 'Paths matching regex',
+};
+
+// PathPrefix "/" is the API default and matches every path.
+const HttpPathSubject: React.FC<{ path?: types.RouteValueMatch | null }> = ({ path }) => {
+  if (!path || (path.type === 'PathPrefix' && path.value === '/')) {
+    return <FlowSubject>Any path</FlowSubject>;
   }
   return (
-    <div className="overview-card-list">
-      {withStableListKeys(rules, (rule) => JSON.stringify(rule)).map(
-        ({ key, value: rule }, index) => {
-          const hasMatches = Boolean(rule.matches?.length);
-          const hasBackends = Boolean(rule.backendRefs?.length);
-          return (
-            <div key={key} className="overview-card">
-              <div className="overview-card-header">
-                <span className="overview-card-title">Rule {index + 1}</span>
-              </div>
-              {!!(hasMatches || hasBackends) && (
-                <div className="overview-card-rows">
-                  {hasMatches && (
-                    <div className="overview-row">
-                      <span className="overview-row-label">Matches</span>
-                      <span className="overview-row-value">{rule.matches?.join(', ')}</span>
-                    </div>
-                  )}
-                  {hasBackends && (
-                    <div className="overview-row">
-                      <span className="overview-row-label">Backends</span>
-                      <span className="overview-row-value plain">
-                        <RefList refs={rule.backendRefs} clusterName={clusterName} />
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        }
-      )}
-    </div>
+    <>
+      <FlowSubject>{PATH_SUBJECTS[path.type] ?? `Paths (${path.type})`}</FlowSubject>
+      <FlowTermLines terms={[path.value]} />
+    </>
   );
 };
+
+// An empty service or method matches any; RegularExpression applies to both values.
+const GrpcMethodSubject: React.FC<{ method?: types.RouteGRPCMethod | null }> = ({ method }) => {
+  if (!method || (!method.service && !method.method)) {
+    return <FlowSubject>Any method</FlowSubject>;
+  }
+  const regex = method.type === 'RegularExpression';
+  if (method.service && !method.method) {
+    return (
+      <>
+        <FlowSubject>{regex ? 'Services matching' : 'Any method of'}</FlowSubject>
+        <FlowTermLines terms={[method.service]} />
+      </>
+    );
+  }
+  return (
+    <>
+      <FlowSubject>{regex ? 'Methods matching' : 'Method'}</FlowSubject>
+      <FlowTermLines terms={[[method.service, method.method].filter(Boolean).join('/')]} />
+      {!method.service && <FlowScope>in any service</FlowScope>}
+    </>
+  );
+};
+
+/** "and header name = value" lines; regular-expression comparisons read "matching". */
+const NamedConditions: React.FC<{ label: string; matches?: types.RouteNamedMatch[] | null }> = ({
+  label,
+  matches,
+}) => (
+  <>
+    {withStableListKeys(matches ?? [], (match) => JSON.stringify(match)).map(
+      ({ key, value: match }) => (
+        <FlowScope key={key}>
+          and {label} <FlowTerm>{match.name}</FlowTerm>{' '}
+          {match.type === 'RegularExpression' ? 'matching' : '='} <FlowTerm>{match.value}</FlowTerm>
+        </FlowScope>
+      )
+    )}
+  </>
+);
+
+// One match is one box: every condition in it must hold.
+const MatchEndpoint: React.FC<{ kind: string; match: types.RouteMatchDetails }> = ({
+  kind,
+  match,
+}) => (
+  <FlowEndpoint>
+    {kind === 'GRPCRoute' ? (
+      <GrpcMethodSubject method={match.grpcMethod} />
+    ) : (
+      <HttpPathSubject path={match.path} />
+    )}
+    {!!match.method && (
+      <FlowScope>
+        and method <FlowTerm>{match.method}</FlowTerm>
+      </FlowScope>
+    )}
+    <NamedConditions label="header" matches={match.headers} />
+    <NamedConditions label="query" matches={match.queryParams} />
+  </FlowEndpoint>
+);
+
+// A rule with no matches takes every request; TLS rules never have matches, so the route's
+// hostnames decide which connections they take.
+const UnmatchedEndpoint: React.FC<{ kind: string; hostnames?: string[] | null }> = ({
+  kind,
+  hostnames,
+}) => {
+  if (kind !== 'TLSRoute') {
+    return (
+      <FlowEndpoint>
+        <FlowSubject>Any request</FlowSubject>
+      </FlowEndpoint>
+    );
+  }
+  return (
+    <FlowEndpoint>
+      <FlowSubject>TLS connections</FlowSubject>
+      <FlowScope>
+        {hostnames?.length ? (
+          <>
+            for <FlowTerm>{hostnames.join(', ')}</FlowTerm>
+          </>
+        ) : (
+          'for any hostname'
+        )}
+      </FlowScope>
+    </FlowEndpoint>
+  );
+};
+
+const backendScope = (
+  backend: types.RouteBackendRefDetails,
+  routeNamespace: string,
+  share: number | null
+): string[] => {
+  const { ref, display } = getRefParts(backend.target);
+  const namespace = ref?.namespace ?? display?.namespace;
+  const parts: string[] = [];
+  if (typeof backend.port === 'number') {
+    parts.push(`port ${backend.port}`);
+  }
+  if (namespace && namespace !== routeNamespace) {
+    parts.push(`in namespace ${namespace}`);
+  }
+  if (share !== null) {
+    parts.push(`${share}% of traffic`);
+  }
+  return parts;
+};
+
+// Weights are relative to the rule's other backends.
+const BackendEndpoint: React.FC<{
+  backend: types.RouteBackendRefDetails;
+  share: number | null;
+  routeNamespace: string;
+  clusterName?: string;
+}> = ({ backend, share, routeNamespace, clusterName }) => {
+  const { ref, display } = getRefParts(backend.target);
+  const scope = backendScope(backend, routeNamespace, share);
+  return (
+    <FlowEndpoint target>
+      <FlowSubject>{ref?.kind ?? display?.kind ?? 'Backend'}</FlowSubject>
+      <div className="reference-grant-item">
+        <RefLink value={backend.target} clusterName={clusterName} nameOnly />
+      </div>
+      {scope.length > 0 && <FlowScope>{scope.join(' · ')}</FlowScope>}
+      {share !== null && (
+        <div className="traffic-flow-share" aria-hidden="true">
+          <span style={{ width: `${share}%` }} />
+        </div>
+      )}
+    </FlowEndpoint>
+  );
+};
+
+// A lone backend gets all of its rule's traffic, so its share is only shown when its weight is 0
+// (no traffic at all); split backends always show their share.
+const trafficShares = (backends: types.RouteBackendRefDetails[]): Array<number | null> => {
+  if (backends.length < 2) {
+    return backends.map((backend) => (backend.weight > 0 ? null : 0));
+  }
+  const total = backends.reduce((sum, backend) => sum + backend.weight, 0);
+  return backends.map((backend) => (total > 0 ? Math.round((backend.weight / total) * 100) : 0));
+};
+
+const RouteRuleFlow: React.FC<{
+  route: RouteDetails;
+  kind: string;
+  rule: types.RouteRuleDetails;
+  clusterName?: string;
+}> = ({ route, kind, rule, clusterName }) => {
+  const backends = rule.backendRefs ?? [];
+  const shares = trafficShares(backends);
+  return (
+    <TrafficFlow
+      from={
+        <FlowEndpoints label="Requests">
+          {rule.matches?.length ? (
+            withStableListKeys(rule.matches, (match) => JSON.stringify(match)).map(
+              ({ key, value: match }) => <MatchEndpoint key={key} kind={kind} match={match} />
+            )
+          ) : (
+            <UnmatchedEndpoint kind={kind} hostnames={route.hostnames} />
+          )}
+        </FlowEndpoints>
+      }
+      middle={<FlowArrow />}
+      to={
+        <FlowEndpoints label="Backends">
+          {backends.length > 0 ? (
+            withStableListKeys(backends, (backend) => JSON.stringify(backend)).map(
+              ({ key, value: backend }, index) => (
+                <BackendEndpoint
+                  key={key}
+                  backend={backend}
+                  share={shares[index] ?? null}
+                  routeNamespace={route.namespace}
+                  clusterName={clusterName}
+                />
+              )
+            )
+          ) : (
+            <FlowEndpoint target>
+              <FlowSubject>No backends</FlowSubject>
+            </FlowEndpoint>
+          )}
+        </FlowEndpoints>
+      }
+    />
+  );
+};
+
+const routeRulesSection =
+  (kind: string) =>
+  (route: RouteDetails, context: OverviewContext): React.ReactNode => {
+    if (!route.rules?.length) {
+      return null;
+    }
+    return (
+      <TrafficFlowSection label="Rules" tone="inbound">
+        <TrafficFlowRules label="Route rules">
+          {withStableListKeys(route.rules, (rule) => JSON.stringify(rule)).map(
+            ({ key, value: rule }, index) => (
+              <TrafficFlowRule key={key} title={`Rule ${index + 1}`}>
+                <RouteRuleFlow
+                  route={route}
+                  kind={kind}
+                  rule={rule}
+                  clusterName={context.clusterName}
+                />
+              </TrafficFlowRule>
+            )
+          )}
+        </TrafficFlowRules>
+      </TrafficFlowSection>
+    );
+  };
 
 const groupByNamespace = <T,>(
   values: readonly T[] | null | undefined,
@@ -450,32 +676,18 @@ const makeRouteDescriptor = (displayKind: string): OverviewDescriptor<RouteDetai
         render: (d, context) => <RefList refs={d.parentRefs} clusterName={context.clusterName} />,
       },
       {
-        field: 'backendRefs',
-        label: 'Backend Refs',
-        fullWidth: true,
-        hidden: (d) => !d.backendRefs?.length,
-        render: (d, context) => <RefList refs={d.backendRefs} clusterName={context.clusterName} />,
-      },
-      {
-        field: 'rules',
-        label: 'Rules',
-        fullWidth: true,
-        hidden: (d) => !d.rules?.length,
-        render: (d, context) => (
-          <RouteRulesList rules={d.rules} clusterName={context.clusterName} />
-        ),
-      },
-      {
         field: 'conditions',
         label: 'Conditions',
         fullWidth: true,
         hidden: (d) => !d.conditions?.length,
         render: (d) => <ConditionList conditions={d.conditions} />,
       },
+      { kind: 'widget', consumes: ['rules', 'hostnames'], render: routeRulesSection(displayKind) },
     ],
   },
-  // `age` and `details` are table-summary fields; `summary` is conveyed by the condition chips.
-  coveredElsewhere: ['age', 'details', 'summary'],
+  // `age` and `details` are table-summary fields; `summary` is conveyed by the condition chips;
+  // `backendRefs` is the route-wide list, and every backend already appears in its rule's flow.
+  coveredElsewhere: ['age', 'details', 'summary', 'backendRefs'],
 });
 
 export const httpRouteDescriptor = makeRouteDescriptor('HTTPRoute');

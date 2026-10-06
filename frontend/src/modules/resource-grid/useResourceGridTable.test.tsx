@@ -278,6 +278,43 @@ describe('useNamespaceResourceGridTable', () => {
     harness.cleanup();
   });
 
+  it("puts a view's own icons between the search options and Favorite, which follows a separator", () => {
+    const harness = renderNamespaceGrid({
+      viewActions: [
+        { type: 'action', id: 'view-action', icon: null, title: 'View action', onClick: vi.fn() },
+      ],
+    });
+    const preActions = harness.result.current?.gridTableProps.filters?.options?.preActions ?? [];
+    harness.cleanup();
+
+    expect(preActions.map((item) => ('id' in item ? item.id : item.type))).toEqual([
+      'include-metadata',
+      'view-action',
+      'separator',
+      'favorite',
+    ]);
+  });
+
+  it('starts the icon bar with Favorite, without a separator, when it is the only icon', () => {
+    const harness = renderNamespaceGrid({ supportsCustomMetadataColumns: false });
+    const preActions = harness.result.current?.gridTableProps.filters?.options?.preActions ?? [];
+    harness.cleanup();
+
+    expect(preActions.map((item) => ('id' in item ? item.id : item.type))).toEqual(['favorite']);
+  });
+
+  it('offers Include metadata exactly when rows carry labels and annotations', () => {
+    const hasToggle = (supportsCustomMetadataColumns: boolean) => {
+      const harness = renderNamespaceGrid({ supportsCustomMetadataColumns });
+      const preActions = harness.result.current?.gridTableProps.filters?.options?.preActions ?? [];
+      harness.cleanup();
+      return preActions.some((item) => 'id' in item && item.id === 'include-metadata');
+    };
+
+    expect(hasToggle(true)).toBe(true);
+    expect(hasToggle(false)).toBe(false);
+  });
+
   it('publishes custom metadata columns to the favorite column contract', () => {
     favoriteMocks.useFavToggle.mockClear();
     const harness = renderNamespaceGrid();

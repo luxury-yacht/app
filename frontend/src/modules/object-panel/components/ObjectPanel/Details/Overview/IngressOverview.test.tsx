@@ -49,6 +49,15 @@ describe('IngressOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
+  const rulesSection = () => container.querySelector<HTMLElement>('section[aria-label="Rules"]');
+  const ruleCards = () =>
+    Array.from(rulesSection()?.querySelectorAll<HTMLElement>('ol > li') ?? []);
+  const endpointTexts = (card: HTMLElement | undefined, label: string) =>
+    Array.from(
+      card?.querySelectorAll<HTMLElement>(`ul[aria-label="${label}"] > li`) ?? [],
+      (item) => item.textContent ?? ''
+    );
+
   const renderComponent = async (fixture: Record<string, unknown>) => {
     const dto = partialModelFixture<ingress.IngressDetails>(fixture);
     await act(async () => {
@@ -119,21 +128,29 @@ describe('IngressOverview', () => {
     expect(ingressClass?.querySelector('a')).toBeTruthy();
     // Load Balancer renamed to Address; surfaced near the top.
     expect(getValueForLabel(container, 'Address')?.textContent).toContain('lb.example.com');
-    expect(getValueForLabel(container, 'Rules')?.textContent).toContain('example.com');
-    expect(getValueForLabel(container, 'Rules')?.textContent).toContain('/app');
-    expect(getValueForLabel(container, 'Rules')?.textContent).toContain('config-service');
-    // Service-backed rule paths are linkable.
-    const rulesValue = getValueForLabel(container, 'Rules');
-    const rulesLinks = rulesValue?.querySelectorAll('a');
-    expect(rulesLinks?.length).toBeGreaterThan(0);
+
+    // Each host rule is a card with one flow per path: requests → port → backend.
+    const [hostRule, defaultRule] = ruleCards();
+    const requests = endpointTexts(hostRule, 'Requests');
+    expect(requests).toHaveLength(2);
+    expect(requests[0]).toContain('/app');
+    expect(requests[0]).toContain('example.com');
+    const backends = endpointTexts(hostRule, 'Backend');
+    expect(backends[0]).toContain('web');
+    expect(backends[1]).toContain('config-service');
+    expect(endpointTexts(hostRule, 'Ports')).toEqual(['port 80']);
+    // Service backends open the Service.
+    expect(hostRule?.querySelector('ul[aria-label="Backend"] a')?.textContent).toBe('web');
+
+    // The default backend takes every request no rule matches.
+    expect(endpointTexts(defaultRule, 'Requests')).toEqual(['All other requests']);
+    expect(endpointTexts(defaultRule, 'Ports')).toEqual(['port 8080']);
+    expect(defaultRule?.querySelector('ul[aria-label="Backend"] a')?.textContent).toBe('fallback');
+
     // TLS secret is now linkable.
     const tlsValue = getValueForLabel(container, 'TLS');
     expect(tlsValue?.textContent).toContain('tls-secret');
     expect(tlsValue?.querySelector('a')).toBeTruthy();
-    // Default backend is linkable; textContent stays as `name:port`.
-    const defaultBackend = getValueForLabel(container, 'Default Backend');
-    expect(defaultBackend?.textContent).toBe('fallback:8080');
-    expect(defaultBackend?.querySelector('a')).toBeTruthy();
   });
 
   it('renders rule hosts as browser links with the TLS-derived scheme', async () => {
@@ -150,7 +167,7 @@ describe('IngressOverview', () => {
       annotations: {},
     });
 
-    const rulesValue = getValueForLabel(container, 'Rules');
+    const rulesValue = rulesSection();
     const linkTitles = Array.from(
       rulesValue?.querySelectorAll<HTMLButtonElement>('button.overview-scheme-link') ?? []
     ).map((b) => b.title);

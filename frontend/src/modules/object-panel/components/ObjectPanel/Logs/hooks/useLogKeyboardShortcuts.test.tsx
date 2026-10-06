@@ -29,28 +29,37 @@ describe('log viewer shortcuts', () => {
   const render = async (isActive = true, isParsedView = false) => {
     const filterInputRef = createRef<HTMLInputElement>();
     const logsContentRef = createRef<HTMLDivElement>();
+    const viewerRef = createRef<HTMLDivElement>();
     const Harness = () => {
       getAvailable = useKeyboardContext().getAvailableShortcuts;
       useLogKeyboardShortcuts({
         isActive,
-        options: { displayMode: isParsedView ? 'parsed' : 'raw', regexMatches: false },
+        options: {
+          displayMode: isParsedView ? 'parsed' : 'raw',
+          regexMatches: false,
+          filterMode: 'filtered',
+          searchOpen: false,
+        },
         hasAnsiLogEntries: true,
         hasCopyableContent: true,
         canParseLogs: true,
+        hasLogs: true,
         dispatch,
         copyLogs: copy,
         filterInputRef,
         logsContentRef,
+        viewerRef,
+        searchRowId: 'log-search',
         timestamps: { toggle: timestamps },
         previousLogs: { toggle: previousLogs },
       });
       return (
-        <>
+        <div ref={viewerRef}>
           <input ref={filterInputRef} aria-label="Filter logs" />
           <div ref={logsContentRef}>
             <div className="gridtable-wrapper" />
           </div>
-        </>
+        </div>
       );
     };
     await act(async () => {
@@ -84,7 +93,6 @@ describe('log viewer shortcuts', () => {
       ['End', 'Scroll logs to bottom'],
       ['t', 'Toggle API timestamps'],
       ['v', 'Toggle previous logs'],
-      ['h', 'Toggle match highlighting'],
       ['i', 'Toggle inverse filtering'],
       ['x', 'Toggle regex filtering'],
       ['c', 'Toggle case-sensitive matching'],
@@ -95,14 +103,13 @@ describe('log viewer shortcuts', () => {
       ['c', 'Copy logs to clipboard'],
     ]);
 
-    for (const key of ['r', 't', 'v', 'h', 'i', 'x', 'c', 'p', 'j', 'o', 'w', 'Home', 'End']) {
+    for (const key of ['r', 't', 'v', 'i', 'x', 'c', 'p', 'j', 'o', 'w', 'Home', 'End']) {
       press(key);
     }
     press('c', true);
     expect(dispatch.mock.calls.map(([action]) => action)).toEqual([
       { type: 'TOGGLE_AUTO_REFRESH' },
-      { type: 'TOGGLE_HIGHLIGHT_MATCHES' },
-      { type: 'TOGGLE_INVERSE_MATCHES' },
+      { type: 'SET_FILTER_MODE', payload: 'invert' },
       { type: 'TOGGLE_REGEX_MATCHES' },
       { type: 'TOGGLE_CASE_SENSITIVE_MATCHES' },
       { type: 'TOGGLE_PARSED_VIEW' },

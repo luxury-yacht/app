@@ -15,6 +15,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // BuildResourceModel builds the NetworkPolicy resource model. Facts are owned by
@@ -28,7 +29,7 @@ func BuildResourceModel(clusterID string, policy *networkingv1.NetworkPolicy) re
 // BuildFacts extracts the NetworkPolicy facts from the raw object.
 func BuildFacts(policy *networkingv1.NetworkPolicy) Facts {
 	facts := Facts{
-		PodSelector: resourcemodel.CopyStringMap(policy.Spec.PodSelector.MatchLabels),
+		PodSelector: labelSelectorFacts(policy.Spec.PodSelector),
 		PolicyTypes: policyTypes(policy.Spec),
 	}
 	for _, ingress := range policy.Spec.Ingress {
@@ -93,16 +94,30 @@ func ruleFacts(peers []networkingv1.NetworkPolicyPeer, ports []networkingv1.Netw
 func peerFacts(peer networkingv1.NetworkPolicyPeer) PeerFacts {
 	facts := PeerFacts{}
 	if peer.PodSelector != nil {
-		facts.PodSelector = resourcemodel.CopyStringMap(peer.PodSelector.MatchLabels)
+		selector := labelSelectorFacts(*peer.PodSelector)
+		facts.PodSelector = &selector
 	}
 	if peer.NamespaceSelector != nil {
-		facts.NamespaceSelector = resourcemodel.CopyStringMap(peer.NamespaceSelector.MatchLabels)
+		selector := labelSelectorFacts(*peer.NamespaceSelector)
+		facts.NamespaceSelector = &selector
 	}
 	if peer.IPBlock != nil {
 		facts.IPBlock = &IPBlockFacts{
 			CIDR:   peer.IPBlock.CIDR,
 			Except: append([]string(nil), peer.IPBlock.Except...),
 		}
+	}
+	return facts
+}
+
+func labelSelectorFacts(selector metav1.LabelSelector) LabelSelectorFacts {
+	facts := LabelSelectorFacts{MatchLabels: resourcemodel.CopyStringMap(selector.MatchLabels)}
+	for _, expr := range selector.MatchExpressions {
+		facts.MatchExpressions = append(facts.MatchExpressions, LabelSelectorRequirementFacts{
+			Key:      expr.Key,
+			Operator: string(expr.Operator),
+			Values:   append([]string(nil), expr.Values...),
+		})
 	}
 	return facts
 }

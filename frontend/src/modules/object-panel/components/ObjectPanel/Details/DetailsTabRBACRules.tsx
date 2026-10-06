@@ -5,7 +5,7 @@
  * non-resource URL) with every verb the role's rules grant it, the same shape `kubectl describe`
  * prints. Verbs are risk-colored chips and bare `*` wildcards are highlighted.
  *
- * Sibling to Overview / Containers / Resource Utilization in the Details tab — rules are the
+ * Sibling to Overview / Containers in the Details tab — rules are the
  * primary content of a Role/ClusterRole and earn their own top-level section.
  */
 

@@ -180,6 +180,23 @@ func GatewayParentGatewayRefLink(clusterID, currentNamespace string, ref gateway
 	return GatewayRefLink(clusterID, group, kind, namespace, string(ref.Name))
 }
 
+// GatewayRouteBackendFacts projects one route rule backend: its link plus the port and weight that
+// decide where and how much of the rule's traffic it receives. An unset weight is the API default 1.
+func GatewayRouteBackendFacts(clusterID, currentNamespace string, ref gatewayv1.BackendRef) RouteBackendFacts {
+	facts := RouteBackendFacts{
+		Link:   GatewayBackendRefLink(clusterID, currentNamespace, ref.BackendObjectReference),
+		Weight: 1,
+	}
+	if ref.Port != nil {
+		port := int32(*ref.Port)
+		facts.Port = &port
+	}
+	if ref.Weight != nil {
+		facts.Weight = *ref.Weight
+	}
+	return facts
+}
+
 func GatewayBackendRefLink(clusterID, currentNamespace string, ref gatewayv1.BackendObjectReference) ResourceLink {
 	group := ""
 	if ref.Group != nil {

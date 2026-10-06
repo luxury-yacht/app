@@ -36,12 +36,13 @@ describe('Karpenter capacity table', () => {
     ]);
   });
 
-  it('adds limit and used columns for a pool and flags usage above 80%', () => {
+  it('adds limit and used columns for a pool and flags the usage the backend flags', () => {
     const dom = mount(
       <KarpenterCapacity
         facts={{
           capacity: { cpu: '900', memory: '256Gi', nodes: '8', pods: '880' },
           limits: { cpu: '1000', memory: '2Ti' },
+          limitUsage: { cpu: { percent: 90, presentation: 'warning' }, memory: { percent: 12.5 } },
         }}
       />
     );
@@ -56,6 +57,20 @@ describe('Karpenter capacity table', () => {
       (row) => row.querySelector('.status-text.warning')?.textContent ?? null
     );
     expect(used).toEqual(['90%', null, null, null]);
+  });
+
+  it('never recolors a usage the backend did not flag', () => {
+    const dom = mount(
+      <KarpenterCapacity
+        facts={{
+          capacity: { cpu: '900' },
+          limits: { cpu: '1000' },
+          limitUsage: { cpu: { percent: 90 } },
+        }}
+      />
+    );
+    expect(rows(dom)[1]).toEqual(['cpu', '900', '1000', '90%']);
+    expect(dom.querySelector('.status-text.warning')).toBeNull();
   });
 
   it('drops the allocatable column when the claim has not reported it', () => {

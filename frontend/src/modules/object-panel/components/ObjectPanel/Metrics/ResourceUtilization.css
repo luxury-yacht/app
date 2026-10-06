@@ -1,0 +1,12 @@
+/* Utilization bar styles
+ *
+ * The bar and legend reuse the ResourceBar housing classes (.resource-group / .metric-header /
+ * .resource-bar-placeholder / .metric-legend*) defined in ResourceBar.css; the Metrics tab section
+ * around them is a standard .object-panel-section. */
+
+/* Highlight overcommitted figures within a metric-legend item.
+   Standalone rule — applied to spans inside .metric-legend__count. */
+.overcommitted-text {
+  color: var(--utilization-overcommitted-text);
+  font-weight: 600;
+}

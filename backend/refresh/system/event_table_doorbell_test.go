@@ -279,7 +279,7 @@ func TestSubsystemWiresAndStopsEventTableDoorbells(t *testing.T) {
 		review.Status.Allowed = attrs != nil && attrs.Resource == "events"
 		return true, review, nil
 	})
-	subsystem, err := NewSubsystemWithServices(Config{
+	subsystem, err := NewSubsystemWithServices(t.Context(), Config{
 		KubernetesClient: kube, APIExtensionsClient: apiextensionsfake.NewClientset(),
 		DynamicClient: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), ClusterID: "c1",
 		Logger: applog.Noop, ObjectDetailsProvider: noopObjectDetailProvider{},

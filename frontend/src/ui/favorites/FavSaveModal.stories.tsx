@@ -20,7 +20,6 @@ const mockFilters: FavoriteFilters = {
   kinds: { mode: 'all' },
   namespaces: { mode: 'all' },
   clusters: { mode: 'all' },
-  caseSensitive: false,
   includeMetadata: false,
 };
 
@@ -44,7 +43,6 @@ const mockExistingFavorite: Favorite = {
         kinds: { mode: 'all' },
         namespaces: { mode: 'all' },
         clusters: { mode: 'all' },
-        caseSensitive: true,
         includeMetadata: false,
       },
       tableState: mockTableState,

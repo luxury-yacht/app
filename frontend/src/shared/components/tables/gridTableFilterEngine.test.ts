@@ -8,6 +8,7 @@ import {
   buildGridTableFilterOptions,
   resolveGridTableFilterAccessors,
 } from '@shared/components/tables/gridTableFilterEngine';
+import { normalizeGridTableFilterState } from '@shared/components/tables/gridTableFilterState';
 import { describe, expect, it } from 'vitest';
 
 interface Row {
@@ -68,7 +69,6 @@ const defaultState: GridTableFilterState = {
   kinds: ALL_MULTISELECT_FILTER,
   namespaces: ALL_MULTISELECT_FILTER,
   clusters: ALL_MULTISELECT_FILTER,
-  caseSensitive: false,
   includeMetadata: false,
 };
 
@@ -231,6 +231,53 @@ describe('gridTableFilterEngine', () => {
     });
 
     expect(filtered.map((row) => row.id)).toEqual(['4']);
+  });
+
+  // Search always ignores letter case. A state saved while Match case existed still
+  // restores, and its old flag no longer narrows the search.
+  it('ignores letter case, even for a state saved with Match case on', () => {
+    const saved = normalizeGridTableFilterState({
+      ...defaultState,
+      search: rows[0].name.toUpperCase(),
+      caseSensitive: true,
+    } as Partial<GridTableFilterState>);
+
+    const filtered = applyGridTableFilters({
+      filteringEnabled: true,
+      data: rows,
+      activeFilters: saved,
+      accessors,
+      defaultGetKind,
+      defaultGetNamespace,
+      defaultGetSearchText,
+    });
+
+    expect(filtered.map((row) => row.id)).toContain(rows[0].id);
+    expect(saved).not.toHaveProperty('caseSensitive');
+  });
+
+  it('searches row labels and annotations only while Include metadata is on', () => {
+    const labelled = [
+      { ...rows[0], metadata: { labels: { team: 'payments' } } },
+      { ...rows[1], annotations: { owner: 'search-team' } },
+    ];
+    const search = (term: string, includeMetadata: boolean) =>
+      applyGridTableFilters({
+        filteringEnabled: true,
+        data: labelled,
+        activeFilters: { ...defaultState, search: term, includeMetadata },
+        accessors,
+        defaultGetKind,
+        defaultGetNamespace,
+        defaultGetSearchText,
+      }).map((row) => row.id);
+
+    expect(search('payments', false)).toEqual([]);
+    expect(search('payments', true)).toEqual([labelled[0].id]);
+    // Annotations, and the key: value form, match too.
+    expect(search('owner: search-team', true)).toEqual([labelled[1].id]);
+    // The default search text still matches with metadata on.
+    expect(search(rows[0].name, true)).toContain(labelled[0].id);
   });
 
   it('does not locally filter query-backed rows', () => {

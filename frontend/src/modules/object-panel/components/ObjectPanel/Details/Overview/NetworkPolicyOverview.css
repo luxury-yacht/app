@@ -1,0 +1,31 @@
+/* NetworkPolicy Overview
+ *
+ * The flow layout is shared (shared/TrafficFlow.css). This file holds only what is NetworkPolicy
+ * specific: an ipBlock's except ranges, shown as "excluding" followed by red chips. */
+
+.network-policy-excluded {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+}
+
+.network-policy-excluded-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* The ✕ is generated content so copying a chip yields only the CIDR. */
+.network-policy-excluded-range {
+  font-family: var(--font-family-mono);
+  white-space: nowrap;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.network-policy-excluded-range::before {
+  content: "✕ ";
+}

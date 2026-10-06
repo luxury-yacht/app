@@ -5,6 +5,7 @@ import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTabl
 import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { SettingsIcon } from '@shared/components/icons/SharedIcons';
 import {
   createStatusChipMeasurementElement,
@@ -211,19 +212,16 @@ export default function ClusterViewAttention() {
     [reportIgnoreError, selectedClusterId]
   );
 
-  const filterOptionOverrides = useMemo(
-    () => ({
-      postActions: [
-        { type: 'separator' as const },
-        {
-          type: 'action' as const,
-          id: 'attention-ignored-findings',
-          icon: <SettingsIcon width={18} height={18} />,
-          title: 'Manage ignored findings',
-          onClick: () => setIgnoredModalOpen(true),
-        },
-      ],
-    }),
+  const viewActions = useMemo<IconBarItem[]>(
+    () => [
+      {
+        type: 'action',
+        id: 'attention-ignored-findings',
+        icon: <SettingsIcon width={18} height={18} />,
+        title: 'Manage ignored findings',
+        onClick: () => setIgnoredModalOpen(true),
+      },
+    ],
     []
   );
 
@@ -255,7 +253,7 @@ export default function ClusterViewAttention() {
       defaultSortKey: 'severity',
       defaultSortDirection: 'asc',
       diagnosticsLabel: 'Cluster Attention',
-      filterOptionOverrides,
+      viewActions,
     });
 
   useGridTableExternalFilters({

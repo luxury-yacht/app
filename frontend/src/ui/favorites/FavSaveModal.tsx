@@ -228,18 +228,6 @@ const FavoritePaneFilters: React.FC<FavoritePaneFiltersProps> = ({
           <label className="modal-checkbox-label">
             <input
               type="checkbox"
-              checked={state.filters.caseSensitive}
-              onChange={(event) =>
-                onChange({ ...state.filters, caseSensitive: event.target.checked })
-              }
-            />
-            {'Match case'}
-          </label>
-        </div>
-        <div className="modal-form-field">
-          <label className="modal-checkbox-label">
-            <input
-              type="checkbox"
               checked={state.filters.includeMetadata}
               onChange={(event) =>
                 onChange({ ...state.filters, includeMetadata: event.target.checked })
@@ -281,6 +269,27 @@ const reconcileFavoriteColumnOrder = (
   }
   return ordered;
 };
+
+// Hidden columns are stored as false; shown and non-hideable columns have no entry.
+const favoriteColumnVisibility = (
+  columns: readonly FavoriteModalColumn[],
+  shown: ReadonlySet<string>,
+  current: FavoriteTableState['columnVisibility']
+): FavoriteTableState['columnVisibility'] => {
+  const visibility = { ...current };
+  for (const column of columns) {
+    if (column.hideable && !shown.has(column.key)) {
+      visibility[column.key] = false;
+    } else {
+      delete visibility[column.key];
+    }
+  }
+  return visibility;
+};
+
+// A favorite does not keep sorting by a column it hides.
+const sortColumnIfShown = (sortColumn: string, shown: ReadonlySet<string>): string =>
+  sortColumn && !shown.has(sortColumn) ? '' : sortColumn;
 
 interface FavoritePaneTableStateProps {
   elementIdPrefix: string;
@@ -352,24 +361,15 @@ const FavoritePaneTableState: React.FC<FavoritePaneTableStateProps> = ({
     if (!Array.isArray(value)) {
       return;
     }
-    const visibleColumns = new Set(value);
-    const columnVisibility = { ...state.tableState.columnVisibility };
-    for (const column of orderedColumns) {
-      if (!column.hideable) {
-        delete columnVisibility[column.key];
-      } else if (visibleColumns.has(column.key)) {
-        delete columnVisibility[column.key];
-      } else {
-        columnVisibility[column.key] = false;
-      }
-    }
+    const shown = new Set(value);
     onChange({
       ...state.tableState,
-      sortColumn:
-        state.tableState.sortColumn && !visibleColumns.has(state.tableState.sortColumn)
-          ? ''
-          : state.tableState.sortColumn,
-      columnVisibility,
+      sortColumn: sortColumnIfShown(state.tableState.sortColumn, shown),
+      columnVisibility: favoriteColumnVisibility(
+        orderedColumns,
+        shown,
+        state.tableState.columnVisibility
+      ),
     });
   };
 
@@ -624,6 +624,19 @@ function createFavoriteDraft({
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
+
+// The cluster a favorite is bound to: none (all blank) when it follows the
+// active cluster.
+const favoriteClusterBinding = (
+  clusterSelection: string | null,
+  getClusterMeta: (config: string) => { id: string; name: string }
+): Pick<Favorite, 'clusterSelection' | 'clusterId' | 'clusterName'> => {
+  if (clusterSelection === null) {
+    return { clusterSelection: '', clusterId: '', clusterName: '' };
+  }
+  const meta = getClusterMeta(clusterSelection);
+  return { clusterSelection, clusterId: meta?.id ?? '', clusterName: meta?.name ?? '' };
+};
 
 interface FavoriteSaveFooterProps {
   isEditing: boolean;
@@ -884,13 +897,10 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       return;
     }
     const bindsCluster = !isGlobalScope && clusterSpecific;
-    const selectedClusterMeta = bindsCluster ? getClusterMeta(clusterSelection) : null;
     const fav: Favorite = {
       id: existingFavorite?.id ?? '',
       name: resolvedName,
-      clusterSelection: bindsCluster ? clusterSelection : '',
-      clusterId: bindsCluster ? (selectedClusterMeta?.id ?? '') : '',
-      clusterName: bindsCluster ? (selectedClusterMeta?.name ?? '') : '',
+      ...favoriteClusterBinding(bindsCluster ? clusterSelection : null, getClusterMeta),
       viewType: scope,
       view: activeView,
       namespace: scope === 'namespace' ? selectedNamespace : '',

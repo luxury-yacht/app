@@ -28,6 +28,57 @@ func statusPresentation(status string) string {
 	}
 }
 
+// AttentionStatus is what an Argo CD Application or ApplicationSet reports about itself
+// for Attention. Conditions lists the active condition types: every condition an
+// Application reports (they carry no status) and each ApplicationSet condition whose
+// status is True. Fields an object does not report are empty.
+type AttentionStatus struct {
+	Sync           string
+	Health         string
+	OperationPhase string
+	Conditions     []string
+}
+
+// ReportedAttentionStatus returns the AttentionStatus of an Argo CD Application or
+// ApplicationSet; ok is false for every other object.
+func ReportedAttentionStatus(object *unstructured.Unstructured) (status AttentionStatus, ok bool) {
+	if !isArgoCD(object) {
+		return AttentionStatus{}, false
+	}
+	switch strings.ToLower(object.GetKind()) {
+	case "application":
+		return AttentionStatus{
+			Sync:           applicationSyncStatus(object),
+			Health:         applicationHealthStatus(object),
+			OperationPhase: crdfacts.Text(object.Object, "status", "operationState", "phase"),
+			Conditions:     activeConditionTypes(conditions(object)),
+		}, true
+	case "applicationset":
+		active := conditions(object)
+		return AttentionStatus{Health: applicationSetHealth(active), Conditions: activeConditionTypes(active)}, true
+	default:
+		return AttentionStatus{}, false
+	}
+}
+
+func activeConditionTypes(conditions []Condition) []string {
+	var active []string
+	for _, condition := range conditions {
+		if condition.Status == "" || strings.EqualFold(condition.Status, "True") {
+			active = append(active, condition.Type)
+		}
+	}
+	return active
+}
+
+func applicationSyncStatus(object *unstructured.Unstructured) string {
+	return statusOrUnknown(crdfacts.Text(object.Object, "status", "sync", "status"))
+}
+
+func applicationHealthStatus(object *unstructured.Unstructured) string {
+	return statusOrUnknown(crdfacts.Text(object.Object, "status", "health", "status"))
+}
+
 // PrimaryStatus keeps Argo's health semantics in every custom-resource projection.
 // Sync remains a separate signal: a synced Application can still be degraded.
 func PrimaryStatus(object *unstructured.Unstructured) (state, label, presentation string, ok bool) {
@@ -36,7 +87,7 @@ func PrimaryStatus(object *unstructured.Unstructured) (state, label, presentatio
 	}
 	switch strings.ToLower(object.GetKind()) {
 	case "application":
-		state = statusOrUnknown(crdfacts.Text(object.Object, "status", "health", "status"))
+		state = applicationHealthStatus(object)
 	case "applicationset":
 		state = applicationSetHealth(conditions(object))
 	default:

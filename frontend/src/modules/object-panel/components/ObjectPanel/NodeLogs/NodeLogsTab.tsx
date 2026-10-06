@@ -1,3 +1,4 @@
+import ActiveFilterChips from '@shared/components/ActiveFilterChips';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar from '@shared/components/IconBar/IconBar';
@@ -8,6 +9,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useReducer,
   useRef,
@@ -21,8 +23,8 @@ import {
   type ParsedLogEntry,
 } from '../Logs/logOptionsReducer';
 import { findLogOverlap } from '../Logs/logOverlap';
-import { buildLogSearchRegex } from '../Logs/logSearch';
-import { buildLogToolbarItems, LogMatchCount, LogTextFilter } from '../Logs/logToolbar';
+import { buildLogSearchChips, clearLogSearch } from '../Logs/logSearchChips';
+import { buildLogToolbarItems, LogSearchRow, renderLogCount } from '../Logs/logToolbar';
 import {
   getLogViewerScrollPosition,
   setLogViewerScrollPosition,
@@ -32,10 +34,10 @@ import type { CapabilityState } from '../types';
 import { fetchNodeLogs, type NodeLogFetchResponse, type NodeLogSource } from './nodeLogsApi';
 import '../Logs/LogViewer.css';
 import './NodeLogsTab.css';
+import { useLogDownloadMenu } from '@shared/hooks/useLogDownloadMenu';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
 import { getObjPanelLogsBufferMaxSize } from '@/core/settings/appPreferences';
-import { useLogCopyAction, useLogSelectionCopy } from '../Logs/hooks/useLogCopyAction';
 import { useLogKeyboardShortcuts } from '../Logs/hooks/useLogKeyboardShortcuts';
 import { useLogMessageRenderer } from '../Logs/hooks/useLogMessageRenderer';
 import {
@@ -45,6 +47,7 @@ import {
   useRawViewFallback,
 } from '../Logs/hooks/useLogPresentation';
 import { useLogScrollRestoration } from '../Logs/hooks/useLogScrollRestoration';
+import { useLogSelectionCopy } from '../Logs/hooks/useLogSelectionCopy';
 import { useTerminalTheme } from '../Logs/hooks/useTerminalTheme';
 import ParsedLogTable from '../Logs/ParsedLogTable';
 import RawLogViewer, { type RenderedLogRow } from '../Logs/RawLogViewer';
@@ -60,6 +63,12 @@ const getNodeLogSourceLeafLabel = (label: string): string => {
   const segments = label.split(' / ');
   return segments[segments.length - 1] || label;
 };
+
+// Names a saved log file: node-<node>-<source>-logs.
+const nodeLogsFileBase = (nodeName: string, source: NodeLogSource | null | undefined): string =>
+  ['node', nodeName, source ? getNodeLogSourceLeafLabel(source.label) : '', 'logs']
+    .filter(Boolean)
+    .join('-');
 
 const buildNodeLogSinceTime = (lastSuccessfulFetchAt: string | null): string | undefined => {
   if (!lastSuccessfulFetchAt) {
@@ -502,10 +511,14 @@ const nodeLogStatusMessage = ({
   if (!hasContent) {
     return 'No logs returned for this source.';
   }
-  if (hasInvalidRegex) {
-    return 'Enter a valid regular expression.';
+  if (hasFilteredLines) {
+    return null;
   }
-  return hasFilteredLines ? null : 'No log lines match the current filter.';
+  // All mode keeps every line on an invalid regex, so this only shows when a
+  // filtering mode has nothing left to show.
+  return hasInvalidRegex
+    ? 'Enter a valid regular expression.'
+    : 'No log lines match the current filter.';
 };
 
 // Dropped lines show as the buffer-full indicator beside the toolbar, as in
@@ -604,20 +617,11 @@ const NodeLogsTab = ({
 }: NodeLogsTabProps) => {
   const [selectedSourcePath, setSelectedSourcePath] = useState('');
   const [options, dispatch] = useReducer(logOptionsReducer, initialLogOptionsState);
-  const {
-    textFilter,
-    autoRefresh,
-    wrapText,
-    showAnsiColors,
-    highlightMatches,
-    inverseMatches,
-    caseSensitiveMatches,
-    regexMatches,
-    displayMode,
-    expandedRows,
-  } = options;
+  const { autoRefresh, wrapText, showAnsiColors, displayMode, expandedRows } = options;
   const logsContentRef = useRef<HTMLElement>(null);
+  const viewerRef = useRef<HTMLDivElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
+  const searchRowId = useId();
   const terminalTheme = useTerminalTheme(logsContentRef);
   const sourceOptions = useMemo<DropdownOption[]>(
     () => buildNodeLogSourceOptions(sources),
@@ -649,11 +653,12 @@ const NodeLogsTab = ({
 
   const lines = useMemo(() => content.split('\n'), [content]);
   const {
-    filterText,
     filteredEntries: filteredLines,
     hasVisibleLines,
     canParseLogs,
     hasInvalidRegex,
+    textFilterHidesLines,
+    highlightRegex,
     parsedRows,
     tableColumns,
     getParsedCsv,
@@ -664,26 +669,28 @@ const NodeLogsTab = ({
     searchTexts: nodeLogSearchTexts,
     lineOf: nodeLogLine,
   });
-  const highlightRegex = useMemo(
-    () =>
-      highlightMatches && !inverseMatches
-        ? buildLogSearchRegex(filterText, {
-            regexMode: regexMatches,
-            caseSensitive: caseSensitiveMatches,
-            global: true,
-          })
-        : null,
-    [caseSensitiveMatches, filterText, highlightMatches, inverseMatches, regexMatches]
-  );
   const isParsedView = displayMode === 'parsed';
+  const { textFilter, filterMode, caseSensitiveMatches, regexMatches } = options;
+  const searchChips = useMemo(
+    () =>
+      buildLogSearchChips({
+        textFilter,
+        filterMode,
+        caseSensitiveMatches,
+        regexMatches,
+        hasInvalidRegex,
+        dispatch,
+      }),
+    [caseSensitiveMatches, filterMode, hasInvalidRegex, regexMatches, textFilter]
+  );
 
   useRawViewFallback({ displayMode, hasVisibleLines, canParseLogs, dispatch });
 
   const displayLines = useMemo(() => {
-    // The JSON views reuse each line's cached parse instead of parsing again.
-    const jsonView = displayMode === 'pretty' || displayMode === 'structured';
+    // The Pretty view reuses each line's cached parse instead of parsing again.
+    const prettyView = displayMode === 'pretty';
     return filteredLines.map((line) =>
-      formatRawOrPrettyJsonLine(line, displayMode, showAnsiColors, jsonView ? jsonOf(line) : null)
+      formatRawOrPrettyJsonLine(line, displayMode, showAnsiColors, prettyView ? jsonOf(line) : null)
     );
   }, [displayMode, filteredLines, jsonOf, showAnsiColors]);
 
@@ -721,6 +728,7 @@ const NodeLogsTab = ({
   const displayedLogCount = isParsedView
     ? parsedRows.length
     : filteredLines.filter((line) => line.length > 0).length;
+  const totalLogCount = useMemo(() => lines.filter((line) => line.length > 0).length, [lines]);
   const rowCount = getNodeLogRowCount(
     content,
     isParsedView,
@@ -754,10 +762,13 @@ const NodeLogsTab = ({
     }
   }, []);
 
-  const handleCopyLogs = useLogCopyAction({
+  const { downloadItem, copyLogs: handleCopyLogs } = useLogDownloadMenu({
     getText: getCopyText,
-    dispatch,
+    isTableView: isParsedView,
+    fileBase: nodeLogsFileBase(nodeName, selectedSource),
     source: 'NodeLogsTab',
+    disabled: !hasCopyableContent,
+    copyShortcut: 'Shift+C',
   });
   useLogSelectionCopy({ rootRef: logsContentRef, active: isActive, source: 'NodeLogsTab' });
   useLogKeyboardShortcuts({
@@ -765,11 +776,14 @@ const NodeLogsTab = ({
     options,
     hasAnsiLogEntries,
     hasCopyableContent,
+    hasLogs: totalLogCount > 0,
     canParseLogs,
     dispatch,
     copyLogs: handleCopyLogs,
     filterInputRef,
     logsContentRef,
+    viewerRef,
+    searchRowId,
   });
 
   const renderMessageContent = useLogMessageRenderer({
@@ -788,15 +802,18 @@ const NodeLogsTab = ({
     dispatch,
     hasAnsiLogEntries,
     canParseLogs,
-    hasCopyableContent,
-    copyLogs: handleCopyLogs,
+    hasLogs: totalLogCount > 0,
+    downloadItem,
+    filterInputRef,
+    searchRowId,
   });
 
   return (
     <div className="object-panel-tab-content">
-      <div className="logs-viewer-display">
+      <div className="logs-viewer-display" ref={viewerRef}>
         <div className="logs-viewer-controls">
           <div className="logs-viewer-controls-left">
+            <LogBufferFullIndicator shown={notices.bufferFullShown} />
             <div className="logs-viewer-control-group">
               <Dropdown
                 options={sourceOptions}
@@ -805,7 +822,6 @@ const NodeLogsTab = ({
                   setSelectedSourcePath(Array.isArray(value) ? (value[0] ?? '') : value)
                 }
                 placeholder={loading ? 'Loading logs…' : 'Select source'}
-                className="logs-viewer-selector-dropdown"
                 ariaLabel="Node log source"
                 renderValue={() =>
                   selectedSource ? getNodeLogSourceLeafLabel(selectedSource.label) : 'Select source'
@@ -813,20 +829,26 @@ const NodeLogsTab = ({
               />
             </div>
 
-            <LogTextFilter
+            <IconBar items={iconItems} />
+          </div>
+          {options.searchOpen ? (
+            <LogSearchRow
+              id={searchRowId}
               inputRef={filterInputRef}
-              value={textFilter}
+              options={options}
               dispatch={dispatch}
               ariaLabel="Filter node logs"
             />
-
-            <IconBar items={iconItems} />
-            <LogBufferFullIndicator shown={notices.bufferFullShown} />
-
-            <LogMatchCount count={displayedLogCount} filtered={textFilter.trim().length > 0} />
-          </div>
+          ) : null}
         </div>
 
+        <ActiveFilterChips
+          ariaLabel="Active log filters"
+          chips={searchChips}
+          onClearAll={() => clearLogSearch(dispatch, { caseSensitiveMatches, regexMatches })}
+          className="logs-viewer-active-filters"
+          summary={renderLogCount(displayedLogCount, totalLogCount, textFilterHidesLines)}
+        />
         <LogWarningBar warnings={notices.warnings} />
 
         <ScrollableRegion

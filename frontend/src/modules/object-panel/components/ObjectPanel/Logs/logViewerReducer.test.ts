@@ -97,13 +97,11 @@ describe('logViewerReducer state transitions', () => {
   it('applies every display preference transition', () => {
     const actions = [
       { type: 'TOGGLE_AUTO_REFRESH' as const },
-      { type: 'CYCLE_TIMESTAMP_MODE' as const },
-      { type: 'SET_TIMESTAMP_MODE' as const, payload: 'hidden' as const },
+      { type: 'SET_SHOW_TIMESTAMPS' as const, payload: false },
       { type: 'TOGGLE_WRAP_TEXT' as const },
       { type: 'TOGGLE_SHOW_ANSI_COLORS' as const },
       { type: 'SET_TEXT_FILTER' as const, payload: 'error' },
-      { type: 'TOGGLE_HIGHLIGHT_MATCHES' as const },
-      { type: 'TOGGLE_INVERSE_MATCHES' as const },
+      { type: 'SET_FILTER_MODE' as const, payload: 'invert' as const },
       { type: 'TOGGLE_CASE_SENSITIVE_MATCHES' as const },
       { type: 'TOGGLE_REGEX_MATCHES' as const },
     ];
@@ -111,12 +109,11 @@ describe('logViewerReducer state transitions', () => {
 
     expect(result).toMatchObject({
       autoRefresh: false,
-      timestampMode: 'hidden',
+      showTimestamps: false,
       wrapText: false,
       showAnsiColors: false,
       textFilter: 'error',
-      highlightMatches: false,
-      inverseMatches: true,
+      filterMode: 'invert',
       caseSensitiveMatches: false,
       regexMatches: true,
     });
@@ -140,14 +137,12 @@ describe('logViewerReducer state transitions', () => {
     expect(logViewerReducer(shown, { type: 'TOGGLE_PARSED_VIEW' }).displayMode).toBe('raw');
   });
 
-  it('updates copy feedback and clears filtering and display mode on scope resets', () => {
-    const copied = logViewerReducer(base(), { type: 'SET_COPY_FEEDBACK', payload: 'copied' });
+  it('clears filtering and display mode on scope resets', () => {
     const reset = logViewerReducer(
-      { ...copied, textFilter: 'error', displayMode: 'parsed' },
+      { ...base(), textFilter: 'error', displayMode: 'parsed' },
       { type: 'RESET_FOR_NEW_SCOPE' }
     );
 
-    expect(copied.copyFeedback).toBe('copied');
     expect(reset).toMatchObject({
       textFilter: '',
       displayMode: 'raw',

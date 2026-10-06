@@ -6,6 +6,7 @@
  */
 
 import { useZoom } from '@core/contexts/ZoomContext';
+import { CheckIcon } from '@shared/components/icons/SharedIcons';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import type React from 'react';
@@ -24,13 +25,35 @@ export interface ContextMenuItem {
   danger?: boolean;
   tooltip?: string;
   disabledReason?: string;
+  /** Marks the item as one of a set of exclusive choices, shown with a check when chosen. */
+  checked?: boolean;
 }
 
 interface ContextMenuProps {
   items: ContextMenuItem[];
   position: { x: number; y: number };
   onClose: () => void;
+  /** Additional CSS class applied to the menu. */
+  className?: string;
 }
+
+// A choice keeps its icon slot when unchecked so the labels of a set stay aligned.
+const renderItemIcon = (item: ContextMenuItem): React.ReactNode => {
+  if (item.checked !== undefined) {
+    return (
+      <span className="context-menu-icon">
+        {item.checked ? <CheckIcon width={12} height={12} /> : null}
+      </span>
+    );
+  }
+  return item.icon ? <span className="context-menu-icon">{item.icon}</span> : null;
+};
+
+// aria-checked is only valid with the choice role, so the two are set together.
+const itemRoleProps = (item: ContextMenuItem) =>
+  item.checked === undefined
+    ? { role: 'menuitem' as const }
+    : { role: 'menuitemradio' as const, 'aria-checked': item.checked };
 
 const ContextMenuOption = ({
   item,
@@ -56,7 +79,7 @@ const ContextMenuOption = ({
       className={`context-menu-item ${item.disabled ? 'disabled' : ''} ${
         item.danger ? 'danger' : ''
       } ${isFocused ? 'is-focused' : ''}`}
-      role="menuitem"
+      {...itemRoleProps(item)}
       aria-disabled={item.disabled ? 'true' : 'false'}
       disabled={item.disabled}
       tabIndex={-1}
@@ -74,7 +97,7 @@ const ContextMenuOption = ({
       }}
       title={tooltip}
     >
-      {!!item.icon && <span className="context-menu-icon">{item.icon}</span>}
+      {renderItemIcon(item)}
       <span className="context-menu-label">{item.label}</span>
       {!!(item.disabled && item.disabledReason) && (
         <span className="context-menu-reason">{item.disabledReason}</span>
@@ -83,7 +106,7 @@ const ContextMenuOption = ({
   );
 };
 
-const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) => {
+const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, className }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   // Capture before focusing the menu. Effect replay must not replace the
   // invoker with this menu itself.
@@ -256,7 +279,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
   return createPortal(
     <div
       ref={menuRef}
-      className="context-menu"
+      className={className ? `context-menu ${className}` : 'context-menu'}
       style={{
         left: initialX,
         top: initialY,

@@ -1,14 +1,14 @@
 /**
  * frontend/src/modules/resource-grid/cursorPageWalk.ts
  *
- * The one cursor walk behind every "all matching rows" Copy/Export scope
+ * The one cursor walk behind every "all matching rows" Download
  * (typed queries and the catalog). The loop, the page guard, the
  * cursor-never-terminates failure, and the cross-page consistency guard live
  * here so a walk fix can never land in one provider and miss the other;
  * blocked/failed/empty pages REJECT inside the caller's fetchPage closure (a
  * partial export saved as success is silent data loss).
  *
- * Consistency guard (docs/architecture/large-data.md "Page Addressing
+ * Consistency guard (docs/architecture/large-data-query.md "Page Addressing
  * Contract"): each page may carry
  * the domain's RAW source clock (sourceVersions["object"] — never the
  * scope-folded token, which differs per page by construction). The walk

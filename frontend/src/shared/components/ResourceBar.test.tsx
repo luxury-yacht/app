@@ -67,7 +67,6 @@ describe('ResourceBar', () => {
       type: 'cpu',
       metricsError: 'unable to load metrics',
       metricsStale: false,
-      showTooltip: true,
       variant: 'default',
     });
 
@@ -120,7 +119,6 @@ describe('ResourceBar', () => {
       usage: 980,
       request: 800,
       limit: 1000,
-      showTooltip: false,
     });
 
     const usageBar = container.querySelector('.resource-bar-usage');
@@ -153,7 +151,6 @@ describe('ResourceBar', () => {
       request: TIB,
       limit: 1.5 * TIB,
       allocatable: 2 * TIB,
-      showTooltip: false,
     });
 
     const markers = container.querySelectorAll<HTMLElement>('.resource-bar-marker');
@@ -173,7 +170,6 @@ describe('ResourceBar', () => {
       usage: 671 * MIB,
       request: 590 * MIB,
       limit: 490 * MIB,
-      showTooltip: false,
     });
 
     const overlimit = container.querySelector<HTMLElement>('.resource-bar-overlimit');
@@ -193,7 +189,6 @@ describe('ResourceBar', () => {
       usage: 100 * MIB,
       request: 200 * MIB,
       limit: 400 * MIB,
-      showTooltip: false,
     });
 
     expect(container.querySelector('.resource-bar-overlimit')).toBeNull();
@@ -211,7 +206,6 @@ describe('ResourceBar', () => {
       usage: 671 * MIB,
       request: 590 * MIB,
       limit: 490 * MIB,
-      showTooltip: false,
     });
 
     const markers = container.querySelectorAll<HTMLElement>('.resource-bar-marker');
@@ -239,7 +233,6 @@ describe('ResourceBar', () => {
       variant: 'compact',
       overcommitPercent: 150,
       animationScopeKey: 'scope-a',
-      showTooltip: true,
     });
 
     const compactContainer = container.querySelector('.resource-bar-container') as HTMLElement;
@@ -316,7 +309,6 @@ describe('ResourceBar', () => {
       allocatable: 4096 * MIB,
       overcommitPercent: 130,
       variant: 'compact',
-      showTooltip: true,
       metricsStale: true,
     });
 
@@ -342,7 +334,6 @@ describe('ResourceBar', () => {
       usage: 1000,
       request: 400,
       variant: 'compact',
-      showTooltip: true,
     });
 
     // Trigger tooltip via the Tooltip wrapper (mouseover bubbles to .tooltip-trigger)
@@ -379,13 +370,7 @@ describe('ResourceBar', () => {
     // Re-render with memory bytes and no constraints to exercise warning branch
     await act(async () => {
       root.render(
-        <ResourceBar
-          type="memory"
-          usage={MIB}
-          variant="compact"
-          showTooltip
-          animationScopeKey="bytes"
-        />
+        <ResourceBar type="memory" usage={MIB} variant="compact" animationScopeKey="bytes" />
       );
       await Promise.resolve();
     });

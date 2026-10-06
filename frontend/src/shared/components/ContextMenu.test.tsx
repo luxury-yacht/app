@@ -142,6 +142,27 @@ describe('ContextMenu', () => {
     destination.remove();
   });
 
+  it('exposes which of a set of choices is selected', async () => {
+    const { menu } = await renderMenu({
+      items: [
+        { label: 'UTC', checked: true, onClick: vi.fn() },
+        { label: 'Local', checked: false, onClick: vi.fn() },
+        { label: 'Settings', onClick: vi.fn() },
+      ],
+    });
+
+    const roles = Array.from(menu.querySelectorAll('.context-menu-item')).map((item) => [
+      item.textContent,
+      item.getAttribute('role'),
+      item.getAttribute('aria-checked'),
+    ]);
+    expect(roles).toEqual([
+      ['UTC', 'menuitemradio', 'true'],
+      ['Local', 'menuitemradio', 'false'],
+      ['Settings', 'menuitem', null],
+    ]);
+  });
+
   it('ignores clicks on disabled items', async () => {
     const onClose = vi.fn();
     const onClick = vi.fn();

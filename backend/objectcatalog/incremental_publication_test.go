@@ -179,6 +179,7 @@ func TestIngestReplacementDoesNotRepublishUnchangedFinalizers(t *testing.T) {
 	}}
 	row := svc.buildSummary(desc, obj)
 	svc.applyIngestCatalogSummary(desc.GVR(), row, false)
+	svc.publishSyncedAttentionSubsets(map[string]Summary{"deleting": row})
 	updates, unsubscribe := svc.SubscribeFinalizerBlockers()
 	defer unsubscribe()
 	<-updates

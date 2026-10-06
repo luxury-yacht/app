@@ -135,14 +135,16 @@ export type ViewType =
   | 'pods'
   | 'jobs'
   | 'events'
+  | 'metrics'
   | 'yaml'
   | 'map'
   | 'manifest'
   | 'values';
 
-export type LogDisplayMode = 'raw' | 'structured' | 'pretty' | 'parsed';
+export type LogDisplayMode = 'raw' | 'pretty' | 'parsed';
 
-export type LogTimestampMode = 'hidden' | 'default' | 'short' | 'localized';
+/** What the text filter does: show every line, only matching lines, or only the others. */
+export type LogFilterMode = 'all' | 'filtered' | 'invert';
 
 export interface LogScrollPosition {
   scrollTop: number;
@@ -165,17 +167,15 @@ export interface LogScrollPosition {
 export interface LogViewerPrefs {
   selectedFilters: MultiSelectFilterSelection;
   autoRefresh: boolean;
-  timestampMode: LogTimestampMode;
+  searchOpen: boolean;
   showTimestamps: boolean;
   wrapText: boolean;
   showAnsiColors?: boolean;
   textFilter: string;
-  highlightMatches: boolean;
-  inverseMatches: boolean;
+  filterMode: LogFilterMode;
   caseSensitiveMatches: boolean;
   regexMatches: boolean;
   displayMode: LogDisplayMode;
-  isParsedView: boolean;
   expandedRows: string[];
   showPreviousContainerLogs: boolean;
 }

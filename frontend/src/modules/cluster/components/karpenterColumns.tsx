@@ -8,38 +8,36 @@ import {
   withColumnSizing,
 } from '@shared/components/tables/columnFactories';
 import { createDetailSegmentsColumn } from '@shared/components/tables/detailSegmentsColumn';
-import { getResourceLimitUsagePercent } from '@shared/utils/resourceCalculations';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import { formatLimitUsagePercent } from '@shared/utils/resourceCalculations';
+import type { LimitUsage } from '@/core/refresh/types';
 
-const formatUsagePercent = (percentage: number | undefined): string =>
-  percentage === undefined ? '-' : `${Number(percentage.toFixed(1))}%`;
+const usageText = (usage: LimitUsage | undefined): string =>
+  usage ? formatLimitUsagePercent(usage.percent) : '-';
 
+// The backend computes NodePool usage and decides when it warrants a warning, so the table,
+// the NodePool details, and Attention flag the same pools.
 function renderPoolUsage(row: CustomResourceGridRow) {
   if (row.ref.kind !== 'NodePool') {
     return '-';
   }
-  const cpu = getResourceLimitUsagePercent(
-    row.karpenter?.capacity?.cpu,
-    row.karpenter?.limits?.cpu,
-    'cpu'
-  );
-  const memory = getResourceLimitUsagePercent(
-    row.karpenter?.capacity?.memory,
-    row.karpenter?.limits?.memory,
-    'memory'
-  );
-  if (cpu === undefined && memory === undefined) {
+  const cpu = row.karpenter?.limitUsage?.cpu;
+  const memory = row.karpenter?.limitUsage?.memory;
+  if (!cpu && !memory) {
     return '-';
   }
-  const cpuText = formatUsagePercent(cpu);
-  const memoryText = formatUsagePercent(memory);
+  const cpuText = usageText(cpu);
+  const memoryText = usageText(memory);
   return (
     <span data-gridtable-export-text={`CPU ${cpuText} / Mem ${memoryText}`}>
       CPU{' '}
-      <span className={cpu !== undefined && cpu > 80 ? 'status-text warning' : undefined}>
+      <span className={cpu?.presentation ? backendStatusTextClass(cpu.presentation) : undefined}>
         {cpuText}
       </span>
       {' / Mem '}
-      <span className={memory !== undefined && memory > 80 ? 'status-text warning' : undefined}>
+      <span
+        className={memory?.presentation ? backendStatusTextClass(memory.presentation) : undefined}
+      >
         {memoryText}
       </span>
     </span>

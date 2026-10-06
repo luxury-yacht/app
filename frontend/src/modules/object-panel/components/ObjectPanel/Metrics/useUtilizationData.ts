@@ -1,31 +1,31 @@
 /**
- * frontend/src/modules/object-panel/components/ObjectPanel/Details/useUtilizationData.ts
+ * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/useUtilizationData.ts
  *
- * Derives the Utilization section's CPU/memory/pods data from live metric domains,
- * falling back to the active detail DTO while those domains load.
+ * Derives the Metrics tab's utilization bars from live metric domains (kept fresh by the panel's
+ * metrics collector), falling back to the active detail DTO while those domains load.
  */
 
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import { parseResourceQuantity } from '@shared/utils/resourceCalculations';
 import { useMemo } from 'react';
-import { useResourceMetrics } from '@/core/resource-metrics';
-import type { UtilizationData } from './detailsTabTypes';
+import { type ResourceMetricValues, useResourceMetrics } from '@/core/resource-metrics';
 
-const UTILIZATION_KINDS = new Set([
-  'pod',
-  'deployment',
-  'daemonset',
-  'statefulset',
-  'replicaset',
-  'node',
-]);
+export interface UtilizationData {
+  cpu?: ResourceMetricValues;
+  memory?: ResourceMetricValues;
+  pods?: {
+    count?: string;
+    capacity?: string;
+    allocatable?: string;
+  };
+  mode?: 'nodeMetrics';
+  podCount?: number;
+  readyPodCount?: number;
+}
 
-const WORKLOAD_UTILIZATION_KINDS = new Set([
-  'deployment',
-  'daemonset',
-  'statefulset',
-  'replicaset',
-]);
+const UTILIZATION_KINDS = new Set(['pod', 'deployment', 'daemonset', 'statefulset', 'node']);
+
+const WORKLOAD_UTILIZATION_KINDS = new Set(['deployment', 'daemonset', 'statefulset']);
 
 // Structural view of the utilization-bearing fields across the relevant detail DTOs.
 // Detail DTOs carry formatted quantity strings; they are parsed once here.
@@ -48,7 +48,6 @@ interface UtilizationDetail {
   podsCount?: number;
   podsCapacity?: string;
   podsAllocatable?: string;
-  isActive?: boolean;
   pods?: unknown[];
   podMetricsSummary?: {
     cpuUsage?: string;
@@ -160,13 +159,7 @@ const workloadMetricSource = (detail: UtilizationDetail): StandardMetricSource =
   return hasSummary && summary ? summary : detail;
 };
 
-const deriveWorkloadUtilization = (
-  detail: UtilizationDetail,
-  objectKind: string
-): UtilizationData | null => {
-  if (objectKind === 'replicaset' && detail.isActive === false) {
-    return null;
-  }
+const deriveWorkloadUtilization = (detail: UtilizationDetail): UtilizationData | null => {
   const metrics = standardMetricSections(workloadMetricSource(detail));
   if (!metrics) {
     return null;
@@ -202,10 +195,10 @@ function deriveDetailUtilizationData(
     return standardMetricSections(d);
   }
 
-  // Workload utilization (deployment/daemonset/statefulset/replicaset): aggregated totals from
+  // Workload utilization (deployment/daemonset/statefulset): aggregated totals from
   // podMetricsSummary when available, falling back to averages on the detail itself.
   if (d && WORKLOAD_UTILIZATION_KINDS.has(objectKind)) {
-    return deriveWorkloadUtilization(d, objectKind);
+    return deriveWorkloadUtilization(d);
   }
 
   // Fallback to objectData fields (dynamic properties on the object reference).
@@ -214,24 +207,12 @@ function deriveDetailUtilizationData(
 
 export function useUtilizationData(params: UseUtilizationDataParams): UtilizationData | null {
   const { objectData, detail } = params;
-  const objectKind = objectData?.kind?.toLowerCase();
-  const liveMetrics = useResourceMetrics(objectData);
+  // Reads the store only: the panel's collector holds the metrics lease and signal refetch.
+  const liveMetrics = useResourceMetrics(objectData, false);
   const detailMetrics = useMemo(
     () => deriveDetailUtilizationData(objectData, detail),
     [objectData, detail]
   );
 
-  return useMemo(() => {
-    if (objectKind !== 'replicaset' && liveMetrics.metrics) {
-      return liveMetrics.metrics;
-    }
-    return detailMetrics;
-  }, [detailMetrics, liveMetrics.metrics, objectKind]);
-}
-
-export function useHasUtilization(objectData: ObjectPanelRef | null | undefined): boolean {
-  return useMemo(() => {
-    const kind = objectData?.kind?.toLowerCase();
-    return kind ? UTILIZATION_KINDS.has(kind) : false;
-  }, [objectData]);
+  return liveMetrics.metrics ?? detailMetrics;
 }

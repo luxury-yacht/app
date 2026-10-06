@@ -19,6 +19,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/argocd"
+	"github.com/luxury-yacht/app/backend/resources/karpenter"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -431,6 +433,7 @@ func summaryFromObject(clusterID string, desc Descriptor, item metav1.Object) Su
 	if meta.DeletionTimestamp != nil {
 		deletionTime = meta.DeletionTimestamp.UnixMilli()
 	}
+	reportedStatuses, reportsStatus := reportedObjectStatuses(item)
 	summary := Summary{
 		Ref:               resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: clusterID, Group: desc.Group, Version: desc.Version, Kind: desc.Kind, Resource: desc.Resource, Namespace: item.GetNamespace(), Name: item.GetName(), UID: string(item.GetUID())}),
 		Metadata:          catalogResourceMetadata(item),
@@ -438,6 +441,8 @@ func summaryFromObject(clusterID string, desc Descriptor, item metav1.Object) Su
 		CreationTimestamp: creationTimestamp,
 		lifecycle:         resourcemodel.ObjectLifecycleWithFinalizers(meta, additionalObjectFinalizers(desc, item)),
 		deletionTime:      deletionTime,
+		reportedStatuses:  reportedStatuses,
+		reportsStatus:     reportsStatus,
 		Scope:             desc.Scope,
 	}
 
@@ -447,6 +452,36 @@ func summaryFromObject(clusterID string, desc Descriptor, item metav1.Object) Su
 	summary.ActionFacts = buildSummaryActionFacts(desc, item)
 
 	return summary
+}
+
+// reportedObjectStatuses reads the statuses an object reports for Attention, and whether
+// its kind reports any. Argo CD Applications and ApplicationSets and Karpenter NodePools
+// report them; they are read here because the catalog is the only source that watches
+// custom resources with their full content.
+func reportedObjectStatuses(item metav1.Object) (reportedStatusValues, bool) {
+	object, ok := item.(*unstructuredv1.Unstructured)
+	if !ok {
+		return reportedStatusValues{}, false
+	}
+	if status, ok := argocd.ReportedAttentionStatus(object); ok {
+		return newReportedStatusValues(map[string][]string{
+			ReportedStatusSync:       reportedValue(status.Sync),
+			ReportedStatusHealth:     reportedValue(status.Health),
+			ReportedStatusOperation:  reportedValue(status.OperationPhase),
+			ReportedStatusConditions: status.Conditions,
+		}), true
+	}
+	if warnings, ok := karpenter.LimitWarnings(object); ok {
+		return newReportedStatusValues(map[string][]string{ReportedStatusLimits: warnings}), true
+	}
+	return reportedStatusValues{}, false
+}
+
+func reportedValue(value string) []string {
+	if value == "" {
+		return nil
+	}
+	return []string{value}
 }
 
 func catalogResourceMetadata(item metav1.Object) *resourcemodel.ResourceTableMetadata {

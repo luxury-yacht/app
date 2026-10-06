@@ -326,16 +326,15 @@ type ArgoCDSummary struct {
 	DestinationNamespace string `json:"destinationNamespace,omitempty"`
 }
 
-// KarpenterSummary contains only the facts shown in the Karpenter table.
-// Capacity and limits supply NodePool usage; scheduling and provider configuration
-// belong to the rich detail DTO.
+// KarpenterSummary contains only the facts shown in the Karpenter table. LimitUsage
+// supplies NodePool usage, computed by the Karpenter facts; scheduling and provider
+// configuration belong to the rich detail DTO.
 type KarpenterSummary struct {
-	NodePool     *resourcemodel.ResourceLink `json:"nodePool,omitempty"`
-	NodeClass    *resourcemodel.ResourceLink `json:"nodeClass,omitempty"`
-	InstanceType string                      `json:"instanceType,omitempty"`
-	CapacityType string                      `json:"capacityType,omitempty"`
-	Capacity     map[string]string           `json:"capacity,omitempty"`
-	Limits       map[string]string           `json:"limits,omitempty"`
+	NodePool     *resourcemodel.ResourceLink         `json:"nodePool,omitempty"`
+	NodeClass    *resourcemodel.ResourceLink         `json:"nodeClass,omitempty"`
+	InstanceType string                              `json:"instanceType,omitempty"`
+	CapacityType string                              `json:"capacityType,omitempty"`
+	LimitUsage   map[string]resourcemodel.LimitUsage `json:"limitUsage,omitempty"`
 }
 
 // ClusterCustomSummary is a CRD-backed cluster-scoped custom resource row.

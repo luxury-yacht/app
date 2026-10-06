@@ -153,7 +153,6 @@ describe('ClusterViewCustom kind filter propagation', () => {
         kinds: { mode: 'some', values: ['Widget'] },
         namespaces: { mode: 'all' },
         clusters: { mode: 'all' },
-        caseSensitive: false,
         includeMetadata: false,
       });
       await Promise.resolve();

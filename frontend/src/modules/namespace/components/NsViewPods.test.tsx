@@ -6,7 +6,7 @@
  */
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { CollapseIcon, ExpandIcon } from '@shared/components/icons/SharedIcons';
+import { ChevronDownIcon, ChevronUpIcon } from '@shared/components/icons/SharedIcons';
 import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import type { GridTableFilterState, GridTableProps } from '@shared/components/tables/GridTable';
 import { getTextContent } from '@shared/components/tables/GridTable.utils';
@@ -79,7 +79,6 @@ const {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     } as GridTableFilterState,
   },
@@ -162,13 +161,12 @@ vi.mock('@shared/components/tables/GridTable', () => ({
                 title={item.title}
                 aria-label={item.ariaLabel ?? item.title}
                 aria-pressed={item.type === 'toggle' ? item.active : undefined}
-                onClick={item.onClick}
+                onClick={item.type === 'menu' ? undefined : item.onClick}
               >
                 {item.icon}
               </button>
             );
           })}
-          {props.filters?.options?.customActions ?? null}
         </div>
         <table data-testid="grid-table">
           <tbody>
@@ -363,7 +361,6 @@ describe('NsViewPods', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     };
     useTableSortMock.mockReset();
@@ -563,20 +560,27 @@ describe('NsViewPods', () => {
     }
   };
 
-  it('owns the Pods collapse action as the first structural filter action', async () => {
+  it('puts the Pods collapse action left of the Namespace dropdown', async () => {
     const onPodsCollapsedChange = vi.fn();
     await renderPods({ onPodsCollapsedChange });
 
-    const structuralActions = gridTablePropsRef.current.filters?.options?.beforeNamespaceActions;
+    // The pane's collapse control stays left of the Namespace dropdown, out of the main icon bar.
+    const options = gridTablePropsRef.current.filters?.options;
+    const paneActions = options?.beforeNamespaceActions ?? [];
     expect(
-      structuralActions?.map((action) => (action.type === 'separator' ? null : action.title))
+      paneActions.map((action) => (action.type === 'separator' ? null : action.title))
     ).toEqual(['Collapse Pods']);
-    const collapseAction = structuralActions?.[0];
-    if (!collapseAction || collapseAction.type === 'separator') {
+    expect(
+      (options?.preActions ?? []).some(
+        (action) => action.type !== 'separator' && action.title === 'Collapse Pods'
+      )
+    ).toBe(false);
+    const collapseAction = paneActions[0];
+    if (!collapseAction || collapseAction.type !== 'action') {
       throw new Error('Expected the Collapse Pods action');
     }
     expect(requireReactElement(collapseAction.icon, 'expected collapse icon').type).toBe(
-      ExpandIcon
+      ChevronDownIcon
     );
 
     act(() => {
@@ -600,9 +604,9 @@ describe('NsViewPods', () => {
       '.gridtable-filter-bar button[title="Expand Pods"]'
     );
     expect(expandButton).not.toBeNull();
-    const renderedCollapseIcon = CollapseIcon({});
+    const renderedCollapseIcon = ChevronUpIcon({});
     if (renderedCollapseIcon instanceof Promise) {
-      throw new Error('Expected CollapseIcon to render synchronously');
+      throw new Error('Expected ChevronUpIcon to render synchronously');
     }
     const collapseSvg = requireReactElement<{ children: React.ReactNode }>(
       renderedCollapseIcon,
@@ -718,7 +722,6 @@ describe('NsViewPods', () => {
           values: ['["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]'],
         },
       },
-      caseSensitive: false,
       includeMetadata: false,
     });
     expect(container.querySelector('.metrics-warning-banner')).toBeNull();
@@ -748,6 +751,41 @@ describe('NsViewPods', () => {
     expect(setFiltersMock).toHaveBeenCalledOnce();
   });
 
+  // A workload selected while the pane is collapsed is applied by the time it expands.
+  it('applies a workload selection made while the pane was collapsed', async () => {
+    const workloadFilterRequest = {
+      type: 'set' as const,
+      workload: {
+        clusterId: 'alpha:ctx',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'team-a',
+        name: 'api',
+      },
+    };
+    const props = {
+      namespace: ALL_NAMESPACES_SCOPE,
+      workloadFilterRequest,
+      onWorkloadFilterMismatch: vi.fn(),
+      onPodsCollapsedChange: vi.fn(),
+    };
+    await renderPods({ ...props, collapsed: true });
+    await renderPods({ ...props, collapsed: false });
+
+    expect(setFiltersMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespaces: { mode: 'some', values: ['team-a'] },
+        queryFacets: {
+          owners: {
+            mode: 'some',
+            values: ['["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]'],
+          },
+        },
+      })
+    );
+  });
+
   it('preserves a persisted owner facet when the embedded pane has no workload selection', async () => {
     persistedFiltersRef.current = {
       search: '',
@@ -761,7 +799,6 @@ describe('NsViewPods', () => {
           values: ['["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]'],
         },
       },
-      caseSensitive: false,
       includeMetadata: false,
     };
 

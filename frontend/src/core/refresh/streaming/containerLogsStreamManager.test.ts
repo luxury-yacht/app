@@ -521,6 +521,55 @@ describe('ContainerLogsStreamManager', () => {
     manager.stopAll(true);
   });
 
+  // A container that starts after the tab opens shows up here when its first
+  // line arrives, so the view can tell its container list is out of date.
+  test('lists the containers that have lines in the buffer', async () => {
+    const fromContainer = (
+      timestamp: string,
+      line: string,
+      container: string,
+      traits: { isEphemeral?: boolean; pod?: string } = {}
+    ): ContainerLogsWireEntry => ({
+      ...entry(timestamp, line, traits.pod),
+      container,
+      isEphemeral: traits.isEphemeral,
+    });
+    const app = { name: 'app', isInit: false, isEphemeral: false };
+    const debug = { name: 'debugger', isInit: false, isEphemeral: true };
+    const manager = new ContainerLogsStreamManager({ maxEntries: 2 });
+    await startLive(manager, [
+      fromContainer('2024-01-01T00:00:01Z', 'one', 'app'),
+      fromContainer('2024-01-01T00:00:02Z', 'two', 'app'),
+    ]);
+    expect(state().data?.containers).toEqual([app]);
+    const held = state().data?.containers;
+
+    FakeStream.latest().receive({
+      entries: [fromContainer('2024-01-01T00:00:03Z', 'three', 'app')],
+    });
+    // The same containers keep the same list, so the view need not compare it again.
+    expect(state().data?.containers).toBe(held);
+
+    FakeStream.latest().receive({
+      entries: [fromContainer('2024-01-01T00:00:04Z', 'four', 'debugger', { isEphemeral: true })],
+    });
+    expect(state().data?.containers).toEqual([app, debug]);
+
+    FakeStream.latest().receive({
+      entries: [fromContainer('2024-01-01T00:00:05Z', 'five', 'debugger', { isEphemeral: true })],
+    });
+    // app's last line was evicted.
+    expect(state().data?.containers).toEqual([debug]);
+
+    FakeStream.latest().receive({
+      entries: [fromContainer('2024-01-01T00:00:06Z', 'six', 'sidecar', { pod: 'web-1' })],
+    });
+    FakeStream.latest().receive({ removedPods: ['web-1'] });
+    // An ended pod's containers go with its lines.
+    expect(state().data?.containers).toEqual([debug]);
+    manager.stopAll(true);
+  });
+
   test('stopAll with reset clears every scope', async () => {
     const manager = new ContainerLogsStreamManager();
     await startLive(manager, [entry('2024-01-01T00:00:01Z', 'kept')]);

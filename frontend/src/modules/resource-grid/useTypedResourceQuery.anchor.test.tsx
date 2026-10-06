@@ -1,7 +1,7 @@
 /**
  * frontend/src/modules/resource-grid/useTypedResourceQuery.anchor.test.tsx
  *
- * Anchor jump intent lifecycle (docs/architecture/large-data.md "Page
+ * Anchor jump intent lifecycle (docs/architecture/large-data-query.md "Page
  * Addressing Contract"): anchorTo
  * fires an anchored request; a found landing seeds pageIndex from the
  * serve-time rank and adopts the self cursor so live refetches stay

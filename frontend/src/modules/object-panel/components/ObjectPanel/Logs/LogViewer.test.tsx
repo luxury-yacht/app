@@ -31,6 +31,7 @@ import type {
   ContainerLogsWarning,
 } from '@/core/refresh/types';
 import {
+  getObjPanelLogsApiTimestampUseLocalTimeZone,
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
@@ -81,19 +82,30 @@ const waitForElement = async <T extends Element>(
   throw new Error('Timed out waiting for element');
 };
 
-const getLatestKeyboardSurfaceConfig = () => {
+type KeyboardSurfaceConfig = {
+  active?: boolean;
+  rootRef?: React.RefObject<HTMLElement | null>;
+  onEscape?: () => boolean;
+  onNativeAction?: (context: {
+    action: 'copy' | 'selectAll' | 'paste';
+    activeElement: Element | null;
+    selection: Selection | null;
+    text?: string;
+  }) => boolean;
+};
+
+// The latest registration of the keyboard surface that has the given handler.
+const getLatestKeyboardSurfaceConfig = (
+  handler: 'onNativeAction' | 'onEscape' = 'onNativeAction'
+): KeyboardSurfaceConfig | undefined => {
   const calls = shortcutMocks.useKeyboardSurface.mock.calls;
-  const call = calls[calls.length - 1];
-  return call?.[0] as
-    | {
-        onNativeAction?: (context: {
-          action: 'copy' | 'selectAll' | 'paste';
-          activeElement: Element | null;
-          selection: Selection | null;
-          text?: string;
-        }) => boolean;
-      }
-    | undefined;
+  for (let i = calls.length - 1; i >= 0; i -= 1) {
+    const config = calls[i][0] as KeyboardSurfaceConfig;
+    if (config[handler] !== undefined) {
+      return config;
+    }
+  }
+  return undefined;
 };
 
 const mockModules = vi.hoisted(() => {
@@ -116,9 +128,16 @@ const autoRefreshLoadingState = vi.hoisted(() => ({
   suppressPassiveLoading: false,
 }));
 
+const saveFileMocks = vi.hoisted(() => ({
+  SaveCsvFile: vi.fn(),
+  SaveLogFile: vi.fn(),
+}));
+
 vi.mock('@core/backend-api', () => ({
   FetchContainerLogs: vi.fn(),
   GetContainerLogsScopeContainers: vi.fn(),
+  SaveCsvFile: saveFileMocks.SaveCsvFile,
+  SaveLogFile: saveFileMocks.SaveLogFile,
 }));
 
 vi.mock('@/core/refresh/orchestrator', () => ({
@@ -132,6 +151,7 @@ vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
   useKeyboardSurface: vi.fn(),
+  useSearchShortcutTarget: vi.fn(),
 }));
 
 const contextMocks = vi.hoisted(() => ({
@@ -151,7 +171,7 @@ vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
   useKeyboardSurface: (...args: unknown[]) => shortcutMocks.useKeyboardSurface(...args),
   useKeyboardContext: () => contextMocks,
-  useSearchShortcutTarget: () => undefined,
+  useSearchShortcutTarget: (...args: unknown[]) => shortcutMocks.useSearchShortcutTarget(...args),
 }));
 
 vi.mock('@core/contexts/ZoomContext', () => ({
@@ -337,6 +357,18 @@ const seedLogSnapshot = (
       issues: overrides.issues ?? [],
       truncation: overrides.truncation ?? null,
       pods: Array.from(new Set(entries.map((entry) => entry.pod))),
+      containers: Array.from(
+        new Map(
+          entries.map((entry) => [
+            `${entry.container}|${entry.isInit}|${Boolean(entry.isEphemeral)}`,
+            {
+              name: entry.container,
+              isInit: entry.isInit,
+              isEphemeral: Boolean(entry.isEphemeral),
+            },
+          ])
+        ).values()
+      ),
     },
     stats: null,
     error: overrides.error ?? null,
@@ -475,6 +507,7 @@ describe('LogViewer active pod synchronisation', () => {
       // keep working without per-test plumbing.
       containerLogsScope = activeScope,
       panelId = 'obj:test:deployment:team-a:api',
+      objectName = 'api',
     } = overrides;
 
     await act(async () => {
@@ -486,10 +519,83 @@ describe('LogViewer active pod synchronisation', () => {
           activePodNames={activePodNames}
           clusterId={clusterId}
           panelId={panelId}
+          objectName={objectName}
         />
       );
       await Promise.resolve();
     });
+  };
+
+  // Opens the Download button and chooses where the shown logs go.
+  const downloadLogs = async (choice: 'Copy to Clipboard' | 'Save to File') => {
+    await act(async () => {
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Download logs"]'),
+        'expected the Download button'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    const item = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
+      (element) => element.textContent === choice
+    );
+    await act(async () => {
+      requireValue(item, `expected ${choice}`).dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+
+  // Clicks the format button until the logs show the given format.
+  const showLogFormat = async (label: 'Pretty' | 'Table') => {
+    for (let step = 0; step < 3; step += 1) {
+      const button = requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label^="Log format:"]'),
+        'expected the format button'
+      );
+      if (button.getAttribute('aria-label') === `Log format: ${label}`) {
+        return;
+      }
+      await act(async () => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    }
+    throw new Error(`format ${label} was not reached`);
+  };
+
+  // Opens the search row (filter box and search options) unless it is already open.
+  const openSearch = async () => {
+    const button = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Search logs"]'),
+      'expected the search button'
+    );
+    if (button.getAttribute('aria-expanded') === 'true') {
+      return;
+    }
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+  };
+
+  // Clicks the filter mode button until it shows the given mode.
+  const chooseFilterMode = async (label: 'All' | 'Filtered' | 'Invert') => {
+    for (let step = 0; step < 3; step += 1) {
+      const button = requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label^="Filter mode:"]'),
+        'expected the filter mode button'
+      );
+      if (button.getAttribute('aria-label') === `Filter mode: ${label}`) {
+        return;
+      }
+      await act(async () => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    }
+    throw new Error(`filter mode ${label} was not reached`);
   };
 
   const getLatestShortcut = (key: string) => {
@@ -612,7 +718,6 @@ describe('LogViewer active pod synchronisation', () => {
   it('registers log tab shortcuts with appropriate availability', async () => {
     await renderViewer({ activePodNames: ['web-1'], isActive: true });
     expect(getLatestShortcut('r')).toBeTruthy();
-    expect(getLatestShortcut('h')).toBeTruthy();
     expect(getLatestShortcut('i')).toBeTruthy();
     expect(getLatestShortcut('x')).toBeTruthy();
     expect(getLatestShortcut('t')).toBeTruthy();
@@ -646,7 +751,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(getLatestShortcut('v')?.enabled).toBe(true);
   });
 
-  it('toggles highlight, inverse, regex, and previous logs from keyboard shortcuts', async () => {
+  it('toggles inverse filtering, regex, and previous logs from keyboard shortcuts', async () => {
     seedLogSnapshot(
       [
         {
@@ -666,6 +771,7 @@ describe('LogViewer active pod synchronisation', () => {
       resourceKind: 'Pod',
       panelId: 'obj:test:shortcut-toggles',
     });
+    await openSearch();
 
     const filterInput = await waitForElement(() =>
       container.querySelector<HTMLInputElement>('input[placeholder="Filter"]')
@@ -678,11 +784,6 @@ describe('LogViewer active pod synchronisation', () => {
     await act(async () => {
       nativeValueSetter?.call(filterInput, 'panic');
       filterInput.dispatchEvent(new Event('input', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      expect(getLatestShortcut('h')?.handler()).toBe(true);
       await Promise.resolve();
     });
 
@@ -701,20 +802,7 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
 
-    expect(
-      container
-        .querySelector<HTMLButtonElement>(
-          'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-        )
-        ?.getAttribute('aria-pressed')
-    ).toBe('false');
-    expect(
-      container
-        .querySelector<HTMLButtonElement>(
-          'button[aria-label="Invert the text filter to show only non-matching logs"]'
-        )
-        ?.getAttribute('aria-pressed')
-    ).toBe('true');
+    expect(container.querySelector('button[aria-label="Filter mode: Invert"]')).not.toBeNull();
     expect(
       container
         .querySelector<HTMLButtonElement>(
@@ -755,11 +843,7 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
 
-    expect(
-      container
-        .querySelector<HTMLButtonElement>('button[aria-label="Show pretty JSON"]')
-        ?.getAttribute('aria-pressed')
-    ).toBe('true');
+    expect(container.querySelector('button[aria-label="Log format: Pretty"]')).not.toBeNull();
   });
 
   it('disables handlers when the tab is inactive', async () => {
@@ -791,7 +875,6 @@ describe('LogViewer active pod synchronisation', () => {
     };
 
     expectDisabledShortcut('r');
-    expectDisabledShortcut('h');
     expectDisabledShortcut('i');
     expectDisabledShortcut('x');
     expectDisabledShortcut('t');
@@ -865,7 +948,8 @@ describe('LogViewer active pod synchronisation', () => {
 
       expect(container.textContent).toContain('cannot list resource "pods"');
       expect(container.querySelector('button[aria-label="Show previous logs (V)"]')).not.toBeNull();
-      expect(container.querySelector('button[aria-label="Toggle auto-refresh"]')).not.toBeNull();
+      // The failure turned auto-refresh off; its button offers to start it again.
+      expect(container.querySelector('button[aria-label="Start auto-refresh"]')).not.toBeNull();
     } finally {
       await stream.close();
     }
@@ -1122,18 +1206,16 @@ describe('LogViewer active pod synchronisation', () => {
       defaultScope
     );
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'unmatched',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -1144,9 +1226,11 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.querySelector('[aria-label="Active log filters"]')?.textContent).toContain(
       'Text: unmatched'
     );
-    expect(container.querySelector('.logs-viewer-count')?.textContent?.trim()).toBe(
-      '0 matching logs'
-    );
+    expect(
+      container
+        .querySelector('[aria-label="Active log filters"] .logs-viewer-count')
+        ?.textContent?.trim()
+    ).toBe('0/2 logs');
   });
 
   it('virtualizes large raw log buffers instead of rendering every row at once', async () => {
@@ -1214,18 +1298,16 @@ describe('LogViewer active pod synchronisation', () => {
     try {
       const panelId = 'obj:test:pretty-remount-scroll';
       setLogViewerPrefs(panelId, {
-        selectedFilters: [],
+        selectedFilters: { mode: 'all' },
         autoRefresh: true,
-        timestampMode: 'default',
         showTimestamps: true,
+        searchOpen: false,
         wrapText: false,
         textFilter: '',
-        highlightMatches: false,
-        inverseMatches: false,
+        filterMode: 'filtered',
         caseSensitiveMatches: false,
         regexMatches: false,
         displayMode: 'pretty',
-        isParsedView: false,
         expandedRows: [],
         showPreviousContainerLogs: false,
       });
@@ -1350,20 +1432,21 @@ describe('LogViewer active pod synchronisation', () => {
         'button[aria-label="Resume scrolling"]'
       );
       expect(resumeButton).not.toBeNull();
+      // The button is named for what a click does; like the other choice buttons it has no pressed state.
       const autoRefreshButton = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Toggle auto-refresh"]'
+        'button[aria-label="Stop auto-refresh"]'
       );
-      expect(autoRefreshButton?.getAttribute('aria-pressed')).toBe('true');
+      expect(autoRefreshButton?.hasAttribute('aria-pressed')).toBe(false);
       await act(async () => {
         autoRefreshButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
-      expect(autoRefreshButton?.getAttribute('aria-pressed')).toBe('false');
+      expect(autoRefreshButton?.getAttribute('aria-label')).toBe('Start auto-refresh');
       await act(async () => {
         resumeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         await Promise.resolve();
       });
 
-      expect(autoRefreshButton?.getAttribute('aria-pressed')).toBe('true');
+      expect(autoRefreshButton?.getAttribute('aria-label')).toBe('Stop auto-refresh');
       expect(container.textContent).not.toContain('anchored line 1');
       expect(container.textContent).toContain('anchored line 4');
       expect(content.scrollTop).toBe(400);
@@ -1483,24 +1566,119 @@ describe('LogViewer active pod synchronisation', () => {
     expect(filteredMetadataSpans.some((span) => span.textContent?.includes('[app]'))).toBe(false);
   });
 
+  // A container that starts after the tab opens (a debug container, or a sidecar
+  // from a rollout) is read into the container list when its first line
+  // arrives, so its lines name it and the Containers dropdown offers it.
+  it('reads the container list again when a line comes from a container it lacks', async () => {
+    const containersMock = GetContainerLogsScopeContainers as unknown as ViMock;
+    const scope = buildContainerLogsScope('team-a:/v1:pod:api-pod-0');
+    const appLine = {
+      pod: 'api-pod-0',
+      container: 'app',
+      line: 'app line',
+      timestamp: '2024-05-01T10:00:00Z',
+      isInit: false,
+    };
+    const debugLine = (line: string, timestamp: string) => ({
+      pod: 'api-pod-0',
+      container: 'debugger',
+      line,
+      timestamp,
+      isInit: false,
+      isEphemeral: true,
+    });
+    const metadata = () =>
+      Array.from(container.querySelectorAll('.log-viewer-line .log-viewer-metadata')).map((span) =>
+        span.textContent?.trim()
+      );
+    seedLogSnapshot([appLine], scope);
+    await renderViewer({ resourceKind: 'pod' });
+    await waitForMockCalls(containersMock, 1);
+    // One container, so lines don't name it.
+    expect(metadata()).not.toContain('[app]');
+
+    containersMock.mockResolvedValue([scopeContainer('app'), scopeContainer('debugger', 'debug')]);
+    seedLogSnapshot([appLine, debugLine('attached', '2024-05-01T10:00:01Z')], scope);
+    await renderViewer({ resourceKind: 'pod' });
+    await waitForMockCalls(containersMock, 2);
+    await flushAsync();
+    expect(metadata()).toContain('[app]');
+    expect(metadata()).toContain('[debugger (debug)]');
+    const containerSelect = requireValue(
+      container.querySelector<HTMLSelectElement>('[data-testid="logs-containers-dropdown"]'),
+      'expected the containers dropdown'
+    );
+    expect(Array.from(containerSelect.options).map((option) => option.value)).toContain(
+      'debug:debugger'
+    );
+
+    // More lines from listed containers don't read it again.
+    seedLogSnapshot(
+      [
+        appLine,
+        debugLine('attached', '2024-05-01T10:00:01Z'),
+        debugLine('more', '2024-05-01T10:00:02Z'),
+      ],
+      scope
+    );
+    await renderViewer({ resourceKind: 'pod' });
+    await flushAsync();
+    expect(containersMock).toHaveBeenCalledTimes(2);
+  });
+
+  // A container the list still lacks after a reread (its pod ended, or the read
+  // failed) is not read for again.
+  it('reads the container list at most once for each container it lacks', async () => {
+    const containersMock = GetContainerLogsScopeContainers as unknown as ViMock;
+    const scope = buildContainerLogsScope('team-a:/v1:pod:api-pod-0');
+    const line = (text: string, timestamp: string, name: string) => ({
+      pod: 'api-pod-0',
+      container: name,
+      line: text,
+      timestamp,
+      isInit: false,
+    });
+    seedLogSnapshot([line('one', '2024-05-01T10:00:00Z', 'app')], scope);
+    await renderViewer({ resourceKind: 'pod' });
+    await waitForMockCalls(containersMock, 1);
+
+    seedLogSnapshot(
+      [line('one', '2024-05-01T10:00:00Z', 'app'), line('two', '2024-05-01T10:00:01Z', 'gone')],
+      scope
+    );
+    await renderViewer({ resourceKind: 'pod' });
+    await waitForMockCalls(containersMock, 2);
+    await flushAsync();
+
+    seedLogSnapshot(
+      [
+        line('one', '2024-05-01T10:00:00Z', 'app'),
+        line('two', '2024-05-01T10:00:01Z', 'gone'),
+        line('three', '2024-05-01T10:00:02Z', 'gone'),
+      ],
+      scope
+    );
+    await renderViewer({ resourceKind: 'pod' });
+    await flushAsync();
+    expect(containersMock).toHaveBeenCalledTimes(2);
+  });
+
   // An empty log (reconnecting, or switching to previous logs) says nothing
   // about whether the lines are JSON, so the table view stays on until lines
   // arrive that are not.
   it('keeps the table view while the log is empty', async () => {
     const panelId = 'obj:test:parsed-while-empty';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'parsed',
-      isParsedView: true,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -1558,7 +1736,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.querySelector('[data-testid="gridtable-parsed-logs"]')).toBeFalsy();
   });
 
-  it('switches between raw, pretty JSON, and parsed output modes from the icon bar', async () => {
+  it('cycles raw, pretty JSON, and table output from the format button and its menu', async () => {
     seedLogSnapshot([
       {
         pod: 'web-1',
@@ -1571,42 +1749,49 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer();
 
-    const prettyButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Show pretty JSON"]'
-    );
-    const parsedButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Parse the JSON into a table"]'
-    );
-    expect(prettyButton).toBeTruthy();
-    expect(parsedButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(prettyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
+    const formatButton = () =>
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label^="Log format:"]'),
+        'expected the format button'
       );
-      await Promise.resolve();
-    });
-    expect(prettyButton?.getAttribute('aria-pressed')).toBe('true');
+    const click = (element: Element) =>
+      act(async () => {
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    const parsedTable = () => container.querySelector('[data-testid="gridtable-parsed-logs"]');
+
+    expect(formatButton().getAttribute('aria-label')).toBe('Log format: Raw');
+
+    await click(formatButton());
+    expect(formatButton().getAttribute('aria-label')).toBe('Log format: Pretty');
     expect(container.textContent).toContain('"nested": {');
 
-    await act(async () => {
-      requireValue(parsedButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-    expect(prettyButton?.getAttribute('aria-pressed')).toBe('false');
-    expect(parsedButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(container.querySelector('[data-testid="gridtable-parsed-logs"]')).toBeTruthy();
+    await click(formatButton());
+    expect(formatButton().getAttribute('aria-label')).toBe('Log format: Table');
+    expect(parsedTable()).toBeTruthy();
 
-    await act(async () => {
-      requireValue(parsedButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-    expect(parsedButton?.getAttribute('aria-pressed')).toBe('false');
-    expect(container.querySelector('[data-testid="gridtable-parsed-logs"]')).toBeFalsy();
+    await click(formatButton());
+    expect(formatButton().getAttribute('aria-label')).toBe('Log format: Raw');
+    expect(parsedTable()).toBeFalsy();
+    expect(container.textContent).not.toContain('"nested": {');
+
+    // The menu offers every format, marks the current one, and jumps straight to a pick.
+    await click(
+      requireValue(
+        container.querySelector('button[aria-label="Choose log format"]'),
+        'expected the format menu button'
+      )
+    );
+    const choices = Array.from(document.body.querySelectorAll('[role="menuitemradio"]'));
+    expect(choices.map((item) => [item.textContent, item.getAttribute('aria-checked')])).toEqual([
+      ['Raw', 'true'],
+      ['Pretty', 'false'],
+      ['Table', 'false'],
+    ]);
+    await click(requireValue(choices[2], 'expected the Table choice'));
+    expect(formatButton().getAttribute('aria-label')).toBe('Log format: Table');
+    expect(parsedTable()).toBeTruthy();
   });
 
   it('hides pretty JSON and parsed JSON buttons when logs are not parseable', async () => {
@@ -1622,8 +1807,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer();
 
-    expect(container.querySelector('button[aria-label="Show pretty JSON"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="Parse the JSON into a table"]')).toBeNull();
+    expect(container.querySelector('button[aria-label^="Log format:"]')).toBeNull();
   });
 
   it('copies parsed logs as CSV using the visible parsed columns', async () => {
@@ -1638,29 +1822,8 @@ describe('LogViewer active pod synchronisation', () => {
     ]);
 
     await renderViewer();
-
-    const parsedButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Parse the JSON into a table"]'
-    );
-    const copyButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Copy to clipboard"]'
-    );
-    expect(parsedButton).toBeTruthy();
-    expect(copyButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(parsedButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await showLogFormat('Table');
+    await downloadLogs('Copy to Clipboard');
 
     expect(writeTextMock).toHaveBeenCalledWith(
       [
@@ -1668,6 +1831,60 @@ describe('LogViewer active pod synchronisation', () => {
         '2024-05-01T11:00:00Z,web-1,app,info,2,"hello, world"',
       ].join('\n')
     );
+  });
+
+  it('saves the same logs Copy takes: a .log file, or a .csv file in Table view', async () => {
+    saveFileMocks.SaveLogFile.mockResolvedValue({ path: '/tmp/api.log', bytes: 1 });
+    saveFileMocks.SaveCsvFile.mockResolvedValue({ path: '/tmp/api.csv', bytes: 1 });
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: '{"level":"info","message":"hello, world","count":2}',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+    ]);
+    await renderViewer();
+    const download = () => container.querySelector('button[aria-label="Download logs"]');
+
+    await downloadLogs('Copy to Clipboard');
+    await downloadLogs('Save to File');
+    expect(saveFileMocks.SaveLogFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^luxury-yacht-deployment-api-logs-\d{14}\.log$/),
+      writeTextMock.mock.calls[0]?.[0]
+    );
+    expect(download()?.classList.contains('feedback-success')).toBe(true);
+
+    await showLogFormat('Table');
+    await downloadLogs('Copy to Clipboard');
+    await downloadLogs('Save to File');
+    expect(saveFileMocks.SaveCsvFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^luxury-yacht-deployment-api-logs-\d{14}\.csv$/),
+      writeTextMock.mock.calls[1]?.[0]
+    );
+    expect(writeTextMock.mock.calls[1]?.[0]).toContain('level,count,message');
+  });
+
+  // Dismissing the save dialog is not a failure, so the button shows no feedback.
+  it('shows no feedback when the save dialog is dismissed', async () => {
+    saveFileMocks.SaveLogFile.mockResolvedValue({ path: '', bytes: 0, canceled: true });
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'ready',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+    ]);
+    await renderViewer();
+
+    await downloadLogs('Save to File');
+    expect(saveFileMocks.SaveLogFile).toHaveBeenCalledOnce();
+    const download = container.querySelector('button[aria-label="Download logs"]');
+    expect(download?.classList.contains('feedback-error')).toBe(false);
+    expect(download?.classList.contains('feedback-success')).toBe(false);
   });
 
   it('keeps reserved metadata values in CSV when pod and timestamp columns are hidden', async () => {
@@ -1686,19 +1903,17 @@ describe('LogViewer active pod synchronisation', () => {
     );
     await renderViewer({ resourceKind: 'pod', containerLogsScope: scope });
 
-    for (const label of [
-      'Show timestamps from the Kubernetes API',
-      'Parse the JSON into a table',
-      'Copy to clipboard',
-    ]) {
-      await act(async () => {
+    const clickControl = (label: string) =>
+      act(async () => {
         requireValue(
           container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`),
           `expected ${label} control`
         ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
         await Promise.resolve();
       });
-    }
+    await clickControl('Show timestamps from the Kubernetes API');
+    await showLogFormat('Table');
+    await downloadLogs('Copy to Clipboard');
 
     expect(writeTextMock).toHaveBeenCalledWith('Container,_pod,_timestamp\napp,-,');
   });
@@ -1757,7 +1972,52 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({ activePodNames: ['web-1'] });
 
-    expect(container.textContent).toContain('[11:00:00.123] [web-1/app] hello');
+    expect(container.textContent).toContain('[11:00:00.123] [web-1] hello');
+  });
+
+  it('names the container on workload lines only when there is more than one container', async () => {
+    setAppPreferencesForTesting({ objPanelLogsApiTimestampFormat: 'HH:mm:ss.SSS' });
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'hello',
+        timestamp: '2024-05-01T11:00:00.000Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-2',
+        container: 'app',
+        line: 'world',
+        timestamp: '2024-05-01T11:00:01.000Z',
+        isInit: false,
+      },
+    ]);
+    const lines = () =>
+      Array.from(container.querySelectorAll('.log-viewer-line')).map((element) =>
+        element.textContent?.replace(/\s+/g, ' ').trim()
+      );
+    const containersMock = GetContainerLogsScopeContainers as unknown as ViMock;
+
+    // One container: the pod is enough.
+    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+    await waitForMockCalls(containersMock, 1);
+    await flushAsync();
+    expect(lines()).toEqual(['[11:00:00.000] [web-1] hello', '[11:00:01.000] [web-2] world']);
+
+    // A second container: lines name the container again.
+    act(() => {
+      root.unmount();
+    });
+    containersMock.mockResolvedValue([scopeContainer('app'), scopeContainer('sidecar')]);
+    root = ReactDOM.createRoot(container);
+    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+    await waitForMockCalls(containersMock, 2);
+    await flushAsync();
+    expect(lines()).toEqual([
+      '[11:00:00.000] [web-1/app] hello',
+      '[11:00:01.000] [web-2/app] world',
+    ]);
   });
 
   it('keeps the workload pod metadata when the log line is empty', async () => {
@@ -1777,7 +2037,7 @@ describe('LogViewer active pod synchronisation', () => {
     const lines = Array.from(container.querySelectorAll('.log-viewer-line')).map((element) =>
       element.textContent?.replace(/\s+/g, ' ').trim()
     );
-    expect(lines).toEqual(['[11:00:00.123] [web-1/app] [container emitted an empty log]']);
+    expect(lines).toEqual(['[11:00:00.123] [web-1] [container emitted an empty log]']);
   });
 
   it('copies the configured API timestamp format in raw and parsed views', async () => {
@@ -1793,38 +2053,13 @@ describe('LogViewer active pod synchronisation', () => {
     ]);
 
     await renderViewer({ activePodNames: ['web-1'] });
-
-    const copyButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Copy to clipboard"]'
-    );
-    const parsedButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Parse the JSON into a table"]'
-    );
-    expect(copyButton).toBeTruthy();
-    expect(parsedButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await downloadLogs('Copy to Clipboard');
     expect(writeTextMock).toHaveBeenLastCalledWith(
-      '[11:00:00.123] [web-1/app] {"level":"info","message":"hello"}'
+      '[11:00:00.123] [web-1] {"level":"info","message":"hello"}'
     );
 
-    await act(async () => {
-      requireValue(parsedButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-    await act(async () => {
-      requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await showLogFormat('Table');
+    await downloadLogs('Copy to Clipboard');
 
     expect(writeTextMock).toHaveBeenLastCalledWith(
       ['API Timestamp,Pod,Container,level,message', '11:00:00.123,web-1,app,info,hello'].join('\n')
@@ -1862,7 +2097,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({ activePodNames: ['web-1'] });
 
-    expect(container.textContent).toContain(`[${expectedTimestamp}] [web-1/app] hello`);
+    expect(container.textContent).toContain(`[${expectedTimestamp}] [web-1] hello`);
   });
 
   it('toggles API timestamps from the icon bar', async () => {
@@ -1906,6 +2141,439 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).toContain('2024-05-01T11:00:00.123Z');
   });
 
+  it('shows the active-filters strip only while a chip or the log count has something to show', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'panic in worker',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'steady state',
+        timestamp: '2024-05-01T11:00:01Z',
+        isInit: false,
+      },
+    ]);
+    await renderViewer();
+    const strip = () => container.querySelector('[aria-label="Active log filters"]');
+    expect(strip()).toBeNull();
+
+    await openSearch();
+    const input = requireValue(
+      container.querySelector<HTMLInputElement>('input[placeholder="Filter"]'),
+      'expected the filter box'
+    );
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setValue?.call(input, 'panic');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await chooseFilterMode('Filtered');
+    expect(strip()?.querySelector('.logs-viewer-count')?.textContent).toBe('1/2 logs');
+
+    await act(async () => {
+      requireValue(
+        strip()?.querySelector<HTMLButtonElement>('button[aria-label="Clear all filters"]'),
+        'expected Clear all'
+      ).click();
+      await Promise.resolve();
+    });
+    expect(strip()).toBeNull();
+  });
+
+  // The Table view has a row only for JSON lines, so its count is of table rows,
+  // as in Node Logs.
+  it('counts table rows, not filtered lines, in the Table view', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: '{"level":"error","message":"db down"}',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'error: disk full',
+        timestamp: '2024-05-01T11:00:01Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: '{"level":"info","message":"ok"}',
+        timestamp: '2024-05-01T11:00:02Z',
+        isInit: false,
+      },
+    ]);
+    await renderViewer();
+    await openSearch();
+    const input = requireValue(
+      container.querySelector<HTMLInputElement>('input[placeholder="Filter"]'),
+      'expected the filter box'
+    );
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setValue?.call(input, 'error');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await chooseFilterMode('Filtered');
+    const count = () =>
+      container.querySelector('[aria-label="Active log filters"] .logs-viewer-count')?.textContent;
+    expect(count()).toBe('2/3 logs');
+
+    await showLogFormat('Table');
+    expect(count()).toBe('1/3 logs');
+  });
+
+  it('disables search, timestamps and wrap, and their shortcuts, until a log line arrives', async () => {
+    const control = (label: string) =>
+      container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    const latestSearchTarget = () =>
+      shortcutMocks.useSearchShortcutTarget.mock.calls[
+        shortcutMocks.useSearchShortcutTarget.mock.calls.length - 1
+      ]?.[0] as { isActive: boolean; focus: () => void } | undefined;
+    const labels = ['Search logs', 'Show timestamps from the Kubernetes API', 'Wrap text'];
+    const searchKeys = ['t', 'w', 'i', 'x', 'c'];
+
+    seedLogSnapshot([]);
+    await renderViewer();
+    for (const label of labels) {
+      expect(control(label)?.disabled, label).toBe(true);
+    }
+    for (const key of searchKeys) {
+      expect(getLatestShortcut(key)?.enabled, key).toBe(false);
+    }
+    // The logs tab still claims the search shortcut, so it can't reach a table
+    // behind the panel, but it opens nothing.
+    expect(latestSearchTarget()?.isActive).toBe(true);
+    await act(async () => {
+      requireValue(latestSearchTarget(), 'expected a search shortcut target').focus();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('input[placeholder="Filter"]')).toBeNull();
+
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'ready',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+    ]);
+    await renderViewer();
+    for (const label of labels) {
+      expect(control(label)?.disabled, label).toBe(false);
+    }
+    for (const key of searchKeys) {
+      expect(getLatestShortcut(key)?.enabled, key).toBe(true);
+    }
+    expect(latestSearchTarget()?.isActive).toBe(true);
+  });
+
+  it('keeps an open search row closable when the logs empty out', async () => {
+    await renderViewer();
+    await openSearch();
+    const searchButton = () =>
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Search logs"]'),
+        'expected the search button'
+      );
+
+    seedLogSnapshot([]);
+    await renderViewer();
+    expect(container.querySelector('input[placeholder="Filter"]')).not.toBeNull();
+    expect(searchButton().disabled).toBe(false);
+    expect(getLatestShortcut('i')?.enabled).toBe(true);
+
+    await act(async () => {
+      searchButton().click();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('input[placeholder="Filter"]')).toBeNull();
+    expect(searchButton().disabled).toBe(true);
+    expect(getLatestShortcut('i')?.enabled).toBe(false);
+  });
+
+  it('applies a time zone picked from the timestamp menu app-wide and shows timestamps', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'hello world',
+        timestamp: '2024-05-01T11:00:00.123Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer();
+
+    const timestampButton = requireValue(
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show timestamps from the Kubernetes API"]'
+      ),
+      'expected the timestamp toggle'
+    );
+    const zoneButton = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Timestamp time zone"]'),
+      'expected the time zone menu button'
+    );
+    const click = (element: Element) =>
+      act(async () => {
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    const pickZone = async (label: RegExp) => {
+      await click(zoneButton);
+      const choice = Array.from(document.body.querySelectorAll('[role="menuitemradio"]')).find(
+        (item) => label.test(item.textContent ?? '')
+      );
+      await click(requireValue(choice, `expected the ${label} choice`));
+    };
+
+    // Picking a zone while timestamps are hidden shows them again.
+    await click(timestampButton);
+    expect(container.textContent).not.toContain('2024-05-01T11:00:00.123Z');
+
+    await pickZone(/^Local/);
+    expect(getObjPanelLogsApiTimestampUseLocalTimeZone()).toBe(true);
+    expect(timestampButton.getAttribute('aria-pressed')).toBe('true');
+    // The toggle names the zone in use.
+    expect(timestampButton.textContent).toBe('LOCAL');
+    expect(container.textContent).toMatch(/\d{4}-\d\d-\d\dT\d\d:\d\d:00\.123[+-]\d\d:\d\d/);
+
+    await pickZone(/^UTC$/);
+    expect(getObjPanelLogsApiTimestampUseLocalTimeZone()).toBe(false);
+    expect(timestampButton.textContent).toBe('UTC');
+    expect(container.textContent).toContain('2024-05-01T11:00:00.123Z');
+  });
+
+  it('shows all, matching, or non-matching lines from the filter mode button', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'panic in worker',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'steady state',
+        timestamp: '2024-05-01T11:00:01Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer();
+    await openSearch();
+    const input = requireValue(
+      container.querySelector<HTMLInputElement>('input[placeholder="Filter"]'),
+      'expected the filter box'
+    );
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        input,
+        'panic'
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const modeButton = () =>
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label^="Filter mode:"]'),
+        'expected the filter mode button'
+      );
+    const click = (element: Element) =>
+      act(async () => {
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    const highlighted = () =>
+      Array.from(container.querySelectorAll('.log-viewer-line mark.log-viewer-highlight')).map(
+        (mark) => mark.textContent
+      );
+
+    // All, the default: every line, with the match highlighted.
+    expect(modeButton().getAttribute('aria-label')).toBe('Filter mode: All');
+    expect(container.textContent).toContain('panic in worker');
+    expect(container.textContent).toContain('steady state');
+    expect(highlighted()).toEqual(['panic']);
+
+    // Filtered: only matching lines, still highlighted.
+    await click(modeButton());
+    expect(modeButton().getAttribute('aria-label')).toBe('Filter mode: Filtered');
+    expect(container.textContent).toContain('panic in worker');
+    expect(container.textContent).not.toContain('steady state');
+    expect(highlighted()).toEqual(['panic']);
+
+    // Invert: only the lines that do not match, nothing highlighted.
+    await click(modeButton());
+    expect(modeButton().getAttribute('aria-label')).toBe('Filter mode: Invert');
+    expect(container.textContent).not.toContain('panic in worker');
+    expect(container.textContent).toContain('steady state');
+    expect(highlighted()).toEqual([]);
+
+    // The menu offers every mode, marks the current one, and jumps straight to a pick.
+    await click(
+      requireValue(
+        container.querySelector('button[aria-label="Choose filter mode"]'),
+        'expected the filter mode menu button'
+      )
+    );
+    const choices = Array.from(document.body.querySelectorAll('[role="menuitemradio"]'));
+    expect(choices.map((item) => [item.textContent, item.getAttribute('aria-checked')])).toEqual([
+      ['All', 'false'],
+      ['Filtered', 'false'],
+      ['Invert', 'true'],
+    ]);
+    await click(requireValue(choices[0], 'expected the All choice'));
+    expect(modeButton().getAttribute('aria-label')).toBe('Filter mode: All');
+    expect(container.textContent).toContain('panic in worker');
+    expect(container.textContent).toContain('steady state');
+  });
+
+  it('opens search from the search button and keeps filtering after the row closes', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'panic in worker',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'steady state',
+        timestamp: '2024-05-01T11:00:01Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer();
+
+    const searchButton = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Search logs"]'),
+      'expected the search button'
+    );
+    const filterInput = () =>
+      container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
+    const clickSearch = () =>
+      act(async () => {
+        searchButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+    expect(searchButton.getAttribute('aria-expanded')).toBe('false');
+    expect(filterInput()).toBeNull();
+
+    await clickSearch();
+    expect(searchButton.getAttribute('aria-expanded')).toBe('true');
+    const input = requireValue(filterInput(), 'expected the filter box');
+    expect(document.activeElement).toBe(input);
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        input,
+        'panic'
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await chooseFilterMode('Filtered');
+    expect(container.textContent).toContain('panic in worker');
+    expect(container.textContent).not.toContain('steady state');
+
+    // Closing the row only hides it: the logs stay filtered.
+    await clickSearch();
+    expect(searchButton.getAttribute('aria-expanded')).toBe('false');
+    expect(filterInput()).toBeNull();
+    expect(container.textContent).toContain('panic in worker');
+    expect(container.textContent).not.toContain('steady state');
+  });
+
+  it('opens the search row from the search shortcut and focuses the filter', async () => {
+    await renderViewer();
+    expect(container.querySelector('input[placeholder="Filter"]')).toBeNull();
+
+    const target = shortcutMocks.useSearchShortcutTarget.mock.calls[
+      shortcutMocks.useSearchShortcutTarget.mock.calls.length - 1
+    ]?.[0] as { focus: () => void } | undefined;
+    await act(async () => {
+      requireValue(target, 'expected a search shortcut target').focus();
+      await Promise.resolve();
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
+    expect(input).not.toBeNull();
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('closes the open search row on Escape from anywhere in the viewer', async () => {
+    await renderViewer();
+    await openSearch();
+    const input = requireValue(
+      container.querySelector<HTMLInputElement>('input[placeholder="Filter"]'),
+      'expected the filter box'
+    );
+    expect(document.activeElement).toBe(input);
+
+    const surface = requireValue(
+      getLatestKeyboardSurfaceConfig('onEscape'),
+      'expected an Escape surface'
+    );
+    expect(surface.active).toBe(true);
+    // The surface covers the search row and the log output, not just the box.
+    expect(surface.rootRef?.current?.contains(input)).toBe(true);
+    expect(
+      surface.rootRef?.current?.contains(container.querySelector('.logs-viewer-content'))
+    ).toBe(true);
+
+    let handled = false;
+    await act(async () => {
+      handled = requireValue(surface.onEscape, 'expected an Escape handler')();
+      await Promise.resolve();
+    });
+    expect(handled).toBe(true);
+    const searchButton = container.querySelector('button[aria-label="Search logs"]');
+    expect(searchButton?.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('input[placeholder="Filter"]')).toBeNull();
+    expect(document.activeElement).toBe(searchButton);
+    expect(getLatestKeyboardSurfaceConfig('onEscape')?.active).toBe(false);
+  });
+
+  it('remembers an open search row when the viewer remounts', async () => {
+    await renderViewer();
+    await act(async () => {
+      requireValue(
+        container.querySelector('button[aria-label="Search logs"]'),
+        'expected the search button'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    act(() => {
+      root.unmount();
+    });
+    root = ReactDOM.createRoot(container);
+    await renderViewer();
+
+    expect(
+      container.querySelector('button[aria-label="Search logs"]')?.getAttribute('aria-expanded')
+    ).toBe('true');
+    expect(container.querySelector('input[placeholder="Filter"]')).not.toBeNull();
+  });
+
   it('does not duplicate the workload pod/container label when timestamps are hidden', async () => {
     seedLogSnapshot([
       {
@@ -1935,7 +2603,7 @@ describe('LogViewer active pod synchronisation', () => {
       .querySelector('.log-viewer-line')
       ?.textContent?.replace(/\s+/g, ' ')
       .trim();
-    expect(line).toBe('[web-1/app] matched log');
+    expect(line).toBe('[web-1] matched log');
   });
 
   it('only shows the ANSI colors button when the current logs contain ANSI codes', async () => {
@@ -2034,24 +2702,22 @@ describe('LogViewer active pod synchronisation', () => {
     const lines = Array.from(container.querySelectorAll('.log-viewer-line')).map((el) =>
       el.textContent?.replace(/\s+/g, ' ').trim()
     );
-    expect(lines).toEqual(['[2024-05-01T10:00:00Z] [web-1/app] matched log']);
+    expect(lines).toEqual(['[2024-05-01T10:00:00Z] [web-1] matched log']);
   });
 
   it('supports highlighting ANSI-colored log text in the DOM renderer', async () => {
     const panelId = 'obj:test:highlight-ansi';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'INFO',
-      highlightMatches: true,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: true,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -2085,18 +2751,16 @@ describe('LogViewer active pod synchronisation', () => {
   it('supports no-wrap for ANSI-colored log text in the DOM renderer', async () => {
     const panelId = 'obj:test:nowrap-ansi';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: false,
       wrapText: false,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -2148,18 +2812,7 @@ describe('LogViewer active pod synchronisation', () => {
     });
     await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
     await flushAsync();
-
-    const copyButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Copy to clipboard"]'
-    );
-    expect(copyButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await downloadLogs('Copy to Clipboard');
 
     expect(writeTextMock).toHaveBeenLastCalledWith(
       '[2024-05-01T10:00:00Z] \u001b[31merror\u001b[0m happened'
@@ -2285,18 +2938,16 @@ describe('LogViewer active pod synchronisation', () => {
       scopeContainer('sidecar'),
     ]);
     setLogViewerPrefs('obj:test:deployment:team-a:api', {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -2369,7 +3020,7 @@ describe('LogViewer active pod synchronisation', () => {
       el.textContent?.replace(/\s+/g, ' ').trim()
     );
     expect(filteredLines).toHaveLength(1);
-    expect(filteredLines[0]).toContain('[web-1/app] matched log');
+    expect(filteredLines[0]).toContain('[web-1] matched log');
     expect(getContainerLogsStreamScopeParams(defaultScope)).toEqual({
       selectedFilters: ['pod:web-1', 'container:app'],
     });
@@ -2455,6 +3106,11 @@ describe('LogViewer active pod synchronisation', () => {
       defaultScope
     );
 
+    // Two containers, so lines name (and link) the container.
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
+      scopeContainer('app'),
+      scopeContainer('sidecar'),
+    ]);
     await renderViewer({ activePodNames: ['web-1', 'web-2'], panelId });
 
     const podButton = await waitForElement(() =>
@@ -2559,18 +3215,16 @@ describe('LogViewer active pod synchronisation', () => {
   it('keeps workload metadata links on the entry when a message starts with [a/b]', async () => {
     const panelId = 'obj:test:deployment:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'hidden',
       showTimestamps: false,
+      searchOpen: false,
       wrapText: true,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -2596,7 +3250,7 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(container.querySelector('button[aria-label="Show only logs from pod main"]')).toBeNull();
     expect(container.querySelector('.log-viewer-line')?.textContent).toBe(
-      '[web-1/app] [main/INFO] Server started'
+      '[web-1] [main/INFO] Server started'
     );
     await act(async () => podButton.click());
     expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
@@ -2648,18 +3302,16 @@ describe('LogViewer active pod synchronisation', () => {
   it('shows metadata only on the first row of a pretty JSON entry and copies it once', async () => {
     const panelId = 'obj:test:deployment:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'hidden',
       showTimestamps: false,
+      searchOpen: false,
       wrapText: true,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'pretty',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -2680,19 +3332,12 @@ describe('LogViewer active pod synchronisation', () => {
     const rows = Array.from(container.querySelectorAll('.log-viewer-line')).map(
       (row) => row.textContent
     );
-    expect(rows).toEqual(['[web-1/app] {', '  "msg": "[a/b] ready"', '}']);
+    expect(rows).toEqual(['[web-1] {', '  "msg": "[a/b] ready"', '}']);
     expect(
       container.querySelectorAll('button[aria-label^="Show only logs from pod"]')
     ).toHaveLength(1);
-    const copyButton = requireValue(
-      container.querySelector<HTMLButtonElement>('button[aria-label="Copy to clipboard"]'),
-      'copy button'
-    );
-    await act(async () => {
-      copyButton.click();
-      await Promise.resolve();
-    });
-    expect(writeTextMock).toHaveBeenCalledWith('[web-1/app] {\n  "msg": "[a/b] ready"\n}');
+    await downloadLogs('Copy to Clipboard');
+    expect(writeTextMock).toHaveBeenCalledWith('[web-1] {\n  "msg": "[a/b] ready"\n}');
   });
 
   it('excludes parsed metadata from Tab while retaining its filter actions', async () => {
@@ -2831,18 +3476,16 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('highlights matching substrings in visible log text without changing backend params', async () => {
     setLogViewerPrefs('obj:test:highlight', {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'panic',
-      highlightMatches: true,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -2863,11 +3506,6 @@ describe('LogViewer active pod synchronisation', () => {
       activePodNames: ['web-1'],
       panelId: 'obj:test:highlight',
     });
-
-    const highlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-    );
-    expect(highlightButton?.getAttribute('aria-pressed')).toBe('true');
     expect(getContainerLogsStreamScopeParams(defaultScope)).toBeUndefined();
 
     const highlights = Array.from(container.querySelectorAll('.log-viewer-highlight')).map(
@@ -2875,61 +3513,6 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(highlights).toEqual(['panic']);
     expect(container.textContent).toContain('timeout while waiting for panic handler');
-  });
-
-  it('can invert the text filter to keep only non-matching logs', async () => {
-    seedLogSnapshot([
-      {
-        pod: 'web-1',
-        container: 'app',
-        line: 'panic in worker',
-        timestamp: '2024-05-01T11:00:00Z',
-        isInit: false,
-      },
-      {
-        pod: 'web-1',
-        container: 'app',
-        line: 'steady state',
-        timestamp: '2024-05-01T11:00:01Z',
-        isInit: false,
-      },
-    ]);
-
-    await renderViewer();
-
-    const filterInput = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
-    expect(filterInput).toBeTruthy();
-    const nativeValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype,
-      'value'
-    )?.set;
-
-    await act(async () => {
-      nativeValueSetter?.call(filterInput, 'panic');
-      requireValue(filterInput, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new Event('input', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toContain('panic in worker');
-    expect(container.textContent).not.toContain('steady state');
-
-    const inverseButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Invert the text filter to show only non-matching logs"]'
-    );
-    expect(inverseButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(inverseButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(inverseButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(container.textContent).not.toContain('panic in worker');
-    expect(container.textContent).toContain('steady state');
   });
 
   it('supports case-sensitive matching from the iconbar', async () => {
@@ -2951,6 +3534,8 @@ describe('LogViewer active pod synchronisation', () => {
     ]);
 
     await renderViewer();
+    await openSearch();
+    await chooseFilterMode('Filtered');
 
     const filterInput = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
     const caseSensitiveButton = container.querySelector<HTMLButtonElement>(
@@ -3003,7 +3588,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(caseSensitiveButton?.hasAttribute('disabled')).toBe(true);
   });
 
-  it('supports regex mode and disables highlight while inverse regex filtering is active', async () => {
+  it('highlights regex matches, and none once the filter is inverted', async () => {
     seedLogSnapshot([
       {
         pod: 'web-1',
@@ -3029,6 +3614,8 @@ describe('LogViewer active pod synchronisation', () => {
     ]);
 
     await renderViewer();
+    await openSearch();
+    await chooseFilterMode('Filtered');
 
     const filterInput = container.querySelector<HTMLInputElement>('input[placeholder="Filter"]');
     expect(filterInput).toBeTruthy();
@@ -3048,21 +3635,10 @@ describe('LogViewer active pod synchronisation', () => {
     const regexButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Enable regular expression support for the text filter"]'
     );
-    const highlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-    );
-    const inverseButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Invert the text filter to show only non-matching logs"]'
-    );
     expect(regexButton).toBeTruthy();
-    expect(highlightButton).toBeTruthy();
-    expect(inverseButton).toBeTruthy();
 
     await act(async () => {
       requireValue(regexButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      requireValue(highlightButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
         new MouseEvent('click', { bubbles: true })
       );
       await Promise.resolve();
@@ -3074,65 +3650,12 @@ describe('LogViewer active pod synchronisation', () => {
     expect(highlights).toEqual(['panic', 'timeout']);
     expect(container.textContent).not.toContain('steady state');
 
-    await act(async () => {
-      requireValue(inverseButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await chooseFilterMode('Invert');
 
-    expect(inverseButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(highlightButton?.getAttribute('aria-pressed')).toBe('false');
-    expect(highlightButton?.hasAttribute('disabled')).toBe(true);
     expect(container.querySelectorAll('.log-viewer-highlight')).toHaveLength(0);
     expect(container.textContent).toContain('steady state');
     expect(container.textContent).not.toContain('panic in worker');
     expect(container.textContent).not.toContain('timeout waiting on cache');
-  });
-
-  it('allows highlight and inverse toggles before any text filter is entered', async () => {
-    seedLogSnapshot([
-      {
-        pod: 'web-1',
-        container: 'app',
-        line: 'steady state',
-        timestamp: '2024-05-01T11:00:00Z',
-        isInit: false,
-      },
-    ]);
-
-    await renderViewer();
-
-    const highlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-    );
-    const inverseButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Invert the text filter to show only non-matching logs"]'
-    );
-
-    expect(highlightButton).toBeTruthy();
-    expect(inverseButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(highlightButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(highlightButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(highlightButton?.hasAttribute('disabled')).toBe(false);
-
-    await act(async () => {
-      requireValue(inverseButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(inverseButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(highlightButton?.getAttribute('aria-pressed')).toBe('false');
-    expect(highlightButton?.hasAttribute('disabled')).toBe(true);
   });
 
   it('shows previous logs without touching the live buffer', async () => {
@@ -3246,28 +3769,23 @@ describe('LogViewer active pod synchronisation', () => {
   it('rehydrates LogViewer state from logViewerPrefsCache on mount', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: ['pod:web-1'],
+      selectedFilters: { mode: 'some', values: ['pod:web-1'] },
       autoRefresh: false,
-      timestampMode: 'hidden',
       showTimestamps: false,
+      searchOpen: true,
       wrapText: false,
       textFilter: 'panic',
-      highlightMatches: true,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: ['row-7', 'row-9'],
       showPreviousContainerLogs: false,
     });
 
     await renderViewer({ panelId });
     await flushAsync();
-    const highlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-    );
-    expect(highlightButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('button[aria-label="Filter mode: Filtered"]')).not.toBeNull();
     expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
       mode: 'some',
       values: ['pod:web-1'],
@@ -3280,6 +3798,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('writes prefs back to the cache as the user toggles them', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
     await renderViewer({ panelId });
+    await openSearch();
 
     // Defaults are written immediately on first mount via the writeback
     // effect — verify by reading back through the cache helper.
@@ -3287,8 +3806,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(initial).toBeDefined();
     expect(initial?.textFilter).toBe('');
     expect(initial?.selectedFilters).toEqual({ mode: 'all' });
-    expect(initial?.highlightMatches).toBe(false);
-    expect(initial?.inverseMatches).toBe(false);
+    expect(initial?.filterMode).toBe('all');
     expect(initial?.caseSensitiveMatches).toBe(false);
     expect(initial?.regexMatches).toBe(false);
 
@@ -3312,31 +3830,15 @@ describe('LogViewer active pod synchronisation', () => {
 
     expect(getLogViewerPrefs(panelId)?.textFilter).toBe('fatal');
 
-    const highlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
-    );
-    expect(highlightButton).toBeTruthy();
     await act(async () => {
-      requireValue(highlightButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
+      requireValue(
+        container.querySelector('button[aria-label="Filter mode: All"]'),
+        'expected the filter mode button'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
 
-    expect(getLogViewerPrefs(panelId)?.highlightMatches).toBe(true);
-
-    const inverseButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Invert the text filter to show only non-matching logs"]'
-    );
-    expect(inverseButton).toBeTruthy();
-    await act(async () => {
-      requireValue(inverseButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(getLogViewerPrefs(panelId)?.inverseMatches).toBe(true);
+    expect(getLogViewerPrefs(panelId)?.filterMode).toBe('filtered');
 
     const caseSensitiveButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Case-sensitive search - disabled when regex is enabled"]'
@@ -3447,34 +3949,30 @@ describe('LogViewer active pod synchronisation', () => {
     const panelA = 'obj:cluster-a:pod:team-a:api';
     const panelB = 'obj:cluster-b:pod:team-b:web';
     setLogViewerPrefs(panelA, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'a-only',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
     setLogViewerPrefs(panelB, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: true,
       wrapText: true,
       textFilter: 'b-only',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -3490,18 +3988,16 @@ describe('LogViewer active pod synchronisation', () => {
   it('clears the text filter from the filter box and shows every line again', async () => {
     const panelId = 'obj:test:deployment:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'hidden',
       showTimestamps: false,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'error',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -3514,6 +4010,7 @@ describe('LogViewer active pod synchronisation', () => {
     );
 
     await renderViewer({ activePodNames: ['web-1'], panelId });
+    await openSearch();
     expect(container.textContent).not.toContain('info two');
 
     const clearButton = requireValue(
@@ -3537,18 +4034,16 @@ describe('LogViewer active pod synchronisation', () => {
       scopeContainer('app'),
     ]);
     setLogViewerPrefs(panelId, {
-      selectedFilters: ['pod:web-1', 'container:app'],
+      selectedFilters: { mode: 'some', values: ['pod:web-1', 'container:app'] },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'panic',
-      highlightMatches: true,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: true,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -3562,25 +4057,23 @@ describe('LogViewer active pod synchronisation', () => {
     expect(chipStrip?.textContent).toContain('Regex: panic');
     expect(chipStrip?.textContent).toContain('web-1');
     expect(chipStrip?.textContent).toContain('app');
-    expect(chipStrip?.textContent).toContain('Highlight');
+    expect(chipStrip?.textContent).toContain('Filtered');
     expect(chipStrip?.textContent).toContain('Regex: panic');
   });
 
   it('shows invalid regex validation in the regex chip', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: '[',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: true,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -3594,18 +4087,16 @@ describe('LogViewer active pod synchronisation', () => {
   it('shows a previous-logs chip and returns to live logs when it is cleared', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: true,
     });
@@ -3641,18 +4132,16 @@ describe('LogViewer active pod synchronisation', () => {
   it('clears filters and toggles when active filter chips are removed', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: 'panic',
-      highlightMatches: true,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: true,
     });
@@ -3667,12 +4156,12 @@ describe('LogViewer active pod synchronisation', () => {
     const removeTextFilterButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Clear text filter"]'
     );
-    const removeHighlightButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Disable highlight matches"]'
+    const removeFilterModeButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Show all lines"]'
     );
 
     expect(removeTextFilterButton).toBeTruthy();
-    expect(removeHighlightButton).toBeTruthy();
+    expect(removeFilterModeButton).toBeTruthy();
 
     await act(async () => {
       requireValue(
@@ -3685,12 +4174,12 @@ describe('LogViewer active pod synchronisation', () => {
 
     await act(async () => {
       requireValue(
-        removeHighlightButton,
+        removeFilterModeButton,
         'expected test value in LogViewer.test.tsx'
       ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
-    expect(getLogViewerPrefs(panelId)?.highlightMatches).toBe(false);
+    expect(getLogViewerPrefs(panelId)?.filterMode).toBe('all');
     const clearAllButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Clear all filters"]'
     );
@@ -3703,7 +4192,6 @@ describe('LogViewer active pod synchronisation', () => {
     });
     expect(getLogViewerPrefs(panelId)?.showPreviousContainerLogs).toBe(false);
     const chipStrip = container.querySelector('[aria-label="Active log filters"]');
-    expect(chipStrip?.textContent ?? '').not.toContain('Highlight');
     expect(chipStrip?.textContent ?? '').not.toContain('Showing previous logs');
   });
 
@@ -3763,18 +4251,16 @@ describe('LogViewer active pod synchronisation', () => {
       isInit: false,
     }));
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: false,
       wrapText: false,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'pretty',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });

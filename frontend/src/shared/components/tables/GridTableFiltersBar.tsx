@@ -16,11 +16,7 @@ import {
   multiSelectFilterTriggerLabel,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import {
-  CaseSensitiveIcon,
-  PlusIcon,
-  ResetFiltersIcon,
-} from '@shared/components/icons/SharedIcons';
+import { PlusIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import SearchInput from '@shared/components/inputs/SearchInput';
 import Tooltip from '@shared/components/Tooltip';
 import type {
@@ -50,8 +46,6 @@ interface GridTableFiltersBarProps {
   onFiltersChange: (changes: Partial<GridTableFilterState>) => void;
   onSearchChange: (value: string) => void;
   onReset: () => void;
-  /** Toggle the case-sensitive search filter. */
-  onToggleCaseSensitive: () => void;
   renderOption: (option: DropdownOption, isSelected: boolean) => React.ReactNode;
   renderColumnsValue?: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
   columnOptions?: DropdownOption[];
@@ -76,8 +70,6 @@ interface GridTableFiltersBarProps {
   preActions?: IconBarItem[];
   /** IconBar items rendered after a separator following the preceding actions (e.g. Load More). */
   postActions?: IconBarItem[];
-  /** Arbitrary content rendered after the IconBar (e.g. text toggle buttons). */
-  customActions?: React.ReactNode;
   /** Filter feedback shown after the active filter chips: N matching of M in scope. */
   resultCount?: {
     /** N — items matching the active filters (a total, not the current page). */
@@ -180,14 +172,6 @@ function buildActiveFilterChips(
       label,
       removeLabel: `Clear ${control.triggerLabel} filter`,
       onRemove: control.onClear,
-    });
-  }
-  if (activeFilters.caseSensitive) {
-    chips.push({
-      key: 'case-sensitive',
-      label: 'Match case',
-      removeLabel: 'Clear Match case filter',
-      onRemove: () => onFiltersChange({ caseSensitive: false }),
     });
   }
   if (activeFilters.includeMetadata) {
@@ -360,7 +344,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   onFiltersChange,
   onSearchChange,
   onReset,
-  onToggleCaseSensitive,
   renderOption,
   renderColumnsValue = () => 'Columns',
   columnOptions,
@@ -383,7 +366,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   containerRef,
   preActions,
   postActions,
-  customActions,
   resultCount,
 }) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -391,7 +373,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   // pagination/total info — that lives in the pagination footer. So it shows only when
   // a narrowing filter (search/kind/namespace/cluster/provider query facet) is active.
   const hasNarrowingFilters = hasNarrowingGridTableFilters(activeFilters);
-  const showCaseSensitiveToggle = resolvedFilterOptions.searchBehavior !== 'query';
   const queryFacets = resolvedFilterOptions.queryFacets ?? [];
   const { renderColumnOption, renderColumnOrderActions, getColumnRowProps } =
     useGridTableColumnOptionRows({
@@ -489,15 +470,11 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   const controlsAt = (placement: FilterControlPlacement): ResolvedMultiselectFilterControl[] =>
     filterControls.filter((control) => control.visible && control.placement === placement);
 
+  const asItems = (controls: ResolvedMultiselectFilterControl[]): PrimaryFilterItem[] =>
+    controls.map((control) => ({ type: 'control', control }));
   const primaryFilterItems: PrimaryFilterItem[] = [
-    ...controlsAt('before-kinds').map((control) => ({
-      type: 'control' as const,
-      control,
-    })),
-    ...controlsAt('kind').map((control) => ({
-      type: 'control' as const,
-      control,
-    })),
+    ...asItems(controlsAt('before-kinds')),
+    ...asItems(controlsAt('kind')),
     ...(resolvedFilterOptions.beforeNamespaceActions?.length
       ? [
           {
@@ -506,18 +483,9 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
           },
         ]
       : []),
-    ...controlsAt('namespace').map((control) => ({
-      type: 'control' as const,
-      control,
-    })),
-    ...controlsAt('cluster').map((control) => ({
-      type: 'control' as const,
-      control,
-    })),
-    ...controlsAt('after-clusters').map((control) => ({
-      type: 'control' as const,
-      control,
-    })),
+    ...asItems(controlsAt('namespace')),
+    ...asItems(controlsAt('cluster')),
+    ...asItems(controlsAt('after-clusters')),
   ];
 
   const activeFilterChips = buildActiveFilterChips(activeFilters, filterControls, onFiltersChange);
@@ -577,16 +545,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
 
   const iconBarItems = useMemo<IconBarItem[]>(() => {
     const items: IconBarItem[] = [];
-    if (showCaseSensitiveToggle) {
-      items.push({
-        type: 'toggle',
-        id: 'case-sensitive',
-        icon: <CaseSensitiveIcon width={18} height={18} />,
-        active: activeFilters.caseSensitive,
-        onClick: onToggleCaseSensitive,
-        title: 'Match case',
-      });
-    }
     if (preActions && preActions.length > 0) {
       items.push(...preActions);
     }
@@ -597,13 +555,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       items.push(...postActions);
     }
     return items;
-  }, [
-    activeFilters.caseSensitive,
-    onToggleCaseSensitive,
-    showCaseSensitiveToggle,
-    preActions,
-    postActions,
-  ]);
+  }, [preActions, postActions]);
 
   const resultCountChip = renderResultCountChip(
     resultCount,
@@ -646,14 +598,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
             </div>
             <div className="gridtable-filter-actions">
               {!!iconBarItems.length && <IconBar items={iconBarItems} />}
-              {!!customActions && (
-                <div
-                  className="gridtable-filter-custom-actions"
-                  data-gridtable-filter-role="custom-actions"
-                >
-                  {customActions}
-                </div>
-              )}
             </div>
           </div>
         </div>

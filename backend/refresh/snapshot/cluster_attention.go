@@ -41,6 +41,11 @@ const (
 	attentionSourceWorkload attentionSource = "workload"
 	attentionSourceNode     attentionSource = "node"
 	attentionSourceEvent    attentionSource = "event"
+	// attentionSourceReportedStatus is a status an object reports about itself, published
+	// by the object catalog (for example an Argo CD Application's sync status).
+	attentionSourceReportedStatus attentionSource = "reported-status"
+
+	attentionReportedStatusOwner = "reported-status"
 )
 
 // AttentionFinding is one Kubernetes object that currently warrants operator
@@ -256,6 +261,9 @@ type attentionSourceRecord struct {
 	DeletionTimestamp  int64
 	Message            string
 	AgeTimestamp       int64
+	// ReportedStatuses maps each aspect a reported-status object reports about itself (for
+	// example an Argo CD Application's sync, health, and conditions) to its current values.
+	ReportedStatuses map[string][]string
 }
 
 type attentionEvaluation struct {
@@ -341,6 +349,9 @@ func newClusterAttentionIndex(meta ClusterMeta, now func() time.Time) *clusterAt
 	}
 	index.maintained = newTypedMaintainedStore(meta, attentionQuerypageSchema(), attentionTableQueryAdapter())
 	heap.Init(&index.deadlines)
+	for _, kind := range attentionReportedStatusKinds() {
+		index.registerOwnerKind(attentionReportedStatusOwner, kind)
+	}
 	return index
 }
 
@@ -555,9 +566,7 @@ func (i *clusterAttentionIndex) UpsertSource(owner string, record attentionSourc
 	pruner := i.ignoredObjectPruner
 	i.armTimerLocked()
 	i.mu.Unlock()
-	if pruned != nil && pruner != nil {
-		pruner(*pruned)
-	}
+	pruneAttentionRefs(pruner, pruned)
 }
 
 func (i *clusterAttentionIndex) ReplaceSource(owner string, records []attentionSourceRecord) {
@@ -573,7 +582,7 @@ func (i *clusterAttentionIndex) replaceSource(owner string, records []attentionS
 		i.mu.Unlock()
 		return
 	}
-	replacement := newAttentionSourceReplacement(records, i.now())
+	replacement := newAttentionSourceReplacement(records, i.now(), pruneMissingIgnores)
 	i.upsertReplacementRecords(owner, records, replacement)
 	i.removeMissingReplacementSources(owner, replacement)
 	i.removeMissingReplacementFindings(owner, replacement)
@@ -588,14 +597,18 @@ func (i *clusterAttentionIndex) replaceSource(owner string, records []attentionS
 }
 
 type attentionSourceReplacement struct {
+	// pruneIgnores is false when an object's absence from the records does not prove it
+	// was deleted, so saved ignores must survive the replacement.
+	pruneIgnores       bool
 	want               map[string]struct{}
 	presentIgnoredKeys map[string]struct{}
 	pruned             []resourcemodel.ResourceRef
 	now                time.Time
 }
 
-func newAttentionSourceReplacement(records []attentionSourceRecord, now time.Time) *attentionSourceReplacement {
+func newAttentionSourceReplacement(records []attentionSourceRecord, now time.Time, pruneIgnores bool) *attentionSourceReplacement {
 	return &attentionSourceReplacement{
+		pruneIgnores:       pruneIgnores,
 		want:               make(map[string]struct{}, len(records)),
 		presentIgnoredKeys: make(map[string]struct{}, len(records)),
 		pruned:             make([]resourcemodel.ResourceRef, 0),
@@ -615,9 +628,7 @@ func (i *clusterAttentionIndex) upsertReplacementRecords(
 		key := attentionRefKey(record.Ref)
 		replacement.want[key] = struct{}{}
 		replacement.presentIgnoredKeys[attentionIgnoredObjectKey(record.Ref)] = struct{}{}
-		if replaced := i.upsertSourceLocked(owner, record, replacement.now); replaced != nil {
-			replacement.pruned = append(replacement.pruned, *replaced)
-		}
+		replacement.pruned = append(replacement.pruned, i.upsertSourceLocked(owner, record, replacement.now)...)
 	}
 }
 
@@ -631,7 +642,7 @@ func (i *clusterAttentionIndex) removeMissingReplacementSources(
 		}
 		state := i.sources[key]
 		i.deleteSourceLocked(owner, key)
-		if !i.finalizerConfirmsObjectLocked(state.record.Ref) && i.pruneIgnoredObjectLocked(state.record.Ref) {
+		if replacement.pruneIgnores && !i.finalizerConfirmsObjectLocked(state.record.Ref) && i.pruneIgnoredObjectLocked(state.record.Ref) {
 			replacement.pruned = append(replacement.pruned, state.record.Ref)
 		}
 	}
@@ -825,6 +836,23 @@ func (i *clusterAttentionIndex) ReplaceFinalizerBlockers(blockers []objectcatalo
 	pruneAttentionRefs(pruner, pruned)
 }
 
+// ReplaceReportedStatuses replaces the catalog-owned source of statuses objects report
+// about themselves, such as every Argo CD Application's and ApplicationSet's, for this cluster.
+// Like the catalog's finalizer findings, an object missing from the catalog's view is not
+// proof of deletion (its listing may have failed or been denied, or its CRD removed), so
+// saved ignores survive; a recreated object (same name, new UID) drops the old one's
+// ignores as soon as it is observed.
+func (i *clusterAttentionIndex) ReplaceReportedStatuses(statuses []objectcatalog.ReportedStatus) {
+	records := make([]attentionSourceRecord, 0, len(statuses))
+	for _, status := range statuses {
+		records = append(records, attentionSourceRecord{
+			Ref: status.Ref, Metadata: status.Metadata, Source: attentionSourceReportedStatus,
+			ReportedStatuses: status.Statuses, AgeTimestamp: status.CreationTimestamp,
+		})
+	}
+	i.replaceSource(attentionReportedStatusOwner, records, false)
+}
+
 func attentionRefBelongsToCluster(ref resourcemodel.ResourceRef, clusterID string) bool {
 	return completeAttentionRef(ref) && ref.ClusterID == strings.TrimSpace(clusterID)
 }
@@ -855,14 +883,13 @@ func finalizerAttentionFinding(blocker objectcatalog.FinalizerBlocker) Attention
 	}
 }
 
-func (i *clusterAttentionIndex) upsertSourceLocked(owner string, record attentionSourceRecord, now time.Time) *resourcemodel.ResourceRef {
+func (i *clusterAttentionIndex) upsertSourceLocked(owner string, record attentionSourceRecord, now time.Time) []resourcemodel.ResourceRef {
 	key := attentionRefKey(record.Ref)
 	previous := i.sources[key]
-	var pruned *resourcemodel.ResourceRef
+	pruned := i.pruneSupersededIgnoresLocked(record.Ref)
 	if previous.owner != "" && attentionIgnoredObjectKey(previous.record.Ref) != attentionIgnoredObjectKey(record.Ref) &&
 		i.pruneIgnoredObjectLocked(previous.record.Ref) {
-		removed := previous.record.Ref
-		pruned = &removed
+		pruned = append(pruned, previous.record.Ref)
 	}
 	if previous.owner != "" && previous.owner != owner {
 		delete(i.owners[previous.owner], key)
@@ -882,6 +909,28 @@ func (i *clusterAttentionIndex) upsertSourceLocked(owner string, record attentio
 		heap.Push(&i.deadlines, attentionDeadline{key: key, generation: state.generation, at: state.deadline})
 	}
 	return pruned
+}
+
+// pruneSupersededIgnoresLocked drops saved ignores of an earlier object with the live
+// object's identity coordinates. Kubernetes allows one object per name at a time, so a
+// different UID proves the ignored object is gone, even when the index never saw it.
+func (i *clusterAttentionIndex) pruneSupersededIgnoresLocked(live resourcemodel.ResourceRef) []resourcemodel.ResourceRef {
+	if len(i.ignoreRules.ObjectFindings) == 0 || strings.TrimSpace(live.UID) == "" {
+		return nil
+	}
+	var pruned []resourcemodel.ResourceRef
+	for _, ignored := range append([]AttentionObjectFindingIgnore(nil), i.ignoreRules.ObjectFindings...) {
+		if supersededAttentionObject(ignored.Ref, live) && i.pruneIgnoredObjectLocked(ignored.Ref) {
+			pruned = append(pruned, ignored.Ref)
+		}
+	}
+	return pruned
+}
+
+func supersededAttentionObject(ignored, live resourcemodel.ResourceRef) bool {
+	return strings.TrimSpace(ignored.UID) != "" && ignored.UID != live.UID &&
+		ignored.ClusterID == live.ClusterID && ignored.Group == live.Group && ignored.Kind == live.Kind &&
+		ignored.Namespace == live.Namespace && ignored.Name == live.Name
 }
 
 func (i *clusterAttentionIndex) deleteSourceLocked(owner, key string) {
@@ -1135,9 +1184,10 @@ func attentionResourceKey(row AttentionFinding) string {
 
 func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 	return typedTableQueryAdapter[AttentionFinding]{
-		Key:       func(row AttentionFinding) string { return attentionRefKey(row.Ref) },
-		Namespace: func(row AttentionFinding) string { return row.Namespace },
-		Kind:      func(row AttentionFinding) string { return row.Ref.Kind },
+		MetadataText: func(row AttentionFinding) []string { return tableMetadataSearchText(row.Metadata) },
+		Key:          func(row AttentionFinding) string { return attentionRefKey(row.Ref) },
+		Namespace:    func(row AttentionFinding) string { return row.Namespace },
+		Kind:         func(row AttentionFinding) string { return row.Ref.Kind },
 		Facets: []typedTableQueryFacet[AttentionFinding]{
 			{
 				Descriptor: ResourceQueryFacetDescriptor{Key: "severities", Label: "Severity", Placeholder: "All severities", BulkActions: true},
@@ -1438,6 +1488,8 @@ func evaluateAttentionSource(record attentionSourceRecord, now time.Time) attent
 		return evaluateNodeAttention(record)
 	case attentionSourceEvent:
 		return evaluateEventAttention(record, now)
+	case attentionSourceReportedStatus:
+		return evaluateReportedStatusAttention(record)
 	default:
 		return attentionEvaluation{}
 	}
@@ -1598,6 +1650,37 @@ func appendGraceAwareCause(
 		return causes, true
 	}
 	return appendAttentionCause(causes, cause), false
+}
+
+// Every matching reported-status rule contributes a cause, since an object can report
+// several problems at once (an Application out of sync and degraded).
+func evaluateReportedStatusAttention(record attentionSourceRecord) attentionEvaluation {
+	causes := make([]AttentionCause, 0, len(record.ReportedStatuses))
+	for _, rule := range attentionClassificationRules {
+		if view, applies := reportedStatusView(rule, record); applies {
+			causes = appendAttentionCause(causes, classificationCause(rule, view))
+		}
+	}
+	return findingEvaluation(record, causes)
+}
+
+// reportedStatusView is the record as a reported-status rule sees it. The rule applies when
+// any value of the aspect it names matches; the view's status lists every matching value
+// (for example each active error condition).
+func reportedStatusView(rule attentionClassificationRule, record attentionSourceRecord) (attentionSourceRecord, bool) {
+	if rule.ReportedStatus == "" {
+		return attentionSourceRecord{}, false
+	}
+	view := record
+	var matched []string
+	for _, value := range record.ReportedStatuses[rule.ReportedStatus] {
+		view.Status = value
+		if rule.matches(view) {
+			matched = append(matched, value)
+		}
+	}
+	view.Status = strings.Join(matched, ", ")
+	return view, len(matched) > 0
 }
 
 func evaluateNodeAttention(record attentionSourceRecord) attentionEvaluation {

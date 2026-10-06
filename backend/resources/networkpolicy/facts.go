@@ -9,10 +9,10 @@ package networkpolicy
 
 // Facts is the canonical NetworkPolicy model facts.
 type Facts struct {
-	PodSelector  map[string]string `json:"podSelector,omitempty"`
-	PolicyTypes  []string          `json:"policyTypes,omitempty"`
-	IngressRules []RuleFacts       `json:"ingressRules,omitempty"`
-	EgressRules  []RuleFacts       `json:"egressRules,omitempty"`
+	PodSelector  LabelSelectorFacts `json:"podSelector"`
+	PolicyTypes  []string           `json:"policyTypes,omitempty"`
+	IngressRules []RuleFacts        `json:"ingressRules,omitempty"`
+	EgressRules  []RuleFacts        `json:"egressRules,omitempty"`
 }
 
 type RuleFacts struct {
@@ -20,10 +20,25 @@ type RuleFacts struct {
 	Ports []PortFacts `json:"ports,omitempty"`
 }
 
+// PeerFacts keeps selector presence: nil means the selector was not set, while an empty
+// selector matches everything (a nil NamespaceSelector scopes the peer to the policy namespace).
 type PeerFacts struct {
-	PodSelector       map[string]string `json:"podSelector,omitempty"`
-	NamespaceSelector map[string]string `json:"namespaceSelector,omitempty"`
-	IPBlock           *IPBlockFacts     `json:"ipBlock,omitempty"`
+	PodSelector       *LabelSelectorFacts `json:"podSelector,omitempty"`
+	NamespaceSelector *LabelSelectorFacts `json:"namespaceSelector,omitempty"`
+	IPBlock           *IPBlockFacts       `json:"ipBlock,omitempty"`
+}
+
+// LabelSelectorFacts is a pod or namespace label selector.
+type LabelSelectorFacts struct {
+	MatchLabels      map[string]string               `json:"matchLabels,omitempty"`
+	MatchExpressions []LabelSelectorRequirementFacts `json:"matchExpressions,omitempty"`
+}
+
+// LabelSelectorRequirementFacts is a single selector requirement.
+type LabelSelectorRequirementFacts struct {
+	Key      string   `json:"key"`
+	Operator string   `json:"operator"`
+	Values   []string `json:"values,omitempty"`
 }
 
 type PortFacts struct {

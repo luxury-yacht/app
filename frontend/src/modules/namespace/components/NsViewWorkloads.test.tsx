@@ -184,7 +184,6 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
       search: '',
       kinds: [],
       namespaces: [],
-      caseSensitive: false,
       includeMetadata: false,
     },
     setFilters: vi.fn(),
@@ -207,7 +206,6 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
       search: '',
       kinds: [],
       namespaces: [],
-      caseSensitive: false,
       includeMetadata: false,
     },
     setFilters: vi.fn(),
@@ -373,16 +371,16 @@ describe('NsViewWorkloads', () => {
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
 
-    const structuralActions = (
-      gridTablePropsRef.current.filters?.options as
-        | { beforeNamespaceActions?: Array<{ title: string; onClick: () => void }> }
-        | undefined
-    )?.beforeNamespaceActions;
-    const clearAction = structuralActions?.find(
-      (action) => action.title === 'Clear selected workload'
+    // The view's own icon sits in the main icon bar, with the search options and Favorite.
+    const clearAction = gridTablePropsRef.current.filters?.options?.preActions?.find(
+      (action) => action.type !== 'separator' && action.title === 'Clear selected workload'
     );
-    expect(clearAction).toBeTruthy();
-    act(() => clearAction?.onClick());
+    expect(clearAction?.type).toBe('action');
+    act(() => {
+      if (clearAction?.type === 'action') {
+        clearAction.onClick();
+      }
+    });
     expect(podsViewPropsRef.current).toMatchObject({
       namespace: 'team-a',
       workloadFilterRequest: { type: 'clear' },
@@ -391,7 +389,7 @@ describe('NsViewWorkloads', () => {
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
     expect(
-      gridTablePropsRef.current.filters?.options?.beforeNamespaceActions?.find(
+      gridTablePropsRef.current.filters?.options?.preActions?.find(
         (action) => action.type !== 'separator' && action.title === 'Collapse Pods'
       )
     ).toBeUndefined();
@@ -407,8 +405,13 @@ describe('NsViewWorkloads', () => {
       onPodsCollapsedChange(true);
     });
     expect(podsViewPropsRef.current).toMatchObject({ collapsed: true });
+    // Selecting a workload while Pods is collapsed leaves it collapsed but still
+    // filters the pane, so expanding it later shows that workload's pods.
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-    expect(podsViewPropsRef.current).toMatchObject({ collapsed: false });
+    expect(podsViewPropsRef.current).toMatchObject({
+      collapsed: true,
+      workloadFilterRequest: { type: 'set', workload: expect.objectContaining({ name: 'api' }) },
+    });
   });
 
   it('clears the selected workload when GridTable reports an unused-body click', async () => {

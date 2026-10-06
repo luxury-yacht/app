@@ -42,6 +42,7 @@ func nodePodsUsedSortValue(pods string) (float64, bool) {
 
 func configTableQueryAdapter() typedTableQueryAdapter[ConfigSummary] {
 	return typedTableQueryAdapter[ConfigSummary]{
+		MetadataText: func(row ConfigSummary) []string { return tableMetadataSearchText(row.Metadata) },
 		Key: func(row ConfigSummary) string {
 			return namespacedTableKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name)
 		},
@@ -80,6 +81,7 @@ func configTableQueryAdapter() typedTableQueryAdapter[ConfigSummary] {
 
 func networkTableQueryAdapter() typedTableQueryAdapter[NetworkSummary] {
 	return typedTableQueryAdapter[NetworkSummary]{
+		MetadataText: func(row NetworkSummary) []string { return tableMetadataSearchText(row.Metadata) },
 		Key: func(row NetworkSummary) string {
 			return namespacedTableKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name)
 		},
@@ -117,6 +119,7 @@ func networkTableQueryAdapter() typedTableQueryAdapter[NetworkSummary] {
 
 func storageTableQueryAdapter() typedTableQueryAdapter[StorageSummary] {
 	return typedTableQueryAdapter[StorageSummary]{
+		MetadataText: func(row StorageSummary) []string { return tableMetadataSearchText(row.Metadata) },
 		Key: func(row StorageSummary) string {
 			return namespacedTableKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name)
 		},
@@ -156,6 +159,7 @@ func storageTableQueryAdapter() typedTableQueryAdapter[StorageSummary] {
 
 func autoscalingTableQueryAdapter() typedTableQueryAdapter[AutoscalingSummary] {
 	return typedTableQueryAdapter[AutoscalingSummary]{
+		MetadataText: func(row AutoscalingSummary) []string { return tableMetadataSearchText(row.Metadata) },
 		Key: func(row AutoscalingSummary) string {
 			return namespacedTableKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name)
 		},
@@ -205,6 +209,7 @@ func autoscalingTableQueryAdapter() typedTableQueryAdapter[AutoscalingSummary] {
 
 func quotaTableQueryAdapter() typedTableQueryAdapter[QuotaSummary] {
 	return typedTableQueryAdapter[QuotaSummary]{
+		MetadataText: func(row QuotaSummary) []string { return tableMetadataSearchText(row.Metadata) },
 		Key: func(row QuotaSummary) string {
 			return namespacedTableKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name)
 		},
@@ -240,10 +245,11 @@ func quotaTableQueryAdapter() typedTableQueryAdapter[QuotaSummary] {
 
 func rbacTableQueryAdapter() typedTableQueryAdapter[RBACSummary] {
 	return typedTableQueryAdapter[RBACSummary]{
-		Key:       func(row RBACSummary) string { return namespacedTableKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name) },
-		AnchorKey: namespacedTableKey,
-		Namespace: func(row RBACSummary) string { return row.Ref.Namespace },
-		Kind:      func(row RBACSummary) string { return row.Ref.Kind },
+		MetadataText: func(row RBACSummary) []string { return tableMetadataSearchText(row.Metadata) },
+		Key:          func(row RBACSummary) string { return namespacedTableKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name) },
+		AnchorKey:    namespacedTableKey,
+		Namespace:    func(row RBACSummary) string { return row.Ref.Namespace },
+		Kind:         func(row RBACSummary) string { return row.Ref.Kind },
 		SearchText: func(row RBACSummary) []string {
 			return []string{row.Ref.Kind, row.Ref.Name, row.Ref.Namespace, row.Details}
 		},
@@ -336,10 +342,11 @@ func eventQueryFacets[T any](eventType, reason, source func(T) string) []typedTa
 
 func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 	return typedTableQueryAdapter[EventSummary]{
-		Key:       func(row EventSummary) string { return namespacedTableKey("Event", row.Ref.Namespace, row.Ref.Name) },
-		AnchorKey: func(_, namespace, name string) string { return namespacedTableKey("Event", namespace, name) },
-		Namespace: func(row EventSummary) string { return row.ObjectNamespace },
-		Kind:      func(row EventSummary) string { return row.ObjectKind },
+		MetadataText: func(row EventSummary) []string { return tableMetadataSearchText(row.Metadata) },
+		Key:          func(row EventSummary) string { return namespacedTableKey("Event", row.Ref.Namespace, row.Ref.Name) },
+		AnchorKey:    func(_, namespace, name string) string { return namespacedTableKey("Event", namespace, name) },
+		Namespace:    func(row EventSummary) string { return row.ObjectNamespace },
+		Kind:         func(row EventSummary) string { return row.ObjectKind },
 		Facets: eventQueryFacets(
 			func(row EventSummary) string { return row.Type },
 			func(row EventSummary) string { return row.Reason },
@@ -389,6 +396,7 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 
 func clusterEventTableQueryAdapter() typedTableQueryAdapter[ClusterEventEntry] {
 	return typedTableQueryAdapter[ClusterEventEntry]{
+		MetadataText: func(row ClusterEventEntry) []string { return tableMetadataSearchText(row.Metadata) },
 		Key: func(row ClusterEventEntry) string {
 			return namespacedTableKey("Event", row.Ref.Namespace, row.Ref.Name)
 		},
@@ -440,18 +448,26 @@ func clusterEventTableQueryAdapter() typedTableQueryAdapter[ClusterEventEntry] {
 	}
 }
 
-// metadataSearchText flattens label/annotation maps into searchable strings — the key,
-// the value, and "key: value" — mirroring the frontend metadata-search accessor so
-// server-side search (query-backed tables) matches the same text as the old client-side
-// "Include metadata" toggle did.
+// metadataSearchText flattens label/annotation maps into "key: value" strings. Search
+// is a substring match, so these also match any part of a key or a value alone — the
+// same text the frontend metadata-search accessor matches.
 func metadataSearchText(maps ...map[string]string) []string {
 	var out []string
 	for _, m := range maps {
 		for key, value := range m {
-			out = append(out, key, value, key+": "+value)
+			out = append(out, key+": "+value)
 		}
 	}
 	return out
+}
+
+// tableMetadataSearchText is metadataSearchText for rows that carry their labels
+// and annotations in a ResourceTableMetadata (nil when the object has neither).
+func tableMetadataSearchText(metadata *resourcemodel.ResourceTableMetadata) []string {
+	if metadata == nil {
+		return nil
+	}
+	return metadataSearchText(metadata.Labels, metadata.Annotations)
 }
 
 func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
@@ -511,10 +527,11 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 
 func clusterConfigTableQueryAdapter() typedTableQueryAdapter[ClusterConfigEntry] {
 	return typedTableQueryAdapter[ClusterConfigEntry]{
-		Key:       func(row ClusterConfigEntry) string { return clusterTableKey(row.Ref.Kind, row.Ref.Name) },
-		AnchorKey: func(kind, _, name string) string { return clusterTableKey(kind, name) },
-		Namespace: func(ClusterConfigEntry) string { return "" },
-		Kind:      func(row ClusterConfigEntry) string { return row.Ref.Kind },
+		MetadataText: func(row ClusterConfigEntry) []string { return tableMetadataSearchText(row.Metadata) },
+		Key:          func(row ClusterConfigEntry) string { return clusterTableKey(row.Ref.Kind, row.Ref.Name) },
+		AnchorKey:    func(kind, _, name string) string { return clusterTableKey(kind, name) },
+		Namespace:    func(ClusterConfigEntry) string { return "" },
+		Kind:         func(row ClusterConfigEntry) string { return row.Ref.Kind },
 		SearchText: func(row ClusterConfigEntry) []string {
 			return []string{row.Ref.Kind, row.Ref.Name, row.Details}
 		},
@@ -542,10 +559,11 @@ func clusterConfigTableQueryAdapter() typedTableQueryAdapter[ClusterConfigEntry]
 
 func clusterStorageTableQueryAdapter() typedTableQueryAdapter[ClusterStorageEntry] {
 	return typedTableQueryAdapter[ClusterStorageEntry]{
-		Key:       func(row ClusterStorageEntry) string { return clusterTableKey(row.Ref.Kind, row.Ref.Name) },
-		AnchorKey: func(kind, _, name string) string { return clusterTableKey(kind, name) },
-		Namespace: func(ClusterStorageEntry) string { return "" },
-		Kind:      func(row ClusterStorageEntry) string { return row.Ref.Kind },
+		MetadataText: func(row ClusterStorageEntry) []string { return tableMetadataSearchText(row.Metadata) },
+		Key:          func(row ClusterStorageEntry) string { return clusterTableKey(row.Ref.Kind, row.Ref.Name) },
+		AnchorKey:    func(kind, _, name string) string { return clusterTableKey(kind, name) },
+		Namespace:    func(ClusterStorageEntry) string { return "" },
+		Kind:         func(row ClusterStorageEntry) string { return row.Ref.Kind },
 		SearchText: func(row ClusterStorageEntry) []string {
 			return []string{row.Ref.Kind, row.Ref.Name, row.StorageClass, row.Capacity, row.AccessModes, row.Status, row.Claim}
 		},
@@ -581,10 +599,11 @@ func clusterStorageTableQueryAdapter() typedTableQueryAdapter[ClusterStorageEntr
 
 func clusterRBACTableQueryAdapter() typedTableQueryAdapter[ClusterRBACEntry] {
 	return typedTableQueryAdapter[ClusterRBACEntry]{
-		Key:       func(row ClusterRBACEntry) string { return clusterTableKey(row.Ref.Kind, row.Ref.Name) },
-		AnchorKey: func(kind, _, name string) string { return clusterTableKey(kind, name) },
-		Namespace: func(ClusterRBACEntry) string { return "" },
-		Kind:      func(row ClusterRBACEntry) string { return row.Ref.Kind },
+		MetadataText: func(row ClusterRBACEntry) []string { return tableMetadataSearchText(row.Metadata) },
+		Key:          func(row ClusterRBACEntry) string { return clusterTableKey(row.Ref.Kind, row.Ref.Name) },
+		AnchorKey:    func(kind, _, name string) string { return clusterTableKey(kind, name) },
+		Namespace:    func(ClusterRBACEntry) string { return "" },
+		Kind:         func(row ClusterRBACEntry) string { return row.Ref.Kind },
 		SearchText: func(row ClusterRBACEntry) []string {
 			return []string{row.Ref.Kind, row.TypeAlias, row.Ref.Name, row.Details}
 		},
@@ -612,10 +631,11 @@ func clusterRBACTableQueryAdapter() typedTableQueryAdapter[ClusterRBACEntry] {
 
 func clusterCRDTableQueryAdapter() typedTableQueryAdapter[ClusterCRDEntry] {
 	return typedTableQueryAdapter[ClusterCRDEntry]{
-		Key:       func(row ClusterCRDEntry) string { return clusterTableKey("CustomResourceDefinition", row.Ref.Name) },
-		AnchorKey: func(_, _, name string) string { return clusterTableKey("CustomResourceDefinition", name) },
-		Namespace: func(ClusterCRDEntry) string { return "" },
-		Kind:      func(ClusterCRDEntry) string { return "CustomResourceDefinition" },
+		MetadataText: func(row ClusterCRDEntry) []string { return tableMetadataSearchText(row.Metadata) },
+		Key:          func(row ClusterCRDEntry) string { return clusterTableKey("CustomResourceDefinition", row.Ref.Name) },
+		AnchorKey:    func(_, _, name string) string { return clusterTableKey("CustomResourceDefinition", name) },
+		Namespace:    func(ClusterCRDEntry) string { return "" },
+		Kind:         func(ClusterCRDEntry) string { return "CustomResourceDefinition" },
 		SearchText: func(row ClusterCRDEntry) []string {
 			return []string{row.Ref.Kind, row.TypeAlias, row.Ref.Name, row.Group, row.Scope, row.Details, row.StorageVersion}
 		},

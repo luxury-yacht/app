@@ -34,11 +34,13 @@ const setAppLogsPanelVisibleMock = vi.hoisted(() => vi.fn().mockResolvedValue(un
 const useShortcutMock = vi.hoisted(() => vi.fn());
 const realNavigation = vi.hoisted(() => ({ enabled: false }));
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
+const reportOperationalErrorMock = vi.hoisted(() => vi.fn());
 const dropdownInstances = vi.hoisted(() => [] as CapturedDropdownProps[]);
 const runtimeEventHandlers = vi.hoisted(() => new Map<string, (...args: unknown[]) => void>());
 const runtimeDisposerMock = vi.hoisted(() => vi.fn());
 const clipboardWriteTextMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const nativeClipboardWriteTextMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const saveLogFileMock = vi.hoisted(() => vi.fn());
 
 // Data-oriented tests use a transparent panel; the keyboard regression uses
 // the actual dockable owner and providers.
@@ -84,6 +86,7 @@ vi.mock('@core/backend-api', () => ({
   GetAppLogsSince: (...args: unknown[]) => getAppLogsSinceMock(...args),
   ClearAppLogs: (...args: unknown[]) => clearAppLogsMock(...args),
   SetAppLogsPanelVisible: (...args: unknown[]) => setAppLogsPanelVisibleMock(...args),
+  SaveLogFile: (...args: unknown[]) => saveLogFileMock(...args),
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
@@ -95,11 +98,42 @@ vi.mock('@core/desktop-runtime', () => ({
   },
 }));
 
+// The app renders panels inside ZoomProvider, which the Download menu reads.
+vi.mock('@core/contexts/ZoomContext', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@core/contexts/ZoomContext')>()),
+  useZoom: () => ({ zoomLevel: 100 }),
+}));
+
 vi.mock('@utils/errorHandler', () => ({
   errorHandler: errorHandlerMock,
+  reportOperationalError: (...args: unknown[]) => reportOperationalErrorMock(...args),
 }));
 
 import AppLogsPanel from './AppLogsPanel';
+
+// Opens the Download menu and picks one of its choices.
+const chooseDownload = async (
+  container: HTMLElement,
+  choice: 'Copy to Clipboard' | 'Save to File'
+): Promise<void> => {
+  await act(async () => {
+    container
+      .querySelector<HTMLButtonElement>('button[aria-label="Download logs"]')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+  });
+  const item = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
+    (element) => element.textContent === choice
+  );
+  if (!item) {
+    throw new Error(`expected the ${choice} menu item`);
+  }
+  await act(async () => {
+    item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+};
 
 const renderPanel = async (initialIsOpen = true) => {
   const container = document.createElement('div');
@@ -708,15 +742,15 @@ describe('AppLogsPanel', () => {
     const autoScrollButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Toggle auto-scroll"]'
     );
-    const copyButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Copy logs to clipboard"]'
+    const downloadButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Download logs"]'
     );
     const clearButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Clear logs"]'
     );
 
     expect(autoScrollButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(copyButton?.disabled).toBe(false);
+    expect(downloadButton?.disabled).toBe(false);
     expect(clearButton?.disabled).toBe(false);
 
     await act(async () => {
@@ -729,26 +763,29 @@ describe('AppLogsPanel', () => {
     cleanup();
   });
 
-  it('copies logs through the native desktop clipboard', async () => {
+  // The Download menu is the log viewers' menu: Copy to Clipboard through the
+  // native clipboard, or Save to File with the same text in a .log file.
+  it('copies or saves the shown logs from the Download menu', async () => {
     vi.useFakeTimers();
     getAppLogsMock.mockResolvedValue([
       { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
     ]);
+    saveLogFileMock.mockResolvedValue({ path: '/tmp/app.log', bytes: 1 });
 
     const { container, cleanup } = await renderPanel();
     await flushInitialLoad();
 
-    const copyButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Copy logs to clipboard"]'
-    );
-    await act(async () => {
-      copyButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
+    await chooseDownload(container, 'Copy to Clipboard');
     expect(nativeClipboardWriteTextMock).toHaveBeenCalledOnce();
-    expect(nativeClipboardWriteTextMock.mock.calls[0]?.[0]).toContain('[core] [Global] Ready');
+    const copied = nativeClipboardWriteTextMock.mock.calls[0]?.[0];
+    expect(copied).toContain('[core] [Global] Ready');
     expect(clipboardWriteTextMock).not.toHaveBeenCalled();
+
+    await chooseDownload(container, 'Save to File');
+    expect(saveLogFileMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^luxury-yacht-app-logs-\d{14}\.log$/),
+      copied
+    );
 
     cleanup();
   });
@@ -869,26 +906,56 @@ describe('AppLogsPanel', () => {
 
     await flushInitialLoad();
 
-    const copyButton = container.querySelector<HTMLButtonElement>(
-      'button[title="Copy logs to clipboard"]'
-    );
-    expect(copyButton).toBeTruthy();
+    await chooseDownload(container, 'Copy to Clipboard');
 
-    await act(async () => {
-      copyButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
+    // As in the other log views: reported, and the button flashes an error.
+    expect(reportOperationalErrorMock).toHaveBeenCalledWith(clipboardError, {
+      source: 'AppLogsPanel',
+      action: 'copyLogs',
     });
-
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
-      clipboardError,
-      { action: 'copyLogs' },
-      'Failed to copy logs to clipboard'
-    );
+    expect(
+      container
+        .querySelector('button[aria-label="Download logs"]')
+        ?.classList.contains('feedback-error')
+    ).toBe(true);
 
     cleanup();
   });
 
-  it('clears pending copy feedback timers on unmount', async () => {
+  // Every Download button, table or log, is busy while a choice runs, so a save
+  // dialog left open can't be stacked with another.
+  it('keeps the Download button busy while a save is in progress', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
+    ]);
+    let finishSave: ((result: { path: string }) => void) | undefined;
+    saveLogFileMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishSave = resolve;
+        })
+    );
+
+    const { container, cleanup } = await renderPanel();
+    await flushInitialLoad();
+    const downloadButton = () =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Download logs"]');
+
+    await chooseDownload(container, 'Save to File');
+    expect(downloadButton()?.disabled).toBe(true);
+
+    await act(async () => {
+      finishSave?.({ path: '/tmp/app.log' });
+      await Promise.resolve();
+    });
+    expect(downloadButton()?.disabled).toBe(false);
+    expect(downloadButton()?.classList.contains('feedback-success')).toBe(true);
+
+    cleanup();
+  });
+
+  it('clears pending download feedback timers on unmount', async () => {
     vi.useFakeTimers();
     getAppLogsMock.mockResolvedValue([
       { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
@@ -898,14 +965,10 @@ describe('AppLogsPanel', () => {
 
     await flushInitialLoad();
 
-    const copyButton = container.querySelector<HTMLButtonElement>(
-      'button[title="Copy logs to clipboard"]'
-    );
-    expect(copyButton).toBeTruthy();
-
+    await chooseDownload(container, 'Copy to Clipboard');
+    // Let the menu's immediate work run; the feedback reset is still pending.
     await act(async () => {
-      copyButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
+      vi.advanceTimersByTime(1);
     });
 
     expect(vi.getTimerCount()).toBe(1);

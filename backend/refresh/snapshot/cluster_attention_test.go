@@ -67,6 +67,10 @@ func TestAttentionPoliciesUseTheClosedSeverityCatalog(t *testing.T) {
 		require.False(t, ruleIDs[rule.ID], "duplicate Attention classification rule %q", rule.ID)
 		ruleIDs[rule.ID] = true
 		require.Contains(t, attentionSeverityDefinitions, rule.Severity, "rule %q uses an undeclared severity", rule.ID)
+		if rule.ReportedStatus != "" {
+			// Reported statuses carry no transition time to anchor a grace period.
+			require.Zero(t, rule.Grace, "reported-status rule %q cannot have a grace period", rule.ID)
+		}
 		if rule.GraceSeverity != "" {
 			require.Contains(t, attentionSeverityDefinitions, rule.GraceSeverity, "rule %q uses an undeclared grace severity", rule.ID)
 		}

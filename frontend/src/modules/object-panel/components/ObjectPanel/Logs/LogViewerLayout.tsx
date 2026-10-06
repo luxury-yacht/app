@@ -23,8 +23,8 @@ import {
   logSourceGroupLabel,
   logSourceGroupValues,
 } from './logFilterSelection';
-import type { ParsedLogEntry } from './logOptionsReducer';
-import { LogMatchCount, LogTextFilter } from './logToolbar';
+import type { LogOptionsState, ParsedLogEntry } from './logOptionsReducer';
+import { LogSearchRow } from './logToolbar';
 import type { LogViewerAction } from './logViewerReducer';
 import ParsedLogTable from './ParsedLogTable';
 import RawLogViewer from './RawLogViewer';
@@ -148,7 +148,6 @@ const LogSourceDropdown = ({
     renderValue={(value) =>
       logSourceGroupLabel(label, selectedFilters, group, normalizeDropdownValue(value))
     }
-    className="logs-viewer-selector-dropdown"
   />
 );
 
@@ -158,10 +157,9 @@ type LogViewerControlsProps = {
   containerOptions: DropdownOption[];
   selectedFilters: MultiSelectFilterSelection;
   filterInputRef: React.RefObject<HTMLInputElement | null>;
-  textFilter: string;
+  searchRowId: string;
+  searchOptions: LogOptionsState;
   iconItems: IconBarItem[];
-  hasActiveResultFilter: boolean;
-  matchCount: number;
   bufferFullShown: number | null;
   dispatch: React.Dispatch<LogViewerAction>;
 };
@@ -172,10 +170,9 @@ export const LogViewerControls = ({
   containerOptions,
   selectedFilters,
   filterInputRef,
-  textFilter,
+  searchRowId,
+  searchOptions,
   iconItems,
-  hasActiveResultFilter,
-  matchCount,
   bufferFullShown,
   dispatch,
 }: LogViewerControlsProps) => {
@@ -185,6 +182,7 @@ export const LogViewerControls = ({
       className={`logs-viewer-controls${activeFilterChips.length > 0 ? ' logs-viewer-controls--with-active-filters' : ''}`}
     >
       <div className="logs-viewer-controls-left">
+        <LogBufferFullIndicator shown={bufferFullShown} />
         {(podOptions.length > 0 || containerOptions.length > 0) && (
           <div className="logs-viewer-control-group">
             {podOptions.length > 0 && (
@@ -209,24 +207,28 @@ export const LogViewerControls = ({
             )}
           </div>
         )}
-        <LogTextFilter
+        <IconBar items={iconItems} />
+      </div>
+      {searchOptions.searchOpen ? (
+        <LogSearchRow
+          id={searchRowId}
           inputRef={filterInputRef}
-          value={textFilter}
+          options={searchOptions}
           dispatch={dispatch}
           title="Filter logs by text (searches in log lines, pods, and containers)"
         />
-        <IconBar items={iconItems} />
-        <LogBufferFullIndicator shown={bufferFullShown} />
-        <LogMatchCount count={matchCount} filtered={hasActiveResultFilter} />
-      </div>
+      ) : null}
     </div>
   );
 };
 
 type LogViewerReadyViewProps = {
+  viewerRef: React.RefObject<HTMLDivElement | null>;
   controls: React.ReactNode;
   activeFilterChips: ActiveFilterChip[];
   clearAllFilters: () => void;
+  /** Shown beside the Clear all button: the shown/total log count. */
+  logCount: React.ReactNode;
   visibleLogWarnings: string[];
   logsContentRef: React.RefObject<HTMLElement | null>;
   renderedLogContent: React.ReactNode;
@@ -236,9 +238,11 @@ type LogViewerReadyViewProps = {
 };
 
 export const LogViewerReadyView = ({
+  viewerRef,
   controls,
   activeFilterChips,
   clearAllFilters,
+  logCount,
   visibleLogWarnings,
   logsContentRef,
   renderedLogContent,
@@ -247,13 +251,14 @@ export const LogViewerReadyView = ({
   resumeScrolling,
 }: LogViewerReadyViewProps) => (
   <div className="object-panel-tab-content">
-    <div className="logs-viewer-display">
+    <div className="logs-viewer-display" ref={viewerRef}>
       {controls}
       <ActiveFilterChips
         ariaLabel="Active log filters"
         chips={activeFilterChips}
         onClearAll={clearAllFilters}
         className="logs-viewer-active-filters"
+        summary={logCount}
       />
       <LogWarningBar warnings={visibleLogWarnings} />
       <div className="logs-viewer-content-frame">

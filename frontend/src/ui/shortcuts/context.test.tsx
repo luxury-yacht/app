@@ -5,7 +5,7 @@
  * Covers key behaviors and edge cases for context.
  */
 
-import { act, useEffect, useEffectEvent } from 'react';
+import { act, useEffect, useEffectEvent, useRef } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -18,6 +18,7 @@ import {
   useKeyboardContext,
 } from './context';
 import { useShortcut, useShortcuts } from './hooks';
+import { useKeyboardSurface } from './surfaces';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn<(event: string, handler: (...args: unknown[]) => void) => () => void>(
@@ -622,6 +623,57 @@ describe('keyboard handling edge cases', () => {
     expect(inputEvents).toHaveBeenCalled();
 
     input.remove();
+  });
+
+  // The menu's Select All arrives as an event, not the browser's own command, so
+  // a focused text box must select its own text. The log viewer is the case that
+  // broke: its search box sits in a region surface beside a log view whose
+  // surface selects the logs.
+  it('selects the focused text box through the menu bridge', async () => {
+    const selectLogs = vi.fn(() => true);
+    const LogViewerLike = () => {
+      const viewerRef = useRef<HTMLDivElement>(null);
+      const logsRef = useRef<HTMLPreElement>(null);
+      useKeyboardSurface({ kind: 'region', rootRef: viewerRef, onEscape: () => true });
+      useKeyboardSurface({
+        kind: 'editor',
+        rootRef: logsRef,
+        captureWhenActive: true,
+        onNativeAction: ({ action }) => (action === 'selectAll' ? selectLogs() : false),
+      });
+      return (
+        <div ref={viewerRef}>
+          <input data-testid="search" defaultValue="error in worker" />
+          <pre ref={logsRef}>line one</pre>
+        </div>
+      );
+    };
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <LogViewerLike />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const input = container.querySelector<HTMLInputElement>('[data-testid="search"]');
+    input?.focus();
+    input?.setSelectionRange(3, 3);
+    const selectAllRegistrations = runtimeMocks.eventsOn.mock.calls.filter(
+      ([event]) => event === 'menu:selectAll'
+    );
+    const selectAllHandler = selectAllRegistrations[selectAllRegistrations.length - 1]?.[1] as
+      | (() => void)
+      | undefined;
+
+    act(() => {
+      selectAllHandler?.();
+    });
+
+    expect(input?.selectionStart).toBe(0);
+    expect(input?.selectionEnd).toBe('error in worker'.length);
+    expect(selectLogs).not.toHaveBeenCalled();
   });
 
   it('pastes into the focused input through the menu bridge fallback', async () => {

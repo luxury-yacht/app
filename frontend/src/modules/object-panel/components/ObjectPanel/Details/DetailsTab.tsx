@@ -5,7 +5,6 @@
 import Containers from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabContainers';
 import DataSection from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabData';
 import RBACRules from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabRBACRules';
-import Utilization from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization';
 import Overview from '@modules/object-panel/components/ObjectPanel/Details/Overview';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { WarningIcon } from '@shared/components/icons/SharedIcons';
@@ -16,7 +15,6 @@ import './DetailsTabData.css';
 
 // Import from extracted modules
 import type { DetailsTabProps } from './detailsTabTypes';
-import { useHasUtilization, useUtilizationData } from './useUtilizationData';
 
 // Action-relevant fields read off the active detail DTO for the Overview/ActionsMenu.
 interface ActionDetail {
@@ -71,14 +69,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({
   onAfterAction,
 }) => {
   const model = detailModel;
-  const hasUtilization = useHasUtilization(objectData);
-
   const dataInfo = model.dataSection;
-
-  const utilizationData = useUtilizationData({
-    objectData,
-    detail: model.activeDetail,
-  });
 
   return (
     <div className="object-panel-tab-content">
@@ -132,19 +123,6 @@ const DetailsTab: React.FC<DetailsTabProps> = ({
           onAfterDelete={onAfterDelete}
           onAfterAction={onAfterAction}
         />
-
-        {(hasUtilization || objectData?.kind?.toLowerCase() === 'node') && utilizationData && (
-          <div className="details-section-spaced">
-            <Utilization
-              cpu={utilizationData.cpu}
-              memory={utilizationData.memory}
-              pods={utilizationData.pods}
-              mode={utilizationData.mode}
-              podCount={utilizationData.podCount}
-              readyPodCount={utilizationData.readyPodCount}
-            />
-          </div>
-        )}
 
         {/* Containers Section - Only for Pods and core Workloads (not Jobs/CronJobs) */}
         {!!model.containerSection && (

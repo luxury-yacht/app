@@ -120,7 +120,8 @@ export const ForceDeleteIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-export const ExpandIcon: React.FC<IconProps> = ({
+/** Chevron pointing up. */
+export const ChevronUpIcon: React.FC<IconProps> = ({
   width = 24,
   height = 24,
   fill = 'currentColor',
@@ -136,11 +137,12 @@ export const ExpandIcon: React.FC<IconProps> = ({
     width={width}
     height={height}
   >
-    <path d="M11.9999 13.1714L16.9497 8.22168L18.3639 9.63589L11.9999 15.9999L5.63599 9.63589L7.0502 8.22168L11.9999 13.1714Z" />
+    <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" />
   </svg>
 );
 
-export const CollapseIcon: React.FC<IconProps> = ({
+/** Chevron pointing down. */
+export const ChevronDownIcon: React.FC<IconProps> = ({
   width = 24,
   height = 24,
   fill = 'currentColor',
@@ -156,7 +158,7 @@ export const CollapseIcon: React.FC<IconProps> = ({
     width={width}
     height={height}
   >
-    <path d="M11.9999 10.8284L7.0502 15.7782L5.63599 14.364L11.9999 8L18.3639 14.364L16.9497 15.7782L11.9999 10.8284Z" />
+    <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
   </svg>
 );
 
@@ -898,6 +900,47 @@ export const StopSquareIcon: React.FC<FixedColorIconProps> = ({
   </svg>
 );
 
+export const PlayOutlineIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
+  <svg
+    className={className}
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinejoin="round"
+    width={width}
+    height={height}
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d="M5 3.25v9.5l7.75-4.75z" />
+  </svg>
+);
+
+export const StopOutlineIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
+  <svg
+    className={className}
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    width={width}
+    height={height}
+    aria-hidden="true"
+    focusable="false"
+  >
+    <rect x="3.75" y="3.75" width="8.5" height="8.5" rx="1.25" />
+  </svg>
+);
+
 export const PlusIcon: React.FC<FixedColorIconProps> = ({ width = 24, height = 24, className }) => (
   <svg
     viewBox="0 0 16 16"
@@ -908,6 +951,31 @@ export const PlusIcon: React.FC<FixedColorIconProps> = ({ width = 24, height = 2
     focusable="false"
   >
     <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+/** Arrow down onto a line (download). */
+export const DownloadIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
+  <svg
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    className={className}
+    aria-hidden="true"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    focusable="false"
+  >
+    <path d="M12 4v11" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M5 20h14" />
   </svg>
 );
 

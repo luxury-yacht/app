@@ -570,8 +570,8 @@ const renderPodTemplateGroup = (d: PodTemplate, context: OverviewContext): React
 const POD_TEMPLATE_CONSUMES = ['serviceAccount', 'nodeSelector', 'tolerations'] as const;
 
 // Common count/utilization/template DTO keys covered outside the Overview schema.
-// containers/initContainers -> Containers section; cpu*/mem*/podMetricsSummary/pods ->
-// Utilization section (podMetricsSummary is also consumed by the pod-state widget).
+// containers/initContainers -> Containers section; cpu*/mem*/podMetricsSummary/pods -> the
+// Metrics tab's utilization bars (podMetricsSummary is also consumed by the pod-state widget).
 const COVERED_CONTAINERS = ['containers', 'initContainers'] as const;
 const COVERED_UTILIZATION = [
   'cpuRequest',
@@ -1052,8 +1052,8 @@ export const replicaSetDescriptor: OverviewDescriptor<ReplicaSetDetails> = {
   displayKind: 'ReplicaSet',
   dtoName: 'ReplicaSetDetails',
   schema: { showSelector: true, items: replicaSetItems },
-  // details -> table summary; conditions/observedGeneration/isActive -> not surfaced in the
-  // ReplicaSet Overview; containers -> Containers section; cpu/mem/pods -> Utilization section.
+  // details -> table summary; conditions/observedGeneration/isActive and cpu/mem -> not surfaced
+  // (ReplicaSets have no Metrics tab); containers -> Containers section; pods -> the Logs pod list.
   // The pod-template group does not run for ReplicaSet (legacy parity), so serviceAccount/
   // nodeSelector/tolerations are not on the ReplicaSet DTO at all.
   coveredElsewhere: [

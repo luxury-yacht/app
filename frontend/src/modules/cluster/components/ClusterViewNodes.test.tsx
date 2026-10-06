@@ -175,7 +175,6 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
       search: '',
       kinds: [],
       namespaces: [],
-      caseSensitive: false,
       includeMetadata: false,
     },
     setFilters: vi.fn(),
@@ -368,8 +367,6 @@ describe('ClusterViewNodes', () => {
     const options = gridTablePropsRef.current?.filters?.options;
     const preActions = options?.preActions ?? [];
     expect(preActions.some((item) => 'id' in item && item.id === 'favorite')).toBe(true);
-    const postActions = options?.postActions ?? [];
-    expect(postActions.some((item) => 'id' in item && item.id === 'favorite')).toBe(false);
   });
 
   it('threads fetchAllRows so the table can offer the all-matching-rows scope', async () => {

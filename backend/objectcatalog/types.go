@@ -8,6 +8,7 @@ package objectcatalog
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -67,6 +68,8 @@ type Summary struct {
 	CreationTimestamp string                               `json:"creationTimestamp"` // resource creation timestamp
 	lifecycle         resourcemodel.ResourceLifecycle
 	deletionTime      int64
+	reportedStatuses  reportedStatusValues
+	reportsStatus     bool
 	Scope             Scope        `json:"scope"`                  // resource scope
 	LabelsDigest      string       `json:"labelsDigest,omitempty"` // optional digest of resource labels
 	ActionFacts       *ActionFacts `json:"actionFacts,omitempty"`  // optional facts needed to present object actions correctly
@@ -87,6 +90,79 @@ func (s Summary) FinalizerBlocker() (FinalizerBlocker, bool) {
 		return FinalizerBlocker{}, false
 	}
 	return FinalizerBlocker{Ref: s.Ref, Metadata: s.Metadata, DeletionTimestamp: s.deletionTime}, true
+}
+
+// Aspects an object can report about itself in ReportedStatus.Statuses.
+const (
+	ReportedStatusSync       = "sync"
+	ReportedStatusHealth     = "health"
+	ReportedStatusOperation  = "operation"
+	ReportedStatusConditions = "conditions"
+	// ReportedStatusLimits lists the resources an object uses too much of its limit for.
+	ReportedStatusLimits = "limits"
+)
+
+var reportedAspects = [...]string{
+	ReportedStatusSync, ReportedStatusHealth, ReportedStatusOperation, ReportedStatusConditions, ReportedStatusLimits,
+}
+
+// reportedValueSeparator joins an aspect's values; reported values (Argo CD statuses,
+// operation phases, condition types) never contain it.
+const reportedValueSeparator = ","
+
+// reportedStatusValues holds each reportedAspects entry's sorted values joined by
+// reportedValueSeparator ("" when not reported). It is an array of strings rather than a
+// map of slices so Summary stays comparable.
+type reportedStatusValues [len(reportedAspects)]string
+
+func newReportedStatusValues(statuses map[string][]string) reportedStatusValues {
+	var values reportedStatusValues
+	for index, aspect := range reportedAspects {
+		sorted := slices.Clone(statuses[aspect])
+		slices.Sort(sorted)
+		values[index] = strings.Join(sorted, reportedValueSeparator)
+	}
+	return values
+}
+
+func (v reportedStatusValues) statuses() map[string][]string {
+	var statuses map[string][]string
+	for index, value := range v {
+		if value == "" {
+			continue
+		}
+		if statuses == nil {
+			statuses = make(map[string][]string, len(v))
+		}
+		statuses[reportedAspects[index]] = strings.Split(value, reportedValueSeparator)
+	}
+	return statuses
+}
+
+// ReportedStatus is the catalog's backend-only projection of the statuses an object
+// reports about itself for Attention to classify, such as an Argo CD Application's sync,
+// health, last sync operation, and conditions. Statuses maps each aspect to its current
+// values. Every reporting object is included whatever its statuses, so Attention can tell
+// an object that recovered from one that was deleted.
+type ReportedStatus struct {
+	Ref               resourcemodel.ResourceRef
+	Metadata          *resourcemodel.ResourceTableMetadata
+	CreationTimestamp int64
+	Statuses          map[string][]string
+}
+
+// ReportedStatus returns the object's identity and reported statuses only when the
+// object is a kind that reports them; its statuses may currently be empty.
+func (s Summary) ReportedStatus() (ReportedStatus, bool) {
+	if !s.reportsStatus {
+		return ReportedStatus{}, false
+	}
+	statuses := s.reportedStatuses.statuses()
+	var created int64
+	if parsed, err := time.Parse(time.RFC3339, s.CreationTimestamp); err == nil {
+		created = parsed.UnixMilli()
+	}
+	return ReportedStatus{Ref: s.Ref, Metadata: s.Metadata, CreationTimestamp: created, Statuses: statuses}, true
 }
 
 // ActionFacts carries lightweight, action-relevant state for catalog rows.

@@ -90,7 +90,7 @@ func TestReplaceWhereReplacesOnlyOwnedRows(t *testing.T) {
 		t.Fatalf("rows after ReplaceWhere = %v, want %v", got, want)
 	}
 
-	_, total := s.Scope(map[string][]string{"status": {"Deployment"}}, "")
+	_, total := s.Scope(map[string][]string{"status": {"Deployment"}}, "", false)
 	if total != 1 {
 		t.Fatalf("deployment facet total after ReplaceWhere = %d, want 1", total)
 	}
@@ -334,7 +334,7 @@ func TestScopeCountsMatchQueryTotal(t *testing.T) {
 
 	// No base filters / no search: Scope total equals the whole store, and the per-facet
 	// counts equal the maintained facet counters.
-	facets, total := s.Scope(nil, "")
+	facets, total := s.Scope(nil, "", false)
 	if total != 30 {
 		t.Fatalf("scope total = %d, want 30", total)
 	}
@@ -349,7 +349,7 @@ func TestScopeCountsMatchQueryTotal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sFacets, sTotal := s.Scope(base, "")
+	sFacets, sTotal := s.Scope(base, "", false)
 	if sTotal != fpage.Total {
 		t.Fatalf("scope total %d != query total %d", sTotal, fpage.Total)
 	}
@@ -365,7 +365,7 @@ func TestScopeCountsMatchQueryTotal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, searchTotal := s.Scope(nil, "pod-0")
+	_, searchTotal := s.Scope(nil, "pod-0", false)
 	if searchTotal != searchPage.Total {
 		t.Fatalf("scope search total %d != query total %d", searchTotal, searchPage.Total)
 	}

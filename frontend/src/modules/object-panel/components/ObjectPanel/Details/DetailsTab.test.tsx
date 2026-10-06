@@ -2,7 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.test.tsx
  *
  * DetailsTab composes the Overview (descriptor-driven, rendered by Overview/index) with the sibling
- * sections (Utilization, Containers, RBACRules, DataSection), each gated by the derived
+ * sections (Containers, RBACRules, DataSection), each gated by the derived
  * ObjectDetailModel. Per-kind FIELD rendering is covered by the descriptor tests + driftCheck; this
  * suite covers the composition contract: what DetailsTab passes to Overview and which sibling
  * sections appear.
@@ -16,7 +16,6 @@ import { buildObjectDetailModel } from './objectDetailModel';
 
 const useShortcutMock = vi.fn();
 const overviewMock = vi.fn();
-const utilizationMock = vi.fn();
 const containersMock = vi.fn();
 const rbacRulesMock = vi.fn();
 const dataMock = vi.fn();
@@ -43,14 +42,6 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Details/Overview', () => (
   default: (props: unknown) => {
     overviewMock(props);
     return <div data-testid="mock-overview" />;
-  },
-}));
-
-vi.mock('./DetailsTabUtilization', () => ({
-  __esModule: true,
-  default: (props: unknown) => {
-    utilizationMock(props);
-    return <div data-testid="mock-utilization" />;
   },
 }));
 
@@ -136,7 +127,6 @@ const overviewProps = () => overviewMock.mock.calls[0]?.[0] as Record<string, un
 describe('DetailsTab', () => {
   beforeEach(() => {
     overviewMock.mockClear();
-    utilizationMock.mockClear();
     containersMock.mockClear();
     rbacRulesMock.mockClear();
     dataMock.mockClear();
@@ -170,7 +160,7 @@ describe('DetailsTab', () => {
     cleanup();
   });
 
-  it('renders the Containers section for pods/workloads and the Utilization section with metrics', async () => {
+  it('renders the Containers section for pods/workloads and leaves utilization to the Metrics tab', async () => {
     const props = createBaseProps(
       { kind: 'Pod', name: 'pod-1', namespace: 'default' },
       {
@@ -183,24 +173,14 @@ describe('DetailsTab', () => {
       }
     );
 
-    const { cleanup } = await renderDetailsTab(props);
+    const { container, cleanup } = await renderDetailsTab(props);
     expect(containersMock).toHaveBeenCalledWith(
       expect.objectContaining({
         containers: expect.arrayContaining([{ name: 'app', image: 'example/app:1.0.0' }]),
       })
     );
-    expect(utilizationMock).toHaveBeenCalled();
+    expect(container.querySelector('.resource-bar-container')).toBeNull();
     expect(dataMock).not.toHaveBeenCalled();
-    cleanup();
-  });
-
-  it('hides utilization for inactive replicasets', async () => {
-    const props = createBaseProps(
-      { kind: 'ReplicaSet', name: 'web-rs', namespace: 'default' },
-      { replicas: '1/2', cpuUsage: '100m', memUsage: '128Mi', isActive: false }
-    );
-    const { cleanup } = await renderDetailsTab(props);
-    expect(utilizationMock).not.toHaveBeenCalled();
     cleanup();
   });
 
@@ -242,7 +222,7 @@ describe('DetailsTab', () => {
     sec.cleanup();
   });
 
-  it('uses node utilization metrics and omits containers when not applicable', async () => {
+  it('omits containers and utilization for nodes', async () => {
     const props = createBaseProps(
       { kind: 'Node', name: 'node-a', namespace: '' },
       {
@@ -254,8 +234,8 @@ describe('DetailsTab', () => {
         podsCapacity: '110',
       }
     );
-    const { cleanup } = await renderDetailsTab(props);
-    expect(utilizationMock.mock.calls[0][0]).toMatchObject({ mode: 'nodeMetrics' });
+    const { container, cleanup } = await renderDetailsTab(props);
+    expect(container.querySelector('.resource-bar-container')).toBeNull();
     expect(containersMock).not.toHaveBeenCalled();
     cleanup();
   });
@@ -306,7 +286,6 @@ describe('DetailsTab', () => {
     const props = createBaseProps({ kind: 'Widget', name: 'gizmo', namespace: 'weird' }, null);
     const { cleanup } = await renderDetailsTab(props);
     expect(overviewProps()).toMatchObject({ kind: 'Widget', name: 'gizmo', activeDetail: null });
-    expect(utilizationMock).not.toHaveBeenCalled();
     expect(containersMock).not.toHaveBeenCalled();
     cleanup();
   });

@@ -5,20 +5,26 @@
  * and previous logs (V) are optional features a viewer passes when it has them.
  */
 
-import { useSearchShortcutTarget, useShortcut } from '@ui/shortcuts';
+import { useKeyboardSurface, useSearchShortcutTarget, useShortcut } from '@ui/shortcuts';
 import { type Dispatch, type RefObject, useCallback } from 'react';
 import type { LogOptionsAction, LogOptionsState } from '../logOptionsReducer';
+import { closeLogSearch, logSearchAvailable, openLogSearch } from '../logToolbar';
 
 interface UseLogKeyboardShortcutsParams {
   isActive: boolean;
-  options: Pick<LogOptionsState, 'displayMode' | 'regexMatches'>;
+  options: Pick<LogOptionsState, 'displayMode' | 'regexMatches' | 'filterMode' | 'searchOpen'>;
   hasAnsiLogEntries: boolean;
   hasCopyableContent: boolean;
   canParseLogs: boolean;
+  /** A log line has arrived; the T, W, search and filter-option shortcuts wait for one, like their buttons. */
+  hasLogs: boolean;
   dispatch: Dispatch<LogOptionsAction>;
   copyLogs: () => void;
   filterInputRef: RefObject<HTMLInputElement | null>;
   logsContentRef: RefObject<HTMLElement | null>;
+  /** The whole viewer: controls, search row and log output. */
+  viewerRef: RefObject<HTMLElement | null>;
+  searchRowId: string;
   timestamps?: { toggle: () => void };
   previousLogs?: { toggle: () => void };
 }
@@ -29,17 +35,21 @@ export function useLogKeyboardShortcuts({
   hasAnsiLogEntries,
   hasCopyableContent,
   canParseLogs,
+  hasLogs,
   dispatch,
   copyLogs,
   filterInputRef,
   logsContentRef,
+  viewerRef,
+  searchRowId,
   timestamps,
   previousLogs,
 }: UseLogKeyboardShortcutsParams) {
-  const { displayMode, regexMatches } = options;
+  const { displayMode, regexMatches, filterMode, searchOpen } = options;
   const isParsedView = displayMode === 'parsed';
   const toggleTimestamps = timestamps?.toggle;
   const togglePreviousLogs = previousLogs?.toggle;
+  const searchAvailable = logSearchAvailable(hasLogs, searchOpen);
   // Toggle auto-refresh with 'R' key
   useShortcut({
     key: 'r',
@@ -60,16 +70,16 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 't',
     handler: useCallback(() => {
-      if (!isActive || !toggleTimestamps) {
+      if (!isActive || !hasLogs || !toggleTimestamps) {
         return false;
       }
       toggleTimestamps();
       return true;
-    }, [isActive, toggleTimestamps]),
+    }, [isActive, hasLogs, toggleTimestamps]),
     description: 'Toggle API timestamps',
     category: 'Logs',
     helpOrder: 30,
-    enabled: isActive && Boolean(toggleTimestamps),
+    enabled: isActive && hasLogs && Boolean(toggleTimestamps),
     priority: 20,
   });
 
@@ -90,66 +100,50 @@ export function useLogKeyboardShortcuts({
   });
 
   useShortcut({
-    key: 'h',
-    handler: useCallback(() => {
-      if (!isActive) {
-        return false;
-      }
-      dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' });
-      return true;
-    }, [isActive, dispatch]),
-    description: 'Toggle match highlighting',
-    category: 'Logs',
-    helpOrder: 50,
-    enabled: isActive,
-    priority: 20,
-  });
-
-  useShortcut({
     key: 'i',
     handler: useCallback(() => {
-      if (!isActive) {
+      if (!isActive || !searchAvailable) {
         return false;
       }
-      dispatch({ type: 'TOGGLE_INVERSE_MATCHES' });
+      dispatch({ type: 'SET_FILTER_MODE', payload: filterMode === 'invert' ? 'all' : 'invert' });
       return true;
-    }, [isActive, dispatch]),
+    }, [isActive, searchAvailable, dispatch, filterMode]),
     description: 'Toggle inverse filtering',
     category: 'Logs',
     helpOrder: 51,
-    enabled: isActive,
+    enabled: isActive && searchAvailable,
     priority: 20,
   });
 
   useShortcut({
     key: 'x',
     handler: useCallback(() => {
-      if (!isActive) {
+      if (!isActive || !searchAvailable) {
         return false;
       }
       dispatch({ type: 'TOGGLE_REGEX_MATCHES' });
       return true;
-    }, [isActive, dispatch]),
+    }, [isActive, searchAvailable, dispatch]),
     description: 'Toggle regex filtering',
     category: 'Logs',
     helpOrder: 52,
-    enabled: isActive,
+    enabled: isActive && searchAvailable,
     priority: 20,
   });
 
   useShortcut({
     key: 'c',
     handler: useCallback(() => {
-      if (!isActive || regexMatches) {
+      if (!isActive || !searchAvailable || regexMatches) {
         return false;
       }
       dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' });
       return true;
-    }, [dispatch, isActive, regexMatches]),
+    }, [dispatch, isActive, searchAvailable, regexMatches]),
     description: 'Toggle case-sensitive matching',
     category: 'Logs',
     helpOrder: 53,
-    enabled: isActive && !regexMatches,
+    enabled: isActive && searchAvailable && !regexMatches,
     priority: 20,
   });
 
@@ -226,16 +220,16 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'w',
     handler: useCallback(() => {
-      if (!isActive || isParsedView) {
+      if (!isActive || !hasLogs || isParsedView) {
         return false;
       }
       dispatch({ type: 'TOGGLE_WRAP_TEXT' });
       return true;
-    }, [isActive, isParsedView, dispatch]),
+    }, [isActive, hasLogs, isParsedView, dispatch]),
     description: 'Toggle text wrap',
     category: 'Logs',
     helpOrder: 63,
-    enabled: isActive && !isParsedView,
+    enabled: isActive && hasLogs && !isParsedView,
     priority: 20,
   });
 
@@ -298,16 +292,34 @@ export function useLogKeyboardShortcuts({
     priority: 500,
   });
 
-  // Focus filter input shortcut
+  // The search shortcut opens the search row and focuses its filter box. The
+  // logs tab keeps the shortcut while search is unavailable, so it doesn't fall
+  // through to a table behind the panel; it then does nothing.
   const focusFilterInput = useCallback(() => {
-    filterInputRef.current?.focus();
-    filterInputRef.current?.select();
-  }, [filterInputRef]);
+    if (searchAvailable) {
+      openLogSearch(dispatch, filterInputRef);
+    }
+  }, [searchAvailable, dispatch, filterInputRef]);
 
   useSearchShortcutTarget({
     isActive,
     focus: focusFilterInput,
     priority: 25,
     label: 'Logs filter',
+  });
+
+  // While the search row is open, Escape with focus in the viewer closes it.
+  // The viewer sits inside the object panel, so it is asked before the panel
+  // closes its tab.
+  const closeSearch = useCallback(() => {
+    closeLogSearch(dispatch, searchRowId);
+    return true;
+  }, [dispatch, searchRowId]);
+
+  useKeyboardSurface({
+    kind: 'region',
+    rootRef: viewerRef,
+    active: isActive && searchOpen,
+    onEscape: closeSearch,
   });
 }

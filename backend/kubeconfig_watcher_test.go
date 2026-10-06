@@ -290,7 +290,7 @@ func TestDeselectClusters_AbortsOnReconciliationFailure(t *testing.T) {
 	app.Refresh.refreshService.Store(nil)
 	setRefreshRuntimeContextForTest(app.Refresh, nil)
 	originalBuilder := newRefreshSubsystemWithServices
-	newRefreshSubsystemWithServices = func(system.Config) (*system.Subsystem, error) {
+	newRefreshSubsystemWithServices = func(context.Context, system.Config) (*system.Subsystem, error) {
 		return nil, errors.New("forced refresh reconciliation failure")
 	}
 	t.Cleanup(func() { newRefreshSubsystemWithServices = originalBuilder })

@@ -24,19 +24,16 @@ describe('objectMapG6Behaviors', () => {
     expect(onCanvasDragFinish).toHaveBeenCalledTimes(1);
   });
 
-  it('lets ordinary wheel gestures pan and leaves modifier wheels for zoom', () => {
-    const [, scrollCanvas] = objectMapG6Behaviors();
+  it('leaves every wheel gesture to the zoom handler so a wheel never also pans', () => {
+    const wheelBehaviorTypes = objectMapG6Behaviors()
+      .map((behavior) => {
+        if (typeof behavior === 'string') {
+          return behavior;
+        }
+        return typeof behavior === 'function' ? undefined : behavior.type;
+      })
+      .filter((type) => type === 'scroll-canvas' || type === 'zoom-canvas');
 
-    expect(scrollCanvas).toMatchObject({
-      type: 'scroll-canvas',
-      range: Infinity,
-    });
-    expect(typeof scrollCanvas).toBe('object');
-    if (typeof scrollCanvas !== 'object' || !scrollCanvas || !('enable' in scrollCanvas)) {
-      throw new Error('scroll-canvas behavior is missing its enable callback');
-    }
-
-    expect(scrollCanvas.enable({ ctrlKey: false, metaKey: false } as WheelEvent)).toBe(true);
-    expect(scrollCanvas.enable({ ctrlKey: true, metaKey: false } as WheelEvent)).toBe(false);
+    expect(wheelBehaviorTypes).toEqual([]);
   });
 });

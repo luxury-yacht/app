@@ -264,7 +264,7 @@ func (a *WorkspaceCoordinator) executeSelectionChangeWork(
 		return err
 	}
 	refreshStart := time.Now()
-	if err := a.publishConnectedClusterSelections(intent.normalizedSelections); err != nil {
+	if err := a.publishConnectedClusterSelections(workCtx, intent.normalizedSelections); err != nil {
 		return errors.Join(clientErr, err)
 	}
 	if phases != nil {
@@ -484,7 +484,7 @@ func (a *WorkspaceCoordinator) applySelectionPrune(
 	logComponent string,
 ) {
 	if len(remainingParsed) > 0 {
-		if err := a.refresh.updateRefreshSubsystemSelections(remainingParsed); err != nil {
+		if err := a.refresh.updateRefreshSubsystemSelections(a.CtxOrBackground(), remainingParsed); err != nil {
 			a.logger.Warn(fmt.Sprintf("Failed to reconcile refresh subsystems after deselect, aborting: %v", err), logComponent)
 			return
 		}

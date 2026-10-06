@@ -130,7 +130,7 @@ func TestRegisterHelmCacheInvalidationEvictsViaHelmStorageInformer(t *testing.T)
 		return true, nil
 	})
 	client := cgofake.NewClientset()
-	factory := informer.New(client, nil, time.Minute, checker)
+	factory := informer.New(context.Background(), client, nil, time.Minute, checker)
 	gateway.registerHelmCacheInvalidation(factory.HelmStorage(), selectionKey)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

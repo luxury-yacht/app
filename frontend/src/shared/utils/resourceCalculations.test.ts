@@ -6,7 +6,6 @@ import {
   formatMemoryValue,
   formatResourceExportValue,
   formatResourceValue,
-  getResourceLimitUsagePercent,
   parseResourceQuantity,
 } from './resourceCalculations';
 
@@ -27,13 +26,17 @@ describe('shared resource calculations', () => {
     ['memory', '1T', '2e12', 50],
     ['memory', '1P', '2E', 0.05],
     ['memory', '1000m', '2', 50],
-  ] as const)('calculates %s usage %s against limit %s', (type, usage, limit, expected) => {
-    expect(getResourceLimitUsagePercent(usage, limit, type)).toBeCloseTo(expected, 8);
+  ] as const)('parses %s quantities %s and %s in the same units', (type, first, second, ratio) => {
+    const parsedFirst = parseResourceQuantity(first, type);
+    const parsedSecond = parseResourceQuantity(second, type);
+    expect(parsedFirst).toBeDefined();
+    expect(parsedSecond).toBeDefined();
+    expect(((parsedFirst ?? 0) / (parsedSecond ?? 1)) * 100).toBeCloseTo(ratio, 8);
   });
 
-  it('distinguishes zero usage from missing, invalid, or nonpositive capacity', () => {
-    expect(getResourceLimitUsagePercent('0', '1Gi', 'memory')).toBe(0);
-    for (const usage of [
+  it('distinguishes zero from missing or invalid quantities', () => {
+    expect(parseResourceQuantity('0', 'memory')).toBe(0);
+    for (const value of [
       undefined,
       '',
       '-',
@@ -43,13 +46,9 @@ describe('shared resource calculations', () => {
       '1.2.3Gi',
       'invalid',
       '1garbage',
-      '-1',
       '1e999',
     ]) {
-      expect(getResourceLimitUsagePercent(usage, '1Gi', 'memory')).toBeUndefined();
-    }
-    for (const limit of [undefined, '', '-', 'invalid', '1garbage', '0', '-1', '1e999']) {
-      expect(getResourceLimitUsagePercent('1', limit, 'memory')).toBeUndefined();
+      expect(parseResourceQuantity(value, 'memory')).toBeUndefined();
     }
   });
 

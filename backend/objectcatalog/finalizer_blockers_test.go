@@ -14,9 +14,6 @@ func TestFinalizerBlockerSubscriptionPublishesOnlyRelevantChanges(t *testing.T) 
 	updates, unsubscribe := service.SubscribeFinalizerBlockers()
 	defer unsubscribe()
 
-	initial := <-updates
-	require.Zero(t, initial.Revision)
-
 	blocked := Summary{
 		Ref: resourcemodel.ResourceRef{
 			ClusterID: "cluster-a", Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets",
@@ -26,14 +23,14 @@ func TestFinalizerBlockerSubscriptionPublishesOnlyRelevantChanges(t *testing.T) 
 		lifecycle:       resourcemodel.ResourceLifecycle{Deleting: true, FinalizerBlocked: true},
 		deletionTime:    deletingAt.UnixMilli(),
 	}
-	service.replaceFinalizerBlockers(map[string]Summary{"widget": blocked})
+	service.publishSyncedAttentionSubsets(map[string]Summary{"widget": blocked})
 
 	update := <-updates
 	require.Equal(t, uint64(1), update.Revision)
 	require.Equal(t, []FinalizerBlocker{{Ref: blocked.Ref, DeletionTimestamp: deletingAt.UnixMilli()}}, service.FinalizerBlockers())
 
 	blocked.ResourceVersion = "2"
-	service.replaceFinalizerBlockers(map[string]Summary{"widget": blocked})
+	service.publishSyncedAttentionSubsets(map[string]Summary{"widget": blocked})
 	select {
 	case unexpected := <-updates:
 		t.Fatalf("resource-version-only update emitted blocker revision %d", unexpected.Revision)
@@ -41,7 +38,7 @@ func TestFinalizerBlockerSubscriptionPublishesOnlyRelevantChanges(t *testing.T) 
 	}
 
 	blocked.lifecycle.FinalizerBlocked = false
-	service.replaceFinalizerBlockers(map[string]Summary{"widget": blocked})
+	service.publishSyncedAttentionSubsets(map[string]Summary{"widget": blocked})
 	update = <-updates
 	require.Equal(t, uint64(2), update.Revision)
 	require.Empty(t, service.FinalizerBlockers())

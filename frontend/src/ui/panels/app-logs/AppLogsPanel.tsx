@@ -22,11 +22,12 @@ import {
   pruneFilterSelectionToOptions,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { AutoScrollIcon, CopyIcon } from '@shared/components/icons/LogIcons';
+import { AutoScrollIcon } from '@shared/components/icons/LogIcons';
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
 import { AriaGridColumnHeader, AriaGridRow } from '@shared/components/tables/AriaGridPrimitives';
+import { useLogDownloadMenu } from '@shared/hooks/useLogDownloadMenu';
 
 import { acquireColumnResizeCursor } from '@shared/utils/columnResizeCursor';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
@@ -48,7 +49,6 @@ import {
 } from 'react';
 import { readAppLogs, readAppLogsSince } from '@/core/app-state-access';
 import { ClearAppLogs, SetAppLogsPanelVisible } from '@/core/backend-api';
-import { writeClipboardText } from '@/core/desktop-runtime';
 import { type AppLogsAddedEvent, subscribeAppLogsAdded } from '@/core/logging/appLogsClient';
 import './AppLogsPanel.css';
 import { compareUtf16Strings } from '@/shared/utils/sort';
@@ -186,7 +186,6 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isAutoScroll, setIsAutoScroll] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [copyFeedback, setCopyFeedback] = useState<'idle' | 'copied' | 'error'>('idle');
 
   const [logLevelFilter, setLogLevelFilter] =
     useState<MultiSelectFilterSelection>(ALL_MULTISELECT_FILTER);
@@ -203,7 +202,6 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
   const prevScrollTopRef = useRef(0);
   const offsetFromBottomRef = useRef(0);
   const latestSequenceRef = useRef(0);
-  const copyFeedbackTimerRef = useRef<number | null>(null);
   const resizeDragRef = useRef<ResizeDragState | null>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const SCROLL_THRESHOLD = 10;
@@ -662,15 +660,6 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
     [clusterFilter, componentFilter, logLevelFilter, logs, textFilter]
   );
 
-  useEffect(() => {
-    return () => {
-      if (copyFeedbackTimerRef.current !== null) {
-        window.clearTimeout(copyFeedbackTimerRef.current);
-        copyFeedbackTimerRef.current = null;
-      }
-    };
-  }, []);
-
   const showFilteredCount =
     isNarrowingFilterSelection(logLevelFilter) ||
     isNarrowingFilterSelection(componentFilter) ||
@@ -711,50 +700,28 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
 
-  const resetCopyFeedback = useCallback(() => {
-    if (copyFeedbackTimerRef.current !== null) {
-      window.clearTimeout(copyFeedbackTimerRef.current);
-    }
-    copyFeedbackTimerRef.current = window.setTimeout(() => {
-      copyFeedbackTimerRef.current = null;
-      setCopyFeedback('idle');
-    }, 1200);
-  }, []);
-
-  const handleCopyToClipboard = useCallback(async () => {
-    if (filteredLogs.length === 0) {
-      setCopyFeedback('error');
-      resetCopyFeedback();
-      return;
-    }
-
-    const formattedLogs = filteredLogs
-      .map((log) => {
-        const timestamp = formatTimestamp(log.timestamp);
-        const level = log.level.toUpperCase().padEnd(5);
-        const source = log.source ? `[${log.source}] ` : '';
-        const clusterPart = `[${getLogScopeLabel(log)}] `;
-        return `${timestamp} ${level} ${source}${clusterPart}${log.message}`;
-      })
-      .join('\n');
-
-    try {
-      await writeClipboardText(formattedLogs);
-      setCopyFeedback('copied');
-    } catch (err) {
-      setCopyFeedback('error');
-      errorHandler.handle(err, { action: 'copyLogs' }, 'Failed to copy logs to clipboard');
-    }
-    resetCopyFeedback();
-  }, [filteredLogs, formatTimestamp, resetCopyFeedback]);
+  // The shown logs as the Download menu copies or saves them.
+  const getDownloadText = useCallback(
+    () =>
+      filteredLogs
+        .map((log) => {
+          const timestamp = formatTimestamp(log.timestamp);
+          const level = log.level.toUpperCase().padEnd(5);
+          const source = log.source ? `[${log.source}] ` : '';
+          const clusterPart = `[${getLogScopeLabel(log)}] `;
+          return `${timestamp} ${level} ${source}${clusterPart}${log.message}`;
+        })
+        .join('\n'),
+    [filteredLogs, formatTimestamp]
+  );
+  const { downloadItem } = useLogDownloadMenu({
+    getText: getDownloadText,
+    fileBase: 'app-logs',
+    source: 'AppLogsPanel',
+    disabled: filteredLogs.length === 0,
+  });
 
   const appLogsIconBarItems = useMemo<IconBarItem[]>(() => {
-    let copyIconFeedback: 'success' | 'error' | null = null;
-    if (copyFeedback === 'copied') {
-      copyIconFeedback = 'success';
-    } else if (copyFeedback === 'error') {
-      copyIconFeedback = 'error';
-    }
     return [
       {
         type: 'toggle',
@@ -766,16 +733,7 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
         ariaLabel: 'Toggle auto-scroll',
       },
       { type: 'separator' },
-      {
-        type: 'action',
-        id: 'copyAppLogs',
-        icon: <CopyIcon width={18} height={18} />,
-        onClick: handleCopyToClipboard,
-        title: 'Copy logs to clipboard',
-        ariaLabel: 'Copy logs to clipboard',
-        disabled: filteredLogs.length === 0,
-        feedback: copyIconFeedback,
-      },
+      downloadItem,
       {
         type: 'action',
         id: 'clearAppLogs',
@@ -786,15 +744,7 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
         disabled: logs.length === 0,
       },
     ];
-  }, [
-    copyFeedback,
-    filteredLogs.length,
-    handleClearAppLogs,
-    handleCopyToClipboard,
-    handleToggleAutoScroll,
-    isAutoScroll,
-    logs.length,
-  ]);
+  }, [downloadItem, handleClearAppLogs, handleToggleAutoScroll, isAutoScroll, logs.length]);
 
   let renderedLogs: ReactNode;
   if (isLoading) {

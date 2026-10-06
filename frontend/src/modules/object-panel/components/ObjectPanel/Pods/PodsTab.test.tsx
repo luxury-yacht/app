@@ -63,8 +63,12 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   }),
 }));
 
+// Most tests render the tab in a native panel window; null renders it in the main window.
+const panelWindowRole = vi.hoisted(() => ({
+  current: { windowName: 'panel-1' } as { windowName: string } | null,
+}));
 vi.mock('@/core/panel-windows/PanelWindowRoleContext', () => ({
-  usePanelWindowRole: () => ({ windowName: 'panel-1' }),
+  usePanelWindowRole: () => panelWindowRole.current,
 }));
 
 // Provide a DIFFERENT global clusterId to prove PodsTab uses the panel scope, not this one.
@@ -292,7 +296,7 @@ describe('PodsTab (query-backed)', () => {
       setColumnWidths: vi.fn(),
       columnVisibility: null,
       setColumnVisibility: vi.fn(),
-      filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+      filters: { search: '', kinds: [], namespaces: [] },
       setFilters: vi.fn(),
       pageSize: null,
       setPageSize: vi.fn(),
@@ -395,6 +399,20 @@ describe('PodsTab (query-backed)', () => {
     expect(getGridTableProps().data.map((pod: PodSnapshotEntry) => pod.ref.name)).toEqual([
       'query-pod',
     ]);
+  });
+
+  // A favorite saves a main-window view, so a table inside an object panel offers none,
+  // in the main window as well as in a panel window.
+  it('offers no Favorite in the main window either', async () => {
+    panelWindowRole.current = null;
+    try {
+      mockQueryRows([createPod()]);
+      await renderPods();
+      const preActions = getGridTableProps().filters?.options?.preActions ?? [];
+      expect(preActions.some((item) => 'id' in item && item.id === 'favorite')).toBe(false);
+    } finally {
+      panelWindowRole.current = { windowName: 'panel-1' };
+    }
   });
 
   it('omits workspace-only Pod and namespace navigation in a panel window', async () => {

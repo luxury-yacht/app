@@ -233,6 +233,8 @@ func TestLoadFavoritesFileMigratesV2FavoritesIndividually(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rewritten, &rewrittenState))
 	require.Equal(t, favoritesSchemaVersion, rewrittenState.SchemaVersion)
 	require.Equal(t, []string{"first", "last"}, []string{rewrittenState.Favorites[0].ID, rewrittenState.Favorites[1].ID})
+	// Search always ignores case now: a stored Match case flag loads and is not written back.
+	require.NotContains(t, string(rewritten), "caseSensitive")
 }
 
 func TestLoadFavoritesFileMigratesV2WorkloadsAndPodsIntoBothPanes(t *testing.T) {

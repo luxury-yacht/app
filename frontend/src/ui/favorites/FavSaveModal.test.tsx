@@ -283,7 +283,6 @@ const defaultFilters: FavoriteFilters = {
     apiGroups: { mode: 'some', values: ['apps'] },
     resourceScopes: { mode: 'some', values: ['Namespace'] },
   },
-  caseSensitive: false,
   includeMetadata: false,
 };
 
@@ -935,6 +934,61 @@ describe('FavSaveModal', () => {
       sortDirection: 'desc',
       columnVisibility: {},
       columnOrder: ['status', 'name', 'age'],
+    });
+  });
+
+  // A favorite must not keep sorting by a column it hides.
+  it('hides a column and drops the sort on it', async () => {
+    const onSave = vi.fn();
+    const existingFavorite = makeFavorite({
+      panes: {
+        main: {
+          filters: defaultFilters,
+          tableState: {
+            sortColumn: 'status',
+            sortDirection: 'asc',
+            columnVisibility: {},
+            columnOrder: ['name', 'status', 'age'],
+          },
+        },
+      },
+    });
+    await renderComponent(
+      makeProps({
+        existingFavorite,
+        panes: [
+          {
+            id: 'main',
+            label: 'Pods',
+            ...existingFavorite.panes.main,
+            filterOptions: {},
+            columns: [
+              { key: 'name', label: 'Name', hideable: false, sortable: true },
+              { key: 'status', label: 'Status', hideable: true, sortable: true },
+              { key: 'age', label: 'Age', hideable: true, sortable: true },
+            ],
+          },
+        ],
+        onSave,
+      })
+    );
+
+    await act(async () => {
+      container
+        .querySelector<HTMLElement>('.dropdown-columns-menu [data-column-key="status"]')
+        ?.querySelector<HTMLButtonElement>('.dropdown-option')
+        ?.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button.save')?.click();
+      await Promise.resolve();
+    });
+
+    const saved = onSave.mock.calls[0]?.[0] as Favorite;
+    expect(saved.panes.main.tableState).toMatchObject({
+      sortColumn: '',
+      columnVisibility: { status: false },
     });
   });
 

@@ -53,11 +53,18 @@ func TestDetailSegmentsSearchTextExpandsCollapsedLists(t *testing.T) {
 	require.Equal(t, "Hosts: web.example.com, b.example.com, c.example.com, Rules: 4", DetailSegmentsSearchText(segments))
 }
 
-func TestFormatPortsSummaryGroupsUniformProtocols(t *testing.T) {
-	require.Equal(t, "", FormatPortsSummary(nil))
-	require.Equal(t, "443/TCP", FormatPortsSummary([]PortProtocol{{Port: 443, Protocol: "TCP"}}))
-	require.Equal(t, "443,80/TCP", FormatPortsSummary([]PortProtocol{{Port: 443, Protocol: "TCP"}, {Port: 80, Protocol: "TCP"}}))
-	require.Equal(t, "443/TCP,53/UDP", FormatPortsSummary([]PortProtocol{{Port: 443, Protocol: "TCP"}, {Port: 53, Protocol: "UDP"}}))
+// A port list collapses like every other list in the address slot, so a Service with many
+// ports never outgrows its table column; the full list stays searchable and in the tooltip.
+func TestPortsDetailSegmentCollapsesLikeOtherAddressLists(t *testing.T) {
+	require.Equal(t, DetailSegment{}, PortsDetailSegment(nil))
+	require.Equal(t, DetailSegment{Slot: DetailSlotAddress, Label: "Ports", Value: "443/TCP"},
+		PortsDetailSegment([]PortProtocol{{Port: 443, Protocol: "TCP"}}))
+	require.Equal(t, DetailSegment{
+		Slot: DetailSlotAddress, Label: "Ports", Value: "8686/TCP +3",
+		Search: "8686/TCP, 4317/TCP, 4318/TCP, 53/UDP",
+	}, PortsDetailSegment([]PortProtocol{
+		{Port: 8686, Protocol: "TCP"}, {Port: 4317, Protocol: "TCP"}, {Port: 4318, Protocol: "TCP"}, {Port: 53, Protocol: "UDP"},
+	}))
 }
 
 func TestListDetailSegmentCollapsesToFirstPlusCount(t *testing.T) {

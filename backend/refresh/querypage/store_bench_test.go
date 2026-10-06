@@ -94,7 +94,7 @@ func BenchmarkStoreQueryDeepPage(b *testing.B) {
 // BenchmarkStoreQueryAround measures the anchored jump: one counted O(rank+limit)
 // walk to the page-aligned window containing the anchor. mid = rank ~N/2,
 // deep = last rank (worst case, a full-index counted walk). Budget context in
-// docs/architecture/large-data.md "Current Browse Budget".
+// docs/architecture/large-data-measurements.md "Current Browse Budget".
 func BenchmarkStoreQueryAround(b *testing.B) {
 	for _, n := range []int{100_000, 250_000} {
 		for _, tc := range []struct {

@@ -1,265 +1,240 @@
 # Backend data layer — store, ingest, governor, delivery
 
-The contract for how cluster object-state reaches a table. One per-cluster columnar
-store + one `Query → Page` engine serve **every typed table and Browse**; everything
-else (detail, object-map, overview, logs, metrics, permissions) is a deliberately
-separate path (see "Boundaries"). This doc is the durable architecture extracted from
-the completed `v2` rewrite plan.
+How cluster object state reaches a table. One per-cluster columnar store and
+one `Query → Page` engine serve every typed table and Browse; detail,
+object-map, overview, logs, metrics, and permissions are deliberately separate
+paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
 
 ## Ownership
 
-- **Store + query engine:** `backend/refresh/querypage/` — the owned columnar
-  `Store[R]` and the `Query → Page` engine.
-- **Ingestion:** `backend/refresh/ingest/` — owned-reflector LIST+WATCH ingestion with
-  projection-at-intake; `backend/refresh/informer/` — the shared typed-informer factory
-  (uncut kinds), projection transform, and process-wide startup transport policy.
-- **Per-domain serve + maintained stores:** `backend/refresh/snapshot/` —
-  `querypage_typed.go` (`resolveTypedSnapshotPageViaStore`, `resolveMaintainedDirect`,
+- **Store + query engine:** `backend/refresh/querypage/` (owned columnar
+  `Store[R]` and the `Query → Page` engine).
+- **Ingestion:** `backend/refresh/ingest/` (owned-reflector LIST+WATCH with
+  projection at intake); `backend/refresh/informer/` (shared typed-informer
+  factory for uncut kinds, projection transform, startup transport policy).
+- **Serve + maintained stores:** `backend/refresh/snapshot/querypage_typed.go`
+  (`resolveTypedSnapshotPageViaStore`, `resolveMaintainedDirect`,
   `typedMaintainedStore`); `backend/objectcatalog/` for Browse.
-- **Lifecycle / memory:** `backend.RefreshCoordinator` in
-  `backend/refresh_*.go`, with governor policy in
-  `backend/refresh/system/governor.go` and spill in
-  `backend/refresh/domain/maintained_stores.go`. Its reset path unpublishes
-  request/stream routing and stops producers before clearing cache and spill
-  state; offline reset removes the same cache root through
-  `internal/appstate.Manifest`.
+- **Lifecycle/memory:** `backend.RefreshCoordinator` (`backend/refresh_*.go`),
+  governor policy in `backend/refresh/system/governor.go`, spill in
+  `backend/refresh/domain/maintained_stores.go`. Reset unpublishes routing and
+  stops producers before clearing cache and spill state; offline reset removes
+  the same cache root through `internal/appstate` `Manifest`.
 
 ## Invariants
 
-1. **One store, one query language, one delivery model.** Typed tables and Browse are
-   the same `querypage` call differing only by `WHERE kind`. Do not add a second query
-   engine or cursor codec.
-2. **The webview never holds, sorts, or filters N.** All ordering/filtering/facet/total
-   authority is backend-side; the client holds the visible page + a small LRU. A
-   client-side narrow of the already-loaded window with the identical predicate during a
-   refetch is allowed; full-N client sort/filter is not.
-3. **No cgo, no embedded SQL engine.** The store is a pure-Go owned columnar SoA. Any
-   on-disk fallback must stay pure-Go (`bbolt`/Badger), never SQLite/cgo.
-4. **Object state and metrics are two sources joined by UID.** Object columns are
-   stored; metrics (CPU/mem) are **overlaid at serve** from the poller
-   (`LatestPodUsage()`), never written to the store. A metrics poll must never re-project
-   or re-store an object row. The join happens inside the BASE table domains
-   (`pods`/`nodes`/`namespace-workloads`, which carry an extra `metric` source clock) —
-   there are no separate `*-metrics` domains and no client-side metric join
-   (see [`resource-metrics.md`](./resource-metrics.md)).
-5. **All object references carry `clusterId` + group/version/kind** (+ namespace/name
-   when specific) — see [`multi-cluster.md`](./multi-cluster.md).
+1. **One store, one query language, one delivery model.** Typed tables and
+   Browse are the same `querypage` call differing only by `WHERE kind`. Do not
+   add a second query engine or cursor codec.
+2. **The webview never holds, sorts, or filters N.** Ordering, filtering,
+   facets, and totals are backend-owned; the client holds the visible page and a
+   small LRU. Narrowing the already-loaded window with the identical predicate
+   during a refetch is allowed; full-N client sort/filter is not.
+3. **No cgo, no embedded SQL engine.** The store is a pure-Go owned columnar
+   SoA. Any on-disk fallback stays pure-Go (`bbolt`/Badger), never SQLite/cgo.
+4. **Object state and metrics are separate sources joined by UID.** Metrics are
+   overlaid at serve from the poller (`LatestPodUsage()`) inside the base table
+   domains (`pods`, `nodes`, `namespace-workloads`, which carry an extra
+   `metric` clock), never written to the store. A metrics poll never
+   re-projects or re-stores an object row. There are no per-kind `*-metrics`
+   domains and no client-side metric join; `namespace-metrics` is the one
+   metric-only payload ([resource-metrics.md](resource-metrics.md)).
 
 ## Store & query engine (`querypage`)
 
-- **Columnar SoA, dictionary-interned.** String columns intern to `uint32` dict ids;
-  numeric/bool columns are pointer-free slices; a recycled `rowId` arena. Adaptive
-  promotion drops the dict for ≥90%-unique columns. A by-`rowId` match cache answers
-  filter/search/facet/total with no row reconstruction. Starting points:
-  `querypage/store.go`, `columnar.go`.
-- **Keyset indexes, per direction.** One asc + one desc `google/btree` per sortable key,
-  tie-broken to reproduce the live total order exactly. Pagination is a bounded keyset
-  range scan — **O(log N + page) when the walked entries match** (unfiltered, or dense
-  filters); a sparse filter/search walks past non-matching entries to fill the page and
-  degrades toward O(N) worst case (`store.go` `collect`; the trigram index narrows
-  search candidates but membership is still verified per entry). Cost honesty on
-  counts: the **unfiltered** total is O(1) (`rows.len()`) and the facet counters
-  returned with every page are maintained-counter reads — but a **filtered/searched**
-  query pays a full O(N) match-value scan for its exact `Total`
-  (`store.go:524-532`), and `Scope` (filtered facet counts + totals for the
-  maintained-direct path) is the same O(N) column scan. These are cheap
-  no-reconstruction column reads — measured 4–18 ms per page at 100k–250k rows
-  (see `large-data.md` "Current Browse Budget") — linear, not O(1). Cursor =
-  `(sortValue, uid)` + signature (`querypage/cursor.go`). There is **no**
-  order-statistics (Rank/At) augmentation — it was only needed by the unbuilt delta
-  layer.
-- **On-disk format = the same SoA, mmap'd.** `querypage/columnstore_mmap.go` (zero-copy `unsafe.Slice`/`unsafe.String` over `syscall.Mmap`,
-  portable heap fallback). This is what spill and Cold-serving use.
-- **Serve paths:** typed domains → `resolveMaintainedDirect` (query the persistent store
-  in place) or `resolveTypedSnapshotPageViaStore` (rebuild a per-Build store for
-  cross-kind-join domains); Browse → `objectcatalog` `queryViaEngine`. Each domain is
-  gated byte-identical to a brute list+project path (`…MaintainedMatchesListPath`).
+- **Columnar SoA, dictionary-interned** (`store.go`, `columnar.go`): string
+  columns intern to `uint32` dict ids, numeric/bool columns are pointer-free
+  slices, rows live in a recycled `rowId` arena, and columns that are ≥90%
+  unique drop the dictionary. A by-`rowId` match cache answers
+  filter/search/facet/total without row reconstruction.
+- **Per-direction keyset indexes:** one asc and one desc `google/btree` per
+  sortable key, tie-broken to reproduce the live total order. Cursor =
+  `(sortValue, uid)` plus signature (`cursor.go`).
+- **Cost:** O(log N + page) when walked entries match; sparse filters/search
+  degrade toward O(N) (`store.go` `collect`; trigram narrowing still verifies
+  each entry). Unfiltered totals are O(1) and facet counters are maintained,
+  but a filtered exact `Total` and `Scope` (maintained-direct filtered facets
+  and totals) are O(N) column scans: 4–18 ms per page at 100k–250k rows
+  ([Current Browse Budget](large-data-measurements.md#current-browse-budget)).
+- **On-disk format = the same SoA, mmap'd** (`columnstore_mmap.go`: zero-copy
+  `unsafe.Slice`/`unsafe.String` over `syscall.Mmap`, portable heap fallback).
+  Spill and Cold serving use it.
+- **Serve paths:** typed domains use `resolveMaintainedDirect` (query the
+  persistent store in place) or `resolveTypedSnapshotPageViaStore` (per-Build
+  store for cross-kind-join domains); Browse uses `objectcatalog`
+  `queryViaEngine`.
 
 ## Ingestion (owned-reflector LIST+WATCH + projection-at-intake)
 
-- **Project at intake, discard the typed object.** `ingest.Manager` creates
-  client-go reflectors for List/Watch/relist/RV handling and feeds a `ProjectingStore` that keeps
-  only the projected bundle. `informer.StripManagedFields` (a `WithTransform` on every
-  factory) drops `managedFields` before any cache — the core memory lever. Starting
-  points: `ingest/manager.go`, `ingest/projecting_store.go`, `informer/projection.go`.
-- **LIST+WATCH is the startup transport.** `informer/watchlist_config.go` disables
-  client-go's beta WatchList gate before reflectors are constructed. A capability probe
-  is insufficient because a proxy can deliver the required terminal bookmark while
-  streaming a large initial collection too slowly for an interactive application.
-  Ordinary LIST establishes the complete baseline; WATCH then carries live changes.
-  A per-GVR sync-deadline degrades a hung GVR instead of wedging the cluster
-  (`informer/factory.go`). Deadline settlement is only a liveness decision: until
-  the source completes a real initial list, snapshots that depend on it report
-  partial/inexact data with a syncing issue instead of an authoritative empty
+- **Project at intake.** `ingest.IngestManager` (`ingest/manager.go`) runs
+  client-go reflectors for List/Watch/relist/RV handling and feeds a
+  `ProjectingStore` (`ingest/projecting_store.go`) that keeps only the projected
+  bundle. `informer.StripManagedFields` (`informer/projection.go`, a
+  `WithTransform` on every factory) drops `managedFields` before any cache; it
+  is the main memory lever.
+- **Locking:** `IngestManager.mu` is a leaf lock that guards only the entries
+  map and is never held across a store call; sink delivery runs under the
+  store write lock.
+- **LIST+WATCH is the startup transport.** `informer/watchlist_config.go`
+  disables client-go's beta WatchList gate before reflectors are built. A
+  capability probe is insufficient: a proxy can deliver the terminal bookmark
+  while streaming a large initial collection too slowly for an interactive app.
+- **Sync deadline is liveness only.** A per-GVR deadline
+  (`informer/factory.go`) degrades a hung GVR instead of wedging the cluster;
+  until the source completes a real initial list, dependent snapshots report
+  partial/inexact data with a syncing issue, never an authoritative empty
   result.
-- **Immediate parallel cold start.** The ingest manager declares each kind's
-  permission-approved partitions before launching that kind, then starts every permitted
-  reflector without an additional application-level admission queue. Client-go's
-  per-cluster REST rate limiter remains the request-pressure boundary. The shared
-  15-second liveness deadline can mark a still-syncing source degraded, but never delays
-  another source from beginning its initial LIST.
-- **Two cutover shapes.** Registry-driven single-object kinds flip a descriptor
-  `IngestOwned` flag (the generic path wires maintained store, catalog, object-map,
-  response-cache). Cross-kind-join domains (pods, workloads, network, nodes) use a
-  bespoke `RegisterReflector` + **serve-time re-aggregation** (metrics overlay, pod
-  aggregates, HPA, Service↔EndpointSlice) — these joins stay at serve by design.
-- **Cross-kind projection inputs must declare a late-arrival story.** A projection may
-  read its OWN object freely; any input read from another kind's cache at projection
-  time is a race against that kind's sync, and owned reflectors never resync — a value
-  baked from an unsynced cache is wrong forever (the empty-Deployment-Pods-tab bug,
-  2026-07-05). Exactly two sanctioned shapes:
-  1. **Don't bake — re-join at serve** (Service↔EndpointSlice endpoint counts, pod
-     aggregates, metrics overlay): correct by construction; right for volatile joins.
-  2. **Bake + heal on the input kind's events** (the pod ReplicaSet→Deployment owner:
-     `snapshot/pod_owner_heal.go` applied via `ingest.ProjectingStore.RewriteBundlesByIndex`
-     from the RS informer handler): right for immutable joins that serve filters and
-     doorbell scope routing need pre-resolved. A heal MUST be pinned by an equivalence
-     test — healed bundle byte-equal to a fresh synced-cache projection
-     (`pod_owner_heal_test.go`) — so the heal and the projector cannot drift.
-  The tell in review: a `New*IngestProjector` signature growing another kind's
+- **Immediate parallel cold start.** The manager declares each kind's
+  permission-approved partitions, then starts every permitted reflector with no
+  application admission queue; client-go's per-cluster REST rate limiter is the
+  pressure boundary. The shared 15-second liveness deadline can mark a source
+  degraded but never delays another source's initial LIST.
+- **Two cutover shapes.** Registry-driven single-object kinds set the
+  descriptor `IngestOwned` flag (the generic path wires maintained store,
+  catalog, object-map, and response cache). Cross-kind-join domains (pods,
+  workloads, network, nodes) use `RegisterReflector` plus serve-time
+  re-aggregation (metrics overlay, pod aggregates, HPA, Service↔EndpointSlice).
+- **Cross-kind projection inputs need a late-arrival story.** A projection may
+  read its own object freely. Reading another kind's cache at projection time
+  races that kind's sync, and owned reflectors never resync, so a baked value
+  from an unsynced cache stays wrong (this caused the empty Deployment Pods
+  tab). Only two shapes are allowed:
+  1. **Re-join at serve** (endpoint counts, pod aggregates, metrics): correct
+     by construction; use for volatile joins.
+  2. **Bake + heal on the input kind's events** (pod ReplicaSet→Deployment
+     owner: `snapshot/pod_owner_heal.go` via
+     `ingest.ProjectingStore.RewriteBundlesByIndex` from the RS handler): for
+     immutable joins that serve filters and doorbell routing need pre-resolved.
+     Pin the heal with an equivalence test (healed bundle byte-equal to a fresh
+     synced-cache projection, `pod_owner_heal_test.go`).
+  Review tell: a `New*IngestProjector` signature gaining another kind's
   lister/store without one of these shapes.
-- **Runtime-discovered sources share ingest ownership.** The existing typed CRD
-  informer supplies definitions; initial admission waits for discovery's preferred
-  served version. Ingest compares the source specification, definition UID and
+- **Runtime-discovered sources share ingest ownership.** The typed CRD informer
+  supplies definitions; initial watch admission waits for discovery's preferred
+  served version. Ingest compares source specification, definition UID, and
   permitted namespace partitions before allocating replacement stores/reflectors.
-  Permission checks happen outside both definition-selection and lifecycle locks,
-  with admission rechecked before commit so a delayed check cannot restore an
-  older definition. Replacement cancels and joins its predecessor before starting;
-  incomplete definitions retain the predecessor. Terminal shutdown rejects new
-  admissions. These sources hold catalog projections rather than full objects.
-  The detail-cache sink runs before catalog notification, and retirement evicts
-  responses for the old source. YAML and visible-page/export hydration continue
-  to read live API payloads; catalog projections do not replace those reads.
-- **Kept-as-typed-informer (documented):** ReplicaSet (pod-owner resolution), CRDs (CR
-  discovery), events, gateway-API ×8, HPA, namespaces — each justified in `factory.go`.
+  Permission checks run outside definition-selection and lifecycle locks, and
+  admission is rechecked before commit so a delayed check cannot restore an
+  older definition. Replacement cancels and joins its predecessor first;
+  incomplete definitions keep the predecessor; terminal shutdown rejects
+  admissions. These sources hold catalog projections, not full objects: the
+  detail-cache sink runs before catalog notification, retirement evicts the
+  old source's responses, and YAML and visible-page/export hydration still read
+  live API payloads.
+- **Kept as typed informers** (each justified in `informer/factory.go`):
+  ReplicaSet (pod-owner resolution), CRDs (CR discovery), events, gateway-API
+  ×8, HPA, namespaces.
 
 ## Lifecycle & governor
 
-- **Foreground / Background / Cold** per cluster (`system/governor.go`,
-  `refresh_governor.go`). Foreground and Background both keep the subsystem
-  live; metrics polling follows cluster-scoped frontend lease demand rather than
-  governor visibility. A memory-pressure poll (`runtime.ReadMemStats` HeapInuse vs budget — **not**
-  `GOMEMLIMIT`) collapses the warm set under pressure and `FreeOSMemory`s.
-- **Spill + Cold-serving.** Maintained stores spill to a per-cluster cache dir in the
-  columnar format, warm-paint on re-warm (cross-restart, format-version-guarded), and
-  reconcile after sync. A Cold cluster can serve from read-only **mmap-aliased** stores
-  (column data off-heap/OS-reclaimable, indexes resident) rather than full teardown;
-  re-warm unroutes then closes the mappings safely. Cold clusters do not run object-catalog
-  discovery, capability checks, or sync loops against their stopped feeds; the catalog
-  restarts as part of re-warm. Starting points:
-  `domain/maintained_stores.go`, `querypage/columnstore_mmap.go`, `refresh_spill.go`.
-- **Cold has a server-owned entry gate.** A desired Cold tier stays unapplied while
-  the live subsystem builds ready `namespaces` and `cluster-overview` snapshots
-  for its cluster scope. The namespace build uses the aggregate lifecycle callback,
-  so Ready and the retained sidebar/Global payloads exist before any producer stops.
-  Preparation waits on that lifecycle state and the current subsystem generation's
-  namespace workload tracker without polling namespace snapshots, retries the overview
-  from the backend, and does not wait for tab activation. This generation-local gate
-  prevents a retained Ready state from cooling a replacement subsystem before its own
-  stores actually sync or are explicitly permission-skipped. Only a successful
-  preparation marks the subsystem eligible for cooling; the governor records Cold
-  after the executor reaches it. Preparation is owned by that subsystem generation:
-  replacement or teardown cancels an in-flight
-  build, and the retry loop exits as soon as the generation is no longer current.
-  Under sustained HeapInuse pressure only, an unsettled preparation that exceeds one
-  bounded snapshot-attempt grace degrades to the normal full teardown path. Available
-  stores still spill, but the backend is unavailable for that cluster until re-warm;
-  it never serves an unsettled store as a Cold mmap baseline. Every over-budget sample
-  re-drives reconciliation so this fallback remains reachable after the pressure edge.
-- **Re-warm keeps Ready.** Governor re-warms rebuild the subsystem through the same
-  per-cluster chokepoint as first builds. Normal mmap-cooled serving is continuous
-  (cooled stores serve until the aggregate re-routes; fresh stores warm-paint from spill);
-  after a pressure-forced full teardown, frontend-retained rows remain visible while the
-  backend rebuilds from spill —
-  `transitionClusterToLoading` guards the chokepoint so an already-READY cluster is
-  never demoted to loading on a tab switch. Aggregate stream routing then ends
-  only that cluster's old-manager subscriptions so they re-establish against the
-  replacement without reconnecting other clusters; continuity follows
-  [the freshness contract](data-freshness.md#signals-and-source-clocks).
-- **Tier application is serialized.** Cooling and re-warming are multi-step subsystem
-  replacements. A newer visible-cluster intent may be recorded while one is running,
-  but its reconciliation waits until the in-flight transition has reached a consistent
-  Cold or live state. Foreground activation must never inspect or accept the interval
-  after feeds stop but before the subsystem is marked Cold. After reconciliation,
-  activation replays the cluster's current lifecycle state so a frontend that missed
-  an earlier transition converges even when the backend state did not change. The
-  governor publishes a separate planned tier before executor work begins, then records
-  the applied tier only after that work completes. Catalog gating reads the plan: it
-  closes before cooling stops feeds and opens before re-warm starts the catalog. A live
-  tier is reached only when both the subsystem and its cluster object catalog exist.
-- **Cluster workload readiness is server-driven.** A namespaces snapshot moves
-  `loading`/`loading_slow` to `degraded` once every workload source has settled but at
-  least one missed the deadline. `degraded` is operational: available refresh data,
-  permissions, actions, and navigation remain usable while incomplete tables stay
-  labelled. Only actual initial sync or an explicit permission skip moves the cluster
-  to `ready`. The backend self-builds the snapshot on each pending/degraded namespaces
-  doorbell (`runNamespacesReadinessSelfBuild` via the
-  `Subsystem.NamespacesDoorbell` observer, wired per cluster in
-  `buildRefreshSubsystemForSelection`). Readiness never depends on the frontend
-  asking first. Idle re-arm ticks inspect only source readiness; they rebuild workload
-  rollups on an ingest event, a readiness edge, or a throttled pending change. Governor
-  Cold admission remains stricter and requires actual `ready` data for the current
-  subsystem generation.
-- **Client publication and lifecycle are ordered per cluster.** Startup settings and
-  saved-selection restore run through the runtime selection coordinator. A completed
-  client is installed inside its per-cluster operation before that operation publishes
-  `connected`, without waiting for sibling builds. Building the refresh subsystem then
-  advances the cluster to `loading`; stale client-build completions cannot demote
-  `loading`, `loading_slow`, `degraded`, or `ready` back to `connecting`/`connected`.
+- **Tiers:** Foreground, Background, and Cold per cluster
+  (`system/governor.go`, `backend/refresh_governor.go`). Foreground and
+  Background keep the subsystem live; metrics polling follows cluster-scoped
+  lease demand, not governor tier. A memory-pressure poll
+  (`runtime.ReadMemStats` HeapInuse vs budget, not `GOMEMLIMIT`) collapses the
+  warm set and calls `FreeOSMemory`.
+- **Spill + Cold serving** (`domain/maintained_stores.go`,
+  `querypage/columnstore_mmap.go`, `backend/refresh_spill.go`): maintained
+  stores spill to a per-cluster cache dir in the columnar format, warm-paint on
+  re-warm (across restarts, format-version-guarded), and reconcile after sync.
+  A Cold cluster serves from read-only mmap-aliased stores (column data
+  off-heap, indexes resident) instead of tearing down. Cold clusters run no
+  object-catalog discovery, capability checks, or sync loops.
+- **Cold entry gate.** A desired Cold tier stays unapplied until the live
+  subsystem has built ready `namespaces` and `cluster-overview` snapshots for
+  that exact cluster scope. The namespace build runs through the aggregate
+  lifecycle callback, so Ready and the retained sidebar/Global payloads exist
+  before any producer stops, without a frontend request. Preparation also
+  requires the current generation's namespace workload tracker to report
+  actual initial sync or explicit permission skip for every tracked
+  Pod/workload source, so a Ready state retained across re-warm cannot cool an
+  unsynced replacement. It never polls namespace snapshots (scoped builds can
+  probe the API), retries the overview itself, ignores tab activation, and is
+  never a manual refresh. Only successful preparation makes the subsystem
+  eligible, and its completion re-drives governor reconciliation; the governor
+  records Cold after the executor reaches it.
+  Replacement or teardown cancels the generation's in-flight build and ends its
+  retry loop.
+- **Pressure fallback.** Under sustained HeapInuse pressure only, a
+  preparation unsettled after one bounded snapshot-attempt grace degrades to
+  full teardown of the inactive cluster: feeds stop, available stores spill, and
+  the backend serves nothing for that cluster until a foreground re-warm
+  rebuilds subsystem and catalog. Every over-budget sample re-drives the
+  transition so the fallback stays reachable after the pressure edge. Never
+  serve an unsettled store as a Cold baseline.
+- **Cooled-store lifetime.** Cooled mmap stores belong to one subsystem
+  generation. Replacement publishes new aggregate routes before retiring old
+  snapshot serving; retirement rejects late reads and drains active builders
+  before releasing mappings. A failed re-warm keeps the old routed generation
+  and its mappings. Partial cooling returns already-swapped mappings to the
+  coordinator, which retires and spills those stores before closing them during
+  fallback teardown.
+- **Re-warm** rebuilds through the same per-cluster chokepoint as first builds
+  without demoting Ready ([refresh-system.md](refresh-system.md#permission-and-readiness)).
+  Normal mmap-cooled serving is continuous: cooled stores serve until the
+  aggregate re-routes, and fresh stores warm-paint from spill. Stream routing
+  then replaces only that cluster's old-manager subscriptions
+  ([subscription lifetime](refresh-system.md#backend-subscription-lifetime)).
+- **Tier application is serialized.** Cooling and re-warming are multi-step
+  replacements. A newer visible-cluster intent may be recorded meanwhile, but
+  reconciles only after the in-flight transition reaches a consistent Cold or
+  live state; foreground activation never observes the gap between feeds
+  stopping and the subsystem being marked Cold. The governor publishes the
+  planned tier before executor work and records the applied tier only after it
+  completes; the two maps carry different ordering contracts. Catalog gating
+  (`startObjectCatalogForTarget`, `backend/refresh_object_catalog.go`) reads
+  the plan: it closes before cooling stops feeds and opens before re-warm
+  starts the catalog. A live tier is reached only when both the subsystem and
+  its cluster object catalog exist.
 
 ## Delivery — page + refetch-on-signal
 
-- **Pull:** `GET /api/v2/snapshots/{domain}` (`refresh/api/server.go:59`) → `Build`.
-- **Push:** the resource-stream protocol uses the `refresh-resources` named
-  Wails JSON stream and carries only a change
-  **signal**; a delta/resync advances the scoped doorbell clocks
-  (`signalVersions`, plus the folded `sourceVersion`) and the query-backed view
-  refetches its page. **No live row ever crosses the wire** — the
-  envelope (`streammux.ServerMessage`) has no row field, and the live-row-merge path
-  (`applyResourceRowUpdates`, `mergeSnapshotRows`, `sortRows`, per-domain collections) is deleted. See
-  [`data-freshness.md`](./data-freshness.md) for the frontend contract.
-- **Metrics** reach a view by serve-time overlay (above), not the store or the wire.
-  Metric source clocks and frontend utilization reads are covered by
-  [`data-freshness.md`](./data-freshness.md) and
-  [`resource-metrics.md`](./resource-metrics.md).
+- **Pull:** `GET /api/v2/snapshots/{domain}` (`refresh/api/server.go`) runs
+  `Build`.
+- **Push:** the `refresh-resources` stream carries only a change signal. A
+  delta/resync advances the scoped doorbell clocks (`signalVersions`, plus the
+  folded `sourceVersion`) and the query-backed view refetches its page. No live
+  row crosses the wire: `streammux.ServerMessage` has no row field. Signal
+  rules: [data-freshness.md](data-freshness.md#signals-and-source-clocks).
+- **Metrics** reach a view only by serve-time overlay.
 
 ## Boundaries (deliberately NOT this path)
 
-These share the store's transport where sensible but must **not** be forced onto
-`querypage`: object **detail/YAML** (lazy direct client GET via the `object-details`
-domain / `object_yaml_by_gvk.go`), **object-map/overview** (aggregations over
-listers/ingest/metrics — `object_map_assembler.go`, `cluster_overview.go`), and
-**logs/shell/exec/port-forward/permissions/metrics-poll** (live streams + access
-reviews, not object-state queries).
+These may share transport but must not be forced onto `querypage`: object
+detail/YAML (lazy direct GET via the `object-details` domain,
+`object_yaml_by_gvk.go`); object map and overview (aggregations over
+listers/ingest/metrics, `object_map_assembler.go`, `cluster_overview.go`); and
+logs, shell/exec, port-forward, permissions, and metrics polling (live streams
+and access reviews, not object-state queries).
 
 ## Validation
 
-- Per-domain `…MaintainedMatchesListPath` byte-identity gates (store serve == list+project).
-- `querypage` fuzz/property test (`apply(deltas) == recompute`) + the catalog brute-force
-  oracle.
-- `wails3 task qc:prerelease` (backend `-race`, vitest, knip, trivy) is the release gate.
+- Per-domain `…MatchesListPath` tests gate byte identity between store serve
+  and the brute list+project path.
+- `querypage` fuzz/property test (`apply(deltas) == recompute`) and the catalog
+  brute-force oracle.
 
 ## Deliberately not built (do not re-attempt as TODOs)
 
-Validated/decided during the rewrite; reasons in git history + the memory record:
+Reasons beyond these lines are in git history.
 
-- **Positional window-delta WS protocol** (INSERT/MOVE/REMOVE/DOORBELL, fractional
-  posKeys, CBOR, object/metric sub-channels) — refetch-on-signal is simpler and the
-  bounded pages it refetches are small.
-- **h2c** (browser `fetch` can't do HTTP/2 cleartext), **MessagePack/Web-Worker decode**
-  (pages are small), **gorilla→coder/websocket** (gorilla is maintained again).
-- **A single per-cluster LSN clock** as a from-scratch rewrite (Phase 2 dropped) and
-  **SSAR→SSRR** for the remaining callers (legitimately not SSRR-expressible).
-- **Order-statistics Rank/At index** and a **`metricsRevision` metric index**. The
-  anchor-jump / numbered-page feature that needs a per-row rank uses a counted
-  `QueryAround`/`QueryAt` walk instead — measured within the page-serve budget class for a
-  one-shot jump (`large-data.md` "Current Browse Budget"), so order statistics stay parked
-  behind a measured regression. The metric index would still only serve the unbuilt delta
-  layer / profiled metric-sorted views.
+- Rejected: positional window-delta stream protocol (INSERT/MOVE/REMOVE,
+  fractional posKeys, CBOR, object/metric sub-channels) and live row merging
+  into client collections — refetch-on-signal is simpler and pages are small.
+- Rejected: h2c — browser `fetch` cannot do HTTP/2 cleartext.
+- Rejected: MessagePack or Web-Worker decode — pages are small.
+- Rejected: gorilla→coder/websocket migration — gorilla is maintained again.
+- Rejected: a from-scratch single per-cluster LSN clock — dropped during the
+  rewrite; per-payload source clocks remain.
+- Rejected: SSAR→SSRR for the remaining callers — not SSRR-expressible.
+- Parked: order-statistics Rank/At index — anchor jumps and numbered pages use a
+  counted `QueryAround`/`QueryAt` walk within the page-serve budget; revisit
+  only on a measured regression.
+- Rejected: `metricsRevision` metric index — it would only serve the unbuilt
+  delta layer or profiled metric-sorted views.
 
 ## Provenance
 
-The owned-engine bet (columnar + interning + keyset indexes, no SQLite/cgo) was gated by
-**Prototype #1** (1M-object write-path benchmark) and the WatchList fallback by
-**Prototype #3**, both in the throwaway `backend/refresh/storebench/` package. Full
-design history remains available in git.
+`backend/refresh/storebench/` holds the throwaway prototypes that gated the
+owned columnar engine (Prototype #1, 1M-object write path) and the WatchList
+fallback (Prototype #3).

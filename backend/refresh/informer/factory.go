@@ -121,32 +121,37 @@ type informerSyncState struct {
 }
 
 // CanListResource reports whether the current identity can list the supplied resource.
-func (f *Factory) CanListResource(group, resource string) (bool, error) {
+func (f *Factory) CanListResource(ctx context.Context, group, resource string) (bool, error) {
 	if f == nil {
 		return false, fmt.Errorf("informer factory not initialised")
 	}
-	return f.checkResourceVerb(group, resource, "list")
+	return f.checkResourceVerb(ctx, group, resource, "list")
 }
 
 // CanWatchResource reports whether the current identity can watch the supplied resource.
-func (f *Factory) CanWatchResource(group, resource string) (bool, error) {
+func (f *Factory) CanWatchResource(ctx context.Context, group, resource string) (bool, error) {
 	if f == nil {
 		return false, fmt.Errorf("informer factory not initialised")
 	}
-	return f.checkResourceVerb(group, resource, "watch")
+	return f.checkResourceVerb(ctx, group, resource, "watch")
 }
 
-// CanListWatch reports whether the current identity can both list and watch the resource.
-// Returns false if either permission is denied or if checking fails.
+// CanListWatch implements the context-free ListWatchChecker used by runtime readers.
 func (f *Factory) CanListWatch(group, resource string) bool {
+	return f.CanListWatchWithContext(context.Background(), group, resource)
+}
+
+// CanListWatchWithContext reports whether the current identity can both list and watch the resource.
+// Returns false if either permission is denied or if checking fails.
+func (f *Factory) CanListWatchWithContext(ctx context.Context, group, resource string) bool {
 	if f == nil {
 		return false
 	}
-	listAllowed, listErr := f.CanListResource(group, resource)
+	listAllowed, listErr := f.CanListResource(ctx, group, resource)
 	if listErr != nil || !listAllowed {
 		return false
 	}
-	watchAllowed, watchErr := f.CanWatchResource(group, resource)
+	watchAllowed, watchErr := f.CanWatchResource(ctx, group, resource)
 	if watchErr != nil || !watchAllowed {
 		return false
 	}
@@ -155,21 +160,21 @@ func (f *Factory) CanListWatch(group, resource string) bool {
 
 // CanListWatchInNamespace reports whether the current identity can both list
 // and watch the resource in the exact namespace used by an informer.
-func (f *Factory) CanListWatchInNamespace(group, resource, namespace string) bool {
+func (f *Factory) CanListWatchInNamespace(ctx context.Context, group, resource, namespace string) bool {
 	if f == nil {
 		return false
 	}
-	listAllowed, listErr := f.checkResourceVerbInNamespace(group, resource, "list", namespace)
+	listAllowed, listErr := f.checkResourceVerbInNamespace(ctx, group, resource, "list", namespace)
 	if listErr != nil || !listAllowed {
 		return false
 	}
-	watchAllowed, watchErr := f.checkResourceVerbInNamespace(group, resource, "watch", namespace)
+	watchAllowed, watchErr := f.checkResourceVerbInNamespace(ctx, group, resource, "watch", namespace)
 	return watchErr == nil && watchAllowed
 }
 
 // New returns a new informer Factory with the provided resync period.
 // The checker is used for all permission (SSAR) checks; it must not be nil.
-func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interface, resync time.Duration, checker *permissions.Checker) *Factory {
+func New(ctx context.Context, client kubernetes.Interface, apiextClient apiextensionsclientset.Interface, resync time.Duration, checker *permissions.Checker) *Factory {
 	if checker == nil {
 		panic("informer.New: permissions checker must not be nil")
 	}
@@ -267,13 +272,13 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 		})
 	}
 
-	result.processPendingClusterInformers()
+	result.processPendingClusterInformers(ctx)
 
 	// Stand up the helm-storage source (label-filtered owner=helm Secrets+ConfigMaps,
 	// full typed objects) for the three helm consumers that still need the typed
 	// release object after configmaps/secrets are cut. Its informers join the sync
 	// gate; Start runs its factory alongside the shared one.
-	result.helmStorage = result.newHelmStorageSource()
+	result.helmStorage = result.newHelmStorageSource(ctx)
 
 	return result
 }
@@ -312,7 +317,7 @@ const gatewayGroup = "gateway.networking.k8s.io"
 //
 // Cutting would add a bespoke-projector reflector and a parallel data path for no
 // memory win, so these kinds stay on the typed informer.
-func (f *Factory) WithGatewayFactory(factory gatewayinformers.SharedInformerFactory, presence common.GatewayAPIPresence) *Factory {
+func (f *Factory) WithGatewayFactory(ctx context.Context, factory gatewayinformers.SharedInformerFactory, presence common.GatewayAPIPresence) *Factory {
 	if f == nil || factory == nil || presence == nil || !presence.AnyPresent() {
 		return f
 	}
@@ -342,7 +347,7 @@ func (f *Factory) WithGatewayFactory(factory gatewayinformers.SharedInformerFact
 	if presence.Has("BackendTLSPolicy") {
 		f.registerClusterInformer(gatewayGroup, "backendtlspolicies", func() cache.SharedIndexInformer { return gateway.BackendTLSPolicies().Informer() })
 	}
-	f.processPendingClusterInformers()
+	f.processPendingClusterInformers(ctx)
 	return f
 }
 
@@ -689,16 +694,16 @@ func (f *Factory) registerClusterInformer(group, resource string, factory inform
 	})
 }
 
-func (f *Factory) processPendingClusterInformers() {
+func (f *Factory) processPendingClusterInformers(ctx context.Context) {
 	if len(f.pendingClusterInformers) == 0 {
 		return
 	}
 
-	f.primePendingClusterPermissions()
+	f.primePendingClusterPermissions(ctx)
 
 	for _, pending := range f.pendingClusterInformers {
-		listAllowed, listErr := f.CanListResource(pending.group, pending.resource)
-		watchAllowed, watchErr := f.CanWatchResource(pending.group, pending.resource)
+		listAllowed, listErr := f.CanListResource(ctx, pending.group, pending.resource)
+		watchAllowed, watchErr := f.CanWatchResource(ctx, pending.group, pending.resource)
 		if listErr != nil || watchErr != nil {
 			klog.V(2).Infof("Skipping informer for %s/%s due to access check error: %v %v", pending.group, pending.resource, listErr, watchErr)
 			continue
@@ -713,7 +718,7 @@ func (f *Factory) processPendingClusterInformers() {
 	f.pendingClusterInformers = nil
 }
 
-func (f *Factory) primePendingClusterPermissions() {
+func (f *Factory) primePendingClusterPermissions(ctx context.Context) {
 	requests := make([]PermissionRequest, 0, len(f.pendingClusterInformers)*2)
 	for _, pending := range f.pendingClusterInformers {
 		if pending.group == "" && pending.resource == "" {
@@ -726,24 +731,24 @@ func (f *Factory) primePendingClusterPermissions() {
 	}
 
 	if len(requests) > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), config.PermissionPrimeTimeout)
+		ctx, cancel := context.WithTimeout(ctx, config.PermissionPrimeTimeout)
 		_ = f.PrimePermissions(ctx, requests)
 		cancel()
 	}
 
 }
 
-func (f *Factory) checkResourceVerb(group, resource, verb string) (bool, error) {
+func (f *Factory) checkResourceVerb(ctx context.Context, group, resource, verb string) (bool, error) {
 	if f.runtimePermissions == nil {
 		return false, fmt.Errorf("permission checker not configured")
 	}
 
 	grant := PermissionGrant{group: group, resource: resource, verb: verb, scope: permissionGrantDefaultScope}
-	decision, err := f.runtimePermissions.Can(context.Background(), group, resource, verb)
+	decision, err := f.runtimePermissions.Can(ctx, group, resource, verb)
 	return f.recordPermissionDecision(grant, decision, err)
 }
 
-func (f *Factory) checkResourceVerbInNamespace(group, resource, verb, namespace string) (bool, error) {
+func (f *Factory) checkResourceVerbInNamespace(ctx context.Context, group, resource, verb, namespace string) (bool, error) {
 	if f.runtimePermissions == nil {
 		return false, fmt.Errorf("permission checker not configured")
 	}
@@ -755,7 +760,7 @@ func (f *Factory) checkResourceVerbInNamespace(group, resource, verb, namespace 
 		namespace: namespace,
 		scope:     permissionGrantExactNamespace,
 	}
-	decision, err := f.runtimePermissions.CanInNamespace(context.Background(), group, resource, verb, namespace)
+	decision, err := f.runtimePermissions.CanInNamespace(ctx, group, resource, verb, namespace)
 	return f.recordPermissionDecision(grant, decision, err)
 }
 
@@ -790,11 +795,16 @@ func (f *Factory) PrimePermissions(ctx context.Context, requests []PermissionReq
 		unique[req] = struct{}{}
 	}
 
-	g, _ := errgroup.WithContext(ctx)
+	// Keep independent grants even if another review fails. Caller cancellation
+	// stops the entire preflight; an individual denial or error does not.
+	g := new(errgroup.Group)
 	g.SetLimit(16)
 	for req := range unique {
 		g.Go(func() error {
-			_, err := f.checkResourceVerb(req.Group, req.Resource, req.Verb)
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			_, err := f.checkResourceVerb(ctx, req.Group, req.Resource, req.Verb)
 			return err
 		})
 	}

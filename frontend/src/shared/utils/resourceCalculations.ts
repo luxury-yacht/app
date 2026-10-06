@@ -77,20 +77,9 @@ export const parseResourceQuantity = (
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-// A missing usage or limit is unknown, while an explicit zero usage is valid.
-export const getResourceLimitUsagePercent = (
-  usage: string | undefined,
-  limit: string | undefined,
-  type: ResourceType
-): number | undefined => {
-  const rawUsage = parseResourceQuantity(usage, type);
-  const rawLimit = parseResourceQuantity(limit, type);
-  if (rawUsage === undefined || rawLimit === undefined || rawLimit <= 0 || rawUsage < 0) {
-    return undefined;
-  }
-  const percentage = (rawUsage / rawLimit) * 100;
-  return Number.isFinite(percentage) ? percentage : undefined;
-};
+// Formats a limit-usage percentage computed by the backend: one decimal place at most.
+export const formatLimitUsagePercent = (percent: number): string =>
+  `${Number(percent.toFixed(1))}%`;
 
 // Format CPU values for display
 export const formatCpuValue = (millicores: number): string => {

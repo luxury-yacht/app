@@ -198,7 +198,7 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 
 	var capturedCfg system.Config
 	original := newRefreshSubsystemWithServices
-	newRefreshSubsystemWithServices = func(cfg system.Config) (*system.Subsystem, error) {
+	newRefreshSubsystemWithServices = func(_ context.Context, cfg system.Config) (*system.Subsystem, error) {
 		capturedCfg = cfg
 		return &system.Subsystem{
 			Manager:   manager,
@@ -338,7 +338,7 @@ users:
 	}
 
 	original := newRefreshSubsystemWithServices
-	newRefreshSubsystemWithServices = func(cfg system.Config) (*system.Subsystem, error) {
+	newRefreshSubsystemWithServices = func(_ context.Context, cfg system.Config) (*system.Subsystem, error) {
 		return nil, errors.New("boom")
 	}
 	defer func() { newRefreshSubsystemWithServices = original }()

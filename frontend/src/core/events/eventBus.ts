@@ -44,14 +44,15 @@ export interface AppEvents {
   'command-palette:open': undefined;
   'application-menu:close': undefined;
 
-  // Auth events — bridged from Wails runtime by AuthErrorContext.
+  // Auth events — bridged from the Wails runtime by ClusterWorkspaceStore.
   'cluster:auth:failed': { clusterId: string };
   'cluster:auth:recovered': { clusterId: string };
 
   // A cluster's namespace scope changed and its refresh subsystem finished
-  // rebuilding (docs/architecture/namespace-scope.md) — bridged from the Wails
-  // cluster:scope:changed event by KubeconfigContext. Streams must restart
-  // and the cluster's domains refetch.
+  // rebuilding (docs/architecture/namespace-scope.md), or its permissions
+  // changed — bridged from the Wails cluster:scope:changed and
+  // cluster:permissions:changed events by ClusterWorkspaceStore. Streams must
+  // restart and the cluster's domains refetch.
   'cluster:permissions-changed': { clusterId: string };
   'cluster:scope-changed': { clusterId: string };
 

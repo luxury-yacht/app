@@ -1,6 +1,7 @@
 package system
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,7 +14,7 @@ import (
 func TestNamespacesRegistrationScopedBypassesPermissionGates(t *testing.T) {
 	deps := registrationDeps{cfg: Config{AllowedNamespaces: []string{"prod", "dev"}}}
 
-	reg := namespacesRegistration(deps)
+	reg := namespacesRegistration(context.Background(), deps)
 	require.Equal(t, "namespaces", reg.name)
 	require.NotNil(t, reg.direct, "scoped registration must dispatch directly")
 	require.Nil(t, reg.listWatch)
@@ -23,7 +24,7 @@ func TestNamespacesRegistrationScopedBypassesPermissionGates(t *testing.T) {
 func TestNamespacesRegistrationUnscopedKeepsFailFastGate(t *testing.T) {
 	deps := registrationDeps{cfg: Config{}}
 
-	reg := namespacesRegistration(deps)
+	reg := namespacesRegistration(context.Background(), deps)
 	require.Equal(t, "namespaces", reg.name)
 	require.Nil(t, reg.direct)
 	require.NotNil(t, reg.listWatch)
@@ -32,7 +33,7 @@ func TestNamespacesRegistrationUnscopedKeepsFailFastGate(t *testing.T) {
 }
 
 func TestNamespaceMetricsRegistrationIsIndependentFromNamespaceObjectPermissions(t *testing.T) {
-	registrations := domainRegistrations(registrationDeps{cfg: Config{ClusterID: "cluster-a"}})
+	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{ClusterID: "cluster-a"}})
 
 	var metricRegistration *domainRegistration
 	for i := range registrations {
@@ -48,7 +49,7 @@ func TestNamespaceMetricsRegistrationIsIndependentFromNamespaceObjectPermissions
 }
 
 func TestAttentionRegistrationTreatsOperationalHealthSourcesAsOptional(t *testing.T) {
-	registrations := domainRegistrations(registrationDeps{cfg: Config{ClusterID: "cluster-a"}})
+	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{ClusterID: "cluster-a"}})
 
 	var attention *domainRegistration
 	for i := range registrations {

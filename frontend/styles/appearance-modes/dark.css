@@ -227,7 +227,7 @@
   --log-surface-maximized-bg: var(--color-base-950);
   --log-text-primary: var(--color-base-200);
   --log-metadata-text: var(--color-base-500);
-  --log-controls-bg: var(--color-base-800);
+  --log-controls-bg: var(--color-bg-secondary);
   --log-controls-border: var(--color-base-700);
   --log-controls-shadow: none;
   --log-controls-maximized-bg: var(--color-base-800);
@@ -421,6 +421,13 @@
     #dc2626 8px
   );
   --utilization-overcommitted-text: var(--color-accent-dark-400);
+
+  /* Metrics charts (object panel Metrics tab) */
+  --chart-usage-color: #60a5fa;
+  --chart-request-color: #fbbf24;
+  --chart-limit-color: #f87171;
+  --chart-allocatable-color: #34d399;
+  --chart-usage-fill: rgba(96, 165, 250, 0.15);
 
   /* Events tab */
   --events-scroll-track: var(--editor-scroll-track);

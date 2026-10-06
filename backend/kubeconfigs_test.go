@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -31,6 +32,22 @@ func TestOpenKubeconfigSearchPathDialogUsesWailsDirectoryOptions(t *testing.T) {
 	require.False(t, options.CanChooseFiles)
 	require.Equal(t, "Select kubeconfig directory", options.Title)
 	require.NotEmpty(t, options.Directory)
+}
+
+// Dismissing the folder picker selects nothing and is not an error, including
+// Windows' "cancelled by user" dismissal.
+func TestOpenKubeconfigSearchPathDialogTreatsADismissedPickerAsNoSelection(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.DesktopShell.openFileDialog = func(*application.OpenFileDialogOptions) (string, error) {
+		return "", errors.New("cancelled by user")
+	}
+
+	selected, err := app.DesktopShell.OpenKubeconfigSearchPathDialog()
+
+	require.NoError(t, err)
+	require.Empty(t, selected)
 }
 
 // createTempKubeconfig creates a temporary kubeconfig file for testing

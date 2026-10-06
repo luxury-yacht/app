@@ -1,8 +1,8 @@
 /**
  * frontend/src/modules/object-map/objectMapG6Viewport.ts
  *
- * Viewport helpers for G6 map zooming, fit-to-view padding, and wheel modifier
- * behavior.
+ * Viewport helpers for G6 map zooming, fit-to-view padding, and wheel zoom
+ * ratios.
  */
 
 const OBJECT_MAP_WHEEL_ZOOM_DELTA_LIMIT = 50;
@@ -17,21 +17,6 @@ export interface ObjectMapG6ViewportGraph {
   zoomBy: (ratio: number, animation: boolean, origin?: [number, number]) => Promise<void>;
   zoomTo: (zoom: number, animation: boolean, origin?: [number, number]) => Promise<void>;
 }
-
-export const isObjectMapMacPlatform = (platform?: string): boolean => {
-  const value = platform ?? (typeof navigator === 'undefined' ? '' : navigator.platform);
-  return /Mac|iPhone|iPad|iPod/.test(value);
-};
-
-export const isObjectMapZoomWheelEvent = (
-  event: Pick<WheelEvent, 'ctrlKey' | 'metaKey'>,
-  platform?: string
-): boolean => {
-  if (isObjectMapMacPlatform(platform)) {
-    return event.metaKey || event.ctrlKey;
-  }
-  return event.ctrlKey;
-};
 
 export const objectMapWheelZoomRatio = (event: Pick<WheelEvent, 'deltaX' | 'deltaY'>): number => {
   const dominantDelta =

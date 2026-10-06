@@ -98,6 +98,9 @@ export function OverviewRenderer<T>({
         return `field:${item.field ?? String(item.label)}`;
       }).map(({ key, value: item }) => {
         if (item.kind === 'status') {
+          if (item.hidden?.(data)) {
+            return null;
+          }
           return (
             <ResourceStatus
               key={key}

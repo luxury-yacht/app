@@ -5,13 +5,7 @@ description: Work on settings, command palette, sidebar, shortcuts, modals, dock
 
 # App Shell
 
-Use this when touching settings, preferences, command palette, sidebar,
-shortcuts, global navigation, modals, overlays, dockable panels, favorites,
-saved views, app-shell persistence, or visual shell tests.
-
-## Task routes
-
-Read only the contracts selected by the change. Follow further links when the
+Read only the contracts the change selects; follow further links when the
 changed path crosses that boundary.
 
 | Change | Read |
@@ -24,53 +18,28 @@ changed path crosses that boundary.
 | Docked/floating panels or handoffs | [dockable-panels](../../../docs/frontend/dockable-panels.md) |
 | Favorites or saved table state | [gridtable-filtering](../../../docs/frontend/gridtable-filtering.md#favorite-snapshots) |
 | App-state reads or backend-call ownership | [data-access](../../../docs/architecture/data-access.md) |
-| Native windows, process UI, startup or shutdown | [application-lifecycle](../../../docs/architecture/application-lifecycle.md) |
+| Native windows, chrome, menus, startup, quit, or Factory Reset | [application-lifecycle](../../../docs/architecture/application-lifecycle.md) |
 | File placement or shared popup infrastructure | [component-structure](../../../docs/frontend/component-structure.md) |
 
-## Entry Points
+## Entry points
 
-- `frontend/src/ui/settings`
-- `frontend/src/core/settings`
-- `frontend/src/core/app-state-access`
-- `backend/preferences_service.go`
-- `backend/preferences_settings.go`
-- `backend/runtime_setting_policies.go`
-- `backend/data_management_coordinator.go`
-- `backend/desktop_shell.go`
-- `backend/favorites_service.go`
-- `backend/ui_state_store.go`
-- `frontend/src/ui/command-palette`
-- `frontend/src/ui/shortcuts`
-- `frontend/src/ui/navigation`
-- `frontend/src/ui/layout`
-- `frontend/src/ui/dockable`
-- `frontend/src/ui/modals`
-- `frontend/src/ui/favorites`
-- `frontend/src/shared/components/modals`
-- `frontend/src/shared/components/tabs`
+- Frontend: `frontend/src/ui/{settings,command-palette,shortcuts,navigation,layout,dockable,modals,favorites}`,
+  `frontend/src/core/{settings,app-state-access}`,
+  `frontend/src/shared/components/{modals,tabs}`
+- Backend: `backend/{preferences_service,preferences_settings,runtime_setting_policies,data_management_coordinator,desktop_shell,favorites_service,ui_state_store}.go`
 
-## Checklist
-
-Apply the checks for the changed surface:
+## Checks
 
 - Keep labels, icons, categories, and command-palette entries aligned where
   they represent the same action.
-- Preserve cluster/namespace identity in state and persistence keys where the
-  state represents cluster data.
-- For settings, use the schema, mutation, rollback, and binding checks in
-  `docs/architecture/app-preferences.md`.
-- For shortcuts, modals, and panels, exercise the affected focus, dismissal,
+- Shortcuts, modals, and panels: exercise the affected focus, dismissal,
   selection, close, drag/drop, and identity contracts.
-- Reuse shared CSS/tokens and test the changed interaction or persistence path.
+- Reuse shared CSS/tokens.
 
-## Validation
-
-Select focused checks for the changed surface while iterating:
+Focused checks while iterating; use browser or Storybook validation for visual
+behavior:
 
 ```sh
 mise exec -- npm run typecheck --prefix frontend
 mise exec -- npm run test --prefix frontend -- settings command-palette shortcuts modals dockable favorites
 ```
-
-Use browser or Storybook validation for visual behavior, then follow the root
-final validation gate.

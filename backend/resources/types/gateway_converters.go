@@ -105,10 +105,52 @@ func RouteDetailsFromFacts(kind string, meta metav1.ObjectMeta, facts resourcemo
 		Annotations: meta.Annotations,
 	}
 	for _, rule := range facts.Rules {
-		detail.Rules = append(detail.Rules, RouteRuleDetails{
-			Matches:     append([]string(nil), rule.Matches...),
-			BackendRefs: RefOrDisplaySliceFromResourceLinks(rule.Backends),
-		})
+		detail.Rules = append(detail.Rules, routeRuleDetailsFromFacts(rule))
 	}
 	return detail
+}
+
+func routeRuleDetailsFromFacts(rule resourcemodel.RouteRuleFacts) RouteRuleDetails {
+	details := RouteRuleDetails{}
+	for _, match := range rule.Matches {
+		details.Matches = append(details.Matches, routeMatchDetailsFromFacts(match))
+	}
+	for _, backend := range rule.Backends {
+		details.BackendRefs = append(details.BackendRefs, RouteBackendRefDetails{
+			Target: RefOrDisplayFromResourceLink(backend.Link),
+			Port:   backend.Port,
+			Weight: backend.Weight,
+		})
+	}
+	return details
+}
+
+func routeMatchDetailsFromFacts(match resourcemodel.RouteMatchFacts) RouteMatchDetails {
+	details := RouteMatchDetails{
+		Method:      match.Method,
+		Headers:     routeNamedMatchesFromFacts(match.Headers),
+		QueryParams: routeNamedMatchesFromFacts(match.QueryParams),
+	}
+	if match.Path != nil {
+		details.Path = &RouteValueMatch{Type: match.Path.Type, Value: match.Path.Value}
+	}
+	if match.GRPCMethod != nil {
+		details.GRPCMethod = &RouteGRPCMethod{
+			Type:    match.GRPCMethod.Type,
+			Service: match.GRPCMethod.Service,
+			Method:  match.GRPCMethod.Method,
+		}
+	}
+	return details
+}
+
+func routeNamedMatchesFromFacts(matches []resourcemodel.RouteNamedMatchFacts) []RouteNamedMatch {
+	if len(matches) == 0 {
+		return nil
+	}
+	details := make([]RouteNamedMatch, 0, len(matches))
+	for _, match := range matches {
+		details = append(details, RouteNamedMatch(match))
+	}
+	return details
 }

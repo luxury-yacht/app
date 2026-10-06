@@ -24,7 +24,7 @@ func TestHelmStorageGateIsClusterWideUnderNamespaceScope(t *testing.T) {
 		return resource == "secrets" || resource == "configmaps"
 	})
 
-	factory := New(fake.NewSimpleClientset(), nil, time.Minute, checker)
+	factory := New(context.Background(), fake.NewSimpleClientset(), nil, time.Minute, checker)
 	helm := factory.HelmStorage()
 	require.NotNil(t, helm)
 	require.Nil(t, helm.SecretInformer(), "per-namespace grant must not create the cluster-wide helm secret informer")

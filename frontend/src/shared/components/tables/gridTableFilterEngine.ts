@@ -1,4 +1,5 @@
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import { rowMetadataMaps } from '@shared/components/tables/customMetadataColumns';
 import type {
   GridTableFilterAccessors,
   GridTableFilterOptions,
@@ -125,11 +126,9 @@ const buildBaseFilterOptions = (options: GridTableFilterOptions | undefined) => 
   namespaceDropdownBulkActions: options?.namespaceDropdownBulkActions ?? false,
   clusterDropdownSearchable: options?.clusterDropdownSearchable ?? false,
   clusterDropdownBulkActions: options?.clusterDropdownBulkActions ?? false,
-  beforeNamespaceActions: options?.beforeNamespaceActions,
   queryFacets: options?.searchBehavior === 'query' ? (options.queryFacets ?? []) : [],
+  beforeNamespaceActions: options?.beforeNamespaceActions,
   preActions: options?.preActions,
-  postActions: options?.postActions,
-  customActions: options?.customActions,
   totalIsExact: options?.totalIsExact ?? true,
   partialDataLabel: options?.partialDataLabel,
 });
@@ -231,6 +230,15 @@ const normalizeSearchValues = (values: unknown): unknown[] => {
   return typeof values === 'string' ? [values] : [];
 };
 
+// A row's labels and annotations as "key", "value" and "key: value", the strings
+// the backend matches when a query includes metadata.
+const metadataSearchValues = (row: unknown): string[] => {
+  const { labels, annotations } = rowMetadataMaps(row);
+  return [labels, annotations].flatMap((map) =>
+    Object.entries(map ?? {}).flatMap(([key, value]) => [key, value, `${key}: ${value}`])
+  );
+};
+
 const matchesRowSearch = <T>(
   row: T,
   kind: string,
@@ -248,12 +256,14 @@ const matchesRowSearch = <T>(
   if (namespace) {
     searchValues.push(namespace);
   }
+  if (matcher.activeFilters.includeMetadata) {
+    searchValues.push(...metadataSearchValues(row));
+  }
   return searchValues.some((candidate) => {
     if (typeof candidate !== 'string') {
       return false;
     }
-    const comparable = matcher.activeFilters.caseSensitive ? candidate : candidate.toLowerCase();
-    return comparable.includes(matcher.searchNeedle);
+    return candidate.toLowerCase().includes(matcher.searchNeedle);
   });
 };
 
@@ -316,9 +326,8 @@ export function applyGridTableFilters<T>({
     return [];
   }
 
-  const searchNeedle = activeFilters.caseSensitive
-    ? activeFilters.search.trim()
-    : activeFilters.search.trim().toLowerCase();
+  // Search ignores letter case.
+  const searchNeedle = activeFilters.search.trim().toLowerCase();
   const kindSet = new Set(
     activeFilters.kinds.mode === 'some'
       ? activeFilters.kinds.values.map((value) => value.toLowerCase())

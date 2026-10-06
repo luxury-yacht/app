@@ -5,7 +5,7 @@
  * viewer composes this state with its own source fields.
  */
 
-import type { LogDisplayMode } from '../types';
+import type { LogDisplayMode, LogFilterMode } from '../types';
 
 export interface ParsedLogEntry {
   /** User JSON fields — never collides with internal metadata */
@@ -20,44 +20,41 @@ export interface ParsedLogEntry {
   seq?: number;
 }
 
-export type CopyFeedback = 'idle' | 'copied' | 'error';
-
 export interface LogOptionsState {
   autoRefresh: boolean;
+  // Whether the search row (filter box and search options) is shown.
+  searchOpen: boolean;
   textFilter: string;
-  highlightMatches: boolean;
-  inverseMatches: boolean;
+  filterMode: LogFilterMode;
   caseSensitiveMatches: boolean;
   regexMatches: boolean;
   wrapText: boolean;
   showAnsiColors: boolean;
   displayMode: LogDisplayMode;
   expandedRows: Set<string>;
-  copyFeedback: CopyFeedback;
 }
 
 export type LogOptionsAction =
   | { type: 'TOGGLE_AUTO_REFRESH' }
   | { type: 'SET_AUTO_REFRESH'; payload: boolean }
+  | { type: 'SET_SEARCH_OPEN'; payload: boolean }
   | { type: 'SET_TEXT_FILTER'; payload: string }
-  | { type: 'TOGGLE_HIGHLIGHT_MATCHES' }
-  | { type: 'TOGGLE_INVERSE_MATCHES' }
+  | { type: 'SET_FILTER_MODE'; payload: LogFilterMode }
   | { type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }
   | { type: 'TOGGLE_REGEX_MATCHES' }
   | { type: 'TOGGLE_WRAP_TEXT' }
   | { type: 'TOGGLE_SHOW_ANSI_COLORS' }
   | { type: 'TOGGLE_PARSED_VIEW' }
   | { type: 'SET_DISPLAY_MODE'; payload: LogDisplayMode }
-  | { type: 'TOGGLE_ROW_EXPANSION'; payload: string }
-  | { type: 'SET_COPY_FEEDBACK'; payload: CopyFeedback };
+  | { type: 'TOGGLE_ROW_EXPANSION'; payload: string };
 
 const LOG_OPTIONS_ACTION_TYPES = new Set<string>(
   Object.keys({
     TOGGLE_AUTO_REFRESH: true,
     SET_AUTO_REFRESH: true,
+    SET_SEARCH_OPEN: true,
     SET_TEXT_FILTER: true,
-    TOGGLE_HIGHLIGHT_MATCHES: true,
-    TOGGLE_INVERSE_MATCHES: true,
+    SET_FILTER_MODE: true,
     TOGGLE_CASE_SENSITIVE_MATCHES: true,
     TOGGLE_REGEX_MATCHES: true,
     TOGGLE_WRAP_TEXT: true,
@@ -65,7 +62,6 @@ const LOG_OPTIONS_ACTION_TYPES = new Set<string>(
     TOGGLE_PARSED_VIEW: true,
     SET_DISPLAY_MODE: true,
     TOGGLE_ROW_EXPANSION: true,
-    SET_COPY_FEEDBACK: true,
   } satisfies Record<LogOptionsAction['type'], true>)
 );
 
@@ -74,30 +70,22 @@ export const isLogOptionsAction = (action: { type: string }): action is LogOptio
 
 export const initialLogOptionsState: LogOptionsState = {
   autoRefresh: true,
+  searchOpen: false,
   textFilter: '',
-  highlightMatches: false,
-  inverseMatches: false,
+  filterMode: 'all',
   caseSensitiveMatches: false,
   regexMatches: false,
   wrapText: true,
   showAnsiColors: true,
   displayMode: 'raw',
   expandedRows: new Set<string>(),
-  copyFeedback: 'idle',
 };
 
-// Highlighting marks matches, so it cannot apply while the filter is inverted;
-// regex patterns carry their own case handling.
+// Regex patterns carry their own case handling.
 const toggleSearchOption = <S extends LogOptionsState>(state: S, action: LogOptionsAction): S => {
   switch (action.type) {
-    case 'TOGGLE_HIGHLIGHT_MATCHES':
-      return { ...state, highlightMatches: state.inverseMatches ? false : !state.highlightMatches };
-    case 'TOGGLE_INVERSE_MATCHES':
-      return {
-        ...state,
-        inverseMatches: !state.inverseMatches,
-        highlightMatches: state.inverseMatches ? state.highlightMatches : false,
-      };
+    case 'SET_FILTER_MODE':
+      return { ...state, filterMode: action.payload };
     case 'TOGGLE_CASE_SENSITIVE_MATCHES':
       return state.regexMatches
         ? state
@@ -141,6 +129,8 @@ export function logOptionsReducer<S extends LogOptionsState>(
       return state.autoRefresh === action.payload
         ? state
         : { ...state, autoRefresh: action.payload };
+    case 'SET_SEARCH_OPEN':
+      return { ...state, searchOpen: action.payload };
     case 'SET_TEXT_FILTER':
       return { ...state, textFilter: action.payload };
     case 'TOGGLE_WRAP_TEXT':
@@ -153,8 +143,6 @@ export function logOptionsReducer<S extends LogOptionsState>(
       return setDisplayMode(state, action.payload);
     case 'TOGGLE_ROW_EXPANSION':
       return toggleRowExpansion(state, action.payload);
-    case 'SET_COPY_FEEDBACK':
-      return { ...state, copyFeedback: action.payload };
     default:
       return toggleSearchOption(state, action);
   }

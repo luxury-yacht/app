@@ -51,24 +51,24 @@ export const deriveParsedLogFieldKeys = (entries: ParsedLogEntry[]): string[] =>
 };
 
 /**
- * The line as a view shows it. Only the JSON views parse it; a caller that has
+ * The line as a view shows it. Only the Pretty view parses it; a caller that has
  * already parsed the line passes the result as `parsedJson`.
  */
 export const formatRawOrPrettyJsonLine = (
   line: string,
-  displayMode: 'raw' | 'pretty' | 'structured' | 'parsed',
+  displayMode: 'raw' | 'pretty' | 'parsed',
   showAnsiColors: boolean,
   parsedJson?: Record<string, unknown> | null
 ): string => {
   const normalizedLine = showAnsiColors ? line : stripAnsi(line);
-  if (displayMode !== 'structured' && displayMode !== 'pretty') {
+  if (displayMode !== 'pretty') {
     return normalizedLine;
   }
   const parsed = parsedJson === undefined ? tryParseJSONObject(line) : parsedJson;
   if (!parsed) {
     return normalizedLine;
   }
-  return displayMode === 'pretty' ? JSON.stringify(parsed, null, 2) : JSON.stringify(parsed);
+  return JSON.stringify(parsed, null, 2);
 };
 
 export const getParsedLogRowKey = (

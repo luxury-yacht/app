@@ -50,7 +50,7 @@ func newStartedFactory(t *testing.T) *Factory {
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
-	return New(fake.NewClientset(), nil, time.Minute, checker)
+	return New(context.Background(), fake.NewClientset(), nil, time.Minute, checker)
 }
 
 func TestStartSettlesWhenInformerCanNeverSync(t *testing.T) {
@@ -262,7 +262,7 @@ func TestNewFactoryDoesNotRegisterPodInformer(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
-	factory := New(client, nil, time.Minute, checker)
+	factory := New(context.Background(), client, nil, time.Minute, checker)
 
 	factory.syncStatesMu.Lock()
 	keys := make(map[string]struct{}, len(factory.syncStates))
@@ -289,7 +289,7 @@ func TestNewFactoryDoesNotRegisterWorkloadInformers(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
-	factory := New(client, nil, time.Minute, checker)
+	factory := New(context.Background(), client, nil, time.Minute, checker)
 
 	factory.syncStatesMu.Lock()
 	keys := make(map[string]struct{}, len(factory.syncStates))
@@ -320,7 +320,7 @@ func TestNewFactoryDoesNotRegisterNetworkInformers(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
-	factory := New(client, nil, time.Minute, checker)
+	factory := New(context.Background(), client, nil, time.Minute, checker)
 
 	factory.syncStatesMu.Lock()
 	keys := make(map[string]struct{}, len(factory.syncStates))
@@ -351,7 +351,7 @@ func TestNewFactoryDoesNotRegisterNodeInformer(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
-	factory := New(client, nil, time.Minute, checker)
+	factory := New(context.Background(), client, nil, time.Minute, checker)
 
 	factory.syncStatesMu.Lock()
 	keys := make(map[string]struct{}, len(factory.syncStates))
@@ -370,7 +370,7 @@ func TestNewFactoryRegistersBothHPAInformerVersions(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
-	factory := New(client, nil, time.Minute, checker)
+	factory := New(context.Background(), client, nil, time.Minute, checker)
 
 	factory.syncStatesMu.Lock()
 	defer factory.syncStatesMu.Unlock()
@@ -394,7 +394,7 @@ func TestCanListResourceCachesResults(t *testing.T) {
 
 	factory := newMinimalFactory(checker)
 
-	allowed, err := factory.CanListResource("apps", "deployments")
+	allowed, err := factory.CanListResource(context.Background(), "apps", "deployments")
 	if err != nil {
 		t.Fatalf("CanListResource returned error: %v", err)
 	}
@@ -406,7 +406,7 @@ func TestCanListResourceCachesResults(t *testing.T) {
 	}
 
 	// Second call should be served from the Checker's cache.
-	allowed, err = factory.CanListResource("apps", "deployments")
+	allowed, err = factory.CanListResource(context.Background(), "apps", "deployments")
 	if err != nil {
 		t.Fatalf("CanListResource returned error on cached call: %v", err)
 	}
@@ -470,7 +470,7 @@ func TestProcessPendingClusterInformersSkipsWithoutPermissions(t *testing.T) {
 		},
 	}
 
-	factory.processPendingClusterInformers()
+	factory.processPendingClusterInformers(context.Background())
 	if len(factory.pendingClusterInformers) != 0 {
 		t.Fatalf("expected pending informers to be cleared")
 	}
@@ -483,10 +483,10 @@ func TestWithGatewayFactoryDoesNotRegisterClusterWideInformerWhenDenied(t *testi
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, group, resource, _, _ string) (bool, error) {
 		return group != gatewayGroup || resource != "gateways", nil
 	})
-	factory := New(fake.NewClientset(), nil, time.Minute, checker)
+	factory := New(context.Background(), fake.NewClientset(), nil, time.Minute, checker)
 	gatewayFactory := gatewayinformers.NewSharedInformerFactory(gatewayfake.NewClientset(), time.Minute)
 
-	factory.WithGatewayFactory(gatewayFactory, testGatewayPresence{"Gateway": true})
+	factory.WithGatewayFactory(context.Background(), gatewayFactory, testGatewayPresence{"Gateway": true})
 
 	factory.syncStatesMu.Lock()
 	defer factory.syncStatesMu.Unlock()
@@ -524,7 +524,7 @@ func TestNewFactoryRegistersHelmStorageNotFullConfigInformers(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
-	factory := New(client, nil, time.Minute, checker)
+	factory := New(context.Background(), client, nil, time.Minute, checker)
 
 	// configmaps + secrets are cut to the ingest path: the shared factory must not
 	// register a full informer for either, but the helm-storage source DOES register
@@ -573,7 +573,7 @@ func TestHelmStorageSourceSkipsDeniedKinds(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, resource, _, _ string) (bool, error) {
 		return resource != "secrets", nil
 	})
-	factory := New(client, nil, time.Minute, checker)
+	factory := New(context.Background(), client, nil, time.Minute, checker)
 
 	helm := factory.HelmStorage()
 	if helm == nil {
@@ -606,10 +606,10 @@ func TestCanListWatchInNamespaceChecksTheExactInformerScope(t *testing.T) {
 	})
 	factory := newMinimalFactory(checker)
 
-	if !factory.CanListWatchInNamespace("example.com", "widgets", "allowed") {
+	if !factory.CanListWatchInNamespace(context.Background(), "example.com", "widgets", "allowed") {
 		t.Fatal("expected the allowed namespace to pass list/watch checks")
 	}
-	if factory.CanListWatchInNamespace("example.com", "widgets", "denied") {
+	if factory.CanListWatchInNamespace(context.Background(), "example.com", "widgets", "denied") {
 		t.Fatal("expected the denied namespace to fail list/watch checks")
 	}
 	expected := []string{
@@ -634,8 +634,8 @@ func TestPermissionSnapshotPreservesEvaluationScope(t *testing.T) {
 		return group == "apps" && resource == "deployments"
 	})
 	factory := newMinimalFactory(checker)
-	require.True(t, factory.CanListWatch("apps", "deployments"))
-	require.True(t, factory.CanListWatchInNamespace("example.com", "widgets", "team-a"))
+	require.True(t, factory.CanListWatchWithContext(context.Background(), "apps", "deployments"))
+	require.True(t, factory.CanListWatchInNamespace(context.Background(), "example.com", "widgets", "team-a"))
 
 	var checked []string
 	revalidationChecker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, group, resource, verb, namespace string) (bool, error) {

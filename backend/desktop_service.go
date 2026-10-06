@@ -8,6 +8,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/panelmetrics"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/internal/panelwindow"
@@ -146,6 +147,7 @@ type DesktopShellCommands interface {
 	ExecuteApplicationMenuCommand(string, ApplicationMenuCommand) error
 	OpenKubeconfigSearchPathDialog() (string, error)
 	SaveCsvFile(string, string) (CatalogQueryCSVExport, error)
+	SaveLogFile(string, string) (CatalogQueryCSVExport, error)
 	SetAppLogsPanelVisible(bool)
 	SetSidebarVisible(bool)
 }
@@ -167,6 +169,12 @@ type PanelWindowCommands interface {
 	AcceptPanelTabTransfer(string, string) error
 	FailPanelTabTransfer(string, string) error
 	AcknowledgeApplicationQuitPreflight(string, string, bool) error
+}
+
+// PanelMetricsCommands is the frontend command surface owned by PanelMetricsService.
+type PanelMetricsCommands interface {
+	AppendPanelMetricSample(string, string, panelmetrics.Sample) error
+	GetPanelMetricSeries(string, string, int64) (*panelmetrics.Series, error)
 }
 
 // DesktopServiceLifecycle owns Wails service startup and shutdown.
@@ -193,6 +201,7 @@ type DesktopServiceDependencies struct {
 	Logs           AppLogCommands
 	DesktopShell   DesktopShellCommands
 	PanelWindows   PanelWindowCommands
+	PanelMetrics   PanelMetricsCommands
 	Lifecycle      DesktopServiceLifecycle
 	HTTP           http.Handler
 }
@@ -215,6 +224,7 @@ type DesktopService struct {
 	logs           AppLogCommands
 	desktopShell   DesktopShellCommands
 	panelWindows   PanelWindowCommands
+	panelMetrics   PanelMetricsCommands
 	lifecycle      DesktopServiceLifecycle
 	http           http.Handler
 }
@@ -235,6 +245,7 @@ func NewDesktopService(dependencies DesktopServiceDependencies) *DesktopService 
 		logs:           dependencies.Logs,
 		desktopShell:   dependencies.DesktopShell,
 		panelWindows:   dependencies.PanelWindows,
+		panelMetrics:   dependencies.PanelMetrics,
 		lifecycle:      dependencies.Lifecycle,
 		http:           dependencies.HTTP,
 	}
@@ -608,6 +619,10 @@ func (s *DesktopService) SaveCsvFile(defaultFilename, content string) (CatalogQu
 	return s.desktopShell.SaveCsvFile(defaultFilename, content)
 }
 
+func (s *DesktopService) SaveLogFile(defaultFilename, content string) (CatalogQueryCSVExport, error) {
+	return s.desktopShell.SaveLogFile(defaultFilename, content)
+}
+
 func (s *DesktopService) SetAppLogsPanelVisible(visible bool) {
 	s.desktopShell.SetAppLogsPanelVisible(visible)
 }
@@ -753,4 +768,12 @@ func (s *DesktopService) AcknowledgeApplicationQuitPreflight(ctx context.Context
 		return err
 	}
 	return s.panelWindows.AcknowledgeApplicationQuitPreflight(callerWindowName, transactionID, allowed)
+}
+
+func (s *DesktopService) AppendPanelMetricSample(clusterID, panelID string, sample panelmetrics.Sample) error {
+	return s.panelMetrics.AppendPanelMetricSample(clusterID, panelID, sample)
+}
+
+func (s *DesktopService) GetPanelMetricSeries(clusterID, panelID string, afterT int64) (*panelmetrics.Series, error) {
+	return s.panelMetrics.GetPanelMetricSeries(clusterID, panelID, afterT)
 }

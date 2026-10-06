@@ -14,13 +14,13 @@ import {
   filterSelectionValues,
   isNarrowingFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
-import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
-import { readContainerLogsScopeContainers, requestData } from '@/core/data-access';
+import { useLogDownloadMenu } from '@shared/hooks/useLogDownloadMenu';
+import React, { useCallback, useEffect, useId, useMemo, useReducer, useRef } from 'react';
 import { useContainerLogsStream } from './hooks/useContainerLogsStream';
-import { useLogCopyAction, useLogSelectionCopy } from './hooks/useLogCopyAction';
 import { useLogFiltering } from './hooks/useLogFiltering';
 import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import { logCopyText, useRawViewFallback } from './hooks/useLogPresentation';
+import { useLogSelectionCopy } from './hooks/useLogSelectionCopy';
 import './LogViewer.css';
 import { eventBus } from '@/core/events';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -38,7 +38,9 @@ import type {
 import {
   getObjPanelLogsApiTimestampFormat,
   getObjPanelLogsApiTimestampUseLocalTimeZone,
+  setObjPanelLogsApiTimestampUseLocalTimeZone,
 } from '@/core/settings/appPreferences';
+import { formatObjPanelLogsApiTimestamp } from '@/utils/objPanelLogsApiTimestampFormat';
 import { INACTIVE_SCOPE } from '../constants';
 import { containsAnsi } from './ansi';
 import { buildContainerLogMetadataColumns, containerLogExportValue } from './containerLogColumns';
@@ -66,10 +68,10 @@ import {
   shouldDisplayPodContainerMetadata,
   useContainerLogDisplay,
 } from './containerLogRows';
-import { formatTimestampForMode } from './containerLogTimestamps';
 import { getWorkloadPodNames, useActivePodSet, useHiddenPods } from './hooks/useActivePodSet';
 import { useAnchoredLogEntries } from './hooks/useAnchoredLogEntries';
 import { useLogMessageRenderer } from './hooks/useLogMessageRenderer';
+import { containersOfEntries, useLogScopeContainers } from './hooks/useLogScopeContainers';
 import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
 import {
   type BackendLogSelection,
@@ -92,8 +94,9 @@ import {
   pruneLogFilterSelectionToOptions,
 } from './logFilterSelection';
 import type { ParsedLogEntry } from './logOptionsReducer';
-import { buildLogSearchRegex, isValidRegexPattern } from './logSearch';
-import { buildLogToolbarItems } from './logToolbar';
+import { isValidRegexPattern } from './logSearch';
+import { clearLogSearch } from './logSearchChips';
+import { buildLogToolbarItems, renderLogCount } from './logToolbar';
 import {
   getLogViewerPrefs,
   getLogViewerScrollPosition,
@@ -128,6 +131,8 @@ interface LogViewerProps {
    * ObjectPanelContent unmount/remount caused by cluster switches.
    */
   panelId: string;
+  /** Name of the object whose logs these are; it names a saved log file. */
+  objectName: string;
 }
 
 const CONTAINER_LOGS_DOMAIN = 'container-logs' as const;
@@ -144,21 +149,6 @@ type LogEmptyState =
   | 'auto_refresh_off';
 
 type ContainerLogsSnapshotState = DomainSnapshotState<ContainerLogsSnapshotPayload>;
-
-const requestLogScopeContainers = async (
-  clusterId: string,
-  scope: string
-): Promise<types.PodContainer[]> => {
-  const result = await requestData({
-    resource: 'log-scope-containers',
-    reason: 'startup',
-    adapter: 'rpc-read',
-    label: 'Log Scope Containers',
-    scope,
-    read: () => readContainerLogsScopeContainers(clusterId, scope),
-  });
-  return result.status === 'executed' ? (result.data ?? []) : [];
-};
 
 const syncContainerLogsScope = ({
   scope,
@@ -186,6 +176,7 @@ type LiveContainerLogs = {
   issues: ContainerLogsTargetIssue[];
   truncation: ContainerLogsSnapshotPayload['truncation'];
   pods: string[];
+  containers: types.PodContainer[];
   // A snapshot has been delivered at least once for this scope.
   hasSnapshot: boolean;
 };
@@ -197,6 +188,7 @@ const NO_LIVE_LOGS: LiveContainerLogs = {
   issues: [],
   truncation: null,
   pods: [],
+  containers: [],
   hasSnapshot: false,
 };
 
@@ -215,6 +207,7 @@ const getLiveContainerLogs = (
     issues: data.issues,
     truncation: data.truncation,
     pods: data.pods,
+    containers: data.containers,
     hasSnapshot: data.resetCount > 0,
   };
 };
@@ -238,8 +231,9 @@ const liveLoadingMessage = (phase: ContainerLogsStreamPhase | null): string =>
 
 type LogViewerSource = {
   entries: ContainerLogsEntry[];
-  // The pods that have lines in the source.
+  // The pods and containers that have lines in the source.
   pods: readonly string[];
+  containers: readonly types.PodContainer[];
   issues: ContainerLogsTargetIssue[];
   notices: string[];
   // Logs shown once the buffer has dropped some (null while it has room); the
@@ -265,13 +259,17 @@ const resolveLogViewerSource = ({
   showPreviousContainerLogs: boolean;
   hasScope: boolean;
   live: LiveContainerLogs;
-  previous: PreviousContainerLogs & { pods: readonly string[] };
+  previous: PreviousContainerLogs & {
+    pods: readonly string[];
+    containers: readonly types.PodContainer[];
+  };
   streamExpected: boolean;
 }): LogViewerSource => {
   if (showPreviousContainerLogs) {
     return {
       entries: previous.entries,
       pods: previous.pods,
+      containers: previous.containers,
       issues: previous.issues,
       notices: buildContainerLogNotices({
         phase: null,
@@ -291,6 +289,7 @@ const resolveLogViewerSource = ({
   return {
     entries: live.entries,
     pods: live.pods,
+    containers: live.containers,
     issues: live.issues,
     notices: buildContainerLogNotices(live),
     bufferFullShown: live.truncation?.shown ?? null,
@@ -365,16 +364,18 @@ const shouldShowPausedLogEmptyState = ({
   entryCount === 0 &&
   !showPreviousContainerLogs;
 
-const hasCopyableContainerLogs = (
+// The logs shown: table rows in the Table view, which has rows only for JSON
+// lines, and the filtered lines otherwise.
+const shownContainerLogCount = (
   isParsedView: boolean,
   parsedCount: number,
   filteredCount: number
-): boolean => (isParsedView ? parsedCount > 0 : filteredCount > 0);
+): number => (isParsedView ? parsedCount : filteredCount);
 
 const hasActiveLogResultFilter = (
   selectedFilters: Parameters<typeof isNarrowingFilterSelection>[0],
-  textFilter: string
-): boolean => isNarrowingFilterSelection(selectedFilters) || textFilter.trim().length > 0;
+  textFilterHidesLines: boolean
+): boolean => isNarrowingFilterSelection(selectedFilters) || textFilterHidesLines;
 
 const LogViewerInner: React.FC<LogViewerProps> = ({
   resourceKind,
@@ -383,6 +384,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   activePodNames = null,
   clusterId,
   panelId,
+  objectName,
 }) => {
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   // Lazy reducer init: rehydrate from the panel-scoped prefs cache so a
@@ -408,19 +410,17 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     availablePods,
     selectedFilters,
     autoRefresh,
-    timestampMode,
+    showTimestamps,
     wrapText,
     showAnsiColors,
     textFilter,
-    highlightMatches,
-    inverseMatches,
+    filterMode,
     caseSensitiveMatches,
     regexMatches,
     displayMode,
     expandedRows,
   } = state;
   const showPreviousContainerLogs = state.mode.kind === 'previous';
-  const showTimestamps = timestampMode !== 'hidden';
   const isParsedView = displayMode === 'parsed';
 
   // Push the persistent subset of state into the panel-scoped prefs
@@ -442,7 +442,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   // Refs
   const logsContentRef = useRef<HTMLElement>(null);
+  const viewerRef = useRef<HTMLDivElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
+  const searchRowId = useId();
   const terminalTheme = useTerminalTheme(logsContentRef);
 
   useEffect(
@@ -557,16 +559,28 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     () => Array.from(new Set(previous.entries.map((entry) => entry.pod))),
     [previous.entries]
   );
+  const previousContainers = useMemo(
+    () => containersOfEntries(previous.entries),
+    [previous.entries]
+  );
   const source = useMemo(
     () =>
       resolveLogViewerSource({
         showPreviousContainerLogs,
         hasScope: Boolean(containerLogsScope),
         live,
-        previous: { ...previous, pods: previousPods },
+        previous: { ...previous, pods: previousPods, containers: previousContainers },
         streamExpected,
       }),
-    [containerLogsScope, live, previous, previousPods, showPreviousContainerLogs, streamExpected]
+    [
+      containerLogsScope,
+      live,
+      previous,
+      previousContainers,
+      previousPods,
+      showPreviousContainerLogs,
+      streamExpected,
+    ]
   );
   const hiddenPods = useHiddenPods(source.entries, activePods);
 
@@ -621,22 +635,24 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     const fallbackColor = styles.getPropertyValue('--hash-color-fallback').trim();
     return buildStablePodColorMap(availablePods, palette, fallbackColor);
   }, [availablePods]);
+  // Hidden timestamps format as empty, which the CSV export keeps for its reserved column.
   const formatApiTimestamp = useCallback(
     (timestamp: string) =>
-      formatTimestampForMode(
-        timestamp,
-        timestampMode,
-        apiTimestampFormat,
-        apiTimestampUseLocalTimeZone
-      ),
-    [apiTimestampFormat, apiTimestampUseLocalTimeZone, timestampMode]
+      showTimestamps
+        ? formatObjPanelLogsApiTimestamp(
+            timestamp,
+            apiTimestampFormat,
+            apiTimestampUseLocalTimeZone
+          )
+        : '',
+    [apiTimestampFormat, apiTimestampUseLocalTimeZone, showTimestamps]
   );
   // The table view's pod, container and timestamp columns, ahead of the JSON fields.
   const metadataColumns = useMemo(
     () =>
       buildContainerLogMetadataColumns({
         isWorkload,
-        showTimestamp: timestampMode !== 'hidden',
+        showTimestamp: showTimestamps,
         podColors,
         formatTimestamp: formatApiTimestamp,
         getContainerLabel: (entry) =>
@@ -651,7 +667,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       handleSelectPodFilter,
       isWorkload,
       podColors,
-      timestampMode,
+      showTimestamps,
     ]
   );
   const exportTableValue = useCallback(
@@ -659,9 +675,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [formatApiTimestamp]
   );
   const {
-    filterText,
     filteredEntries,
     hasVisibleLines,
+    textFilterHidesLines,
+    highlightRegex,
     canParseLogs: canParseContainerLogs,
     parsedRows,
     tableColumns,
@@ -675,17 +692,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     metadataColumns,
     exportValue: exportTableValue,
   });
-  // Highlighting follows the filter as applied, so it never runs ahead of it.
-  const highlightRegex = useMemo(
-    () =>
-      buildLogSearchRegex(highlightMatches && !inverseMatches ? filterText : '', {
-        regexMode: regexMatches,
-        caseSensitive: caseSensitiveMatches,
-        global: true,
-      }),
-    [caseSensitiveMatches, filterText, highlightMatches, inverseMatches, regexMatches]
-  );
-
   // A new source selection restarts the live stream; previous logs refetch on
   // their own, and a stopped stream picks the selection up when it starts.
   useEffect(() => {
@@ -785,17 +791,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       showPreviousContainerLogs,
       selectedFilterValues,
       selectorOptionLabelsByValue,
-      highlightMatches,
-      inverseMatches,
+      filterMode,
       caseSensitiveMatches,
       dispatch,
       stopPreviousLogs: () => dispatch({ type: 'STOP_PREVIOUS_LOGS' }),
     });
   }, [
     caseSensitiveMatches,
+    filterMode,
     hasInvalidRegex,
-    highlightMatches,
-    inverseMatches,
     regexMatches,
     selectedFilterValues,
     selectorOptionLabelsByValue,
@@ -803,30 +807,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     textFilter,
   ]);
   const handleClearAllFilters = useCallback(() => {
-    dispatch({ type: 'SET_TEXT_FILTER', payload: '' });
     dispatch({ type: 'SET_SELECTED_FILTERS', payload: ALL_MULTISELECT_FILTER });
     if (showPreviousContainerLogs) {
       dispatch({ type: 'STOP_PREVIOUS_LOGS' });
     }
-    if (highlightMatches) {
-      dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' });
-    }
-    if (inverseMatches) {
-      dispatch({ type: 'TOGGLE_INVERSE_MATCHES' });
-    }
-    if (caseSensitiveMatches) {
-      dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' });
-    }
-    if (regexMatches) {
-      dispatch({ type: 'TOGGLE_REGEX_MATCHES' });
-    }
-  }, [
-    caseSensitiveMatches,
-    highlightMatches,
-    inverseMatches,
-    regexMatches,
-    showPreviousContainerLogs,
-  ]);
+    clearLogSearch(dispatch, { caseSensitiveMatches, regexMatches });
+  }, [caseSensitiveMatches, regexMatches, showPreviousContainerLogs]);
 
   useEffect(() => {
     const nextSelection = pruneLogFilterSelectionToOptions(selectedFilters, selectorOptions);
@@ -862,7 +848,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     () => ({
       displayMode,
       showAnsiColors,
-      timestampMode,
+      showTimestamps,
       apiTimestampFormat,
       apiTimestampUseLocalTimeZone,
       isWorkload,
@@ -875,7 +861,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       isWorkload,
       showAnsiColors,
       showContainerMetadata,
-      timestampMode,
+      showTimestamps,
     ]
   );
   const { rows: displayRows, copyText } = useContainerLogDisplay({
@@ -885,16 +871,18 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     options: displayOptions,
   });
 
-  const hasCopyableContent = hasCopyableContainerLogs(
+  const shownLogCount = shownContainerLogCount(
     isParsedView,
     parsedRows.length,
     filteredEntries.length
   );
+  const hasCopyableContent = shownLogCount > 0;
+  const hasLogs = logEntries.length > 0;
   const hasAnsiLogEntries = useMemo(
     () => logEntries.some((entry) => containsAnsi(entry.line)),
     [logEntries]
   );
-  const hasActiveResultFilter = hasActiveLogResultFilter(selectedFilters, textFilter);
+  const hasActiveResultFilter = hasActiveLogResultFilter(selectedFilters, textFilterHidesLines);
 
   useRawViewFallback({
     displayMode,
@@ -922,35 +910,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [handleSelectContainerFilter, handleSelectPodFilter, podColors, renderMessageContent]
   );
 
-  // Fetch container inventory for the current log scope.
-  useEffect(() => {
-    // Keep the inventory recheck on pod/workload transitions.
-    void isWorkload;
-    if (!containerLogsScope) {
-      dispatch({ type: 'SET_CONTAINERS', payload: [] });
-      return;
-    }
-
-    let isCancelled = false;
-    void requestLogScopeContainers(resolvedClusterId, containerLogsScope)
-      .then((containerList) => {
-        if (isCancelled) {
-          return;
-        }
-        dispatch({ type: 'SET_CONTAINERS', payload: containerList });
-      })
-      .catch((err) => {
-        if (isCancelled) {
-          return;
-        }
-        console.warn('Failed to fetch containers:', err);
-        dispatch({ type: 'SET_CONTAINERS', payload: [] });
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [isWorkload, containerLogsScope, resolvedClusterId]);
+  useLogScopeContainers({
+    clusterId: resolvedClusterId,
+    scope: containerLogsScope,
+    isWorkload,
+    containers,
+    heldContainers: source.containers,
+    dispatch,
+  });
 
   const { resumeTailFollowing } = useLogScrollRestoration({
     rootRef: logsContentRef,
@@ -975,15 +942,28 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     () => logCopyText(displayMode, copyText, getParsedCsv),
     [copyText, displayMode, getParsedCsv]
   );
-  const handleCopyContainerLogs = useLogCopyAction({
+  const { downloadItem, copyLogs: handleCopyContainerLogs } = useLogDownloadMenu({
     getText: getCopyText,
-    dispatch,
+    isTableView: isParsedView,
+    fileBase: [resourceKindKey, objectName, 'logs'].filter(Boolean).join('-'),
     source: 'LogViewer',
+    disabled: !hasCopyableContent,
+    copyShortcut: 'Shift+C',
   });
   useLogSelectionCopy({ rootRef: logsContentRef, active: isActive, source: 'LogViewer' });
 
   const toggleTimestamps = useCallback(
-    () => dispatch({ type: 'SET_TIMESTAMP_MODE', payload: showTimestamps ? 'hidden' : 'default' }),
+    () => dispatch({ type: 'SET_SHOW_TIMESTAMPS', payload: !showTimestamps }),
+    [showTimestamps]
+  );
+  // The zone is the app-wide setting. Picking one also shows timestamps.
+  const chooseTimeZone = useCallback(
+    (useLocalTimeZone: boolean) => {
+      setObjPanelLogsApiTimestampUseLocalTimeZone(useLocalTimeZone);
+      if (!showTimestamps) {
+        dispatch({ type: 'SET_SHOW_TIMESTAMPS', payload: true });
+      }
+    },
     [showTimestamps]
   );
   const previousLogsFeature = supportsPreviousContainerLogs
@@ -994,11 +974,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     options: state,
     hasAnsiLogEntries,
     hasCopyableContent,
+    hasLogs,
     canParseLogs: canParseContainerLogs,
     dispatch,
     copyLogs: handleCopyContainerLogs,
     filterInputRef,
     logsContentRef,
+    viewerRef,
+    searchRowId,
     timestamps: { toggle: toggleTimestamps },
     previousLogs: previousLogsFeature,
   });
@@ -1033,10 +1016,17 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     dispatch,
     hasAnsiLogEntries,
     canParseLogs: canParseContainerLogs,
-    hasCopyableContent,
-    copyLogs: handleCopyContainerLogs,
+    hasLogs,
+    downloadItem,
+    filterInputRef,
+    searchRowId,
     previousLogs: previousLogsFeature,
-    timestamps: { active: showTimestamps, toggle: toggleTimestamps },
+    timestamps: {
+      active: showTimestamps,
+      toggle: toggleTimestamps,
+      useLocalTimeZone: apiTimestampUseLocalTimeZone,
+      chooseTimeZone,
+    },
   });
   const controls = (
     <LogViewerControls
@@ -1045,19 +1035,20 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       containerOptions={containerOptions}
       selectedFilters={selectedFilters}
       filterInputRef={filterInputRef}
-      textFilter={textFilter}
+      searchRowId={searchRowId}
+      searchOptions={state}
       iconItems={iconItems}
-      hasActiveResultFilter={hasActiveResultFilter}
-      matchCount={filteredEntries.length}
       bufferFullShown={source.bufferFullShown}
       dispatch={dispatch}
     />
   );
   return (
     <LogViewerReadyView
+      viewerRef={viewerRef}
       controls={controls}
       activeFilterChips={activeFilterChips}
       clearAllFilters={handleClearAllFilters}
+      logCount={renderLogCount(shownLogCount, logEntries.length, hasActiveResultFilter)}
       visibleLogWarnings={visibleLogWarnings}
       logsContentRef={logsContentRef}
       renderedLogContent={renderedLogContent}

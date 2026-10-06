@@ -16,7 +16,7 @@ func (s *Service) publishCatalogChangesLocked(changes []catalogChange) bool {
 	if s.queryEngineStore == nil || s.kindCounts == nil {
 		s.cacheRebuilds.Add(1)
 		s.catalogIndex.rebuildCacheFromItems(s.items, s.catalogIndex.descriptors())
-		s.replaceFinalizerBlockers(s.items)
+		s.replaceAttentionSubsets(s.items)
 		return true
 	}
 	for _, change := range changes {
@@ -24,7 +24,7 @@ func (s *Service) publishCatalogChangesLocked(changes []catalogChange) bool {
 	}
 	s.catalogIndex.publishFacetCounts()
 	s.cachesReady = true
-	s.updateFinalizerBlockers(changes)
+	s.updateAttentionSubsets(changes)
 	return true
 }
 

@@ -33,6 +33,7 @@ type ApplicationRuntime struct {
 	ContainerLogsPolicy   *ContainerLogsSelectionPolicy
 	PermissionFetchPolicy *PermissionFetchPolicy
 	NodeMaintenance       *nodemaintenance.Store
+	PanelMetrics          *PanelMetricsService
 	DataManagement        *DataManagementCoordinator
 	Attention             *ClusterAttentionService
 	Resources             *ResourceGateway
@@ -229,6 +230,7 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		Favorites: favorites, UIState: uiState, Preferences: preferences,
 		ErrorReporting: errorReporting, ContainerLogsPolicy: containerLogsPolicy,
 		PermissionFetchPolicy: permissionFetchPolicy, NodeMaintenance: nodeMaintenanceStore,
+		PanelMetrics:   NewPanelMetricsService(workspace.PanelWorkspaceDirectory()),
 		DataManagement: dataManagement,
 		Attention:      attention, Resources: resources, Operations: operations, Updates: updates,
 	}

@@ -6,12 +6,7 @@ import type {
   RefreshDomain,
 } from '@/core/refresh/types';
 
-export type ResourceMetricsSource =
-  | 'pods'
-  | 'namespace-workloads'
-  | 'nodes'
-  | 'cluster-overview'
-  | 'detail-replicaset';
+export type ResourceMetricsSource = 'pods' | 'namespace-workloads' | 'nodes' | 'cluster-overview';
 
 export type ResourceMetricsDomain = Extract<
   RefreshDomain,
@@ -70,12 +65,6 @@ export interface DomainResourceMetricsResolution {
   scope: string;
 }
 
-export interface DetailExceptionResourceMetricsResolution {
-  kind: 'detail-exception';
-  source: 'detail-replicaset';
-  reason: 'replicaset-owner-collapse';
-}
-
 export interface UnsupportedResourceMetricsResolution {
   kind: 'unsupported';
   reason: 'unsupported-kind';
@@ -88,7 +77,6 @@ export interface InvalidResourceMetricsResolution {
 
 export type ResourceMetricsResolution =
   | DomainResourceMetricsResolution
-  | DetailExceptionResourceMetricsResolution
   | UnsupportedResourceMetricsResolution
   | InvalidResourceMetricsResolution;
 
@@ -98,8 +86,7 @@ export type ResourceMetricsStatus =
   | 'missing'
   | 'error'
   | 'unsupported'
-  | 'invalid'
-  | 'detail-exception';
+  | 'invalid';
 
 export interface ResourceMetricsResult {
   status: ResourceMetricsStatus;

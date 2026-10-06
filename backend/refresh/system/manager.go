@@ -237,7 +237,7 @@ func scopedResourcePredicate() func(group, resource string) bool {
 	}
 }
 
-func newInformerInfrastructure(cfg Config) (*permissions.Checker, *informer.Factory, error) {
+func newInformerInfrastructure(ctx context.Context, cfg Config) (*permissions.Checker, *informer.Factory, error) {
 	runtimePerms := permissions.NewChecker(cfg.KubernetesClient, cfg.ClusterID, 0)
 	if len(cfg.AllowedNamespaces) > 0 {
 		runtimePerms.SetScope(cfg.AllowedNamespaces, scopedResourcePredicate())
@@ -245,12 +245,12 @@ func newInformerInfrastructure(cfg Config) (*permissions.Checker, *informer.Fact
 	if err := informer.DisableWatchList(); err != nil {
 		return nil, nil, fmt.Errorf("configure informer startup transport: %w", err)
 	}
-	factory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, runtimePerms).
-		WithGatewayFactory(cfg.GatewayInformerFactory, cfg.GatewayAPIPresence)
+	factory := informer.New(ctx, cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, runtimePerms).
+		WithGatewayFactory(ctx, cfg.GatewayInformerFactory, cfg.GatewayAPIPresence)
 	return runtimePerms, factory, nil
 }
 
-func newIngestInfrastructure(cfg Config, factory *informer.Factory, runtimePerms *permissions.Checker) (*ingest.IngestManager, error) {
+func newIngestInfrastructure(ctx context.Context, cfg Config, factory *informer.Factory, runtimePerms *permissions.Checker) (*ingest.IngestManager, error) {
 	clusterMeta := snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName}
 	manager := ingest.NewIngestManager(
 		streamrows.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName},
@@ -272,7 +272,7 @@ func newIngestInfrastructure(cfg Config, factory *informer.Factory, runtimePerms
 	registerNetworkReflectors(manager, clusterMeta)
 	registerNodeReflector(manager, clusterMeta)
 	manager.SetPermissionFilter(ingestPermissionFilter(runtimePerms))
-	registerCustomResourceIngest(manager, factory, cfg.ClusterID)
+	registerCustomResourceIngest(ctx, manager, factory, cfg.ClusterID)
 	return manager, nil
 }
 
@@ -292,12 +292,12 @@ func logPermissionSkip(domainName, group, resource string) {
 	klog.V(2).Infof("Skipping registration for domain %s: insufficient permission to list %s/%s", domainName, group, resource)
 }
 
-func newMetricsServices(cfg Config, gate *permissionGate, recorder *telemetry.Recorder, issues *permissionIssueRecorder) (refresh.MetricsPoller, metrics.Provider) {
+func newMetricsServices(ctx context.Context, cfg Config, gate *permissionGate, recorder *telemetry.Recorder, issues *permissionIssueRecorder) (refresh.MetricsPoller, metrics.Provider) {
 	checks := []listCheck{
 		{group: metricsAPIGroup, resource: "nodes"},
 		{group: metricsAPIGroup, resource: "pods"},
 	}
-	results := gate.runListChecks(checks)
+	results := gate.runListChecks(ctx, checks)
 	metricErrors := gate.listErrors(results)
 	issues.append("metrics-poller", metricsAPIGroup+"/nodes,pods", metricErrors...)
 	if len(metricErrors) == 0 && gate.allListAllowed(results) {
@@ -347,14 +347,19 @@ func restServerHost(cfg *rest.Config) string {
 	return cfg.Host
 }
 
-func registerSubsystemDomains(factory *informer.Factory, gate *permissionGate, runtimePerms *permissions.Checker, registrations []domainRegistration) error {
+func registerSubsystemDomains(ctx context.Context, factory *informer.Factory, gate *permissionGate, runtimePerms *permissions.Checker, registrations []domainRegistration) error {
 	preflight := preflightRequests(registrations, []informer.PermissionRequest{
 		{Group: metricsAPIGroup, Resource: "nodes", Verb: "list"},
 		{Group: metricsAPIGroup, Resource: "pods", Verb: "list"},
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), config.PermissionPreflightTimeout)
-	defer cancel()
-	_ = factory.PrimePermissions(ctx, preflight)
+	// The preflight budget bounds only priming. Reviews it leaves uncached are
+	// retried by the gate checks, so only caller cancellation aborts the build.
+	preflightCtx, cancel := context.WithTimeout(ctx, config.PermissionPreflightTimeout)
+	_ = factory.PrimePermissions(preflightCtx, preflight)
+	cancel()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	return registerDomains(ctx, gate, runtimePerms, registrations)
 }
 
@@ -399,13 +404,13 @@ func wireMetricsObserver(metricsPoller refresh.MetricsPoller, resourceManager *r
 }
 
 // NewSubsystemWithServices returns a fully wired refresh subsystem.
-func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
+func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, error) {
 	registry := domain.New()
-	runtimePerms, informerFactory, err := newInformerInfrastructure(cfg)
+	runtimePerms, informerFactory, err := newInformerInfrastructure(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	ingestManager, err := newIngestInfrastructure(cfg, informerFactory, runtimePerms)
+	ingestManager, err := newIngestInfrastructure(ctx, cfg, informerFactory, runtimePerms)
 	if err != nil {
 		return nil, err
 	}
@@ -417,7 +422,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	telemetryRecorder.SetClusterMeta(cfg.ClusterID, cfg.ClusterName)
 
 	clusterMeta := snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName}
-	metricsPoller, metricsProvider := newMetricsServices(cfg, gate, telemetryRecorder, issues)
+	metricsPoller, metricsProvider := newMetricsServices(ctx, cfg, gate, telemetryRecorder, issues)
 
 	var namespaceNotifier *snapshot.NamespaceChangeNotifier
 	var objectEventsNotifier *snapshot.ObjectEventsChangeNotifier
@@ -444,8 +449,8 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		},
 	}
 
-	registrations := domainRegistrations(deps)
-	if err := registerSubsystemDomains(informerFactory, gate, runtimePerms, registrations); err != nil {
+	registrations := domainRegistrations(ctx, deps)
+	if err := registerSubsystemDomains(ctx, informerFactory, gate, runtimePerms, registrations); err != nil {
 		return nil, err
 	}
 

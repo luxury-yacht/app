@@ -50,10 +50,12 @@ export interface OverviewField<T> {
 }
 
 /** The shared ResourceStatus block (status/statusState/statusPresentation). */
-export interface OverviewStatusItem {
+export interface OverviewStatusItem<T> {
   kind: 'status';
   /** Override the generic Status label when a resource has canonical domain terminology. */
   label?: string;
+  /** Hide conditionally, e.g. when the status has nothing to flag beyond other rows. */
+  hidden?: (data: T) => boolean;
 }
 
 /** An escape hatch for irreducible per-kind UI. `consumes` lists the DTO keys it reads. */
@@ -63,7 +65,7 @@ export interface OverviewWidget<T> {
   consumes?: (keyof T & string)[];
 }
 
-export type OverviewItemSpec<T> = OverviewField<T> | OverviewStatusItem | OverviewWidget<T>;
+export type OverviewItemSpec<T> = OverviewField<T> | OverviewStatusItem<T> | OverviewWidget<T>;
 
 export interface OverviewSchema<T> {
   items: OverviewItemSpec<T>[];

@@ -23,6 +23,13 @@ export interface ServiceDetails {
     "selector"?: { [_ in string]?: string } | null;
     "endpoints"?: string[] | null;
     "endpointCount": number;
+
+    /**
+     * Ready/not-ready backend addresses (pods), counted once each regardless of port count. Nil
+     * when the EndpointSlices could not be listed, so unknown readiness never reads as zero.
+     */
+    "readyEndpointCount": number | null;
+    "notReadyEndpointCount": number | null;
     "labels"?: { [_ in string]?: string } | null;
     "annotations"?: { [_ in string]?: string } | null;
     "healthStatus": string;

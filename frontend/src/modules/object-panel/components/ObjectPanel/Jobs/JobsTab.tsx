@@ -179,9 +179,8 @@ export const JobsTab: React.FC<JobsTabProps> = ({
         <ObjectPanelResourceGridTableSurface<JobRow>
           gridTableProps={{
             ...gridTableProps,
-            // Local-complete table: "all matching rows" is the local row set.
-            // fetchAllRows arms the standard scope-toggle + Copy + Export trio.
-            fetchAllRows: () => Promise.resolve(jobRows),
+            // A local table: Download takes the rows its filters match, so there is
+            // no all-rows fetcher (one returning every job would bypass the filters).
             exportFilename: 'object-panel-jobs',
           }}
           columns={columns}

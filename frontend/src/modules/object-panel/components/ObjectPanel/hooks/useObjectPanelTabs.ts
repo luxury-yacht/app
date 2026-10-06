@@ -14,6 +14,7 @@ import type {
 import { hasCompleteObjectMapReference } from '@modules/object-panel/objectPanelRef';
 import { useShortcuts } from '@ui/shortcuts';
 import { useEffect, useMemo } from 'react';
+import { resolveResourceMetricsScope } from '@/core/resource-metrics';
 
 interface UseObjectPanelTabsArgs {
   capabilities: ComputedCapabilities;
@@ -34,6 +35,33 @@ interface ObjectPanelTabsResult {
   availableTabs: Array<{ id: string; label: string }>;
 }
 
+type PanelTab = (typeof TABS)[keyof typeof TABS];
+
+// Helm releases show their manifest and values instead of the object tabs; Event objects have no
+// events, YAML, or map of their own.
+const HELM_HIDDEN_TABS = new Set(['events', 'yaml', 'pods', 'jobs', 'map', 'metrics']);
+const HELM_ONLY_TABS = new Set(['manifest', 'values']);
+const EVENT_HIDDEN_TABS = new Set(['events', 'yaml', 'map']);
+
+const isHiddenForObjectType = (tabId: string, isHelmRelease: boolean, isEvent: boolean): boolean =>
+  (isHelmRelease ? HELM_HIDDEN_TABS.has(tabId) : HELM_ONLY_TABS.has(tabId)) ||
+  (isEvent && EVENT_HIDDEN_TABS.has(tabId));
+
+const isAllowedForKind = (tab: PanelTab, objectKind: string | null): boolean => {
+  const kinds: readonly string[] = 'onlyForKinds' in tab ? tab.onlyForKinds : [];
+  return kinds.length === 0 || (objectKind !== null && kinds.includes(objectKind));
+};
+
+const hasRequiredCapability = (tab: PanelTab, capabilities: ComputedCapabilities): boolean => {
+  if ('alwaysShow' in tab && tab.alwaysShow) {
+    return true;
+  }
+  if ('requiresCapability' in tab && tab.requiresCapability) {
+    return capabilities[tab.requiresCapability as keyof ComputedCapabilities];
+  }
+  return true;
+};
+
 export const useObjectPanelTabs = ({
   capabilities,
   objectData,
@@ -52,6 +80,7 @@ export const useObjectPanelTabs = ({
       TABS.PODS,
       TABS.JOBS,
       TABS.LOGS,
+      TABS.METRICS,
       TABS.EVENTS,
       TABS.YAML,
       TABS.SHELL,
@@ -60,43 +89,17 @@ export const useObjectPanelTabs = ({
     ];
 
     return orderedTabs.filter((tab) => {
-      if (isHelmRelease) {
-        if (
-          tab.id === 'events' ||
-          tab.id === 'yaml' ||
-          tab.id === 'pods' ||
-          tab.id === 'jobs' ||
-          tab.id === 'map'
-        ) {
-          return false;
-        }
-      } else if (tab.id === 'manifest' || tab.id === 'values') {
+      if (isHiddenForObjectType(tab.id, isHelmRelease, isEvent)) {
         return false;
       }
-
-      if (isEvent && (tab.id === 'events' || tab.id === 'yaml' || tab.id === 'map')) {
-        return false;
-      }
-
+      // These tabs depend on the object's full identity, not just its kind.
       if (tab.id === 'map') {
         return hasCompleteObjectMapReference(objectData);
       }
-
-      if ('onlyForKinds' in tab && Array.isArray(tab.onlyForKinds) && tab.onlyForKinds.length > 0) {
-        if (!objectKind || !tab.onlyForKinds.includes(objectKind)) {
-          return false;
-        }
+      if (tab.id === 'metrics') {
+        return resolveResourceMetricsScope(objectData).kind === 'domain';
       }
-
-      if ('alwaysShow' in tab && tab.alwaysShow) {
-        return true;
-      }
-
-      if ('requiresCapability' in tab && tab.requiresCapability) {
-        return capabilities[tab.requiresCapability as keyof typeof capabilities];
-      }
-
-      return true;
+      return isAllowedForKind(tab, objectKind) && hasRequiredCapability(tab, capabilities);
     });
   }, [capabilities, isEvent, isHelmRelease, objectData, objectKind]);
 

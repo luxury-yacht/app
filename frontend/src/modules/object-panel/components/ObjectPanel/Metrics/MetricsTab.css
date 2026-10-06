@@ -1,0 +1,76 @@
+/* Metrics tab: toolbar, then a CPU and a Memory section (bar + chart). */
+
+.metrics-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.metrics-tab__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  /* The sections' outer margin, so the chip and pod count line up with their edges. */
+  margin-top: 0.4rem;
+  margin-left: var(--spacing-sm);
+}
+
+/* The chart needs a sized box (ResponsiveContainer); a fixed height also keeps the sections
+   aligned whether they hold a chart or a no-data state. */
+.metrics-section__chart {
+  height: 12rem;
+  font-size: var(--font-size-xs);
+  padding-top: 0.5rem;
+  background: var(--color-bg);
+  border-radius: var(--border-radius-lg);
+}
+
+.metrics-section__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  border: var(--border-width) dashed var(--color-border);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-secondary);
+}
+
+.metrics-tab__notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-text-secondary);
+}
+
+.metrics-tab__hint {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.metrics-chart-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--font-size-xs);
+}
+
+.metrics-chart-tooltip__time {
+  color: var(--color-text-secondary);
+}
+
+.metrics-chart-tooltip__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  white-space: nowrap;
+}

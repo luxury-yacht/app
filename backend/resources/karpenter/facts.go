@@ -2,9 +2,11 @@ package karpenter
 
 import (
 	"fmt"
+
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/crdfacts"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -30,43 +32,54 @@ type Budget struct {
 	Duration string   `json:"duration,omitempty"`
 }
 
+// limitWarningPercent is the share of a NodePool limit above which its usage is flagged, in
+// the Karpenter table and details and in Attention. Karpenter stops launching nodes for a
+// pool once it reaches a limit.
+const limitWarningPercent = 80
+
+const limitWarningPresentation = "warning"
+
+// limitUsageResources are the limits whose usage is reported.
+var limitUsageResources = []string{"cpu", "memory"}
+
 // Facts are version-tolerant projections from discovered Karpenter objects.
 // Missing fields stay absent; controller defaults are never invented here.
 type Facts struct {
-	NodeClass              *resourcemodel.ResourceLink `json:"nodeClass,omitempty"`
-	NodePool               *resourcemodel.ResourceLink `json:"nodePool,omitempty"`
-	Node                   *resourcemodel.ResourceLink `json:"node,omitempty"`
-	Weight                 *int64                      `json:"weight,omitempty"`
-	Replicas               *int64                      `json:"replicas,omitempty"`
-	Limits                 map[string]string           `json:"limits,omitempty"`
-	Capacity               map[string]string           `json:"capacity,omitempty"`
-	Allocatable            map[string]string           `json:"allocatable,omitempty"`
-	ConsolidationPolicy    string                      `json:"consolidationPolicy,omitempty"`
-	ConsolidateAfter       string                      `json:"consolidateAfter,omitempty"`
-	ExpireAfter            string                      `json:"expireAfter,omitempty"`
-	TerminationGracePeriod string                      `json:"terminationGracePeriod,omitempty"`
-	Requirements           []Requirement               `json:"requirements,omitempty"`
-	Taints                 []Taint                     `json:"taints,omitempty"`
-	StartupTaints          []Taint                     `json:"startupTaints,omitempty"`
-	Budgets                []Budget                    `json:"budgets,omitempty"`
-	ProviderID             string                      `json:"providerID,omitempty"`
-	ImageID                string                      `json:"imageID,omitempty"`
-	InstanceType           string                      `json:"instanceType,omitempty"`
-	CapacityType           string                      `json:"capacityType,omitempty"`
-	Zone                   string                      `json:"zone,omitempty"`
-	Architecture           string                      `json:"architecture,omitempty"`
-	Role                   string                      `json:"role,omitempty"`
-	InstanceProfile        string                      `json:"instanceProfile,omitempty"`
-	ImageFamily            string                      `json:"imageFamily,omitempty"`
-	Subnets                []string                    `json:"subnets,omitempty"`
-	SecurityGroups         []string                    `json:"securityGroups,omitempty"`
-	Images                 []string                    `json:"images,omitempty"`
-	Tags                   map[string]string           `json:"tags,omitempty"`
-	PriceAdjustment        string                      `json:"priceAdjustment,omitempty"`
+	NodeClass              *resourcemodel.ResourceLink         `json:"nodeClass,omitempty"`
+	NodePool               *resourcemodel.ResourceLink         `json:"nodePool,omitempty"`
+	Node                   *resourcemodel.ResourceLink         `json:"node,omitempty"`
+	Weight                 *int64                              `json:"weight,omitempty"`
+	Replicas               *int64                              `json:"replicas,omitempty"`
+	Limits                 map[string]string                   `json:"limits,omitempty"`
+	Capacity               map[string]string                   `json:"capacity,omitempty"`
+	LimitUsage             map[string]resourcemodel.LimitUsage `json:"limitUsage,omitempty"`
+	Allocatable            map[string]string                   `json:"allocatable,omitempty"`
+	ConsolidationPolicy    string                              `json:"consolidationPolicy,omitempty"`
+	ConsolidateAfter       string                              `json:"consolidateAfter,omitempty"`
+	ExpireAfter            string                              `json:"expireAfter,omitempty"`
+	TerminationGracePeriod string                              `json:"terminationGracePeriod,omitempty"`
+	Requirements           []Requirement                       `json:"requirements,omitempty"`
+	Taints                 []Taint                             `json:"taints,omitempty"`
+	StartupTaints          []Taint                             `json:"startupTaints,omitempty"`
+	Budgets                []Budget                            `json:"budgets,omitempty"`
+	ProviderID             string                              `json:"providerID,omitempty"`
+	ImageID                string                              `json:"imageID,omitempty"`
+	InstanceType           string                              `json:"instanceType,omitempty"`
+	CapacityType           string                              `json:"capacityType,omitempty"`
+	Zone                   string                              `json:"zone,omitempty"`
+	Architecture           string                              `json:"architecture,omitempty"`
+	Role                   string                              `json:"role,omitempty"`
+	InstanceProfile        string                              `json:"instanceProfile,omitempty"`
+	ImageFamily            string                              `json:"imageFamily,omitempty"`
+	Subnets                []string                            `json:"subnets,omitempty"`
+	SecurityGroups         []string                            `json:"securityGroups,omitempty"`
+	Images                 []string                            `json:"images,omitempty"`
+	Tags                   map[string]string                   `json:"tags,omitempty"`
+	PriceAdjustment        string                              `json:"priceAdjustment,omitempty"`
 }
 
 func BuildFacts(clusterID string, object *unstructured.Unstructured) *Facts {
-	if object == nil || resourcekind.FamilyForResource(object.GroupVersionKind().Group, object.GetKind(), object.GetNamespace() != "") != resourcekind.KarpenterFamily {
+	if !isKarpenter(object) {
 		return nil
 	}
 	facts := &Facts{}
@@ -97,6 +110,7 @@ func buildPoolFacts(clusterID string, object *unstructured.Unstructured, spec ma
 	facts.Replicas = crdfacts.Number(spec, "replicas")
 	facts.Limits = quantities(spec, "limits")
 	facts.Capacity = quantities(object.Object, "status", "resources")
+	facts.LimitUsage = limitUsage(facts.Capacity, facts.Limits)
 	facts.ConsolidationPolicy = crdfacts.Text(spec, "disruption", "consolidationPolicy")
 	facts.ConsolidateAfter = crdfacts.Text(spec, "disruption", "consolidateAfter")
 	facts.Budgets = decodeList[Budget](nestedMap(spec, "disruption"), "budgets")
@@ -105,6 +119,58 @@ func buildPoolFacts(clusterID string, object *unstructured.Unstructured, spec ma
 	facts.Requirements = decodeList[Requirement](template, "requirements")
 	facts.Taints = decodeList[Taint](template, "taints")
 	facts.StartupTaints = decodeList[Taint](template, "startupTaints")
+}
+
+// LimitWarnings returns the resources a Karpenter NodePool uses more than limitWarningPercent
+// of; ok is false for every other object.
+func LimitWarnings(object *unstructured.Unstructured) (resources []string, ok bool) {
+	if !isKarpenter(object) || object.GetKind() != "NodePool" {
+		return nil, false
+	}
+	usage := limitUsage(quantities(object.Object, "status", "resources"), quantities(nestedMap(object.Object, "spec"), "limits"))
+	for _, name := range limitUsageResources {
+		if usage[name].Presentation == limitWarningPresentation {
+			resources = append(resources, name)
+		}
+	}
+	return resources, true
+}
+
+// limitUsage is the percentage of each limit in use. A zero or unparseable limit, or a
+// resource with no reported usage, has no percentage rather than reading as 0%.
+func limitUsage(capacity, limits map[string]string) map[string]resourcemodel.LimitUsage {
+	var usage map[string]resourcemodel.LimitUsage
+	for _, name := range limitUsageResources {
+		used, usedOK := quantityValue(capacity[name])
+		limit, limitOK := quantityValue(limits[name])
+		if !usedOK || !limitOK || limit <= 0 || used < 0 {
+			continue
+		}
+		entry := resourcemodel.LimitUsage{Percent: used * 100 / limit}
+		if entry.Percent > limitWarningPercent {
+			entry.Presentation = limitWarningPresentation
+		}
+		if usage == nil {
+			usage = make(map[string]resourcemodel.LimitUsage, len(limitUsageResources))
+		}
+		usage[name] = entry
+	}
+	return usage
+}
+
+func quantityValue(value string) (float64, bool) {
+	if value == "" {
+		return 0, false
+	}
+	quantity, err := resource.ParseQuantity(value)
+	if err != nil {
+		return 0, false
+	}
+	return quantity.AsApproximateFloat64(), true
+}
+
+func isKarpenter(object *unstructured.Unstructured) bool {
+	return object != nil && resourcekind.FamilyForResource(object.GroupVersionKind().Group, object.GetKind(), object.GetNamespace() != "") == resourcekind.KarpenterFamily
 }
 
 func buildClaimFacts(clusterID string, object *unstructured.Unstructured, spec map[string]any, facts *Facts) {

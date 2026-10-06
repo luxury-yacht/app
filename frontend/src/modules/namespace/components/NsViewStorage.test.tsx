@@ -147,7 +147,7 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+    filters: { search: '', kinds: [], namespaces: [] },
     setFilters: vi.fn(),
     isNamespaceScoped: true,
     resetState: vi.fn(),
@@ -167,6 +167,7 @@ vi.mock('@shared/components/icons/SharedIcons', () => ({
   OpenIcon: () => <span>open</span>,
   ObjectMapIcon: () => <span>map</span>,
   DeleteIcon: () => <span>delete</span>,
+  MetadataIcon: () => <span>metadata</span>,
 }));
 
 vi.mock('@utils/errorHandler', () => ({

@@ -12,8 +12,10 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   gatewayDescriptor,
+  grpcRouteDescriptor,
   httpRouteDescriptor,
   referenceGrantDescriptor,
+  tlsRouteDescriptor,
 } from './descriptors/gateway';
 import { OverviewRenderer } from './OverviewRenderer';
 import type { OverviewContext, OverviewDescriptor } from './schema';
@@ -193,7 +195,20 @@ describe('GatewayAPIOverview', () => {
     expect(listenersValue?.textContent).toContain('tls.example.com');
   });
 
-  it('renders route parents, backends, rules, and hostnames', async () => {
+  const serviceRef = (name: string, namespace = 'prod') => ({
+    ref: { clusterId: 'cluster-a', group: '', version: 'v1', kind: 'Service', namespace, name },
+  });
+  const routeRules = (label = 'Rules') =>
+    Array.from(
+      container.querySelectorAll<HTMLElement>(`section[aria-label="${label}"] ol > li`) ?? []
+    );
+  const endpointTexts = (rule: HTMLElement | undefined, label: string) =>
+    Array.from(
+      rule?.querySelectorAll<HTMLElement>(`ul[aria-label="${label}"] > li`) ?? [],
+      (item) => item.textContent ?? ''
+    );
+
+  it('shows each route rule as its matches flowing to weighted backends', async () => {
     await renderDescriptor(httpRouteDescriptor, {
       kind: 'HTTPRoute',
       name: 'web',
@@ -211,33 +226,25 @@ describe('GatewayAPIOverview', () => {
           },
         },
       ],
-      backendRefs: [
-        {
-          ref: {
-            clusterId: 'cluster-a',
-            group: '',
-            version: 'v1',
-            kind: 'Service',
-            namespace: 'prod',
-            name: 'web-svc',
-          },
-        },
-      ],
+      backendRefs: [serviceRef('web-svc'), serviceRef('web-canary')],
       rules: [
         {
-          matches: ['path /app'],
-          backendRefs: [
+          matches: [
             {
-              ref: {
-                clusterId: 'cluster-a',
-                group: '',
-                version: 'v1',
-                kind: 'Service',
-                namespace: 'prod',
-                name: 'web-svc',
-              },
+              path: { type: 'PathPrefix', value: '/app' },
+              headers: [{ type: 'Exact', name: 'x-canary', value: 'true' }],
             },
+            { path: { type: 'Exact', value: '/healthz' }, method: 'GET' },
           ],
+          backendRefs: [
+            { target: serviceRef('web-svc'), port: 8080, weight: 90 },
+            { target: serviceRef('web-canary', 'canary'), port: 8080, weight: 10 },
+          ],
+        },
+        { backendRefs: [{ target: serviceRef('web-svc'), port: 80, weight: 1 }] },
+        {
+          matches: [{ path: { type: 'PathPrefix', value: '/old' } }],
+          backendRefs: [{ target: serviceRef('legacy'), port: 80, weight: 0 }],
         },
       ],
       conditions: [{ type: 'ResolvedRefs', status: 'True', reason: 'ResolvedRefs' }],
@@ -247,11 +254,72 @@ describe('GatewayAPIOverview', () => {
 
     expect(getValueForLabel(container, 'Hostnames')?.textContent).toBe('example.com');
     expect(getValueForLabel(container, 'Parent Refs')?.textContent).toContain('Gateway prod/edge');
-    expect(getValueForLabel(container, 'Backend Refs')?.textContent).toContain(
-      'Service prod/web-svc'
-    );
-    expect(getValueForLabel(container, 'Rules')?.textContent).toContain('path /app');
-    expect(getValueForLabel(container, 'Rules')?.textContent).toContain('Service prod/web-svc');
+
+    const [split, catchAll, disabled] = routeRules();
+    // Matches are alternatives; every condition inside one match applies together.
+    const requests = endpointTexts(split, 'Requests');
+    expect(requests).toHaveLength(2);
+    expect(requests[0]).toContain('/app');
+    expect(requests[0]).toContain('x-canary');
+    expect(requests[1]).toContain('/healthz');
+    expect(requests[1]).toContain('GET');
+    // Backends carry port and their share of the rule's traffic.
+    const backends = endpointTexts(split, 'Backends');
+    expect(backends[0]).toContain('web-svc');
+    expect(backends[0]).toContain('8080');
+    expect(backends[0]).toContain('90%');
+    expect(backends[1]).toContain('10%');
+    // A backend in another namespace says which one.
+    expect(backends[1]).toContain('canary');
+    expect(
+      split
+        ?.querySelector('ul[aria-label="Backends"] [data-testid="object-panel-link"]')
+        ?.getAttribute('data-name')
+    ).toBe('web-svc');
+
+    // A rule without matches takes every request; a single backend gets no share.
+    expect(endpointTexts(catchAll, 'Requests')).toEqual(['Any request']);
+    expect(endpointTexts(catchAll, 'Backends')[0]).not.toContain('%');
+    // Weight 0 sends no traffic, even for a rule's only backend.
+    expect(endpointTexts(disabled, 'Backends')[0]).toContain('0% of traffic');
+  });
+
+  it('describes gRPC method matches and TLS hostnames as the requests a rule takes', async () => {
+    await renderDescriptor(grpcRouteDescriptor, {
+      kind: 'GRPCRoute',
+      name: 'orders',
+      namespace: 'prod',
+      rules: [
+        {
+          matches: [
+            {
+              grpcMethod: { type: 'Exact', service: 'orders.OrderService', method: 'Create' },
+              headers: [{ type: 'Exact', name: 'tenant', value: 'acme' }],
+            },
+            { headers: [{ type: 'Exact', name: 'x-debug', value: '1' }] },
+          ],
+          backendRefs: [{ target: serviceRef('orders'), port: 9090, weight: 1 }],
+        },
+      ],
+      labels: {},
+      annotations: {},
+    });
+    const [grpcRequests, anyMethod] = endpointTexts(routeRules()[0], 'Requests');
+    expect(grpcRequests).toContain('orders.OrderService/Create');
+    expect(grpcRequests).toContain('tenant');
+    expect(anyMethod).toContain('Any method');
+
+    await renderDescriptor(tlsRouteDescriptor, {
+      kind: 'TLSRoute',
+      name: 'db',
+      namespace: 'prod',
+      hostnames: ['db.example.com'],
+      rules: [{ backendRefs: [{ target: serviceRef('postgres'), port: 5432, weight: 1 }] }],
+      labels: {},
+      annotations: {},
+    });
+    // TLS rules have no matches; the route's hostnames decide which connections they take.
+    expect(endpointTexts(routeRules()[0], 'Requests')[0]).toContain('db.example.com');
   });
 
   it('renders display-only refs without object links', async () => {

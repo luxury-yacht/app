@@ -38,7 +38,6 @@ type FavoriteFilters struct {
 	Namespaces      FavoriteFilterSelection            `json:"namespaces"`
 	Clusters        FavoriteFilterSelection            `json:"clusters"`
 	QueryFacets     map[string]FavoriteFilterSelection `json:"queryFacets,omitempty"`
-	CaseSensitive   bool                               `json:"caseSensitive"`
 	IncludeMetadata bool                               `json:"includeMetadata"`
 }
 
@@ -88,7 +87,6 @@ type favoriteFiltersV1 struct {
 	Namespaces      []string            `json:"namespaces"`
 	Clusters        []string            `json:"clusters,omitempty"`
 	QueryFacets     map[string][]string `json:"queryFacets,omitempty"`
-	CaseSensitive   bool                `json:"caseSensitive"`
 	IncludeMetadata bool                `json:"includeMetadata"`
 }
 
@@ -200,7 +198,6 @@ func migrateFavoriteV1(raw json.RawMessage) (Favorite, error) {
 			Namespaces:      migrateFavoriteFilterSelectionV1(legacy.Filters.Namespaces),
 			Clusters:        migrateFavoriteFilterSelectionV1(legacy.Filters.Clusters),
 			QueryFacets:     queryFacets,
-			CaseSensitive:   legacy.Filters.CaseSensitive,
 			IncludeMetadata: legacy.Filters.IncludeMetadata,
 		}
 	}

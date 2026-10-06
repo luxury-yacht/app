@@ -141,18 +141,16 @@ describe.runIf(process.env.LOGS_BENCHMARK === '1')('Logs tab stream-batch benchm
     const panelId = `obj:benchmark:${bufferSize}:${json}:${displayMode}`;
     eventBus.emit('settings:obj-panel-logs-buffer-size', bufferSize);
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
-      timestampMode: 'default',
       showTimestamps: true,
+      searchOpen: false,
       wrapText: true,
       textFilter: '',
-      highlightMatches: false,
-      inverseMatches: false,
+      filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode,
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -171,6 +169,7 @@ describe.runIf(process.env.LOGS_BENCHMARK === '1')('Logs tab stream-batch benchm
           activePodNames={PODS}
           clusterId="alpha:ctx"
           panelId={panelId}
+          objectName="web"
         />
       );
       await Promise.resolve();

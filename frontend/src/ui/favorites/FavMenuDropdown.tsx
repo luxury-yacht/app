@@ -11,13 +11,11 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import {
-  ChevronDownIcon,
-  ChevronUpIcon,
   FavoriteFilledIcon,
   FavoriteGenericIcon,
   FavoritePinIcon,
 } from '@shared/components/icons/FavoriteIcons';
-import { DeleteIcon } from '@shared/components/icons/SharedIcons';
+import { ChevronDownIcon, ChevronUpIcon, DeleteIcon } from '@shared/components/icons/SharedIcons';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { isClusterSpecificFavorite } from '@/core/navigation/favoriteRoute';

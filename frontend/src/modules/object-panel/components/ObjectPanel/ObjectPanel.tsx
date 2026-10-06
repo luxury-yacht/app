@@ -22,6 +22,7 @@ import { DockablePanel, useDockablePanelContext } from '@ui/dockable';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { queryNamespacePermissions } from '@/core/capabilities';
 import { PanelLifecycleClusterSurface } from '@/core/panel-windows/panelLifecycleGuards';
+import { useAutoRefreshEnabled } from '@/core/refresh/hooks/useRefreshPreferences';
 import './ObjectPanel.css';
 import {
   CLUSTER_SCOPE,
@@ -31,6 +32,7 @@ import { useObjectPanelCapabilities } from '@modules/object-panel/components/Obj
 import { useObjectPanelFeatureSupport } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport';
 import { useObjectPanelRefresh } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh';
 import { useObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs';
+import { usePanelMetricsCollector } from '@modules/object-panel/components/ObjectPanel/Metrics/usePanelMetricsCollector';
 import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
 import { ObjectPanelHeader } from '@modules/object-panel/components/ObjectPanel/ObjectPanelHeader';
 import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/ObjectPanelTabs';
@@ -102,6 +104,11 @@ function ObjectPanel({
   const [resourceDeleted, setResourceDeleted] = useState(false);
   const [deletedResourceName, setDeletedResourceName] = useState('');
   const activeTab: ViewType = useObjectPanelActiveTab(panelId) ?? 'details';
+
+  // Metrics are collected for the panel's whole life, whatever tab it shows and even behind
+  // another panel of its dock group, so the Metrics tab opens on a chart that is already running.
+  const autoRefreshEnabled = useAutoRefreshEnabled();
+  usePanelMetricsCollector(panelId, objectRef, autoRefreshEnabled);
 
   const {
     objectKind,

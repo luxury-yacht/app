@@ -110,6 +110,9 @@ export const TABS = {
     onlyForKinds: ['cronjob'],
   },
   EVENTS: { id: 'events', label: 'Events', alwaysShow: true },
+  // Live metrics-server samples, kept while the panel is open (docs/architecture/resource-metrics.md).
+  // Offered for objects useResourceMetrics can serve (see useObjectPanelTabs).
+  METRICS: { id: 'metrics', label: 'Metrics' },
   YAML: { id: 'yaml', label: 'YAML', alwaysShow: true },
   MAP: { id: 'map', label: 'Map', alwaysShow: true },
   SHELL: {

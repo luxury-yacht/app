@@ -3,9 +3,40 @@ import {
   buildCustomMetadataGridColumns,
   collectAvailableCustomMetadataKeys,
   createCustomMetadataColumnDefinition,
+  normalizeCustomMetadataColumnDefinitions,
 } from './customMetadataColumns';
 
 describe('custom metadata columns', () => {
+  // Saved table state is read back from disk: malformed column definitions are
+  // dropped, values are trimmed, and a repeated column keeps its first definition.
+  it('restores only valid, distinct saved column definitions', () => {
+    expect(
+      normalizeCustomMetadataColumnDefinitions([
+        { source: 'label', metadataKey: ' team ', header: ' Team ' },
+        { source: 'label', metadataKey: 'team', header: 'Owner team' },
+        { source: 'annotation', metadataKey: 'owner', header: 'Owner' },
+        { source: 'env', metadataKey: 'tier', header: 'Tier' },
+        { source: 'label', metadataKey: ' ', header: 'Blank' },
+        { source: 'label', metadataKey: 'app', header: 42 },
+        null,
+        ['label', 'app', 'App'],
+        'label:app',
+      ])
+    ).toEqual([
+      createCustomMetadataColumnDefinition({
+        source: 'label',
+        metadataKey: 'team',
+        header: 'Team',
+      }),
+      createCustomMetadataColumnDefinition({
+        source: 'annotation',
+        metadataKey: 'owner',
+        header: 'Owner',
+      }),
+    ]);
+    expect(normalizeCustomMetadataColumnDefinitions({ source: 'label' })).toEqual([]);
+  });
+
   it('derives stable and source-specific identity from the exact metadata key', () => {
     const label = createCustomMetadataColumnDefinition({
       source: 'label',

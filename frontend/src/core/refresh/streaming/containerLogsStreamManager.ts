@@ -7,6 +7,7 @@
  * entry buffer projected into the store.
  */
 
+import type { types } from '@core/backend-api/models';
 import { type JSONSocket, JSONStream } from '@wailsio/runtime';
 import { eventBus } from '@/core/events';
 import {
@@ -198,6 +199,68 @@ const sameEntryContent = (left: ContainerLogsEntry[], right: ContainerLogsWireEn
   });
 
 /**
+ * The distinct values a buffer's entries carry (their pods, their containers),
+ * counted as entries come and go. `values` is the same array until the set of
+ * values changes.
+ */
+class HeldValues<V> {
+  private counts = new Map<string, { value: V; count: number }>();
+  private list: V[] = [];
+  private changed = false;
+
+  private readonly keyOf: (entry: ContainerLogsEntry) => string;
+  private readonly heldValueOf: (entry: ContainerLogsEntry) => V;
+
+  constructor(
+    keyOf: (entry: ContainerLogsEntry) => string,
+    heldValueOf: (entry: ContainerLogsEntry) => V
+  ) {
+    this.keyOf = keyOf;
+    this.heldValueOf = heldValueOf;
+  }
+
+  get values(): V[] {
+    if (this.changed) {
+      this.list = Array.from(this.counts.values(), (held) => held.value);
+      this.changed = false;
+    }
+    return this.list;
+  }
+
+  holds(key: string): boolean {
+    return this.counts.has(key);
+  }
+
+  count(entry: ContainerLogsEntry, delta: number): void {
+    const key = this.keyOf(entry);
+    const held = this.counts.get(key);
+    const count = (held?.count ?? 0) + delta;
+    if (count > 0) {
+      this.changed ||= !held;
+      this.counts.set(key, { value: held?.value ?? this.heldValueOf(entry), count });
+    } else if (this.counts.delete(key)) {
+      this.changed = true;
+    }
+  }
+
+  clear(): void {
+    this.counts = new Map();
+    this.changed = true;
+  }
+}
+
+const podOf = (entry: ContainerLogsEntry): string => entry.pod;
+
+const containerKeyOf = (entry: ContainerLogsEntry): string =>
+  `${entry.container}|${entry.isInit}|${Boolean(entry.isEphemeral)}`;
+
+const containerOf = (entry: ContainerLogsEntry): types.PodContainer => ({
+  name: entry.container,
+  isInit: entry.isInit,
+  isEphemeral: Boolean(entry.isEphemeral),
+});
+
+/**
  * One scope's entries in timestamp order, bounded by count and line bytes.
  * The oldest entries are evicted first.
  */
@@ -212,41 +275,36 @@ class LogBuffer {
   // The selection and size whose newest entries the buffer holds; null until a
   // snapshot arrives.
   private basis: BufferBasis | null = null;
-  // Entries held per pod, kept as entries come and go.
-  private podCounts = new Map<string, number>();
-  private podList: string[] = [];
-  private podsChanged = false;
+  // The pods and containers with lines in the buffer, kept as entries come and go.
+  private readonly heldPods = new HeldValues(podOf, podOf);
+  private readonly heldContainers = new HeldValues(containerKeyOf, containerOf);
 
   /** The pods with lines in the buffer; the same array until that set changes. */
   get pods(): string[] {
-    if (this.podsChanged) {
-      this.podList = Array.from(this.podCounts.keys());
-      this.podsChanged = false;
-    }
-    return this.podList;
+    return this.heldPods.values;
   }
 
-  private countPod(pod: string, delta: number): void {
-    const count = (this.podCounts.get(pod) ?? 0) + delta;
-    if (count > 0) {
-      this.podsChanged ||= !this.podCounts.has(pod);
-      this.podCounts.set(pod, count);
-    } else if (this.podCounts.delete(pod)) {
-      this.podsChanged = true;
-    }
+  /** The containers with lines in the buffer; the same array until that set changes. */
+  get containers(): types.PodContainer[] {
+    return this.heldContainers.values;
   }
 
-  private recountPods(): void {
-    this.podCounts = new Map();
-    this.podsChanged = true;
+  private countHeld(entry: ContainerLogsEntry, delta: number): void {
+    this.heldPods.count(entry, delta);
+    this.heldContainers.count(entry, delta);
+  }
+
+  private recountHeld(): void {
+    this.heldPods.clear();
+    this.heldContainers.clear();
     for (const entry of this.entries) {
-      this.countPod(entry.pod, 1);
+      this.countHeld(entry, 1);
     }
   }
 
   /** Drops the lines of pods that no longer exist; they are not counted as received. */
   dropPods(pods: readonly string[]): void {
-    const gone = new Set(pods.filter((pod) => this.podCounts.has(pod)));
+    const gone = new Set(pods.filter((pod) => this.heldPods.holds(pod)));
     if (gone.size === 0) {
       return;
     }
@@ -256,6 +314,7 @@ class LogBuffer {
       if (gone.has(entry.pod)) {
         this.bytes -= utf8Length(entry.line);
         this.received -= 1;
+        this.countHeld(entry, -1);
       } else {
         entries.push(entry);
         keys.push(this.keys[index]);
@@ -263,10 +322,6 @@ class LogBuffer {
     });
     this.entries = entries;
     this.keys = keys;
-    for (const pod of gone) {
-      this.podCounts.delete(pod);
-    }
-    this.podsChanged = true;
   }
 
   /** Records the request whose snapshot the buffer now reflects. */
@@ -308,7 +363,7 @@ class LogBuffer {
     this.keys = this.entries.map((entry) => timestampKey(entry.timestamp));
     this.bytes = this.entries.reduce((sum, entry) => sum + utf8Length(entry.line), 0);
     this.received = this.entries.length + trimmed;
-    this.recountPods();
+    this.recountHeld();
   }
 
   /**
@@ -334,7 +389,7 @@ class LogBuffer {
       entries.push(next.entry);
       keys.push(next.key);
       this.bytes += utf8Length(next.entry.line);
-      this.countPod(next.entry.pod, 1);
+      this.countHeld(next.entry, 1);
     }
     this.entries = entries.concat(this.entries.slice(held));
     this.keys = keys.concat(this.keys.slice(held));
@@ -361,7 +416,7 @@ class LogBuffer {
       return;
     }
     for (let index = 0; index < drop; index += 1) {
-      this.countPod(this.entries[index].pod, -1);
+      this.countHeld(this.entries[index], -1);
     }
     this.entries = this.entries.slice(drop);
     this.keys = this.keys.slice(drop);
@@ -705,6 +760,7 @@ export class ContainerLogsStreamManager {
         issues: buffer.issues,
         truncation: buffer.truncation(),
         pods: buffer.pods,
+        containers: buffer.containers,
       };
       return {
         ...previous,

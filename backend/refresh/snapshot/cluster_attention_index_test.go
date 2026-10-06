@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -465,4 +466,207 @@ func TestClusterAttentionIndexRefiltersRestoredRowsWhenIgnoreRulesChange(t *test
 	restored.SetIgnoreRules(AttentionIgnoreRules{ClusterFindingTypes: []string{"restarts"}})
 
 	require.Empty(t, restored.Snapshot())
+}
+
+func argoCDStatuses(sync, health string) map[string][]string {
+	return map[string][]string{objectcatalog.ReportedStatusSync: {sync}, objectcatalog.ReportedStatusHealth: {health}}
+}
+
+func reportedStatusTestObject(clusterID, group, kind, name string, statuses map[string][]string) objectcatalog.ReportedStatus {
+	return objectcatalog.ReportedStatus{
+		Ref: resourcemodel.ResourceRef{
+			ClusterID: clusterID, Group: group, Version: "v1alpha1", Kind: kind, Resource: strings.ToLower(kind) + "s",
+			Namespace: "argocd", Name: name, UID: name + "-uid",
+		},
+		Statuses: statuses,
+	}
+}
+
+func withReported(statuses map[string][]string, aspect string, values ...string) map[string][]string {
+	statuses[aspect] = values
+	return statuses
+}
+
+func TestClusterAttentionIndexFlagsArgoCDProblemsAsSoonAsReported(t *testing.T) {
+	now := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	healthy := func() map[string][]string { return argoCDStatuses("Synced", "Healthy") }
+
+	// Argo CD records no time for a sync transition, so a problem already present when the
+	// app starts is flagged at once rather than after a grace period.
+	for _, test := range []struct {
+		name     string
+		kind     string
+		statuses map[string][]string
+		severity AttentionSeverity
+		causes   []string
+	}{
+		{"out of sync", "Application", argoCDStatuses("OutOfSync", "Healthy"), AttentionSeverityWarning, []string{"argocd-application-out-of-sync"}},
+		{"missing", "Application", argoCDStatuses("Synced", "Missing"), AttentionSeverityWarning, []string{"argocd-application-missing"}},
+		{"degraded", "Application", argoCDStatuses("Synced", "Degraded"), AttentionSeverityError, []string{"argocd-application-degraded"}},
+		{"out of sync and degraded", "Application", argoCDStatuses("OutOfSync", "Degraded"), AttentionSeverityError,
+			[]string{"argocd-application-out-of-sync", "argocd-application-degraded"}},
+		{"sync failed", "Application", withReported(healthy(), objectcatalog.ReportedStatusOperation, "Failed"), AttentionSeverityError,
+			[]string{"argocd-application-sync-failed"}},
+		{"sync errored", "Application", withReported(healthy(), objectcatalog.ReportedStatusOperation, "Error"), AttentionSeverityError,
+			[]string{"argocd-application-sync-failed"}},
+		{"error conditions", "Application",
+			withReported(healthy(), objectcatalog.ReportedStatusConditions, "ComparisonError", "SharedResourceWarning", "SyncError"),
+			AttentionSeverityError, []string{"argocd-application-error"}},
+		{"application set error", "ApplicationSet",
+			map[string][]string{objectcatalog.ReportedStatusHealth: {"Degraded"}, objectcatalog.ReportedStatusConditions: {"ErrorOccurred"}},
+			AttentionSeverityError, []string{"argocd-applicationset-error"}},
+	} {
+		object := reportedStatusTestObject("cluster-a", "argoproj.io", test.kind, "storefront", test.statuses)
+		object.CreationTimestamp = now.Add(-30 * 24 * time.Hour).UnixMilli()
+		index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{object})
+		rows := index.Snapshot()
+		require.Len(t, rows, 1, test.name)
+		require.Equal(t, object.Ref, rows[0].Ref, test.name)
+		require.Equal(t, test.severity, rows[0].Severity, test.name)
+		require.ElementsMatch(t, test.causes, attentionCauseTypes(rows[0].Causes), test.name)
+		require.Equal(t, object.CreationTimestamp, rows[0].AgeTimestamp, test.name)
+	}
+
+	// Several error conditions are one finding that names each of them.
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{reportedStatusTestObject("cluster-a", "argoproj.io", "Application", "storefront",
+		withReported(healthy(), objectcatalog.ReportedStatusConditions, "ComparisonError", "SyncError"))})
+	rows := index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Len(t, rows[0].Causes, 1)
+	require.Contains(t, rows[0].Causes[0].Message, "ComparisonError")
+	require.Contains(t, rows[0].Causes[0].Message, "SyncError")
+
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{
+		reportedStatusTestObject("cluster-a", "argoproj.io", "Application", "storefront",
+			withReported(withReported(healthy(), objectcatalog.ReportedStatusOperation, "Succeeded"),
+				objectcatalog.ReportedStatusConditions, "SharedResourceWarning")),
+		reportedStatusTestObject("cluster-a", "argoproj.io", "ApplicationSet", "tenants",
+			map[string][]string{objectcatalog.ReportedStatusHealth: {"Healthy"}, objectcatalog.ReportedStatusConditions: {"ResourcesUpToDate"}}),
+		// Another API group's Application reporting the same words is not an Argo CD Application.
+		reportedStatusTestObject("cluster-a", "core.oam.dev", "Application", "storefront-vela", argoCDStatuses("OutOfSync", "Degraded")),
+	})
+	require.Empty(t, index.Snapshot())
+}
+
+func TestClusterAttentionIndexDropsRestoredArgoCDFindingWhenApplicationIsDeleted(t *testing.T) {
+	now := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
+	meta := ClusterMeta{ClusterID: "cluster-a"}
+	appSet := reportedStatusTestObject(meta.ClusterID, "argoproj.io", "ApplicationSet", "tenants",
+		map[string][]string{objectcatalog.ReportedStatusHealth: {"Degraded"}, objectcatalog.ReportedStatusConditions: {"ErrorOccurred"}})
+	original := newClusterAttentionIndex(meta, func() time.Time { return now })
+	original.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{appSet})
+	require.Len(t, original.Snapshot(), 1)
+	spillPath := t.TempDir() + "/attention.spill"
+	require.NoError(t, original.SpillTo(spillPath))
+	original.Stop()
+
+	restored := newClusterAttentionIndex(meta, func() time.Time { return now })
+	t.Cleanup(restored.Stop)
+	require.NoError(t, restored.RestoreFrom(spillPath))
+	require.Len(t, restored.Snapshot(), 1)
+	restored.ReplaceReportedStatuses(nil)
+	require.Empty(t, restored.Snapshot(), "a restored finding must not outlive its deleted object")
+}
+
+func TestClusterAttentionIndexWarnsWhenKarpenterNodePoolNearsItsLimits(t *testing.T) {
+	now := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	pool := reportedStatusTestObject("cluster-a", "karpenter.sh", "NodePool", "general",
+		map[string][]string{objectcatalog.ReportedStatusLimits: {"cpu", "memory"}})
+	pool.Ref.Namespace = ""
+
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{pool})
+	rows := index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Equal(t, pool.Ref, rows[0].Ref)
+	require.Equal(t, AttentionSeverityWarning, rows[0].Severity)
+	require.Equal(t, []string{"karpenter-nodepool-near-limit"}, attentionCauseTypes(rows[0].Causes))
+	require.Contains(t, rows[0].Causes[0].Message, "cpu")
+	require.Contains(t, rows[0].Causes[0].Message, "memory")
+
+	// Back within its limits, the NodePool still reports but is not flagged.
+	pool.Statuses = nil
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{pool})
+	require.Empty(t, index.Snapshot())
+}
+
+func TestClusterAttentionIndexKeepsSavedIgnoresForReportedObjectsMissingFromACatalogView(t *testing.T) {
+	now := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	var persistedPrunes []resourcemodel.ResourceRef
+	index.SetIgnoredObjectPruner(func(ref resourcemodel.ResourceRef) { persistedPrunes = append(persistedPrunes, ref) })
+	app := reportedStatusTestObject("cluster-a", "argoproj.io", "Application", "storefront", argoCDStatuses("OutOfSync", "Healthy"))
+	index.SetIgnoreRules(AttentionIgnoreRules{ObjectFindings: []AttentionObjectFindingIgnore{{
+		Ref: app.Ref, FindingType: "argocd-application-out-of-sync",
+	}}})
+
+	// A catalog view without the object (a failed or denied listing, a removed CRD) is not
+	// proof that it was deleted, so the saved ignore survives it.
+	index.ReplaceReportedStatuses(nil)
+	require.Len(t, index.IgnoreRules().ObjectFindings, 1)
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{app})
+	require.Empty(t, index.Snapshot(), "the saved ignore still applies")
+	index.ReplaceReportedStatuses(nil)
+	require.Len(t, index.IgnoreRules().ObjectFindings, 1)
+	require.Empty(t, persistedPrunes)
+
+	// A recreated object (same name, new UID) does not inherit the old object's ignore.
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{app})
+	recreated := app
+	recreated.Ref.UID = "recreated-uid"
+	index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{recreated})
+	require.Empty(t, index.IgnoreRules().ObjectFindings)
+	require.Equal(t, []resourcemodel.ResourceRef{app.Ref}, persistedPrunes)
+	require.Len(t, index.Snapshot(), 1)
+}
+
+// Kubernetes allows one object per name at a time, so a live object with the same identity
+// coordinates and a different UID proves the ignored object is gone, however the index
+// learned about it.
+func TestClusterAttentionIndexPrunesIgnoresOfARecreatedObjectWhenItIsFirstObserved(t *testing.T) {
+	now := time.Date(2026, time.October, 4, 12, 0, 0, 0, time.UTC)
+	old := reportedStatusTestObject("cluster-a", "argoproj.io", "Application", "storefront", argoCDStatuses("OutOfSync", "Healthy"))
+	recreated := old
+	recreated.Ref.UID = "new-uid"
+	ignore := AttentionObjectFindingIgnore{Ref: old.Ref, FindingType: "argocd-application-out-of-sync"}
+	// Ignores of other objects that merely share part of the identity are kept.
+	otherNamespace, otherKind := old, old
+	otherNamespace.Ref.Namespace, otherNamespace.Ref.UID = "team-b", "other-namespace-uid"
+	otherKind.Ref.Kind, otherKind.Ref.UID = "ApplicationSet", "other-kind-uid"
+	kept := []AttentionObjectFindingIgnore{
+		{Ref: otherNamespace.Ref, FindingType: "argocd-application-out-of-sync"},
+		{Ref: otherKind.Ref, FindingType: "argocd-applicationset-error"},
+	}
+
+	for _, test := range []struct {
+		name    string
+		observe func(index *clusterAttentionIndex)
+	}{
+		{"recreated after dropping out of a catalog view", func(index *clusterAttentionIndex) {
+			index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{old})
+			index.ReplaceReportedStatuses(nil)
+			index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{recreated})
+		}},
+		{"saved ignore from an earlier session", func(index *clusterAttentionIndex) {
+			index.ReplaceReportedStatuses([]objectcatalog.ReportedStatus{recreated})
+		}},
+	} {
+		index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+		var persistedPrunes []resourcemodel.ResourceRef
+		index.SetIgnoredObjectPruner(func(ref resourcemodel.ResourceRef) { persistedPrunes = append(persistedPrunes, ref) })
+		index.SetIgnoreRules(AttentionIgnoreRules{ObjectFindings: append([]AttentionObjectFindingIgnore{ignore}, kept...)})
+
+		test.observe(index)
+
+		require.ElementsMatch(t, kept, index.IgnoreRules().ObjectFindings, test.name)
+		require.Equal(t, []resourcemodel.ResourceRef{old.Ref}, persistedPrunes, test.name)
+		rows := index.Snapshot()
+		require.Len(t, rows, 1, test.name)
+		require.Equal(t, recreated.Ref, rows[0].Ref, "the recreated object's finding is not suppressed: %s", test.name)
+		index.Stop()
+	}
 }

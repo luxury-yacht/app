@@ -192,7 +192,6 @@ describe('useGridTableFilters', () => {
       kinds: ALL_MULTISELECT_FILTER,
       namespaces: ALL_MULTISELECT_FILTER,
       clusters: ALL_MULTISELECT_FILTER,
-      caseSensitive: false,
       includeMetadata: false,
     });
     expect(result?.tableData.length).toBe(rows.length);
@@ -208,7 +207,6 @@ describe('useGridTableFilters', () => {
         namespaces: ALL_MULTISELECT_FILTER,
         clusters: ALL_MULTISELECT_FILTER,
         queryFacets: { apiGroups: { mode: 'some', values: ['apps'] } },
-        caseSensitive: false,
         includeMetadata: false,
       },
       onChange,
@@ -237,7 +235,6 @@ describe('useGridTableFilters', () => {
       namespaces: ALL_MULTISELECT_FILTER,
       clusters: ALL_MULTISELECT_FILTER,
       queryFacets: { apiGroups: { mode: 'some', values: ['(core)'] } },
-      caseSensitive: false,
       includeMetadata: false,
     });
   });
@@ -249,7 +246,6 @@ describe('useGridTableFilters', () => {
       kinds: { mode: 'some', values: ['configmap'] },
       namespaces: { mode: 'some', values: [''] },
       clusters: ALL_MULTISELECT_FILTER,
-      caseSensitive: false,
       includeMetadata: false,
     };
 
@@ -272,47 +268,11 @@ describe('useGridTableFilters', () => {
       kinds: { mode: 'some', values: ['configmap'] },
       namespaces: { mode: 'some', values: [''] },
       clusters: ALL_MULTISELECT_FILTER,
-      caseSensitive: false,
       includeMetadata: false,
     });
 
     result = getResult();
     expect(result?.activeFilters).toEqual(controlledValue);
-  });
-
-  it('toggleCaseSensitive makes search case-sensitive', async () => {
-    const filters: GridTableFilterConfig<Row> = {
-      enabled: true,
-      initial: { search: 'Frontend' },
-    };
-
-    const { getResult } = await renderHook(filters);
-
-    // Default: case-insensitive — "Frontend" matches "frontend".
-    let result = getResult();
-    expect(result?.activeFilters.caseSensitive).toBe(false);
-    expect(result?.tableData.map((r) => r.id)).toEqual(['1', '2']);
-
-    // Toggle on case-sensitive search.
-    await act(async () => {
-      result?.toggleCaseSensitive();
-      await Promise.resolve();
-    });
-
-    result = getResult();
-    expect(result?.activeFilters.caseSensitive).toBe(true);
-    // "Frontend" (capital F) should NOT match "frontend" (lowercase f).
-    expect(result?.tableData.map((r) => r.id)).toEqual([]);
-
-    // Toggle back off.
-    await act(async () => {
-      result?.toggleCaseSensitive();
-      await Promise.resolve();
-    });
-
-    result = getResult();
-    expect(result?.activeFilters.caseSensitive).toBe(false);
-    expect(result?.tableData.map((r) => r.id)).toEqual(['1', '2']);
   });
 
   it('does not reset user-typed search when filters.initial is a new reference with same content', async () => {

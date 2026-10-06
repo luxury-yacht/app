@@ -92,7 +92,7 @@ type refreshDomainRecord struct {
 func TestDomainRegistrationOrder(t *testing.T) {
 	expected := contractSnapshotDomains(t)
 
-	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
+	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{}})
 	actual := make([]string, 0, len(registrations))
 	for _, registration := range registrations {
 		actual = append(actual, registration.name)
@@ -149,7 +149,7 @@ func TestDomainRegistrationRunnerRegistersPermissionDenial(t *testing.T) {
 
 func TestDomainRegistrationsMatchAuthoredContract(t *testing.T) {
 	contract := loadRefreshDomainContract(t)
-	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
+	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{}})
 	registered := make(map[string]domainRegistration, len(registrations))
 	for _, registration := range registrations {
 		registered[registration.name] = registration
@@ -397,7 +397,7 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 }
 
 func TestSnapshotAndAggregateDomainRegistrationContracts(t *testing.T) {
-	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
+	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{}})
 	byDomain := make(map[string]domainRegistration, len(registrations))
 	for _, registration := range registrations {
 		byDomain[registration.name] = registration
@@ -443,7 +443,7 @@ func TestSnapshotAndAggregateDomainRegistrationContracts(t *testing.T) {
 }
 
 func TestResourceStreamDomainsAreRegisteredRefreshDomains(t *testing.T) {
-	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
+	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{}})
 	registered := make(map[string]struct{}, len(registrations))
 	for _, registration := range registrations {
 		registered[registration.name] = struct{}{}
@@ -476,7 +476,7 @@ func TestStreamOnlyDomainsHaveEndpointWiring(t *testing.T) {
 
 	kubeClient := fake.NewClientset()
 	runtimePerms := permissions.NewChecker(kubeClient, "cluster-a", 0)
-	informerFactory := informer.New(kubeClient, nil, 0, runtimePerms)
+	informerFactory := informer.New(context.Background(), kubeClient, nil, 0, runtimePerms)
 	containerLogsHandler, resourceManager, err := registerStreamHandlers(streamDeps{
 		informerFactory: informerFactory,
 		cfg: Config{
@@ -627,7 +627,7 @@ func requireResourceSetEqual(t *testing.T, domain, label string, code []resource
 }
 
 func TestDomainRegistrationProviderAndServiceGatesAreExplicit(t *testing.T) {
-	missing := domainRegistrations(registrationDeps{
+	missing := domainRegistrations(context.Background(), registrationDeps{
 		cfg: Config{
 			ObjectDetailsProvider: noopObjectDetailProvider{},
 		},
@@ -638,7 +638,7 @@ func TestDomainRegistrationProviderAndServiceGatesAreExplicit(t *testing.T) {
 	require.True(t, findRegistration(t, missing, "object-helm-manifest").skipIf())
 	require.True(t, findRegistration(t, missing, "object-helm-values").skipIf())
 
-	withProviders := domainRegistrations(registrationDeps{
+	withProviders := domainRegistrations(context.Background(), registrationDeps{
 		cfg: Config{
 			ObjectCatalogService:  func() *objectcatalog.Service { return &objectcatalog.Service{} },
 			ObjectDetailsProvider: fullObjectDetailProvider{},
@@ -652,7 +652,7 @@ func TestDomainRegistrationProviderAndServiceGatesAreExplicit(t *testing.T) {
 }
 
 func TestPartialDataRegistrationDeniedReasonsUseRuntimeContract(t *testing.T) {
-	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
+	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{}})
 	access := domainpermissions.NewRuntimeAccess()
 
 	for _, registration := range registrations {
@@ -666,7 +666,7 @@ func TestPartialDataRegistrationDeniedReasonsUseRuntimeContract(t *testing.T) {
 }
 
 func TestListRegistrationMetadataDerivesFromRuntimeContract(t *testing.T) {
-	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
+	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{}})
 	access := domainpermissions.NewRuntimeAccess()
 
 	for _, registration := range registrations {
@@ -906,7 +906,7 @@ func registrationKind(registration domainRegistration) string {
 }
 
 func TestDomainReadinessResourcesUnionsDeclaredContracts(t *testing.T) {
-	registrations := domainRegistrations(registrationDeps{cfg: Config{}})
+	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{}})
 	readiness := domainReadinessResources(registrations)
 
 	// Registration gate checks beyond the permission policy are included:

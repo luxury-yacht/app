@@ -39,7 +39,7 @@ const mockUseGridTablePersistence = vi.fn().mockReturnValue({
   setColumnWidths: vi.fn(),
   columnVisibility: null,
   setColumnVisibility: vi.fn(),
-  filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+  filters: { search: '', kinds: [], namespaces: [] },
   setFilters: vi.fn(),
   customColumns: [],
   setCustomColumns: vi.fn(),
@@ -215,7 +215,9 @@ describe('JobsTab', () => {
     expect(getGridTableProps().customMetadataColumns).toBeUndefined();
   });
 
-  it('offers the all-matching-rows export scope like every other resource table', async () => {
+  // Jobs are a local table: Download takes the rows the table's filters match. An
+  // all-rows fetcher would bypass those filters, so the tab must not supply one.
+  it('leaves Download to the rows the table filters match', () => {
     const jobs = [makeJob({ name: 'job-a' }), makeJob({ name: 'job-b' })];
     act(() => {
       root.render(
@@ -229,13 +231,8 @@ describe('JobsTab', () => {
       );
     });
 
-    // fetchAllRows arms the scope toggle + Copy + Export trio in the filter bar.
     expect(getGridTableProps().exportFilename).toBe('object-panel-jobs');
-    const allRows = await requireValue(
-      getGridTableProps().fetchAllRows,
-      'expected all-rows fetcher in JobsTab.test.tsx'
-    )();
-    expect(allRows).toHaveLength(2);
+    expect(getGridTableProps().fetchAllRows).toBeUndefined();
   });
 
   it('uses viewId "object-panel-jobs" for persistence', () => {

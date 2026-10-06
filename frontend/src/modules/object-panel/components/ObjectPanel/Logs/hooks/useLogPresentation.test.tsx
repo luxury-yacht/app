@@ -51,8 +51,10 @@ describe('useLogPresentation', () => {
     return result as ReturnType<typeof useLogPresentation<T>>;
   };
 
+  // These cases filter, so they start in Filtered mode; the default, All, hides nothing.
   const options = (overrides: Partial<LogOptionsState> = {}): LogOptionsState => ({
     ...initialLogOptionsState,
+    filterMode: 'filtered',
     ...overrides,
   });
 
@@ -161,12 +163,21 @@ describe('useLogPresentation', () => {
       (
         await present({
           entries: lines,
-          options: options({ textFilter: 'error', inverseMatches: true }),
+          options: options({ textFilter: 'error', filterMode: 'invert' }),
           searchTexts: (l) => [l],
           lineOf: (l) => l,
         })
       ).filteredEntries
     ).toEqual(['fine']);
+    // All mode hides nothing; an invalid pattern is still reported without emptying the view.
+    const all = await present({
+      entries: lines,
+      options: options({ textFilter: '(', regexMatches: true, filterMode: 'all' }),
+      searchTexts: (l) => [l],
+      lineOf: (l) => l,
+    });
+    expect(all.filteredEntries).toEqual(lines);
+    expect(all.hasInvalidRegex).toBe(true);
 
     const invalid = await present({
       entries: lines,

@@ -22,7 +22,6 @@ export function useIdentityDetails(ref: IdentityPanelRef, enabled: boolean) {
   const filters = useMemo(
     () => ({
       search: '',
-      caseSensitive: true,
       includeMetadata: false,
       kinds: { mode: 'some' as const, values: [ref.kind] },
       namespaces: ALL_MULTISELECT_FILTER,

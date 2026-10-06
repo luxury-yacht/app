@@ -24,6 +24,16 @@ export interface DisplayRef {
     "uid"?: string;
 }
 
+/**
+ * LimitUsage is how much of one configured limit an object already uses (for example a
+ * Karpenter NodePool's spec.limits). Presentation flags usage that needs attention; the
+ * owning kind decides the threshold.
+ */
+export interface LimitUsage {
+    "percent": number;
+    "presentation"?: string;
+}
+
 export interface ResourceLink {
     "ref"?: ResourceRef | null;
     "display"?: DisplayRef | null;

@@ -334,8 +334,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     [items, useShortResourceNames]
   );
 
-  // Export source: every matching catalog item (all pages) mapped to table rows, so the
-  // Copy/Export "all matching rows" scope produces the same columns shown on screen.
+  // Download source: every matching catalog item (all pages) mapped to table rows, so
+  // Download writes the same columns shown on screen.
   const fetchAllTableRows = useCallback(
     async () => toTableRows(await fetchAllCatalogItems(), useShortResourceNames),
     [fetchAllCatalogItems, useShortResourceNames]

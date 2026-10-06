@@ -1,6 +1,7 @@
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import Tooltip from '@shared/components/Tooltip';
-import { getResourceLimitUsagePercent } from '@shared/utils/resourceCalculations';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import { formatLimitUsagePercent } from '@shared/utils/resourceCalculations';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { type ReactNode, useId, useState } from 'react';
 import type {
@@ -90,30 +91,21 @@ export function KarpenterMap({
 const hasEntries = (values: Record<string, string> | undefined): boolean =>
   Object.keys(values ?? {}).length > 0;
 
-// Capacity-to-limit percentage for the resources the shared calculation understands; the same
-// number the family table's Usage column shows, warning-colored strictly above 80%.
-const usedOfLimit = (
-  resource: string,
-  facts: KarpenterFacts
-): { text: string; warning: boolean } => {
-  const percentage =
-    resource === 'cpu' || resource === 'memory'
-      ? getResourceLimitUsagePercent(facts.capacity?.[resource], facts.limits?.[resource], resource)
-      : undefined;
-  if (percentage === undefined) {
-    return { text: '-', warning: false };
-  }
-  return { text: `${Number(percentage.toFixed(1))}%`, warning: percentage > 80 };
-};
-
+// The pool's capacity-to-limit percentage and its warning, both computed by the backend, so the
+// details, the family table's Usage column, and Attention flag the same usage.
 function KarpenterUsedCell({
   resource,
   facts,
 }: Readonly<{ resource: string; facts: KarpenterFacts }>) {
-  const used = usedOfLimit(resource, facts);
+  const usage = facts.limitUsage?.[resource];
+  const text = usage ? formatLimitUsagePercent(usage.percent) : '-';
   return (
     <td className="overview-row-value">
-      {used.warning ? <span className="status-text warning">{used.text}</span> : used.text}
+      {usage?.presentation ? (
+        <span className={backendStatusTextClass(usage.presentation)}>{text}</span>
+      ) : (
+        text
+      )}
     </td>
   );
 }

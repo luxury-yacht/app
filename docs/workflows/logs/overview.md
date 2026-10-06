@@ -1,101 +1,115 @@
 # Logs Contract
 
-Luxury Yacht has three separate log surfaces. Keep their scope, transport, and
-settings separate.
+Three separate log surfaces; keep their scope, transport, settings, and buffers
+separate.
 
-| Surface | Shows | Scope | Details |
+| Surface | Shows | Scope and reads | Details |
 | --- | --- | --- | --- |
-| Application Logs | Luxury Yacht diagnostic log buffer | App-global, optionally cluster-annotated | [application-logs.md](application-logs.md) |
-| Container Logs | Kubernetes pod/workload container logs | Object-panel pod/workload scope | [container-logs.md](container-logs.md) |
-| Node Logs | Node proxy log files or service query output | Object-panel Node scope | [node-logs.md](node-logs.md) |
+| Application Logs | Luxury Yacht diagnostic log buffer | App-global, optionally cluster-annotated; app-state reads | [application-logs.md](application-logs.md) |
+| Container Logs | Kubernetes pod/workload container logs | Object-panel pod/workload scope; cluster data-access reads | [container-logs.md](container-logs.md) |
+| Node Logs | Node proxy log files or service query output | Object-panel Node scope; cluster data-access reads | [node-logs.md](node-logs.md) |
 
-## Agent Contract
-
-- Do not mix Application Logs settings, buffers, or transports with Kubernetes
+- Never mix Application Logs settings, buffers, or transports into Kubernetes
   log workflows.
-- Kubernetes log paths must preserve `clusterId` and full object identity.
-- Kubernetes log reads go through cluster/resource data-access paths.
-- Application Logs are app-state/runtime data.
-- Share viewer behavior such as search, wrapping, ANSI rendering, copy, and JSON
-  display only when the source supports it.
-- Document whether a new control filters existing frontend data or changes the
-  backend target/query.
+- Document whether a new control filters frontend data or changes the backend
+  target/query.
+- Share viewer behavior (search, wrap, ANSI, copy, JSON) only where the source
+  supports it: a control both viewers can support goes in the shared piece,
+  otherwise it is an optional feature.
+- Validate with focused tests for the changed surface; transport changes also
+  warrant a manual stream/fetch smoke test.
 
 ## Shared viewer shell
 
-Container and Node Logs share one viewer shell under
-`frontend/src/modules/object-panel/components/ObjectPanel/Logs`. Each viewer
-keeps its own source selection and transport.
+Container and Node Logs share one shell under
+`frontend/src/modules/object-panel/components/ObjectPanel/Logs`; each keeps its
+own source selection and transport. Timestamps and previous logs are optional
+features; Node Logs passes neither.
 
-- `logOptionsReducer.ts`: search (text, highlight, invert, case, regex),
-  display (wrap, ANSI, raw/pretty/parsed), row expansion, copy feedback and
-  auto-refresh. The container reducer composes it with its source
-  fields. Highlighting is off while the filter is inverted; case sensitivity is
-  off in regex mode.
-- `hooks/useLogPresentation.ts`: the deferred text filter (a viewer supplies the
-  texts an entry matches; container search also matches pod and container
-  names), JSON detection cached per line, the parsed JSON table (rows, columns
-  and CSV; Container Logs passes pod, container and timestamp columns and its
-  CSV value formatter), and the copy text. Parsed rows are derived, not stored.
-  Node Logs splits its plain lines into display rows with `splitDisplayRows`;
-  Container Logs builds its rows from the entries, so the pod, container and
-  timestamp a row shows come from the entry and never from its message text. `useRawViewFallback` returns the JSON views to raw only when lines are
-  shown and none is JSON; an empty log keeps the view.
-- `logToolbar.tsx`: the text filter box (`LogTextFilter`), the icon bar, and
-  the match count (`LogMatchCount`), shown only while a filter narrows the logs.
-  Timestamps and previous logs are optional icon bar features; Node Logs
-  passes neither. The log settings both viewers share (buffer size, container
-  limits, API timestamps) live in Settings → Logs, not in the Logs tab.
-- `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts. `T` (timestamps) and
+- `logOptionsReducer.ts`: search (text, filter mode, case, regex), display
+  (wrap, ANSI, raw/pretty/parsed), row expansion, auto-refresh; the container
+  reducer composes it with its source fields. Filter modes: All (default) keeps
+  every line, Filtered keeps matches, Invert keeps the rest. Matches highlight
+  in All and Filtered, never Invert. Case sensitivity is off in regex mode.
+- `hooks/useLogPresentation.ts`: deferred text filter (the viewer supplies an
+  entry's match texts; container search also matches pod and container names),
+  per-line cached JSON detection, the parsed JSON table (rows, columns, CSV;
+  Container Logs passes pod, container, timestamp columns and its CSV value
+  formatter), and copy text. Parsed rows are derived, never stored. Node Logs
+  splits plain lines into rows with `splitDisplayRows`; Container Logs builds
+  rows from entries, so pod, container, and timestamp come from the entry,
+  never the message text. `useRawViewFallback` returns JSON views to raw only
+  when lines are shown and none is JSON; an empty log keeps the view.
+- `logToolbar.tsx`: icon bar, search row (`LogSearchRow`), and log count
+  (`renderLogCount`, "shown/total logs", only while a filter hides lines, in
+  the active-filters strip left of Clear all).
+  - The search button opens the row below the main controls; ⌘F / Ctrl+F opens
+    it and focuses the box. Row: text box, filter-mode button (click cycles
+    All → Filtered → Invert; menu picks one; `I` switches Invert/All), case and
+    regex options.
+  - While open, Escape with focus in the Logs tab closes the row before the
+    object panel's Escape can close the tab; focus inside the row moves to the
+    search button first.
+  - Closing the row keeps its filter; the search button stays highlighted while
+    a filter is typed. Container Logs persists row-open state with the tab's
+    options; Node Logs keeps it in memory with its filter text.
+  - Search, timestamps, wrap, and their shortcuts are unavailable until a line
+    arrives; ANSI and format buttons are hidden until a line has color codes or
+    JSON.
+  - Timestamps is a split toggle: the icon shows/hides timestamps and is
+    labeled with the zone (UTC or LOCAL); the caret menu picks the zone and
+    shows timestamps. The zone is the app-wide Settings → Logs setting, applying
+    to every Logs tab.
+  - With JSON present, the format button cycles Raw → Pretty → Table, its caret
+    menu picks one, and `J` / `P` toggle Pretty / Table.
+  - Other shared settings (buffer size, container limits, timestamp format)
+    live only in Settings → Logs.
+- `logSearchChips.ts`: search chips in the active-filters strip (text filter,
+  flagged "(invalid expression)" for a bad regex; Filtered or Invert, Match
+  case, Regex when on) and the search part of Clear all. Container Logs adds
+  source and previous-logs chips.
+- `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts; `T` (timestamps) and
   `V` (previous logs) exist only when the viewer passes those features.
-- `hooks/useLogCopyAction.ts`: the copy action and selection copy; clipboard
-  failures are reported, never swallowed.
-- `LogStatus.tsx`: the error block, the warning bar and the buffer-full
-  indicator (a warning icon beside the icon bar whose tooltip says which logs
-  are shown). Both viewers show loading with the shared spinner and their empty
-  messages as the log's only line; a failure that leaves lines keeps them and
-  reports in the warning bar.
+- `@shared/hooks/useLogDownloadMenu.tsx`: the Download button of every log view,
+  App Logs included, on the `useDownloadMenu` tables use (busy while a choice
+  runs, then success/error feedback). Both choices take the same text: CSV in
+  Table view (`.csv`), otherwise the shown lines (`.log`). `Shift+C` still
+  copies in Container and Node Logs. Failures are reported, never swallowed.
+  `hooks/useLogSelectionCopy.ts` copies a selection.
+- `LogStatus.tsx`: error block, warning bar, and buffer-full indicator (warning
+  icon at the start of the controls row; tooltip says which logs are shown).
+  Both viewers show loading with the shared spinner and empty messages as the
+  log's only line; a failure that leaves lines keeps them and reports in the
+  warning bar.
 
-Add a new control to the shared piece when both viewers can support it, and as
-an optional feature otherwise.
-
-A busy stream delivers a batch up to four times a second, so work per batch
-must follow the new lines, not the buffer: Container Logs formats each entry
-once per display option set (`useContainerLogDisplay`), the JSON views reuse
-the presentation's cached parse (`jsonOf`), and copy text and table CSV are
-built only when copying. Check changes to this path with
-`mise exec -- wails3 task qc:benchmark-logs` (1,000 and 10,000 lines).
+Per-batch cost: busy streams deliver up to four batches a second, so per-batch
+work must scale with new lines, not the buffer. Container Logs formats each
+entry once per display-option set (`useContainerLogDisplay`), JSON views reuse
+the cached parse (`jsonOf`), and copy text and table CSV are built only when
+copying. Check with `mise exec -- wails3 task qc:benchmark-logs` (1,000 and
+10,000 lines).
 
 ## Shared raw-log layout
 
-Container and Node Logs use
-[`RawLogViewer`](../../../frontend/src/modules/object-panel/components/ObjectPanel/Logs/RawLogViewer.tsx)
-and its
-[`useVirtualizedLogRows`](../../../frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useVirtualizedLogRows.ts)
-hook. DOM row refs and ResizeObserver callbacks supply measured heights.
-`RawLogViewer` is generic over its row type, so a viewer's `renderRow` receives
-the data it attached to each row.
+Both viewers render through `Logs/RawLogViewer.tsx` (generic over row type;
+`renderRow` receives the data the viewer attached) and
+`Logs/hooks/useVirtualizedLogRows.ts`; DOM row refs and ResizeObserver callbacks
+supply measured heights.
 
-- Update the height cache immediately, but publish its React state notification
-  at most once per animation frame. A measured row can expose more unmeasured
-  rows; synchronous state updates from their refs can recurse through commits.
-- Cancel pending notifications and disconnect observers on cleanup. Clear the
-  measurements so StrictMode replay can remeasure after a canceled notification.
+- Update the height cache immediately but publish its React state notification
+  at most once per animation frame: a measured row can expose more unmeasured
+  rows, and synchronous state updates from their refs recurse through commits.
+- On cleanup, cancel pending notifications, disconnect observers, and clear
+  measurements so StrictMode replay can remeasure after a canceled
+  notification.
 - Keep the row-key extractor stable across measurement renders. Cache updates
-  still rebuild row positions; frame batching is not a guarantee of cheap layout.
-- Exercise tall wrapped rows, scrolling into unmeasured content, resizing,
+  still rebuild row positions; frame batching does not make layout cheap.
+- Test tall wrapped rows, scrolling into unmeasured content, resizing,
   filtering to zero rows, wrap changes, and tail-following. Measure settling
-  separately from crash prevention. Include padding in height assertions, and
+  separately from crash prevention, include padding in height assertions, and
   begin StrictMode tests before viewport sizing can hide a lost notification.
-
-## Validation
-
-Run focused tests for the changed log surface. Manual stream/fetch smoke tests
-are useful for transport changes.
-
-The 2026-09-09 investigation of
-[LUXURY-YACHT-FRONTEND-2Q](https://luxury-yacht.sentry.io/issues/7722326368/)
-reproduced the update-depth failure with synthetic data and the real viewer.
-The original Deployment's native retry remained unverified. Its extreme browser
-case (1,000 long lines in a 200×600px viewport) took about 1.6 seconds to settle
-after the fix; do not treat crash prevention as resolution of that layout cost.
+- Known gap: the update-depth crash
+  ([LUXURY-YACHT-FRONTEND-2Q](https://luxury-yacht.sentry.io/issues/7722326368/))
+  is fixed, but 1,000 long lines in a 200×600px viewport took about 1.6 s to
+  settle after the fix, and the original Deployment's native retry is
+  unverified. Crash prevention does not resolve that layout cost.

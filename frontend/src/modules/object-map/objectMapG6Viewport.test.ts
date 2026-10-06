@@ -7,8 +7,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   fitObjectMapG6GraphToView,
-  isObjectMapMacPlatform,
-  isObjectMapZoomWheelEvent,
   OBJECT_MAP_FIT_VIEW_MAX_ZOOM,
   type ObjectMapG6ViewportGraph,
   objectMapWheelZoomRatio,
@@ -26,19 +24,6 @@ const graph = (overrides: Partial<ObjectMapG6ViewportGraph> = {}): ObjectMapG6Vi
 });
 
 describe('objectMapG6Viewport', () => {
-  it('detects mac-like platforms', () => {
-    expect(isObjectMapMacPlatform('MacIntel')).toBe(true);
-    expect(isObjectMapMacPlatform('iPad')).toBe(true);
-    expect(isObjectMapMacPlatform('Win32')).toBe(false);
-  });
-
-  it('uses cmd or ctrl for wheel zoom on mac and ctrl elsewhere', () => {
-    expect(isObjectMapZoomWheelEvent({ metaKey: true, ctrlKey: false }, 'MacIntel')).toBe(true);
-    expect(isObjectMapZoomWheelEvent({ metaKey: false, ctrlKey: true }, 'MacIntel')).toBe(true);
-    expect(isObjectMapZoomWheelEvent({ metaKey: true, ctrlKey: false }, 'Win32')).toBe(false);
-    expect(isObjectMapZoomWheelEvent({ metaKey: false, ctrlKey: true }, 'Win32')).toBe(true);
-  });
-
   it('computes clamped wheel zoom ratios from the dominant wheel delta', () => {
     expect(objectMapWheelZoomRatio({ deltaX: 0, deltaY: -20 })).toBe(1.2);
     expect(objectMapWheelZoomRatio({ deltaX: 75, deltaY: 10 })).toBe(0.5);

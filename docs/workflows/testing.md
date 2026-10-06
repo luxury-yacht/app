@@ -65,9 +65,8 @@ For a mixed test, remove incidental copy/style assertions and retain the
 behavioral ones. Prefer an existing behavioral test over another render-only
 case of the same path. Delete an entire test only after checking its assertions
 and nearby coverage; do not delete tests mechanically based on names or matchers.
-Remove fixtures and imports left unused by pruning.
-Reducing the case count by putting the same assertions into a loop is not pruning.
-Remove redundant obligations rather than changing how the runner counts them.
+Remove fixtures and imports left unused by pruning. Moving the same assertions
+into a loop is not pruning; remove redundant obligations instead.
 
 During a pruning pass, check whether the application still reaches the code
 under test. A dependency audit is a candidate list, not proof: search imports,
@@ -76,13 +75,9 @@ module and its tests. Preserve styles or helpers still used by the current UI.
 For a shared pass-through path, keep one representative consumer test; vary
 resource kinds only when the asserted behavior actually branches on kind.
 
-Use red/green/refactor for production behavior changes. Copy, cosmetic styling,
-documentation, and test-only pruning do not need a manufactured failing test.
-For pruning, run the surviving affected tests, measure and report coverage
-impact, and run the repository gate. Keep production behavior and test/coverage
-configuration unchanged. A lower percentage is acceptable when it reflects
-removing tests that only exercise presentation; do not add filler tests to
-restore it. Investigate lost coverage of meaningful branches.
+Pruning keeps production behavior and test/coverage configuration unchanged.
+Investigate lost coverage of meaningful branches; a drop from removing
+presentation-only tests is acceptable.
 
 ## Test environment
 

@@ -12,8 +12,7 @@ import {
   makePodSnapshotPayload,
 } from '@/core/refresh/refreshContractTestBuilders';
 import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
-import type { UtilizationData } from './detailsTabTypes';
-import { useUtilizationData } from './useUtilizationData';
+import { type UtilizationData, useUtilizationData } from './useUtilizationData';
 
 const MIB = 1024 ** 2;
 const GIB = 1024 ** 3;
@@ -62,8 +61,8 @@ const renderUtilizationHook = async (initialProps: HookProps) => {
 
   return {
     latest,
-    rerender: async (nextProps: HookProps) => {
-      propsRef.current = nextProps;
+    rerender: async (nextProps: Partial<HookProps>) => {
+      propsRef.current = { ...propsRef.current, ...nextProps };
       await act(async () => {
         root.render(<Harness />);
         await Promise.resolve();
@@ -155,7 +154,7 @@ describe('useUtilizationData', () => {
     hook.cleanup();
   });
 
-  it('updates Deployment utilization from namespace-workloads rows and keeps ReplicaSet on detail DTOs', async () => {
+  it('updates Deployment utilization from namespace-workloads rows', async () => {
     const deploymentRef = {
       clusterId: 'cluster-a',
       group: 'apps',
@@ -218,17 +217,6 @@ describe('useUtilizationData', () => {
       memory: { usage: 384 * MIB, request: 192 * MIB, limit: 768 * MIB },
       podCount: 3,
       readyPodCount: 2,
-    });
-
-    await hook.rerender({
-      objectData: { ...deploymentRef, kind: 'ReplicaSet', name: 'api-7c9d' },
-      detail,
-    });
-
-    expect(hook.latest.current).toMatchObject({
-      cpu: { usage: 100 },
-      podCount: 1,
-      readyPodCount: 1,
     });
 
     hook.cleanup();
@@ -361,7 +349,7 @@ describe('useUtilizationData', () => {
     hook.cleanup();
   });
 
-  it('keeps inactive ReplicaSet utilization hidden on the detail-backed path', async () => {
+  it('gives ReplicaSets no utilization, even when their details carry usage', async () => {
     const hook = await renderUtilizationHook({
       objectData: {
         clusterId: 'cluster-a',
@@ -372,7 +360,7 @@ describe('useUtilizationData', () => {
         name: 'api-7c9d',
       },
       detail: {
-        isActive: false,
+        isActive: true,
         podMetricsSummary: {
           cpuUsage: '100m',
           memUsage: '128Mi',
@@ -383,6 +371,25 @@ describe('useUtilizationData', () => {
     });
 
     expect(hook.latest.current).toBeNull();
+
+    hook.cleanup();
+  });
+
+  it('never leases metrics itself: the panel collector owns the lease', async () => {
+    const hook = await renderUtilizationHook({
+      objectData: {
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'team-a',
+        name: 'api',
+      },
+      detail: { cpuUsage: '100m', memUsage: '128Mi' },
+    });
+    expect(refreshMocks.acquireScopedDomainLease).not.toHaveBeenCalled();
+    expect(refreshMocks.fetchScopedDomain).not.toHaveBeenCalled();
+    expect(hook.latest.current).toMatchObject({ cpu: { usage: 100 } });
 
     hook.cleanup();
   });

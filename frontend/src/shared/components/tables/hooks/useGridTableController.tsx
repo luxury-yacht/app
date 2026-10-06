@@ -461,7 +461,6 @@ export function useGridTableController<T>({
     getTextContent,
     fetchAllRows,
     exportFilename,
-    hasAllLocalMatches: Boolean(localPagination),
   });
   const filtersNode = (
     <>

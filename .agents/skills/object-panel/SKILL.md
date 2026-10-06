@@ -18,136 +18,68 @@ changed path crosses that boundary.
 | --- | --- |
 | Docking, placement, close, handoffs or panel lifetime | [dockable-panels](../../../docs/frontend/dockable-panels.md) |
 | Overview descriptors or derived detail sections | [component-structure](../../../docs/frontend/component-structure.md#object-panel-overview-rendering-descriptor-driven) |
+| Adding a kind's typed detail fetcher, Overview, or capabilities | [add-resource skill](../add-resource/SKILL.md) |
 | YAML editor mechanics | [yaml-editor](../../../docs/frontend/yaml-editor.md) |
 | YAML read, save, merge or field ownership | [yaml-editing](../../../docs/architecture/yaml-editing.md) |
-| Object refs, status, facts or links | [shared-resource-model](../../../docs/architecture/shared-resource-model.md) |
+| Object refs, status, facts, links, finalizer removal | [shared-resource-model](../../../docs/architecture/shared-resource-model.md); panel ref types under Frontend Reference Types |
 | Frontend data reads | [data-access](../../../docs/architecture/data-access.md) |
 | Resource Utilization | [resource-metrics](../../../docs/architecture/resource-metrics.md) |
 | Object/header/table age display | [live-age](../../../docs/frontend/live-age.md) |
-| Logs, shell/debug or map tab behavior | [overview](../../../docs/workflows/logs/overview.md), [shell-debug](../../../docs/workflows/shell-debug.md), or [object-map](../../../docs/workflows/object-map.md) for the affected tab |
+| Logs, shell/debug or map tab behavior | [logs overview](../../../docs/workflows/logs/overview.md) (shared viewer shell), [shell-debug](../../../docs/workflows/shell-debug.md), or [object-map](../../../docs/workflows/object-map.md) |
 
-## Backend Entry Points
+## Entry Points
 
-- `backend/object_detail_provider.go`
-- `backend/resources`
-- `backend/resources/types`
-- `backend/object_yaml*.go`
-- `backend/resources/pods/logs.go`
-- `backend/resources/nodes/logs.go`
-- `backend/resources/pods/debug.go`
-- `backend/shell_sessions.go`
+- Backend: `backend/object_detail_provider.go`, `backend/resources`,
+  `backend/resources/types`, `backend/object_yaml*.go`,
+  `backend/resources/pods/{logs,debug}.go`, `backend/resources/nodes/logs.go`,
+  `backend/shell_sessions.go`.
+- Frontend: `frontend/src/modules/object-panel` (`components/ObjectPanel`, its
+  `Logs` and `NodeLogs`, and `hooks`), `frontend/src/shared/components/yaml`,
+  `frontend/src/core/resource-metrics`, `frontend/src/ui/dockable`,
+  `frontend/src/shared/components/modals`, and
+  `frontend/bindings/github.com/luxury-yacht/app/backend/models.ts` when Go DTOs
+  change.
 
-Backend object-panel work must keep requests cluster-scoped and use complete
-GVK/object identity. Rich detail and imperative operations belong in
-`backend/resources`; list/table snapshot payloads belong in
-`backend/refresh/snapshot`.
+## Panel contracts
 
-When adding a typed detail fetcher, declare the kind's `appbinding.Spec`, attach
-it to the per-kind descriptor, and run
-`mise exec -- go generate ./backend`. The generated `objectDetailFetchers` map
-provides dispatch, while `objectDetailFetcherGVKs` is derived from that map and
-`resourcecontract.BuiltinResources`; do not hand-edit either map. Add a
-`detailFetcherVersionPins` entry only when the built-in contract intentionally
-contains more than one version for the same kind.
-
-## Frontend Entry Points
-
-- `frontend/src/modules/object-panel`
-- `frontend/src/modules/object-panel/components/ObjectPanel`
-- `frontend/src/modules/object-panel/components/ObjectPanel/Logs`
-- `frontend/src/modules/object-panel/components/ObjectPanel/NodeLogs`
-- `frontend/src/modules/object-panel/hooks`
-- `frontend/src/shared/components/yaml` for shared YAML editor mechanics
-- `frontend/src/core/resource-metrics` for Resource Utilization data/adapters
-- `frontend/src/ui/dockable`
-- `frontend/src/shared/components/modals`
-- `frontend/bindings/github.com/luxury-yacht/app/backend/models.ts` when Go DTOs change
-
-Frontend object-panel work must use backend-provided `statusPresentation` and
-`ResourceLink.ref` where available. Do not reconstruct object identity from kind
-and name when a full backend reference should be carried.
-
-Past `useObjectPanel.openWithObject`, the panel chain carries the
-cluster-complete `ObjectPanelRef`
-(`frontend/src/modules/object-panel/objectPanelRef.ts`, an alias of
-`ClusterObjectReference`): `openWithObject` accepts the loose
-`KubernetesObjectReference` and `assertObjectRefHasRequiredIdentity` narrows it
-at that single chokepoint. Keep panel-internal types (openPanels,
-`CurrentObjectPanelContext`, detail/utilization props) on `ObjectPanelRef`; do
-not re-widen them to the nullable shape. See
-`docs/architecture/shared-resource-model.md` → Frontend Reference Types.
-
-Log viewer presentation shared by container logs and node logs lives under
-`frontend/src/modules/object-panel/components/ObjectPanel/Logs`. Keep
-transport-specific wiring in the container or node shell, and put shared options
-(`logOptionsReducer.ts`), presentation (`useLogPresentation`), toolbar
-(`logToolbar.tsx`), keyboard shortcuts, copy, CSV export, parsed JSON, ANSI
-rendering, scroll restoration, and terminal theme behavior in the shared log
-viewer utilities/components (see
-`docs/workflows/logs/overview.md#shared-viewer-shell`).
-
-YAML editor mechanics live in `frontend/src/shared/components/yaml/YamlEditor`.
-Use that shared component for single-document YAML viewing/editing instead of
-adding new CodeMirror/search/context-menu stacks inside object-panel tabs. Keep
-workflow state such as refresh, object identity, permissions, save/cancel,
-reload/merge, drift, managedFields policy, and post-save notices in the
-object-panel wrapper.
-
-Object actions (delete, restart, scale, rollback, trigger, suspend,
-port-forward) run through the shared `useObjectActionController`
-(`frontend/src/shared/hooks`) rendered by `ActionsMenu` — the same controller
-the cluster/namespace tables and object map use. It owns action execution,
-permission gating, and every action modal (confirm/scale/scale-to-zero/rollback/
-port-forward). The object-panel wrapper supplies only lifecycle callbacks
-(`onAfterDelete` to close the panel, `onAfterAction` to refetch) plus the Node
-cordon/drain openers. Do not reintroduce a panel-local action reducer, per-action
-prop drilling through `DetailsTab`, or bespoke action modals.
-
-## Resource Utilization
-
-Object Panel Resource Utilization reads live pod, workload, and node usage
-through `frontend/src/core/resource-metrics`. Live usage is joined onto the
-base domains' rows at serve: Pod panels lease the `pods` namespace scope,
-Deployment/DaemonSet/StatefulSet panels lease `namespace-workloads`, and Node
-panels lease `nodes` (see `docs/architecture/resource-metrics.md`).
-
-Object-detail DTO utilization values are fallback-only while the base domain
-loads, is unavailable, or is permission denied. ReplicaSet is the exception:
-keep it detail-backed until a separate ReplicaSet unification slice adds direct
-owner identity while preserving the existing resolved-owner behavior.
-
-Embedded Object Panel Pods tables use the same single base-domain query as main
-Pods tables; live CPU/memory usage arrives on the pod rows (joined at serve)
-and the freshness block rides the query payload's `metrics`.
-
-## Checklist
-
-- [ ] Object references include `clusterId`, `group`, `version`, `kind`, and
-      namespace/name for concrete objects.
-- [ ] Backend DTO changes are reflected in frontend bindings/types.
-- [ ] Status rendering uses backend presentation fields.
-- [ ] Actions and tabs respect permissions/capabilities and surface denial
-      reasons where applicable.
-- [ ] Object actions go through the shared `useObjectActionController` (no
-      panel-local action reducer, prop-drilled handlers, or duplicate modals).
-- [ ] Docked panel state, refresh behavior, and cluster/namespace changes remain
-      consistent.
-- [ ] YAML surfaces use `YamlEditor` for editor mechanics and keep workflow
-      state in the caller.
-- [ ] Resource Utilization uses `frontend/src/core/resource-metrics`; object
-      details are fallback only except the documented ReplicaSet exception.
-- [ ] Age display uses `LiveAgeText` or shared age columns with timestamps
-      rather than refetching details to update relative text.
-- [ ] Tests cover the changed tab, action, or identity flow.
+- Past `useObjectPanel.openWithObject`, panel-internal types (`openPanels`,
+  `CurrentObjectPanelContext`, detail/utilization props) carry the
+  cluster-complete `ObjectPanelRef` (`objectPanelRef.ts`); never re-widen them
+  to the nullable shape.
+- Object actions (delete, restart, scale, rollback, trigger, suspend,
+  port-forward) run through the shared `useObjectActionController`
+  (`frontend/src/shared/hooks`) rendered by `ActionsMenu`, the same controller
+  the cluster/namespace tables and object map use. It owns execution,
+  permission gating, and every action modal (confirm, scale, scale-to-zero,
+  rollback, port-forward). The panel wrapper supplies only lifecycle callbacks
+  (`onAfterDelete` closes the panel, `onAfterAction` refetches) plus the Node
+  cordon/drain openers. Rejected: a panel-local action reducer, per-action prop
+  drilling through `DetailsTab`, or bespoke action modals — they duplicate the
+  shared controller.
+- Single-document YAML viewing/editing uses
+  `frontend/src/shared/components/yaml/YamlEditor`; never add another
+  CodeMirror/search/context-menu stack inside a tab. Workflow state (refresh,
+  object identity, permissions, save/cancel, reload/merge, drift, managedFields
+  policy, post-save notices) stays in the object-panel wrapper.
+- Container and node log viewers keep transport-specific wiring in their own
+  shell and share everything else through the
+  [shared viewer shell](../../../docs/workflows/logs/overview.md#shared-viewer-shell).
+- Resource Utilization leases the base domain per
+  [resource-metrics](../../../docs/architecture/resource-metrics.md);
+  object-detail DTO values are fallback only while that domain loads, is
+  unavailable, or is permission denied. ReplicaSets get no panel metrics until
+  pod rows expose both direct and resolved owner identity. Embedded Pods tables
+  use the same single base-domain query as main Pods tables (usage joined at
+  serve; freshness from the query payload's `metrics`).
+- Actions and tabs respect permissions/capabilities and surface denial reasons
+  where applicable.
 
 ## Validation
 
-Use focused checks while iterating:
+Focused checks while iterating:
 
 ```sh
 mise exec -- go test ./backend ./backend/resources/...
 mise exec -- npm run typecheck --prefix frontend
 mise exec -- npm run test --prefix frontend -- object-panel
 ```
-
-Then follow the root final validation gate.

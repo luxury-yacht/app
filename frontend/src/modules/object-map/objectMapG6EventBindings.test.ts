@@ -138,6 +138,7 @@ const bind = (selection: ObjectMapSelectionState = selectionState) => {
     onSelectNode: vi.fn(),
     onToggleGroup: vi.fn(),
   };
+  const onUserViewportChangeRef = ref<(() => void) | undefined>(vi.fn());
   const cleanup = bindObjectMapG6Events({
     container,
     graph: graph as unknown as Graph,
@@ -146,12 +147,12 @@ const bind = (selection: ObjectMapSelectionState = selectionState) => {
     ignoreNextCanvasClickRef: ref(false),
     layoutRef: ref(layout),
     nodeGestureState: createObjectMapNodeGestureState(),
-    onUserViewportChangeRef: ref<(() => void) | undefined>(vi.fn()),
+    onUserViewportChangeRef,
     paletteRef: ref<ObjectMapG6Palette | null>(palette),
     selectionStateRef: ref(selection),
     updateTooltipPosition: vi.fn(),
   });
-  return { cleanup, graph, handlers };
+  return { cleanup, container, graph, handlers, onUserViewportChangeRef };
 };
 
 describe('object map G6 event bindings', () => {
@@ -266,6 +267,28 @@ describe('object map G6 event bindings', () => {
       }),
       false
     );
+    cleanup();
+  });
+
+  it.each([
+    { name: 'a plain mouse wheel', modifiers: {} },
+    { name: 'a pinch or modifier wheel', modifiers: { ctrlKey: true } },
+  ])('zooms around the cursor for $name and turns off auto-fit', ({ modifiers }) => {
+    const { cleanup, container, graph, onUserViewportChangeRef } = bind();
+    const event = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 110,
+      clientY: 120,
+      deltaY: -20,
+      ...modifiers,
+    });
+
+    container.dispatchEvent(event);
+
+    expect(graph.zoomBy).toHaveBeenCalledWith(1.2, false, [100, 100]);
+    expect(event.defaultPrevented).toBe(true);
+    expect(onUserViewportChangeRef.current).toHaveBeenCalledTimes(1);
     cleanup();
   });
 

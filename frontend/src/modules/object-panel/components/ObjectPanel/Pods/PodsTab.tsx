@@ -44,7 +44,6 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { podNamespacePermissionTargets, podOwnerReference } from '@shared/utils/podTableModel';
-import { usePanelWindowRole } from '@/core/panel-windows/PanelWindowRoleContext';
 import { buildObjectPanelPodsScope } from './objectPanelPodsScope';
 
 interface PodsTabProps {
@@ -80,7 +79,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   const objectLink = useObjectLink();
   const viewState = useOptionalViewState();
   const namespaceContext = useNamespace();
-  const panelWindowRole = usePanelWindowRole();
   // Per-pod staleness comes from the pods query payload's metrics meta, which
   // is scoped to the PANEL OBJECT's cluster (the globally selected cluster can
   // be a different one). The query hook needs `columns`, so the column
@@ -208,7 +206,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         getUsage: (pod) => workloadRowCpuValue(pod, 'usage'),
         getRequest: (pod) => workloadRowCpuValue(pod, 'request'),
         getLimit: (pod) => workloadRowCpuValue(pod, 'limit'),
-        getVariant: () => 'compact',
         getMetricsStale: () => Boolean(metricsRef.current?.stale),
         getMetricsError: () => metricsRef.current?.lastError || undefined,
         getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:cpu`,
@@ -221,7 +218,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         getUsage: (pod) => workloadRowMemoryValue(pod, 'usage'),
         getRequest: (pod) => workloadRowMemoryValue(pod, 'request'),
         getLimit: (pod) => workloadRowMemoryValue(pod, 'limit'),
-        getVariant: () => 'compact',
         getMetricsStale: () => Boolean(metricsRef.current?.stale),
         getMetricsError: () => metricsRef.current?.lastError || undefined,
         getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:memory`,
@@ -242,7 +238,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     viewState,
   ]);
 
-  const { gridTableProps, favModal, source, queryPayload } = useQueryBackedClusterResourceGridTable<
+  const { gridTableProps, source, queryPayload } = useQueryBackedClusterResourceGridTable<
     PodSnapshotPayload,
     PodSnapshotEntry
   >({
@@ -258,7 +254,8 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     columns,
     objectIdentity: podIdentity,
     diagnosticsLabel: 'Object Panel Pods',
-    showFavoriteToggle: panelWindowRole === null,
+    // A favorite saves a main-window view, which this panel table is not.
+    showFavoriteToggle: false,
     showKindDropdown: false,
     // Object-panel pods are already scoped to one workload/node; the namespace
     // filter UI is not applicable here.
@@ -324,7 +321,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
           tableClassName="gridtable-pods gridtable-pods--namespaced"
           spinnerMessage="Loading pods..."
           updatingMessage="Updating pods..."
-          favModal={favModal}
           hideHeader={!isActive}
           emptyMessage="No pods found"
         />

@@ -25,9 +25,9 @@ func BuildFacts(clusterID string, route *gatewayv1.TLSRoute) Facts {
 	for _, rule := range route.Spec.Rules {
 		ruleFacts := resourcemodel.RouteRuleFacts{}
 		for _, backendRef := range rule.BackendRefs {
-			link := resourcemodel.GatewayBackendRefLink(clusterID, route.Namespace, backendRef.BackendObjectReference)
-			ruleFacts.Backends = append(ruleFacts.Backends, link)
-			common.Backends = append(common.Backends, link)
+			backend := resourcemodel.GatewayRouteBackendFacts(clusterID, route.Namespace, backendRef)
+			ruleFacts.Backends = append(ruleFacts.Backends, backend)
+			common.Backends = append(common.Backends, backend.Link)
 		}
 		common.Rules = append(common.Rules, ruleFacts)
 	}

@@ -1,0 +1,238 @@
+/* Traffic flow
+ *
+ * Shared by NetworkPolicy, Ingress, Gateway API route, and Service Overviews (TrafficFlow.tsx). Each
+ * rule is a card; inside it a flow is built from the ReferenceGrant diagram boxes in OverviewBlocks.css
+ * with an arrow between the two sides. The section tone (inbound blue, outbound purple) colours the
+ * card edge and badge, the arrow, its label pills, the target outline, and — on views with more than
+ * one direction — a heading dot; a direction that allows nothing gets a red edge and marker. */
+
+.traffic-flow-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  --traffic-flow-tint: color-mix(in srgb, var(--traffic-flow-color) 10%, transparent);
+  --traffic-flow-line: color-mix(in srgb, var(--traffic-flow-color) 45%, transparent);
+}
+
+.traffic-flow-section--inbound {
+  --traffic-flow-color: var(--badge-blue-text);
+}
+
+.traffic-flow-section--outbound {
+  --traffic-flow-color: var(--badge-purple-text);
+}
+
+/* Matches the space above the first section, which sits below the header separator's margin. */
+.traffic-flow-section + .traffic-flow-section {
+  margin-top: var(--spacing-sm);
+}
+
+.traffic-flow-section > h3 {
+  margin: 0;
+}
+
+/* Views with more than one direction (NetworkPolicy) mark each heading with its tone. */
+.traffic-flow-section--directional > h3::before {
+  content: "";
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-right: 0.45rem;
+  border-radius: 50%;
+  background: var(--traffic-flow-color);
+  vertical-align: 0.05rem;
+}
+
+.traffic-flow-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.traffic-flow-rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.traffic-flow-card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--traffic-flow-color);
+  border-radius: var(--border-radius-sm);
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
+}
+
+.traffic-flow-card--denied {
+  border-left-color: var(--color-error);
+  padding-top: var(--spacing-md);
+}
+
+.traffic-flow-rule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.traffic-flow-rule-title {
+  align-self: flex-start;
+  margin-bottom: var(--spacing-xs);
+  padding: 1px 0.6rem;
+  border-radius: 999px;
+  background: var(--traffic-flow-tint);
+  color: var(--traffic-flow-color);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+/* A rule with several flows (e.g. one per Ingress path) stacks them. */
+.traffic-flow + .traffic-flow {
+  margin-top: var(--spacing-sm);
+}
+
+/* Endpoints read as a sentence: a bold subject, mono terms, then a secondary scope line. */
+.traffic-flow-subject {
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.traffic-flow-scope {
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* Long names wrap at their <wbr> breaks first, and never overflow the box. */
+.traffic-flow-subject,
+.traffic-flow-scope {
+  overflow-wrap: break-word;
+}
+
+.traffic-flow-term {
+  color: var(--color-text);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
+.traffic-flow-muted {
+  color: var(--color-text-secondary);
+}
+
+/* Keeps a short phrase (e.g. "node port 31443") on one line when its line wraps. */
+.traffic-flow-nowrap {
+  white-space: nowrap;
+}
+
+/* Boxes keep their natural height; the shorter side centres against the taller one. */
+.traffic-flow .reference-grant-side {
+  flex: 0 0 auto;
+}
+
+.traffic-flow .reference-grant-side-stack {
+  justify-content: center;
+}
+
+/* A side sized to its content (FlowEndpoints `fit`) leaves the rest of the width to the other,
+   but never takes more than 40% of the flow, so the other side stays readable. */
+.traffic-flow .reference-grant-side-stack.traffic-flow-fit {
+  flex: 0 1 auto;
+  max-width: 40%;
+}
+
+/* Entries listed inside one endpoint box, e.g. each port of a Service. */
+.traffic-flow-entries {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* Terms wrap at their <wbr> breaks rather than mid-word. */
+.traffic-flow .reference-grant-item {
+  overflow-wrap: break-word;
+}
+
+/* Selectors, names, CIDRs, and ports stay copyable despite the app's descendant selection reset. */
+.traffic-flow .reference-grant-item,
+.traffic-flow .traffic-flow-term,
+.traffic-flow-pills li {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.traffic-flow-target {
+  border-width: 2px;
+  border-color: var(--traffic-flow-color);
+}
+
+.traffic-flow-warning {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-error) 60%, transparent);
+}
+
+.traffic-flow-warning > .traffic-flow-subject {
+  color: var(--color-error);
+}
+
+/* A backend's configured share of a rule's traffic (route weights), as a proportion bar. */
+.traffic-flow-share {
+  height: 4px;
+  margin-top: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--color-border);
+}
+
+.traffic-flow-share > span {
+  display: block;
+  height: 100%;
+  background: var(--traffic-flow-color);
+}
+
+.traffic-flow-arrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* Labels under the arrow (e.g. ports) get a steady column width so rule cards line up. */
+.traffic-flow-arrow--labelled {
+  min-width: 4.5rem;
+}
+
+.traffic-flow-arrow .reference-grant-arrow {
+  color: var(--traffic-flow-color);
+  font-size: 1.4rem;
+}
+
+.traffic-flow-pills {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  color: var(--color-text);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+  white-space: nowrap;
+}
+
+.traffic-flow-pills li {
+  padding: 0 0.5rem;
+  border: 1px solid var(--traffic-flow-line);
+  border-radius: 999px;
+  background: var(--traffic-flow-tint);
+  color: var(--traffic-flow-color);
+}
+
+.traffic-flow-denied,
+.traffic-flow-denied .reference-grant-arrow {
+  color: var(--color-error);
+}
+
+.traffic-flow-denied {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}

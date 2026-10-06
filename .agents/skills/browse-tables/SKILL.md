@@ -9,51 +9,29 @@ Classify the table task before loading broad table architecture.
 
 ## Task tiers
 
-1. **Narrow view edit:** one column, interaction, empty state, or local filter.
-   Inspect its row producer, identity, persistence, and adjacent tests; do not
+1. **Narrow view edit** (one column, interaction, empty state, or local filter):
+   inspect its row producer, identity, persistence, and adjacent tests; do not
    inventory unrelated tables.
-2. **Shared table behavior:** GridTable, resource-table controller, adapters,
-   persistence, shared filtering/sorting/pagination, identity, or columns.
-   Inventory affected usages and use the task routes in
-   `docs/frontend/gridtable.md`; read only the matching reference sections.
-   Read [table modes](references/table-modes.md) when source/completeness semantics
-   are involved.
-3. **Architecture or large-data behavior:** query ownership, global semantics,
-   pagination/windowing, caps, dynamic metrics, export, or select-all. Inventory
-   every production resource-table usage, read the shared contract and selected
-   references in `docs/architecture/large-data.md`, and use
-   [table modes](references/table-modes.md).
+2. **Shared table behavior** (GridTable, resource-table controller, adapters,
+   persistence, shared filtering/sorting/pagination, identity, or columns):
+   inventory affected usages and follow the task routes in
+   `docs/frontend/gridtable.md`, reading only the matching sections.
+3. **Architecture or large-data behavior** (query ownership, global semantics,
+   pagination/windowing, caps, dynamic metrics, export, or select-all): read
+   `docs/architecture/large-data.md` and its selected references, then run the
+   [broad-change inventory](references/table-modes.md), recording it in
+   `docs/plans/<topic>.md`.
 
-Use `docs/architecture/catalog.md` for discovery/Browse changes,
-`docs/architecture/refresh-system.md` for snapshot/stream contracts,
-`docs/frontend/live-age.md` for age behavior, and
-`docs/architecture/resource-metrics.md` for CPU/memory/utilization. Read only
-the contracts selected by the change.
+Classify every touched production table against
+[table modes](../../../docs/architecture/large-data.md#table-modes) and keep its
+counts, facets, sorting, export, selection, and actions consistent with its
+actual completeness.
 
-## Ownership
-
-- The object catalog owns discovery, existence, canonical identity, Browse
-  namespace metadata, and cluster listings. The `namespaces` refresh domain owns
-  namespace LIST rows.
-- Typed list/table data comes from refresh snapshots and, when applicable,
-  matching resource-stream projections.
-- Frontend reads use data access or refresh orchestration. Resource tables render
-  through `ResourceInventoryTable` with `boundedRowsSource` or
-  `backendQuerySource`; do not add a third source shape.
-- Shared `GridTable` and column factories own common rendering behavior.
-- Row actions and navigation use concrete full object references.
-
-## Workflow
-
-1. Trace backend producer, scope, cap/truncation, permission behavior, cache or
-   query owner, stream parity, and every consumer assumption.
-2. Classify the table mode. For tier 2/3 work, use the definitions and inventory
-   in [table modes](references/table-modes.md).
-3. For broad work, create or update `docs/plans/<topic>.md`; move durable results
-   into the owning architecture/frontend doc when finished.
-4. Write the failing contract test before changing global table semantics.
-5. Keep counts, facets, sorting, export, selection, and actions consistent with
-   the table's actual completeness.
+Related contracts, read only when selected by the change:
+`docs/architecture/catalog.md` (discovery/Browse),
+`docs/architecture/refresh-system.md` (snapshot/stream contracts),
+`docs/frontend/live-age.md` (age), and `docs/architecture/resource-metrics.md`
+(CPU/memory/utilization).
 
 ## Focused checks
 
@@ -63,7 +41,6 @@ mise exec -- npm run test --prefix frontend -- browse tables cluster namespace
 mise exec -- npm run typecheck --prefix frontend
 ```
 
-For broad shared-table changes, also run
-`mise exec -- wails3 task qc:knip` and add a static/contract test preventing
-unclassified production resource-table usage. Then follow the root final
-validation gate.
+Broad shared-table changes also run `mise exec -- wails3 task qc:knip` and keep
+the `gridTableViewRegistry` contract test rejecting unclassified production
+resource-table usage.

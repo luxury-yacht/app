@@ -19,10 +19,10 @@ import (
 
 func TestUpdateRefreshSubsystemSelectionsValidatesReceiverAndAllowsEmptySelection(t *testing.T) {
 	var nilRefresh *RefreshCoordinator
-	require.EqualError(t, nilRefresh.updateRefreshSubsystemSelections(nil), "refresh coordinator is nil")
+	require.EqualError(t, nilRefresh.updateRefreshSubsystemSelections(context.Background(), nil), "refresh coordinator is nil")
 
 	refreshCoordinator := newRefreshCoordinatorTestFixture(t).Refresh
-	require.NoError(t, refreshCoordinator.updateRefreshSubsystemSelections(nil))
+	require.NoError(t, refreshCoordinator.updateRefreshSubsystemSelections(context.Background(), nil))
 }
 
 func TestApplyRefreshSelectionUpdateReportsClustersWhenRuntimeUnavailable(t *testing.T) {
@@ -77,7 +77,7 @@ func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T)
 	app.Refresh.refreshSubsystems = map[string]*system.Subsystem{clusterA: existingSubsystem}
 
 	originalBuilder := newRefreshSubsystemWithServices
-	newRefreshSubsystemWithServices = func(system.Config) (*system.Subsystem, error) {
+	newRefreshSubsystemWithServices = func(context.Context, system.Config) (*system.Subsystem, error) {
 		return &system.Subsystem{Manager: refresh.NewManager(nil, nil, nil, nil, nil)}, nil
 	}
 	t.Cleanup(func() { newRefreshSubsystemWithServices = originalBuilder })
@@ -154,7 +154,7 @@ func TestAuthFailedClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	// Track whether the subsystem builder was called for each cluster.
 	builderCalls := make(map[string]bool)
 	originalBuilder := newRefreshSubsystemWithServices
-	newRefreshSubsystemWithServices = func(cfg system.Config) (*system.Subsystem, error) {
+	newRefreshSubsystemWithServices = func(_ context.Context, cfg system.Config) (*system.Subsystem, error) {
 		builderCalls[cfg.ClusterID] = true
 		return &system.Subsystem{Manager: refresh.NewManager(nil, nil, nil, nil, nil)}, nil
 	}
@@ -222,7 +222,7 @@ func TestAuthFailedOnInitClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	// Track whether the subsystem builder was called for each cluster.
 	builderCalls := make(map[string]bool)
 	originalBuilder := newRefreshSubsystemWithServices
-	newRefreshSubsystemWithServices = func(cfg system.Config) (*system.Subsystem, error) {
+	newRefreshSubsystemWithServices = func(_ context.Context, cfg system.Config) (*system.Subsystem, error) {
 		builderCalls[cfg.ClusterID] = true
 		return &system.Subsystem{Manager: refresh.NewManager(nil, nil, nil, nil, nil)}, nil
 	}
@@ -306,7 +306,7 @@ users:
 	app.Refresh.refreshSubsystems = map[string]*system.Subsystem{}
 
 	originalBuilder := newRefreshSubsystemWithServices
-	newRefreshSubsystemWithServices = func(system.Config) (*system.Subsystem, error) {
+	newRefreshSubsystemWithServices = func(context.Context, system.Config) (*system.Subsystem, error) {
 		return &system.Subsystem{Manager: refresh.NewManager(nil, nil, nil, nil, nil)}, nil
 	}
 	t.Cleanup(func() { newRefreshSubsystemWithServices = originalBuilder })

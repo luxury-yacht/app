@@ -46,9 +46,6 @@ const stateStatusToResult = (
   if (resolution.kind === 'unsupported') {
     return 'unsupported';
   }
-  if (resolution.kind === 'detail-exception') {
-    return 'detail-exception';
-  }
   if (status === 'error' || error) {
     return 'error';
   }

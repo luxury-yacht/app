@@ -15,6 +15,7 @@ import {
   FindCatalogObjectMatch,
   GetContainerLogsScopeContainers,
   GetObjectYAMLByGVK,
+  GetPanelMetricSeries,
   GetPodContainers,
   GetRevisionHistory,
   GetTargetPorts,
@@ -22,6 +23,7 @@ import {
   IsWorkloadHPAManaged,
   QueryPermissions,
   SaveCsvFile,
+  SaveLogFile,
 } from '@/core/backend-api';
 import { desktopRuntimeAvailable } from '@/core/desktop-runtime';
 
@@ -69,6 +71,10 @@ export const readTargetPortsForRef = (target: ObjectReadTarget) =>
     target.name
   );
 
+/** An object panel's metric samples newer than afterT (unix ms), from the backend panel buffer. */
+export const readPanelMetricSeries = (clusterId: string, panelId: string, afterT: number) =>
+  GetPanelMetricSeries(clusterId, panelId, afterT);
+
 export const readPodContainers = (clusterId: string, namespace: string, resourceName: string) =>
   GetPodContainers(clusterId, namespace, resourceName);
 
@@ -112,11 +118,17 @@ export const readCatalogObjectByUID = (clusterId: string, uid: string) =>
 export interface CatalogQueryCSVExport {
   path: string;
   bytes: number;
+  /** The user dismissed the save dialog; nothing was written. */
+  canceled?: boolean;
 }
 
 /** Save a frontend-built CSV string to a user-selected file (returns the chosen path). */
 export const saveCsvFile = (defaultFilename: string, content: string) =>
   SaveCsvFile(defaultFilename, content) as Promise<CatalogQueryCSVExport>;
+
+/** Save log text to a user-selected .log file (returns the chosen path). */
+export const saveLogFile = (defaultFilename: string, content: string) =>
+  SaveLogFile(defaultFilename, content) as Promise<CatalogQueryCSVExport>;
 
 export interface CustomCatalogHydrationRow {
   clusterId: string;

@@ -459,7 +459,7 @@ func (run *catalogSync) publishEmpty() {
 	s.mu.Lock()
 	s.catalogIndex.reset()
 	s.mu.Unlock()
-	s.replaceFinalizerBlockers(nil)
+	s.publishSyncedAttentionSubsets(nil)
 	s.logDebug("no resources discovered; catalog cleared")
 	elapsed := s.now().Sub(run.start)
 	s.updateHealth(true, false, nil, 0)
@@ -804,7 +804,7 @@ func (run *catalogSync) publish(descriptors []Descriptor, collectErr error) {
 	s.cacheRebuilds.Add(1)
 	s.catalogIndex.rebuildCacheFromItems(run.newItems, descriptors)
 	s.mu.Unlock()
-	s.replaceFinalizerBlockers(run.newItems)
+	s.publishSyncedAttentionSubsets(run.newItems)
 	// Notify after publishing the complete replacement, including rows retained
 	// for failed descriptors, so readers never observe the intermediate batches.
 	run.service.broadcastStreaming(collectErr == nil)

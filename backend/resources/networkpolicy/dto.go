@@ -12,7 +12,7 @@ type NetworkPolicyDetails struct {
 	Name         string              `json:"name"`
 	Namespace    string              `json:"namespace"`
 	Details      string              `json:"details"`
-	PodSelector  map[string]string   `json:"podSelector"`
+	PodSelector  LabelSelector       `json:"podSelector"`
 	PolicyTypes  []string            `json:"policyTypes"`
 	IngressRules []NetworkPolicyRule `json:"ingressRules,omitempty"`
 	EgressRules  []NetworkPolicyRule `json:"egressRules,omitempty"`
@@ -26,10 +26,22 @@ type NetworkPolicyRule struct {
 	Ports []NetworkPolicyPort `json:"ports,omitempty"`
 }
 
+// NetworkPolicyPeer omits an unset selector; an empty selector ({}) matches everything.
 type NetworkPolicyPeer struct {
-	PodSelector       map[string]string `json:"podSelector,omitempty"`
-	NamespaceSelector map[string]string `json:"namespaceSelector,omitempty"`
-	IPBlock           *IPBlock          `json:"ipBlock,omitempty"`
+	PodSelector       *LabelSelector `json:"podSelector,omitempty"`
+	NamespaceSelector *LabelSelector `json:"namespaceSelector,omitempty"`
+	IPBlock           *IPBlock       `json:"ipBlock,omitempty"`
+}
+
+type LabelSelector struct {
+	MatchLabels      map[string]string          `json:"matchLabels,omitempty"`
+	MatchExpressions []LabelSelectorRequirement `json:"matchExpressions,omitempty"`
+}
+
+type LabelSelectorRequirement struct {
+	Key      string   `json:"key"`
+	Operator string   `json:"operator"`
+	Values   []string `json:"values,omitempty"`
 }
 
 type IPBlock struct {

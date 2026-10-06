@@ -167,7 +167,6 @@ describe('useGridTablePersistence multi-cluster', () => {
         kinds: [],
         namespaces: [],
         queryFacets: { types: ['Warning'], reasons: ['BackOff'] },
-        caseSensitive: false,
         includeMetadata: false,
       },
     };
@@ -178,7 +177,6 @@ describe('useGridTablePersistence multi-cluster', () => {
         kinds: [],
         namespaces: [],
         queryFacets: { statuses: ['Healthy'], hasIssues: ['false'] },
-        caseSensitive: false,
         includeMetadata: false,
       },
     };

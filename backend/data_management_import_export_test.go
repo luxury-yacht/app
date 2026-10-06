@@ -547,3 +547,28 @@ func TestDecodeFavoritesDataFileRejectsInvalidFavorites(t *testing.T) {
 		})
 	}
 }
+
+// Dismissing the import file picker is a cancel, not a failure. macOS and Linux
+// report it as an empty selection; Windows as Wails' "cancelled by user" error.
+func TestImportReportsADismissedFilePickerAsCanceled(t *testing.T) {
+	dismissals := map[string]func(*application.OpenFileDialogOptions) (string, error){
+		"empty selection": func(*application.OpenFileDialogOptions) (string, error) { return "", nil },
+		"windows cancel":  func(*application.OpenFileDialogOptions) (string, error) { return "", errors.New("cancelled by user") },
+	}
+	for name, dialog := range dismissals {
+		t.Run(name, func(t *testing.T) {
+			setTestConfigEnv(t)
+			app := newSettingsEffectsTestFixture(t)
+			setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+			app.DesktopShell.openFileDialog = dialog
+
+			settings, err := app.DataManagement.ImportSettings()
+			require.NoError(t, err)
+			require.Equal(t, DataManagementResult{Canceled: true}, settings)
+
+			favorites, err := app.DataManagement.ImportFavorites()
+			require.NoError(t, err)
+			require.Equal(t, DataManagementResult{Canceled: true}, favorites)
+		})
+	}
+}

@@ -353,7 +353,7 @@ func (a *RefreshCoordinator) replacePermissionGeneration(ctx context.Context, cl
 	if !ok || ctx.Err() != nil || a.getRefreshSubsystem(clusterID) != expected {
 		return
 	}
-	next, ok := rebuild.buildSubsystem(clients)
+	next, ok := rebuild.buildSubsystem(ctx, clients)
 	if !ok {
 		return
 	}

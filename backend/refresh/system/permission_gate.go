@@ -1,6 +1,7 @@
 package system
 
 import (
+	"context"
 	"errors"
 
 	"k8s.io/klog/v2"
@@ -91,10 +92,10 @@ type listWatchCheckResult struct {
 	err          error
 }
 
-func (g *permissionGate) runListChecks(checks []listCheck) []listCheckResult {
+func (g *permissionGate) runListChecks(ctx context.Context, checks []listCheck) []listCheckResult {
 	results := make([]listCheckResult, 0, len(checks))
 	for _, check := range checks {
-		allowed, err := g.informerFactory.CanListResource(check.group, check.resource)
+		allowed, err := g.informerFactory.CanListResource(ctx, check.group, check.resource)
 		results = append(results, listCheckResult{
 			check:   check,
 			allowed: allowed,
@@ -104,11 +105,11 @@ func (g *permissionGate) runListChecks(checks []listCheck) []listCheckResult {
 	return results
 }
 
-func (g *permissionGate) runListWatchChecks(checks []listWatchCheck) []listWatchCheckResult {
+func (g *permissionGate) runListWatchChecks(ctx context.Context, checks []listWatchCheck) []listWatchCheckResult {
 	results := make([]listWatchCheckResult, 0, len(checks))
 	for _, check := range checks {
-		listAllowed, listErr := g.informerFactory.CanListResource(check.group, check.resource)
-		watchAllowed, watchErr := g.informerFactory.CanWatchResource(check.group, check.resource)
+		listAllowed, listErr := g.informerFactory.CanListResource(ctx, check.group, check.resource)
+		watchAllowed, watchErr := g.informerFactory.CanWatchResource(ctx, check.group, check.resource)
 		results = append(results, listWatchCheckResult{
 			check:        check,
 			listAllowed:  listAllowed,
@@ -199,8 +200,8 @@ func (g *permissionGate) listAllowedByKey(results []listCheckResult) domainpermi
 }
 
 // registerListDomain enforces list-only permissions before registering a domain.
-func (g *permissionGate) registerListDomain(cfg listDomainConfig) error {
-	results := g.runListChecks(cfg.checks)
+func (g *permissionGate) registerListDomain(ctx context.Context, cfg listDomainConfig) error {
+	results := g.runListChecks(ctx, cfg.checks)
 	errs := g.listErrors(results)
 	g.appendIssue(cfg.name, cfg.issueResource, errs...)
 
@@ -221,8 +222,8 @@ func (g *permissionGate) registerListDomain(cfg listDomainConfig) error {
 }
 
 // registerListWatchDomain enforces list+watch permissions before registering a domain.
-func (g *permissionGate) registerListWatchDomain(cfg listWatchDomainConfig) error {
-	results := g.runListWatchChecks(cfg.checks)
+func (g *permissionGate) registerListWatchDomain(ctx context.Context, cfg listWatchDomainConfig) error {
+	results := g.runListWatchChecks(ctx, cfg.checks)
 	errs := g.listWatchErrors(results)
 	g.appendIssue(cfg.name, cfg.issueResource, errs...)
 
@@ -232,7 +233,7 @@ func (g *permissionGate) registerListWatchDomain(cfg listWatchDomainConfig) erro
 	}
 
 	if cfg.registerFallback != nil && len(cfg.fallbackChecks) > 0 {
-		fallbackResults := g.runListChecks(cfg.fallbackChecks)
+		fallbackResults := g.runListChecks(ctx, cfg.fallbackChecks)
 		if g.fallbackEligible(cfg, results, fallbackResults) {
 			if cfg.fallbackLog != "" {
 				klog.V(2).Info(cfg.fallbackLog)

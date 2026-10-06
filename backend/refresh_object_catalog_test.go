@@ -45,7 +45,7 @@ func TestCatalogFinalizerBridgeProjectsArbitraryKindsIntoAttention(t *testing.T)
 	require.NoError(t, err)
 	t.Cleanup(index.Stop)
 
-	updates := make(chan objectcatalog.FinalizerBlockerUpdate, 1)
+	updates := make(chan objectcatalog.SubsetUpdate, 1)
 	blockers := []objectcatalog.FinalizerBlocker{{
 		Ref: resourcemodel.ResourceRef{
 			ClusterID: "cluster-a", Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets",
@@ -57,10 +57,10 @@ func TestCatalogFinalizerBridgeProjectsArbitraryKindsIntoAttention(t *testing.T)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runCatalogFinalizerBridge(ctx, updates, func() []objectcatalog.FinalizerBlocker { return blockers }, index)
+		runCatalogSubsetBridge(ctx, updates, func() []objectcatalog.FinalizerBlocker { return blockers }, index.ReplaceFinalizerBlockers)
 	}()
 
-	updates <- objectcatalog.FinalizerBlockerUpdate{Revision: 1}
+	updates <- objectcatalog.SubsetUpdate{Revision: 1}
 	require.Eventually(t, func() bool { return len(index.Snapshot()) == 1 }, time.Second, time.Millisecond)
 	require.Equal(t, "Widget", index.Snapshot()[0].Ref.Kind)
 
@@ -85,14 +85,14 @@ func TestCatalogFinalizerBridgeStopsForUnavailableInputs(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(index.Stop)
 
-	closedUpdates := make(chan objectcatalog.FinalizerBlockerUpdate)
+	closedUpdates := make(chan objectcatalog.SubsetUpdate)
 	close(closedUpdates)
 
-	runCatalogFinalizerBridge(context.Background(), closedUpdates, func() []objectcatalog.FinalizerBlocker {
+	runCatalogSubsetBridge(context.Background(), closedUpdates, func() []objectcatalog.FinalizerBlocker {
 		t.Fatal("a closed update channel must not read blocker state")
 		return nil
-	}, index)
-	runCatalogFinalizerBridge(context.Background(), nil, nil, nil)
+	}, index.ReplaceFinalizerBlockers)
+	runCatalogSubsetBridge[objectcatalog.FinalizerBlocker](context.Background(), nil, nil, nil)
 }
 
 func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool) (*workspaceCoordinatorTestFixture, catalogTarget) {
@@ -108,7 +108,7 @@ func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool
 	checker := refreshpermissions.NewCheckerWithReview(clusterID, time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		return true, nil
 	})
-	factory := refreshinformer.New(kubeClient, apiExtensionsClient, time.Minute, checker)
+	factory := refreshinformer.New(context.Background(), kubeClient, apiExtensionsClient, time.Minute, checker)
 	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
 	app.ClusterRuntime.clusterClients[clusterID] = &clusterClients{
 		meta:                ClusterMeta{ID: clusterID, Name: "Cluster A"},
@@ -247,7 +247,7 @@ func TestCatalogStartsForNamespaceScopedIdentityDeniedClusterWideInformers(t *te
 	clients.dynamicClient = fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
 		map[schema.GroupVersionResource]string{replicaSetGVR: "ReplicaSetList"}, replicaSet)
 
-	subsystem, err := system.NewSubsystemWithServices(system.Config{
+	subsystem, err := system.NewSubsystemWithServices(context.Background(), system.Config{
 		KubernetesClient: kube, APIExtensionsClient: clients.apiextensionsClient, DynamicClient: clients.dynamicClient,
 		ClusterID: target.meta.ID, ClusterName: target.meta.Name, Logger: app.AppLogs.Logger(), ResyncInterval: time.Minute,
 		AllowedNamespaces:     []string{namespace},

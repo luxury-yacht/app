@@ -2,8 +2,10 @@ package backend
 
 import (
 	"fmt"
-	"github.com/luxury-yacht/app/internal/panelwindow"
+	"slices"
 	"strings"
+
+	"github.com/luxury-yacht/app/internal/panelwindow"
 )
 
 func (a *WorkspaceCoordinator) PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory {
@@ -47,6 +49,14 @@ func (a *WorkspaceCoordinator) RetainPanelCluster(referenceID, clusterID string)
 	if strings.TrimSpace(referenceID) == "" || strings.TrimSpace(clusterID) == "" {
 		return fmt.Errorf("panel retention requires reference and cluster identity")
 	}
+	if a == nil {
+		return fmt.Errorf("app is nil")
+	}
+	finish := a.beginSelectionMutationDrain()
+	defer finish()
+	if handled, err := a.retainOwnedPanelCluster(referenceID, clusterID); handled {
+		return err
+	}
 	return a.runOrderedSelectionMutation("retain-panel-cluster", func(_ *selectionMutation) error {
 		selection := a.selectionForOpenCluster(clusterID)
 		if selection == "" {
@@ -54,15 +64,48 @@ func (a *WorkspaceCoordinator) RetainPanelCluster(referenceID, clusterID string)
 		}
 		a.workspaceSelectionsMu.Lock()
 		defer a.workspaceSelectionsMu.Unlock()
-		if previous := a.panelSelections[referenceID]; previous != "" && previous != selection {
-			return fmt.Errorf("panel reference %q cannot change cluster", referenceID)
-		}
-		if a.panelSelections == nil {
-			a.panelSelections = make(map[string]string)
-		}
-		a.panelSelections[referenceID] = selection
-		return nil
+		return a.retainPanelSelectionLocked(referenceID, selection)
 	})
+}
+
+// Adding a reference to an already-owned selection does not change the
+// process union. Check ownership and retain under the same short lock so a
+// concurrent last-owner removal cannot commit a union that drops this panel.
+func (a *WorkspaceCoordinator) retainOwnedPanelCluster(referenceID, clusterID string) (bool, error) {
+	a.workspaceSelectionsMu.Lock()
+	defer a.workspaceSelectionsMu.Unlock()
+	selection := a.selectionForOpenCluster(clusterID)
+	if selection == "" || !a.selectionHasOwnerLocked(selection, "") {
+		return false, nil
+	}
+	return true, a.retainPanelSelectionLocked(referenceID, selection)
+}
+
+func (a *WorkspaceCoordinator) retainPanelSelectionLocked(referenceID, selection string) error {
+	if previous := a.panelSelections[referenceID]; previous != "" && previous != selection {
+		return fmt.Errorf("panel reference %q cannot change cluster", referenceID)
+	}
+	if a.panelSelections == nil {
+		a.panelSelections = make(map[string]string)
+	}
+	a.panelSelections[referenceID] = selection
+	return nil
+}
+
+// The caller holds workspaceSelectionsMu. An excluded panel reference cannot
+// provide the ownership that allows its own removal to bypass runtime teardown.
+func (a *WorkspaceCoordinator) selectionHasOwnerLocked(selection, excludedReference string) bool {
+	for _, owned := range a.workspaceSelections {
+		if slices.Contains(owned, selection) {
+			return true
+		}
+	}
+	for reference, owned := range a.panelSelections {
+		if reference != excludedReference && owned == selection {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *WorkspaceCoordinator) selectionForOpenCluster(clusterID string) string {
@@ -76,6 +119,15 @@ func (a *WorkspaceCoordinator) selectionForOpenCluster(clusterID string) string 
 }
 
 func (a *WorkspaceCoordinator) ReleasePanelCluster(referenceID string) error {
+	if a == nil {
+		return fmt.Errorf("app is nil")
+	}
+	finish := a.beginSelectionMutationDrain()
+	defer finish()
+	if a.releaseOwnedPanelCluster(referenceID) {
+		return nil
+	}
+
 	return a.runOrderedSelectionMutation("release-panel-cluster", func(mutation *selectionMutation) error {
 		if clusterID, shared := strings.CutPrefix(referenceID, "panel-workspace:"); shared && a.PanelWorkspaceDirectory().HasClusterReference(clusterID) {
 			return nil
@@ -90,4 +142,24 @@ func (a *WorkspaceCoordinator) ReleasePanelCluster(referenceID string) error {
 		}
 		return a.setSelectedKubeconfigs(mutation, union)
 	})
+}
+
+// Release references without waiting for connection work when a peer or
+// another panel still owns the selection. The final reference keeps the
+// serialized teardown path so runtime retirement and reopening cannot overlap.
+func (a *WorkspaceCoordinator) releaseOwnedPanelCluster(referenceID string) bool {
+	a.workspaceSelectionsMu.Lock()
+	defer a.workspaceSelectionsMu.Unlock()
+	selection := a.panelSelections[referenceID]
+	if selection == "" {
+		return true
+	}
+	if clusterID, shared := strings.CutPrefix(referenceID, "panel-workspace:"); shared && a.PanelWorkspaceDirectory().HasClusterReference(clusterID) {
+		return true
+	}
+	if !a.selectionHasOwnerLocked(selection, referenceID) {
+		return false
+	}
+	delete(a.panelSelections, referenceID)
+	return true
 }

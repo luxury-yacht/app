@@ -62,27 +62,36 @@ describe('Karpenter columns', () => {
     }
     expect(dom.textContent).not.toContain('Configuration');
   });
-  it('calculates NodePool usage against limits without treating unavailable percentages as zero', () => {
+  it('shows the backend NodePool usage and flags only what the backend flags', () => {
     const column = karpenterColumns(parts).find((entry) => entry.key === 'usage');
     expect(column).toBeDefined();
     const pool = { ...source, ref: { ...source.ref, kind: 'NodePool', resource: 'nodepools' } };
     const dom = document.createElement('div');
-    for (const [capacity, limits, expected] of [
-      [{ cpu: '1250m', memory: '768Gi' }, { cpu: '2', memory: '1Ti' }, 'CPU 62.5% / Mem 75%'],
-      [{ cpu: '8', memory: '0' }, { cpu: '10', memory: '1Ti' }, 'CPU 80% / Mem 0%'],
-      [{ cpu: '8500m', memory: '1.2Ti' }, { cpu: '10', memory: '1Ti' }, 'CPU 85% / Mem 120%'],
-      [{ cpu: '1', memory: '2Gi' }, { cpu: '0' }, '-'],
-      [{ memory: '1Gi' }, { cpu: '10', memory: '2Gi' }, 'CPU - / Mem 50%'],
+    for (const [limitUsage, expected, flagged] of [
+      [{ cpu: { percent: 62.5 }, memory: { percent: 75 } }, 'CPU 62.5% / Mem 75%', []],
+      [
+        {
+          cpu: { percent: 85, presentation: 'warning' },
+          memory: { percent: 120.04, presentation: 'warning' },
+        },
+        'CPU 85% / Mem 120%',
+        ['85%', '120%'],
+      ],
+      // The threshold belongs to the backend: an unflagged percentage is never recolored here.
+      [{ cpu: { percent: 90 } }, 'CPU 90% / Mem -', []],
+      [{ memory: { percent: 50 } }, 'CPU - / Mem 50%', []],
+      [undefined, '-', []],
     ] as const) {
-      dom.innerHTML = renderToStaticMarkup(
-        column?.render({ ...pool, karpenter: { capacity, limits } })
-      );
+      dom.innerHTML = renderToStaticMarkup(column?.render({ ...pool, karpenter: { limitUsage } }));
       expect(dom.textContent).toBe(expected);
       expect(
         dom
           .querySelector('[data-gridtable-export-text]')
           ?.getAttribute('data-gridtable-export-text') ?? dom.textContent
       ).toBe(expected);
+      expect(
+        [...dom.querySelectorAll('.status-text.warning')].map((node) => node.textContent)
+      ).toEqual(flagged);
     }
     expect(column?.render(source)).toBe('-');
     expect(

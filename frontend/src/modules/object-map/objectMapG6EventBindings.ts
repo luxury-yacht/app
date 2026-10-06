@@ -27,7 +27,7 @@ import {
   objectMapG6EndpointKind,
   objectMapG6EndpointLabel,
 } from './objectMapG6RendererOptions';
-import { isObjectMapZoomWheelEvent, objectMapWheelZoomRatio } from './objectMapG6Viewport';
+import { objectMapWheelZoomRatio } from './objectMapG6Viewport';
 import type { ObjectMapLayout, PositionedEdge } from './objectMapLayout';
 import type { ObjectMapNodeGestureState } from './objectMapNodeGesture';
 import type { ObjectMapHoverEdge, ObjectMapSelectionState } from './objectMapRendererTypes';
@@ -254,9 +254,6 @@ export const bindObjectMapG6Events = (options: ObjectMapG6EventBindingOptions): 
       return;
     }
     onUserViewportChangeRef.current?.();
-    if (!isObjectMapZoomWheelEvent(event)) {
-      return;
-    }
     event.preventDefault();
     const rect = container.getBoundingClientRect();
     const origin: [number, number] = [event.clientX - rect.left, event.clientY - rect.top];

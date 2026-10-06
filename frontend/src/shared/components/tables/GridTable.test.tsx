@@ -154,6 +154,32 @@ const flushAsync = async () => {
   });
 };
 
+// Opens the table's Download button (named for its row scope) and chooses where the rows go.
+const chooseDownload = async (
+  container: HTMLElement,
+  scope: 'Download all matching rows' | 'Download visible rows',
+  choice: 'Copy to Clipboard' | 'Save to File'
+) => {
+  const button = requireValue(
+    container.querySelector<HTMLButtonElement>(`.icon-bar-button[aria-label="${scope}"]`),
+    `expected the ${scope} button`
+  );
+  await act(async () => {
+    button.click();
+    await Promise.resolve();
+  });
+  const item = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
+    (element) => element.textContent === choice
+  );
+  await act(async () => {
+    requireValue(item, `expected ${choice}`).dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+};
+
 describe('GridTable virtualization', () => {
   let originalClientHeightDescriptor: PropertyDescriptor | undefined;
   let originalScrollTo: typeof Element.prototype.scrollTo | undefined;
@@ -281,7 +307,7 @@ describe('GridTable virtualization', () => {
     expect(resultCount?.classList.contains('active-filter-chip')).toBe(false);
   });
 
-  it('renders the Copy · Export pair acting on all matching rows (no scope toggle)', () => {
+  it('offers Copy to Clipboard and Save to File from one Download button', async () => {
     const { container, cleanup } = renderGridTable({
       data: createRows(3),
       virtualization: { enabled: false },
@@ -303,18 +329,20 @@ describe('GridTable virtualization', () => {
         '[aria-label="Toggle copy and export scope between current page and all matching rows"]'
       )
     ).toBeNull();
-    const copy = container.querySelector('[aria-label="Copy all matching rows to clipboard"]');
-    const exportBtn = container.querySelector('[aria-label="Export all matching rows to file"]');
-    expect(copy).toBeTruthy();
-    expect(exportBtn).toBeTruthy();
-    // Order: Copy · Export.
+    const download = requireValue(
+      container.querySelector<HTMLButtonElement>('[aria-label="Download all matching rows"]'),
+      'expected the Download button'
+    );
+    expect(download.getAttribute('aria-haspopup')).toBe('menu');
+    await act(async () => {
+      download.click();
+      await Promise.resolve();
+    });
     expect(
-      Boolean(
-        requireValue(copy, 'expected test value in GridTable.test.tsx').compareDocumentPosition(
-          requireValue(exportBtn, 'expected test value in GridTable.test.tsx')
-        ) & Node.DOCUMENT_POSITION_FOLLOWING
+      Array.from(document.body.querySelectorAll('[role="menuitem"]')).map(
+        (item) => item.textContent
       )
-    ).toBe(true);
+    ).toEqual(['Copy to Clipboard', 'Save to File']);
 
     cleanup();
   });
@@ -339,16 +367,7 @@ describe('GridTable virtualization', () => {
     });
     cleanupRoot = cleanup;
 
-    const copy = container.querySelector(
-      '[aria-label="Copy all matching rows to clipboard"]'
-    ) as HTMLElement;
-    expect(copy).toBeTruthy();
-
-    await act(async () => {
-      copy.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await chooseDownload(container, 'Download all matching rows', 'Copy to Clipboard');
 
     expect(fetchAllRows).toHaveBeenCalledTimes(1);
     expect(writeText).toHaveBeenCalledTimes(1);
@@ -979,7 +998,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     };
 
@@ -1030,7 +1048,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     });
 
@@ -1055,7 +1072,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     });
 
@@ -1071,7 +1087,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     };
 
@@ -1128,7 +1143,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     };
 
@@ -1212,7 +1226,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'some', values: ['Pod', 'Deployment'] },
       namespaces: { mode: 'some', values: ['team-a', 'team-b', 'team-c'] },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     };
 
@@ -1252,7 +1265,6 @@ describe('GridTable interactions (non-virtualized)', () => {
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      caseSensitive: false,
       includeMetadata: false,
     };
     await act(async () => {
@@ -1695,7 +1707,6 @@ it('keeps local pagination on the first page after a filter is applied and remov
     kinds: { mode: 'all' },
     namespaces: { mode: 'all' },
     clusters: { mode: 'all' },
-    caseSensitive: false,
     includeMetadata: false,
   };
   const filters = (): GridTableFilterConfig<SimpleRow> => ({
@@ -1747,6 +1758,54 @@ it('keeps local pagination on the first page after a filter is applied and remov
   cleanup();
 });
 
+// The Download button names its scope: a complete local table holds every matching
+// row even without paging, while a partial window holds only what it shows.
+it('names the Download scope from whether the table holds every matching row', () => {
+  const downloadLabel = (partialDataLabel?: string) => {
+    const { container, cleanup } = renderGridTable({
+      data: createRows(3),
+      virtualization: { enabled: false },
+      filters: { enabled: true, options: { partialDataLabel } },
+    });
+    const label = container
+      .querySelector('.icon-bar-button[aria-haspopup="menu"]')
+      ?.getAttribute('aria-label');
+    cleanup();
+    return label;
+  };
+
+  expect(downloadLabel()).toBe('Download all matching rows');
+  expect(downloadLabel('This table is showing a bounded or recent local window.')).toBe(
+    'Download visible rows'
+  );
+});
+
+// A local table without an all-rows fetcher downloads the rows its filters match.
+it('downloads only the local rows that match the active search', async () => {
+  const clipboardWriteText = runtimeMocks.writeClipboardText;
+  clipboardWriteText.mockReset().mockResolvedValue(undefined);
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(12),
+    virtualization: { enabled: false },
+    filters: {
+      enabled: true,
+      initial: { search: 'Row 1' },
+      accessors: {
+        getKind: () => '',
+        getNamespace: () => '',
+        getSearchText: (row) => [row.label],
+      },
+    },
+  });
+  cleanupRoot = cleanup;
+
+  await chooseDownload(container, 'Download all matching rows', 'Copy to Clipboard');
+
+  expect(clipboardWriteText).toHaveBeenCalledWith('Label\nRow 1\nRow 10\nRow 11');
+  cleanup();
+});
+
 it('copies every filtered local row when only one local page is rendered', async () => {
   const clipboardWriteText = runtimeMocks.writeClipboardText;
   clipboardWriteText.mockReset().mockResolvedValue(undefined);
@@ -1765,15 +1824,7 @@ it('copies every filtered local row when only one local page is rendered', async
   cleanupRoot = cleanup;
 
   expect(container.querySelectorAll('.gridtable-row')).toHaveLength(2);
-  const copyButton = container.querySelector<HTMLButtonElement>(
-    '.icon-bar-button[aria-label="Copy all matching rows as CSV"]'
-  );
-  expect(copyButton).not.toBeNull();
-
-  await act(async () => {
-    requireValue(copyButton, 'expected local pagination copy action').click();
-    await Promise.resolve();
-  });
+  await chooseDownload(container, 'Download all matching rows', 'Copy to Clipboard');
 
   expect(clipboardWriteText).toHaveBeenCalledWith('Label\nRow 0\nRow 1\nRow 2\nRow 3\nRow 4');
 
@@ -1897,7 +1948,7 @@ it('ignores wrapper context menus when no empty-area items are exposed', async (
   cleanup();
 });
 
-it('copies the current visible table contents as CSV from the filter icon bar', async () => {
+it('copies the table contents as CSV from the filter icon bar', async () => {
   const clipboardWriteText = runtimeMocks.writeClipboardText;
   clipboardWriteText.mockReset().mockResolvedValue(undefined);
 
@@ -1953,15 +2004,7 @@ it('copies the current visible table contents as CSV from the filter icon bar', 
 
   await flushAsync();
 
-  const copyButton = container.querySelector<HTMLButtonElement>(
-    '.icon-bar-button[aria-label="Copy visible rows as CSV"]'
-  );
-  expect(copyButton).not.toBeNull();
-
-  await act(async () => {
-    requireValue(copyButton, 'expected test value in GridTable.test.tsx').click();
-    await Promise.resolve();
-  });
+  await chooseDownload(container, 'Download all matching rows', 'Copy to Clipboard');
 
   expect(clipboardWriteText).toHaveBeenCalledWith(
     'Label,Notes\n' + '"Alpha,One","He said ""hi"""\n' + 'Beta,"Line\nBreak"'
@@ -2028,15 +2071,7 @@ it('copies resource-bar columns as plain millicores and KiB under unit headers',
 
   await flushAsync();
 
-  const copyButton = container.querySelector<HTMLButtonElement>(
-    '.icon-bar-button[aria-label="Copy visible rows as CSV"]'
-  );
-  expect(copyButton).not.toBeNull();
-
-  await act(async () => {
-    requireValue(copyButton, 'expected test value in GridTable.test.tsx').click();
-    await Promise.resolve();
-  });
+  await chooseDownload(container, 'Download all matching rows', 'Copy to Clipboard');
 
   expect(clipboardWriteText).toHaveBeenCalledWith(
     'Label,CPU (m),Memory (KiB)\nAlpha,250,524288\nBeta,1000,2097152'

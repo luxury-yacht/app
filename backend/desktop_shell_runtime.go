@@ -2,6 +2,7 @@ package backend
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -68,28 +69,43 @@ func (s *DesktopShell) emitCurrentWindowEvent(name string, data ...any) {
 	window.EmitEvent(name, data...)
 }
 
+// promptForOpenFile returns the chosen path, or "" when the user dismisses the
+// dialog.
 func (s *DesktopShell) promptForOpenFile(options *application.OpenFileDialogOptions) (string, error) {
 	if s != nil && s.openFileDialog != nil {
-		return s.openFileDialog(options)
+		return dismissedDialogAsEmpty(s.openFileDialog(options))
 	}
 	window, err := s.currentWindowWhenReady()
 	if err != nil {
 		return "", err
 	}
 	options.Window = window
-	return s.application.Dialog.OpenFileWithOptions(options).PromptForSingleSelection()
+	return dismissedDialogAsEmpty(s.application.Dialog.OpenFileWithOptions(options).PromptForSingleSelection())
 }
 
+// promptForSaveFile returns the chosen path, or "" when the user dismisses the
+// dialog.
 func (s *DesktopShell) promptForSaveFile(options *application.SaveFileDialogOptions) (string, error) {
 	if s != nil && s.saveFileDialog != nil {
-		return s.saveFileDialog(options)
+		return dismissedDialogAsEmpty(s.saveFileDialog(options))
 	}
 	window, err := s.currentWindowWhenReady()
 	if err != nil {
 		return "", err
 	}
 	options.Window = window
-	return s.application.Dialog.SaveFileWithOptions(options).PromptForSingleSelection()
+	return dismissedDialogAsEmpty(s.application.Dialog.SaveFileWithOptions(options).PromptForSingleSelection())
+}
+
+// dismissedDialogAsEmpty reports a dismissed native dialog as an empty selection.
+// macOS and Linux already return one with no error; Windows returns Wails'
+// "cancelled by user" error, which Wails does not export, so it is matched by
+// its message.
+func dismissedDialogAsEmpty(path string, err error) (string, error) {
+	if err != nil && strings.Contains(err.Error(), "cancelled by user") {
+		return "", nil
+	}
+	return path, err
 }
 
 func (s *DesktopShell) clipboardText() (string, error) {

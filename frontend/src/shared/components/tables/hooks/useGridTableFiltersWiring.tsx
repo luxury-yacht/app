@@ -21,8 +21,7 @@ import {
   defaultGetSearchText,
 } from '@shared/components/tables/GridTable.utils';
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
-import { useGridTableCsvExport } from '@shared/components/tables/hooks/useGridTableCsvExport';
-import { useGridTableCsvFileExportAction } from '@shared/components/tables/hooks/useGridTableCsvFileExportAction';
+import { useGridTableDownloadAction } from '@shared/components/tables/hooks/useGridTableDownloadAction';
 import { useGridTableFilters } from '@shared/components/tables/useGridTableFilters';
 import type { ComponentProps, ReactNode } from 'react';
 import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
@@ -72,16 +71,10 @@ type UseGridTableFiltersPresentationOptions<T> = {
   searchShortcut?: SearchShortcutConfig;
   exportColumns?: GridColumnDefinition<T>[];
   getTextContent?: (node: ReactNode) => string;
-  /** When provided, Copy/Export gain an "all matching rows" scope toggle that calls this. */
+  /** When provided, the Download button copies or saves every matching row it returns. */
   fetchAllRows?: () => Promise<T[]>;
-  /** Default filename offered by the file Export action. */
+  /** Base of the file name Download's Save to File offers. */
   exportFilename?: string;
-  /** The local data contains every filter match before presentation pagination. */
-  hasAllLocalMatches?: boolean;
-  /** IconBar items rendered before the built-in Reset action. */
-  preActions?: IconBarItem[];
-  /** IconBar items rendered after a separator following Reset. */
-  postActions?: IconBarItem[];
 };
 
 export function useGridTableFilterModel<T>({
@@ -121,9 +114,6 @@ export function useGridTableFiltersPresentation<T>({
   getTextContent,
   fetchAllRows,
   exportFilename,
-  hasAllLocalMatches,
-  preActions,
-  postActions,
 }: UseGridTableFiltersPresentationOptions<T>): ReactNode {
   const {
     filteringEnabled,
@@ -138,7 +128,6 @@ export function useGridTableFiltersPresentation<T>({
     handleFilterQueryFacetChange,
     handleFiltersChange,
     handleFilterReset,
-    toggleCaseSensitive,
   } = filterModel;
 
   const handleKindDropdownChange = useCallback(
@@ -199,61 +188,25 @@ export function useGridTableFiltersPresentation<T>({
   const searchShortcutActive = searchShortcut?.active ?? filteringEnabled;
   const searchShortcutPriority = searchShortcut?.priority ?? 5;
   const showColumnsDropdown = Boolean(columnsDropdown);
-  const resolvedPreActions = preActions ?? resolvedFilterOptions.preActions;
-  const resolvedCustomActions = resolvedFilterOptions.customActions;
+  const resolvedPreActions = resolvedFilterOptions.preActions;
 
-  // Copy and Export act on every matching row when the view can fetch all pages.
-  // Local presentation pagination also supplies every filtered row here because
-  // pagination is applied downstream of this hook.
-  const supportsExportAll = Boolean(fetchAllRows);
-
-  const fetchAllRowsOrEmpty = useCallback(
-    (): Promise<T[]> => (fetchAllRows ? fetchAllRows() : Promise.resolve([])),
-    [fetchAllRows]
-  );
-
-  const csvExportAction = useGridTableCsvExport({
+  // Download copies or saves every matching row when the view can fetch all pages.
+  // Otherwise it takes this local row set; local presentation pagination still
+  // supplies every filtered row here because pagination is applied downstream.
+  // That set is every matching row unless it is a backend page or a partial window.
+  const downloadAction = useGridTableDownloadAction({
     data: tableData,
     columns: exportColumns,
     getTextContent,
-    // Pass the real (possibly undefined) fetcher: when absent, Copy takes this local row set.
     fetchAllRows,
-    hasAllLocalMatches,
-  });
-
-  const csvExportFileAction = useGridTableCsvFileExportAction({
-    fetchAllRows: fetchAllRowsOrEmpty,
-    columns: exportColumns,
-    getTextContent,
+    allMatchingRows:
+      Boolean(fetchAllRows) ||
+      (filters?.options?.searchBehavior !== 'query' && !filters?.options?.partialDataLabel),
     defaultFilename: exportFilename ?? 'export',
-    disabled: tableData.length === 0,
   });
 
-  const resolvedPostActions = useMemo<IconBarItem[]>(() => {
-    // The grouped copy/export pair. When the view can fetch all rows, both act on the
-    // full matching set — [copy · export]. Otherwise just the visible-rows copy.
-    const items: IconBarItem[] = [];
-    if (supportsExportAll) {
-      items.push(csvExportAction, csvExportFileAction);
-    } else {
-      items.push(csvExportAction);
-    }
-
-    if (resolvedFilterOptions.postActions?.length) {
-      items.push(...resolvedFilterOptions.postActions);
-    }
-    if (postActions?.length) {
-      items.push(...postActions);
-    }
-
-    return items;
-  }, [
-    csvExportAction,
-    csvExportFileAction,
-    postActions,
-    resolvedFilterOptions.postActions,
-    supportsExportAll,
-  ]);
+  // Download ends the icon bar, after a separator.
+  const resolvedPostActions = useMemo<IconBarItem[]>(() => [downloadAction], [downloadAction]);
 
   // Filter feedback for the bar: N (items matching the active filters) of M (items in scope before
   // them). Both are TOTALS, never the current page. Server-paginated tables get them from the
@@ -311,7 +264,6 @@ export function useGridTableFiltersPresentation<T>({
       onQueryFacetChange: handleQueryFacetDropdownChange,
       onFiltersChange: handleFiltersChange,
       onReset: handleFilterReset,
-      onToggleCaseSensitive: toggleCaseSensitive,
       showKindDropdown,
       showNamespaceDropdown,
       showClusterDropdown,
@@ -333,7 +285,6 @@ export function useGridTableFiltersPresentation<T>({
       searchShortcutPriority,
       preActions: resolvedPreActions,
       postActions: resolvedPostActions,
-      customActions: resolvedCustomActions,
       resultCount,
     }),
     [
@@ -352,7 +303,6 @@ export function useGridTableFiltersPresentation<T>({
       handleQueryFacetDropdownChange,
       handleFiltersChange,
       handleFilterReset,
-      toggleCaseSensitive,
       showKindDropdown,
       showNamespaceDropdown,
       showClusterDropdown,
@@ -364,7 +314,6 @@ export function useGridTableFiltersPresentation<T>({
       searchShortcutPriority,
       resolvedPreActions,
       resolvedPostActions,
-      resolvedCustomActions,
       resultCount,
       filtersContainerRef,
     ]
