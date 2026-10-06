@@ -20,6 +20,12 @@ export interface DropdownOption<TMetadata = unknown> {
   metadata?: TMetadata;
 }
 
+export interface DropdownIconTrigger {
+  icon: ReactNode;
+  label: string;
+  active?: boolean;
+}
+
 export type DropdownOptionRowProps = React.HTMLAttributes<HTMLDivElement> & {
   [dataAttribute: `data-${string}`]: unknown;
 };
@@ -66,6 +72,12 @@ export interface DropdownProps<TMetadata = unknown> {
    */
   getOptionRowProps?: (option: DropdownOption<TMetadata>) => DropdownOptionRowProps;
   renderValue?: (value: string | string[], options: DropdownOption<TMetadata>[]) => ReactNode;
+  /**
+   * Opens the menu from an icon toolbar button instead of the value field.
+   * `label` is the button's accessible name and tooltip; `active` gives it the
+   * toolbar's "on" fill.
+   */
+  iconTrigger?: DropdownIconTrigger;
   className?: string;
   dropdownClassName?: string;
 

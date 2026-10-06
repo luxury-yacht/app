@@ -75,8 +75,9 @@ resolved placement with a deferred module.
 - Trigger text comes from `multiSelectFilterTriggerLabel`
   (`shared/components/dropdowns/multiSelectFilterSelection.ts`): the bare label
   when everything is selected, else `Label (N)` including `Label (0)`, so an
-  empty selection never looks unfiltered. Column-visibility menus keep their
-  `Columns` text.
+  empty selection never looks unfiltered. Column-visibility menus are named
+  `Columns` instead; the GridTable one opens from an icon toolbar button
+  (`iconTrigger`) rather than the value field.
 - Each multi-select row has an `only` shortcut (`enableOnlyAction`, default on)
   that collapses the selection to that option, revealed on hover or keyboard
   highlight and reachable via `Alt+Enter`. It is a click region inside the

@@ -161,6 +161,37 @@ describe('Dropdown', () => {
     expect(container.contains(menu)).toBe(false);
   });
 
+  it('opens the same menu from an icon trigger named by its label', async () => {
+    const handleChange = vi.fn();
+    const dropdownId = createTestId('icon-trigger-dropdown');
+    await mount(
+      <Dropdown
+        id={dropdownId}
+        multiple
+        options={OPTIONS}
+        value={['alpha']}
+        onChange={handleChange}
+        placeholder="Columns"
+        iconTrigger={{ icon: <svg />, label: 'Columns (2 hidden)', active: true }}
+      />
+    );
+
+    const trigger = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Columns (2 hidden)"]'),
+      'expected the icon trigger named by its label'
+    );
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+    click(trigger);
+
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    const menu = requireValue(document.getElementById(`${dropdownId}-menu`), 'expected the menu');
+    // The menu keeps its own name; only the trigger carries the state label.
+    expect(menu.getAttribute('aria-label')).toBe('Columns');
+    click(optionIn('Beta'));
+    expect(handleChange).toHaveBeenCalledWith(['alpha', 'beta']);
+  });
+
   it('positions the portaled menu inside the viewport without using trigger layout space', async () => {
     const originalInnerWidth = window.innerWidth;
     const originalInnerHeight = window.innerHeight;

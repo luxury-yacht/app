@@ -3,6 +3,7 @@
 
 ### Changed
 
+- Tables open the Columns menu from an icon button, which is highlighted while any column is hidden.
 
 ### Fixed
 

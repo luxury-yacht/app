@@ -76,7 +76,7 @@ describe('GridTableKeys filter target selectors', () => {
     namespace: '[data-gridtable-filter-role="namespace"] .dropdown-trigger',
     cluster: '[data-gridtable-filter-role="cluster"] .dropdown-trigger',
     apiGroups: '[data-gridtable-filter-role="query-facet-apiGroups"] .dropdown-trigger',
-    columns: '[data-gridtable-filter-role="columns"] .dropdown-trigger',
+    columns: '[data-gridtable-filter-role="columns"] button[aria-label="Columns"]',
   };
 
   const renderFiltersBar = async (
@@ -333,7 +333,6 @@ describe('GridTableKeys filter target selectors', () => {
             onSearchChange={vi.fn()}
             onReset={vi.fn()}
             renderOption={(option) => option.label}
-            renderColumnsValue={() => 'Columns'}
             showColumnsDropdown
             columnOptions={[{ label: 'Name', value: 'name' }]}
             columnValue={['name']}

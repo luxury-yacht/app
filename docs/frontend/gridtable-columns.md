@@ -46,8 +46,10 @@ columns. Apply the [shared GridTable contract](gridtable.md).
 
 ## Columns menu
 
-- The trigger reads `Columns`, or `Columns (N hidden)` once any is hidden;
-  visibility persists per cluster and view, so the closed control discloses it.
+- The menu opens from an icon-only toolbar button (`Dropdown` `iconTrigger`)
+  named `Columns`, or `Columns (N hidden)` once any is hidden, which also gives
+  it the toolbar's `active` fill; visibility persists per cluster and view, so
+  the closed control discloses it.
 - The menu lists every column in display order (top-to-bottom =
   left-to-right). Required columns' visibility toggles are disabled, but every
   row, Name included, drags to reorder; the whole row is the drag target and the

@@ -10,7 +10,7 @@ import { createPortal } from 'react-dom';
 import { useAriaAnnouncements } from './hooks/useAriaAnnouncements';
 import { useDropdownState } from './hooks/useDropdownState';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
-import type { DropdownOption, DropdownProps } from './types';
+import type { DropdownIconTrigger, DropdownOption, DropdownProps } from './types';
 import '@styles/components/dropdowns.css';
 import { ListboxOptionButton } from '@shared/components/aria/ListboxOptionButton';
 import {
@@ -265,8 +265,12 @@ interface DropdownTriggerProps {
   ariaDescribedBy?: string;
   ariaLabelledBy?: string;
   toggleDropdown: () => void;
+  iconTrigger?: DropdownIconTrigger;
   children: React.ReactNode;
 }
+
+const iconTriggerClassName = ({ active }: DropdownIconTrigger) =>
+  active ? 'icon-bar-button active' : 'icon-bar-button';
 
 const DropdownTrigger = ({
   triggerRef,
@@ -281,6 +285,7 @@ const DropdownTrigger = ({
   ariaDescribedBy,
   ariaLabelledBy,
   toggleDropdown,
+  iconTrigger,
   children,
 }: DropdownTriggerProps) => {
   const comboboxProps =
@@ -291,12 +296,13 @@ const DropdownTrigger = ({
     <button
       type="button"
       ref={triggerRef}
-      className="dropdown-trigger"
+      className={iconTrigger ? iconTriggerClassName(iconTrigger) : 'dropdown-trigger'}
       onClick={toggleDropdown}
       {...comboboxProps}
       aria-expanded={isOpen}
       aria-haspopup={hasOptionActions ? 'dialog' : 'listbox'}
-      aria-label={ariaLabel}
+      aria-label={iconTrigger?.label ?? ariaLabel}
+      title={iconTrigger?.label}
       aria-describedby={ariaDescribedBy}
       aria-labelledby={ariaLabelledBy}
       aria-controls={menuId}
@@ -304,7 +310,7 @@ const DropdownTrigger = ({
       id={id}
       disabled={disabled}
     >
-      {children}
+      {iconTrigger?.icon ?? children}
     </button>
   );
 };
@@ -1065,6 +1071,7 @@ const Dropdown = <TMetadata,>({
   renderOptionActions,
   getOptionRowProps,
   renderValue,
+  iconTrigger,
   className = '',
   dropdownClassName = '',
   ariaLabel,
@@ -1468,6 +1475,7 @@ const Dropdown = <TMetadata,>({
         ariaDescribedBy={ariaDescribedBy}
         ariaLabelledBy={ariaLabelledBy}
         toggleDropdown={toggleDropdown}
+        iconTrigger={iconTrigger}
       >
         {triggerContent}
       </DropdownTrigger>

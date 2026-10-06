@@ -735,7 +735,6 @@ describe('GridTableFiltersBar', () => {
       canResetColumns: true,
       onResetColumns,
       columnsDropdownId: 'columns',
-      renderColumnsValue: () => 'Columns',
     });
 
     const dropdown = container.querySelector('[data-testid="columns"]') as HTMLSelectElement;
@@ -838,7 +837,6 @@ describe('GridTableFiltersBar', () => {
       canResetColumns: false,
       onResetColumns: vi.fn(),
       columnsDropdownId: 'columns',
-      renderColumnsValue: () => 'Columns',
     });
 
     const reset = container.querySelector(
@@ -866,7 +864,6 @@ describe('GridTableFiltersBar', () => {
       onEditCustomMetadataColumn,
       onRemoveCustomMetadataColumn,
       columnsDropdownId: 'columns',
-      renderColumnsValue: () => 'Columns',
     });
 
     const addCustomColumnButton = container.querySelector<HTMLButtonElement>(
@@ -905,7 +902,6 @@ describe('GridTableFiltersBar', () => {
       canResetColumns: false,
       onResetColumns: vi.fn(),
       columnsDropdownId: 'columns',
-      renderColumnsValue: () => 'Columns',
     });
 
     // The menu is scoped so required rows can opt out of the shared disabled styling.

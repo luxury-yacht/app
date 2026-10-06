@@ -30,7 +30,7 @@ type ColumnsDropdownConfig = {
   options: DropdownOption[];
   value: string[];
   onChange: (value: string | string[]) => void;
-  renderValue?: (value: string | string[], options: DropdownOption[]) => ReactNode;
+  hiddenCount: number;
   onMoveColumn?: (key: string, offset: -1 | 1) => void;
   onReorderColumn?: (key: string, targetIndex: number) => void;
   canResetColumns?: boolean;
@@ -180,11 +180,6 @@ export function useGridTableFiltersPresentation<T>({
     []
   );
 
-  const renderColumnsValue = useCallback(
-    (_value: string | string[], _options: DropdownOption[]) => 'Columns',
-    []
-  );
-
   const searchShortcutActive = searchShortcut?.active ?? filteringEnabled;
   const searchShortcutPriority = searchShortcut?.priority ?? 5;
   const showColumnsDropdown = Boolean(columnsDropdown);
@@ -268,7 +263,7 @@ export function useGridTableFiltersPresentation<T>({
       showNamespaceDropdown,
       showClusterDropdown,
       renderOption: renderFilterOption,
-      renderColumnsValue: columnsDropdown?.renderValue ?? renderColumnsValue,
+      columnsHiddenCount: columnsDropdown?.hiddenCount,
       columnOptions: columnsDropdown?.options,
       columnValue: columnsDropdown?.value,
       onColumnsChange: columnsDropdown?.onChange,
@@ -308,7 +303,6 @@ export function useGridTableFiltersPresentation<T>({
       showClusterDropdown,
       renderFilterOption,
       columnsDropdown,
-      renderColumnsValue,
       showColumnsDropdown,
       searchShortcutActive,
       searchShortcutPriority,

@@ -16,7 +16,7 @@ import {
   multiSelectFilterTriggerLabel,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { PlusIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
+import { ColumnsIcon, PlusIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import SearchInput from '@shared/components/inputs/SearchInput';
 import Tooltip from '@shared/components/Tooltip';
 import type {
@@ -47,7 +47,8 @@ interface GridTableFiltersBarProps {
   onSearchChange: (value: string) => void;
   onReset: () => void;
   renderOption: (option: DropdownOption, isSelected: boolean) => React.ReactNode;
-  renderColumnsValue?: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
+  /** Columns the user has hidden; the Columns button is highlighted and names the count. */
+  columnsHiddenCount?: number;
   columnOptions?: DropdownOption[];
   columnValue?: string[];
   onColumnsChange?: (value: string | string[]) => void;
@@ -244,8 +245,12 @@ interface ColumnsDropdownOptions {
   onResetColumns: GridTableFiltersBarProps['onResetColumns'];
   canResetColumns: boolean;
   onAddCustomMetadataColumn: GridTableFiltersBarProps['onAddCustomMetadataColumn'];
-  renderColumnsValue: NonNullable<GridTableFiltersBarProps['renderColumnsValue']>;
+  hiddenCount: number;
 }
+
+// Hidden columns persist per cluster and view, so the closed button discloses them.
+const columnsButtonLabel = (hiddenCount: number): string =>
+  hiddenCount > 0 ? `Columns (${hiddenCount} hidden)` : 'Columns';
 
 function renderColumnsDropdown({
   show,
@@ -259,7 +264,7 @@ function renderColumnsDropdown({
   onResetColumns,
   canResetColumns,
   onAddCustomMetadataColumn,
-  renderColumnsValue,
+  hiddenCount,
 }: ColumnsDropdownOptions): React.ReactNode {
   if (!show || !columnOptions || !columnValue || !onColumnsChange) {
     return null;
@@ -272,6 +277,11 @@ function renderColumnsDropdown({
         multiple
         showBulkActions
         placeholder="Columns"
+        iconTrigger={{
+          icon: <ColumnsIcon width={18} height={18} />,
+          label: columnsButtonLabel(hiddenCount),
+          active: hiddenCount > 0,
+        }}
         value={columnValue}
         options={columnOptions}
         disabled={!columnOptions.length}
@@ -322,7 +332,6 @@ function renderColumnsDropdown({
             )}
           </>
         )}
-        renderValue={renderColumnsValue}
       />
     </div>
   );
@@ -345,7 +354,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   onSearchChange,
   onReset,
   renderOption,
-  renderColumnsValue = () => 'Columns',
+  columnsHiddenCount = 0,
   columnOptions,
   columnValue,
   onColumnsChange,
@@ -614,7 +623,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
             onResetColumns,
             canResetColumns,
             onAddCustomMetadataColumn,
-            renderColumnsValue,
+            hiddenCount: columnsHiddenCount,
           })}
         </div>
       </div>

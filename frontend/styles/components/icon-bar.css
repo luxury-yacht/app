@@ -116,8 +116,8 @@
   box-shadow: 0 0 0 2px var(--color-accent);
 }
 
-/* A menu button or split caret keeps its hover look while its menu shows. */
-.icon-bar-button[aria-haspopup="menu"][aria-expanded="true"] {
+/* A menu button, split caret, or dropdown icon trigger keeps its hover look while its popup shows. */
+.icon-bar-button[aria-haspopup][aria-expanded="true"] {
   color: var(--color-text);
 }
 

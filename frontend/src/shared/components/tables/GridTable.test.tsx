@@ -1111,7 +1111,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     await flushAsync();
 
     const columnsTrigger = container.querySelector<HTMLElement>(
-      '[data-gridtable-filter-role="columns"] .dropdown-trigger'
+      '[data-gridtable-filter-role="columns"] button[aria-label="Columns"]'
     );
     const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
     const grid = container.querySelector<HTMLTableElement>('table.gridtable--body');
@@ -1169,7 +1169,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
     const grid = container.querySelector<HTMLTableElement>('table.gridtable--body');
     const columnsTrigger = container.querySelector<HTMLElement>(
-      '[data-gridtable-filter-role="columns"] .dropdown-trigger'
+      '[data-gridtable-filter-role="columns"] button[aria-label="Columns"]'
     );
     expect(wrapper).not.toBeNull();
     expect(grid).not.toBeNull();
@@ -1448,6 +1448,38 @@ it('appends configured metadata columns to the rendered and exportable column se
   cleanup();
 });
 
+it('names the Columns button by the hidden-column count and opens the menu from it', async () => {
+  const { container, cleanup } = renderGridTable({
+    data: createRows(2),
+    columns: [
+      { key: 'label', header: 'Label', render: (row) => row.label },
+      { key: 'name', header: 'Name', render: (row) => row.name ?? '' },
+    ],
+    filters: { enabled: true },
+    enableColumnVisibilityMenu: true,
+    virtualization: { enabled: false },
+    columnVisibility: { name: false },
+  });
+  cleanupRoot = cleanup;
+  await flushAsync();
+
+  const trigger = requireValue(
+    container.querySelector<HTMLButtonElement>(
+      '[data-gridtable-filter-role="columns"] button[aria-label="Columns (1 hidden)"]'
+    ),
+    'expected the Columns button to name the hidden count'
+  );
+  await act(async () => {
+    trigger.click();
+    await Promise.resolve();
+  });
+
+  expect(
+    document.body.querySelector('[aria-label="Columns"].dropdown-columns-menu')
+  ).not.toBeNull();
+  cleanup();
+});
+
 it('does not inspect row metadata until the custom-column editor opens', async () => {
   let metadataReads = 0;
   const row: SimpleRow = { id: 'row-1', label: 'Row 1' };
@@ -1472,7 +1504,7 @@ it('does not inspect row metadata until the custom-column editor opens', async (
   await act(async () => {
     requireValue(
       container.querySelector<HTMLButtonElement>(
-        '[data-gridtable-filter-role="columns"] .dropdown-trigger'
+        '[data-gridtable-filter-role="columns"] button[aria-label="Columns"]'
       ),
       'expected Columns trigger'
     ).click();
@@ -1510,7 +1542,7 @@ it('creates a custom metadata column from the Columns menu', async () => {
   await act(async () => {
     requireValue(
       container.querySelector<HTMLButtonElement>(
-        '[data-gridtable-filter-role="columns"] .dropdown-trigger'
+        '[data-gridtable-filter-role="columns"] button[aria-label="Columns"]'
       ),
       'expected Columns trigger'
     ).click();
@@ -1585,7 +1617,7 @@ it('deletes a custom metadata column directly from the Columns menu', async () =
   await act(async () => {
     requireValue(
       container.querySelector<HTMLButtonElement>(
-        '[data-gridtable-filter-role="columns"] .dropdown-trigger'
+        '[data-gridtable-filter-role="columns"] button[aria-label="Columns"]'
       ),
       'expected Columns trigger'
     ).click();
@@ -2974,7 +3006,7 @@ it('returns auto-width columns to automatic sizing from the Columns reset action
   await flushAsync();
 
   const columnsTrigger = container.querySelector<HTMLButtonElement>(
-    '[data-gridtable-filter-role="columns"] .dropdown-trigger'
+    '[data-gridtable-filter-role="columns"] button[aria-label="Columns"]'
   );
   expect(columnsTrigger).not.toBeNull();
   await act(async () => {
