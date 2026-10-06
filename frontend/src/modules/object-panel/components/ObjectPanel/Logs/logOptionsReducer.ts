@@ -20,8 +20,6 @@ export interface ParsedLogEntry {
   seq?: number;
 }
 
-export type DownloadFeedback = 'idle' | 'done' | 'error';
-
 export interface LogOptionsState {
   autoRefresh: boolean;
   // Whether the search row (filter box and search options) is shown.
@@ -34,7 +32,6 @@ export interface LogOptionsState {
   showAnsiColors: boolean;
   displayMode: LogDisplayMode;
   expandedRows: Set<string>;
-  downloadFeedback: DownloadFeedback;
 }
 
 export type LogOptionsAction =
@@ -49,8 +46,7 @@ export type LogOptionsAction =
   | { type: 'TOGGLE_SHOW_ANSI_COLORS' }
   | { type: 'TOGGLE_PARSED_VIEW' }
   | { type: 'SET_DISPLAY_MODE'; payload: LogDisplayMode }
-  | { type: 'TOGGLE_ROW_EXPANSION'; payload: string }
-  | { type: 'SET_DOWNLOAD_FEEDBACK'; payload: DownloadFeedback };
+  | { type: 'TOGGLE_ROW_EXPANSION'; payload: string };
 
 const LOG_OPTIONS_ACTION_TYPES = new Set<string>(
   Object.keys({
@@ -66,7 +62,6 @@ const LOG_OPTIONS_ACTION_TYPES = new Set<string>(
     TOGGLE_PARSED_VIEW: true,
     SET_DISPLAY_MODE: true,
     TOGGLE_ROW_EXPANSION: true,
-    SET_DOWNLOAD_FEEDBACK: true,
   } satisfies Record<LogOptionsAction['type'], true>)
 );
 
@@ -84,7 +79,6 @@ export const initialLogOptionsState: LogOptionsState = {
   showAnsiColors: true,
   displayMode: 'raw',
   expandedRows: new Set<string>(),
-  downloadFeedback: 'idle',
 };
 
 // Regex patterns carry their own case handling.
@@ -149,8 +143,6 @@ export function logOptionsReducer<S extends LogOptionsState>(
       return setDisplayMode(state, action.payload);
     case 'TOGGLE_ROW_EXPANSION':
       return toggleRowExpansion(state, action.payload);
-    case 'SET_DOWNLOAD_FEEDBACK':
-      return { ...state, downloadFeedback: action.payload };
     default:
       return toggleSearchOption(state, action);
   }

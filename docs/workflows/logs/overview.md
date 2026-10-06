@@ -45,8 +45,11 @@ keeps its own source selection and transport.
   shown and none is JSON; an empty log keeps the view.
 - `logToolbar.tsx`: the icon bar, the search row (`LogSearchRow`), and the
   log count (`renderLogCount`, "shown/total logs"), shown only while a filter hides
-  lines. It sits in the active-filters strip, left of Clear all; Node Logs has
-  no filter chips, so its strip holds only the count.
+  lines. It sits in the active-filters strip, left of Clear all.
+- `logSearchChips.ts`: the search chips both viewers show in that strip (the
+  text filter, flagged "(invalid expression)" for a bad regex, and Filtered or
+  Invert, Match case and Regex when on) and the search part of Clear all.
+  Container Logs adds its source and previous-logs chips.
   The icon bar's search button opens the search row below the main controls:
   the text filter box, the filter mode button (click cycles All → Filtered →
   Invert; its menu picks one; `I` switches between Invert and All), and the
@@ -72,10 +75,12 @@ keeps its own source selection and transport.
   Settings → Logs.
 - `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts. `T` (timestamps) and
   `V` (previous logs) exist only when the viewer passes those features.
-- `hooks/useLogDownloadActions.ts`: the Download button's Copy to Clipboard
-  and Save to File, and selection copy. Both choices take the same text: CSV in
-  Table view, saved as a .csv file, and the shown lines otherwise, saved as a
-  .log file. `Shift+C` still copies. Failures are reported, never swallowed.
+- `@shared/hooks/useLogDownloadMenu.tsx`: the Download button of every log
+  view, App Logs included: Copy to Clipboard and Save to File, with its own
+  success or error feedback. Both choices take the same text: CSV in Table view,
+  saved as a .csv file, and the shown lines otherwise, saved as a .log file.
+  `Shift+C` still copies in Container and Node Logs. Failures are reported, never
+  swallowed. `hooks/useLogSelectionCopy.ts` copies a text selection.
 - `LogStatus.tsx`: the error block, the warning bar and the buffer-full
   indicator (a warning icon at the start of the controls row whose tooltip says
   which logs are shown). Both viewers show loading with the shared spinner and their empty

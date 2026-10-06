@@ -1,4 +1,4 @@
-import ActiveFilterChips, { type ActiveFilterChip } from '@shared/components/ActiveFilterChips';
+import ActiveFilterChips from '@shared/components/ActiveFilterChips';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar from '@shared/components/IconBar/IconBar';
@@ -23,6 +23,7 @@ import {
   type ParsedLogEntry,
 } from '../Logs/logOptionsReducer';
 import { findLogOverlap } from '../Logs/logOverlap';
+import { buildLogSearchChips, clearLogSearch } from '../Logs/logSearchChips';
 import { buildLogToolbarItems, LogSearchRow, renderLogCount } from '../Logs/logToolbar';
 import {
   getLogViewerScrollPosition,
@@ -33,10 +34,10 @@ import type { CapabilityState } from '../types';
 import { fetchNodeLogs, type NodeLogFetchResponse, type NodeLogSource } from './nodeLogsApi';
 import '../Logs/LogViewer.css';
 import './NodeLogsTab.css';
+import { useLogDownloadMenu } from '@shared/hooks/useLogDownloadMenu';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
 import { getObjPanelLogsBufferMaxSize } from '@/core/settings/appPreferences';
-import { useLogDownloadActions, useLogSelectionCopy } from '../Logs/hooks/useLogDownloadActions';
 import { useLogKeyboardShortcuts } from '../Logs/hooks/useLogKeyboardShortcuts';
 import { useLogMessageRenderer } from '../Logs/hooks/useLogMessageRenderer';
 import {
@@ -46,6 +47,7 @@ import {
   useRawViewFallback,
 } from '../Logs/hooks/useLogPresentation';
 import { useLogScrollRestoration } from '../Logs/hooks/useLogScrollRestoration';
+import { useLogSelectionCopy } from '../Logs/hooks/useLogSelectionCopy';
 import { useTerminalTheme } from '../Logs/hooks/useTerminalTheme';
 import ParsedLogTable from '../Logs/ParsedLogTable';
 import RawLogViewer, { type RenderedLogRow } from '../Logs/RawLogViewer';
@@ -56,8 +58,6 @@ const nodeLogSearchTexts = (line: string): string[] => [line];
 const nodeLogLine = (line: string): string => line;
 const NODE_LOG_AUTO_REFRESH_MS = 5000;
 const NODE_LOG_APPEND_OVERLAP_MS = 5000;
-// Node Logs has no filter chips; its strip shows only the log count.
-const NO_FILTER_CHIPS: ActiveFilterChip[] = [];
 
 const getNodeLogSourceLeafLabel = (label: string): string => {
   const segments = label.split(' / ');
@@ -670,6 +670,19 @@ const NodeLogsTab = ({
     lineOf: nodeLogLine,
   });
   const isParsedView = displayMode === 'parsed';
+  const { textFilter, filterMode, caseSensitiveMatches, regexMatches } = options;
+  const searchChips = useMemo(
+    () =>
+      buildLogSearchChips({
+        textFilter,
+        filterMode,
+        caseSensitiveMatches,
+        regexMatches,
+        hasInvalidRegex,
+        dispatch,
+      }),
+    [caseSensitiveMatches, filterMode, hasInvalidRegex, regexMatches, textFilter]
+  );
 
   useRawViewFallback({ displayMode, hasVisibleLines, canParseLogs, dispatch });
 
@@ -749,12 +762,13 @@ const NodeLogsTab = ({
     }
   }, []);
 
-  const { copyLogs: handleCopyLogs, saveLogs: handleSaveLogs } = useLogDownloadActions({
+  const { downloadItem, copyLogs: handleCopyLogs } = useLogDownloadMenu({
     getText: getCopyText,
     isTableView: isParsedView,
     fileBase: nodeLogsFileBase(nodeName, selectedSource),
-    dispatch,
     source: 'NodeLogsTab',
+    disabled: !hasCopyableContent,
+    copyShortcut: 'Shift+C',
   });
   useLogSelectionCopy({ rootRef: logsContentRef, active: isActive, source: 'NodeLogsTab' });
   useLogKeyboardShortcuts({
@@ -788,10 +802,8 @@ const NodeLogsTab = ({
     dispatch,
     hasAnsiLogEntries,
     canParseLogs,
-    hasCopyableContent,
     hasLogs: totalLogCount > 0,
-    copyLogs: handleCopyLogs,
-    saveLogs: handleSaveLogs,
+    downloadItem,
     filterInputRef,
     searchRowId,
   });
@@ -832,8 +844,8 @@ const NodeLogsTab = ({
 
         <ActiveFilterChips
           ariaLabel="Active log filters"
-          chips={NO_FILTER_CHIPS}
-          onClearAll={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
+          chips={searchChips}
+          onClearAll={() => clearLogSearch(dispatch, { caseSensitiveMatches, regexMatches })}
           className="logs-viewer-active-filters"
           summary={renderLogCount(displayedLogCount, totalLogCount, textFilterHidesLines)}
         />

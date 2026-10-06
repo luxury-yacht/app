@@ -7,6 +7,8 @@
 - Table search always ignores letter case, so the Match case button and its favorite option are gone; most tables already searched this way. Saved favorites still restore.
 - Table toolbars keep their icons in one place after the search box: search options, the view's own icons (such as Clear selected workload or Manage ignored findings), Favorite, then Download. The Pods pane's collapse button stays at the left, before the Namespace filter.
 - Toolbar buttons are dimmed only when they are unavailable. An off toggle and a ready button look the same, and a filled button is on. Hovering a button brightens its icon without filling it.
+- The Application Logs panel's Copy button is now the Download button used by the Logs tab: Copy to Clipboard, or Save to File.
+- Node Logs shows the same search chips as container logs, such as the text filter, Filtered and Match case, and Clear all resets them. An invalid regular expression is flagged in its chip.
 - In the Logs tab, search, timestamps and wrap are unavailable until a log line arrives. The format and filter mode buttons are never highlighted.
 - The Logs tab's auto-refresh button is never highlighted. It shows a red stop icon while logs refresh and a green play icon while they are stopped.
 - Tables and the Logs tab have one Download button in place of the separate copy and export buttons. Its menu offers Copy to Clipboard and Save to File, so every table can now save its rows to a CSV file, and the Logs tab can save the shown logs to a file.
@@ -20,6 +22,7 @@
 
 ### Fixed
 
+- ⌘A / Ctrl+A now selects the text in a search box or other text field, such as the Logs tab's search box. It used to select nothing.
 - In the Logs tab, a container that starts after the tab opens, such as a debug container, now appears in the Containers dropdown, and log lines name their container once there is more than one.
 - Selecting a workload no longer reopens a collapsed Pods pane. The pane shows that workload's pods when you expand it.
 - Canceling the save dialog from a Download button no longer flashes an error or reports one. On Windows, canceling a settings or favorites export or import, or the kubeconfig folder picker, no longer reports an error either.

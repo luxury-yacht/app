@@ -14,12 +14,13 @@ import {
   filterSelectionValues,
   isNarrowingFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
+import { useLogDownloadMenu } from '@shared/hooks/useLogDownloadMenu';
 import React, { useCallback, useEffect, useId, useMemo, useReducer, useRef } from 'react';
 import { useContainerLogsStream } from './hooks/useContainerLogsStream';
-import { useLogDownloadActions, useLogSelectionCopy } from './hooks/useLogDownloadActions';
 import { useLogFiltering } from './hooks/useLogFiltering';
 import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import { logCopyText, useRawViewFallback } from './hooks/useLogPresentation';
+import { useLogSelectionCopy } from './hooks/useLogSelectionCopy';
 import './LogViewer.css';
 import { eventBus } from '@/core/events';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -94,6 +95,7 @@ import {
 } from './logFilterSelection';
 import type { ParsedLogEntry } from './logOptionsReducer';
 import { isValidRegexPattern } from './logSearch';
+import { clearLogSearch } from './logSearchChips';
 import { buildLogToolbarItems, renderLogCount } from './logToolbar';
 import {
   getLogViewerPrefs,
@@ -805,18 +807,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     textFilter,
   ]);
   const handleClearAllFilters = useCallback(() => {
-    dispatch({ type: 'SET_TEXT_FILTER', payload: '' });
     dispatch({ type: 'SET_SELECTED_FILTERS', payload: ALL_MULTISELECT_FILTER });
     if (showPreviousContainerLogs) {
       dispatch({ type: 'STOP_PREVIOUS_LOGS' });
     }
-    dispatch({ type: 'SET_FILTER_MODE', payload: 'all' });
-    if (caseSensitiveMatches) {
-      dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' });
-    }
-    if (regexMatches) {
-      dispatch({ type: 'TOGGLE_REGEX_MATCHES' });
-    }
+    clearLogSearch(dispatch, { caseSensitiveMatches, regexMatches });
   }, [caseSensitiveMatches, regexMatches, showPreviousContainerLogs]);
 
   useEffect(() => {
@@ -947,14 +942,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     () => logCopyText(displayMode, copyText, getParsedCsv),
     [copyText, displayMode, getParsedCsv]
   );
-  const { copyLogs: handleCopyContainerLogs, saveLogs: handleSaveContainerLogs } =
-    useLogDownloadActions({
-      getText: getCopyText,
-      isTableView: isParsedView,
-      fileBase: [resourceKindKey, objectName, 'logs'].filter(Boolean).join('-'),
-      dispatch,
-      source: 'LogViewer',
-    });
+  const { downloadItem, copyLogs: handleCopyContainerLogs } = useLogDownloadMenu({
+    getText: getCopyText,
+    isTableView: isParsedView,
+    fileBase: [resourceKindKey, objectName, 'logs'].filter(Boolean).join('-'),
+    source: 'LogViewer',
+    disabled: !hasCopyableContent,
+    copyShortcut: 'Shift+C',
+  });
   useLogSelectionCopy({ rootRef: logsContentRef, active: isActive, source: 'LogViewer' });
 
   const toggleTimestamps = useCallback(
@@ -1021,10 +1016,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     dispatch,
     hasAnsiLogEntries,
     canParseLogs: canParseContainerLogs,
-    hasCopyableContent,
     hasLogs,
-    copyLogs: handleCopyContainerLogs,
-    saveLogs: handleSaveContainerLogs,
+    downloadItem,
     filterInputRef,
     searchRowId,
     previousLogs: previousLogsFeature,

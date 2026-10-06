@@ -137,14 +137,12 @@ describe('logViewerReducer state transitions', () => {
     expect(logViewerReducer(shown, { type: 'TOGGLE_PARSED_VIEW' }).displayMode).toBe('raw');
   });
 
-  it('updates download feedback and clears filtering and display mode on scope resets', () => {
-    const copied = logViewerReducer(base(), { type: 'SET_DOWNLOAD_FEEDBACK', payload: 'done' });
+  it('clears filtering and display mode on scope resets', () => {
     const reset = logViewerReducer(
-      { ...copied, textFilter: 'error', displayMode: 'parsed' },
+      { ...base(), textFilter: 'error', displayMode: 'parsed' },
       { type: 'RESET_FOR_NEW_SCOPE' }
     );
 
-    expect(copied.downloadFeedback).toBe('done');
     expect(reset).toMatchObject({
       textFilter: '',
       displayMode: 'raw',

@@ -19,6 +19,9 @@ Kubernetes container logs or node logs.
   `none` states. Deselecting the final option must show no entries; it must not
   revert to the unrestricted state. Dynamic cluster and component options keep
   `all` open-ended as new log sources appear.
+- The panel's Download button is the log views' shared menu
+  (`useLogDownloadMenu`): Copy to Clipboard, or Save to File as a `.log` file,
+  with the shown entries as the copy text.
 
 ## Ownership
 

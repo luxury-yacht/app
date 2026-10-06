@@ -388,7 +388,6 @@ describe('NodeLogsTab', () => {
   });
 
   // As in Container Logs, the shown/total count shows only while a filter narrows the logs.
-  // Node Logs has no filter chips, so without the count the strip takes no space.
   it('shows the log count only while a text filter is applied', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       status: 'executed',
@@ -409,7 +408,49 @@ describe('NodeLogsTab', () => {
     expect(strip()?.querySelector('.logs-viewer-count')?.textContent).toBe('1/2 logs');
 
     await filterLogsBy('  ');
-    expect(strip()).toBeNull();
+    expect(strip()?.querySelector('.logs-viewer-count') ?? null).toBeNull();
+  });
+
+  // The search chips are Container Logs' chips: the text filter and each search
+  // option that differs from its default. Clear all resets them all.
+  it('shows the search chips and clears them all', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      status: 'executed',
+      data: {
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'info boot complete\nerror failed to reconcile',
+      },
+    });
+    const chipLabels = () =>
+      Array.from(
+        container.querySelectorAll('[aria-label="Active log filters"] .active-filter-chip__label')
+      ).map((label) => label.textContent);
+
+    await renderTab();
+    await selectSource('kubelet');
+    await filterLogsBy('error');
+    await act(async () => {
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label^="Case-sensitive search"]'),
+        'expected the Match case button'
+      ).click();
+      await Promise.resolve();
+    });
+    expect(chipLabels()).toEqual(['Text: error', 'Filtered', 'Match case']);
+
+    await act(async () => {
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Clear all filters"]'),
+        'expected Clear all'
+      ).click();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[aria-label="Active log filters"]')).toBeNull();
+    expect(
+      container.querySelector('button[aria-label^="Filter mode:"]')?.getAttribute('aria-label')
+    ).toBe('Filter mode: All');
+    expect(container.textContent).toContain('info boot complete');
   });
 
   it('clears the text filter from the filter box and shows every line again', async () => {
@@ -555,9 +596,14 @@ describe('NodeLogsTab', () => {
 
     await setFilterValue('[');
 
-    // All only highlights matches, so the lines stay readable.
+    // All only highlights matches, so the lines stay readable and the chip says
+    // the expression is invalid.
     expect(container.textContent).not.toContain('Enter a valid regular expression.');
     expect(container.textContent).toContain('error failed to reconcile');
+    expect(
+      container.querySelector('[aria-label="Active log filters"] .active-filter-chip__label')
+        ?.textContent
+    ).toBe('Regex: [ (invalid expression)');
 
     await chooseFilterMode('Filtered');
     expect(container.textContent).toContain('Enter a valid regular expression.');

@@ -159,7 +159,17 @@ export const deriveCopyText = (selection: Selection | null): string | null => {
     : selectedText;
 };
 
+type TextEntryElement = HTMLInputElement | HTMLTextAreaElement;
+
+const isTextEntryElement = (element: Element | null): element is TextEntryElement =>
+  element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
+
 export const applySelectAll = (selection: Selection | null, activeElement: Element | null) => {
+  // A text box's text is not part of the document selection, so it selects its own.
+  if (isTextEntryElement(activeElement)) {
+    activeElement.select();
+    return;
+  }
   if (!selection) {
     return;
   }
@@ -173,11 +183,6 @@ export const applySelectAll = (selection: Selection | null, activeElement: Eleme
     document.execCommand('selectAll');
   }
 };
-
-type TextEntryElement = HTMLInputElement | HTMLTextAreaElement;
-
-const isTextEntryElement = (element: Element | null): element is TextEntryElement =>
-  element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
 
 const cutTextEntrySelection = (element: TextEntryElement): boolean => {
   if (element.readOnly || element.disabled) {

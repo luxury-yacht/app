@@ -23,7 +23,6 @@ import {
 } from '@shared/components/icons/LogIcons';
 import {
   CaseSensitiveIcon,
-  DownloadIcon,
   PlayOutlineIcon,
   SearchIcon,
   StopOutlineIcon,
@@ -32,7 +31,7 @@ import type { Dispatch, ReactNode, RefObject } from 'react';
 import { flushSync } from 'react-dom';
 import { isMacPlatform } from '@/utils/platform';
 import type { LogDisplayMode, LogFilterMode } from '../types';
-import type { DownloadFeedback, LogOptionsAction, LogOptionsState } from './logOptionsReducer';
+import type { LogOptionsAction, LogOptionsState } from './logOptionsReducer';
 
 type ToggleFeature = { active: boolean; toggle: () => void };
 
@@ -47,23 +46,15 @@ export type LogToolbarOptions = {
   dispatch: Dispatch<LogOptionsAction>;
   hasAnsiLogEntries: boolean;
   canParseLogs: boolean;
-  hasCopyableContent: boolean;
   /** A log line has arrived. Until then search, timestamps and wrap are disabled. */
   hasLogs: boolean;
-  copyLogs: () => void;
-  saveLogs: () => void;
+  /** The view's Download menu (useLogDownloadMenu). */
+  downloadItem: IconBarItem;
   filterInputRef: RefObject<HTMLInputElement | null>;
   /** Id of the viewer's search row, which the search button shows and hides. */
   searchRowId: string;
   previousLogs?: ToggleFeature;
   timestamps?: TimestampsFeature;
-};
-
-const downloadIconFeedback = (feedback: DownloadFeedback): 'success' | 'error' | null => {
-  if (feedback === 'done') {
-    return 'success';
-  }
-  return feedback === 'error' ? 'error' : null;
 };
 
 // One choice of a cycle button, and the choice a click on the button moves to.
@@ -253,29 +244,9 @@ const displayItems = ({
   return items;
 };
 
-const actionItems = ({
-  options,
-  hasCopyableContent,
-  copyLogs,
-  saveLogs,
-}: LogToolbarOptions): IconBarItem[] => [
+const actionItems = ({ downloadItem }: LogToolbarOptions): IconBarItem[] => [
   { type: 'separator' },
-  {
-    type: 'menu',
-    id: 'download',
-    icon: <DownloadIcon width={18} height={18} />,
-    title: 'Download logs',
-    menuItems: [
-      {
-        label: 'Copy to Clipboard',
-        onClick: copyLogs,
-        tooltip: 'Copy logs to clipboard (Shift+C)',
-      },
-      { label: 'Save to File', onClick: saveLogs },
-    ],
-    disabled: !hasCopyableContent,
-    feedback: downloadIconFeedback(options.downloadFeedback),
-  },
+  downloadItem,
 ];
 
 /** Opens the search row and puts the cursor in its filter box. */

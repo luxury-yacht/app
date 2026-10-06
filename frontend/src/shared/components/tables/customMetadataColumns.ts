@@ -61,34 +61,42 @@ export const defaultCustomMetadataColumnHeader = (metadataKey: string): string =
     .join(' ');
 };
 
+const trimmedString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
+const isCustomMetadataColumnSource = (value: unknown): value is CustomMetadataColumnSource =>
+  value === 'label' || value === 'annotation';
+
+// One saved column definition, or null when it is malformed.
+const parseCustomMetadataColumnDefinition = (
+  candidate: unknown
+): CustomMetadataColumnDefinition | null => {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return null;
+  }
+  const record = candidate as Record<string, unknown>;
+  const metadataKey = trimmedString(record.metadataKey);
+  const header = trimmedString(record.header);
+  if (!isCustomMetadataColumnSource(record.source) || !metadataKey || !header) {
+    return null;
+  }
+  return createCustomMetadataColumnDefinition({ source: record.source, metadataKey, header });
+};
+
+/** Saved column definitions, keeping the valid ones and the first of any repeated column. */
 export const normalizeCustomMetadataColumnDefinitions = (
   value: unknown
 ): CustomMetadataColumnDefinition[] => {
   if (!Array.isArray(value)) {
     return [];
   }
-
-  const definitions: CustomMetadataColumnDefinition[] = [];
-  const seen = new Set<string>();
+  const definitions = new Map<string, CustomMetadataColumnDefinition>();
   for (const candidate of value) {
-    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
-      continue;
+    const definition = parseCustomMetadataColumnDefinition(candidate);
+    if (definition && !definitions.has(definition.key)) {
+      definitions.set(definition.key, definition);
     }
-    const record = candidate as Record<string, unknown>;
-    const source = record.source;
-    const metadataKey = typeof record.metadataKey === 'string' ? record.metadataKey.trim() : '';
-    const header = typeof record.header === 'string' ? record.header.trim() : '';
-    if ((source !== 'label' && source !== 'annotation') || !metadataKey || !header) {
-      continue;
-    }
-    const definition = createCustomMetadataColumnDefinition({ source, metadataKey, header });
-    if (seen.has(definition.key)) {
-      continue;
-    }
-    seen.add(definition.key);
-    definitions.push(definition);
   }
-  return definitions;
+  return Array.from(definitions.values());
 };
 
 const CUSTOM_METADATA_SAMPLE_VALUE_LIMIT = 3;

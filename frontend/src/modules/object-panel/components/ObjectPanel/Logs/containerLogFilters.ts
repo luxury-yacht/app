@@ -2,7 +2,8 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/containerLogFilters.ts
  *
  * Container Logs source filters: container kinds and labels, the pod and container
- * filter values, the source selector's options, and the active filter chips.
+ * filter values, the source selector's options, and the active filter chips
+ * (the search chips come from logSearchChips.ts).
  */
 
 import type { types } from '@core/backend-api/models';
@@ -10,8 +11,13 @@ import type { ActiveFilterChip } from '@shared/components/ActiveFilterChips';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { ALL_MULTISELECT_FILTER } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type React from 'react';
-import type { LogFilterMode } from '../types';
 import { logFilterSelectionLabel } from './logFilterSelection';
+import {
+  buildSearchOptionChips,
+  buildTextFilterChip,
+  type LogSearchChipOptions,
+  optionalActiveFilterChip,
+} from './logSearchChips';
 import type { LogViewerAction } from './logViewerReducer';
 
 export type LogContainerKind = 'regular' | 'init' | 'ephemeral';
@@ -100,30 +106,6 @@ const formatSelectedFilterLabel = (
   return filterValue;
 };
 
-const buildTextFilterChip = (
-  textFilter: string,
-  regexMatches: boolean,
-  hasInvalidRegex: boolean,
-  dispatch: React.Dispatch<LogViewerAction>
-): ActiveFilterChip | null => {
-  const trimmedTextFilter = textFilter.trim();
-  if (!trimmedTextFilter) {
-    return null;
-  }
-  let label = `Text: ${trimmedTextFilter}`;
-  if (regexMatches) {
-    label = hasInvalidRegex
-      ? `Regex: ${trimmedTextFilter} (invalid expression)`
-      : `Regex: ${trimmedTextFilter}`;
-  }
-  return {
-    key: 'text-filter',
-    label,
-    removeLabel: 'Clear text filter',
-    onRemove: () => dispatch({ type: 'SET_TEXT_FILTER', payload: '' }),
-  };
-};
-
 const removeSelectedFilterValue = (selectedValues: string[], filterValue: string) => {
   const values = selectedValues.filter((value) => value !== filterValue);
   return values.length > 0 ? { mode: 'some' as const, values } : ALL_MULTISELECT_FILTER;
@@ -150,36 +132,23 @@ const buildSelectedFilterChips = (
     };
   });
 
-const optionalActiveFilterChip = (
-  enabled: boolean,
-  chip: ActiveFilterChip
-): ActiveFilterChip | null => (enabled ? chip : null);
-
 export const buildActiveLogFilterChips = ({
-  textFilter,
-  regexMatches,
-  hasInvalidRegex,
   showPreviousContainerLogs,
   selectedFilterValues,
   selectorOptionLabelsByValue,
-  filterMode,
-  caseSensitiveMatches,
   dispatch,
   stopPreviousLogs,
-}: {
-  textFilter: string;
-  regexMatches: boolean;
-  hasInvalidRegex: boolean;
+  ...search
+}: Omit<LogSearchChipOptions, 'dispatch'> & {
   showPreviousContainerLogs: boolean;
   selectedFilterValues: string[];
   selectorOptionLabelsByValue: Map<string, string>;
-  filterMode: LogFilterMode;
-  caseSensitiveMatches: boolean;
   dispatch: React.Dispatch<LogViewerAction>;
   stopPreviousLogs: () => void;
 }): ActiveFilterChip[] => {
+  const searchOptions = { ...search, dispatch };
   const chips = [
-    buildTextFilterChip(textFilter, regexMatches, hasInvalidRegex, dispatch),
+    buildTextFilterChip(searchOptions),
     optionalActiveFilterChip(showPreviousContainerLogs, {
       key: 'previous-logs',
       label: 'Showing previous logs',
@@ -187,25 +156,7 @@ export const buildActiveLogFilterChips = ({
       onRemove: stopPreviousLogs,
     }),
     ...buildSelectedFilterChips(selectedFilterValues, selectorOptionLabelsByValue, dispatch),
-    // All lines is the default, so only Filtered and Invert show a chip.
-    optionalActiveFilterChip(filterMode !== 'all', {
-      key: 'filter-mode',
-      label: filterMode === 'filtered' ? 'Filtered' : 'Invert',
-      removeLabel: 'Show all lines',
-      onRemove: () => dispatch({ type: 'SET_FILTER_MODE', payload: 'all' }),
-    }),
-    optionalActiveFilterChip(caseSensitiveMatches, {
-      key: 'case-sensitive',
-      label: 'Match case',
-      removeLabel: 'Disable case-sensitive matching',
-      onRemove: () => dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }),
-    }),
-    optionalActiveFilterChip(regexMatches && !textFilter.trim(), {
-      key: 'regex',
-      label: 'Regex',
-      removeLabel: 'Disable regex matching',
-      onRemove: () => dispatch({ type: 'TOGGLE_REGEX_MATCHES' }),
-    }),
+    ...buildSearchOptionChips(searchOptions),
   ];
   return chips.filter((chip): chip is ActiveFilterChip => chip !== null);
 };
