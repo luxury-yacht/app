@@ -1206,7 +1206,7 @@ describe('LogViewer active pod synchronisation', () => {
       defaultScope
     );
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: false,
@@ -1216,7 +1216,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -1299,7 +1298,7 @@ describe('LogViewer active pod synchronisation', () => {
     try {
       const panelId = 'obj:test:pretty-remount-scroll';
       setLogViewerPrefs(panelId, {
-        selectedFilters: [],
+        selectedFilters: { mode: 'all' },
         autoRefresh: true,
         showTimestamps: true,
         searchOpen: false,
@@ -1309,7 +1308,6 @@ describe('LogViewer active pod synchronisation', () => {
         caseSensitiveMatches: false,
         regexMatches: false,
         displayMode: 'pretty',
-        isParsedView: false,
         expandedRows: [],
         showPreviousContainerLogs: false,
       });
@@ -1671,7 +1669,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('keeps the table view while the log is empty', async () => {
     const panelId = 'obj:test:parsed-while-empty';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: false,
@@ -1681,7 +1679,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'parsed',
-      isParsedView: true,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -2711,7 +2708,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('supports highlighting ANSI-colored log text in the DOM renderer', async () => {
     const panelId = 'obj:test:highlight-ansi';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: false,
@@ -2721,7 +2718,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: true,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -2755,7 +2751,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('supports no-wrap for ANSI-colored log text in the DOM renderer', async () => {
     const panelId = 'obj:test:nowrap-ansi';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: false,
@@ -2765,7 +2761,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -2943,7 +2938,7 @@ describe('LogViewer active pod synchronisation', () => {
       scopeContainer('sidecar'),
     ]);
     setLogViewerPrefs('obj:test:deployment:team-a:api', {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: false,
@@ -2953,7 +2948,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -3221,7 +3215,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('keeps workload metadata links on the entry when a message starts with [a/b]', async () => {
     const panelId = 'obj:test:deployment:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: false,
       searchOpen: false,
@@ -3231,7 +3225,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -3309,7 +3302,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('shows metadata only on the first row of a pretty JSON entry and copies it once', async () => {
     const panelId = 'obj:test:deployment:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: false,
       searchOpen: false,
@@ -3319,7 +3312,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'pretty',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -3484,7 +3476,7 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('highlights matching substrings in visible log text without changing backend params', async () => {
     setLogViewerPrefs('obj:test:highlight', {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: false,
@@ -3494,7 +3486,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -3778,7 +3769,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('rehydrates LogViewer state from logViewerPrefsCache on mount', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: ['pod:web-1'],
+      selectedFilters: { mode: 'some', values: ['pod:web-1'] },
       autoRefresh: false,
       showTimestamps: false,
       searchOpen: true,
@@ -3788,7 +3779,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: ['row-7', 'row-9'],
       showPreviousContainerLogs: false,
     });
@@ -3959,7 +3949,7 @@ describe('LogViewer active pod synchronisation', () => {
     const panelA = 'obj:cluster-a:pod:team-a:api';
     const panelB = 'obj:cluster-b:pod:team-b:web';
     setLogViewerPrefs(panelA, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: false,
@@ -3969,12 +3959,11 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
     setLogViewerPrefs(panelB, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: true,
@@ -3984,7 +3973,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -4000,7 +3988,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('clears the text filter from the filter box and shows every line again', async () => {
     const panelId = 'obj:test:deployment:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: false,
       searchOpen: false,
@@ -4010,7 +3998,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -4047,7 +4034,7 @@ describe('LogViewer active pod synchronisation', () => {
       scopeContainer('app'),
     ]);
     setLogViewerPrefs(panelId, {
-      selectedFilters: ['pod:web-1', 'container:app'],
+      selectedFilters: { mode: 'some', values: ['pod:web-1', 'container:app'] },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: false,
@@ -4057,7 +4044,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: true,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -4078,7 +4064,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('shows invalid regex validation in the regex chip', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: false,
@@ -4088,7 +4074,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: true,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });
@@ -4102,7 +4087,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('shows a previous-logs chip and returns to live logs when it is cleared', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: false,
@@ -4112,7 +4097,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: true,
     });
@@ -4148,7 +4132,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('clears filters and toggles when active filter chips are removed', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: false,
@@ -4158,7 +4142,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: true,
     });
@@ -4268,7 +4251,7 @@ describe('LogViewer active pod synchronisation', () => {
       isInit: false,
     }));
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: false,
@@ -4278,7 +4261,6 @@ describe('LogViewer active pod synchronisation', () => {
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'pretty',
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });

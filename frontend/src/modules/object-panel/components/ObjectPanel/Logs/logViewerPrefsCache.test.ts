@@ -24,7 +24,6 @@ const samplePrefs = (overrides: Partial<LogViewerPrefs> = {}): LogViewerPrefs =>
   caseSensitiveMatches: false,
   regexMatches: false,
   displayMode: 'raw',
-  isParsedView: false,
   expandedRows: [],
   showPreviousContainerLogs: false,
   ...overrides,

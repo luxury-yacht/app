@@ -141,7 +141,7 @@ describe.runIf(process.env.LOGS_BENCHMARK === '1')('Logs tab stream-batch benchm
     const panelId = `obj:benchmark:${bufferSize}:${json}:${displayMode}`;
     eventBus.emit('settings:obj-panel-logs-buffer-size', bufferSize);
     setLogViewerPrefs(panelId, {
-      selectedFilters: [],
+      selectedFilters: { mode: 'all' },
       autoRefresh: true,
       showTimestamps: true,
       searchOpen: false,
@@ -151,7 +151,6 @@ describe.runIf(process.env.LOGS_BENCHMARK === '1')('Logs tab stream-batch benchm
       caseSensitiveMatches: false,
       regexMatches: false,
       displayMode,
-      isParsedView: false,
       expandedRows: [],
       showPreviousContainerLogs: false,
     });

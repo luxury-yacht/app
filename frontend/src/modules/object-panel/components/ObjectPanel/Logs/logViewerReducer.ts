@@ -80,7 +80,6 @@ export const extractLogViewerPrefs = (state: LogViewerState): LogViewerPrefs => 
   caseSensitiveMatches: state.caseSensitiveMatches,
   regexMatches: state.regexMatches,
   displayMode: state.displayMode,
-  isParsedView: state.displayMode === 'parsed',
   expandedRows: Array.from(state.expandedRows),
   showPreviousContainerLogs: state.mode.kind === 'previous',
 });
@@ -105,7 +104,7 @@ export const applyLogViewerPrefs = (
   filterMode: prefs.filterMode,
   caseSensitiveMatches: prefs.caseSensitiveMatches ?? false,
   regexMatches: prefs.regexMatches ?? false,
-  displayMode: prefs.displayMode ?? (prefs.isParsedView ? 'parsed' : 'raw'),
+  displayMode: prefs.displayMode,
   expandedRows: new Set(prefs.expandedRows),
   // Rehydrate into the previous-logs view (not loading — the fetch reprimes on
   // mount); otherwise the default live mode.

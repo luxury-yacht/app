@@ -176,7 +176,6 @@ export interface LogViewerPrefs {
   caseSensitiveMatches: boolean;
   regexMatches: boolean;
   displayMode: LogDisplayMode;
-  isParsedView: boolean;
   expandedRows: string[];
   showPreviousContainerLogs: boolean;
 }
