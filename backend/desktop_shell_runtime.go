@@ -69,45 +69,43 @@ func (s *DesktopShell) emitCurrentWindowEvent(name string, data ...any) {
 	window.EmitEvent(name, data...)
 }
 
+// promptForOpenFile returns the chosen path, or "" when the user dismisses the
+// dialog.
 func (s *DesktopShell) promptForOpenFile(options *application.OpenFileDialogOptions) (string, error) {
 	if s != nil && s.openFileDialog != nil {
-		return s.openFileDialog(options)
+		return dismissedDialogAsEmpty(s.openFileDialog(options))
 	}
 	window, err := s.currentWindowWhenReady()
 	if err != nil {
 		return "", err
 	}
 	options.Window = window
-	return s.application.Dialog.OpenFileWithOptions(options).PromptForSingleSelection()
+	return dismissedDialogAsEmpty(s.application.Dialog.OpenFileWithOptions(options).PromptForSingleSelection())
 }
 
 // promptForSaveFile returns the chosen path, or "" when the user dismisses the
 // dialog.
 func (s *DesktopShell) promptForSaveFile(options *application.SaveFileDialogOptions) (string, error) {
-	var path string
-	var err error
 	if s != nil && s.saveFileDialog != nil {
-		path, err = s.saveFileDialog(options)
-	} else {
-		var window application.Window
-		window, err = s.currentWindowWhenReady()
-		if err != nil {
-			return "", err
-		}
-		options.Window = window
-		path, err = s.application.Dialog.SaveFileWithOptions(options).PromptForSingleSelection()
+		return dismissedDialogAsEmpty(s.saveFileDialog(options))
 	}
-	if isDialogCanceledError(err) {
+	window, err := s.currentWindowWhenReady()
+	if err != nil {
+		return "", err
+	}
+	options.Window = window
+	return dismissedDialogAsEmpty(s.application.Dialog.SaveFileWithOptions(options).PromptForSingleSelection())
+}
+
+// dismissedDialogAsEmpty reports a dismissed native dialog as an empty selection.
+// macOS and Linux already return one with no error; Windows returns Wails'
+// "cancelled by user" error, which Wails does not export, so it is matched by
+// its message.
+func dismissedDialogAsEmpty(path string, err error) (string, error) {
+	if err != nil && strings.Contains(err.Error(), "cancelled by user") {
 		return "", nil
 	}
 	return path, err
-}
-
-// isDialogCanceledError reports a dismissed native dialog. macOS and Linux return an
-// empty selection with no error; Windows returns Wails' "cancelled by user" error,
-// which Wails does not export, so it is matched by its message.
-func isDialogCanceledError(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "cancelled by user")
 }
 
 func (s *DesktopShell) clipboardText() (string, error) {

@@ -9,6 +9,8 @@
 
 export * from './types.generated';
 
+import type { types } from '@core/backend-api/models';
+
 import type {
   BackendDomainPayloadMap,
   CanonicalResourceRef,
@@ -70,6 +72,9 @@ export interface ContainerLogsSnapshotPayload {
   // The pods that have lines in the buffer; the same array until that set
   // changes.
   pods: string[];
+  // The containers that have lines in the buffer, likewise. A container that
+  // started after the view read its container list shows up here first.
+  containers: types.PodContainer[];
 }
 
 export type DomainPayloadMap = BackendDomainPayloadMap & {

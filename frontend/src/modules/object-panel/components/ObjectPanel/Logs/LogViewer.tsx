@@ -15,7 +15,6 @@ import {
   isNarrowingFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import React, { useCallback, useEffect, useId, useMemo, useReducer, useRef } from 'react';
-import { readContainerLogsScopeContainers, requestData } from '@/core/data-access';
 import { useContainerLogsStream } from './hooks/useContainerLogsStream';
 import { useLogDownloadActions, useLogSelectionCopy } from './hooks/useLogDownloadActions';
 import { useLogFiltering } from './hooks/useLogFiltering';
@@ -71,6 +70,7 @@ import {
 import { getWorkloadPodNames, useActivePodSet, useHiddenPods } from './hooks/useActivePodSet';
 import { useAnchoredLogEntries } from './hooks/useAnchoredLogEntries';
 import { useLogMessageRenderer } from './hooks/useLogMessageRenderer';
+import { containersOfEntries, useLogScopeContainers } from './hooks/useLogScopeContainers';
 import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
 import {
   type BackendLogSelection,
@@ -148,21 +148,6 @@ type LogEmptyState =
 
 type ContainerLogsSnapshotState = DomainSnapshotState<ContainerLogsSnapshotPayload>;
 
-const requestLogScopeContainers = async (
-  clusterId: string,
-  scope: string
-): Promise<types.PodContainer[]> => {
-  const result = await requestData({
-    resource: 'log-scope-containers',
-    reason: 'startup',
-    adapter: 'rpc-read',
-    label: 'Log Scope Containers',
-    scope,
-    read: () => readContainerLogsScopeContainers(clusterId, scope),
-  });
-  return result.status === 'executed' ? (result.data ?? []) : [];
-};
-
 const syncContainerLogsScope = ({
   scope,
   previousScopeRef,
@@ -189,6 +174,7 @@ type LiveContainerLogs = {
   issues: ContainerLogsTargetIssue[];
   truncation: ContainerLogsSnapshotPayload['truncation'];
   pods: string[];
+  containers: types.PodContainer[];
   // A snapshot has been delivered at least once for this scope.
   hasSnapshot: boolean;
 };
@@ -200,6 +186,7 @@ const NO_LIVE_LOGS: LiveContainerLogs = {
   issues: [],
   truncation: null,
   pods: [],
+  containers: [],
   hasSnapshot: false,
 };
 
@@ -218,6 +205,7 @@ const getLiveContainerLogs = (
     issues: data.issues,
     truncation: data.truncation,
     pods: data.pods,
+    containers: data.containers,
     hasSnapshot: data.resetCount > 0,
   };
 };
@@ -241,8 +229,9 @@ const liveLoadingMessage = (phase: ContainerLogsStreamPhase | null): string =>
 
 type LogViewerSource = {
   entries: ContainerLogsEntry[];
-  // The pods that have lines in the source.
+  // The pods and containers that have lines in the source.
   pods: readonly string[];
+  containers: readonly types.PodContainer[];
   issues: ContainerLogsTargetIssue[];
   notices: string[];
   // Logs shown once the buffer has dropped some (null while it has room); the
@@ -268,13 +257,17 @@ const resolveLogViewerSource = ({
   showPreviousContainerLogs: boolean;
   hasScope: boolean;
   live: LiveContainerLogs;
-  previous: PreviousContainerLogs & { pods: readonly string[] };
+  previous: PreviousContainerLogs & {
+    pods: readonly string[];
+    containers: readonly types.PodContainer[];
+  };
   streamExpected: boolean;
 }): LogViewerSource => {
   if (showPreviousContainerLogs) {
     return {
       entries: previous.entries,
       pods: previous.pods,
+      containers: previous.containers,
       issues: previous.issues,
       notices: buildContainerLogNotices({
         phase: null,
@@ -294,6 +287,7 @@ const resolveLogViewerSource = ({
   return {
     entries: live.entries,
     pods: live.pods,
+    containers: live.containers,
     issues: live.issues,
     notices: buildContainerLogNotices(live),
     bufferFullShown: live.truncation?.shown ?? null,
@@ -368,11 +362,13 @@ const shouldShowPausedLogEmptyState = ({
   entryCount === 0 &&
   !showPreviousContainerLogs;
 
-const hasCopyableContainerLogs = (
+// The logs shown: table rows in the Table view, which has rows only for JSON
+// lines, and the filtered lines otherwise.
+const shownContainerLogCount = (
   isParsedView: boolean,
   parsedCount: number,
   filteredCount: number
-): boolean => (isParsedView ? parsedCount > 0 : filteredCount > 0);
+): number => (isParsedView ? parsedCount : filteredCount);
 
 const hasActiveLogResultFilter = (
   selectedFilters: Parameters<typeof isNarrowingFilterSelection>[0],
@@ -561,16 +557,28 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     () => Array.from(new Set(previous.entries.map((entry) => entry.pod))),
     [previous.entries]
   );
+  const previousContainers = useMemo(
+    () => containersOfEntries(previous.entries),
+    [previous.entries]
+  );
   const source = useMemo(
     () =>
       resolveLogViewerSource({
         showPreviousContainerLogs,
         hasScope: Boolean(containerLogsScope),
         live,
-        previous: { ...previous, pods: previousPods },
+        previous: { ...previous, pods: previousPods, containers: previousContainers },
         streamExpected,
       }),
-    [containerLogsScope, live, previous, previousPods, showPreviousContainerLogs, streamExpected]
+    [
+      containerLogsScope,
+      live,
+      previous,
+      previousContainers,
+      previousPods,
+      showPreviousContainerLogs,
+      streamExpected,
+    ]
   );
   const hiddenPods = useHiddenPods(source.entries, activePods);
 
@@ -868,11 +876,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     options: displayOptions,
   });
 
-  const hasCopyableContent = hasCopyableContainerLogs(
+  const shownLogCount = shownContainerLogCount(
     isParsedView,
     parsedRows.length,
     filteredEntries.length
   );
+  const hasCopyableContent = shownLogCount > 0;
   const hasLogs = logEntries.length > 0;
   const hasAnsiLogEntries = useMemo(
     () => logEntries.some((entry) => containsAnsi(entry.line)),
@@ -906,35 +915,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [handleSelectContainerFilter, handleSelectPodFilter, podColors, renderMessageContent]
   );
 
-  // Fetch container inventory for the current log scope.
-  useEffect(() => {
-    // Keep the inventory recheck on pod/workload transitions.
-    void isWorkload;
-    if (!containerLogsScope) {
-      dispatch({ type: 'SET_CONTAINERS', payload: [] });
-      return;
-    }
-
-    let isCancelled = false;
-    void requestLogScopeContainers(resolvedClusterId, containerLogsScope)
-      .then((containerList) => {
-        if (isCancelled) {
-          return;
-        }
-        dispatch({ type: 'SET_CONTAINERS', payload: containerList });
-      })
-      .catch((err) => {
-        if (isCancelled) {
-          return;
-        }
-        console.warn('Failed to fetch containers:', err);
-        dispatch({ type: 'SET_CONTAINERS', payload: [] });
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [isWorkload, containerLogsScope, resolvedClusterId]);
+  useLogScopeContainers({
+    clusterId: resolvedClusterId,
+    scope: containerLogsScope,
+    isWorkload,
+    containers,
+    heldContainers: source.containers,
+    dispatch,
+  });
 
   const { resumeTailFollowing } = useLogScrollRestoration({
     rootRef: logsContentRef,
@@ -1067,7 +1055,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       controls={controls}
       activeFilterChips={activeFilterChips}
       clearAllFilters={handleClearAllFilters}
-      logCount={renderLogCount(filteredEntries.length, logEntries.length, hasActiveResultFilter)}
+      logCount={renderLogCount(shownLogCount, logEntries.length, hasActiveResultFilter)}
       visibleLogWarnings={visibleLogWarnings}
       logsContentRef={logsContentRef}
       renderedLogContent={renderedLogContent}

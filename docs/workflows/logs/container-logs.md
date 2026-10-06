@@ -27,6 +27,12 @@ Panel. They are not Application Logs and they are not Node Logs.
   container, or no selection and a single container in the inventory, leaves
   it out (`shouldDisplayPodContainerMetadata`). The table always keeps its
   Container column.
+- The container inventory is read when the scope opens and again when the
+  shown logs hold a container it lacks, such as a debug container or a sidecar
+  a rollout added (`useLogScopeContainers`). The stream buffer lists the
+  containers it holds, kept up to date as entries come and go like its pods, so
+  the view compares only when that set changes. Each missing container is read
+  for once per scope, so one that never appears in the inventory cannot loop.
 - Previous logs, history size, follow, timestamps, and target caps are backend
   log query concerns.
 - Live logs come only from the stream; there is no fetch fallback and no

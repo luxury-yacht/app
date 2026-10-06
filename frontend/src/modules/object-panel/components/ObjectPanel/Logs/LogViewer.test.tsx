@@ -357,6 +357,18 @@ const seedLogSnapshot = (
       issues: overrides.issues ?? [],
       truncation: overrides.truncation ?? null,
       pods: Array.from(new Set(entries.map((entry) => entry.pod))),
+      containers: Array.from(
+        new Map(
+          entries.map((entry) => [
+            `${entry.container}|${entry.isInit}|${Boolean(entry.isEphemeral)}`,
+            {
+              name: entry.container,
+              isInit: entry.isInit,
+              isEphemeral: Boolean(entry.isEphemeral),
+            },
+          ])
+        ).values()
+      ),
     },
     stats: null,
     error: overrides.error ?? null,
@@ -1556,6 +1568,103 @@ describe('LogViewer active pod synchronisation', () => {
     expect(filteredMetadataSpans.some((span) => span.textContent?.includes('[app]'))).toBe(false);
   });
 
+  // A container that starts after the tab opens (a debug container, or a sidecar
+  // from a rollout) is read into the container list when its first line
+  // arrives, so its lines name it and the Containers dropdown offers it.
+  it('reads the container list again when a line comes from a container it lacks', async () => {
+    const containersMock = GetContainerLogsScopeContainers as unknown as ViMock;
+    const scope = buildContainerLogsScope('team-a:/v1:pod:api-pod-0');
+    const appLine = {
+      pod: 'api-pod-0',
+      container: 'app',
+      line: 'app line',
+      timestamp: '2024-05-01T10:00:00Z',
+      isInit: false,
+    };
+    const debugLine = (line: string, timestamp: string) => ({
+      pod: 'api-pod-0',
+      container: 'debugger',
+      line,
+      timestamp,
+      isInit: false,
+      isEphemeral: true,
+    });
+    const metadata = () =>
+      Array.from(container.querySelectorAll('.log-viewer-line .log-viewer-metadata')).map((span) =>
+        span.textContent?.trim()
+      );
+    seedLogSnapshot([appLine], scope);
+    await renderViewer({ resourceKind: 'pod' });
+    await waitForMockCalls(containersMock, 1);
+    // One container, so lines don't name it.
+    expect(metadata()).not.toContain('[app]');
+
+    containersMock.mockResolvedValue([scopeContainer('app'), scopeContainer('debugger', 'debug')]);
+    seedLogSnapshot([appLine, debugLine('attached', '2024-05-01T10:00:01Z')], scope);
+    await renderViewer({ resourceKind: 'pod' });
+    await waitForMockCalls(containersMock, 2);
+    await flushAsync();
+    expect(metadata()).toContain('[app]');
+    expect(metadata()).toContain('[debugger (debug)]');
+    const containerSelect = requireValue(
+      container.querySelector<HTMLSelectElement>('[data-testid="logs-containers-dropdown"]'),
+      'expected the containers dropdown'
+    );
+    expect(Array.from(containerSelect.options).map((option) => option.value)).toContain(
+      'debug:debugger'
+    );
+
+    // More lines from listed containers don't read it again.
+    seedLogSnapshot(
+      [
+        appLine,
+        debugLine('attached', '2024-05-01T10:00:01Z'),
+        debugLine('more', '2024-05-01T10:00:02Z'),
+      ],
+      scope
+    );
+    await renderViewer({ resourceKind: 'pod' });
+    await flushAsync();
+    expect(containersMock).toHaveBeenCalledTimes(2);
+  });
+
+  // A container the list still lacks after a reread (its pod ended, or the read
+  // failed) is not read for again.
+  it('reads the container list at most once for each container it lacks', async () => {
+    const containersMock = GetContainerLogsScopeContainers as unknown as ViMock;
+    const scope = buildContainerLogsScope('team-a:/v1:pod:api-pod-0');
+    const line = (text: string, timestamp: string, name: string) => ({
+      pod: 'api-pod-0',
+      container: name,
+      line: text,
+      timestamp,
+      isInit: false,
+    });
+    seedLogSnapshot([line('one', '2024-05-01T10:00:00Z', 'app')], scope);
+    await renderViewer({ resourceKind: 'pod' });
+    await waitForMockCalls(containersMock, 1);
+
+    seedLogSnapshot(
+      [line('one', '2024-05-01T10:00:00Z', 'app'), line('two', '2024-05-01T10:00:01Z', 'gone')],
+      scope
+    );
+    await renderViewer({ resourceKind: 'pod' });
+    await waitForMockCalls(containersMock, 2);
+    await flushAsync();
+
+    seedLogSnapshot(
+      [
+        line('one', '2024-05-01T10:00:00Z', 'app'),
+        line('two', '2024-05-01T10:00:01Z', 'gone'),
+        line('three', '2024-05-01T10:00:02Z', 'gone'),
+      ],
+      scope
+    );
+    await renderViewer({ resourceKind: 'pod' });
+    await flushAsync();
+    expect(containersMock).toHaveBeenCalledTimes(2);
+  });
+
   // An empty log (reconnecting, or switching to previous logs) says nothing
   // about whether the lines are JSON, so the table view stays on until lines
   // arrive that are not.
@@ -2078,6 +2187,53 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
     expect(strip()).toBeNull();
+  });
+
+  // The Table view has a row only for JSON lines, so its count is of table rows,
+  // as in Node Logs.
+  it('counts table rows, not filtered lines, in the Table view', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: '{"level":"error","message":"db down"}',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'error: disk full',
+        timestamp: '2024-05-01T11:00:01Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: '{"level":"info","message":"ok"}',
+        timestamp: '2024-05-01T11:00:02Z',
+        isInit: false,
+      },
+    ]);
+    await renderViewer();
+    await openSearch();
+    const input = requireValue(
+      container.querySelector<HTMLInputElement>('input[placeholder="Filter"]'),
+      'expected the filter box'
+    );
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setValue?.call(input, 'error');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await chooseFilterMode('Filtered');
+    const count = () =>
+      container.querySelector('[aria-label="Active log filters"] .logs-viewer-count')?.textContent;
+    expect(count()).toBe('2/3 logs');
+
+    await showLogFormat('Table');
+    expect(count()).toBe('1/3 logs');
   });
 
   it('disables search, timestamps and wrap, and their shortcuts, until a log line arrives', async () => {
