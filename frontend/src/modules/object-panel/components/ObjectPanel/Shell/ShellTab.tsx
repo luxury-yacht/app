@@ -14,7 +14,12 @@ import {
 import { readPodContainers, requestData } from '@/core/data-access';
 import '@xterm/xterm/css/xterm.css';
 import type { types } from '@core/backend-api/models';
-import { type DesktopEventPayload, onEvent, writeClipboardText } from '@core/desktop-runtime';
+import {
+  type DesktopEventPayload,
+  onEvent,
+  readClipboardText,
+  writeClipboardText,
+} from '@core/desktop-runtime';
 import {
   buildObjectActionTarget,
   runCreateDebugContainer,
@@ -176,14 +181,13 @@ function handleShellClipboardKey(
   if (event.type !== 'keydown' || !(event.ctrlKey || event.metaKey)) {
     return true;
   }
-  const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
   const key = event.key.toLowerCase();
   if (key === 'c' && terminal.hasSelection() && copySelection()) {
     event.preventDefault();
     event.stopPropagation();
     return false;
   }
-  if (key === 'v' && clipboard?.readText) {
+  if (key === 'v') {
     event.preventDefault();
     event.stopPropagation();
     void pasteClipboard();
@@ -279,13 +283,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
   }, []);
 
   const pasteClipboardToTerminal = useCallback(async () => {
-    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
-    if (!clipboard?.readText) {
-      return false;
-    }
-
     try {
-      const text = await clipboard.readText();
+      const text = await readClipboardText();
       pasteTextToTerminal(text ?? '');
       return true;
     } catch {

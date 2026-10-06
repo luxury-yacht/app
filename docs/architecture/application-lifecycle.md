@@ -159,6 +159,9 @@ close sequences: [dockable-panels.md](../frontend/dockable-panels.md).
 - Copy with `writeClipboardText`: the WebView refuses click-initiated browser
   clipboard writes, so `navigator.clipboard` fails from a button or menu but
   works from a shortcut. The `no-direct-clipboard-write` Biome plugin enforces it.
+- Paste with `readClipboardText`: the WebView gates `navigator.clipboard`
+  reads behind a "Paste" callout the user must click. The
+  `no-direct-clipboard-read` Biome plugin enforces it.
 
 ## Cluster-owned panel workspaces
 

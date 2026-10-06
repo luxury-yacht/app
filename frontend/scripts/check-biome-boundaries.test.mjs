@@ -85,6 +85,12 @@ describe('Biome architectural boundary plugins', () => {
     ['no-direct-clipboard-write', 'navigator.clipboard?.writeText(text);', 'writeClipboardText'],
     ['no-direct-clipboard-write', 'navigator?.clipboard?.writeText(text);', 'writeClipboardText'],
     ['no-direct-clipboard-write', 'navigator.clipboard?.write([item]);', 'writeClipboardText'],
+    ['no-direct-clipboard-read', 'void navigator.clipboard.readText();', 'readClipboardText'],
+    ['no-direct-clipboard-read', 'void clipboard.readText();', 'readClipboardText'],
+    ['no-direct-clipboard-read', 'void navigator.clipboard.read();', 'readClipboardText'],
+    ['no-direct-clipboard-read', 'void navigator.clipboard?.readText();', 'readClipboardText'],
+    ['no-direct-clipboard-read', 'void navigator?.clipboard?.readText();', 'readClipboardText'],
+    ['no-direct-clipboard-read', 'void navigator.clipboard?.read();', 'readClipboardText'],
     [
       'no-inline-error-text',
       'const loadError = "failed"; const View = () => <div>{loadError}</div>;',
@@ -137,6 +143,7 @@ describe('Biome architectural boundary plugins', () => {
     ['no-direct-permission-read', 'dataAccess.readPermissions();'],
     ['no-direct-refresh-orchestrator', 'dataAccess.refreshContext();'],
     ['no-direct-clipboard-write', 'void writeClipboardText(text);'],
+    ['no-direct-clipboard-read', 'void readClipboardText();'],
   ])('accepts boundary calls outside %s', (pluginName, source) => {
     const result = lintWithPlugin(pluginName, source);
 
@@ -163,6 +170,7 @@ describe('Biome architectural boundary plugins', () => {
     ['orchestrator.triggerManualRefreshForContext({});', 'triggerManualRefreshForContext'],
     ['console.error("load failed", error);', 'errorHandler'],
     ['void navigator.clipboard.writeText("copied");', 'writeClipboardText'],
+    ['void navigator.clipboard.readText();', 'readClipboardText'],
   ])('rejects forbidden calls through the real project config', (source, diagnostic) => {
     const result = lintWithProjectConfig(source);
 

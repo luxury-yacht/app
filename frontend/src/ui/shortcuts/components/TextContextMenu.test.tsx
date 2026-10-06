@@ -8,7 +8,7 @@
 
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 import TextContextMenu from './TextContextMenu';
 
@@ -28,12 +28,14 @@ vi.mock('@shared/components/ContextMenu', () => ({
 }));
 
 const clipboardMocks = vi.hoisted(() => ({
+  readClipboardText: vi.fn<() => Promise<string>>(() => Promise.resolve('')),
   writeClipboardText: vi.fn<(text: string) => Promise<void>>(() => Promise.resolve()),
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: vi.fn(() => () => undefined),
+  readClipboardText: clipboardMocks.readClipboardText,
   writeClipboardText: clipboardMocks.writeClipboardText,
 }));
 
@@ -264,6 +266,53 @@ describe('TextContextMenu', () => {
     );
     expect(writeTextSpy).toHaveBeenCalledWith('copied');
     span.remove();
+  });
+
+  it('Paste inserts native clipboard text into the editable target', async () => {
+    clipboardMocks.readClipboardText.mockResolvedValueOnce('pasted');
+    const browserReadText = vi.fn(() => Promise.resolve('browser'));
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { readText: browserReadText },
+    });
+    // jsdom has no editing commands; record what the menu asks the editor to insert.
+    const execCommand = vi.fn(() => true);
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: execCommand });
+    onTestFinished(() => {
+      Reflect.deleteProperty(document, 'execCommand');
+      if (originalClipboard) {
+        Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      } else {
+        Reflect.deleteProperty(navigator, 'clipboard');
+      }
+    });
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    document.body.appendChild(input);
+
+    clearSelection();
+    act(() => fireContextMenu(input));
+
+    const pasteItem = requireValue(
+      capturedMenuProps,
+      'expected test value in TextContextMenu.test.tsx'
+    ).items.find((i) => i.label === 'Paste');
+    await act(async () => {
+      requireValue(
+        requireValue(pasteItem, 'expected test value in TextContextMenu.test.tsx').onClick,
+        'expected test value in TextContextMenu.test.tsx'
+      )();
+      await Promise.resolve();
+    });
+
+    // The WebView gates navigator.clipboard.readText behind a "Paste" callout the
+    // user must click; menu paste must read through the native clipboard.
+    expect(browserReadText).not.toHaveBeenCalled();
+    expect(execCommand).toHaveBeenCalledWith('insertText', false, 'pasted');
+    expect(document.activeElement).toBe(input);
+    input.remove();
   });
 
   it('Select All calls input.select() for input elements', () => {

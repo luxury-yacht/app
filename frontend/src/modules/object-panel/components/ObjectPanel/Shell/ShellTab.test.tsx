@@ -150,11 +150,13 @@ vi.mock('@utils/errorHandler', () => ({
 }));
 
 const nativeClipboardMocks = vi.hoisted(() => ({
+  readClipboardText: vi.fn<() => Promise<string>>(),
   writeClipboardText: vi.fn<(text: string) => Promise<void>>(),
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
+  readClipboardText: nativeClipboardMocks.readClipboardText,
   writeClipboardText: nativeClipboardMocks.writeClipboardText,
   onEvent: (name: string, handler: (payload: unknown) => void) => {
     eventRegistry.handlers[name] = handler;
@@ -257,6 +259,7 @@ describe('ShellTab', () => {
       }
     }
     globalThis.ResizeObserver = TestResizeObserver;
+    nativeClipboardMocks.readClipboardText.mockReset().mockResolvedValue('');
     nativeClipboardMocks.writeClipboardText.mockReset().mockResolvedValue(undefined);
     const clipboardMock = {
       readText: vi.fn().mockResolvedValue(''),
@@ -419,9 +422,7 @@ describe('ShellTab', () => {
     clickConnectButton();
 
     const terminal = getLatestTerminal();
-    (navigator.clipboard.readText as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      'echo hello\n'
-    );
+    nativeClipboardMocks.readClipboardText.mockResolvedValueOnce('echo hello\n');
 
     const event = {
       type: 'keydown',
@@ -435,7 +436,9 @@ describe('ShellTab', () => {
     const handled = terminal?.triggerKey?.(event);
     await flushAsync();
 
-    expect(navigator.clipboard.readText).toHaveBeenCalled();
+    // The WebView gates navigator.clipboard.readText behind a "Paste" callout the
+    // user must click; shell paste must read through the native clipboard.
+    expect(navigator.clipboard.readText).not.toHaveBeenCalled();
     expect(terminal?.paste).toHaveBeenCalledWith('echo hello\n');
     expect(event.preventDefault).toHaveBeenCalled();
     expect(event.stopPropagation).toHaveBeenCalled();
@@ -481,9 +484,7 @@ describe('ShellTab', () => {
     clickConnectButton();
 
     const terminal = getLatestTerminal();
-    (navigator.clipboard.readText as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      'kubectl logs pod-1\n'
-    );
+    nativeClipboardMocks.readClipboardText.mockResolvedValueOnce('kubectl logs pod-1\n');
 
     const wrapper = container.querySelector(
       '.shell-tab__terminal-wrapper'
@@ -510,7 +511,7 @@ describe('ShellTab', () => {
       await Promise.resolve();
     });
 
-    expect(navigator.clipboard.readText).toHaveBeenCalled();
+    expect(navigator.clipboard.readText).not.toHaveBeenCalled();
     expect(terminal?.paste).toHaveBeenCalledWith('kubectl logs pod-1\n');
   });
 

@@ -1,0 +1,19 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+// Clipboard reads go through the native desktop clipboard in core/desktop-runtime. The app's
+// WebView gates browser clipboard reads behind a "Paste" callout the user must click before
+// anything is pasted.
+or {
+  `$receiver.readText($...)`,
+  `$receiver?.readText($...)`,
+  `$receiver.clipboard.read($...)`,
+  `$receiver.clipboard?.read($...)`,
+  `$receiver?.clipboard?.read($...)`
+} as $call where {
+  register_diagnostic(
+    span = $call,
+    message = "Read from the clipboard with readClipboardText from @core/desktop-runtime.",
+    severity = "error"
+  )
+}

@@ -222,6 +222,11 @@
       "includes": ["**/src/**/*.{ts,tsx}", "!**/src/**/*.test.*", "!**/src/**/*.stories.*"]
     },
     {
+      // Clipboard reads use the native desktop clipboard; the WebView gates browser reads behind a Paste callout.
+      "path": "./biome-plugins/no-direct-clipboard-read.grit",
+      "includes": ["**/src/**/*.{ts,tsx}", "!**/src/**/*.test.*", "!**/src/**/*.stories.*"]
+    },
+    {
       // Caught operational failures cross one boundary so the original exception is reportable.
       "path": "./biome-plugins/no-direct-console-error.grit",
       "includes": [
