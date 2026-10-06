@@ -922,6 +922,39 @@ describe('AppLogsPanel', () => {
     cleanup();
   });
 
+  // Every Download button, table or log, is busy while a choice runs, so a save
+  // dialog left open can't be stacked with another.
+  it('keeps the Download button busy while a save is in progress', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
+    ]);
+    let finishSave: ((result: { path: string }) => void) | undefined;
+    saveLogFileMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishSave = resolve;
+        })
+    );
+
+    const { container, cleanup } = await renderPanel();
+    await flushInitialLoad();
+    const downloadButton = () =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Download logs"]');
+
+    await chooseDownload(container, 'Save to File');
+    expect(downloadButton()?.disabled).toBe(true);
+
+    await act(async () => {
+      finishSave?.({ path: '/tmp/app.log' });
+      await Promise.resolve();
+    });
+    expect(downloadButton()?.disabled).toBe(false);
+    expect(downloadButton()?.classList.contains('feedback-success')).toBe(true);
+
+    cleanup();
+  });
+
   it('clears pending download feedback timers on unmount', async () => {
     vi.useFakeTimers();
     getAppLogsMock.mockResolvedValue([

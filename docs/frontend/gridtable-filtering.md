@@ -29,8 +29,10 @@ placement and zoom follow [interaction boundaries](gridtable-interaction.md#inte
 - Search ignores letter case on every table, local and query-backed; there is
   no case-sensitive option. Saved table state and favorites that still carry the
   old `caseSensitive` flag load normally and drop it.
-- The Download button's menu (`useGridTableDownloadAction`) copies the rows to
-  the clipboard as CSV or saves them to a CSV file. Both take every matching row
+- The Download button's menu (`useGridTableDownloadAction`, on the shared
+  `@shared/hooks/useDownloadMenu` that log views also use) copies the rows to
+  the clipboard as CSV or saves them to a CSV file. It is busy while a choice
+  runs, then flashes success or error; a canceled save changes nothing. Both take every matching row
   when the view supplies `fetchAllRows`, and otherwise the local filtered rows.
   Its label says "all matching rows" unless the rows are a backend page without
   `fetchAllRows` or a partial window (`partialDataLabel`), which say "visible

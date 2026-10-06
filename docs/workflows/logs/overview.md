@@ -76,8 +76,9 @@ keeps its own source selection and transport.
 - `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts. `T` (timestamps) and
   `V` (previous logs) exist only when the viewer passes those features.
 - `@shared/hooks/useLogDownloadMenu.tsx`: the Download button of every log
-  view, App Logs included: Copy to Clipboard and Save to File, with its own
-  success or error feedback. Both choices take the same text: CSV in Table view,
+  view, App Logs included, on the shared `useDownloadMenu` that tables also use
+  (busy while a choice runs, then success or error feedback). Both choices take
+  the same text: CSV in Table view,
   saved as a .csv file, and the shown lines otherwise, saved as a .log file.
   `Shift+C` still copies in Container and Node Logs. Failures are reported, never
   swallowed. `hooks/useLogSelectionCopy.ts` copies a text selection.

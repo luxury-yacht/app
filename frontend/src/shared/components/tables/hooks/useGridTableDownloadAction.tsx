@@ -1,21 +1,21 @@
 /**
  * frontend/src/shared/components/tables/hooks/useGridTableDownloadAction.tsx
  *
- * The table toolbar's Download button. Its menu copies the table's rows to the
- * clipboard as CSV or saves them to a CSV file. Both take every matching row when
- * the view can fetch all pages, and otherwise the rows the table holds.
+ * The table toolbar's Download button (useDownloadMenu). Its menu copies the
+ * table's rows to the clipboard as CSV or saves them to a CSV file. Both take
+ * every matching row when the view can fetch all pages, and otherwise the rows
+ * the table holds.
  */
 
 import { saveCsvFile } from '@core/data-access';
 import { writeClipboardText } from '@core/desktop-runtime';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { DownloadIcon } from '@shared/components/icons/SharedIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { buildGridTableCsv } from '@shared/components/tables/gridTableCsv';
+import { useDownloadMenu } from '@shared/hooks/useDownloadMenu';
 import { buildExportFilename, type DownloadOutcome } from '@shared/utils/exportFilename';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
-import { useGridTableExportAction } from './useGridTableExportAction';
 
 interface UseGridTableDownloadActionOptions<T> {
   data: T[];
@@ -78,23 +78,13 @@ export function useGridTableDownloadAction<T>({
     };
   }, [buildCsv, defaultFilename]);
 
-  const { feedback, exporting, run } = useGridTableExportAction();
-  const title = allMatchingRows ? 'Download all matching rows' : 'Download visible rows';
-
-  return useMemo<IconBarItem>(
-    () => ({
-      type: 'menu',
-      id: 'download-gridtable-csv',
-      icon: <DownloadIcon width={18} height={18} />,
-      title,
-      ariaLabel: title,
-      menuItems: [
-        { label: 'Copy to Clipboard', onClick: () => void run('copyCsv', copyToClipboard) },
-        { label: 'Save to File', onClick: () => void run('exportCsvFile', saveToFile) },
-      ],
-      disabled: data.length === 0 || !columns?.length || exporting,
-      feedback,
-    }),
-    [columns?.length, copyToClipboard, data.length, exporting, feedback, run, saveToFile, title]
-  );
+  const { downloadItem } = useDownloadMenu({
+    id: 'download-gridtable-csv',
+    title: allMatchingRows ? 'Download all matching rows' : 'Download visible rows',
+    disabled: data.length === 0 || !columns?.length,
+    copy: copyToClipboard,
+    save: saveToFile,
+    report: { source: 'GridTable', copy: 'copyCsv', save: 'exportCsvFile' },
+  });
+  return downloadItem;
 }
