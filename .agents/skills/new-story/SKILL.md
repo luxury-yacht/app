@@ -5,28 +5,27 @@ description: Generate a Storybook story for a component using real components an
 
 # New Story
 
-Generate a Storybook story for a given component.
-
-## Arguments
-
-`/new-story <ComponentPath>` — path to the component (e.g. `frontend/src/ui/modals/MyModal.tsx`)
+`/new-story <ComponentPath>` (e.g. `frontend/src/ui/modals/MyModal.tsx`)
+creates `<ComponentName>.stories.tsx` next to the component.
 
 ## Rules
 
-1. **Use real components.** Import and render the actual component. Never approximate with inline styles.
-2. **Use real CSS classes.** If you need wrapper markup, use the project's actual CSS classes — never inline styles that mimic them.
-3. **Mock only data, not rendering.** Mock Go backend calls via `window.__storybookGoOverrides`, mock props with realistic data. Never mock the component's visual output.
-4. **Trace ALL hook dependencies before writing.** Read the component and every hook it uses. Identify which providers are needed. Don't discover them one crash at a time.
-5. **Use existing decorators.** Check `frontend/.storybook/decorators/` for providers:
-   - `SidebarProvidersDecorator` — KubeconfigProvider + NamespaceProvider
-   - `AppearanceModeProviderDecorator` — appearance mode context
-   - `KeyboardProviderDecorator` — keyboard shortcuts
-   - `KubeconfigProviderDecorator` — kubeconfig only
-   - `ZoomProviderDecorator` — zoom context
-6. **Use existing mocks.** Check `frontend/.storybook/mocks/` for Go backend mocks (`wailsBackendApp.ts`, `wailsBackendSettings.ts`, `wailsModels.ts`).
-7. **Production ownership.** Implement behavior and appearance changes in production code; stories verify them.
-8. **Story file location.** Place the `.stories.tsx` file next to the component it tests.
-9. **Multiple stories per file.** Create stories for the main states: default, loading, error, empty, and any interesting prop variations.
+1. Render the real component. Wrapper markup uses the project's real CSS
+   classes; never approximate with inline styles.
+2. Mock only data, never rendering: realistic props, and Go backend calls via
+   `window.__storybookBackendOverrides` (installed by `frontend/.storybook/preview.ts`).
+3. Before writing, read the component and every hook it uses to list the
+   providers it needs instead of discovering them one crash at a time.
+4. Reuse `frontend/.storybook/decorators/`: `SidebarProvidersDecorator`
+   (Kubeconfig + Namespace providers), `AppearanceModeProviderDecorator`,
+   `KeyboardProviderDecorator`, `KubeconfigProviderDecorator`,
+   `ZoomProviderDecorator`.
+5. Reuse backend mocks in `frontend/.storybook/mocks/` (`wailsBackendApp.ts`,
+   `wailsBackendSettings.ts`).
+6. Behavior and appearance changes belong in production code; stories only
+   verify them.
+7. Cover the main states: default, loading, error, empty, and notable prop
+   variations.
 
 ## Template
 
@@ -39,7 +38,6 @@ Generate a Storybook story for a given component.
 
 import type { Meta, StoryObj } from '@storybook/react';
 import <ComponentName> from './<ComponentName>';
-// import decorators as needed
 
 const meta: Meta<typeof <ComponentName>> = {
   title: '<Category>/<ComponentName>',
@@ -60,6 +58,4 @@ export const Default: Story = {
 
 ## Verification
 
-After creating the story, run
-`mise exec -- npm run typecheck --prefix frontend` to confirm it compiles without
-errors.
+Run `mise exec -- npm run typecheck --prefix frontend`.

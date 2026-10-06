@@ -1,124 +1,103 @@
 # Large Data Producer Reference
 
-Use for changes to a named resource family, or an audit of the producer and
-consumer paths. Search for the affected family; do not load this inventory for
-local column or styling work. Shared rules live in [large data](large-data.md).
+Per-family producer and consumer facts; search for the affected family. Shared
+rules: [large data](large-data.md); query mechanics, including single-namespace
+`baseScope` paging: [query contract](large-data-query.md).
 
-## High-Risk Typed Producer Trace
+- Config, RBAC, storage, network, quotas, autoscaling, and Helm expose typed
+  backend query pages for cluster, all-namespaces, and single-namespace
+  surfaces.
+- Status, Owner, and Node are provider-owned query facets, not fixed
+  typed-query fields; Pods, Workloads, and Nodes publish them as capability
+  descriptors ([query facets](../frontend/gridtable-filtering.md#query-facets)).
+  Their options describe the full structural scope, not the current page or the
+  active selection.
 
-Pods: `backend/refresh/snapshot/pods.go` feeds namespace and all-namespaces pod
-tables. It carries pod identity, status, restart, readiness, node, owner, and
-metrics projection state. All-namespaces Pods are `Query Backed Dynamic`:
-search, namespace/status/node filters, health predicates, pagination, and
-CPU/memory sort are backend-owned for the current metrics snapshot. Status and
-node dropdown options describe the full structural scope rather than the current
-page or selected subset. Pod rows are served from a maintained `querypage` store
-fed by the owned-reflector ingest path (a keyset range scan with exact
-facet/total counters; metrics are overlaid at serve, never stored) — see
-[data-layer.md](./data-layer.md).
+## Pods
 
-Workloads: `backend/refresh/snapshot/namespace_workloads.go` feeds namespace
-workload tables. Both single-namespace and all-namespaces workload tables are
-`Query Backed Dynamic` (single-namespace runs a namespace-scoped query page):
-kind, namespace, and status filters, search, pagination, and CPU/memory aggregate
-sorts are backend-owned for the current metrics snapshot. Status options cover
-the full structural namespace scope and remain available when a Status selection
-or fixed health predicate narrows the result set. Like Pods, workload rows serve
-from a maintained `querypage` store fed by the workload GVRs' ingest reflectors,
-with the pod-aggregate / HPA / metrics join applied at serve — see
-[data-layer.md](./data-layer.md).
+`backend/refresh/snapshot/pods.go` feeds namespace and all-namespaces pod tables
+(identity, status, restarts, readiness, node, owner, metrics projection).
+All-namespaces Pods are `Query Backed Dynamic`: search, namespace/status/node
+filters, health predicates, pagination, and CPU/memory sort are backend-owned
+for the current metrics snapshot. Rows serve from a maintained `querypage` store
+fed by owned-reflector ingest ([data-layer.md](data-layer.md)).
+
+## Workloads
+
+`backend/refresh/snapshot/namespace_workloads.go` feeds single-namespace and
+all-namespaces `Query Backed Dynamic` tables: kind, namespace, and status
+filters, search, pagination, and CPU/memory aggregate sorts are backend-owned.
+Status options stay available when a Status selection or fixed health predicate
+narrows results. Rows serve from a maintained `querypage` store fed by the
+workload GVRs' reflectors; pod aggregates, HPA, and metrics join at serve.
 
 The namespace Workloads destination composes two independent query-backed
-tables: Workloads above and Pods below. Each table retains its own filter,
-sort, cursor pagination, page size, diagnostics, and persisted GridTable state.
-The split starts at 50% and supports pointer and keyboard resizing through a
-handle directly on the pane boundary; it has no separate divider band. The Pods
-pane boundary retains a one-pixel separator so the drag handle remains visible;
-hovering or dragging thickens it to the shared resize highlight. The Pods pane
-can be collapsed from the left edge of its own GridTable filter bar. While
-collapsed, the one-pixel boundary remains and the Pods row becomes a compact
-header containing only the expand control and `Show Pods`; expanding restores
-the full filter bar and table. Pointer resizing cancels native selection at
-gesture start and disables both standard and WebKit text selection for the
-gesture, including while the pointer crosses the native app-window boundary.
-Selecting a Workloads row writes the normal Pods GridTable filters: Namespace
-when the table spans all namespaces, plus the provider-owned Owner facet. Owner
-values carry cluster, group, version, kind, namespace, and name. Deployments
-resolve through ReplicaSets, CronJobs resolve through Jobs, direct owners match
-directly, and an ownerless Pod uses its own core/v1 identity. The projected Pod
-row retains both direct-controller and resolved-ancestor identities; no
-generated name parsing is part of the descendant contract. Manually changing
-Namespace or Owner clears the Workloads row highlight without restoring the
-previous filters. Changing the cluster or pinned namespace while a workload row
-is selected clears that selection's Owner filter before querying the new scope;
-an Owner filter with no active workload selection remains ordinary persisted
-table state. The former standalone Pods navigation value is parsed as Workloads
-for persisted-state compatibility.
+tables, Workloads above Pods, each with its own filter, sort, cursor, page size,
+diagnostics, and persisted GridTable state:
 
-Custom resources: cluster and namespace custom table row universes come from
-the object catalog query path with `customOnly=true`. Search, kind filters,
-sort, paging, counts, and facets for the visible table are owned by the backend
-catalog query contract. The frontend hydrates only the current catalog page
-through `HydrateCatalogCustomRows` to recover status, readiness, conditions,
-labels, and annotations. The retired full-list Custom domains are not registered
-or accepted by resource streams. `cluster-custom` and `namespace-custom` remain
-table-persistence and navigation IDs, so removing the domains does not discard
-saved settings. CSV exports hydrate all matching catalog rows through the same
-live API path; projected catalog membership is not a rich detail payload.
+- The split starts at 50% and resizes by pointer or keyboard through a handle on
+  the pane boundary (no divider band); its one-pixel separator thickens to the
+  shared resize highlight on hover or drag. Pointer resizing cancels native
+  selection at gesture start and disables standard and WebKit text selection for
+  the gesture, including across the native window boundary.
+- The Pods pane collapses from the left edge of its own filter bar; collapsed,
+  the boundary stays and the row shows only the expand control and `Show Pods`.
+- Selecting a Workloads row writes the normal Pods filters: Namespace (when the
+  table spans all namespaces) plus the provider-owned Owner facet, whose values
+  carry full object identity. Deployments resolve through ReplicaSets, CronJobs
+  through Jobs, direct owners match directly, and an ownerless Pod uses its own
+  core/v1 identity. Projected Pod rows keep both direct-controller and
+  resolved-ancestor identities; no generated-name parsing.
+- Manually changing Namespace or Owner clears the row highlight without
+  restoring previous filters. Changing cluster or pinned namespace while a row
+  is selected clears that selection's Owner filter before querying the new
+  scope; an Owner filter without an active selection is ordinary persisted
+  state.
+- The former standalone Pods navigation value parses as Workloads for
+  persisted-state compatibility.
 
-A local Kind measurement on 2026-09-22 used the production ingest subsystem and
-catalog service with real Kubernetes clients, 10,000 additional Widget CRs, and
-default catalog options. After initial collection and watch readiness, changing
-the Widget CRD's short names triggered a warm full resync. That pass published
-10,336 objects across 64 resource types in 155 ms; update-to-publication latency
-was 385 ms. Transport counting observed 29 non-CRD LIST requests, 64 permission
-reviews and two discovery requests, with no custom-resource LIST. The pass
-therefore included API work as well as ingest-memory reads. This single local
-sample supports retaining the shared full-resync contract for that fixture;
-it does not establish latency for remote clusters or aggregated extension APIs,
-which were absent. Re-measure those APIs before justifying partial recollection.
+## Nodes
 
-Events: cluster and namespace event tables use typed backend query pages over
-the current event set and are `Query Backed Static` for table search, filters,
-sort, counts, and cursor pagination. Object-panel events remain object-scoped
-recent/capped windows and are visibly `Local Partial`.
+`backend/refresh/snapshot/nodes.go` feeds a `Query Backed Dynamic` cluster
+table: search, pagination, status filters, age sort, and CPU/memory sorts are
+backend-owned for the current resource and metric projection.
 
-- Both tables share one row projection (`projectEventRow` in
-  `backend/refresh/snapshot/event_rows.go`). Type, source, message, and object
-  carry the Event's own values, empty when it has none, and the Events tables,
-  the Events tab, and Recent Events render the shared empty placeholder; a blank
-  message never repeats the reason. The Event detail panel's status keeps the
-  shared status vocabulary (`Unknown` for an untyped Event). Object Type and
-  Object Name come from the involved object, not from the display text.
-- Every Events surface judges recency and orders by the Event's latest
-  observation (`EventTimestamp` in `backend/resources/events`), which covers
-  `events.k8s.io` series that keep `eventTime` at their first occurrence.
+## Custom resources
+
+- Cluster and namespace custom tables take their row universe from the catalog
+  query with `customOnly=true`; the catalog contract owns search, kind filters,
+  sort, paging, counts, and facets.
+- The frontend hydrates only the current page through `HydrateCatalogCustomRows`
+  (status, readiness, conditions, labels, annotations). CSV export hydrates all
+  matching rows through the same live API path; catalog membership is not a rich
+  detail payload.
+- The full-list Custom domains are retired and not registered or accepted by
+  resource streams. `cluster-custom` and `namespace-custom` remain
+  table-persistence and navigation IDs so saved settings survive.
+- CRD changes trigger the shared full resync; partial recollection is not
+  justified yet ([measurement](large-data-measurements.md#catalog-full-resync)).
+
+## Events
+
+Cluster and namespace event tables are `Query Backed Static` typed query pages
+over the current event set. Object-panel events are object-scoped recent/capped
+windows, visibly `Local Partial`.
+
+- Both tables share `projectEventRow` (`backend/refresh/snapshot/event_rows.go`).
+  Type, source, message, and object carry the Event's own values, empty when
+  absent, rendered with the shared empty placeholder; a blank message never
+  repeats the reason. The Event detail status uses the shared vocabulary
+  (`Unknown` for an untyped Event). Object Type and Object Name come from the
+  involved object, not display text.
+- Every Events surface judges recency and orders by the latest observation
+  (`EventTimestamp` in `backend/resources/events`), covering `events.k8s.io`
+  series that keep `eventTime` at their first occurrence.
 - The object-panel window keeps the most recently observed events when it
-  truncates, and matches the involved object by API group, not version.
+  truncates and matches the involved object by API group, not version.
 - Every Events surface opens an involved object only from the backend's
-  `involvedObject` link, and never guesses a group or version from the kind.
-  Without an openable link, the Events tables, the Events tab, and Recent Events
-  can still open it through a catalog lookup by UID; the Event detail panel shows
-  it as text.
-- Reconcile reports rows it sweeps after a spill restore through the same
-  doorbell as informer deletes, so restored rows for Events that expired while
-  the cluster was Cold leave the tables.
-
-Nodes: `backend/refresh/snapshot/nodes.go` feeds a `Query Backed Dynamic`
-cluster table. Search, pagination, status filters, age sort, and CPU/memory
-metric sorts are backend-owned for the current resource and metric projection
-state. Node Status options cover the full cluster scope rather than the current
-page or active Status selection.
-
-Status, Owner, and Node are provider-owned query facets, not fixed typed-query fields.
-Pods, Workloads, and Nodes publish generic facet descriptors in capabilities;
-their responses pair those descriptors with full-structural-scope option values
-and exactness. The shared request path serializes every selection as
-`facet.<key>`, so adding another provider facet does not require a new GridTable
-state field or view-local filter implementation.
-
-Config, RBAC, storage, network, quotas, autoscaling, and Helm: these snapshot
-producers expose typed backend query pages for cluster, all-namespaces, and
-single-namespace surfaces alike. Single-namespace tables run a namespace-scoped
-query page (`baseScope = namespace:<name>`) rather than a local-complete window,
-so pagination and table semantics match every other scope.
+  `involvedObject` link, never guessing group or version from the kind. Without
+  an openable link, the Events tables, Events tab, and Recent Events fall back
+  to a catalog lookup by UID; the Event detail panel shows it as text.
+- Reconcile reports rows swept after a spill restore through the same doorbell
+  as informer deletes, so rows for Events that expired while the cluster was
+  Cold leave the tables.

@@ -25,6 +25,7 @@
     "sonar:audit": "node scripts/check-typescript-s3776.mjs",
     "sonar:audit:main": "node scripts/check-typescript-s3776.mjs --branch main",
     "sonar:baseline:update": "node scripts/check-typescript-s3776.mjs --branch main --update-baseline",
+    "complexity": "biome lint --config-path=biome.complexity.jsonc",
     "test": "vitest run",
     "knip": "knip",
     "storybook": "storybook dev -p 6006"

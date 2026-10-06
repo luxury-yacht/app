@@ -32,6 +32,5 @@ It exempts `_test.go`, `.test.ts[x]`, `.spec.ts[x]`, documentation, and `.claude
 files so the failing-test step can precede production changes. The analysis
 artifact is ignored by Git.
 
-This is a Claude Code tool prerequisite, not an additional approval requirement.
-Other runtimes still follow the root producer/consumer, ordering, TDD, and
-completion contracts; they do not need to create a Claude-specific artifact.
+This is a Claude Code tool prerequisite, not an additional approval
+requirement; other runtimes do not create the artifact.

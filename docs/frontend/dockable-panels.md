@@ -1,301 +1,254 @@
 # Dockable and Native Panel Windows Contract
 
-Object panels can be docked on the workspace's right or bottom edge, or moved
-as a complete tab group into an ordinary native application window. “Floating”
-is a product action that creates that native window; there is no in-page HTML
-floating, viewport-relative geometry, or blank-space drag. Docked panels retain
-their existing in-page maximize behavior; native panel windows use OS window
-maximize and restore.
+Object panels dock on the workspace's right or bottom edge or move, as a whole
+tab group, into an ordinary native window ("Float"). There is no in-page HTML
+floating, viewport-relative geometry, or blank-space drag. Docked panels keep
+in-page maximize; native panel windows use OS maximize/restore.
 
-## Agent Contract
-
-- Panel tabs preserve complete object identity: `clusterId`, `group`,
-  `version`, `kind`, `namespace`, and `name`.
-- Opening an object goes through the object-panel and native-panel boundaries;
-  feature code must not splice panel location state directly.
-- A shared cluster workspace contains each object or observed identity once
-  across docked, native, and retained placements; every app view accesses that
-  same collection. Identity targets preserve exact User/Group names and carry
-  no object reference. Both target types use the shared `obj:` panel ID prefix
-  for layout preferences; identity IDs encode cluster, subject kind, and name.
-- One native window represents one tab group with immutable
-  `clusterId` and `groupId`. Tabs from different clusters never share a group.
-- Docked and native renderers share the group chrome and object content
-  contract. Native snapshots contain serializable identity and view state, not
-  React nodes, refs, fetched data, credentials, drafts, or terminal buffers.
-- Native panel windows reuse the workspace window chrome: macOS uses the
-  transparent full-size titlebar with native traffic-light controls. Windows
-  and Linux use a frameless window with minimize, maximize/restore, and close
-  controls in the shared `WindowHeader`. Windows keeps WebView2 non-client
-  regions disabled so Wails can handle DOM resizing before dragging. Linux
-  clears the framework's initial internal-name title. The shared `WindowHeader`
-  remains the drag/maximize surface, while the inner
-  `DockablePanelHeader` remains tab and panel controls only. Workspace status,
-  favorites, and command-palette controls do not render in the panel window.
-- The shared directory is authoritative for panel location. A panel renderer is
-  a projection and acknowledges changes through its owner.
-- Transient unmounts such as workspace cluster switches preserve panel refresh
-  state. Actual tab close evicts the current renderer's caches; a committed
-  native handoff also evicts the source renderer's caches after the destination
-  has reconstructed them. Eviction runs after React commits the removal, outside
-  state updater callbacks; replayed renders must not reset shared refresh stores
-  or notify their subscribers during rendering.
-- Menus and other transient surfaces render through their shared body-level
-  portal. Do not weaken scrolling or overflow boundaries to expose them.
+This doc owns renderer placement, handoffs, and close sequences. Backend
+directory, registry transactions, lock ordering, runtime retention, and window
+chrome:
+[application lifecycle](../architecture/application-lifecycle.md#cluster-owned-panel-workspaces).
+Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
+[keyboard.md](keyboard.md).
 
 ## Ownership
 
 - Docked group state and rendering: `frontend/src/ui/dockable`
-- Native protocol, owner coordination, and lifecycle guards:
+- Native protocol, owner coordination, lifecycle guards:
   `frontend/src/core/panel-windows`
-- Object identity, per-cluster directory, and cache eviction:
+- Object identity, per-cluster directory, cache eviction:
   `frontend/src/modules/object-panel`
-- Native role and transfer registry: `internal/appwindow`, with serializable
-  DTOs in `internal/panelwindow`
-- Shared tab behavior: [tabs.md](tabs.md)
-- Keyboard and focus behavior: [keyboard.md](keyboard.md)
-- Native close and application lifecycle:
-  [application-lifecycle.md](../architecture/application-lifecycle.md)
+- Native role and transfer registry: `internal/appwindow`; DTOs:
+  `internal/panelwindow`
 
-## Placement and Uniqueness
+## Contract
 
-- Within each renderer, its cluster-scoped tab groups are the single writable
-  placement projection. Each group owns its size, maximize, and stacking order;
-  tabs own open state. Object state contains local references, active views, and
-  pending native opens. Neither keeps a second dock edge or native-window location index.
-- `useRestoreWorkspacePanels` installs group membership before restoring object
-  content for retained panels, dock-back, panel-tab insertion, and cluster-view
-  insertion. A mounting `DockablePanel` preserves that membership while its
-  open state initializes; the initial closed state must not remove the group.
+- Open objects through the object-panel and native-panel boundaries; feature
+  code must not splice panel location state.
+- A shared cluster workspace holds each object or observed identity once across
+  docked, native, and retained placements; every app view sees it. Identity
+  targets keep exact User/Group names and no object reference. Both target
+  types use the `obj:` panel ID prefix for layout preferences; identity IDs
+  encode cluster, subject kind, and name.
+- One native window holds one same-cluster group; clusters never share a group.
+- Renderers project the shared directory and acknowledge changes through its
+  owner.
+- Docked and native renderers share group chrome and object content. Native
+  snapshots hold serializable identity and view state only: no React nodes,
+  refs, fetched data, credentials, drafts, or terminal buffers.
+- Panel windows reuse workspace chrome: `WindowHeader` is the drag/maximize
+  surface; `DockablePanelHeader` holds only tab and panel controls. Workspace
+  status, favorites, and command palette never render there.
+- Every panel header shows its cluster name (else cluster ID; duplicate names
+  add the ID), with full identity in a tooltip when truncated.
+- Transient unmounts (such as cluster switches) preserve panel refresh state.
+  Tab close evicts the current renderer's caches; a committed native handoff
+  evicts the source's caches after the destination reconstructs. Evict after
+  React commits the removal, outside state updaters; replayed renders must not
+  reset shared refresh stores or notify subscribers.
+- Menus and transient surfaces use their shared body-level portal; never weaken
+  scrolling or overflow boundaries to expose them.
+
+## Placement and uniqueness
+
+- Each renderer's cluster-scoped tab groups are its single writable placement
+  projection: groups own size, maximize, and stacking; tabs own open state;
+  object state holds local references, active views, and pending native opens.
+  No second dock-edge or native-window index.
+- `useRestoreWorkspacePanels` installs group membership before restoring content
+  for retained panels, dock-back, panel-tab insertion, and cluster-view
+  insertion. A mounting `DockablePanel` keeps that membership; its initial
+  closed state must not remove the group.
 - `PanelLayoutLifecycle` releases tab state and membership after committed
-  object removal in both renderer roles. Dock geometry stays with its group
-  through sibling closes, reorders, and cluster switches. An empty dock retains
-  its size but releases maximize. Applying object-panel size settings updates
-  empty docks and groups containing object tabs; occupied utility-only groups
-  retain their size. Removed floating groups release their layout state.
-  Focus and debug readers use their provider's group state; there is no globally
-  selected layout store.
-- Each renderer mounts `DockablePanelLayer` inside its content surface. It
-  renders one `DockablePanelGroup` per visible group, owning chrome, geometry,
-  and a keyed DOM slot per tab. `DockablePanel` portals its own children into
-  that slot, retaining its originating context and error boundary. There is no
-  tab leader, captured-children registry, or content-change notification channel.
-  Sibling opens/closes and reorders retain existing slots and editing state.
-  Moving a tab or a whole group to another dock remounts the moved content,
-  including shell and log views, and must respect lifecycle guards.
-  React owns host replacement during reconstruction or suspension; the provider
-  must not append a one-time DOM container.
-- Prefer the active compatible docked group when opening a new object.
-- A new panel whose default is Floating creates a uniquely isolated, transient,
-  hidden one-tab source group, then asks the native coordinator to transfer it.
-  It never joins a focused floating group whose transfer is already pending.
-- Panel-header Dock, Float, Maximize/Restore, and Close controls apply to the
-  complete tab group. Moving between dock edges appends the whole source group
-  to an occupied destination, preserving source order and its active tab.
-- A panel tab's context menu applies only to that tab, including an inactive
-  tab. It offers the other dock edge and Float for docked tabs, both dock edges
-  for native tabs, and Close. Native tab docking resolves an app view of the
-  same cluster and waits for that renderer's readiness before insertion.
-  Cancelled transfers must not deliver a queued insertion after startup.
-- If an object is already docked, focus its owner and docked tab. If it is in a
-  native group, focus that window and tab.
-- A same-cluster link opened in a child may join that child group after owner
-  authorization. A cross-cluster link routes to the matching owner slice and is
-  rejected with an actionable error when that cluster is not open.
-- Dragging within a tab bar reorders one tab. Dragging between compatible tab
-  bars moves that one tab, including workspace-to-native, native-to-workspace,
-  and native-to-native moves within the same cluster. Cross-cluster drops are rejected.
-- An empty workspace dock offers a right or bottom edge target during a compatible
-  tab drag, including an incoming drag from another window. Only docks without
-  visible tabs offer edge targets; occupied docks use their tab strips. Subtle
-  edge rails reveal a placement preview when hovered. The preview uses the
-  destination's saved size (or the incoming local utility tab's first-use size),
-  with the same size clamp as the dock renderer. It does not initialize or resize
-  the dock. A right preview reserves bottom space only when visible tabs will
-  remain in the bottom dock after the move and that dock is not maximized.
-  The preview is pointer-transparent; the drop hit area stays at the
-  edge so the preview cannot intercept other tabs or destinations. These
-  targets use the same local move and acknowledged native transfer path as tab
-  strips, and disappear when the drag leaves the window, ends, or drops.
-- Rejected cluster combinations show no insertion indicator. Panel drag
-  scope is available during protected dragover; drop-time and backend checks
-  still authorize the actual transfer.
-- On macOS and Windows, dropping an unconsumed tab drag outside a workspace or a
-  native source creates a new one-tab native window near the pointer, using the
-  configured floating size and the pointer's monitor work area. Moving the last
-  tab closes the empty native source after destination acknowledgement. A failed
-  transfer retains the source window and its tab. This differs from
-  the Float button, which always transfers the complete current group. On macOS,
-  the shared native drag policy recognizes both dockable-tab and cluster-tab MIME
-  markers and suppresses AppKit's failed-drop return animation because an accepted
-  tear-off is intentionally represented as `dropEffect: none` by the source webview.
-- Linux drag-out to a new window is deferred for this release. Use Float to
-  transfer the entire current panel group into a native window. Tab reordering
-  and moves between existing compatible panels remain in the release scope.
+  removal in both renderer roles. Dock geometry stays with its group through
+  sibling closes, reorders, and cluster switches. An empty dock keeps its size
+  but releases maximize. Object-panel size settings update empty docks and
+  groups with object tabs; occupied utility-only groups keep their size.
+  Removed floating groups release layout state. Focus and debug readers use
+  their provider's group state; there is no global layout store.
+- `DockablePanelLayer`, mounted inside each renderer's content surface, renders
+  one `DockablePanelGroup` per visible group (chrome, geometry, keyed DOM slot
+  per tab). `DockablePanel` portals its children into its slot, keeping its
+  context and error boundary; there is no tab leader, captured-children
+  registry, or content-change channel. Sibling opens/closes and reorders keep
+  slots and editing state; moving a tab or group to another dock remounts its
+  content (shell and log views too) and must respect lifecycle guards. React
+  owns host replacement; the provider must not append a one-time DOM container.
+- A new object prefers the active compatible docked group. An already-open
+  object focuses its placement: owner and docked tab, or native window and tab.
+- A new panel defaulting to Floating creates a uniquely isolated, hidden,
+  transient one-tab source group and asks the native coordinator to transfer
+  it; it never joins a floating group whose transfer is pending.
+- Panel-header Dock, Float, Maximize/Restore, and Close act on the whole group.
+  Changing dock edge appends the whole group to an occupied destination, keeping
+  source order and active tab.
+- A panel tab's context menu acts on that tab only, even when inactive: docked
+  tabs offer the other edge and Float, native tabs both edges, all Close.
+  Docking a native tab resolves a same-cluster app view and waits for its
+  readiness; a cancelled transfer must not deliver a queued insertion later.
+- A same-cluster link in a child may join that group after owner authorization.
+  A cross-cluster link routes to the matching owner slice, or fails with an
+  actionable error when that cluster is not open.
+- During a compatible tab drag (including from another window), only docks
+  without visible tabs offer right/bottom edge targets; occupied docks use their
+  strips. Hovered edge rails show a pointer-transparent preview at the
+  destination's saved size (or an incoming utility tab's first-use size), with
+  the renderer's clamp, never initializing or resizing the dock. A right
+  preview reserves bottom space only when visible tabs remain in a
+  non-maximized bottom dock. The hit area stays at the edge so the preview never
+  intercepts other targets. Edge targets use the tab-strip move/transfer path
+  and vanish when the drag leaves the window, ends, or drops.
+- macOS and Windows: an unconsumed drop outside a workspace or native source
+  creates a one-tab native window near the pointer at the configured floating
+  size within that monitor's work area. Moving the last tab closes the empty
+  native source after destination acknowledgement; failure keeps source window
+  and tab. Float always moves the whole group.
+- Linux drag-out is deferred for this release (use Float); reordering and moves
+  between existing compatible panels remain in scope.
 
-## Acknowledged Handoffs
+## Acknowledged handoffs
 
-`internal/appwindow/transfer_lifecycle.go` owns admission/replay rejection,
-source/target acknowledgement phases, deadline replacement, and terminal cleanup
-for group, panel-tab, and cluster-view transfers. Each protocol uses a typed
-instance and retains its existing ID namespace: a tab opening a native window
-deliberately shares its ID with the group opening acknowledgement. Protocol
-adapters own preparation, authenticated callers, placement commits, and rollback.
-Their existing locks cover lifecycle and directory changes; the lifecycle adds
-no mutex or backend dependency. Timeout callbacks re-enter the adapter's failure
-path. Cluster transfers release their locks before native window closure.
-Live native snapshots are separate from pending group operations; the registry
-binds each pending operation to its window independently of published content.
-
-Float, dock-back, panel-tab moves, and cluster-tab moves are acknowledged
-transactions. Check source guards and flush its latest snapshot before transfer.
-Directory reads started before a target stages or settles a transfer must not
-remove the target's reconstructed panels. Invalidate those reads per cluster and
-fetch a current snapshot; once settled, later authoritative moves still evict
-the old renderer's copy.
-The source stays mounted while the target reconstructs the panels. The shared
-backend directory commits physical placement only after destination readiness.
-Opening an already-open object focuses the existing placement. Every app window
-displaying the cluster can access the shared panel collection from its cluster
-tab’s context menu.
-
-A tab drag carries the actual source window/group, cluster, complete object
-identity, and active sub-tab. Cross-cluster targets must be rejected. Existing
-targets publish the exact tab before commit; newly created native targets
-acknowledge readiness. Provisional target groups must not claim source panels
-prematurely. Failures and timeouts remove provisional target copies. A source
-native window closes when its final tab commits elsewhere.
-
-Dock-back moves the entire same-cluster group into right or bottom, preserving
-order and active views. Appending to an occupied group preserves existing tabs.
-Cluster-tab movement carries docked groups and local navigation, while floating
-panel windows keep their positions and cluster identity.
+- `internal/appwindow/transfer_lifecycle.go` owns admission/replay rejection,
+  source/target acknowledgement phases, deadline replacement, and terminal
+  cleanup for group, panel-tab, and cluster-view transfers. Each protocol keeps
+  a typed instance and its ID namespace (a tab opening a native window shares
+  its ID with the group-opening acknowledgement on purpose). Adapters own
+  preparation, authenticated callers, placement commits, and rollback under
+  their existing locks; the lifecycle adds no mutex or backend dependency, and
+  timeouts re-enter the adapter's failure path.
+- Live native snapshots are separate from pending group operations; the
+  registry binds each pending operation to its window regardless of published
+  content.
+- For Float, dock-back, and panel-tab and cluster-tab moves: check source guards
+  and flush the latest source snapshot before acceptance; keep the source
+  mounted until the target reconstructs; the backend directory commits only
+  after destination readiness.
+- Targets stay provisional until the registry commits and must not claim source
+  panels. Existing targets publish the exact tab before commit; new native
+  targets acknowledge readiness. Failure or timeout removes provisional copies
+  and keeps source placement. A native source closes once its last tab commits
+  elsewhere.
+- Directory reads started before a target stages or settles a transfer must not
+  remove its reconstructed panels: invalidate them per cluster and refetch.
+  After settlement, later authoritative moves still evict the old copy.
+- Dock-back moves the whole same-cluster group to right or bottom, keeping order
+  and active views; appending to an occupied group keeps existing tabs.
+- Incoming transfers reject a renderer frozen by another transaction, even for
+  a cluster with no panels; a transaction may finish its own reconstruction
+  while frozen.
+- Close and transfer flushes retry the latest failed publication once and
+  reject if that fails. Retained-panel notifications coalesce while claims run;
+  successful claims mount even if a later claim fails.
 
 ## Refresh and runtime state
 
-A panel window uses a fixed-cluster provider. Its visible content owns scoped
-refresh demand; hiding or minimizing releases visible demand while retaining
-cached data. The shared panel collection and live native window retain cluster
-runtime independently of any app window’s cluster tabs.
-
-Object and view identity transfer. Shared refresh data rebuilds detail, YAML,
-events, map, and logs. Shells reconnect by backend session identity. Unsaved YAML,
-saves, and mutations block renderer disposal. Native geometry is process-local.
-The visible header identifies the cluster, with full identity available in its
-tooltip when the text is truncated.
-
-Each renderer serializes its snapshots and flushes before moving or closing.
-A transfer freezes user interaction until commit or rollback. Native panels do
-not publish through an originating app window. Shared directory revisions drive
-app-view reconciliation and retained-panel restoration.
-
-Close preparation checks blockers before awaiting publication. A cluster-tab
-close guards only that cluster's content, including menus rendered through
-portals; it does not display a full-window closing overlay. Other cluster tabs
-and global navigation remain usable. App-window close, Quit, and transfers retain
-their renderer-wide guards.
-
-Window-wide guards preserve the visible content. Transfers, window close, and
-Quit show a compact corner status only after 500 ms; they never blank the window
-with a status overlay. Input freezes immediately, independently of the delayed
-indicator, and settlement removes the status and cancels any pending delay.
-
-Before the backend removes an app view's cluster membership, shared-panel
-synchronization pauses new directory reads and object opens for that cluster,
-drains admitted calls, and flushes queued publications. Docked publications replace
-the entire renderer snapshot, so new publications wait until accepted closures
-appear in the frontend selection. Rejected closes resume synchronization. The
-close preparation lease keeps input guarded through the selection transition;
-duplicate or stale close requests must not reach the backend again.
-
-Incoming transfers must reject a renderer frozen by another transaction, even
-when the transferred cluster has no panels. A transaction may finish its own
-reconstruction while its freeze is active.
+- Panel windows use a fixed-cluster provider. Visible content owns scoped
+  refresh demand; hiding or minimizing releases it but keeps cached data.
+- Object and view identity transfer; shared refresh data rebuilds detail, YAML,
+  events, map, and logs; shells reconnect by backend session identity. Unsaved
+  YAML, saves, and mutations block renderer disposal. Native geometry is
+  process-local.
+- Each renderer serializes its own snapshots (native: live; app: docked groups)
+  and flushes before moving or closing. Native panels never publish through an
+  originating app window. Directory revisions drive app-view reconciliation and
+  retained-panel restoration.
 
 ## Close ordering
 
-- Panel-tab close: guard locally, obtain registry authorization, remove a
-  non-final tab locally and publish the remaining snapshot. Preserve a final
-  tab until its native window close commits.
-- Panel-window close: guard the group, close the native window, then remove its
-  shared entries and release its runtime reference.
-- Cluster-tab close: guard and flush local docked panels. If another app window
-  still displays the cluster, release only this view and retain its shared
-  panels. For the final app view, preflight every native panel window belonging
-  to that cluster, close them only after all approve, discard the shared panel
-  collection, then remove the cluster tab. Denial, timeout, or a pending transfer
-  preserves the tab. Approved renderers stay frozen until the transaction settles.
-- App-window close: guard and flush local docked panels, retain their shared
-  identities, and release that app view. Floating panels remain open.
-- Application quit: preflight every ready app and panel renderer. Close none
-  until every participant approves. Approved renderers remain frozen while their
-  peers decide and through successful process shutdown. After unanimous approval,
-  request application Quit so per-view close hooks do not remove saved clusters.
-  Settlement releases every original participant, including those that already
-  approved, on denial, timeout, delivery failure, or rejected quit handoff.
-  A renderer ignores a late request for a transaction it has already settled.
+Backend surfaces:
+[application lifecycle](../architecture/application-lifecycle.md#close-quit-and-shutdown).
 
-## Change Checklist
+- Close preparation checks blockers before awaiting publication.
+- A cluster-tab close guards only that cluster's content (portal menus
+  included) without a full-window overlay; other tabs, application menus, and
+  global navigation stay usable. App-window close, Quit, and transfers guard the
+  whole renderer.
+- Renderer-wide guards freeze input at once (transfers until commit or
+  rollback) and keep content visible; a compact corner status appears only after
+  500 ms, never blanking the window, and settlement clears it and any pending
+  delay.
+- Before the backend removes an app view's cluster membership, shared-panel sync
+  pauses that cluster's directory reads and object opens, drains admitted calls,
+  and flushes queued publications. Docked publications replace the whole
+  snapshot, so new ones wait until accepted closures reach the frontend
+  selection; rejected closes resume sync. The close-preparation lease keeps
+  input guarded through the transition; duplicate or stale close requests must
+  not reach the backend again.
 
-1. Trace complete object identity from the initiating link/action through the
-   shared directory and snapshot.
-2. Prove the source remains live until target acknowledgement and remains
-   unchanged on failure or timeout.
-3. Verify dock-right, dock-bottom, native float, dock-back, group order, active
-   tabs, uniqueness, and focus.
-4. Verify cluster switching does not rewrite cluster identity or app-view
-   membership, and panel visibility controls only its scoped demand.
-5. Exercise clean, unsaved-YAML, saving, and mutation-in-flight guards across
-   move, tab close, titlebar close, cluster close, app-window close, and quit.
-6. Add reducer/protocol tests and visible component tests. Run typecheck and the
-   targeted dockable, object-panel, shortcut, and appwindow suites.
-7. On macOS and Windows, exercise cluster and panel tab moves with both one and
-   multiple tabs, targeting new and existing windows. Verify object identity,
-   active view, drop placement, phantom animation, and empty-source closure.
-   Cover occupied and empty right/bottom docks; confirm preview bounds match
-   final placement and previews clear after dropping or cancelling. Verify
-   cross-cluster rejection, including empty destination docks.
-   Cancelled or failed transfers must preserve the source content. On Linux,
-   record drag-out as deferred; still test reordering, moves between existing
-   compatible panels, Float, and dock-back.
-8. Open the same cluster in two app windows and find/focus its shared panels
-   from either view. Closing one cluster tab retains the shared panels; closing
-   the final cluster tab closes its panels after all guards approve. Separately
-   close the last app window and dock a surviving floating panel back into a
-   newly created app view.
-9. Quit with different clusters in two app windows and with native panel windows
-   open. An unsaved draft must block quit and leave the other renderer usable.
-   After a clean quit, restart and confirm both cluster selections restore.
+Sequences:
 
-Native validation must include an actual destination drop. Drag-over events or
-a visible insertion indicator alone do not establish transfer success. If
-automation delivers only hover, use a manual drop and inspect content retention
-and empty-source closure, following the
-[completion evidence gate](../workflows/completion.md).
+- Panel tab: guard, get registry authorization, remove a non-final tab locally,
+  publish the remaining snapshot. A final tab stays until its window close
+  commits.
+- Panel window: guard the group, close the window, then dispose local state,
+  remove shared entries, and release its runtime reference.
+- Cluster tab: guard and flush local docked panels. If another app window shows
+  the cluster, release only this view and keep the shared panels. For the final
+  view, preflight every native panel window of the cluster, close them only after
+  all approve, discard the shared collection, then remove the tab. Denial,
+  timeout, or a pending transfer keeps the tab; approved renderers stay frozen
+  until settlement.
+- App window: guard and flush local docked panels, keep their shared
+  identities, release the view. Floating panels stay open.
+- Quit: preflight every ready app and panel renderer; close none until all
+  approve. Approved renderers stay frozen while peers decide and through
+  shutdown. Unanimous approval requests application Quit instead of closing
+  views. Denial, timeout, delivery failure, or a rejected handoff releases every
+  original participant, including earlier approvals. A renderer ignores a late
+  request for a transaction it already settled.
 
-The recorded PR #361 checks on 2026-09-21 did not establish successful native
-tab reordering or drops between occupied docks, into empty docks, or between
-windows. Automation reported `noWindowsAvailable` or left placement unchanged;
-the cause remains undetermined. Windows and Linux UI checks were not run.
-Record the tested revision and platform when these gaps are resolved.
+## Keyboard focus
 
-### Programmatic keyboard focus
+- Group roots are open, nonmodal dialogs; the rest of the workspace stays
+  interactive. Reset native dialog geometry in panel CSS.
+- Dock resize handles are native range inputs exposing the dimension and bounds.
+  Left/Right (right dock) and Up/Down (bottom dock) move the edge 16px;
+  Home/End jump to min/max. The handler cancels native range behavior for all
+  arrows, Home/End, and PageUp/PageDown; other-axis arrows and PageUp/PageDown
+  leave the size unchanged.
+- Object-panel Tab order reaches the resize control after the header controls,
+  then wraps to the first tab.
+- `DockablePanelProvider.focusPanel(panelId, clusterId)` owns deferred focus;
+  pass the owning cluster when activating another. It waits for group membership
+  and active-tab rendering, survives the initiating view unmounting, yields to a
+  newer request, and is discarded on leaving its cluster; pending DOM-focus
+  callbacks cancel on rerender or cleanup. `useObjectPanel` and workspace focus
+  events delegate to it and must not wait for registration inside content the
+  panel replaces.
 
-Group roots are open, nonmodal dialogs; opening a panel must leave the rest of
-the workspace interactive. Dock resize handles use native range inputs for the
-panel dimension and expose their size bounds. Left/Right move the right dock's
-edge by 16px; Up/Down move the bottom dock's edge by 16px. Home/End select the
-minimum/maximum size. The resize handler cancels native range behavior for all
-arrows, Home/End, and PageUp/PageDown; arrows on the other axis and PageUp/PageDown
-leave the size unchanged. Other keys retain their existing handling.
-Object-panel Tab order reaches the resize control after the header
-controls, then wraps to the first tab. Reset native dialog geometry in panel CSS.
+## Validation
 
-`DockablePanelProvider.focusPanel(panelId, clusterId)` owns deferred focus for
-new and existing panels. Callers pass the owning cluster when activating another
-cluster. The provider waits for group membership and active-tab rendering before
-focusing the actual tab. This request survives an initiating object view
-unmounting, is replaced by a newer request, and is discarded when leaving its
-cluster. Pending DOM-focus callbacks are canceled on rerender or provider cleanup.
-`useObjectPanel` and workspace focus events delegate to this owner; they must not
-keep their own registration waits inside content that opening the panel replaces.
+- Trace complete object identity from the initiating link or action through the
+  directory and snapshot. Prove the source stays live until target
+  acknowledgement and unchanged on failure or timeout, and that panel visibility
+  controls only its scoped demand. Add reducer/protocol and visible component
+  tests.
+- Exercise clean, unsaved-YAML, saving, and mutation-in-flight guards across
+  move, tab close, titlebar close, cluster close, app-window close, and quit;
+  cover both docks, Float, dock-back, group order, active tabs, uniqueness,
+  focus, and that cluster switching never rewrites cluster identity or app-view
+  membership. Run typecheck and the dockable, object-panel, shortcut, and
+  appwindow suites.
+- macOS and Windows native checks: cluster and panel tab moves with one and
+  several tabs into new and existing windows; occupied and empty docks (preview
+  matches final placement, clears after drop or cancel); cross-cluster
+  rejection incl. empty docks; identity, active view, phantom animation,
+  empty-source closure; failed or cancelled transfers keep the source. Linux:
+  drag-out deferred; test reorder, moves between existing panels, Float,
+  dock-back.
+- One cluster in two app windows: find/focus shared panels from either; closing
+  one cluster tab keeps them, closing the final one closes them after all guards
+  approve. Close the last app window and dock a surviving floating panel into a
+  new app view.
+- Quit with different clusters in two app windows plus panels: an unsaved draft
+  blocks quit and leaves the other renderer usable; after a clean quit, restart
+  restores both selections.
+- Require an actual destination drop; drag-over or an insertion indicator does
+  not prove transfer. If automation only hovers, drop manually and inspect
+  content retention and empty-source closure.
+- Known gap: PR #361 checks (2026-09-21) did not establish native reorder or
+  drops between occupied docks, into empty docks, or between windows
+  (automation hit `noWindowsAvailable` or left placement unchanged; cause
+  unknown); Windows/Linux UI checks were not run. Record revision and platform
+  when resolved.

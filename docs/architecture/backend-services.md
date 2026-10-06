@@ -1,174 +1,135 @@
 # Backend Service Architecture
 
-The backend is composed from focused state owners and coordinators. This page is
-the canonical map of those owners and the permitted dependency directions. The
-domain documents linked below remain authoritative for each owner's detailed
-behavior.
+Canonical map of backend state owners and permitted dependency directions.
+Detailed owner behavior lives in the linked domain docs; startup and shutdown
+ordering in [application-lifecycle.md](application-lifecycle.md).
 
 ## Composition and transport
 
-`internal/bootstrap` creates the Wails application, passes that concrete application to
-`backend.NewApplicationRuntime`, passing updater and peer-window dependencies
-through `ApplicationRuntimeOptions`, constructs `DesktopService` from the
-returned owners, and registers only that service with Wails. `ApplicationRuntime` is a
-reference-only composition result: it owns no behavior or mutable state, and no
-owner may retain a pointer to it.
+- `internal/bootstrap` creates the Wails application, passes it to
+  `backend.NewApplicationRuntime` with updater and peer-window dependencies in
+  `ApplicationRuntimeOptions`, builds `DesktopService` from the returned owners,
+  and registers only that service.
+- `ApplicationRuntime` is a reference-only result: owner pointers for bootstrap
+  wiring, no behavior or mutable state; no owner may retain it.
+- `NewApplicationRuntime` creates each stateful owner once through a dependency
+  constructor: never an empty owner filled afterward or a post-construction
+  `Configure`/`Bind`. `RefreshCoordinator` and `WorkspaceCoordinator` reject
+  incomplete dependency graphs rather than build substitutes; tests use the
+  shared owner fixtures instead of weakening constructors. Update configuration
+  and the peer-window creation callback are construction inputs, never set
+  afterward.
+- `DesktopService` owns Wails command names, generated-binding reachability, the
+  `/api/v2` entry point, and lifecycle delegation, but no behavior. Each of its
+  fourteen command interfaces maps to one owner (`DesktopShell` serves both
+  desktop-shell and panel-window commands); HTTP and lifecycle are separate
+  collaborators. Owners are not Wails-bound and need no `//wails:ignore`.
+  Command-to-owner table: [data-access.md](data-access.md#wails-command-boundary).
 
-`NewApplicationRuntime` creates each stateful owner once through a dependency
-constructor. The composition root must not create an empty owner, fill private
-fields afterward, or call a post-construction `Configure`/`Bind` method.
-`RefreshCoordinator` and `WorkspaceCoordinator` reject incomplete dependency
-graphs instead of manufacturing substitute owners. Focused tests use the shared
-owner fixtures rather than weakening those production constructors.
-Update configuration and the peer-window creation callback are also supplied at
-construction; `internal/bootstrap` must not configure either owner after the runtime has
-been returned.
-
-Five explicit bind-once ports resolve construction-order edges without making
-an owner partially configurable:
+Five bind-once ports resolve construction-order edges:
 
 | Port | Direction | Before its target exists |
 | --- | --- | --- |
 | Update check | `DesktopShell` to `UpdateCoordinator` | Returns an unavailable error |
 | Kubeconfig search-path read | `DesktopShell` to `PreferencesService` | Returns an unavailable error |
 | Installation telemetry repository | `ErrorReportingService` to `PreferencesService` | Returns an unavailable error |
-| Kubernetes client rate-limit settings | `PreferencesService` to `ClusterRuntimeManager` | Retains the latest QPS/burst values, then pushes them at bind |
-| Refresh settings | `PreferencesService` to `RefreshCoordinator` | Retains the latest global-log limit and metrics interval, then pushes them at bind |
+| Kubernetes client rate-limit settings | `PreferencesService` to `ClusterRuntimeManager` | Retains the latest QPS/burst, pushes at bind |
+| Refresh settings | `PreferencesService` to `RefreshCoordinator` | Retains the latest global-log limit and metrics interval, pushes at bind |
 
-Every port rejects a missing target and a second bind. Retaining bridges call
-their target only after releasing the bridge lock. These ports are composed and
-bound inside owner constructors; they are not general owner back-pointers or a
-license for later rewiring.
-
-`DesktopService` owns the Wails command names, generated-binding reachability,
-the `/api/v2` transport entry point, and lifecycle delegation. It does not own
-application behavior. Its twelve command interfaces each correspond to one
-focused owner; HTTP and lifecycle are separate collaborators. Backend owners are
-not independently Wails-bound and do not need `//wails:ignore` directives.
-
-```mermaid
-flowchart LR
-    Main["main.go assets and entry point"] --> Bootstrap["internal/bootstrap composition"]
-    Bootstrap --> Runtime["ApplicationRuntime references"]
-    Runtime --> Transport["DesktopService transport"]
-    Runtime --> Lifecycle["ApplicationLifecycle"]
-    Runtime --> Owners["Focused owners"]
-    Transport -->|"owner-shaped interfaces"| Owners
-    Lifecycle -->|"ordered startup/shutdown"| Owners
-    Owners -->|"events, DTOs, HTTP, and streams"| Transport
-```
-
-The last arrow represents outputs crossing the transport boundary, not a
-permission for an owner to call `DesktopService`.
+Ports reject a missing target and a second bind, call their target only after
+releasing the bridge lock, and are bound inside owner constructors; they are
+not general back-pointers or a license for later rewiring.
 
 ## Owner map
 
+Includes internal-only owners that hold state or cross-owner sequencing.
+
 | Owner | Responsibility |
 | --- | --- |
-| `ApplicationLifecycle` | Wails service startup/shutdown, runtime readiness, process context, and ordered owner lifecycle |
-| `DesktopShell` | Concrete Wails application/window/menu/dialog/clipboard access and process-wide ephemeral UI visibility |
+| `ApplicationLifecycle` | Service startup/shutdown, runtime readiness, process context, ordered owner lifecycle |
+| `DesktopShell` | Concrete Wails application/window/menu/dialog/clipboard/event/screen access; unpersisted process-wide sidebar, diagnostics-panel, and Application Logs visibility for macOS menu projection |
 | `DesktopService` | Wails transport signatures and delegation only |
 | `FavoritesService` | Favorites persistence and ordering |
-| `UIStateStore` | Persisted grid and cluster-tab UI state |
-| `PreferencesService` | Settings persistence, themes, zoom, search paths, and coalesced lazy loading |
-| `SettingsEffectDispatcher` | Stateless, post-commit routing from Preferences to write-only runtime sinks |
-| `ErrorReportingService` | Reporter configuration and installation-registration state |
-| `AppLogService` | Process log buffer and frontend log commands |
-| `UpdateCoordinator` | Update checks, download, staging, reconciliation, skip state, and restart |
-| `ClusterAttentionService` | Attention rules, persistence transactions, live targets, and its lock |
-| `ClusterWorkspaceProjection` | Replayable health, namespace-scope revisions, and aggregate workspace revision |
-| `ClusterRuntimeManager` | Kubeconfig discovery, cluster clients, auth/recovery, transport health, API metrics, and client rate limits |
-| `RefreshCoordinator` | Per-cluster refresh/catalog lifecycles, HTTP/streams, publication, governor/spill state, and global log limiter |
-| `WorkspaceCoordinator` | Peer selections, serialized selection mutations, namespace-scope rebuilds, foreground demand, and workspace assembly |
-| `ResourceGateway` | Request-shaped resource reads/actions, permission and response caches, YAML, details, and logs |
-| `PanelMetricsService` | In-memory metric samples for open object panels; drops a panel's samples when the panel workspace directory reports it closed |
-| `nodemaintenance.Store` | Process-wide, cluster-keyed node-drain jobs, cancellation handles, bounded history, and its lock |
-| `OperationsCoordinator` | Shell, port-forward, drain-operation registration, active-operation registry, and cleanup |
-| `DataManagementCoordinator` | Import/export and owner-directed live factory reset |
+| `UIStateStore` | Persisted grid and cluster-tab UI documents only; never live visibility flags |
+| `PreferencesService` | `settings.json`, themes, zoom, search paths, coalesced lazy loading |
+| `SettingsEffectDispatcher` | Stateless post-commit routing to write-only runtime sinks ([effects](app-preferences.md#loading-and-runtime-effects)) |
+| `ErrorReportingService` | Reporter configuration and installation registration |
+| `AppLogService` | Process log buffer and log commands |
+| `UpdateCoordinator` | Update checks, download, staging, reconciliation, skip state, restart |
+| `ClusterAttentionService` | Attention rules, persistence transactions, live targets, its lock |
+| `ClusterWorkspaceProjection` | Replayable health, namespace-scope revisions, aggregate workspace revision |
+| `ClusterRuntimeManager` | Kubeconfig discovery, clients, auth/recovery, transport health, API metrics, client rate limits |
+| `RefreshCoordinator` | Per-cluster refresh/catalog lifecycles, HTTP/streams, publication, governor/spill state, global log limiter |
+| `WorkspaceCoordinator` | Peer selections, serialized selection mutations, namespace-scope rebuilds, foreground demand, workspace assembly |
+| `ResourceGateway` | Request-shaped resource reads/actions, permission and response caches, YAML, details, logs |
+| `PanelMetricsService` | Open object panels' in-memory metric samples, dropped when the panel directory reports the panel closed |
+| `nodemaintenance.Store` | Cluster-keyed node-drain jobs, cancellation handles, bounded history, its lock |
+| `OperationsCoordinator` | Shell, port-forward, drain-operation registration, active-operation registry, cleanup |
+| `DataManagementCoordinator` | Import/export and owner-directed live Factory Reset ([sequence](application-lifecycle.md#factory-reset)) |
 | `ContainerLogsSelectionPolicy` | Shared per-scope container-log selection limit |
 | `PermissionFetchPolicy` | Shared SSRR fetch-concurrency limit |
 
-The frontend command allocation is maintained in the command-to-owner table in
-[data-access.md](data-access.md#wails-command-boundary). Internal-only owners
-still appear here because they own state or cross-owner sequencing even though
-they expose no Wails command.
-
 ## Dependency direction
 
-Dependencies point toward capabilities, never back toward the composition root:
+Dependencies point toward capabilities, never back to the composition root:
 
-- `DesktopService` delegates to the twelve command owners, `ApplicationLifecycle`,
-  and the refresh HTTP handler. No owner calls back into `DesktopService`.
-- `ApplicationLifecycle` orders owners during startup and shutdown but does not
-  absorb their state.
+- `DesktopService` delegates to its command owners, `ApplicationLifecycle`,
+  and the refresh HTTP handler; no owner calls back into it (outputs such as
+  events, DTOs, HTTP, and streams cross the transport without such a call).
+- `ApplicationLifecycle` orders owners at startup and shutdown without absorbing
+  their state.
 - `WorkspaceCoordinator` sequences `ClusterRuntimeManager` and
-  `RefreshCoordinator`. Cluster Runtime publishes typed intents to an owner-local
-  queue; Workspace is their single consumer, so Cluster Runtime does not call
-  back into Workspace.
+  `RefreshCoordinator`. Cluster Runtime publishes typed intents to an
+  owner-local queue whose single consumer is Workspace; it never calls
+  Workspace.
 - `RefreshCoordinator` reads Cluster Runtime, registers Attention targets, and
   invokes `ResourceGateway` cache invalidators. Resource requests never call
-  Refresh or acquire refresh/subsystem locks.
-- Refresh publishes catalog and retry-telemetry state into leaf projections.
-  `ResourceGateway` and `OperationsCoordinator` read those projections instead
-  of depending back on `RefreshCoordinator`.
+  Refresh or take refresh/subsystem locks.
+- Refresh publishes catalog and retry-telemetry state into leaf projections that
+  `ResourceGateway` and `OperationsCoordinator` read instead of depending on
+  Refresh.
 - `OperationsCoordinator` uses narrow cluster, permission, event, logging, and
-  projection collaborators. It owns all operation cleanup.
-- Composition creates one `nodemaintenance.Store`. Node resource actions write
-  drain execution state, Refresh reads it for `object-maintenance` snapshots,
-  and Operations performs cluster/process cancellation through the same store.
-  The store is a shared leaf: it is keyed by `clusterId`, owns its lock, and
-  does not call any of those consumers.
+  projection collaborators and owns all operation cleanup.
+- One `nodemaintenance.Store` is a shared leaf keyed by `clusterId` that owns its
+  lock and calls no consumer: node actions write drain state, Refresh reads it
+  for `object-maintenance` snapshots, Operations cancels through it.
 - `DataManagementCoordinator` may sequence owner reset methods and narrow
-  Workspace/Refresh functions. It does not become the owner of the state it
-  resets.
-- `DesktopShell` retains the concrete Wails application. Do not introduce a
-  generic desktop adapter or move native state into persisted `UIStateStore`.
-
-Cross-owner callbacks must be narrow and direction-specific. A shared leaf
-projection may be read by multiple owners, but it must have one writer and may
-not call those readers.
+  Workspace/Refresh functions; it never owns the state it resets.
+- `DesktopShell` keeps the concrete Wails application. Never add a generic
+  desktop adapter or move native state into `UIStateStore`.
+- Cross-owner callbacks are narrow and one-directional. A leaf projection has
+  one writer, any number of readers, and never calls them.
 
 ## Source placement
 
-Production files are named for their owner or for a dependency contract. A file
-may contain methods for only one state owner; cross-owner workflows belong to
-the coordinator that sequences them. `resource_details_generated.go` is the
-single deliberate exception because one generator emits internal
-`ResourceGateway` wrappers and the `DesktopService` model anchor from the same
-resource-kind registry.
-
-`application_runtime_contract_test.go` enforces owner-oriented filenames,
-single-owner files, no owner embedding, interface-only cross-owner fields,
-composition-only `app.go`, and the absence of post-construction configuration.
-Do not replace those dependency and placement guards with exact method or field
-counts.
-
-## Settings effects
-
-`PreferencesService` owns validation and persistence. Runtime changes cross
-write-only sinks; the [app preferences contract](app-preferences.md#loading-and-runtime-effects)
-owns effect targets, lock ordering, publication, and failure handling.
+- Production files are named for their owner or a dependency contract and hold
+  one state owner's methods; cross-owner workflows belong to the sequencing
+  coordinator. Sole exception: `resource_details_generated.go`, where one
+  generator emits internal `ResourceGateway` wrappers and the `DesktopService`
+  model anchor from the resource-kind registry.
+- `application_runtime_contract_test.go` enforces owner-oriented filenames,
+  single-owner files, no owner embedding, interface-only cross-owner fields,
+  composition-only `app.go`, and no post-construction configuration. Do not
+  swap these guards for exact method or field counts.
 
 ## Placing new behavior
 
-1. Put a frontend-callable signature on `DesktopService`, but put its behavior
-   and state on exactly one owner.
-2. Put a lock, cache, persisted document, or lifecycle resource on the owner of
-   the invariant it protects.
-3. Put a workflow spanning owners on a coordinator; pass narrow capabilities,
-   not `ApplicationRuntime` or an all-backend interface.
+1. Frontend-callable signature on `DesktopService`; behavior and state on
+   exactly one owner.
+2. A lock, cache, persisted document, or lifecycle resource lives with the owner
+   of the invariant it protects.
+3. A workflow spanning owners belongs on a coordinator that receives narrow
+   capabilities, never `ApplicationRuntime` or an all-backend interface.
 4. Prefer one-way events, invalidators, or leaf projections when a direct call
-   would create a dependency cycle.
-5. Route runtime preference changes through a write-only settings-effect sink.
-6. Keep cluster data keyed by `clusterId` and boundary-crossing objects identified
-   by their complete resource reference.
+   would create a cycle.
+5. Route runtime preference changes through a write-only settings-effect sink
+   ([app-preferences](app-preferences.md#loading-and-runtime-effects)).
 
 ## Detailed contracts
 
-- Process composition and lifecycle: [application-lifecycle.md](application-lifecycle.md)
-- Command allocation, resources, bindings, and settings: [data-access.md](data-access.md)
+- Commands, resources, bindings, settings: [data-access.md](data-access.md)
 - Cluster/workspace direction: [multi-cluster.md](multi-cluster.md)
 - Refresh ownership and projections: [refresh-system.md](refresh-system.md)
 - Namespace-scope sequencing: [namespace-scope.md](namespace-scope.md)
-- Operation ownership and cleanup: [operation-lifecycle.md](../workflows/operation-lifecycle.md)
-- Permission and cache rules: [permissions.md](permissions.md)
+- Operations and cleanup: [operation-lifecycle.md](../workflows/operation-lifecycle.md)
+- Permissions and caches: [permissions.md](permissions.md)

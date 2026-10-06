@@ -38,17 +38,9 @@ affected boundary. A link is a route, not a requirement to load its whole subtre
 | Permissions | `docs/architecture/permissions.md` | permission gates, capabilities, action hooks |
 | Large tables | `docs/architecture/large-data.md`, `docs/frontend/gridtable.md` | typed queries, resource tables, `GridTable` |
 | Object panel/map | `docs/frontend/component-structure.md`, `docs/workflows/object-map.md` | object panel and map modules |
-| Operations | `docs/workflows/logs/overview.md`, `docs/workflows/shell-debug.md` | log/session/maintenance services and UI |
+| Operations | `docs/workflows/logs/overview.md`, `docs/workflows/operation-lifecycle.md`, `docs/workflows/shell-debug.md` | log/session/maintenance services and UI |
 
-## Shared boundaries
-
-- List/table payloads live in `backend/refresh/snapshot`; rich details and
-  imperative operations live in `backend/resources`.
-- Frontend resource reads use `dataAccess` or refresh orchestration. Direct
-  `fetch` belongs only in `frontend/src/core/refresh/client.ts`.
-- Backend `statusPresentation` and `ResourceLink.ref` own primary status and
-  relationship navigation.
-- Resource metrics use `frontend/src/core/resource-metrics`; absolute timestamps
-  drive live age rendering without snapshot refetches.
-- The root identity, cluster-scope, TDD, git, and final-validation contracts
-  apply everywhere and should not be repeated in workflow skills.
+Shared data/UI boundaries (snapshot vs `backend/resources`, `dataAccess`,
+`statusPresentation`, `ResourceLink.ref`, resource metrics, live age) are
+owned by `backend/AGENTS.md` and `frontend/AGENTS.md`; root `AGENTS.md`
+contracts apply everywhere and are not repeated in skills.

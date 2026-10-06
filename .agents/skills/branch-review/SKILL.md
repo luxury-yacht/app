@@ -7,159 +7,81 @@ description: Review a Luxury Yacht branch for merge readiness, production readin
 
 Use this when the user asks whether a branch is production-ready, merge-ready,
 an actual improvement, or asks for a branch/PR review or PR summary grounded in
-the current diff.
+the current diff. Stay in read-only review mode unless the user asks for fixes.
 
 ## Goal
 
-Return a concrete merge-readiness verdict based on the code, tests, and current
-validation state. Findings lead. Summaries are secondary.
+Return a concrete merge-readiness verdict from the code, tests, and current
+validation state. Findings lead; summaries are secondary. Answer whether the
+work is complete, correct, safe to merge and release, and a real improvement
+for users or the codebase, and whether anything important was missed.
 
-What the user wants to know:
+## Scope the diff
 
-- Is the work COMPLETE?
-- Is the work CORRECT?
-- Is the work SAFE to merge and release?
-- Is the work a REAL improvement, either for the user experience or the codebase?
-- Was anything important missed that should have been included?
+1. Use `origin/main...HEAD` unless the user gives another base or range. If it
+   cannot be resolved, inspect remotes and the default branch read-only and
+   state the exact base assumption before reviewing.
+2. Review committed and working-tree changes; do not skip modified, staged, or
+   untracked files because the branch range is empty:
 
-## Read-Only First Pass
+   ```sh
+   git status --short && git branch --show-current
+   git diff --stat origin/main...HEAD && git diff --name-only origin/main...HEAD
+   git diff --stat && git diff --cached --stat
+   git ls-files --others --exclude-standard
+   ```
 
-Unless the user explicitly asks for fixes, begin in review mode.
+3. Changed docs or plans that claim completion are hints, not proof; inspect
+   the contract paths the diff touches.
 
-1. Apply root and scoped guidance already in context; read a missing `AGENTS.md`
-   once before entering its scope. Use `.agents/README.md` only when the diff
-   spans an ambiguous workflow, and `docs/README.md` only when ownership is unclear.
-2. Check repository state with read-only git commands:
-   - `git status --short`
-   - `git branch --show-current`
-   - `git diff --stat origin/main...HEAD`
-   - `git diff --name-only origin/main...HEAD`
-   - `git diff --stat`
-   - `git diff --name-only`
-   - `git diff --cached --stat`
-   - `git diff --cached --name-only`
-   - `git ls-files --others --exclude-standard`
-3. If the user provides a different base or range, use that instead of
-   `origin/main...HEAD`.
-4. If `origin/main...HEAD` cannot be resolved, inspect remotes/default branch
-   state with read-only git commands and state the exact base assumption before
-   reviewing.
-5. Review both committed branch changes and working-tree changes. Do not ignore
-   modified, staged, or untracked files just because `origin/main...HEAD` is
-   empty.
-6. Read any changed docs/plans that claim completion. Treat them as hints, not
-   proof.
+## Contract audit
 
-## Contract Audit
+Check every meaningful change against the root and scoped `AGENTS.md`
+contracts already in context, then read the owning contract for each touched
+area and verify its review points:
 
-For every meaningful change, inspect the owning contract:
+| Change area | Owning contract | Also verify |
+| --- | --- | --- |
+| Cross-layer contracts, generated bindings, enum/metadata drift | [shared-contracts](../../../docs/architecture/shared-contracts.md) | No parallel frontend/backend enum, descriptor, schema, or registry without a parity test |
+| Multi-cluster, scopes, selected/background clusters, cache keys | [multi-cluster](../../../docs/architecture/multi-cluster.md), [cluster-auth-lifecycle](../cluster-auth-lifecycle/SKILL.md) | Auth, recovery, operations, streams, and cleanup stay scoped to the affected cluster |
+| Auth failure, recovery, kubeconfig, client lifecycle | [auth](../../../docs/architecture/auth.md), [cluster-auth-lifecycle](../cluster-auth-lifecycle/SKILL.md) | |
+| Refresh, snapshots, streams, diagnostics | [refresh-system](../../../docs/architecture/refresh-system.md), [data-layer](../../../docs/architecture/data-layer.md), [refresh-subsystem](../refresh-subsystem/SKILL.md) | Domain metadata, behavior classes, timing, backend/frontend registration, diagnostics, and tests align through the shared domain contract |
+| Query-backed resource streams and WebSocket signals | [data-freshness](../../../docs/architecture/data-freshness.md), [data-layer](../../../docs/architecture/data-layer.md) | Stream messages stay liveness signals; rows, filtering, sorting, facets, totals, and page metadata stay on the HTTP query path; snapshots and signals agree on identity, scope, liveness, and permissions |
+| Identity, status, lifecycle, links, facts, object refs | [shared-resource-model](../../../docs/architecture/shared-resource-model.md), [skill](../shared-resource-model/SKILL.md) | Primary status projects `status`, `statusState`, `statusPresentation`, and optional `statusReason`; relationship navigation uses `ResourceLink.ref` and catalog-backed identity, never frontend kind/name reconstruction |
+| Kind vocabulary, generated dispatch, per-kind behavior | [resource-kind-registry](../../../docs/architecture/resource-kind-registry.md), [add-resource](../add-resource/SKILL.md) | |
+| Browse, catalog, discovery, namespace metadata and LIST rows | [catalog](../../../docs/architecture/catalog.md), [refresh-system](../../../docs/architecture/refresh-system.md), [browse-tables](../browse-tables/SKILL.md) | |
+| Frontend resource reads, app-state reads, stores | [data-access](../../../docs/architecture/data-access.md) | |
+| Permissions, capabilities, RBAC UI | [permissions](../../../docs/architecture/permissions.md), [skill](../permissions-capabilities/SKILL.md) | Permission-denied and restricted-RBAC behavior stays visible in diagnostics |
+| Tables, query-backed pages, large datasets | [gridtable](../../../docs/frontend/gridtable.md), [large-data](../../../docs/architecture/large-data.md) | |
+| Object panel details, YAML, actions, docked panels | [object-panel](../object-panel/SKILL.md), [yaml-editing](../../../docs/architecture/yaml-editing.md), [yaml-editor](../../../docs/frontend/yaml-editor.md), [dockable-panels](../../../docs/frontend/dockable-panels.md) | YAML read/save/merge/ownership keeps full cluster and GVK identity and the shared field-policy contract |
+| Logs, shell/debug, port-forward, drain, runtime operations | [operations-workflows](../operations-workflows/SKILL.md), [logs](../../../docs/workflows/logs/overview.md), [shell-debug](../../../docs/workflows/shell-debug.md), [operation-lifecycle](../../../docs/workflows/operation-lifecycle.md) | |
+| Object map | [object-map skill](../object-map/SKILL.md), [object-map](../../../docs/workflows/object-map.md) | |
+| UI shell, settings, modals, keyboard, tabs | [app-shell](../app-shell/SKILL.md), relevant `docs/frontend/*.md` | |
 
-| Change Area                                                           | Required Context                                                                                                                                            |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cross-layer shared contracts, generated bindings, enum/metadata drift | `docs/architecture/shared-contracts.md`                                                                                                                     |
-| Multi-cluster, scopes, selected/background clusters, cache keys       | `docs/architecture/multi-cluster.md`, `.agents/skills/cluster-auth-lifecycle/SKILL.md`                                                                      |
-| Auth failure, recovery, kubeconfig, client lifecycle                  | `docs/architecture/auth.md`, `.agents/skills/cluster-auth-lifecycle/SKILL.md`                                                                               |
-| Refresh, snapshots, streams, diagnostics                              | `docs/architecture/refresh-system.md`, `docs/architecture/data-layer.md`, `.agents/skills/refresh-subsystem/SKILL.md`                                       |
-| Query-backed resource streams and resource WebSocket signals          | `docs/architecture/data-freshness.md`, `docs/architecture/data-layer.md`                                                                                     |
-| Identity, status, lifecycle, links, facts, object refs                | `docs/architecture/shared-resource-model.md`, `.agents/skills/shared-resource-model/SKILL.md`                                                               |
-| Resource kind vocabulary, generated dispatch, per-kind behavior       | `docs/architecture/resource-kind-registry.md`, `.agents/skills/add-resource/SKILL.md`                                                                       |
-| Browse/catalog/discovery/namespace metadata and LIST rows             | `docs/architecture/catalog.md`, `docs/architecture/refresh-system.md`, `.agents/skills/browse-tables/SKILL.md`                                              |
-| Frontend resource reads, app-state reads, stores                      | `docs/architecture/data-access.md`                                                                                                                          |
-| Permissions/capabilities/RBAC UI                                      | `docs/architecture/permissions.md`, `.agents/skills/permissions-capabilities/SKILL.md`                                                                      |
-| Tables, query-backed pages, large datasets                            | `docs/frontend/gridtable.md`, `docs/architecture/large-data.md`                                                                                             |
-| Object panel details, YAML, actions, docked panels                    | `.agents/skills/object-panel/SKILL.md`, `docs/architecture/yaml-editing.md`, `docs/frontend/yaml-editor.md`, `docs/frontend/dockable-panels.md`             |
-| Logs, shell/debug, port-forward, drain, runtime operations            | `.agents/skills/operations-workflows/SKILL.md`, `docs/workflows/logs/overview.md`, `docs/workflows/shell-debug.md`, `docs/workflows/operation-lifecycle.md` |
-| Object map                                                            | `.agents/skills/object-map/SKILL.md`, `docs/workflows/object-map.md`                                                                                        |
-| UI shell/settings/modals/keyboard/tabs                                | `.agents/skills/app-shell/SKILL.md`, relevant `docs/frontend/*.md`                                                                                          |
+## Validation
 
-## Required Checks
+Run focused checks first when the branch has clear areas:
 
-Look for these before considering the branch ready:
+- Backend shared, resource-model, or refresh changes: focused
+  `mise exec -- go test` packages.
+- Frontend changes: targeted Vitest specs and
+  `mise exec -- npm run typecheck --prefix frontend`.
+- Runtime operations (logs, shell, port-forward, drain): focused backend
+  workflow tests plus affected frontend lifecycle/orchestrator tests.
+- Broad frontend/shared changes: `mise exec -- wails3 task qc:knip`.
 
-- Every review claim cites evidence gathered in the current turn (`file:line` or
-  command output) or is explicitly marked `[unverified]` / `[assumed]`.
-- Cluster-data paths carry `clusterId` through requests, scopes, caches, state,
-  events, navigation, persistence keys, and actions.
-- Object references crossing boundaries carry `clusterId`, `group`, `version`,
-  `kind`, and concrete `namespace`/`name` when applicable.
-- Object catalog remains the source of truth for discovery, existence,
-  GVK/GVR identity, Browse namespace metadata, and cluster listings;
-  namespace LIST rows remain owned by the `namespaces` refresh domain.
-- Backend status semantics are projected as `status`, `statusState`,
-  `statusPresentation`, and optional `statusReason` where primary status is
-  rendered.
-- Relationship navigation uses `ResourceLink.ref` and catalog-backed identity,
-  not frontend kind/name reconstruction.
-- List/table payloads are served from refresh snapshot/query paths, not
-  `backend/resources` detail/action services.
-- Refresh domain metadata, behavior classes, timing, backend registrations,
-  frontend registrations, diagnostics, and tests align through the shared domain
-  contract.
-- Query-backed resource stream WebSocket messages remain liveness signals; rows,
-  filtering, sorting, facets, totals, and page metadata stay on the HTTP
-  snapshot/query path.
-- Snapshot/query payloads and stream signals agree on identity, scope, liveness,
-  and permission behavior for the same table/list surface.
-- Permission-denied or restricted-RBAC behavior remains visible in diagnostics.
-- Auth, recovery, runtime operation, stream, and cleanup behavior stays scoped to
-  the affected cluster.
-- YAML read/save/merge/ownership flows preserve full cluster and GVK identity and
-  the shared field-policy contract.
-- Shared contracts do not add parallel frontend/backend enums, descriptors,
-  schemas, or registries without parity tests.
-- Frontend resource reads use `dataAccess`, app-shell/persisted-state reads use
-  `appStateAccess`, and direct `fetch` remains confined to the refresh client.
-- New frontend UI uses existing components, CSS files, tokens, aliases, and
-  GridTable where applicable.
-- Tests cover the changed behavior at the closest useful level.
+A "ready" verdict requires the root final gate plus `git diff --check` and
+`git status --short` (documentation/comment-only branches may skip
+`qc:prerelease`, not the other two). If the gate cannot run or fails, report the
+exact command and first concrete failure and do not call the branch ready.
 
-## Validation Sequence
+## Output
 
-Run focused tests first when the branch has clear areas:
-
-- Backend shared/resource-model/refresh changes: focused `mise exec -- go test` packages.
-- Frontend changes: targeted Vitest specs and `mise exec -- npm run typecheck --prefix frontend`.
-- Runtime operations/logs/shell/port-forward/drain: focused backend workflow
-  tests plus affected frontend lifecycle/orchestrator tests.
-- Broad frontend/shared changes: consider `mise exec -- wails3 task qc:knip`.
-
-Before a final "ready" verdict on non-documentation or non-comment-only work,
-run:
-
-```sh
-mise exec -- wails3 task qc:prerelease
-git diff --check
-git status --short
-```
-
-If `mise exec -- wails3 task qc:prerelease` cannot run or fails, report the
-exact command and first concrete failure. Do not call the branch ready.
-
-`mise exec -- wails3 task qc:prerelease` includes `qc:lint-fix`, so inspect
-changed files afterward.
-
-For documentation-only or comment-only branches,
-`mise exec -- wails3 task qc:prerelease` may be skipped, but still run
-`git diff --check` and `git status --short` before the verdict.
-
-## Output Format
-
-For review findings:
-
-1. Findings first, ordered by severity.
-2. Each finding includes file/line, problem, impact, and concrete fix direction.
-3. Then open questions or assumptions.
-4. Then validation state.
-5. Then short summary/verdict.
-
-For no findings:
-
-- Say that no merge-blocking issues were found.
-- State exactly what was validated.
-- State residual risk or untested areas.
-
-For PR summaries:
-
-- Use the real diff/range.
-- Describe user-visible behavior and operational impact.
-- Avoid touched-file inventories, commit hashes, and unverified claims.
+- Findings first, ordered by severity; each gives file/line, problem, impact,
+  and concrete fix direction. Then open questions or assumptions, validation
+  state, and a short verdict.
+- No findings: say no merge-blocking issues were found, exactly what was
+  validated, and the residual risk or untested areas.
+- PR summaries: use the real diff/range; describe user-visible behavior and
+  operational impact; omit touched-file inventories, commit hashes, and
+  unverified claims.

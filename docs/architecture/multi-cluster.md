@@ -1,312 +1,247 @@
 # Multi-Cluster Contract
 
-Every cluster is independent. Auth, refresh state, caches, navigation, runtime
-operations, permissions, and object actions for one cluster must not affect
-another cluster.
+Every cluster is independent: auth, refresh state, caches, navigation, runtime
+operations, permissions, and object actions for one cluster never affect another.
 
 ## Agent Contract
 
-- Carry `clusterId` through every cluster-data path: APIs, refresh scopes,
-  caches, stores, events, persistence keys, navigation, diagnostics, and object
-  actions.
-- Do not infer a cluster from the active tab after data has crossed a boundary.
-- Treat the active tab as foreground selection only. Open inactive tabs are
-  retained workspaces, not disposed views.
-- Tab activation and retained/background refresh behavior follows the single
-  [data freshness contract](data-freshness.md); cluster selection must not add a
-  readiness delay or turn inactive tabs into producer demand.
-- Refresh domains are single-cluster. Cross-cluster summaries fan out over
-  per-cluster state instead of inventing aggregate refresh scopes.
-- Cluster add, close, replace, and clear actions must go through the unified
-  kubeconfig selection transition.
+- Besides the root `AGENTS.md` list, APIs, stores, and diagnostics carry
+  `clusterId`.
+- The active tab is foreground selection only; never infer a cluster from it
+  after data crosses a boundary. Missing, ambiguous, or stale cluster identity is
+  an error, never a fallback to the current cluster.
+- Open inactive tabs are retained workspaces, not disposed views. Activation and
+  background refresh follow [data freshness](data-freshness.md); selection adds
+  no readiness delay and never turns inactive tabs into producer demand.
+- Refresh domains are single-cluster; cross-cluster views fan out over
+  per-cluster state, never aggregate scopes.
+- Every add/close/replace/clear goes through `KubeconfigContext`'s unified
+  selection transition (`openKubeconfig`, `closeKubeconfig`,
+  `setSelectedKubeconfigs`). UI never splices selected clusters locally or calls
+  generated backend selection/close commands.
+- Add/remove updates aggregate refresh handlers and object-catalog services via
+  the live update path, not only initial setup. Removal cleans refresh
+  subsystems, catalog state, runtime operations, stream subscriptions, and
+  cluster-scoped UI state.
 - Frontend lifecycle, auth, health, namespace-scope revision, selection, and
-  visible-cluster state are projections of one cluster-workspace state plane;
-  do not introduce another cluster-keyed cache in a React context or hook.
-- Cluster removal must clean refresh subsystems, catalog state, runtime
-  operations, stream subscriptions, and cluster-scoped UI state.
-- Missing, ambiguous, or stale cluster identity is an error. Do not silently
-  fall back to the current cluster.
+  visible-cluster state project one cluster-workspace state plane; never add
+  another cluster-keyed cache in a React context or hook.
+- Test open/add and close/remove/clear paths, distinguishing foreground,
+  background-open, and removed-cluster states.
 
 ## Identity And Scopes
 
-`clusterId` is stable app identity for a selected kubeconfig context. The same
-context name in two kubeconfig files can be two different clusters.
-
-Refresh scopes are cluster-prefixed:
-
-```text
-clusterId|<domain-specific-scope>
-clusterId|
-clusterId|namespace:default
-```
-
-Unsupported multi-cluster scope strings may be parsed only to return clean
-validation errors. Frontend refresh code should not produce them.
+`clusterId` is stable app identity for a selected kubeconfig context; the same
+context name in two kubeconfig files can be two clusters. Refresh scopes are
+cluster-prefixed (`clusterId|`, `clusterId|namespace:default`,
+`clusterId|<domain-specific-scope>`). Unsupported multi-cluster scope strings
+are parsed only to return validation errors; frontend code never produces them.
 
 ## Ownership
 
-- `backend.ClusterRuntimeManager` owns kubeconfig discovery and watcher
-  retargeting, cluster clients and metadata, authentication and recovery,
-  transport-health state, cluster lifecycle, Kubernetes API metrics, mutable
-  client rate limits, dependency resolution, and heartbeat probes.
-- `backend.ClusterWorkspaceProjection` is the leaf owner of replayable health,
-  namespace-scope revisions, and the aggregate workspace revision. Source
-  owners write through its narrow methods; it owns no clients, selections, or
-  refresh subsystem.
-- `backend.WorkspaceCoordinator` owns peer-window selection sets, the
-  serialized selection-mutation boundary, supersession generations,
-  diagnostics, namespace-scope rebuild coalescing, foreground demand, and
-  authoritative workspace-state assembly.
-- `backend.RefreshCoordinator` owns per-cluster refresh and catalog lifecycles,
-  aggregate routing, streams, governor state, spill state, and publication.
-- Cluster Attention rules, persistence transactions, six Ignore/Restore
-  commands, and the cluster-indexed live target registry:
-  `backend.ClusterAttentionService` in `backend/cluster_attention_service.go`
-  and `backend/cluster_attention_rules.go`. The service owns the Attention lock;
-  it uses a narrow `PreferencesService` repository for persistence and never
-  reaches through the refresh owner.
-- Cluster and workspace implementation: `backend/cluster_runtime_clients.go`,
-  `backend/cluster_runtime_kubeconfig_discovery.go`,
-  `backend/workspace_cluster_clients.go`, `backend/workspace_kubeconfigs.go`,
-  and `backend/workspace_state.go`
-- Refresh and object-catalog implementation: `backend/refresh_*.go`,
-  `backend/refresh_object_catalog.go`
-- Frontend cluster-workspace state and runtime-event reconciliation:
-  `frontend/src/core/cluster-workspace/clusterWorkspaceStore.ts`
-- Frontend selection/navigation UI:
-  `frontend/src/modules/kubernetes/config/KubeconfigContext.tsx`
-- Refresh scope helpers: `frontend/src/core/refresh/clusterScope.ts`
-- Cluster tab UI state: `frontend/src/ui/layout/ClusterTabs.tsx`
-- Global/per-cluster workspace navigation:
-  `frontend/src/core/contexts/ViewStateContext.tsx`
+Owner map and dependency directions: [backend-services](backend-services.md).
 
-The dependency direction is one-way: Workspace sequences Cluster Runtime and
-Refresh; Refresh reads Cluster Runtime and invalidates `ResourceGateway`; the
-cluster and refresh owners never call back into Workspace. Watcher, auth, and
-transport producers instead publish typed `ClusterRuntimeIntent` values to an
-owner-local queue. Publication is non-blocking and pending work is coalesced by
-intent kind plus `clusterId`. Workspace is the single consumer: it rejects
-stale generations per kind/cluster and routes accepted work through the same
-serialized selection boundary as frontend commands. Shutdown stops that
-consumer before auth recovery and the watcher can publish more work.
-
-Preferences pushes initial and live Kubernetes QPS/burst values through the
-write-only cluster-runtime settings sink. `ClusterRuntimeManager` stores those
-values for future clients and retimes existing mutable limiters and API-metrics
-entries; it never reads Preferences.
+- Beyond that map: `ClusterRuntimeManager` also owns watcher retargeting,
+  cluster metadata and lifecycle state, dependency resolution, and heartbeat
+  probes; `WorkspaceCoordinator` owns supersession generations, selection
+  diagnostics, and namespace-scope rebuild coalescing; `RefreshCoordinator` owns
+  aggregate routing. Neither Cluster Runtime nor Refresh calls back into
+  Workspace.
+- `ClusterWorkspaceProjection` is a leaf: source owners write through narrow
+  methods; it owns no clients, selections, or refresh subsystem.
+- Watcher, auth, and transport producers publish typed `ClusterRuntimeIntent`
+  values to an owner-local queue, non-blocking and coalesced by intent kind plus
+  `clusterId`. Workspace, the single consumer, rejects stale generations per
+  kind/cluster and routes accepted work through the serialized selection
+  boundary. Shutdown stops the consumer before auth recovery and the watcher can
+  publish more.
+- `ClusterRuntimeManager` stores pushed QPS/burst for future clients and retimes
+  existing mutable limiters and API-metrics entries; it never reads Preferences.
+- `ClusterAttentionService` (`backend/cluster_attention_service.go`,
+  `cluster_attention_rules.go`) owns the Attention lock, six Ignore/Restore
+  commands, and the cluster-indexed live target registry; it persists through a
+  narrow `PreferencesService` repository and never reaches through Refresh.
+- Frontend (`frontend/src/`): `core/cluster-workspace/clusterWorkspaceStore.ts`
+  (state, runtime-event reconciliation),
+  `modules/kubernetes/config/KubeconfigContext.tsx` (selection UI),
+  `core/refresh/clusterScope.ts`, `ui/layout/ClusterTabs.tsx`,
+  `core/contexts/ViewStateContext.tsx` (Global/per-cluster navigation).
+- Backend starting points:
+  [cluster-auth-lifecycle skill](../../.agents/skills/cluster-auth-lifecycle/SKILL.md).
 
 ## Cluster Workspace State Plane
 
-`GetClusterWorkspaceStateForWindow` returns the requesting peer's selected
-kubeconfig contexts and foreground cluster intent together with process-wide,
-cluster-indexed lifecycle, auth, health, and namespace-scope revision state.
-`ApplyClusterWorkspace` updates that peer's complete tab set before visible-
-cluster activation and returns the resulting authoritative per-window
-snapshot. Selection UI must use that response instead of chaining separate
-selection, auth, lifecycle, and visible-cluster reads.
+### Backend snapshot
 
-Selection acknowledgement follows the membership and restart-selection commit,
-before connecting to the selected clusters. The renderer serializes membership
-RPCs in user order, while tab identity paints immediately and foreground commands
-use an independent ordered lane. A later tab switch remains authoritative when
-an earlier membership acknowledgement arrives. Reopens wait for close guards and
-accepted removal to settle. Discovery hydration and delayed command snapshots
-cannot overwrite newer selection intent or lifecycle events. Discovery reads deferred
-by a membership change or close must run again after those operations settle, so
-discovered removals are reconciled against the latest backend selection.
+- `GetClusterWorkspaceStateForWindow` returns the peer's selected contexts and
+  foreground intent plus process-wide, cluster-indexed lifecycle, auth, health,
+  and namespace-scope revisions.
+- `ApplyClusterWorkspace` updates the peer's complete tab set before
+  visible-cluster activation and returns the authoritative per-window snapshot;
+  selection UI uses it instead of chaining selection/auth/lifecycle reads.
+- Each workspace-visible state writer advances the workspace revision under its
+  own lock, in the same commit; capture retries if the revision moves.
+- Public reads take the peer-selection lock, not the serialized selection-work
+  boundary, so unreachable clusters cannot block hydration.
+- Visibility-only `ApplyClusterWorkspace` bypasses the selection boundary without
+  advancing or cancelling its generation. Tab-set changes stay ordered (no
+  window supersedes another's mutation) and capture their snapshot before
+  releasing the boundary.
+- The connection generation is replaced only when the process-wide selection
+  changes; panel retain/release, view moves, and duplicate-view open/close keep
+  in-flight clients and auth results.
 
-A close click removes the visible tab and selects its neighbor immediately,
-including when the tab's open acknowledgement or native close is still pending.
-`selectedKubeconfigs` and `selectedClusterIds` describe these visible tabs;
-`managedKubeconfigs` and `managedClusterIds` retain closing clusters until native
-removal is accepted. Persisted tab ordering uses the managed selection so denial
-restores the original tab position.
-Panel publication, panel/layout ownership, navigation, sidebar, and namespace
-retention use the managed set. Local close guards run before switching away can
-unmount their controls; native removal waits for the prior tab admission.
-Each close captures its registered preflight participants before awaiting them.
-Foreground changes may replace those registrations, but cannot add a second native
-close to the transaction already in progress. Native close is the sole membership
-mutation for that close. The provider requires a participant to report a native
-commit for the requested cluster; missing or uncommitted participants fail the
-close and restore the tab. After acceptance, the renderer adopts the confirmed
-removal and releases its guard without sending another full-set membership write.
-A sibling close may already be committed while its response is still in flight;
-a renderer snapshot cannot establish that ordering. No persistent exclusion set
-survives the close, so transfer hydration can readmit that cluster normally.
-Panel directory reads, object opens,
-and docked publication also require confirmed membership from the workspace state
-plane; optimistic tab visibility does not authorize native panel access. This gate
-does not wait for cluster connection readiness or block the membership command.
-A denied or failed preflight restores the tab and retained state without
-overwriting a newer foreground choice. Only accepted removal disposes that
-cluster's retained state. Global navigation likewise remains retained until the
-close is accepted even while its tab is temporarily hidden.
+### Process selection union
 
-A process-selection change can cancel obsolete connection work before waiting
-for the selection mutation. Peer ownership changes that leave the process union
-unchanged preserve in-flight authentication. Adding a panel reference to an
-already-owned selection, or releasing a reference while another owner remains,
-uses the short workspace-ownership lock and does not wait for connection work.
-The ownership check and reference update are atomic: a reference cannot bypass
-retirement after the last owner has been removed. Final-reference release stays
-serialized with runtime teardown. Both paths participate in the shutdown drain.
-Runtime work retains the serialized mutation and shutdown drain; admitted tabs
-report subsequent connection failure through lifecycle state and selection
-diagnostics. Client construction records failure for its own cluster and
-collects batch errors without cancelling healthy siblings. Open, close, release,
-pruning, and startup use that same failure owner.
-Refresh publication proceeds with installed clients even when another build
-fails; when none remain, it retires the previous refresh runtime. Failed tabs
-stay admitted and unavailable; their recovery guidance is to close and reopen
-the tab, because refreshing data cannot rebuild missing clients. Discovery and
-preflight must propagate the connection context so cancellation drains their HTTP
-requests.
-Closing a canceled connection also removes lifecycle and API-diagnostics entries
-that never acquired installed clients. API diagnostics retire with shared cluster
-workspace state on deselection, pruning, and final-tab clearing; peer-owned
-clusters retain their diagnostics and request history.
-Frontend stream and snapshot continuations belong to the runtime instance that
-started them. Once removal retires that instance, queued work cannot recreate it;
-late subscriptions are disposed and late failures cannot republish scoped state.
-An explicit reopen creates a new runtime with independent work.
+- The backend keeps one cluster-tab set per app window plus cluster-scoped panel
+  references; their deterministic union owns process-wide selected kubeconfigs,
+  clients, refresh subsystems, catalogs, and runtime operations. Teardown
+  requires that no app view or panel reference retains the cluster.
+- Closing a tab releases only that view while another app window shows the
+  cluster. Closing the final app tab first guards and closes its native panel
+  windows and discards its shared panels; closing an app window instead keeps
+  docked panels and leaves floating panels open.
+- The native close command records a view's removal before another close
+  decides finality; renderer selection reconciles that result.
+- Cluster-tab moves stage the target before removing the source. A panel-only
+  renderer projects its fixed cluster without an app-view tab set
+  ([panel workspaces](application-lifecycle.md#cluster-owned-panel-workspaces)).
+- Adding a panel reference to an owned selection, or releasing one while another
+  owner remains, takes only the short workspace-ownership lock. Check and update
+  are atomic, so no reference bypasses retirement after the last owner leaves.
+  Final-reference release stays serialized with teardown; both join the
+  shutdown drain.
 
-The backend retains one cluster-tab set per app window plus cluster-scoped
-panel references. Their deterministic union owns process-wide selected
-kubeconfigs, clients, refresh subsystems, catalogs, and runtime operations.
-Closing a tab releases only that app view while another app window displays the
-cluster. Explicitly closing its final app tab first guards and closes its native
-panel windows and discards its shared panels. Closing an app window instead
-retains docked panels and leaves floating panels open. Teardown requires that
-neither app views nor panel references retain the cluster. The native close
-command records a view's removal before another close decides whether it is the
-final view; renderer selection updates then reconcile that authoritative result.
-Close acknowledgement follows the membership and restart-selection commit,
-before client, refresh, and catalog cleanup finishes. Cleanup remains inside
-the existing serialized selection mutation and shutdown drain. Reopens and later
-selection mutations wait for that cleanup; background cleanup failures are
-reported in selection diagnostics and cluster-scoped application logs without
-restoring an accepted tab close. Panel guards and publication flushes still
-finish before the close is accepted.
-The renderer holds that cluster's request gate before native close preflight,
-aborts its requests and streams, and prunes its refresh runtime on acceptance.
-A denied close releases the hold and resumes retained work. Selection changes
-retain catalogs for surviving clusters; catalog teardown belongs to removal or
-replacement of the owning refresh generation.
-Cluster-tab movement stages the target
-before removing the source, preserving the process selection throughout.
-A panel-only renderer projects its fixed cluster without creating an app-view
-tab set. See [application lifecycle](application-lifecycle.md#cluster-owned-panel-workspaces).
+### Open and selection ordering
 
-The backend snapshot is revision-consistent: every owning state writer advances
-the workspace revision while holding its own lock, and the aggregate retries if
-that revision changes during capture. Public reads use the peer-selection lock,
-not the serialized selection-work boundary, so slow or unreachable clusters
-cannot prevent the frontend from hydrating tabs and lifecycle state.
-Visibility-only `ApplyClusterWorkspace` commands bypass that selection boundary
-and do not advance or cancel its generation; commands that change a peer's tab
-set remain ordered so one window cannot supersede another window's mutation and
-capture their applied snapshot before releasing the boundary. Ordered mutations
-replace the connection generation only when the process-wide cluster selection
-actually changes. Retaining or releasing panels, moving a cluster view, and
-opening or closing duplicate views must preserve an unchanged selection's
-in-flight clients and authentication results. Do not add a
-workspace-visible state writer without advancing the revision in the same locked
-commit.
+- Selection acknowledgement follows the membership and restart-selection
+  commit, before connecting; the connection work after it stays inside the
+  serialized mutation and shutdown drain.
+- The renderer serializes membership RPCs in user order and paints tab identity
+  immediately; foreground commands use an independent ordered lane, so a later
+  tab switch beats an earlier membership ack.
+- Reopens wait for close guards and accepted removal. Discovery hydration and
+  delayed command snapshots never overwrite newer selection intent or lifecycle
+  events; discovery reads deferred by a membership change or close rerun after
+  it settles, reconciling discovered removals against the latest backend
+  selection.
 
-Startup calls `PreferencesService.EnsureLoadedForStartup` before entering the
-selection mutation, then restores the immutable selected-kubeconfig snapshot
-inside that boundary. Client preflight then reuses the restored selection
-generation's cancellation context outside the mutation lock. A later mutation
-that changes the process selection can acquire the lock, cancel stale startup connection work,
-and reconcile its newer selection without waiting for an unreachable API
-server. Successful startup preflight re-enters the selection boundary before it
-publishes refresh and catalog state, preventing stale startup work from racing a
-newer selection. Startup connection work never holds the native runtime-ready
-callback. Search-path changes persist first, ask Cluster Runtime to rediscover
-and retarget the watcher, classify removed selections, and only then reconcile
-refresh, selections, clients/auth, operations, projection state, and the
-persisted remaining selection.
+### Close
 
-The React-free `clusterWorkspaceStore` subscribes to runtime events before its
-initial hydration. Live fields win only over hydration responses that were
-already in flight when the event arrived; later authoritative snapshots can
-heal missed state. It owns the
-foreground activation/serviceability boundary and exposes immutable snapshots;
-`AuthErrorContext`, `ClusterLifecycleContext`, health hooks, and refresh
-readiness are selector/facade layers, not additional state owners. Existing
-internal event-bus emissions are downstream wake-up notifications for refresh
-consumers and must not become a second state cache.
+- A close click removes the tab and selects its neighbor immediately, even with
+  a pending open ack or native close.
+- `selectedKubeconfigs`/`selectedClusterIds` are visible tabs;
+  `managedKubeconfigs`/`managedClusterIds` keep closing clusters until native
+  removal is accepted. Persisted tab order, panel publication and ownership,
+  navigation (including Global), sidebar, and namespace retention use the
+  managed set, so denial restores position and state.
+- Local close guards run before switching away can unmount their controls;
+  native removal waits for the prior tab admission. Each close captures its
+  preflight participants before awaiting them; later foreground changes cannot
+  add a second native close to that transaction.
+- Native close is that close's sole membership mutation. A participant must
+  report a native commit for the requested cluster, or the close fails and the
+  tab returns. After acceptance the renderer adopts the removal without another
+  full-set membership write.
+- A sibling close may be committed while its response is in flight; renderer
+  snapshots cannot order it. No exclusion set survives a close, so transfer
+  hydration can readmit the cluster.
+- Panel directory reads, object opens, and docked publication require confirmed
+  membership; optimistic tab visibility never authorizes native panel access.
+  This gate neither waits for connection readiness nor blocks the membership
+  command.
+- The renderer holds the cluster's request gate before native preflight, aborts
+  its requests and streams, and prunes its refresh runtime on acceptance. Denial
+  or failure releases the hold, resumes retained work, and restores the tab
+  without overriding a newer foreground choice. Only accepted removal disposes
+  retained state.
+- Panel guards and publication flushes finish before acceptance. The close ack
+  precedes client, refresh, and catalog cleanup, which stays inside the
+  serialized selection mutation and shutdown drain; reopens and later mutations
+  wait for it. Cleanup failures go to selection diagnostics and cluster-scoped
+  logs without restoring the tab.
+- Catalogs of surviving clusters persist across selection changes; catalog
+  teardown belongs to removal or replacement of the owning refresh generation.
+- Frontend stream/snapshot continuations belong to the runtime instance that
+  started them; once removal retires it, queued work cannot recreate it, late
+  subscriptions are disposed, and late failures cannot republish. Reopen
+  creates a new runtime.
 
-Initial frontend hydration publishes discovered kubeconfigs and the restored tab
-set before awaiting foreground activation. The workspace store's foreground
-activation hold gates cluster-data refresh until that independent activation
-settles; activation failure cannot erase the app-global discovery result or tab
-selection.
+### Connection work and failure
 
-The `no-direct-cluster-workspace` Biome plugin enforces this ownership boundary:
-only `frontend/src/core/cluster-workspace` may call the combined workspace RPC
-or subscribe directly to lifecycle, auth, health, and namespace-scope Wails
-events.
+- A process-selection change may cancel obsolete connection work before
+  waiting for the selection mutation; ownership changes that leave the union
+  unchanged keep in-flight authentication.
+- Admitted tabs report later connection failure through lifecycle state and
+  selection diagnostics. Client construction records failure per cluster and
+  collects batch errors without cancelling healthy siblings; open, close,
+  release, pruning, and startup share that failure owner.
+- Refresh publication proceeds with the installed clients when another build
+  fails; with none left it retires the previous refresh runtime. Failed tabs stay
+  admitted and unavailable; guidance is close and reopen, since refreshing
+  cannot rebuild missing clients.
+- Discovery and preflight propagate the connection context so cancellation
+  drains their HTTP requests.
+- Closing a canceled connection removes lifecycle and API-diagnostics entries
+  that never acquired clients. API diagnostics retire with shared workspace
+  state on deselection, pruning, and final-tab clearing; peer-owned clusters keep
+  diagnostics and request history.
+
+### Startup and search paths
+
+- Startup runs `PreferencesService.EnsureLoadedForStartup` before entering the
+  selection mutation, then restores the immutable selected-kubeconfig snapshot
+  inside it. Client
+  preflight runs outside the lock with that generation's cancellation context,
+  so a newer selection can cancel it without waiting on an unreachable API
+  server; success re-enters the boundary before publishing refresh and catalog
+  state. Startup connection work never holds the native runtime-ready callback.
+- Search-path changes persist first, have Cluster Runtime rediscover and
+  retarget the watcher, classify removed selections, then reconcile refresh,
+  selections, clients/auth, operations, projection state, and the persisted
+  remainder.
+
+### Frontend store
+
+- The React-free `clusterWorkspaceStore` subscribes to runtime events before
+  initial hydration. Live fields beat only hydration responses already in flight
+  when the event arrived; later snapshots heal missed state.
+- It owns the foreground activation/serviceability boundary and immutable
+  snapshots. `AuthErrorContext`, `ClusterLifecycleContext`, health hooks, and
+  refresh readiness are selector facades; internal event-bus emissions are
+  wake-ups, never a second cache.
+- Initial hydration publishes discovered kubeconfigs and the restored tab set
+  before awaiting foreground activation, whose hold gates cluster-data refresh;
+  activation failure cannot erase discovery or tab selection.
+- The `no-direct-cluster-workspace` Biome plugin restricts the combined
+  workspace RPC and lifecycle/auth/health/namespace-scope Wails events to
+  `frontend/src/core/cluster-workspace`.
 
 ## Global Clusters View
 
-Global is an independent app workspace, not a route owned by the foreground
-cluster. It retains its last Global view while every open cluster independently
-retains its last Cluster/Namespace/Overview route. The foreground kubeconfig is
-still used for backend foreground priority, but its tab is not visually active
-while Global is selected. When fewer than two clusters remain, the app restores
-the remaining foreground cluster's retained route.
+Global workspace rules (entry/exit, staged links, fan-out) live in
+[navigation](../frontend/navigation.md). Multi-cluster specifics:
 
-Clusters is a Global-scope view that compares only open clusters. The frontend
-fans out the existing `cluster-overview` domain over one `clusterId|` scope per
-eligible cluster; it does not introduce a cross-cluster refresh scope or cache
-entry. Each row keeps the originating `clusterId` as its identity and uses
-overview-owned readiness, capacity, workload, metrics, and
-unavailable-resource projections.
-
-Each eligible cluster has its own keyed refresh lease owner. Adding or removing
-one cluster must acquire or release only that cluster's lease; it must not cycle
-the leases or startup fetches of surviving clusters. Global table persistence,
-pagination, and replay-cache identities are fixed per Global view and must never
-be derived from the changing open-cluster membership.
-
-Lifecycle and confirmed authentication failures remain per cluster. Clusters may
-show ready, loading, reconnecting, disconnected, and authentication-required
-rows together, and it does not start overview refresh for a cluster whose
-lifecycle cannot activate that domain.
-
-The Cluster link in a Clusters row prepares the destination cluster's navigation
-and sidebar state before activating its kubeconfig selection and opening that
-cluster's Overview. The rest of the row is non-interactive. The Needs Attention
-cell summarizes not-ready nodes and failing pods without becoming a separate
-navigation target.
-
-The user-facing scope and label are **Global → Clusters**. The internal `fleet`
-Global route and `cluster-fleet` table-persistence id remain compatibility
-identities. Legacy favorites that encoded `fleet` or `global-namespaces` as a
-cluster route are normalized at the favorite navigation boundary.
-
-**Global → Namespaces** reads the existing per-cluster `namespaces` refresh
-entries for every open cluster; it does not introduce an aggregate refresh
-scope. Its columns match **Cluster → Namespaces** and add the originating
-cluster name. Each row retains the namespace object's full canonical identity,
-including `clusterId`, and navigating a row stages that cluster's namespace,
-namespace Browse view, and sidebar selection before activating the cluster.
-When one or more open clusters have no namespace snapshot (including permission
-denial or an unavailable lifecycle), the table labels the union as partial.
-
-## Change Checklist
-
-When touching multi-cluster behavior:
-
-1. Trace producer and consumers of `clusterId`.
-2. Check whether foreground, background-open, and removed-cluster states differ.
-3. Confirm refresh scopes and persistence keys cannot collide across clusters.
-4. Confirm object actions and links use the originating object's cluster.
-5. Add or update tests for both add/open and close/remove/clear paths.
-
-## Validation
-
-Use targeted backend/frontend tests for the touched lifecycle path. For
-non-documentation work, finish with `wails3 task qc:prerelease`.
+- While Global is selected the foreground kubeconfig keeps backend priority but
+  its tab is not visually active.
+- **Global → Clusters** fans out `cluster-overview` over one `clusterId|` scope
+  per eligible open cluster. Rows keep the originating `clusterId` and use
+  overview-owned readiness, capacity, workload, metrics, and
+  unavailable-resource projections.
+- Each eligible cluster has its own keyed lease owner; adding or removing one
+  touches only its lease, never cycling survivors' leases or startup fetches.
+  Global table persistence, pagination, and replay-cache ids are fixed per
+  Global view, never derived from membership.
+- Lifecycle and confirmed auth failures stay per row (ready, loading,
+  reconnecting, disconnected, auth-required together); no overview refresh
+  starts for a cluster whose lifecycle cannot activate that domain.
+- Only the Cluster link is interactive: it prepares the destination's
+  navigation and sidebar, activates its kubeconfig, and opens its Overview. The
+  Needs Attention cell (not-ready nodes, failing pods) is not a link.
+- The internal `fleet` route and `cluster-fleet` table-persistence id are
+  compatibility identities for **Global → Clusters**.
+- **Global → Namespaces** reads each open cluster's `namespaces` entry (no
+  aggregate scope), uses **Cluster → Namespaces** columns plus cluster name, and
+  keeps full row identity. Row navigation stages that cluster's namespace,
+  namespace Browse view, and sidebar before activating it. Any open cluster
+  without a namespace snapshot (denied or unavailable) marks the table partial.

@@ -17,63 +17,35 @@ changed path crosses that boundary.
 
 | Change | Read |
 | --- | --- |
-| Object references or GVK identity | [shared-resource-model](../../../docs/architecture/shared-resource-model.md#identity) |
-| Status, lifecycle, facts or relationship projections | [shared-resource-model](../../../docs/architecture/shared-resource-model.md); select Status, Links, or Use The Model For |
+| Object references or GVK identity | [shared-resource-model](../../../docs/architecture/shared-resource-model.md#identity), including Frontend Reference Types |
+| Status, lifecycle, facts, segments or relationship projections | [shared-resource-model](../../../docs/architecture/shared-resource-model.md); select Agent Contract, Status, Links, or Use The Model For |
 | Per-kind package, descriptor or registry layout | [resource-kind-registry](../../../docs/architecture/resource-kind-registry.md) |
 | Discovery, existence or GVK/GVR resolution | [catalog](../../../docs/architecture/catalog.md) |
 | Refresh payload, scope or stream consumers | [refresh-system](../../../docs/architecture/refresh-system.md) |
+| Adding a kind or a kind's surface | [add-resource skill](../add-resource/SKILL.md) |
 
-## Backend Entry Points
+## Entry Points
 
-- `backend/resources/<kind>` — per-kind `identity.go`, `descriptor.go`,
-  `model.go`, `facts.go`, `dto.go` (the single definition of a kind)
-- `backend/resourcemodel` — shared status/facts/link primitives + relationship
-  index that the per-kind models build on
-- `backend/resourcekind`, `backend/resourcecontract`, `backend/kind/kindregistry`
-  — identity leaf, the built-in identity contract, and the kind registry
-- `backend/refresh/snapshot`
-- `backend/resource_gateway.go` — request-shaped detail/action owner
-- `backend/resources/types` — shared cross-kind DTO field types
-- `backend/object_detail_provider.go` — ResourceGateway detail dispatch
-  (generated bindings)
-
-## Frontend Entry Points
-
-- `frontend/src/shared/utils/backendStatusPresentation.ts`
-- `frontend/src/shared/utils/resourceLinkIdentity.ts`
-- `frontend/src/modules/object-panel`
-- `frontend/src/modules/object-map`
-- Refresh/table consumers under `frontend/src/modules/*` and
-  `frontend/src/core/refresh/types.ts`
-
-## Checklist
-
-- [ ] Object refs crossing boundaries include `clusterId`, group, version, kind,
-      and namespace/name for concrete objects.
-- [ ] Backend GVK/GVR/scope lookups use the object catalog `ResourceResolver`.
-      Built-ins use their real group/version from the catalog seed; CRDs
-      preserve group/version from discovery, catalog, owner refs, HPA targets,
-      events, or manifests.
-- [ ] Primary status is computed once in backend model code and projected as
-      `status`, `statusState`, `statusPresentation`, and optional
-      `statusReason`.
-- [ ] Frontend renders backend presentation fields instead of deriving primary
-      status classes.
-- [ ] Relationships use `ResourceLink`; incomplete source refs become
-      display-only refs rather than unsafe navigation links.
-- [ ] Facts stay semantic until the final DTO/table formatting boundary.
-- [ ] Table rows, stream rows, object panel details, events, and object-map
-      payloads stay consistent when they render the same resource family.
-- [ ] Tests cover model status/facts/links and every changed projection.
+- Backend: `backend/resources/<kind>` (`identity.go`, `descriptor.go`,
+  `model.go`, `facts.go`, `dto.go`); `backend/resourcemodel`;
+  `backend/resourcekind`, `backend/resourcecontract`,
+  `backend/kind/kindregistry`; `backend/refresh/snapshot`;
+  `backend/resource_gateway.go` (request-shaped detail/action owner);
+  `backend/resources/types`; `backend/object_detail_provider.go` (generated
+  detail dispatch).
+- Frontend: `frontend/src/shared/utils/backendStatusPresentation.ts`,
+  `frontend/src/shared/utils/resourceLinkIdentity.ts`,
+  `frontend/src/shared/utils/objectIdentity.ts`,
+  `frontend/src/modules/object-panel`, `frontend/src/modules/object-map`, and
+  refresh/table consumers under `frontend/src/modules/*` and
+  `frontend/src/core/refresh/types.ts`.
 
 ## Validation
 
-Use focused checks while iterating:
+Focused checks while iterating:
 
 ```sh
 mise exec -- go test ./backend/resourcemodel ./backend/refresh/snapshot ./backend/resources/... ./backend
 mise exec -- npm run typecheck --prefix frontend
 mise exec -- npm run test --prefix frontend -- backendStatusPresentation resourceLinkIdentity object-map object-panel
 ```
-
-Then follow the root final validation gate.

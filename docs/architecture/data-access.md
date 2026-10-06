@@ -1,92 +1,61 @@
 # Data Access Contract
 
-Frontend reads must go through one of the app data brokers. Components and
-feature hooks should not call backend read transports directly.
-
-## Agent Contract
-
-- Use `dataAccess` for cluster/resource reads.
-- Use `appStateAccess` for bootstrap, app-shell, persisted-state, app logs, and
-  runtime inventory reads.
-- Do not call generated cluster-data Wails read bindings, `QueryPermissions`,
-  `fetchScopedDomain`, or refresh manual-trigger helpers directly from feature
-  components.
-- Add typed reader wrappers under the owning broker package, then call through
-  the broker.
-- Commands and mutations may use action-specific bindings, but must carry full
-  cluster and object identity.
-- `dataAccess` reads must respect paused auto-refresh policy; user-triggered
-  reads may still run while passive reads are blocked.
-- `appStateAccess` must stay independent of refresh-domain lifecycle policy.
+Frontend reads go through one of two brokers; components and feature hooks
+never call backend read transports directly. Timing, retention, and request
+intents are owned by [data-freshness.md](data-freshness.md).
 
 ## Broker Choice
 
-| Broker | Use for |
-| --- | --- |
-| `dataAccess` | Refresh domains, cluster/resource RPC reads, permission/capability reads |
-| `appStateAccess` | Settings, kubeconfig inventory, app info, app logs, session lists, persisted UI state |
+| Broker | Package | Use for |
+| --- | --- | --- |
+| `dataAccess` | `frontend/src/core/data-access` | Refresh domains, cluster/resource RPC reads, permission/capability reads |
+| `appStateAccess` | `frontend/src/core/app-state-access` | Settings, kubeconfig inventory, app info, app logs, session lists, persisted UI state |
 
-Request reasons for cluster/resource reads are:
+- Feature components never call generated cluster-data Wails read bindings,
+  `QueryPermissions`, `fetchScopedDomain`, or refresh manual-trigger helpers.
+  Add a typed reader wrapper under the owning broker (`readers.ts`) and call
+  through it, declaring diagnostics labels, adapter type, request reason, and
+  scope.
+- Commands and mutations may use action-specific bindings with full cluster and
+  object identity.
+- `dataAccess` honors paused auto-refresh: passive reads are blocked while user
+  reads run ([request intents](data-freshness.md#request-intents)). A blocked
+  read is not an error and shows no passive loading spinner.
+- `appStateAccess` stays independent of refresh-domain lifecycle policy.
+  Settings schema, mutations, rollback, and runtime effects follow the
+  [app preferences contract](app-preferences.md).
+- Other starting points: refresh HTTP client
+  `frontend/src/core/refresh/client.ts`; settings metadata cache
+  `frontend/src/core/settings/appPreferences.ts`.
 
-- `background`: scheduler-driven upkeep
-- `startup`: first passive scope acquisition
-- `foreground`: a retained scope became visible; non-manual and allowed while
-  passive automatic refresh is paused
-- `user`: explicit user action
-- `stream-signal`: doorbell/change-signal-triggered refetch — bypasses the
-  skip-while-stream-healthy gate (a doorbell refetch issued as `background`
-  is silently swallowed)
+## Request correlation
 
-Context-wide manual refresh accepts only `user`. Navigation updates orchestrator
-context and lets the scheduler issue foreground reconciliation; it never creates
-a ManualQueue job.
-
-Every executed `dataAccess` read receives a `broker-read-N` request id. Refresh
-domain reads forward that id as `X-Correlation-ID` on manual-refresh, job-status,
-and snapshot requests through the same-origin Wails service. The backend reuses
-it as the operation identity for snapshot builds
-and carries it through queued manual-refresh execution, so frontend diagnostics,
-structured errors, and breadcrumbs refer to the same request instance.
-Because the refresh orchestrator presents handled failures before the broker
-call completes, it must pass the live `broker-read-N` id into the shared error
-boundary. The telemetry owner resolves only ids that are still registered as
-active broker requests; it does not trust an arbitrary caller-supplied id.
-
-The owning timing, retention, and background-work rules are in
-[data-freshness.md](data-freshness.md).
-
-When auto-refresh is disabled, blocked non-user reads should not show passive
-loading spinners.
-
-## Ownership
-
-- Cluster/resource broker: `frontend/src/core/data-access`
-- App-state broker: `frontend/src/core/app-state-access`
-- Refresh HTTP client: `frontend/src/core/refresh/client.ts`
-- Settings metadata cache: `frontend/src/core/settings/appPreferences.ts`
-- Wails DTOs and generated bindings: `frontend/bindings`; the only callable
-  backend module is `github.com/luxury-yacht/app/backend/desktopservice`
+- Every executed `dataAccess` read gets a `broker-read-N` request id; do not
+  create a second correlation id.
+- Refresh reads forward it as `X-Correlation-ID` on manual-refresh, job-status,
+  and snapshot requests. The backend reuses it as the snapshot-build and queued
+  manual-refresh operation identity, so diagnostics, structured errors, and
+  breadcrumbs name the same request.
+- The refresh orchestrator presents handled failures before the broker call
+  completes, so it passes the live id into the shared error boundary. Telemetry
+  resolves only ids still registered as active broker requests, never an
+  arbitrary caller-supplied id.
 
 ## Wails command boundary
 
-The complete backend owner map and permitted dependency directions are
-maintained in [backend-services.md](backend-services.md).
+Composition and dependency directions are owned by
+[backend-services.md](backend-services.md).
 
-`backend.DesktopService` is the sole registered backend service. It declares
-the stable frontend command signatures and delegates each command to exactly
-one owner-shaped interface: Favorites, UI state, Preferences, Data Management,
-Cluster Attention, Workspace, Cluster Runtime, Resources, Operations, Updates,
-App Logs, or Desktop Shell. Lifecycle and `/api/v2` HTTP handling are separate
-collaborators. Do not replace these seams with one interface containing every
-command, and do not give `DesktopService` a composition-root back-pointer.
-
-Frontend code imports generated commands only through
-`frontend/src/core/backend-api/index.ts`. Higher-level consumers must not import
-`desktopservice.ts` directly. `backend.ApplicationRuntime` is not a registered
-service and has no methods; only `DesktopService` supplies generated commands,
-so implementation owners need no `//wails:ignore` directives.
-
-The final command-to-owner map is:
+- `backend.DesktopService` is the sole registered Wails service. Each command
+  delegates to exactly one owner-shaped interface (table below); lifecycle and
+  `/api/v2` handling are separate collaborators. Rejected: one interface with
+  every command, and a `DesktopService` back-pointer to the composition root.
+- `backend.ApplicationRuntime` is not a service and has no methods, so owners
+  need no `//wails:ignore` directives.
+- Wails generates the callable module at
+  `frontend/bindings/github.com/luxury-yacht/app/backend/desktopservice.ts` and
+  shared DTOs in the adjacent `models.ts`; DTOs from nested Go packages stay in
+  matching generated subdirectories.
 
 | Owner | Commands | Responsibility |
 | --- | ---: | --- |
@@ -101,76 +70,31 @@ The final command-to-owner map is:
 | `OperationsCoordinator` | 10 | Shell, port-forward, drain, and live-operation lifecycle |
 | `UpdateCoordinator` | 6 | Update checks, download, skip, and restart |
 | `AppLogService` | 5 | Process log reads, writes, and clear |
-| `DesktopShell` | 5 | Native dialogs, CSV save, workspace-menu dispatch, and process UI visibility |
+| `DesktopShell` | 6 | Native dialogs, CSV and log save, workspace-menu dispatch, and process UI visibility |
+| `DesktopShell` (`PanelWindowCommands`) | 25 | Native panel-window and shared panel-workspace protocol: open, dock, close, tab/cluster transfer, quit preflight |
 | `PanelMetricsService` | 2 | Object panels' live metric samples: append and series reads |
 
-Wails generates the callable module at
-`frontend/bindings/github.com/luxury-yacht/app/backend/desktopservice.ts` and
-shared backend DTOs at the adjacent `models.ts`. DTOs declared in nested Go
-packages remain in their corresponding generated subdirectories. Frontend
-application code consumes this layout only through the backend API allowlist.
+### ResourceGateway
 
-`ResourceGateway` owns request-shaped Kubernetes resource work: exact catalog
-resolution, capability queries, typed details, YAML, object actions, Helm and
-node-log operations, response caching, and permission-aware cache validation.
-It receives narrow cluster-client, context, transport-health, event, logging,
-catalog, and telemetry collaborators; it never stores the composition root. The current
-cluster-client, dependency-resolution, and transport-health collaborators point
-directly to `ClusterRuntimeManager`. Catalog and refresh-telemetry reads use a
-shared leaf `refreshResourceProjection` that Refresh publishes into, so resource
-requests never call `RefreshCoordinator`.
+- Owns request-shaped resource work: exact catalog resolution, capability
+  queries, typed details, YAML, object actions, Helm and node-log operations,
+  response and SSRR caches, and permission-aware cache validation. It receives
+  narrow collaborators and never stores the composition root; cluster-client,
+  dependency-resolution, and transport-health collaborators point directly to
+  `ClusterRuntimeManager`.
+- The object catalog is its only production GVK-to-GVR and object-existence
+  resolver; the generated kind registry is the per-kind vocabulary. Resource
+  requests never fall back to kind-only discovery, infer a cluster, or read
+  preferences. It reads the shared `ContainerLogsSelectionPolicy` and
+  `PermissionFetchPolicy`, which successful settings operations push into.
+- Cache-invalidation rules: [refresh-system.md](refresh-system.md#snapshot-caches).
 
-The object catalog is the only production GVK-to-GVR and object-existence
-resolver used by `ResourceGateway`. The generated resource-kind registry remains
-the per-kind vocabulary. Resource requests do not fall back to kind-only
-discovery, infer a cluster, or read preferences.
+### Generated binding anchor
 
-Response and SSRR caches live inside `ResourceGateway`. Refresh construction
-registers gateway-owned invalidation callbacks, so the dependency points from
-refresh to resources. Resource code does not acquire refresh/subsystem state or
-call back through the composition root or coordinator. `ResourceGateway` reads the shared
-`ContainerLogsSelectionPolicy` and `PermissionFetchPolicy`; successful settings
-operations push new values into those policies in the opposite direction.
-
-The generated internal `BindingModelAnchor` method belongs to
-`*DesktopService`. Its type-level `wails:inject` directive keeps every resource
-detail DTO reachable even though the implementation-only
-`ResourceGateway.Get<Kind>` wrappers are not commands. `genappbindings.Render`
-emits the anchor and those wrappers in package `backend`, so `DesktopService`,
-`ResourceGateway`, and the generated file must remain there. Moving either type
-requires first adding and testing a target-package option in that generator.
-
-## Settings Rule
-
-Read the [app preferences contract](app-preferences.md) when changing settings
-schema, preference mutations, optimistic rollback, load ownership, or runtime
-effects. `appStateAccess` remains the frontend read boundary.
-
-## Scope Rules
-
-All cluster/resource reads preserve identity:
-
-- cluster-scoped reads include `clusterId`
-- namespace-scoped reads include `clusterId` and namespace
-- object-scoped reads include `clusterId`, `group`, `version`, `kind`, and
-  concrete object identity
-
-Foreground views read the active cluster. Background or cross-cluster displays
-fan out over per-cluster reads; they do not use aggregate refresh scopes.
-
-## Change Checklist
-
-When adding a read:
-
-1. Classify it as cluster/resource data or app-state/runtime data.
-2. Add a typed reader wrapper under the owning broker.
-3. Include diagnostics labels, adapter type, request reason, and scope; let the
-   broker supply the request id rather than creating a second correlation id.
-4. Handle blocked `dataAccess` reads without treating them as errors.
-5. Preserve full cluster and object identity across the boundary.
-
-## Validation
-
-Run targeted frontend tests for the broker or consumer and `npm run typecheck
---prefix frontend` for TypeScript changes. For non-documentation work, finish
-with `wails3 task qc:prerelease`.
+The generated internal `BindingModelAnchor` method on `*DesktopService` carries
+a type-level `wails:inject` directive that keeps every resource detail DTO
+reachable although the implementation-only `ResourceGateway.Get<Kind>`
+wrappers are not commands. `genappbindings.Render` emits the anchor and those
+wrappers in package `backend`, so `DesktopService`, `ResourceGateway`, and the
+generated file must stay there; moving either type first requires a tested
+target-package option in that generator.

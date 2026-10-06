@@ -1,53 +1,45 @@
 # Application Logs Contract
 
-Application Logs are Luxury Yacht's own diagnostic log buffer. They are not
-Kubernetes container logs or node logs.
+Application Logs are Luxury Yacht's own diagnostic log buffer, not Kubernetes
+container or node logs.
 
 ## Agent Contract
 
-- Keep Application Logs app-global.
-- Cluster metadata may annotate entries, but the buffer is not cluster-scoped
-  refresh data.
-- Reads belong to `appStateAccess`, not `dataAccess`.
-- Frontend diagnostic producers should use the app log client wrapper, not
-  generated Wails bindings directly.
-- Avoid feedback loops where reading logs writes more log entries.
-- Clearing Application Logs clears the app diagnostic buffer only; it must not
-  affect Kubernetes log viewers.
-- Keep source names and levels stable enough for filters and support workflows.
+- Keep Application Logs app-global. Cluster metadata may annotate entries, but
+  the buffer is not cluster-scoped refresh data. Reads use `appStateAccess`, not
+  `dataAccess`.
+- Entries carry level, source, message, sequence, and optional cluster
+  metadata. Keep source names and levels stable for filters and support
+  workflows; filters must not depend on unstable message strings.
+- Frontend diagnostic producers use the app log client wrapper, never generated
+  Wails bindings directly.
+- Reading logs must not write log entries (no feedback loops).
+- Clearing empties only the app diagnostic buffer; it never affects Kubernetes
+  log viewers.
+- Event subscriptions are per-listener and cleaned up on unmount.
 - Cluster, component, and level multiselects use explicit `all`, `some`, and
-  `none` states. Deselecting the final option must show no entries; it must not
-  revert to the unrestricted state. Dynamic cluster and component options keep
-  `all` open-ended as new log sources appear.
-- The panel's Download button is the log views' shared menu
-  (`useLogDownloadMenu`): Copy to Clipboard, or Save to File as a `.log` file,
-  with the shown entries as the copy text.
+  `none` states. Deselecting the final option shows no entries; it never
+  reverts to unrestricted. Dynamic cluster and component options keep `all`
+  open-ended as new log sources appear.
+- The panel's Download button is the shared log-view menu
+  (`useLogDownloadMenu`): Copy to Clipboard, or Save to File as `.log`, with the
+  shown entries as the text.
+- `AppLogService` is composed once and lives until process teardown so other
+  owners can log through startup and shutdown; Factory Reset clears it after
+  the other owner resets finish, and it is never recreated as cluster-scoped
+  refresh state ([application-lifecycle.md](../../architecture/application-lifecycle.md)).
 
 ## Ownership
 
-- Process buffer, logger, frontend ingestion, sequence reads, clear operation,
-  and typed event projection: `backend.AppLogService` in
-  `backend/app_log_service.go` and `backend/app_log_service_commands.go`
+- Process buffer, logger, frontend ingestion, sequence reads, clear, and typed
+  event projection: `backend.AppLogService` (`backend/app_log_service.go`,
+  `backend/app_log_service_commands.go`)
 - Error capture bridge: `backend/internal/errorcapture`
 - Frontend app log client: `frontend/src/core/logging/appLogsClient.ts`
-- Application Logs panel: `frontend/src/ui/panels/app-logs`
-- App-state reads: `frontend/src/core/app-state-access`
-
-`AppLogService` is composed once and remains alive until process teardown so
-other owners can log through startup, update shutdown, cluster/runtime cleanup,
-and refresh teardown. Factory Reset clears it after the other owner resets have
-finished; the buffer is not recreated as cluster-scoped refresh state.
-
-## Change Checklist
-
-When changing Application Logs:
-
-1. Check whether the entry is app-global or should be a Kubernetes log instead.
-2. Preserve level, source, message, sequence, and optional cluster metadata.
-3. Keep event subscriptions per-listener and cleaned up on unmount.
-4. Avoid making filters depend on unstable message strings.
-5. Test clear, incremental fetch, filtering, and event cleanup.
+- Panel: `frontend/src/ui/panels/app-logs`; app-state reads:
+  `frontend/src/core/app-state-access`
 
 ## Validation
 
-Run backend app log/errorcapture tests and frontend app log client/panel tests.
+Run backend app log/errorcapture tests and frontend app log client/panel tests
+covering clear, incremental fetch, filtering, and event cleanup.

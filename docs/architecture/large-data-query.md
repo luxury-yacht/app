@@ -1,178 +1,159 @@
 # Large Data Query Contract
 
-Use for backend query semantics, typed envelopes, or query
-liveness. Apply the [shared large-data contract](large-data.md). Cursor/anchor
-addressing and export continuity use [the paging contract](large-data-paging.md).
+Backend query semantics, typed envelopes, page addressing, and query liveness.
+Shared rules and table modes live in [large data](large-data.md).
 
 ## Browse Query Chain
 
-Producer: `backend/objectcatalog.Service.Query` owns Browse filtering, search,
-sort, page limits, cursor validation, totals, and facets. Cursor tokens are
-bound to `clusterId`, query signature, backend sort contract, page direction,
-page limit, cursor version, and the last row's stable sort/tie-breaker values.
-Namespace and kind filters use the catalog query index. Default, search-only,
-and sort-only catalog queries may still stream over all catalog chunks as an
-O(N) CPU scan, but they feed a bounded page buffer and exact-metadata budget
-instead of collecting the full result set in memory.
-
-Query store seam: `backend/objectcatalog.CatalogQueryStore` sits behind
-`Service.Query`. The default implementation is the current in-memory catalog
-index and preserves the public `QueryOptions` to `QueryResult` contract. A
-future SQLite or other persistent backing store may replace this seam when
-benchmarks show that O(N) chunk scans, memory residency, or startup rebuild
-costs exceed the large-cluster budget. The decision point is a measured
-regression in catalog query latency, catalog memory residency, or cursor-page
-churn benchmarks; frontend scopes and snapshot payloads must not change when
-the store changes.
-
-Snapshot boundary: `backend/refresh/snapshot/catalog.go` parses the refresh
-scope into catalog query options and emits `CatalogSnapshot` payloads with full
-catalog object identity, `continue`, `previous`, `cursorInvalid`,
-`totalIsExact`, `facetsExact`, and reason-bearing `issues`.
-
-Frontend boundary: `frontend/src/core/data-access` owns refresh-domain reads.
-`frontend/src/modules/browse/hooks/useBrowseCatalog.ts` builds the scoped
-catalog query, debounces search, requests cursor pages, replaces the current
-row window, and restarts from page one only when the backend reports an invalid
-cursor.
-
-Consumers: `BrowseView` renders a `Query Backed Static` resource-grid table.
-Favorites persist query-backed filter and sort state. Object actions receive
-concrete visible-row refs with `clusterId`, group, version, kind, namespace,
-and name. CSV export/copy in the "all matching rows" scope walks the query
-cursor client-side; destructive object actions continue to use concrete
-visible-row refs.
+- `backend/objectcatalog.Service.Query` owns Browse filtering, search, sort,
+  page limits, cursor validation, totals, and facets. Cursors bind `clusterId`,
+  query signature, backend sort contract, direction, page limit, cursor version,
+  and the last row's sort/tie-breaker values.
+- Namespace and kind filters use the catalog query index. Default, search-only,
+  and sort-only queries may stream every chunk (O(N) CPU) into a bounded page
+  buffer and exact-metadata budget, never a full in-memory result.
+- Store seam: the `Querier` interface (`backend/objectcatalog/query_store.go`,
+  default in-memory index) preserves `QueryOptions` → `QueryResult`. Replace it
+  only on a measured latency, residency, or cursor-churn regression, under the
+  pure-Go rule in [data-layer.md](data-layer.md); frontend scopes and snapshot
+  payloads never change with the store.
+- `backend/refresh/snapshot/catalog.go` parses the scope and emits
+  `CatalogSnapshot` with full object identity, `continue`, `previous`,
+  `cursorInvalid`, `totalIsExact`, `facetsExact`, and reason-bearing `issues`.
+- `frontend/src/modules/browse/hooks/useBrowseCatalog.ts` builds the scoped
+  query, debounces search, requests cursor pages, replaces the row window, and
+  restarts from page one only on `cursorInvalid`. `BrowseView` renders it as
+  `Query Backed Static`.
 
 ## Typed Resource Query Contract
 
-Typed resource queries use `ResourceQueryRequest` and `ResourceQueryResult` in
-`backend/refresh/snapshot/resource_query_contract.go`, mirrored by frontend
-refresh types. Every canonical row carries one complete `ref`, including
-`clusterId`, GVK, plural resource, namespace when namespaced, and name; it does
-not retain flat copies of its own identity. The base resource contract carries
-stable projected table fields, backend predicates,
-facets, exactness flags, partial/degraded issues, and an object revision
-reference. Live CPU/memory usage is joined onto the base rows at serve — there
-are no separate metric-domain query contracts; the payload's `metrics` block
-carries the poller freshness/error metadata
-(see [`resource-metrics.md`](resource-metrics.md)).
+- `ResourceQueryRequest` / `ResourceQueryResult`
+  (`backend/refresh/snapshot/resource_query_contract.go`, mirrored in frontend
+  refresh types): each row carries one complete `ref` (identity plus plural
+  resource) and no flat identity copies, plus stable projected fields; the
+  envelope carries backend predicates, facets, exactness flags,
+  partial/degraded issues, and an object revision reference.
+- CPU/memory usage is joined at serve, with no metric-domain query contracts
+  ([resource metrics](resource-metrics.md)); metric sorts (`usageSortValue`)
+  use the same keyset cursor as every sort.
+- Metadata search runs in the backend: adapters whose rows carry labels and
+  annotations supply `MetadataText`, matched only when the request sets
+  `includeMetadata`, a flag included in cursor and store keys. New typed tables
+  with metadata must supply it; catalog-backed tables (Browse, custom resources)
+  do not support it yet. Metadata values have no app byte cap below the upstream
+  object limit; ingest strips managed fields and
+  `kubectl.kubernetes.io/last-applied-configuration` before projection.
+- Keyset ordering is self-consistent: page sort and cursor boundary derive from
+  one comparable value per row, or pages skip or duplicate rows. Numeric sort
+  fields stay numeric: a missing value (no timestamp, no metric sample,
+  unparseable cell) sorts as a `-Inf` sentinel with `ok=true`, never a string
+  fallback. See `typedTableComparableSortValue`
+  (`backend/refresh/snapshot/typed_table_query.go`) and the wire cursor codec
+  (`backend/refresh/querypage/cursor.go`).
+- Typed builders serve a query page when the scope carries a query
+  (`query.Enabled`), otherwise a bounded window. The window is the canonical
+  snapshot for object panels, counts, and other snapshot consumers. Rejected:
+  deleting it as a "path consolidation" — it is not redundant. A query-backed
+  table holds `query` demand (base live scope plus current page); a consumer
+  needing the window holds separate `snapshot` demand. Both share one live
+  source and its readiness/permission/source clocks.
+- Single-namespace tables are query-backed too (`baseScope =
+  namespace:<name>`), so paging semantics match every scope.
+- Both paths surface degraded and unavailable-source reasons. A window missing a
+  permission-blocked source is inexact and issue-bearing. When an ingest sync
+  deadline releases the liveness gate before the initial list succeeds, the
+  envelope stays partial and inexact until raw source readiness is
+  authoritative.
+- Object-panel related-resource tables stay local while their owner-scoped
+  domain keeps them bounded; they become typed query-backed only at namespace or
+  cluster scale.
 
-Metadata label/annotation search for query-backed typed tables runs in the
-backend query: an adapter whose rows carry labels and annotations supplies
-`MetadataText`, which is matched only when the request sets `includeMetadata`,
-and the cursor and store keys include that flag. A new typed table whose rows
-carry metadata must supply it. The frontend offers the Include metadata toggle
-on every table whose rows carry labels and annotations
-(`supportsCustomMetadataColumns`); local tables match them in the filter
-engine. Catalog-backed tables (Browse and custom resources) do not support
-metadata search yet, so they do not offer the toggle.
+## Page Addressing Contract
 
-Metric sorts run server-side on the joined usage values through the same
-keyset cursor as every other sort (`usageSortValue` over the exact millicore
-and byte fields). Cursors must not restart merely because a metric tick
-refreshed the joined values.
+A request addresses its page exactly one way (validated server-side):
 
-Keyset ordering must be self-consistent. The page sort and the cursor boundary
-must be derived from one comparable value per row, so the order rows are laid out
-in is exactly the order the cursor walks. Computing them from two different
-functions can skip or duplicate rows across pages. A numeric sort field must stay
-uniformly numeric: a row that is missing a value (no age timestamp, no metric
-sample, an unparseable cell) sorts as a `-Inf` sentinel with `ok=true`, never via
-a string fallback, so numeric and string comparable spaces never mix within one
-field. See `typedTableSortedItemLess` and `typedTableComparableSortValue` in
-`backend/refresh/snapshot/typed_table_query.go`; this invariant is what prevents
-silent dup/skip when a new sort field or adapter is added.
+| Field | Contract |
+| --- | --- |
+| `continue` | Opaque backend-minted keyset cursor. Every engine-served response carries `previous` and `continue`; the client keeps no token stack. |
+| `anchor.*` | Full object reference (`clusterId` equals the request cluster; version, kind, name required). Serves the page-aligned window containing it plus `anchor: {found, rank, reason}`; a missing anchor serves the first page with `reason: "filtered" \| "not-found"` in one round trip. |
+| `startRank` | 0-based offset for numbered jumps, offered only while `totalIsExact`; past-the-end starts clamp to the last aligned page. |
 
-The typed builders expose two paths: a backend-query page when the scope carries
-a query string (`query.Enabled`) and a bounded local window otherwise. The
-window path remains the canonical refresh snapshot for object panels, counts,
-and other snapshot consumers, so it is not redundant with the query path and
-must not be deleted as a "path consolidation." Demand ownership prevents the
-table itself from paying for both: a query-backed table holds `query` demand for
-its base live scope and current page, while a separate consumer holds `snapshot`
-demand only when it needs the window payload. Both demands share one live
-source and its readiness/permission/source clocks. Single-namespace resource
-tables are query-backed too — the frontend passes the selected namespace as the
-query `baseScope` (`namespace:<name>`) so pagination and table semantics are
-uniform across every scope, not just all-namespaces and cluster.
-Degraded and unavailable-source reasons are computed and surfaced on both paths;
-a window missing a permission-blocked source is reported inexact and
-issue-bearing, never as a complete table. The same rule applies when an
-informer/ingest sync deadline releases the liveness gate before its initial list
-succeeds: the typed envelope stays partial and inexact until raw source readiness
-becomes authoritative.
+- Counted serves (anchor, `startRank`) also return `pageStartRank` (exact
+  serve-time rank of the first row; a pointer so rank 0 survives omission) and
+  `self` (a landing-page cursor the client adopts so live refetches stay
+  page-stable instead of re-anchoring). Plain cursor pages carry neither; their
+  footer positions stay client-derived. Rejected: rank on every cursor page —
+  the O(rank) walk failed the position-honesty gate at ~2× the worst page-serve
+  budget at 250k ([Current Browse Budget](large-data-measurements.md#current-browse-budget)).
+- Anchors resolve to engine row keys in the serve layer, never the engine
+  (engine keys are adapter-owned and name-shaped, not UIDs). Typed tables map
+  `(kind, namespace, name)` through the adapter's `AnchorKey`, built from the
+  same helpers as its row `Key`; a typed kind without `AnchorKey` cannot be
+  anchor-jumped to. Typed rows carry no UID. The catalog looks up the `Summary`
+  by `(gvr, namespace, name)` and cross-checks `anchor.uid`; a mismatch (a
+  recreated object) is `not-found`.
+- Anchor intent is navigation state, never persisted table state, so favorites
+  never replay jumps. A held jump re-fires on sort, filter, or page-size change
+  (no bounce to page 1), clears on manual pagination, and retries with the
+  anchor when a cursor is rejected mid-jump.
+- Export walks compare the raw `sourceVersions["object"]` clock per page, never
+  the folded `sourceVersion` token (it embeds the scope and differs per page).
+  The first drift restarts the walk once; a second delivers the export with a
+  visible "data changed during export" notification. Failed, blocked, or empty
+  pages reject outright.
 
-Object-panel related-resource tables stay local while their owner-scoped domain
-keeps them naturally bounded. They move to typed query-backed mode only if an
-object-panel table becomes namespace or cluster scale.
+## Liveness Contract for Query-Backed Tables
 
-## Liveness Contract for Query-Backed Tables (Track A acceptance A1)
+Query pages are one-shot; liveness comes from refetching, never from mutating
+displayed rows in place.
 
 ### Shared frontend mechanics
 
-`useCursorPageSession` owns the applied next/previous cursors and footer page
-position for both typed and Browse queries. It publishes these together and
-retains the current state when a repeated snapshot has the same page address.
-The colocated `useQuerySearch` owns the shared 250ms search debounce; Browse can
-reseed it when a structural scope change must clear rows before commit.
+- `useCursorPageSession` owns applied next/previous cursors and footer position
+  for typed and Browse queries, publishes them together, and keeps state when a
+  repeated snapshot has the same page address. Colocated `useQuerySearch` owns
+  the shared 250ms search debounce; Browse may reseed it when a structural scope
+  change must clear rows before commit.
+- `executeQueryPageRequest` delivers results only to the current request owner;
+  data access still owns acquisition, fetch, read, and release. Adapter policies
+  stay out of this helper: typed queries own declarative scopes, warm-up retry,
+  anchors, and failed-navigation rollback; Browse owns imperative cursor
+  requests, separate metadata scopes, quiet-request coalescing, and its
+  blocked-result/error policies.
+- `useQueryStreamSignal` (core refresh hooks) owns query signal identity; typed
+  tables invalidate their declarative query with it, and Browse supplies a
+  current-page reconciliation callback. Snapshot readers use
+  `useStreamSignalRefetch`, which requests each doorbell once per scope however
+  many consumers mount (the shared record lives only while one is mounted).
+  Both read declared doorbell clocks from one helper; query consumers add
+  subscription acknowledgements and fallback reconciliation ticks.
 
-`executeQueryPageRequest` delivers results only to the current request owner.
-Data access still owns query acquisition, fetch, read, and release. Typed
-queries keep declarative scopes, warm-up retry, anchors, and failed-navigation
-rollback. Browse keeps imperative cursor requests, separate metadata scopes,
-quiet-request coalescing, and its existing blocked-result/error policies.
-These policies belong to the adapters, not the shared page-state helper.
+### Guarantees
 
-`useQueryStreamSignal` in the core refresh hooks owns query signal identity.
-Typed tables use its identity to invalidate their declarative query; Browse
-supplies its current-page reconciliation callback. Snapshot readers continue
-using `useStreamSignalRefetch`. Both mechanisms read the declared doorbell
-clocks from the same helper; query consumers additionally include subscription
-acknowledgements and fallback reconciliation ticks. `useStreamSignalRefetch`
-requests each doorbell once per scope however many mounted consumers watch it;
-the shared record lives only while a consumer is mounted.
-
-### Liveness guarantees
-
-A query-backed table renders one-shot query pages, so its liveness comes from
-refetching — never from mutating displayed rows in place. The contract:
-
-- The typed query refetches when a declared `signalVersions` source clock or
-  stream acknowledgement identity changes
-  (`useQueryBackedResourceGridTable.ts`). Payload applies and refresh timestamps
-  are deliberately excluded, so a query response cannot echo into another
-  query. Query demand subscribes before its initial read; `ACK`/initial `RESET`
-  triggers an acknowledged reconciliation, and the query lifecycle identity
-  rejects an older in-flight response.
-- Fallback scheduling for a query-only lease advances a query-reconciliation
-  identity instead of fetching the domain's bounded base snapshot. The
-  consumer uses that identity to reissue its current cursor page, preserving
-  both page position and the one-page retention bound. A healthy stream does
-  not advance the fallback identity because source clocks already invalidate
+- Typed queries refetch when a declared `signalVersions` source clock or stream
+  acknowledgement identity changes (`useQueryBackedResourceGridTable.ts`), never
+  on payload applies or refresh timestamps, so responses cannot echo into
+  queries. Query demand subscribes before its initial read; `ACK`/initial
+  `RESET` triggers an acknowledged reconciliation; the lifecycle identity
+  rejects older in-flight responses.
+- For a query-only lease, fallback scheduling advances a query-reconciliation
+  identity instead of fetching the base snapshot; the consumer reissues its
+  current cursor page, keeping position and the one-page retention bound. A
+  healthy stream does not advance it because source clocks already invalidate
   the page.
-- **Update latency**: for streamed domains, a cluster change is visible within
-  one stream coalescing window (200ms flush in the stream managers) plus one
-  query round-trip (an in-memory backend page build — tens of milliseconds at
-  100k rows). For poll-backed domains, latency is the poll cadence plus the same
-  round-trip. A healthy stream suppresses snapshot polls; the stream manager
-  falls back to polling on drift or stream failure, restoring poll-cadence
-  liveness automatically.
-- **Cursor stability across live updates**: pagination cursors are value-based
-  keysets (sort value + row key), so a page-2+ cursor survives concurrent
-  inserts/deletes without skipping or duplicating rows; metric-backed sorts
-  tolerate metrics-revision advances (`typedTableQueryCursor.matches`). A cursor
-  whose anchor context disappears reports `cursorInvalid` and the table resets
-  to page 1.
-- Every query refetch is visually silent — user-initiated (sort/filter/page
-  size) and background liveness alike. The table keeps the last applied rows
-  (or the settled "no matches" state) until the new page lands; `loading` is
-  reported only before the first applied result for a scope, so filtering never
-  dims the view, swaps in a spinner, or unmounts the filter input (which would
-  steal focus while typing).
-- The typed-query ingestion boundary performs page-local structural sharing.
-  It reuses a complete `ref` when identity is unchanged and reuses a whole row
-  only when every own enumerable scalar, map, array, and nested value is equal.
-  The previous-page index is scoped to the full query/cursor identity and is
-  discarded after apply. Metric-bearing and event-churn families use ref-only
-  sharing where exhaustive whole-row comparison would add work while their
-  projected values normally change.
+- Update latency is one stream coalescing window (200ms) plus one query
+  round-trip (tens of milliseconds at 100k rows), or the poll cadence plus the
+  round-trip for poll-backed domains. A healthy stream suppresses snapshot
+  polls; the stream manager falls back to polling on drift or failure.
+- Value-based keyset cursors (sort value + row key) survive concurrent inserts
+  and deletes without skips or duplicates, and metric sorts tolerate
+  metrics-revision advances. A cursor whose anchor context disappears reports
+  `cursorInvalid` and the table resets to page 1.
+- Every refetch is visually silent
+  ([quiet refresh](../frontend/gridtable-resource-tables.md#quiet-refresh)).
+- Ingestion shares structure page-locally: it reuses a complete `ref` when
+  identity is unchanged and a whole row only when every own enumerable scalar,
+  map, array, and nested value is equal. The previous-page index is scoped to
+  the full query/cursor identity and discarded after apply. Metric-bearing and
+  event-churn families share refs only, because their projected values normally
+  change ([measurements](large-data-measurements.md#resource-row-efficiency-measurements)).

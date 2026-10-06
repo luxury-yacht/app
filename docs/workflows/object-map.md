@@ -1,48 +1,50 @@
 # Object Map Contract
 
-The object map visualizes Kubernetes object relationships. Backend data owns
-graph identity and relationship facts; frontend code owns visibility, layout,
-rendering, and interaction state.
+The object map visualizes Kubernetes object relationships. It is the scoped
+refresh snapshot domain `object-map`, not a rich detail service or a
+resource-stream path. Backend data owns graph identity and relationship facts;
+frontend code owns visibility, layout, rendering, and interaction state.
 
 ## Agent Contract
 
-- Every map node and edge must preserve full object identity where the object is
-  openable.
-- Relationship links come from backend resource semantics or catalog-safe
-  identity, not frontend kind/name guessing.
-- Display-only relationships must stay display-only when identity is partial,
-  stale, external, or unsafe to open.
-- Map scopes must be single-cluster and cluster-prefixed.
-- Frontend filtering, collapse, layout, and viewport state must not rewrite
-  backend identity.
+- Map scopes are single-cluster and cluster-prefixed.
+- Openable nodes and edges keep complete object refs through selection and
+  every open action.
+- Relationships come from backend resource semantics or catalog-safe identity
+  ([shared-resource-model](../architecture/shared-resource-model.md#links)),
+  never from frontend kind/name guesses, visual proximity, or table row
+  strings. Partial, stale, external, deleted, or unsupported identity stays
+  display-only and is never repaired from kind/name guesses.
+- Fix missing nodes, refs, or edges in the backend graph, not with
+  frontend-only labels or renderer patches. Adding a kind changes backend graph
+  facts and frontend presentation only where both are needed.
+- Frontend filtering, collapse, layout, viewport state, and age text never
+  rewrite backend identity, relationship data, or layout inputs. Card age text
+  derives from backend timestamps through [live-age](../frontend/live-age.md).
 - The Kind multiselect distinguishes `all`, `some`, and `none`. `all` includes
-  kinds discovered later, while `none` renders an empty visible graph without
-  changing the backend graph or its object identities.
-- Debug snapshots should describe raw backend graph, frontend-visible graph, and
+  kinds discovered later; `none` renders an empty visible graph without
+  changing the backend graph or its identities.
+- Debug snapshots describe the raw backend graph, frontend-visible graph, and
   renderer state separately.
-- Adding support for a kind means updating backend graph facts and frontend
-  presentation only where both are needed.
+- Graph truncation and permission warnings stay visible below the canvas; a
+  truncated graph never presents its object or link counts as the whole scope.
+- Large graphs keep bounded layout and render work.
+- Legend and copy use user-facing terms such as "Objects" and "Links".
 
 ## Ownership
 
-- Backend object-map snapshot builder:
-  `backend/refresh/snapshot/object_map.go`
-- Shared resource links and facts: `backend/resourcemodel`
-- Frontend object-map module: `frontend/src/modules/object-map`
-- Object-panel map integration: `frontend/src/modules/object-panel`
-- Identity and links:
-  [../architecture/shared-resource-model.md](../architecture/shared-resource-model.md)
-- Refresh scopes: [../architecture/refresh-system.md](../architecture/refresh-system.md)
-- Live age rendering: [../frontend/live-age.md](../frontend/live-age.md)
-
-Declare map collectors and relationship builders in the owning kind's registry
-descriptor.
-For ingest-owned kinds, register node projectors before starting reflectors so
-the initial intake includes map data. Snapshot assembly seeds catalog records
-before merging projected nodes; preserve their presentation and relationship
-fields through that merge. Shared edge projections belong in
-`backend/kind/objectmapspec` to avoid imports between kind packages or back into
-the snapshot package.
+- Backend snapshot builder: `backend/refresh/snapshot/object_map.go`; shared
+  links and facts: `backend/resourcemodel`.
+- Frontend: `frontend/src/modules/object-map`; object-panel Map tab integration
+  in `frontend/src/modules/object-panel`.
+- Declare map collectors and relationship builders in the owning kind's
+  registry descriptor. Shared edge projections belong in
+  `backend/kind/objectmapspec`, avoiding imports between kind packages or back
+  into the snapshot package.
+- Ingest-owned kinds register node projectors before reflectors start so the
+  initial intake includes map data.
+- Snapshot assembly seeds catalog records before merging projected nodes;
+  preserve their presentation and relationship fields through that merge.
 
 ## Relationship Rules
 
@@ -51,75 +53,47 @@ the snapshot package.
   projection from canonical RBAC facts. RoleBindings resolve Roles in their own
   namespace, ClusterRoles at cluster scope, and ServiceAccounts in the subject's
   namespace (defaulting to the binding namespace when omitted). User and Group
-  subjects remain display-only facts, without fabricated object nodes.
+  subjects stay display-only facts without fabricated object nodes.
 - Owners, selectors, Gateway API references, service endpoints, routes, PVC/PV,
-  HPA targets, Helm-managed objects, and event involved objects should use
-  shared resource identity where available.
-- Openable relationships require complete refs.
-- Display-only labels are acceptable for unresolved external names, partial
-  custom refs, deleted objects, and unsupported sources.
-- Do not invent links from visual proximity or table row strings.
-- Card age text should be derived from backend timestamps through the live-age
-  contract. Updating the displayed age must not rewrite backend graph identity,
-  relationship data, or layout inputs.
+  HPA targets, Helm-managed objects, and event involved objects use shared
+  resource identity where available.
 
 ## Map Interactions
 
 - Every wheel gesture zooms around the pointer: a mouse wheel, a trackpad
   scroll, and a pinch. Dragging the background pans. Both turn off auto-fit.
   The map registers no G6 wheel behavior, so a wheel never pans as well.
-- Tab reaches the existing search field and toolbar controls. Enter in the search
-  field centers a matching visible object; repeated presses cycle through matches.
+- Tab reaches the search field and toolbar controls. Enter in the search field
+  centers a matching visible object; repeated presses cycle through matches.
 - Right-clicking an object opens its canvas menu, which uses the shared
   resource-action controller and complete object reference. Partial references
-  do not offer object actions.
-- A removed/filtered object closes its menu. An empty map has no object actions.
+  offer no object actions. A removed or filtered object closes its menu; an
+  empty map has no object actions.
 
 ## Table Navigation
 
-- Resource-table **Open Map** actions open an object-scoped map from a validated
-  reference containing `clusterId`, group, version, kind, namespace when
-  namespaced, and name.
-- Map **Go to Table View** actions select the resource's owning namespace and
-  table, then issue a cluster-scoped row-focus request from the same complete
-  reference. Query-backed tables may use that reference for an anchor query
-  when the object is outside the loaded page.
-- In the map canvas, Alt-click is the shortcut for **Go to Table View**. The
+- Resource-table **Open Map** opens an object-scoped map from a validated
+  complete reference.
+- Map **Go to Table View** selects the resource's owning namespace and table,
+  then issues a cluster-scoped row-focus request from the same complete
+  reference. Query-backed tables may use it for an anchor query when the object
+  is outside the loaded page.
+- In the canvas, Alt-click is the shortcut for **Go to Table View**; the
   context-menu action is the discoverable equivalent.
-- Missing or partial graph identity must not be repaired from kind/name guesses;
-  such relationships remain display-only.
-
-Graph truncation and permission warnings remain visible below the canvas. A
-truncated graph must not present its object or link counts as the whole scope.
-
-## Change Checklist
-
-When changing object-map behavior:
-
-1. Identify whether the change is backend graph data, frontend visibility,
-   layout/rendering, or object-panel integration.
-2. Preserve cluster/object refs through every node, edge, selection, and open
-   action.
-3. Add backend tests for new edge semantics.
-4. Add frontend tests for filtering, collapse, selection, or renderer behavior
-   when those change.
-5. Verify large graphs still have bounded layout/render work.
 
 ## Validation
 
-Run focused object-map snapshot tests and targeted object-map Vitest tests. For
-visual renderer changes, verify in the app.
-
-RBAC regressions live in
-[`object_map_rbac_test.go`](../../backend/refresh/snapshot/object_map_rbac_test.go)
-and [`ingest_projectors_test.go`](../../backend/refresh/system/ingest_projectors_test.go).
-Cover namespace and object scopes, same-name objects in different namespaces,
-both RoleBinding role-reference kinds, cross-namespace ServiceAccount subjects,
-and permission denial with permitted resources still available. Exercise the
-namespace RBAC table's Open Map action and the object-panel Map tab as separate
-frontend consumers.
-
-When measuring per-kind projection coverage through snapshot or ingest tests,
-include those kind packages with `-coverpkg` so consumer execution contributes
-to their coverage. Keep mocked API/navigation evidence separate from native
-app checks.
+- New edge semantics need backend tests; filtering, collapse, selection, or
+  renderer changes need targeted object-map Vitest tests.
+- RBAC regressions live in
+  [`object_map_rbac_test.go`](../../backend/refresh/snapshot/object_map_rbac_test.go)
+  and [`ingest_projectors_test.go`](../../backend/refresh/system/ingest_projectors_test.go).
+  Cover namespace and object scopes, same-name objects in different namespaces,
+  both RoleBinding role-reference kinds, cross-namespace ServiceAccount
+  subjects, and permission denial with permitted resources still available.
+  Exercise the namespace RBAC table's Open Map action and the object-panel Map
+  tab as separate frontend consumers.
+- When measuring per-kind projection coverage through snapshot or ingest tests,
+  include those kind packages with `-coverpkg` so consumer execution counts.
+- Visual renderer changes are verified in the app; keep mocked API/navigation
+  evidence separate from native app checks.

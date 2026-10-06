@@ -1,20 +1,7 @@
 # Frontend Component Structure
 
-Frontend placement should make ownership obvious and keep dependencies flowing
-from app infrastructure to features to reusable building blocks.
-
-## Agent Contract
-
-- Put app infrastructure in `core/`.
-- Put feature-owned UI in `modules/`.
-- Put app shell, navigation, panels, modals, command palette, settings, and
-  shortcuts in `ui/`.
-- Put reusable components, hooks, utilities, constants, and styles in `shared/`.
-- Do not make `shared/` depend on a feature module.
-- Do not bypass documented data-access, permission, refresh, keyboard, modal,
-  table, or tab infrastructure from feature code.
-- New cross-feature behavior should move down only after at least two real
-  consumers need the same abstraction.
+Placement makes ownership obvious; dependencies flow from app infrastructure to
+features to reusable building blocks.
 
 ## Directory Roles
 
@@ -22,161 +9,122 @@ from app infrastructure to features to reusable building blocks.
 | --- | --- |
 | `core/` | App infrastructure, data brokers, refresh, capabilities, contexts, settings |
 | `modules/` | User-facing feature workflows such as browse, namespace, object panel, object map |
-| `ui/` | App shell surfaces such as layout, settings, panels, command palette, shortcuts |
+| `ui/` | App shell: layout, navigation, settings, panels, modals, command palette, shortcuts |
 | `shared/` | Reusable components, hooks, icons, actions, constants, and pure utilities |
 | `styles/` | Global and shared CSS loaded by the app |
 
-`hooks/`, `utils/`, and `types/` under a feature directory are local to that
-feature. Promote only when the dependency direction stays clean.
+- `shared/` never depends on a feature module and holds rendering primitives
+  only when they are independent of module state. Feature-local `hooks/`,
+  `utils/`, and `types/` stay local; promote only when the dependency direction
+  stays clean, and move cross-feature behavior down only once two real
+  consumers need it.
+- Feature code never bypasses the documented data-access, permission, refresh,
+  keyboard, modal, table, tab, or YAML editor infrastructure.
+- Cross-cluster comparison workflows live in `modules/global`. They may read
+  multiple cluster-keyed states, but every refresh read and object/navigation
+  reference keeps its originating `clusterId`. Cluster-only resource views stay
+  in `modules/cluster`; never route Global views through the cluster resource
+  manager.
+- Cross-feature cluster runtime state lives in the React-free
+  `core/cluster-workspace` store, which owns Wails runtime subscriptions.
+  Contexts and hooks may select or adapt it but never mirror lifecycle, auth,
+  health, scope revision, selection, or foreground serviceability in another
+  map; feature code consumes its snapshot or a documented downstream wake-up
+  event.
 
-Cross-cluster comparison workflows live under `modules/global`. They may read
-multiple cluster-keyed states, but each refresh read and object/navigation
-reference must retain its originating `clusterId`. Cluster-only resource views
-remain under `modules/cluster`; do not route Global views through the cluster
-resource manager.
+## Lazy Loading
 
-Cross-feature cluster runtime state lives in the React-free
-`core/cluster-workspace` store. Contexts and hooks may select or adapt that
-state, but must not mirror lifecycle, auth, health, scope revision, selection,
-or foreground serviceability in another map. The store owns Wails runtime
-subscriptions; feature code consumes its snapshot or a documented downstream
-wake-up event.
-
-## Lazy loading
-
-Lazy loading must preserve the placement of the loaded component. Routes may
-use the shared inline loading spinner. Panels and modals that render through a
-portal pass `null` as the `withLazyBoundary` loading message, so their pending
-module does not insert a temporary row into the app grid. Preserve import-error
-reporting and test both pending and resolved placement with a deferred module.
+Lazy loading preserves the loaded component's placement. Routes may use the
+shared inline loading spinner. Portal-rendered panels and modals pass `null` as
+the `withLazyBoundary` loading message so a pending module inserts no temporary
+row into the app grid. Preserve import-error reporting; test pending and
+resolved placement with a deferred module.
 
 ## Shared Transient Popups
 
-Shared dropdown menus render in a body-level portal so table, split-pane,
-modal, and docked-panel overflow cannot clip them or make them participate in
-layout. The shared dropdown owns viewport placement, available-height
-constraints, scroll/resize repositioning, outside-click containment, and popup
-keyboard registration. Consumers may provide a direct popup class through
-`dropdownClassName`; do not style a portaled menu through a trigger ancestor.
+- Shared dropdown menus render in a body-level portal so table, split-pane,
+  modal, and docked-panel overflow cannot clip them or affect layout. The
+  shared dropdown owns viewport placement, available-height constraints,
+  scroll/resize repositioning, outside-click containment, and popup keyboard
+  registration. Style a portaled menu through `dropdownClassName`, never a
+  trigger ancestor.
+- Every selectable dropdown uses the shared `Dropdown`, not a native
+  `<select>`, styled only by `styles/components/dropdowns.css`. Consumers may
+  size the trigger for their slot but never restyle trigger, menu, options, or
+  group headers per feature. Group options with `group: 'header'` rows, not
+  custom markup.
+- A focusable body-level popup declares its owning popup ID, and a control in
+  the owning modal references it with `aria-controls`. The modal focus trap
+  uses that relationship to keep the popup interactive without admitting
+  unrelated body content.
 
-Every selectable dropdown uses the shared `Dropdown`, not a native `<select>`,
-and the shared stylesheet (`styles/components/dropdowns.css`) owns its look. A
-consumer may size the trigger to fit its layout slot. Do not restyle the trigger,
-menu, options, or group headers for one feature. Group related options with
-`group: 'header'` rows instead of custom option markup.
+## Multi-select Dropdown Options
 
-A focusable body-level popup must declare its owning popup ID, and a control
-inside the owning modal must reference that ID with `aria-controls`. The shared
-modal focus trap uses that explicit relationship to keep the popup interactive
-without admitting unrelated body content into the modal focus boundary.
-
-## Multi-select dropdown options
-
-Every multi-select `Dropdown` renders its option content through the shared
-`DropdownFilterOption` (`shared/components/dropdowns/Dropdown/DropdownFilterOption.tsx`).
-Selection is a real checkbox, not a text glyph, and it is decided in one place.
-`Dropdown` also adds the multi-select menu styling (`dropdown-filter-menu`)
-whenever `multiple` is set, so consumers never pass that class.
-
-A multi-select filter's trigger text comes from `multiSelectFilterTriggerLabel`
-(`shared/components/dropdowns/multiSelectFilterSelection.ts`): the bare label
-when everything is selected, and `Label (N)` otherwise, including `Label (0)`,
-so an empty selection never looks unfiltered. Column-visibility menus keep
-their own `Columns` text.
-
-- Do not hand-roll `.dropdown-filter-option` / `.dropdown-filter-box` markup in a
-  feature renderer. Before this component existed the same markup was duplicated
-  seven times across five files and drifted apart.
-- A custom `renderOption` should still delegate to `DropdownFilterOption` and pass
-  a rich `label` node, rather than rebuilding the control alongside its own label.
-- States are `on`, `off`, and `required`. `required` means on-and-not-changeable
-  and is a state of the control; never explain it with an extra word in the row.
-- `plain` drops the control for action rows (`Select all`) so they do not carry a
-  permanently empty checkbox.
-- `dimWhenOff` is opt-in and belongs only to menus where "off" means the item is
-  absent from a view — the GridTable Columns menu today. Filter menus must not
-  set it: most of their options are off by default, so dimming would flag the
-  normal case as an anomaly.
-
-Every multi-select also gets a per-row `only` shortcut that collapses the
-selection to that option. It is on by default (`enableOnlyAction`), revealed on
-hover or keyboard highlight, and reachable without a pointer via `Alt+Enter` on
-the highlighted option.
-
-- It is a click *region* inside the option button, not a nested `<button>`. A
-  real button per row would be an invalid `role="listbox"` child and would force
-  every multi-select menu to `role="dialog"`; the region keeps listbox semantics
-  intact for the menus that do not need the dialog treatment.
-- It never renders on a disabled option or a group header, and it is inert when
-  the option is already the sole selection — disabled rather than hidden, so rows
-  do not change shape as the pointer moves down the list.
-- In the Columns menu it sits immediately left of the drag grip, which stays
-  anchored. Do not swap the grip out for it: hiding the drag affordance exactly
-  when the pointer is on the row is the wrong trade.
-- `only` selects the option alone. Values that cannot be deselected — a required
-  column — necessarily remain, so it means "only this, plus what cannot be turned
-  off".
-
-Row-level behavior (drag-to-reorder, per-row affordances) goes through
-`Dropdown`'s `getOptionRowProps`; `renderOptionActions` only owns the trailing
-slot and cannot reach the row element.
+- Every multi-select `Dropdown` renders option content through
+  `shared/components/dropdowns/Dropdown/DropdownFilterOption.tsx`: selection is
+  a real checkbox decided in one place. `Dropdown` adds `dropdown-filter-menu`
+  whenever `multiple` is set; consumers never pass it.
+- Never hand-roll `.dropdown-filter-option` / `.dropdown-filter-box` markup
+  (it was once duplicated seven times and drifted). A custom `renderOption`
+  delegates to `DropdownFilterOption` with a rich `label` node.
+- States: `on`, `off`, `required` (on and unchangeable; never explained with an
+  extra word in the row). `plain` drops the control for action rows such as
+  `Select all`. `dimWhenOff` is only for menus where "off" means absent from a
+  view (the GridTable Columns menu); filter menus never set it, since most of
+  their options are off by default.
+- Trigger text comes from `multiSelectFilterTriggerLabel`
+  (`shared/components/dropdowns/multiSelectFilterSelection.ts`): the bare label
+  when everything is selected, else `Label (N)` including `Label (0)`, so an
+  empty selection never looks unfiltered. Column-visibility menus keep their
+  `Columns` text.
+- Each multi-select row has an `only` shortcut (`enableOnlyAction`, default on)
+  that collapses the selection to that option, revealed on hover or keyboard
+  highlight and reachable via `Alt+Enter`. It is a click region inside the
+  option button, not a nested `<button>`, which would be an invalid
+  `role="listbox"` child and force every menu to `role="dialog"`. It never
+  renders on disabled options or group headers, and is disabled (not hidden)
+  when the option is already the sole selection so rows keep their shape. In
+  the Columns menu it sits left of the anchored drag grip; never swap the grip
+  out for it (that hides the drag affordance exactly while the pointer is on
+  the row). Values that cannot be deselected (required columns) remain.
+- Row-level behavior (drag-to-reorder, per-row affordances) uses `Dropdown`'s
+  `getOptionRowProps`; `renderOptionActions` owns only the trailing slot.
 
 ## Object-panel Overview rendering (descriptor-driven)
 
-The object panel's Details → Overview is rendered from per-kind **descriptors**, not bespoke
-per-kind components. To add or change a kind's overview, edit its descriptor — do not write a new
-component.
+Details → Overview renders from per-kind descriptors; edit a kind's descriptor
+instead of writing a component. Wails-generated `*Details` DTO classes are the
+data contract; descriptors are frontend view-layer code guarded by a runtime
+drift check. Rejected: pushing Overview vocabulary into Go or codegenning
+descriptors from the backend registry — the generated DTO boundary already
+closes the backend↔frontend loop.
 
-This is frontend-owned presentation: the Wails-generated `*Details` DTO classes are the data
-contract; the descriptors live in the view layer and DTO-field coverage is guarded by a runtime
-drift-check (below), not by code-generating descriptors from the backend registry. Do not push
-Overview/UI vocabulary into Go or try to codegen the descriptors — that tradeoff was evaluated and
-deliberately rejected (the backend↔frontend loop is already closed at the generated DTO boundary).
+Files under `modules/object-panel/components/ObjectPanel/Details/`:
 
-- `Details/Overview/schema.ts` — descriptor types (`OverviewDescriptor`, ordered `items`:
-  `field | status | widget`, dynamic `label`/`fullWidth`, `mono`, `showSelector`, `OverviewContext`)
-  and `coverageKeys`.
-- `Details/Overview/OverviewRenderer.tsx` — generic renderer; owns the frame (`ResourceHeader` top,
-  `ResourceMetadata` bottom) and renders the descriptor's items in between. No per-kind logic.
-- `Details/Overview/descriptors/<area>.tsx` — one `OverviewDescriptor` per kind. Reads the raw
-  Wails-generated `*Details` DTO by key (`field: keyof DTO`); render fns for complex values and
-  `{kind:'widget'}` for irreducible UI; panel-only values (hpaManaged, drain, cluster identity) come
-  from the `OverviewContext` second arg, not hooks. Use a field's `hidden(dto)` predicate for
-  quiet-filtering (hide empty rows; no layout jitter).
-- `Details/Overview/descriptorRegistry.ts` — single source mapping kind → descriptor (production
-  dispatch + drift-check). Register new kinds here.
-- `Details/Overview/driftCheck.test.ts` — runtime guard: every field of `new DtoClass({})` must be
-  accounted for by the descriptor (schema field / `derivedFrom` / status item / widget `consumes` /
-  `coveredElsewhere`). A new backend DTO field fails this test by name until placed.
-- `Details/Overview/GenericOverview.tsx` — direct fallback for custom/unregistered resources.
-- `Details/objectDetailModel.ts` — builds the single `activeDetail` (raw DTO) the renderer consumes,
-  plus the derived sibling sections `DetailsTab` composes (Containers, RBAC rules, ConfigMap/Secret
-  data, active pods, port-forward availability, scale replicas, CronJob suspend). Those derivations
-  are **capability-gated per kind** via `DETAIL_KIND_CONFIG`, NOT inferred from DTO field presence:
-  field names are overloaded across kinds (`rules` on Ingress/Webhook vs RBAC; `containers` on Job;
-  `desiredReplicas` on HPA; `pods` on Node), so shape-inference would mis-derive. Add a new kind's
-  derivations by declaring them in `DETAIL_KIND_CONFIG`; the four overload exclusions are locked by
-  `objectDetailModel.test.ts`.
+- `Overview/schema.ts` — `OverviewDescriptor` (ordered `items`:
+  `field | status | widget`, dynamic `label`/`fullWidth`, `mono`,
+  `showSelector`, `OverviewContext`) and `coverageKeys`.
+- `Overview/OverviewRenderer.tsx` — generic renderer owning the frame
+  (`ResourceHeader` top, `ResourceMetadata` bottom); no per-kind logic.
+- `Overview/descriptors/<area>.tsx` — one descriptor per kind, reading the raw
+  DTO by key (`field: keyof DTO`); render fns for complex values,
+  `{kind:'widget'}` for irreducible UI. Panel-only values (hpaManaged, drain,
+  cluster identity) come from the `OverviewContext` argument, not hooks. Use a
+  field's `hidden(dto)` predicate to hide empty rows without layout jitter.
+- `Overview/descriptorRegistry.ts` — single kind → descriptor map for dispatch
+  and drift check; register new kinds here.
+- `Overview/driftCheck.test.ts` — every field of `new DtoClass({})` must be
+  covered (schema field, `derivedFrom`, status item, widget `consumes`, or
+  `coveredElsewhere`); a new DTO field fails by name until placed.
+- `Overview/GenericOverview.tsx` — fallback for custom/unregistered resources.
+- `objectDetailModel.ts` — builds the single `activeDetail` (raw DTO) plus the
+  sibling sections `DetailsTab` composes (Containers, RBAC rules,
+  ConfigMap/Secret data, active pods, port-forward availability, scale
+  replicas, CronJob suspend). These are capability-gated per kind via
+  `DETAIL_KIND_CONFIG`, never inferred from field presence, because names are
+  overloaded (`rules` on Ingress/Webhook vs RBAC, `containers` on Job,
+  `desiredReplicas` on HPA, `pods` on Node); `objectDetailModel.test.ts` locks
+  those four exclusions.
 
-Parity for each kind lives in its `*Overview.test.tsx`, which renders
+Per-kind parity lives in each `*Overview.test.tsx`, which renders
 `OverviewRenderer(descriptor, dto)` directly.
-
-## Placement Checklist
-
-When adding frontend code:
-
-1. Identify the owner, not just the closest import path.
-2. Keep feature-specific state and UI in the feature module.
-3. Put reusable rendering primitives in `shared` only if they are independent of
-   module state.
-4. Route backend reads through `dataAccess` or `appStateAccess`.
-5. Use shared modal, keyboard, table, tab, and YAML editor primitives when the
-   workflow matches their contracts.
-6. Keep complete object refs and `clusterId` across navigation/action
-   boundaries.
-
-## Validation
-
-Run targeted Vitest tests and `npm run typecheck --prefix frontend` for
-frontend changes. Use browser/story validation for visual behavior when
-appropriate.

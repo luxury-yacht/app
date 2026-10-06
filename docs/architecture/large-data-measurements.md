@@ -1,48 +1,39 @@
 # Large Data Measurements
 
-Use when measuring scale, comparing payload costs, or reconsidering a recorded
-optimization decision. These dated measurements are evidence for their stated
-fixtures and environments, not current system-wide performance guarantees.
-Shared contracts live in [large data](large-data.md).
+Dated evidence for the stated fixture (Apple M2 Max / arm64 unless noted), not a
+system-wide guarantee. Use when measuring scale or reconsidering a recorded
+decision. Shared contracts live in [large data](large-data.md).
 
 ## Current Browse Budget
 
-Measured on 2026-05-31 with Apple M2 Max using the synthetic catalog benchmark:
+Synthetic catalog benchmark, 2026-05-31:
 
-- 100k first page: 4.32 ms, 160 KB allocated.
-- 100k cursor page: 7.07 ms, 151 KB allocated.
-- 100k per-cluster catalog index residency: 26.75 MB.
-- 250k first page: 11.45 ms, 161 KB allocated.
-- 250k cursor page: 17.67 ms, 151 KB allocated.
-- 250k per-cluster catalog index residency: 66.80 MB.
-- 3 x 100k multi-cluster catalog index residency: 80.19 MB aggregate.
+| Rows | First page | Cursor page | Per-cluster index residency |
+| ---: | ---: | ---: | ---: |
+| 100k | 4.32 ms, 160 KB | 7.07 ms, 151 KB | 26.75 MB |
+| 250k | 11.45 ms, 161 KB | 17.67 ms, 151 KB | 66.80 MB |
 
-Anchored jump (measured 2026-07-06 on Apple M2 Max, engine microbenchmark
-`BenchmarkStoreQueryAround`, limit 50 — one counted O(rank + limit) walk per
-user-initiated jump, a one-shot action, not a per-page cost):
+Three 100k clusters: 80.19 MB aggregate index residency.
 
-- 100k anchor at rank N/2: 3.24 ms; at rank N-1 (worst case): 6.92 ms.
-- 250k anchor at rank N/2: 14.35 ms; at rank N-1 (worst case): 33.16 ms.
-
-The deep-anchor worst case exceeds the per-page serve budget above (b-tree
-iteration costs more per entry than the flat match-value scan); that is
-accepted for a one-shot jump. Order-statistics indexes stay not-built; revisit
-only on a measured UX regression.
-
-Per-Build page turns (measured 2026-07-06 on Apple M2 Max,
-`BenchmarkPerBuildPageTurn`, 100k rows): uncached rebuild 618.9 ms per page
-turn; single-slot store cache hit 0.024 ms; churn (version bump per request,
-always a miss) 627.6 ms — identical to uncached, so the cache's win is
-quiet-domain-only by design (the key is the domain's refetch identity: source
-version watermark + metric revision + matched-set inputs).
+- Anchored jump (`BenchmarkStoreQueryAround`, limit 50, 2026-07-06): one counted
+  O(rank + limit) walk per user-initiated jump. 100k: 3.24 ms at rank N/2,
+  6.92 ms at N-1; 250k: 14.35 ms / 33.16 ms. The deep worst case exceeds the
+  page-serve budget (b-tree iteration costs more per entry than the flat scan);
+  accepted for a one-shot jump. Order-statistics indexes stay unbuilt until a
+  measured UX regression.
+- Per-Build page turn (`BenchmarkPerBuildPageTurn`, 100k, 2026-07-06): uncached
+  618.9 ms; single-slot store cache hit 0.024 ms; churn (version bump per
+  request) 627.6 ms. The cache helps quiet domains only, by design; its key is
+  the domain's refetch identity (source version watermark + metric revision +
+  matched-set inputs).
 
 ## Resource-Row Efficiency Measurements
 
-Measured 2026-07-21 on Apple M2 Max / arm64. The producer benchmark is
-`BenchmarkRepresentativeResourceRowWireEncode` in
-`backend/refresh/snapshot/resource_row_wire_benchmark_test.go`; each value below
-is a 1,000-row JSON array. The before shape is commit `eb5edf70`, immediately
-before the ref-only migration.
+Ref-only rows (one complete `ref`, no flat identity copies) versus the prior
+shape (commit `eb5edf70`), 2026-07-21. Producer benchmark
+`BenchmarkRepresentativeResourceRowWireEncode`
+(`backend/refresh/snapshot/resource_row_wire_benchmark_test.go`), 1,000-row
+JSON array:
 
 | Family | Before | Ref-only | Reduction |
 | --- | ---: | ---: | ---: |
@@ -53,52 +44,36 @@ before the ref-only migration.
 | Nodes | 703,001 B | 608,001 B | 13.5% |
 | Custom resources | 642,001 B | 462,001 B | 28.0% |
 
-The frontend benchmark
-`frontend/src/core/refresh/canonicalResourceRowWire.bench.ts` scales the
-producer-marshaled fixture to 1,000 rows. Its measured means were 0.492 ms for
-JSON parse plus envelope validation, 1.019 ms for parse/validation plus static
-whole-row sharing, and 1.433 ms for parse/validation plus dynamic ref-only
-sharing. The isolated sharing benchmark measured 0.579 ms for static whole-row
-comparison and 0.375 ms for dynamic ref-only comparison.
+- Frontend (`canonicalResourceRowWire.bench.ts`, 1,000 rows): static (catalog)
+  parse and validation 0.492 ms, plus whole-row sharing 1.019 ms; dynamic
+  (Nodes) parse, validation, and ref-only sharing 1.433 ms. The fixtures
+  differ; on identical rows (`structuralShareResourceRows.bench.ts`) whole-row
+  comparison costs 0.579 ms and ref-only 0.375 ms. Retained heap for 100,000
+  Config rows: 29.21 → 18.74 MB p50 (row storage only, not total app heap).
+- Rendered surfaces: static Browse (250 rows) and Config (11 rows) recorded
+  zero ref changes across two applies (7.47 / 5.28 ms average render);
+  metric-bearing Nodes (19 rows) recorded 16 ref changes across 18 applies
+  (23.84 ms). This is why dynamic families use ref-only sharing.
+- Native macOS WebKit loopback: WebKit sends `Accept-Encoding: gzip, deflate`
+  and the server returns no `Content-Encoding`; a ~100 KB 250-item Browse page
+  fetches and parses in 8.2 ms p50 (JSON parse 0.2 ms); a stable Config `304`
+  takes 1.2 ms p50.
+- Custom metadata (2026-08-25): one small label adds ~45 B per metadata-bearing
+  row, ~11.25 KB per 250-row page. A small-value fixture, not a maximum.
+- Rejected: best-speed gzip, response compression middleware, and page
+  dictionaries. At 1,000 rows gzip shrank Events to 48,921 B, Pods to 16,333 B,
+  and custom resources to 16,396 B, but raised encode time from 0.68–0.86 ms to
+  1.42–2.02 ms and allocations from 0.50–0.68 MB to 1.77–2.39 MB; ref-only
+  payloads meet the target without CPU, allocation, protocol, or version-skew
+  costs.
 
-A five-run, alternating-order V8 retained-heap comparison loaded 100,000 Config
-rows shaped exactly like `eb5edf70` and the ref-only row into the same rendered
-app process, forcing collection between phases. The old shape retained 29.21 MB
-p50 / 29.40 MB p95; ref-only retained 18.74 MB p50 / 18.98 MB p95, reductions of
-35.8% and 35.5%. The corresponding JSON strings were 36,466,671 B and
-23,527,781 B. This isolates row storage; it is not an estimate of total app
-heap.
+## Catalog full resync
 
-On a real two-cluster Browse surface, a 250-row input retained 40.08 MB total JS
-heap after forced collection, with 22 virtualized DOM rows. GridTable diagnostics
-recorded two applies, zero ref changes, and 7.47 ms average React render time.
-The static 11-row Config surface likewise recorded zero ref changes across two
-applies and 5.28 ms average render time. The metric-bearing 19-row Nodes surface
-recorded 16 ref changes across 18 applies and 23.84 ms average render time; this
-is why dynamic families use ref-only sharing.
-
-The native macOS Wails WebKit capture sent `Accept-Encoding: gzip, deflate` on
-all 170 observed loopback snapshot requests. The server returned no
-`Content-Encoding`; 100 requests carried `200` bodies, 64 were `204`, and 6
-were `304`. A representative 250-item Browse response was 99,981-99,982 B;
-ten loopback fetch/parse samples measured 8.2 ms p50 / 15.8 ms p95 total, of
-which JSON parsing was 0.2 ms p50 / 0.3 ms p95. A stable Config validator
-returned an empty `304` in 1.2 ms p50 / 3.9 ms p95.
-
-Custom metadata projection was measured on 2026-08-25 with the canonical wire
-fixture. Adding one small label to each of its 16 metadata-capable synthetic
-rows increased the compact document from 20,527 B to 21,247 B: 720 B total, or
-45 B per metadata-bearing row. At the 250-row page limit, the same shape adds
-about 11.25 KB to the measured Browse baseline. This is a small-value fixture,
-not a maximum: label and annotation values remain variable-size Kubernetes
-metadata, and the app adds no byte cap below the upstream object limit. The
-ingest boundary strips managed fields and
-`kubectl.kubernetes.io/last-applied-configuration` before projection so the
-known full-object annotation is never retained or serialized by this path.
-
-Best-speed gzip remains rejected. At 1,000 rows it reduced Events to 48,921 B,
-Pods to 16,333 B, and custom resources to 16,396 B, but increased encode time
-from roughly 0.68-0.86 ms to 1.42-2.02 ms and allocations from roughly
-0.50-0.68 MB to 1.77-2.39 MB. No response compression middleware or page
-dictionary is present; the measured ref-only payload meets the current target
-without their CPU, allocation, protocol, or version-skew costs.
+Local Kind, 2026-09-22: production ingest and catalog with real clients, 10,000
+extra Widget CRs, default catalog options. A CRD short-name change triggered a
+warm full resync publishing 10,336 objects across 64 resource types in 155 ms
+(385 ms update-to-publication), with 29 non-CRD LISTs, 64 permission reviews,
+two discovery requests, and no custom-resource LIST. This supports the shared
+full-resync contract for this fixture only; remote clusters and aggregated
+extension APIs were absent. Re-measure them before justifying partial
+recollection.

@@ -1,42 +1,40 @@
 # Data Freshness Contract
 
-This is the single normative contract for when cluster data appears, refreshes,
-and causes Kubernetes API work. Other architecture docs describe ownership and
-payload shape; they link here instead of restating freshness behavior.
+The single normative contract for when cluster data appears, refreshes, and
+causes Kubernetes API work. Mechanics and transport live in
+[refresh-system.md](refresh-system.md); backend store and governor in
+[data-layer.md](data-layer.md); metric payloads in
+[resource-metrics.md](resource-metrics.md).
 
 ## User-visible contract
 
 1. **Paint retained data immediately.** Selecting a tab or view reads that
-   cluster and scope's retained snapshot during the same render. Do not clear it,
-   wait for readiness, or replace it with a loading screen before asking for
-   fresh data.
+   cluster and scope's retained snapshot in the same render; never clear it,
+   wait for readiness, or show a loading screen before requesting fresh data.
 2. **Reconcile immediately after activation.** Foreground activation starts one
-   non-manual refresh for the newly visible scopes. Retained data paints while
-   a cooled backend re-establishes that cluster's producers; snapshot and stream
-   dispatch wait on that activation boundary instead of surfacing transient
-   service-unavailable errors. When reconciliation completes, its snapshot
-   replaces the retained data. This activation boundary applies to every refresh
-   domain and every dispatch path, including scheduled work, stream-triggered
-   snapshots, and stream-only domains. Backend cool/re-warm transitions are
-   serialized so this boundary cannot complete against a half-cooled subsystem.
-3. **Keep background work passive.** An open inactive cluster retains snapshots
-   and object-change subscriptions. It does not continuously fetch snapshots,
-   start metrics collection, or produce manual-refresh errors merely because
-   its tab is open.
+   non-manual refresh for the newly visible scopes; its result replaces the
+   retained data. While a cooled backend re-establishes producers, every domain
+   and dispatch path (scheduled, stream-triggered, stream-only) waits on the
+   activation boundary instead of surfacing transient service-unavailable
+   errors. Backend cool/re-warm transitions are serialized so the boundary
+   cannot complete against a half-cooled subsystem.
+3. **Keep background work passive.** An open inactive cluster keeps snapshots
+   and object-change subscriptions, but does not poll snapshots, start metrics
+   collection, or produce manual-refresh errors because its tab is open.
 4. **Push represents change.** A healthy stream rings a doorbell only when its
-   declared source changes. The signal identifies the cluster, domain, scope,
-   source clock, and version; the snapshot/query path still owns rows.
+   declared source changes. The signal names cluster, domain, scope, source
+   clock, and version; the snapshot/query path owns rows.
 5. **Polling is recovery.** A domain with a reliable push source pauses its
-   timer while the stream is healthy. Its authored interval is the stream-down
-   fallback. A domain whose signal producer may remain silent must explicitly
-   keep its fallback poll running.
+   timer while the stream is healthy; its authored interval is the stream-down
+   fallback. A domain whose producer may stay silent must explicitly keep
+   polling (`pollingContinuesWhileStreaming`).
 6. **Manual means the user asked.** Buttons and commands use manual jobs.
-   Startup, foreground activation, stream signals, and fallback polling are
-   non-manual and must not surface manual-job timeout errors.
+   Startup, foreground, stream signals, and fallback polling are non-manual and
+   never surface manual-job timeout errors.
 
 ## Request intents
 
-| Intent | Meaning | Allowed while automatic refresh is paused? |
+| Intent | Meaning | Runs while auto-refresh is paused? |
 | --- | --- | --- |
 | `startup` | First passive acquisition of a scope | No |
 | `foreground` | A retained scope became visible | Yes |
@@ -44,290 +42,174 @@ payload shape; they link here instead of restating freshness behavior.
 | `stream-signal` | A declared source clock changed | Yes |
 | `user` | Explicit user action/manual refresh | Yes |
 
-Foreground is not manual. It bypasses passive-refresh pauses and cooldowns so a
-tab activation reconciles now, but it calls the backend's ordinary snapshot or
-stream reconciliation path rather than creating a ManualQueue job.
+- Foreground is not manual: it bypasses passive pauses and cooldowns but uses
+  the ordinary snapshot/stream reconciliation path, never a ManualQueue job.
+  Navigation updates orchestrator context and lets the scheduler issue it.
+- Doorbell refetches must use `stream-signal`, which bypasses the
+  skip-while-stream-healthy gate; that gate silently swallows a `background`
+  refetch.
+- Context-wide manual refresh accepts only `user`.
 
 ## Retention and leases
 
-- Refresh state is keyed by one `clusterId` plus the domain-owned scope.
-- The selected cluster and domain scope determine the retained-data read key.
-  Lifecycle/readiness may gate leases and requests, but must not remove that read
-  key or hide a retained snapshot.
-- Disabling or switching a visible scope preserves its last successful data.
-- If an open cluster temporarily loses refresh eligibility, stop its active work
-  with state preservation. Only closing/removing the cluster clears that scope.
-- Re-enabling paints that data before the activation request settles.
-- Cross-cluster views acquire one lease per displayed cluster; membership
-  changes acquire/release only the changed clusters.
-- A lease expresses consumer demand. Do not use an open background workspace as
-  demand for expensive producers that only feed visible data.
-- Scoped leases declare `query` or `snapshot` demand. Query demand owns the
-  live source, source clocks/readiness/permission state, and the consumer's
-  current bounded query page; it does not fetch or retain the domain's separate
-  snapshot payload. Snapshot demand owns that payload. The union starts one
-  live source, and snapshot reconciliation runs whenever snapshot demand joins
-  an already-live query scope.
-- Query demand starts the subscription before its initial page read. The
-  backend `ACK` or initial `RESET` then advances an acknowledgement identity,
-  causing one acknowledged reconciliation read; a response from an older query
-  identity cannot overwrite the newer page. This closes the send/registration
-  race without retaining a second row snapshot.
-- The scheduler never satisfies query-only fallback or global-manual demand by
-  fetching the domain's bounded base snapshot. While the stream is unhealthy,
-  or for a global manual refresh, it advances a query-reconciliation identity;
-  the mounted consumer then reissues its current page. A healthy stream leaves
-  that identity unchanged because its source clocks already drive page reads.
-- Releasing one demand mode preserves work and state owned by the other.
-  Releasing the final demand stops the shared live source under the existing
-  retention rules.
-- A governor Cold assignment is not applied until the backend has built a ready
-  `namespaces` snapshot and a `cluster-overview` snapshot for that exact cluster
-  scope. The namespace build runs through the aggregate lifecycle callback so
-  loading reaches Ready without a frontend request. Until both retained baselines
-  exist, the subsystem and its producers stay live; completion retries the tier
-  reconciliation. Cold preparation requires both that aggregate lifecycle state
-  and the current subsystem generation's namespace workload tracker to report actual
-  initial sync or explicit permission skips for every tracked Pod/workload source;
-  this prevents a Ready state retained across re-warm from authorizing an unsynced
-  replacement subsystem. Preparation does not poll namespace snapshots, because
-  scoped namespace builds can perform API probes. This is automatic preparation,
-  never a manual refresh.
-- Sustained memory pressure is the only exception to that Cold-serving entry
-  rule. If preparation remains unsettled for one bounded snapshot-attempt grace
-  period, each still-over-budget pressure sample re-drives the transition and the
-  backend may force a full teardown of an inactive cluster. It first stops feeds
-  and spills every store currently available, while frontend leases keep their
-  last successful rows. The backend then serves no data for that cluster until a
-  foreground re-warm rebuilds its subsystem and catalog. It must not freeze or
-  present an unsettled store as settled Cold truth.
+- Refresh state is keyed by one `clusterId` plus the domain-owned scope; the
+  selected cluster and scope form the retained-data read key. Lifecycle and
+  readiness may gate leases, requests, and signals, but never remove that key
+  or hide rendered rows.
+- Disabling or switching a visible scope preserves its last successful data
+  (`preserveState: true`; audit enable/disable calls when adding a snapshot
+  stream so remounts do not blank rows). Re-enabling paints it before the
+  activation request settles.
+- Temporary loss of refresh eligibility, including for every open cluster,
+  stops active work with state preserved. Only closing/removing the cluster
+  clears its scopes.
+- Cross-cluster views hold one lease per displayed cluster; membership changes
+  acquire/release only the changed clusters.
+- A lease is consumer demand. An open background workspace is not demand for
+  expensive producers that only feed visible data.
+- Scoped leases declare `query` or `snapshot` demand with independent reference
+  counts over one shared live source (subscription, readiness, permission,
+  stream health, source clocks, fallback polling). Query demand owns the
+  consumer's current bounded page and never fetches or retains the domain's
+  snapshot payload; snapshot demand owns that payload. Snapshot demand joining
+  a live query scope triggers snapshot reconciliation. Releasing one mode keeps
+  the other's work; releasing the last stops the source under these rules.
+- Query demand subscribes before its initial page read. The backend `ACK` or
+  initial `RESET` advances an acknowledgement identity that causes one
+  acknowledged page read; a response for an older query identity cannot
+  overwrite a newer page. This closes the send/registration race without a
+  second retained row snapshot.
+- The scheduler never satisfies query-only fallback or global manual refresh by
+  fetching the bounded base snapshot. While the stream is unhealthy, or on
+  global manual refresh, it advances a query-reconciliation identity and the
+  mounted consumer reissues its page; a healthy stream leaves it unchanged.
+- Governor Cold entry and pressure-forced teardown follow
+  [data-layer.md](data-layer.md#lifecycle--governor). Frontend leases keep their
+  last successful rows through both; after a forced teardown the backend serves
+  nothing for that cluster until a foreground re-warm.
 
 ## Signals and source clocks
 
 The authored domain contract declares which clocks can change a payload:
-`object`, `metric`, `event`, `catalog`, and `attention`.
+`object`, `metric`, `event`, `catalog`, and `attention`. Transport:
+[refresh-system.md](refresh-system.md#transport-boundary).
 
-Request/response refresh traffic uses the same-origin Wails service route
-`/api/v2`. Resource doorbells and container logs use the named Wails streams
-`refresh-resources` and `refresh-container-logs`, with structured JSON frames
-in both directions. The backend publishes or replaces the service handler only
-after the owning aggregate is ready; an earlier request receives a bounded
-service-unavailable response. There is no application-owned loopback listener,
-runtime base-URL discovery, CORS layer, raw browser WebSocket, EventSource, or
-fallback refresh transport.
-
-The service route owns snapshots and validators, permission-shaped failures,
-manual-refresh enqueue/status, telemetry summaries, metrics activation,
-correlation identity, and request-context cancellation. The named streams own
-resource replay/reset and container-log delivery, including their
-backpressure, cancellation, manager replacement, and shutdown behavior. Keep
-those contracts on their framework-owned transports rather than recreating an
-application transport between them.
-
-The telemetry summary reports every open cluster's streams, snapshots and
-metrics polling status, each tagged with its cluster. The Diagnostics summary
-cards describe the active cluster only, combining a stream's socket entry with
-its delivery entries (catalog and event-table domains, log targets); the
-Connections tab lists each cluster's rows with a Cluster column.
-
-- Signal-driven refetch keys only on the declared `signalVersions`. Snapshot
-  responses also update validators and must not echo into another refetch.
-- Signal versions are opaque equality tokens. Sequence and Kubernetes
+- Signal-driven refetch keys only on declared `signalVersions`, never the
+  payload-rewritten `sourceVersion`; keep a first-signal sentinel so an empty
+  previous value cannot swallow the first ring. Snapshot responses update
+  validators and must not echo into another refetch.
+- Signal versions are opaque equality tokens. Sequence numbers and Kubernetes
   `resourceVersion` are transport/object metadata, not global ordering clocks.
-- Stream messages do not carry table rows, query state, positions, or cursors.
-- A healthy transport is not evidence that every collection supplies changes.
-  A table's declared source must carry Kubernetes changes through the actual
-  snapshot owner to the signal consumed by that table, regardless of object
-  count. Tests for collection-source changes or table-source migrations must
-  exercise that composition with real state owners; separate mocked producer
-  and consumer tests cannot establish the connection.
-- A doorbell for an informer-fed maintained store rings from that store's own
-  handler after it applies the change. client-go runs every handler on its own
-  listener goroutine, so a second handler on the same informer can ring before
-  the store holds the change. Adds, real updates, and deletes ring; resync
-  echoes (unchanged `resourceVersion`) do not. The Cluster and Namespace Events
-  tables follow this through the `changed` hook of
-  `registerMaintainedInformerHandler`; namespaced tables ring both
-  `namespace:<name>` and `namespace:all`.
-- A source must advance only the payload it owns. In particular, a metric tick
-  must not advance an object clock or make an object snapshot appear changed.
-- A signal producer invalidates the affected snapshot/query cache before it
-  broadcasts the new source clock. Otherwise the signal-triggered current-page
-  read could consume the pre-change cached page and receive no later signal.
-- `namespaces` advances its `object` signal clock when a Namespace add, update,
-  or delete can change the list. The producer invalidates the namespace
-  snapshot cache before ringing that doorbell, and every leased namespace
-  consumer performs one `stream-signal` reconciliation for the new clock.
+- Stream messages never carry table rows, query state, positions, or cursors.
+- A source advances only the payload it owns: a metric tick never advances an
+  object clock or makes an object snapshot appear changed.
+- A producer invalidates the affected snapshot/query cache before broadcasting
+  the new clock; otherwise the signal-triggered read can consume the
+  pre-change cached page and no later signal arrives.
+- Signals that collide with an in-flight read latch exactly one trailing
+  `stream-signal` read (`latchTrailingStreamSignal`); never drop them or
+  repeatedly abort-and-replace.
+- A healthy transport does not prove every collection supplies changes. A
+  table's declared source must carry Kubernetes changes through the actual
+  snapshot owner to the signal that table consumes, at any object count; prove
+  it with real state owners, not separate mocked producer and consumer tests.
+- An informer-fed maintained store rings from its own handler after applying
+  the change. client-go runs each handler on its own goroutine, so a second
+  handler on the same informer can ring before the store holds the change.
+  Adds, real updates, and deletes ring; resync echoes (unchanged
+  `resourceVersion`, `backend/refresh/snapshot/informer_echo.go`) do not. Events
+  tables use the `changed` hook of `registerMaintainedInformerHandler`;
+  namespaced tables ring both `namespace:<name>` and `namespace:all`.
+- `namespaces` advances its `object` clock when a Namespace add, update, or
+  delete can change the list, invalidating its cache first; every leased
+  consumer performs one `stream-signal` reconciliation.
 - A reconnect may reuse retained data without fetching only when the server
-  successfully replays from the client's resume token. If the server sends a
-  reset because it cannot prove continuity, retained data is invalidated by
-  advancing one of the domain's declared signal clocks; consumers then perform
-  one `stream-signal` reconciliation. A reset must never be accepted as only an
-  acknowledgement while retained data remains visible.
-- If a resource replay cannot fit in the remaining outgoing queue, the mux sends
-  an ACK followed by a RESET for that scope instead of enqueueing a partial replay.
-  Updates already queued for other scopes remain intact. Live delivery overflow
-  still closes the session so every subscription recovers through resume or reset.
-- Replacing one cluster's backend stream manager invalidates subscriptions bound
-  to the previous manager. After routing the replacement, affected subscriptions
-  re-establish against the current manager over the existing aggregate
-  connection; subscriptions for other clusters remain connected. The new tail
-  follows the same replay-or-reset rule before retained data is trusted.
+  replays from the client's resume token. A RESET means continuity is unproven
+  (including token-less subscriptions with retained data): it advances a
+  declared signal clock and causes one `stream-signal` reconciliation, and is
+  never accepted as a bare acknowledgement while retained data stays visible.
+- Replacing one cluster's stream manager re-establishes only that cluster's
+  subscriptions, and the new tail follows the same replay-or-reset rule.
+  Overflow and replacement mechanics:
+  [refresh-system.md](refresh-system.md#backend-subscription-lifetime).
 
 ## Metrics
 
-- The backend poller owns metric cadence and runs only for clusters with an
-  active metric-bearing consumer.
+Payload shape and presentation: [resource-metrics.md](resource-metrics.md).
+
+- The backend poller owns cadence and runs only for clusters with an active
+  metric-bearing consumer.
 - A successful sample advances the `metric` clock and rings every subscribed
-  metric doorbell. A failed attempt advances only `namespace-metrics`, whose
-  payload owns the namespace utilization lifecycle/error state; it does not ring
-  sample-bearing pod, workload, node, or overview doorbells and never invents an
-  object change.
-- Pod, workload, and node queries join the latest sample onto served row copies.
-- Namespace utilization is deliberately separate: `namespaces` owns namespace
-  objects and object-derived rollups; `namespace-metrics` owns only utilization
-  rows and metric freshness. Visible namespace surfaces join them by the full
-  Namespace `ResourceRef`.
+  metric doorbell. A failed attempt advances only `namespace-metrics`, which
+  owns namespace utilization lifecycle/error state; it rings no sample-bearing
+  pod, workload, node, or overview doorbell and never invents an object change.
 - The active cluster leases `namespace-metrics`; inactive cluster tabs do not.
-  Global Namespaces leases it for each cluster whose namespace rows are
-  currently displayed, and releases those leases on exit.
-- Frontend metrics-demand changes are sent in order. A transient demand-request
-  failure retries with bounded backoff while the desired cluster set remains
-  unchanged; a newer desired set is reconciled after the in-flight request.
-- Client timers may change presentation from fresh to stale, but may not fetch
-  data merely to advance staleness or relative age text.
+  Global Namespaces leases it for each cluster whose rows are displayed and
+  releases those leases on exit.
+- Frontend metrics-demand changes are sent in order. A transient failure
+  retries with bounded backoff while the desired cluster set is unchanged; a
+  newer set is reconciled after the in-flight request.
+- Client timers may change presentation from fresh to stale but never fetch
+  merely to advance staleness or relative age text.
 
 ## Errors and readiness
 
-- Retained data remains visible during refresh and transient failure. Attach the
-  refresh/error state to it instead of replacing it with an empty payload.
-- Foreground activation is a per-cluster dispatch boundary. Beginning activation
-  stops that cluster's streams and aborts its in-flight snapshots before the
-  backend replaces or rewarms their producers. Visible leased work is retained
-  and replayed after activation with its original `user` or `stream-signal`
-  intent; passive background work is dropped. Releasing the boundary also
-  restarts retained stream-only leases, which have no snapshot request to queue.
-- A typed permission denial is settled until manual refresh or a cluster-scoped
-  auth, namespace-scope, or permission recovery resets its epoch.
-- Error notifications are deduplicated by full refresh scope. Re-selecting a
-  retained failing scope does not repeat the same notification; leaving the
-  error state clears that scope's dedupe so a later failure can notify again.
-- Loading gates may block invalid early reads, but must still allow the request
-  that advances the cluster to ready.
-- After foreground governor reconciliation, the backend returns the current
-  authoritative cluster-workspace snapshot even when no lifecycle transition
-  occurred. The frontend workspace store applies lifecycle to React selectors
-  and the refresh-readiness boundary, so a missed earlier event cannot leave the
-  tab behind the serving gate. Runtime lifecycle events that arrive before
-  hydration take precedence over that older snapshot.
-- Startup settings and saved-selection restore use the serialized
-  selection-mutation boundary. Client preflight then runs outside that lock with
-  the restored generation's cancellation context, so a newer selection can
-  cancel stale startup work without waiting for an unreachable API server.
-  Successful preflight re-enters the boundary before refresh and catalog
-  publication. Each completed cluster client is published independently; one
-  slow sibling may not delay it. After a cluster enters `loading`,
-  `loading_slow`, `degraded`, or `ready`, a late `connecting`/`connected` result cannot move
-  it back behind the frontend serving gate.
-- `RefreshCoordinator` owns subsystem/catalog replacement, refresh telemetry,
-  Attention-target registration, and handler/stream publication. Replacement
-  publishes new routing before stopping old producers; teardown unpublishes
-  before releasing producers.
-- When a cluster subsystem is replaced, queued or running manual work moves to
-  its replacement queue. Succeeded, failed, and cancelled jobs remain terminal
-  and are never re-enqueued.
+- Retained data stays visible through refresh and transient failure with the
+  refresh/error state attached; never replace it with an empty payload.
+- Foreground activation is a per-cluster dispatch boundary. Beginning it stops
+  that cluster's streams and aborts its in-flight snapshots before the backend
+  replaces or re-warms producers. Visible leased work is replayed afterwards
+  with its original `user` or `stream-signal` intent; passive background work
+  is dropped. Releasing the boundary restarts retained stream-only leases,
+  which have no snapshot request to queue.
+- After foreground governor reconciliation the backend returns the current
+  authoritative cluster-workspace snapshot even without a lifecycle transition.
+  The workspace store applies it to React selectors and the refresh-readiness
+  boundary so a missed event cannot leave the tab behind the serving gate.
+  Runtime lifecycle events that arrive before hydration win over that older
+  snapshot.
+- A typed permission denial is settled until manual refresh or a
+  cluster-scoped auth, namespace-scope, or permission recovery resets its epoch.
+- Error notifications are deduplicated by full refresh scope. Reselecting a
+  retained failing scope does not re-notify; leaving the error state clears
+  that scope's dedupe.
 - Closing/removing a cluster tears down its leases, streams, jobs, and retained
   state. Switching tabs does not.
-
-## Owning code
-
-- Authored domain metadata: `backend/refresh/domain/refresh-domain-contract.json`
-- Backend snapshots and signals: `backend/refresh/snapshot`,
-  `backend/refresh/resourcestream`
-- Backend manual jobs and metrics demand: `backend/refresh/system`,
-  `backend/refresh/types.go`, `backend/refresh_aggregate_metrics.go`
-- Frontend request policy, runtimes, and retained store:
-  `frontend/src/core/data-access`, `frontend/src/core/refresh`
-- Namespace object/metric composition:
-  `frontend/src/modules/namespace/contexts/NamespaceContext.tsx`
 
 ## Change checklist
 
 ### Required evidence for resource-source changes
 
 Adding a resource collection or table, changing its source, or changing watch,
-cache, or signal wiring requires freshness evidence even when the visible table
-and transport are unchanged. Completion requires:
+cache, or signal wiring needs freshness evidence even when the visible table
+and transport are unchanged:
 
-- Trace Kubernetes change delivery through the authoritative state owner,
-  snapshot/cache invalidation, declared signal, and the consuming table adapter.
-  Exercise production registrations and bindings at the affected seams; a test
-  that manually connects a replacement source cannot prove production wiring.
-- Exercise create, update, and completed deletion with the view open and a
-  healthy stream, using a small collection below any watch-promotion threshold.
-  Assert changed rows and affected counts/facets before periodic resync can run,
-  without manual refresh, navigation, or an optimistic action result. An
-  external cluster mutation must converge through the same path.
-- Distinguish deletion requested from deletion completed when finalizers apply.
-  Exercise relevant startup/reconnect races and scope isolation; retained or
+- Trace a Kubernetes change through the authoritative state owner,
+  snapshot/cache invalidation, declared signal, and consuming table adapter,
+  using production registrations and bindings. A test that hand-connects a
+  replacement source cannot prove production wiring.
+- With the view open and a healthy stream, on a small collection below any
+  watch-promotion threshold, exercise create, update, and completed deletion.
+  Assert changed rows and affected counts/facets before periodic resync can
+  run, without manual refresh, navigation, or an optimistic action result.
+  External cluster mutations must converge through the same path.
+- Distinguish deletion requested from deletion completed when finalizers
+  apply. Exercise startup/reconnect races and scope isolation; retained or
   unauthorized data must not become authoritative absence.
-- Show that the regression test detects the missing connection: it fails before
-  the fix, or with that connection deliberately removed in an isolated test
-  build, and passes with the production connection restored.
+- Show the regression test fails with the connection removed (before the fix,
+  or in an isolated test build) and passes with it restored.
 
-Record which seams automated tests exercise and which require native interaction
-evidence. A hook harness does not establish the view's binding, a healthy stream
-does not establish source coverage, and a local pass does not establish required
-merge checks. Leave missing evidence explicit in the completion record.
+Record which seams automated tests cover and which need native interaction
+evidence: a hook harness does not establish the view's binding, and a healthy
+stream does not establish source coverage.
 
-### Shared freshness checks
+### Seam checks
 
-For a freshness change, test the contract at the producer/consumer seam:
-
-1. retained data paints before the activation request completes;
-2. foreground activation issues one non-manual request for the visible scope;
-3. an inactive retained scope does not create producer demand or periodic
-   requests;
-4. the declared source signal refetches the affected payload once;
-5. a reconnect that cannot replay invalidates retained data and refetches it
-   once, while a successful replay does not add a snapshot request;
-6. replacing one cluster's stream manager re-establishes only that cluster's
-   subscriptions and reconciles any continuity gap;
-7. retained errors notify once per scope and can notify again after recovery;
-8. a metric-only change leaves object clocks and object snapshots unchanged;
-9. permission, stream-down fallback, teardown, and multi-cluster isolation still
-   converge.
-10. the activation boundary holds every registered snapshot and stream-only
-    domain, aborts in-flight work for only the activating cluster, preserves
-    visible request intent, and never converts passive background work into
-    queued demand.
-11. a temporarily unavailable open cluster stops refresh work without losing its
-    retained snapshot, including when every open cluster is unavailable;
-12. tab activation replays the backend's unchanged authoritative lifecycle state
-    to both frontend lifecycle consumer paths.
-13. Cold preparation belongs to one subsystem generation, stops on replacement,
-    and under sustained memory pressure re-drives until either a settled mmap
-    transition or the bounded full-teardown fallback completes.
-
-Finish non-documentation changes with `wails3 task qc:prerelease`.
-
-## Snapshot and cooled-store lifetime
-
-Cache invalidation advances a domain generation as well as deleting cache entries.
-New requests cannot join pre-invalidation builds, and those builds cannot populate
-the new generation's cache after completion.
-
-The resource gateway's response cache (object details, header metadata, Helm
-content) follows the same rule per entry: a fetch stores its result only if the
-entry was not evicted after the fetch began (`backend/response_cache.go`). A kind
-whose details embed its pods sets `DetailListsPods`; any pod change in a
-namespace evicts those kinds' cached details there, since a pod row does not name
-its workload. A stale pod list would otherwise hide a new pod's lines in the Logs
-tab.
-
-Cooled mmap stores belong to the exact subsystem generation. Replacement publishes
-new aggregate routes before retiring old snapshot serving; retirement rejects late
-reads and drains active builders before releasing mappings. Failed rewarm retains
-the old routed generation and its mappings. Partial cooling returns ownership of
-already-swapped mappings to the coordinator, which retires and spills those stores
-before closing them during fallback teardown.
+Test each affected rule above at the producer/consumer seam rather than per
+side. Commonly missed cases: an inactive retained scope creating demand; a
+successful replay adding a snapshot request; a stream-manager replacement
+touching other clusters; the activation boundary converting passive work into
+queued demand; every open cluster unavailable at once; activation replaying
+unchanged lifecycle state to both frontend consumer paths (React selectors and
+refresh readiness); and Cold preparation under sustained memory pressure
+re-driving until a settled mmap transition or the full-teardown fallback.

@@ -1,117 +1,86 @@
 # Sonar remediation contract
 
-SonarQube Cloud is the authority for repository S3776 findings. The project uses
-Sonar Automatic Analysis rather than a checked-in scanner; local analysis is an
-early warning, not completion evidence.
+SonarQube Cloud (Automatic Analysis; no checked-in scanner) is the authority for
+S3776 findings. Local analysis is an early warning, not completion evidence.
 
 ## TypeScript S3776 baseline
 
 `frontend/scripts/typescript-s3776-baseline.json` records every open
-`typescript:S3776` issue key, function identity, path, line, and reported score
-from one completed `main` analysis.
+`typescript:S3776` issue key, function identity, path, line, and score from one
+completed `main` analysis. It is monotonic: a new key or an increased score on a
+retained key fails the audit; lower scores and closed keys pass; updates may
+only lower retained scores or remove closed keys, never accept a new or
+increased issue.
 
-The baseline is monotonic:
-
-- a new issue key fails the audit;
-- an increased score on a retained key fails the audit;
-- lower scores and closed keys pass;
-- updating the baseline can only lower retained scores or remove closed keys;
-- the baseline never auto-accepts a new or increased issue.
-
-Audit the current main branch from the repository root:
+Run from the repository root:
 
 ```sh
+# Audit current main.
 mise exec -- npm run sonar:audit:main --prefix frontend
-```
-
-After a pull-request analysis completes, audit every open/confirmed new-code
-issue, not only S3776:
-
-```sh
+# After a PR analysis completes: audit every open/confirmed new-code issue.
 mise exec -- npm run sonar:audit --prefix frontend -- --pull-request 123
-```
-
-The PR audit is intentionally all-rule. A complexity refactor is not successful
-if it replaces S3776 with a correctness, accessibility, duplication, or other
-maintainability issue.
-
-After the remediation is merged and a newer `main` analysis confirms the
-expected reduction, update the baseline explicitly:
-
-```sh
+# After merge, once a newer main analysis confirms the reduction.
 mise exec -- npm run sonar:baseline:update --prefix frontend
 ```
 
-Review the JSON diff before committing it. Do not update from a feature branch,
-from a stale analysis, or while the audit reports a new/increased issue.
+- The PR audit is deliberately all-rule: a complexity refactor fails if it
+  trades S3776 for a correctness, accessibility, duplication, or other
+  maintainability issue.
+- Review the baseline JSON diff before committing it. Never update from a
+  feature branch, a stale analysis, or while the audit reports a new or
+  increased issue.
+- The live API check is not part of the offline frontend lint/test gate. Merge
+  enforcement belongs to the Sonar/GitHub status-check configuration; scripts
+  make the decision reproducible but cannot make an unprotected branch require
+  it.
 
-## Local Biome signal
+## Local signals
 
-The installed Biome exposes
-`lint/complexity/noExcessiveCognitiveComplexity`, which implements a cognitive
-complexity algorithm with a default maximum of 15. Check one touched source
-while refactoring:
+The prerelease gate does not run these checks. Run the applicable one after
+adding recovery branches, loops/selects, or callback logic, and again before the
+gate. Review scores of changed functions and new helpers, not unrelated existing
+findings in the same file. Keep Sonar's configured threshold and exclusions
+unchanged.
 
-```sh
-cd frontend
-mise exec -- npx biome lint src/path/to/file.ts \
-  --only=lint/complexity/noExcessiveCognitiveComplexity
-```
+- TypeScript: `npm run complexity` runs Biome's
+  `lint/complexity/noExcessiveCognitiveComplexity` with the standalone
+  `frontend/biome.complexity.jsonc` at the target of 12 (Biome's default maximum
+  is 15, so a plain `--only` run hides scores of 13–15);
+  `frontend/scripts/biome-complexity.test.mjs` pins the threshold. Paths are
+  relative to `frontend/`; pass each file as its own argument. Use it
+  directionally only: a parity spike matched 90 of Sonar's 91 TypeScript
+  locations but reported 224 production findings, with few exact score
+  matches. Biome-only findings are not Sonar inventory.
 
-The parity spike at revision `b0d3344b976bf451f5a71ab6344599ae3e0754d9`
-found the same location for 90 of Sonar's 91 TypeScript findings, but it reported
-224 production findings compared with Sonar's 91. Only 5 matching locations had
-the exact same score, and only 25 were within three points. Biome also missed
-Sonar's `buildCatalogSummary` finding. Therefore:
+  ```sh
+  mise exec -- npm run complexity --prefix frontend -- src/path/to/file.ts
+  ```
 
-- use Biome directionally while editing a function;
-- target 12 or lower when Biome reports the touched function;
-- do not infer Sonar closure from a Biome score;
-- do not expand the Sonar inventory with Biome-only findings during this plan;
-- wait for the completed Sonar analysis before checking off remediation.
+- Go: pinned gocognit, run without adding a module dependency. Scores can differ
+  from Sonar's Go analyzer, particularly for nested control flow; v1.2.1 is the
+  pin because it supports integer and iterator range loops. `-over 12` lists
+  only functions above the target (exit status 1 when any); drop it to see
+  every score.
 
-## Local Go signal
+  ```sh
+  mise exec -- go run github.com/uudashr/gocognit/cmd/gocognit@v1.2.1 \
+    -over 12 backend/path/to/file.go
+  ```
 
-Use a pinned gocognit invocation to inspect changed Go production functions and
-their new helpers. This does not add a dependency to the application's module:
+Split cohesive responsibilities, such as operation admission, generation
+replacement, live delivery, and terminal cleanup, before adding nesting.
+Preserve the timing of stale-generation guards, cancellation, publication, and
+completion while moving code.
 
-```sh
-mise exec -- go run github.com/uudashr/gocognit/cmd/gocognit@v1.2.1 \
-  -json backend/path/to/file.go
-```
+## Remediation loop
 
-gocognit is a directional check, not the Sonar Go analyzer. Its scores can differ
-from Sonar, particularly for nested control flow. Target 12 or lower in changed
-functions; review their scores rather than treating unrelated existing findings
-in the same file as part of the task. Keep Sonar's configured threshold and
-exclusions unchanged. The pinned version's
-[release notes](https://github.com/uudashr/gocognit/releases/tag/v1.2.1) include
-support for integer and iterator range loops.
-
-## Prevent complexity regressions while implementing
-
-Run the applicable local check after adding recovery branches, loops/selects,
-or callback logic, and again before the prerelease gate. A passing gate does not
-include this separate complexity check. Split cohesive responsibilities such as
-operation admission, generation replacement, live delivery, and terminal cleanup
-before adding more nesting. Preserve the timing of stale-generation guards,
-cancellation, publication, and completion while moving code.
-
-## Required remediation loop
-
-1. Record the Sonar key, score, owning contract, consumers, and directly affected
-   coverage.
+1. Record the Sonar key, score, owning contract, consumers, and directly
+   affected coverage.
 2. Add or confirm characterization cases before moving branches.
 3. Refactor one responsibility at a time and rerun focused tests.
-4. Run the applicable local complexity signal for every changed function and
-   new helper, not only the function Sonar originally flagged.
-5. Run frontend check, typecheck, coverage, and the full prerelease gate.
-6. After an explicitly authorized push, wait for Sonar analysis of that revision.
-7. Run the all-rule PR audit.
-8. After merge and main analysis, run the monotonic main audit and update the
-   baseline.
-
-The live API check is not part of the offline frontend lint/test gate. Merge
-enforcement belongs to the Sonar/GitHub status-check configuration; repository
-scripts make the decision reproducible but cannot make an unprotected branch
-require it.
+4. Run the local signal for every changed function and new helper, not only the
+   function Sonar flagged; then the repository gates.
+5. After an explicitly authorized push, wait for Sonar analysis of that
+   revision, then run the all-rule PR audit. Do not check off remediation before
+   that analysis completes.
+6. After merge and main analysis, run the main audit and update the baseline.

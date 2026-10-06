@@ -1,141 +1,156 @@
 # GridTable Columns
 
-Use with the [shared GridTable contract](gridtable.md). Read only the sections
-selected by the column change. Custom label/annotation columns have a separate
-[metadata contract](gridtable-metadata.md). Width measurement and resizing follow
-[column sizing](gridtable-sizing.md).
+Column definitions, the Columns menu, sorting, sizing, and custom metadata
+columns. Apply the [shared GridTable contract](gridtable.md).
 
 ## Column definitions
 
-- Column keys are durable persistence identifiers. Renaming one is a migration,
-  not cosmetic cleanup.
-- A persisted column order reconciles against the declared columns: stale keys
-  drop, and a column the stored order has never seen enters at its declared
-  position (after its nearest declared predecessor), never appended after the
-  user's trailing column — so a view can add columns without breaking saved
-  layouts (`reconcileColumnOrder`).
-- Declare resource tables in this default order: Kind, Name, Namespace, Status,
-  view-specific columns, Age. A table that shows Namespace only in All
-  Namespaces adds it with `withNamespaceColumn` anchored after Name; Events,
-  which has no Name column, anchors it after Object Name. Keep Status, or the
-  view's equivalent state column, immediately after the identity columns. The
-  only exception is Type (Normal/Warning), which stays second in the Events
+- Column keys are durable persistence identifiers; renaming one is a migration.
+- Persisted order reconciles against declared columns (`reconcileColumnOrder`):
+  stale keys drop; a never-seen column enters after its nearest declared
+  predecessor, never after the user's trailing column.
+- Default resource-table order: Kind, Name, Namespace, Status, view-specific
+  columns, Age. A table showing Namespace only in All Namespaces adds it with
+  `withNamespaceColumn` after Name (Events, which has no Name column: after
+  Object Name). Status, or the view's state column, follows the identity
+  columns; the only exception is Type (Normal/Warning), second in the Events
   tables.
-- Column capabilities are declarative. Set `hideable: false` or
-  `resizable: false` on the definition; the shared table must not infer either
-  capability from `name`, `kind`, `type`, `age`, or another key.
-- Use `createResourceNameColumn` for Kubernetes resource identity. It keeps the
-  Name column visible while still allowing the user to move and resize it.
-- Use `createKindColumn` when Kind badge presentation is wanted. A plain column
-  whose key happens to be `kind` or `type` remains plain.
-- Column header and data alignment are independent: use `alignHeader` and
-  `alignData` with `left`, `center`, or `right`. Each defaults to `left` when
-  omitted; use `className` only for styling outside this alignment contract.
+- Capabilities are declarative: set `hideable: false` or `resizable: false` on
+  the definition. The shared table never infers either from `name`, `kind`,
+  `type`, `age`, or another key.
+- `createResourceNameColumn` owns Kubernetes resource identity: always visible,
+  still movable and resizable. `createKindColumn` adds the Kind badge; a plain
+  column keyed `kind` or `type` stays plain.
+- Header and data alignment are independent: `alignHeader` / `alignData` take
+  `left` (default), `center`, or `right`; use `className` only for styling
+  outside alignment.
 - Prefer shared column factories for common Kubernetes/resource fields.
-- Use `createDetailSegmentsColumn` for backend `DetailSegment[]` details fields
-  (multi-kind tables). The backend tags each segment with a semantic slot
-  (reference/address/counts); the namespace Network view maps them to stable
-  **Context**, **Network**, and **Summary** columns so mixed-kind rows remain
-  vertically aligned. Kind-specific meaning belongs in each segment label
-  (`Class`, `Parent`, `Type`, `Hosts`, `Ports`), not in slash-separated column
-  headings. The namespace Network view renders labeled values separated by dots
-  and applies presentation tokens to exceptional values without boxing ordinary
-  counts. In a narrow text column, keep the label visible and truncate only the
-  value within the remaining width. Resolvable `ResourceLink` segments become
-  cross-object link buttons and suppress the parent row action. Collapsed list
-  values ("first +N") carry their full text
-  in the tooltip via the segment's `search` field. Auto-width relies on the
-  measurer's render-replica fallback,
-  so do not add `measurementText`. Do not re-render segment lists with ad-hoc
-  cells.
-- An absent table value renders as the ASCII hyphen-minus (`-`) in
-  `--color-text-tertiary`. `GridTable` normalizes both `-` and the legacy em
-  dash through `tableNoValue`; native tables must render potentially absent
-  scalar values through `TableCellValue`. Copy and CSV export use the same
-  canonical hyphen.
-- CPU and memory columns (`createResourceBarColumn`) export plain integers,
-  millicores and KiB, under `CPU (m)` / `Memory (KiB)` headers (the column's
-  `exportHeader`), so spreadsheets can sort and total them. The cells keep
-  their display units.
+- `createDetailSegmentsColumn` renders backend `DetailSegment[]` fields
+  (multi-kind tables); never re-render segments with ad-hoc cells. Backend
+  semantic slots (reference/address/counts) map to the namespace Network view's
+  stable **Context**, **Network**, and **Summary** columns so mixed-kind rows
+  align. Kind-specific meaning goes in segment labels (`Class`, `Parent`,
+  `Type`, `Hosts`, `Ports`), not slash-separated headings. Values render
+  dot-separated, tokens only on exceptional values (no boxed ordinary counts); in
+  narrow columns only the value truncates. Resolvable `ResourceLink` segments
+  become link buttons that suppress the row action. Collapsed lists
+  ("first +N") put full text in the tooltip via the segment's `search` field.
+  Auto-width uses the measurer's render-replica fallback; no `measurementText`.
+- An absent value renders as ASCII `-` in `--color-text-tertiary`. `GridTable`
+  normalizes `-` and the legacy em dash through `tableNoValue`; native tables
+  render potentially absent scalars through `TableCellValue`. Copy and CSV use
+  the same hyphen.
+- CPU and memory columns (`createResourceBarColumn`) export plain integers
+  (millicores, KiB) under `CPU (m)` / `Memory (KiB)` (`exportHeader`) so
+  spreadsheets can sort and total them; cells keep display units.
 
 ## Columns menu
 
-- The Columns trigger reports table state the way the other filter dropdowns do:
-  plain `Columns` while every column is shown, and `Columns (N hidden)` once the
-  user hides one — the count names what is missing rather than making the reader
-  subtract shown-from-total. Column visibility persists per cluster and view, so the
-  closed control must stay the place that discloses it.
-- The Columns menu lists every column in current display order. Visibility
-  toggles remain disabled for required columns, while every row—including
-  Name—can be dragged to reorder. The whole row is the drag target; the grip is
-  the affordance that says so and the keyboard entry point. Tab from the open
-  Columns trigger focuses the first grip; a focused grip supports Up and Down
-  Arrow keys. The menu's top-to-bottom order maps to the table's left-to-right
-  column order. Reordering and visibility are independent, and the shared
-  All/None actions affect hideable columns only.
-- When the Columns menu exposes mutable order controls, visible column headers
-  are also whole-cell drag targets. Tables without that menu, and controlled
-  tables without an order-change callback, do not advertise reordering. A
-  visual grip appears on hover immediately before the column label; keyboard
-  reordering remains on the focusable grip in the Columns menu. Header dragging
-  uses the tab strip's midpoint insertion model and the Columns menu's
-  grab/grabbing, dimming, and accent-marker styling. Dropping updates the same
-  order model as the Columns menu. A drop that leaves the visible sequence
-  unchanged does not rewrite hidden-column placement. Resize handles remain
-  resize-only and suppress native drag initiation when resizing starts.
-- Option presentation is owned by the shared `DropdownFilterOption`, not by each
-  menu. A required column renders as a locked control state with the label at
-  full contrast and an `Always shown` title; it must never be explained with an
-  extra word in the row. The menu carries `dropdown-columns-menu` so it can opt
-  out of the shared disabled styling, because dimming a label while its
-  still-usable drag handle stays at full strength is the state this prevents.
-- The Columns menu is the only place that dims an unselected label
-  (`dimWhenOff`), because there "off" means the column is absent from the table.
-  Filter menus must not adopt it: most of their options are off by default, so
-  dimming would flag the normal case as an anomaly.
-- `Reset` is one recovery action for column preferences: it restores the column
-  definitions' declaration order, shows every hideable column, and returns every
-  `autoWidth` column to automatic measurement. Manually sized non-auto columns
-  remain user-owned. Reset is enabled whenever order, visibility, or automatic
-  width ownership differs from its default, and it is separated from All/None in
-  the menu's action bar because it is a different kind of verb. Do not
-  reintroduce partial reset actions — recovering a table must not take multiple
-  actions in multiple models.
+- The trigger reads `Columns`, or `Columns (N hidden)` once any is hidden;
+  visibility persists per cluster and view, so the closed control discloses it.
+- The menu lists every column in display order (top-to-bottom =
+  left-to-right). Required columns' visibility toggles are disabled, but every
+  row, Name included, drags to reorder; the whole row is the drag target and the
+  grip is the affordance and keyboard entry (Tab from the open trigger focuses
+  the first grip; Up/Down move it). Order and visibility are independent;
+  All/None affect hideable columns only.
+- With mutable order in the menu, visible headers are also whole-cell drag
+  targets (hover grip before the label) using the tab strip's midpoint insertion
+  and the menu's drag styling and order model; tables without the menu, or
+  controlled tables without an order-change callback, do not advertise it. A
+  drop leaving the visible sequence unchanged does not rewrite hidden-column
+  placement. Resize handles stay resize-only and suppress native drag.
+- `DropdownFilterOption` owns option presentation. A required column is a locked
+  control at full label contrast with an `Always shown` title, never an extra
+  word; `dropdown-columns-menu` opts out of shared disabled styling so a dimmed
+  label never sits beside a usable drag handle.
+- Only the Columns menu dims unselected labels (`dimWhenOff`), since "off" means
+  absent; filter menus must not, because most of their options are off by
+  default.
+- `Reset` is the single recovery action: declaration order, every hideable
+  column shown, every `autoWidth` column back to automatic (manually sized
+  non-auto columns stay user-owned). It is enabled whenever any differs from
+  default and sits apart from All/None. Rejected: partial resets — recovery must
+  not take several actions across models.
 
 ## Sorting
 
-- Sort keys emitted by `GridTable` must be visible column keys. Hidden data
-  fields such as timestamps may be used by a column `sortValue`, but must not be
-  published as active table sort keys.
-- Age columns should render relative text from `ageTimestamp` through the
-  live-age contract in [live-age.md](live-age.md). `createAgeColumn` owns the
-  timestamp sort value and parses compact fallback text only when a timestamp is
-  unavailable; the generic sorting hook never infers Age semantics from a key.
-- Query-backed table columns may be `sortable: true` only when the backend
-  adapter supports that exact column key, or a documented alias for it, as a
-  global query sort.
-- Do not expose hydrated post-page fields as sortable query columns. If the
-  backend cannot sort the complete matching dataset by a field, the column must
-  be non-sortable or the backend contract must be expanded first.
-- Production query-backed resource views should be covered by a rendered-column
-  contract test that compares their sortable keys against the supported query
-  sort contract.
+- Emitted sort keys are visible column keys. Hidden fields such as timestamps
+  may feed a column `sortValue` but are never published as active sort keys.
+- Query-backed columns are `sortable: true` only when the backend adapter
+  supports that exact key, or a documented alias, as a global sort. Hydrated
+  post-page fields are never sortable query columns; expand the backend
+  contract first. Production query-backed views keep a rendered-column contract
+  test comparing their sortable keys with the supported query sort contract.
 
 ## Age And Metrics Columns
 
-- Age is display-time relative text. Use `createAgeColumn` or `LiveAgeText` with
-  an absolute timestamp; do not refetch rows only to advance age text.
-- Age headers and data are right-aligned in every table. Use `createAgeColumn`,
-  which owns that alignment default, when adding an Age column.
-- Resource utilization columns should use the shared value adapters in
-  `frontend/src/core/resource-metrics`. Table rows can use adapters directly
-  because many table row shapes do not carry full object GVK identity.
-- Global metric-backed sorts belong to backend query contracts and metric source
-  clocks. Do not locally sort a query-backed table by CPU or memory over the
-  current page.
-- Metric-bearing resource tables issue ONE base-domain query per page: live
-  CPU/memory usage is joined onto the rows at serve, and CPU/memory sorts run
-  server-side on the joined values through the same keyset cursor as every
-  other sort. There are no separate metric domains, no metric-row overlay, and
-  no client-side metric merge
-  (see [`resource-metrics.md`](../architecture/resource-metrics.md)).
+- Age follows [live age](live-age.md): render it with `createAgeColumn` or
+  `LiveAgeText` from an absolute timestamp. Age headers and data are
+  right-aligned in every table; `createAgeColumn` owns that default and the
+  timestamp sort value, parsing compact fallback text only without a timestamp;
+  the generic sort hook never infers Age from a key.
+- Metric columns follow [resource metrics](../architecture/resource-metrics.md):
+  one base-domain query per page, usage joined at serve, CPU/memory sorts in the
+  backend through the same keyset cursor. Rejected: metric domains, metric-row
+  overlays, client-side metric merges, and local CPU/memory sorts over a
+  query-backed page.
+
+## Column sizing
+
+- Widths come from persisted user state, the column definition, auto-width
+  measurement, or the shared fallback. Columns never stretch to fill the
+  viewport; narrower tables leave trailing space and wider tables scroll.
+  Resizing affects only the declared column and respects `minWidth`,
+  `maxWidth`, and `resizable`.
+- Auto-width dirty checking hashes the rendered cells before measuring. When
+  virtualization changes `virtualRange.start/end`, the controller enqueues
+  visible auto-width columns after the new row window commits; the range bounds
+  are intentional effect invalidators though the callback does not read them.
+- Measurement considers every row of the current data page; never cap or stride
+  it, because a skipped row can hold the widest value. `measurementSampleKey`
+  may deduplicate only rows with guaranteed equivalent rendered width.
+- Replacing the page forces every non-user-sized `autoWidth` column to
+  recompute in both directions; a wider prior page never becomes the minimum.
+  This pass reads the data page directly after render, not a visible-cell
+  signature, because virtualization or loading can leave no rendered cells.
+- `getBoundingClientRect()` returns visual pixels; convert to unzoomed CSS
+  pixels before storing a width. Intrinsic measurements add one CSS pixel so
+  subpixel rounding cannot clip the content edge.
+- Header measurement reproduces the header cell inside a `gridtable-header` row,
+  because header styles such as the uppercase transform live on the row; a lone
+  cell probe measures narrow and truncates the label.
+- Measurement never mounts cell components or runs their effects. Plain
+  composite values declare `measurementText`; composites whose wrapper changes
+  box width declare an inert `measurementElement` with the rendered wrapper's
+  host tag and classes, derived from the same presentation helpers.
+- When a column changes from declared fixed to automatic sizing, its fresh
+  measurement replaces persisted column-owned widths; only widths whose
+  persisted source is `user` stay fixed.
+
+## Custom metadata columns
+
+- Every resource table declares `supportsCustomMetadataColumns`: `true` only when
+  rows carry Kubernetes labels or annotations through `metadata` or the
+  supported top-level compatibility fields, `false` for projected rows without
+  them so the Columns menu omits a dead-end Add. Shared and query-backed wrappers
+  forward the caller's value and never infer it from table mode.
+- `Add` closes the Columns menu and opens the shared editor: one searchable
+  picker, grouped into Labels and Annotations, of distinct keys from the loaded
+  rows (exact keys, no free typing); a selected key shows up to three sampled
+  values. With no keys, the full-width picker stays disabled with
+  `No metadata keys available`, an explanation beneath, and creation disabled.
+  Custom rows expose Edit and a direct Delete beside the grip; hiding and
+  removing are separate operations.
+- The durable key is `metadata:<label|annotation>:<exact-metadata-key>`; the
+  heading is presentation only, so renaming preserves width, order, visibility,
+  and favorite references. A source/key pair appears once per table scope; a
+  label and an annotation with the same key are distinct.
+- Custom columns are hideable, resizable, auto-width, appended on creation, and
+  non-sortable until a query provider implements metadata-key ordering. A
+  missing key returns `undefined` and renders `-`; a present empty string stays
+  a present, blank value.
+- Definitions persist under the table's cluster/view/namespace key and restore
+  before order, visibility, or width pruning. Columns Reset keeps definitions.
+  Favorites may reference a custom key but never own or recreate its
+  definition; a deleted definition is ignored when the favorite applies.

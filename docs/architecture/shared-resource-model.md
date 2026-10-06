@@ -6,229 +6,168 @@ DTO fields; it does not reinterpret primary resource semantics.
 
 ## Agent Contract
 
-- Object references crossing package, API, cache, event, action, refresh, or
-  navigation boundaries must carry `clusterId`, `group`, `version`, and `kind`.
-  Concrete objects also need `namespace` when namespaced and `name`.
-- Backend code owns primary status semantics and `statusPresentation`.
-- Frontend code renders backend status fields and may only map presentation
-  tokens to CSS at the edge.
-- Relationship links use `resourcemodel.ResourceLink`. Openable links contain a
-  complete `ref`; display-only links contain `display`. Do not emit hybrids.
-- Do not guess `apiVersion`, API group, plural resource, or scope from `kind`.
-  Use typed sources, discovery, owner refs, event involved objects, Helm
-  manifests, or catalog lookup.
-- Resource-specific facts should stay typed. Do not add generic fact buckets or
-  empty future slots.
-- Multi-kind table details use `resourcemodel.DetailSegment` lists (semantic
-  slot, label, value, optional `ResourceLink`, optional presentation token,
-  optional `Search` expansion for collapsed list values) built by each kind's
-  stream-summary builder from its typed facts — never a preformatted prose
-  string. Slots (`DetailSlotReference`/`DetailSlotAddress`/`DetailSlotCounts`/`DetailSlotConfiguration`)
-  map to the aligned frontend Context/Network/Summary columns; each segment's
-  label carries the resource-specific meaning within that stable column model.
-  `DetailSegmentsSearchText` is the canonical search flatten (expanding
-  collapsed lists) and `DetailSlotText` the per-slot sort flatten.
-- Sensitive or large payloads such as raw YAML, Secret data, logs, manifests,
-  and shell output stay in workflow/detail DTOs, not shared facts.
+- Start from Kubernetes API semantics, not current DTO display strings.
+- Never guess `apiVersion`, API group, plural resource, or scope from `kind`.
+  Use typed sources, discovery, owner refs, event involved objects, HPA targets,
+  Helm manifests, or catalog lookup.
+- Keep resource-specific facts typed and semantic until the final DTO/table
+  formatting boundary. No generic fact buckets or empty future slots.
+- Raw YAML, Secret data, logs, manifests, shell output, and other sensitive or
+  large payloads stay in workflow/detail DTOs, never in shared facts.
+- Multi-kind table details are `resourcemodel.DetailSegment` lists (slot,
+  label, value, optional `ResourceLink`, presentation token, and `Search`
+  expansion for collapsed lists) built by each kind's stream-summary builder
+  from typed facts, never a preformatted prose string. Slots
+  (`DetailSlotReference`, `DetailSlotAddress`, `DetailSlotCounts`,
+  `DetailSlotConfiguration`) map to the aligned frontend Context/Network/Summary
+  columns; labels carry the kind-specific meaning. `DetailSegmentsSearchText`
+  is the canonical search flatten (expanding collapsed lists); `DetailSlotText`
+  is the per-slot sort flatten.
+- Project a resource family's status and links into every surface that renders
+  it (snapshot rows, stream rows, detail DTOs, object-map data, object-panel
+  overview), then remove duplicated frontend or service-layer interpretation on
+  that path. Parity tests cover DTO projections and relationship navigation.
 
 ## Use The Model For
 
-- namespace and cluster table rows
-- resource-stream rows
-- object-panel summaries and overviews
-- object-map nodes and edges
-- event involved-object links
-- Helm release summaries and managed-resource links
-- dynamic custom-resource status extraction when conventions are tested
-
-Do not force settings, auth, app logs, refresh diagnostics, runtime operations,
-port-forward sessions, shell IO, node drain history, or raw workflow tabs into
-the shared resource model unless they are rendering Kubernetes resource
-semantics.
+Namespace and cluster table rows, resource-stream rows, object-panel summaries
+and overviews, object-map nodes and edges, event involved-object links, Helm
+release summaries and managed-resource links, and tested dynamic custom-resource
+status extraction. Keep settings, auth, app logs, refresh diagnostics, runtime
+operations, port-forward sessions, shell IO, node drain history, and raw
+workflow tabs out unless they render Kubernetes resource semantics.
 
 ## Identity
 
-Canonical refs include:
+- Canonical refs: `clusterId`, `group`, `version`, `kind`, plus `namespace`
+  when namespaced and `name` when concrete.
+- The plural `resource` is descriptor/RBAC metadata on the general
+  `ResourceRef`; populate it only from discovery, typed code, or the catalog.
+  Canonical snapshot, stream, catalog, and typed-query table row refs require
+  both `resource` and `name` (their producers own a known GVR and a concrete
+  object).
+- Every concrete snapshot or stream row carries its identity in a backend-owned
+  `ref` and never duplicates its own `clusterId`, group, version, kind,
+  namespace, or name as flat fields. Backend query adapters and frontend table
+  keys, filters, columns, navigation, panels, permissions, and actions consume
+  `ref`; do not add another row-local GVK mapper. A flat identity-like field is
+  allowed only with a different meaning (an Event's involved-object kind, a
+  CRD's described API group, a Node's kubelet version).
+- Shared row constructors use `streamrows.NewResourceRef`; resource-specific
+  snapshot projectors copy the `BuildResourceModel(...).Ref` from the owning
+  kind package.
+- `ClusterMeta` is construction context and once-per-scope payload metadata;
+  canonical rows never embed it. Cross-cluster displays resolve `clusterName`
+  from the cluster workspace registry. Row keys derive from the complete ref,
+  never from a second stored identity string.
+- An Event row's `ref` identifies the Event; `involvedObject` links the resource
+  it describes — never substitute one for the other. Synthetic resources keep
+  stable identity: Helm rows use the synthetic release `ref` (`helm.sh/v3`,
+  `HelmRelease`) under the same rule.
+- The [Identities view](cluster-identities.md) holds observed subjects, not
+  object rows. User/Group keys keep exact authentication names and carry no
+  fabricated GVK; only source bindings and their roles carry object refs.
+  User/Group panels use a distinct identity target in the shared panel registry,
+  with a read-only binding view and no resource actions.
 
-```text
-clusterId
-group
-version
-kind
-namespace  # when namespaced
-name       # when concrete
-```
+The canonical-row inventory is executable, not a handwritten frontend list:
 
-The Kubernetes plural `resource` is descriptor/RBAC metadata on the general
-`ResourceRef` type. Populate it only when discovery, typed code, or the catalog
-supplies it. Canonical snapshot, stream, catalog, and typed-query table rows are
-a narrower contract: their `ref` requires both `resource` and `name` because
-their producers own a known GVR and a concrete object.
-
-The [Identities view](cluster-identities.md) contains observed subjects rather
-than object rows. Its User/Group keys preserve exact authentication names and
-carry no fabricated GVK. Only source bindings and their referenced roles carry
-object references in the identity view. User/Group panels use a distinct identity
-target in the shared panel registry, with a read-only binding view and no resource actions.
-
-Synthetic app resources still need stable identity. Helm releases use
-`helm.sh/v3`, `HelmRelease`.
-
-Every concrete snapshot or stream row carries that identity in a backend-owned
-`ref`. Canonical object rows do not duplicate their own `clusterId`, group,
-version, kind, namespace, or name as flat fields. Backend query adapters and
-frontend table keys, filters, columns, navigation, panels, permissions, and
-actions consume `ref`. A flat identity-like field is allowed only when it has a
-different semantic meaning, such as an Event's involved-object kind, a CRD's
-described API group, or a Node's kubelet version. Shared row constructors use
-`streamrows.NewResourceRef`, while resource-specific snapshot projectors copy
-the `BuildResourceModel(...).Ref` produced by the owning kind package.
-
-`ClusterMeta` remains construction context and once-per-scope payload metadata;
-canonical rows do not embed it. Cross-cluster displays resolve `clusterName`
-from the cluster workspace registry instead of retaining it on every row.
-Canonical row keys stay derived from the complete ref rather than becoming a
-second stored identity string.
-
-The canonical-row inventory is executable rather than a second handwritten
-frontend list. `backend/internal/genrefreshcontracts/canonical_rows.go` names
-the concrete Go row types; its reflection test rejects row-level `ClusterMeta`
-and duplicate own-identity fields. The committed
-`frontend/src/test-fixtures/canonical-resource-row-wire.json` fixture is built
-from those production row projectors. A Go test requires the fixture family set
-to match the inventory exactly, and a frontend test parses every refresh row
-through the same envelope validator used by `fetchSnapshot`. The custom catalog
-hydration row instead passes through its production RPC normalizer, including
-the cluster-scoped wire form where `namespace` is omitted.
-
-An Event row has two distinct identities: `ref` identifies the Event resource,
-while `involvedObject` links to the resource the Event describes. Never replace
-one with the other. A Helm row uses its synthetic Helm release `ref` under the
-same rule.
+- `backend/internal/genrefreshcontracts/canonical_rows.go` names the concrete Go
+  row types; its reflection test rejects row-level `ClusterMeta` and duplicate
+  own-identity fields.
+- `frontend/src/test-fixtures/canonical-resource-row-wire.json` is built from the
+  production row projectors. A Go test requires its family set to match the
+  inventory exactly; a frontend test parses every refresh row through the
+  `fetchSnapshot` envelope validator. Add a producer-marshaled entry for each new
+  row family; never hand-build an optional JSON field to satisfy a frontend test.
+- The custom catalog hydration row instead passes through its production RPC
+  normalizer, including the cluster-scoped wire form that omits `namespace`.
 
 ### Frontend Reference Types
 
 Frontend object references form a ladder; carry the narrowest type the boundary
 allows:
 
-- `KubernetesObjectReference` (`frontend/src/types/view-state.ts`) — the loose,
-  pre-validation boundary shape for raw Kubernetes payloads and heterogeneous
-  link/row inputs. Every identity field is nullable. It must not leak past a
-  validation boundary.
-- `ResolvedObjectReference` (`frontend/src/shared/utils/objectIdentity.ts`) —
-  GVK + name required; built by `buildObjectReference`.
-- `ClusterObjectReference` (same module) — `clusterId` also required, the shape
-  the Agent Contract demands past a cluster-identity boundary. Built by
+- `KubernetesObjectReference` (`frontend/src/types/view-state.ts`): the loose
+  pre-validation shape for raw payloads and heterogeneous link/row inputs. Every
+  identity field is nullable; it must not leak past a validation boundary.
+- `ResolvedObjectReference` (`frontend/src/shared/utils/objectIdentity.ts`): GVK
+  and name required; built by `buildObjectReference`.
+- `ClusterObjectReference` (same module): `clusterId` also required. Built by
   `buildRequiredObjectReference` / `buildRequiredRelatedObjectReference`, or
-  narrowed in place by `assertObjectRefHasRequiredIdentity` — an assertion
-  function and the single runtime chokepoint, called at
-  `useObjectPanel.openWithObject`. The object-panel chain carries it end-to-end
-  as `ObjectPanelRef` (an alias), from `openPanels` through
-  `CurrentObjectPanelContext` to detail and utilization props.
+  narrowed in place by `assertObjectRefHasRequiredIdentity`, the single runtime
+  chokepoint, called at `useObjectPanel.openWithObject`. The object-panel chain
+  carries it end-to-end as `ObjectPanelRef` (an alias) from `openPanels` through
+  `CurrentObjectPanelContext` to detail and utilization props; do not re-widen
+  panel-internal types to the nullable shape.
 
 Rules:
 
 - Pre-chokepoint aggregation boundaries (`useNavigateToView`, `useObjectLink`,
   `ObjectPanelLink`, `useObjectActionController` inputs,
-  `buildGridTableFocusRequest`) deliberately accept the loose type: they
-  collect heterogeneous producers, and their outputs already enforce identity
-  at runtime (focus requests require `clusterId`; panel opening asserts). Do
-  not scatter the loose→required conversion into individual producers.
-- `fallbackClusterId` is an explicit, producer-side decision at cluster-scoped
-  views. Never bake a selected-cluster default into shared helpers.
-- References narrowed in place by the assert may still hold `null` in optional
-  fields — the assert preserves the original object so raw payload fields
-  survive, while the builders normalize. Required fields are verified non-empty
-  either way.
+  `buildGridTableFocusRequest`) deliberately accept the loose type because they
+  collect heterogeneous producers and their outputs enforce identity at runtime
+  (focus requests require `clusterId`; panel opening asserts). Do not scatter
+  the loose-to-required conversion into individual producers.
+- `fallbackClusterId` is an explicit producer-side decision at cluster-scoped
+  views; never bake a selected-cluster default into shared helpers.
+- The assert preserves the original object so raw payload fields survive; refs
+  narrowed in place may still hold `null` in optional fields, while builders
+  normalize. Required fields are verified non-empty either way.
 
 ## Status
 
-Projected DTO status fields:
+- Projected fields: `status` (display label), `statusState` (raw source state
+  for diagnostics and parity), `statusPresentation` (CSS/status token), and
+  optional `statusReason`.
+- Backend model code computes primary status once. The frontend renders these
+  fields and only maps presentation tokens to CSS at the edge.
+- Missing `statusPresentation` renders as `unknown` so incomplete projection is
+  visible; `statusState` is never a styling fallback.
+- Deletion lifecycle from `metadata.deletionTimestamp` takes precedence over
+  reason-derived labels while preserving source state.
+- Namespace is the exception to metadata-only finalizer inspection:
+  `ResourceLifecycle.FinalizerBlocked` also accounts for `spec.finalizers`, and
+  Namespace `status.conditions` and `spec.finalizers` stay typed Namespace facts
+  in its detail DTO. The object-details envelope carries kind-agnostic
+  `metadata.deletionTimestamp` and `metadata.finalizers`; frontend deletion
+  diagnostics combine them with the typed Namespace projection without
+  reinterpreting lifecycle status.
 
-- `status`: display label
-- `statusState`: raw/source state for diagnostics and parity checks
-- `statusPresentation`: CSS/status presentation token
-- `statusReason`: optional source reason
+Object Panel finalizer removal is offered only for objects with a deletion
+timestamp and removes only the selected finalizer:
 
-Missing `statusPresentation` should render as `unknown` so incomplete backend
-projection is visible. `statusState` is source state, not a styling fallback.
-Deletion lifecycle from `metadata.deletionTimestamp` takes precedence over
-reason-derived labels while preserving source state.
-
-Namespace deletion is the Kubernetes exception to metadata-only finalizer
-inspection: `ResourceLifecycle.FinalizerBlocked` also accounts for
-`spec.finalizers`, while Namespace `status.conditions` and `spec.finalizers`
-remain typed Namespace facts projected into its detail DTO. The object-details
-envelope carries kind-agnostic `metadata.deletionTimestamp` and
-`metadata.finalizers`; frontend deletion diagnostics combine those fields with
-the typed Namespace projection without reinterpreting lifecycle status.
-
-Object Panel finalizer removal is available only for objects already carrying a
-deletion timestamp. Metadata finalizers use an exact-GVK JSON Patch guarded by a
-`test` operation so a concurrent finalizer update is not overwritten. Namespace
-`spec.finalizers` use the core/v1 Namespace `/finalize` subresource. These paths
-require exact-object `patch` and `update namespaces/finalize` permissions,
-respectively, and remove only the selected finalizer. When fewer than five
-minutes have elapsed since the deletion timestamp, the confirmation warns the
-user to consider giving the responsible controller more cleanup time.
-
-When migrating a resource family, project status consistently into every surface
-that renders it: snapshot rows, stream rows, rich detail DTOs, object-map data,
-and object-panel overview data. Then remove duplicated frontend or service-layer
-status interpretation on that path.
+- Metadata finalizers use an exact-GVK JSON Patch guarded by a `test` operation,
+  so a concurrent finalizer update is not overwritten; requires exact-object
+  `patch`.
+- Namespace `spec.finalizers` use the core/v1 Namespace `/finalize`
+  subresource; requires `update namespaces/finalize`.
+- Under five minutes after the deletion timestamp, the confirmation warns the
+  user to give the responsible controller more cleanup time.
 
 ## Links
 
-Use shared constructors and validators in `backend/resourcemodel`:
-
-- `NewResourceRef`
-- `NewNamespacedResourceLink`
-- `NewClusterResourceLink`
-- `NewDisplayResourceLink`
-- `NewDisplayRef`
-- `ValidateResourceLink`
-
-Projection helpers live in `backend/resources/types`. They intentionally do not
-infer `resource` from `kind`.
-
-Openable refs are allowed only when the source provides complete identity.
-External, stale, deleted, custom-group, or partial references should remain
-display-only unless catalog lookup can safely resolve them.
+- Relationships use `resourcemodel.ResourceLink`. Openable links carry a
+  complete `ref`; display-only links carry `display`. Never emit hybrids.
+- Use the shared constructors and validators in `backend/resourcemodel`:
+  `NewResourceRef`, `NewNamespacedResourceLink`, `NewClusterResourceLink`,
+  `NewDisplayResourceLink`, `NewDisplayRef`, `ValidateResourceLink`. Projection
+  helpers in `backend/resources/types` intentionally do not infer `resource`
+  from `kind`.
+- A link is openable only when its source provides complete identity. External,
+  stale, deleted, custom-group, or partial references stay display-only unless
+  catalog lookup can safely resolve them.
 
 ## Ownership
 
 - Per-kind model, facts, and status: `backend/resources/<kind>/{model,facts}.go`,
-  built once per kind from the shared primitives and registered with one entry in
-  `backend/kind/kindregistry` (see
-  [resource-kind-registry.md](resource-kind-registry.md))
+  registered once in `backend/kind/kindregistry`
+  ([resource-kind-registry.md](resource-kind-registry.md))
 - Shared status/facts/link primitives and the relationship index:
   `backend/resourcemodel`
 - Refresh/table/object-map projections: `backend/refresh/snapshot`
-- Rich detail DTO projections: `backend/resources/<kind>/{details,dto}.go`, with
-  shared cross-kind DTO field types in `backend/resources/types`
-- Catalog identity/existence: `backend/objectcatalog`
+- Rich detail DTOs: `backend/resources/<kind>/{details,dto}.go`; shared
+  cross-kind DTO field types in `backend/resources/types`
+- Catalog identity/existence: `backend/objectcatalog` ([catalog.md](catalog.md))
 - Frontend status rendering: `frontend/src/shared/utils/backendStatusPresentation.ts`
 - Frontend link navigation: `frontend/src/shared/utils/resourceLinkIdentity.ts`
-
-## Change Checklist
-
-When changing resource semantics:
-
-1. Start from Kubernetes API semantics, not current DTO display strings.
-2. Preserve full object identity and avoid kind-only fallbacks.
-3. Put durable resource semantics in typed facts.
-4. Keep raw, large, sensitive, or workflow-specific data out of shared facts.
-5. Project status and links across all affected surfaces.
-6. Put the canonical `ref` on every concrete row, require `resource` on table
-   rows, and consume it at backend query and frontend identity boundaries; do
-   not add flat own-identity projections or another row-local GVK mapper.
-7. Remove duplicate status/link derivation from migrated frontend/backend paths.
-8. Add parity tests for DTO projections and relationship navigation.
-9. Add a producer-marshaled wire fixture entry for every new canonical row
-   family; never hand-build an optional JSON field merely to satisfy a frontend
-   test.
-
-## Validation
-
-Run focused `backend/resourcemodel`, snapshot, detail DTO, and affected frontend
-tests. For non-documentation work, finish with `wails3 task qc:prerelease`.

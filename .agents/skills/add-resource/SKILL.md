@@ -10,60 +10,36 @@ workflow. Decide the user-visible contract before editing.
 
 ## Select surfaces
 
-| Surface | Owner |
-| --- | --- |
-| Identity, status, facts, relationships | per-kind package plus `backend/resourcemodel` |
-| Discovery and Browse | object catalog and catalog snapshot |
-| List/table rows and streams | `backend/refresh/snapshot`, refresh system, frontend refresh |
-| Rich detail and operations | `backend/resources/<kind>`, generated app binding |
-| Object-panel rendering/actions | Overview descriptors, panel capabilities, action backends |
-| Object map | per-kind graph facet, map snapshot, frontend support |
-| YAML/apply and permissions | object YAML paths, RBAC/capability contracts |
-
-List/table payloads belong in refresh snapshots; rich details and imperative
-operations belong in `backend/resources`. The catalog owns discovery and
-identity metadata; the `namespaces` refresh domain owns namespace LIST rows.
+| Surface | Owner | Steps |
+| --- | --- | --- |
+| Identity, status, facts, relationships | per-kind package plus `backend/resourcemodel` | [kind and details](references/kind-and-details.md) |
+| Rich detail and operations | `backend/resources/<kind>`, generated app binding | [kind and details](references/kind-and-details.md) |
+| Discovery and Browse | object catalog and catalog snapshot | [refresh and tests](references/refresh-and-tests.md) |
+| List/table rows and streams | `backend/refresh/snapshot`, refresh system, frontend refresh | [refresh and tests](references/refresh-and-tests.md) |
+| Object map | per-kind graph facet, map snapshot, frontend support | [refresh and tests](references/refresh-and-tests.md) |
+| Object-panel rendering/actions | Overview descriptors, panel capabilities, action backends | [frontend surfaces](references/frontend-surfaces.md) |
+| YAML/apply and permissions | object YAML paths, RBAC/capability contracts | [frontend surfaces](references/frontend-surfaces.md) |
 
 ## Workflow
 
 1. Identify group, version, kind, plural resource, and scope.
-2. Inspect one comparable per-kind package; use
-   `backend/resources/deployment` for a first-class workload example.
+2. Inspect one comparable per-kind package; `backend/resources/deployment` is
+   the first-class workload example.
 3. Write the surface list and related-object relationships before code changes.
-4. Read only the references matching those surfaces:
-   - [kind and details](references/kind-and-details.md) for identity, descriptor, model, DTO,
-     service, generated detail bindings, or built-in identity;
-   - [frontend surfaces](references/frontend-surfaces.md) for Overview rendering, derived detail
-     sections, built-in frontend identity, panel actions, or YAML UI;
-   - [refresh and tests](references/refresh-and-tests.md) for catalog, table/list snapshots,
-     resource streams, diagnostics, object-map participation, and the validation
-     matrix.
-5. If status, facts, links, or object references change, read
-   `docs/architecture/shared-resource-model.md`. If refresh behavior changes,
-   read the refresh-subsystem skill and only its matching references. If graph
-   behavior changes, use the object-map skill.
-6. Trace every producer and consumer for the chosen surfaces, then work in
-   red/green/refactor cycles.
-
-## Invariants
-
-- Define a first-class kind once in its package and register its descriptor once
-  in `backend/kind/kindregistry/registry.go`; subsystems select descriptor
-  facets instead of maintaining kind lists.
-- Project shared status, facts, and relationships from the per-kind model into
-  DTO, snapshot, stream, and map consumers.
-- Generate app detail bindings; never hand-edit generated dispatch or its
-  derived exact-GVK gate.
-- Keep snapshot and resource-stream row shapes at parity.
-- Custom resources retain discovered group/version; do not place them in
-  built-in identity tables.
-- Explain any intentionally omitted user-visible surface before narrowing the
-  requested support.
+   Explain any intentionally omitted user-visible surface before narrowing the
+   requested support.
+4. Read only the references for the selected surfaces (table above).
+5. Contracts: [resource-kind-registry](../../../docs/architecture/resource-kind-registry.md)
+   for per-kind definition and dispatch;
+   [shared-resource-model](../../../docs/architecture/shared-resource-model.md)
+   when status, facts, links, or object references change; the
+   refresh-subsystem skill (matching references only) when refresh behavior
+   changes; the object-map skill when graph behavior changes.
+6. Trace every producer and consumer for the chosen surfaces before editing.
 
 ## Validation
 
-Run only checks for changed surfaces while iterating, then follow the root final
-gate:
+Run only checks for changed surfaces while iterating:
 
 ```sh
 mise exec -- go generate ./backend

@@ -1,17 +1,10 @@
 # Agent Documentation
 
-This directory exists to help agents change Luxury Yacht correctly. Keep docs
-short, contract-focused, and cheaper to maintain than re-reading the code.
-
-Durable docs should answer:
-
-- What invariant must not be broken?
-- Which subsystem owns the contract?
-- Which files are the starting points?
-- What must be validated after a change?
-
-Do not use durable docs for implementation inventories, current UI walkthroughs,
-completed phase plans, or test lists that can be discovered with `rg`.
+These docs help agents change Luxury Yacht correctly. Keep them short,
+contract-focused, and cheaper to maintain than re-reading the code. A durable
+doc answers: which invariant must not break, who owns it, where to start, and
+what to validate. It is not for implementation inventories, UI walkthroughs,
+completed plans, or test lists that `rg` can find.
 
 Use the matching question below. Within a long document, read its shared
 invariants and the sections selected by the task. Follow links only when the
@@ -35,6 +28,8 @@ be read in full.
 | --- | --- |
 | How is the backend decomposed into services, and which dependency directions are allowed? | [architecture/backend-services.md](architecture/backend-services.md) |
 | How is cluster data isolated? | [architecture/multi-cluster.md](architecture/multi-cluster.md) |
+| How does a per-cluster namespace scope ("accessible namespaces") change data paths? | [architecture/namespace-scope.md](architecture/namespace-scope.md) |
+| How does the cluster Identities view derive User/Group subjects? | [architecture/cluster-identities.md](architecture/cluster-identities.md) |
 | When should retained data paint, refresh, stream, poll, or create background work? | [architecture/data-freshness.md](architecture/data-freshness.md) |
 | How do refresh domains, snapshots, streams, and scopes work? | [architecture/refresh-system.md](architecture/refresh-system.md) |
 | How does the backend store, ingest, and serve table data (store, ingest, governor, delivery)? | [architecture/data-layer.md](architecture/data-layer.md) |
@@ -48,8 +43,8 @@ be read in full.
 | How do permission gates and action capabilities work? | [architecture/permissions.md](architecture/permissions.md) |
 | How are auth failures represented and recovered? | [architecture/auth.md](architecture/auth.md) |
 | How is Sentry error reporting configured and bounded? | [architecture/error-reporting.md](architecture/error-reporting.md) |
-| How do Wails startup, readiness, windows, single-instance launches, and shutdown work? | [architecture/application-lifecycle.md](architecture/application-lifecycle.md) |
-| What are the large-data table rules? | [architecture/large-data.md](architecture/large-data.md) |
+| How do Wails startup, readiness, windows, chrome/menus, single-instance launches, quit/shutdown, Factory Reset, and the shared panel-workspace directory work? | [architecture/application-lifecycle.md](architecture/application-lifecycle.md) |
+| What are the large-data table rules (table modes, typed queries, paging, producers, budgets)? | [architecture/large-data.md](architecture/large-data.md) |
 | How do YAML edits save, merge, and check field ownership? | [architecture/yaml-editing.md](architecture/yaml-editing.md) |
 
 ## Frontend Contracts
@@ -85,22 +80,12 @@ be read in full.
 | Which logs doc applies? | [workflows/logs/overview.md](workflows/logs/overview.md) |
 | How do I diagnose a wedged backend (views stuck loading, suspected deadlock)? | [workflows/goroutine-dump.md](workflows/goroutine-dump.md) |
 
-## Cross-Cutting Rules
-
-- Every cluster-data path must carry `clusterId`.
-- Object references crossing boundaries must carry `clusterId`, `group`,
-  `version`, and `kind`; concrete objects also need `namespace` and `name`.
-- The object catalog owns existence and GVK/GVR identity.
-- The backend shared resource model owns primary resource status and relationship
-  links.
-- Frontend resource reads go through `dataAccess`; app-shell and persisted-state
-  reads go through `appStateAccess`.
-- Shared contracts belong beside enforcing code, with docs summarizing the rule.
-
 ## Maintenance Policy
 
 - Keep each durable doc under roughly 150 lines unless the extra detail prevents
-  repeated mistakes.
+  repeated mistakes. State each rule once, in its owning doc, and link to it
+  elsewhere. Never restate root `AGENTS.md` (always loaded) or the scoped
+  `backend/AGENTS.md` / `frontend/AGENTS.md`.
 - Keep entry rules and skill bodies focused on shared invariants and task
   routing. Put substantial conditional procedures in the owning doc/reference;
   add a route block when it selects a meaningful subset or redirects to another
@@ -108,8 +93,8 @@ be read in full.
 - Run `mise exec -- wails3 task qc:docs` after changing Markdown links or
   headings. It checks local link targets and heading anchors in versioned and
   untracked, non-ignored Markdown; external URLs, code-span paths, and dynamic
-  release-template destinations are excluded.
+  release-template destinations are excluded. Code comments also cite docs by
+  path and heading text (`git grep -n 'docs/.*\.md' -- ':!*.md'`); keep those
+  targets or update the comments.
 - Prefer links to owning code over copied implementation detail.
-- Delete completed or stale plans instead of indexing them here.
-- Put temporary implementation plans in `docs/plans/` only while they are active.
-- Put unreleased changelog entries in [release/pending.md](release/pending.md).
+- Do not index plans here; `docs/plans/` holds only active plans.

@@ -47,7 +47,6 @@ type PodSnapshot struct {
 	// "health" query predicate: "unhealthy", "restarts", "not-ready"). Together
 	// they let a query-backed view show total/unhealthy badges and decide whether
 	// a pending health filter has matches — without retaining the live row set.
-	// See docs/architecture/resource-stream-signals.md.
 	TotalCount   int            `json:"totalCount"`
 	HealthCounts map[string]int `json:"healthCounts"`
 }

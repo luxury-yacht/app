@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  // Standalone config for `npm run complexity` (see docs/frontend/sonar.md): checks changed
+  // functions against the AGENTS.md cognitive-complexity target. Biome's default maximum is 15,
+  // and the project config has no complexity threshold, so this file owns the local target.
+  // Its name keeps Biome from discovering it as a nested configuration.
+  "root": true,
+  "formatter": {
+    "enabled": false
+  },
+  "assist": {
+    "enabled": false
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "none",
+      "complexity": {
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": {
+            "maxAllowedComplexity": 12
+          }
+        }
+      }
+    }
+  }
+}
