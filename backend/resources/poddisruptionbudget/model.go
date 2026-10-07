@@ -13,6 +13,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	policyv1 "k8s.io/api/policy/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // BuildResourceModel builds the PodDisruptionBudget resource model. Facts are
@@ -35,8 +36,9 @@ func BuildFacts(clusterID string, pdb *policyv1.PodDisruptionBudget) Facts {
 		DisruptedPods:      resourcemodel.DisruptedPodsFromMap(clusterID, pdb.Namespace, pdb.Status.DisruptedPods),
 		Conditions:         resourcemodel.ConditionFactsFromMetav1(pdb.Status.Conditions),
 	}
-	if pdb.Spec.Selector != nil {
-		facts.Selector = resourcemodel.CopyStringMap(pdb.Spec.Selector.MatchLabels)
+	facts.Selector = labelSelectorFacts(pdb.Spec.Selector)
+	if pdb.Spec.UnhealthyPodEvictionPolicy != nil {
+		facts.UnhealthyPodEvictionPolicy = string(*pdb.Spec.UnhealthyPodEvictionPolicy)
 	}
 	if pdb.Spec.MinAvailable != nil {
 		next := resourcemodel.NewIntOrStringFacts(*pdb.Spec.MinAvailable)
@@ -45,6 +47,22 @@ func BuildFacts(clusterID string, pdb *policyv1.PodDisruptionBudget) Facts {
 	if pdb.Spec.MaxUnavailable != nil {
 		next := resourcemodel.NewIntOrStringFacts(*pdb.Spec.MaxUnavailable)
 		facts.MaxUnavailable = &next
+	}
+	return facts
+}
+
+// labelSelectorFacts keeps a missing selector nil so it stays distinct from {}.
+func labelSelectorFacts(selector *metav1.LabelSelector) *LabelSelectorFacts {
+	if selector == nil {
+		return nil
+	}
+	facts := &LabelSelectorFacts{MatchLabels: resourcemodel.CopyStringMap(selector.MatchLabels)}
+	for _, expr := range selector.MatchExpressions {
+		facts.MatchExpressions = append(facts.MatchExpressions, LabelSelectorRequirementFacts{
+			Key:      expr.Key,
+			Operator: string(expr.Operator),
+			Values:   append([]string(nil), expr.Values...),
+		})
 	}
 	return facts
 }

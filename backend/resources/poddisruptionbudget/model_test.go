@@ -43,7 +43,7 @@ func TestBuildResourceModelFactsAndStatus(t *testing.T) {
 
 	facts := poddisruptionbudget.BuildFacts("cluster-a", pdb)
 	require.Equal(t, "75%", facts.MinAvailable.Value)
-	require.Equal(t, map[string]string{"app": "web"}, facts.Selector)
+	require.Equal(t, &poddisruptionbudget.LabelSelectorFacts{MatchLabels: map[string]string{"app": "web"}}, facts.Selector)
 	require.Equal(t, "Pod", facts.DisruptedPods[0].Pod.Ref.Kind)
 	require.Equal(t, "web-0", facts.DisruptedPods[0].Pod.Ref.Name)
 	require.Equal(t, "DisruptionAllowed", facts.Conditions[0].Type)

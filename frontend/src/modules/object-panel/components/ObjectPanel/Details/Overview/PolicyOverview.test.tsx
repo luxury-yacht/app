@@ -156,21 +156,148 @@ describe('Policy Overview descriptors', () => {
     expect(container.textContent).toContain('Scale Down');
   });
 
-  it('renders PDB specific fields', async () => {
-    await renderDescriptor(pdbDescriptor, {
-      kind: 'PodDisruptionBudget',
-      minAvailable: '50%',
-      maxUnavailable: '1',
-      currentHealthy: 4,
-      desiredHealthy: 5,
-      disruptionsAllowed: 2,
-      selector: { app: 'web' },
+  describe('PodDisruptionBudget', () => {
+    const pdb = { kind: 'PodDisruptionBudget', name: 'web', namespace: 'prod' } as const;
+    const section = (title: string) =>
+      container.querySelector<HTMLElement>(`section[aria-label="${title}"]`);
+
+    // Each blocked cause needs a different fix (wait for pods, relax the budget, fix the selector, or
+    // fix what the controller rejected), so the Health section must tell them apart.
+    it.each([
+      {
+        state: 'evictions allowed',
+        status: { expectedPods: 4, currentHealthy: 4, desiredHealthy: 2, disruptionsAllowed: 2 },
+        verdict: '2 allowed',
+        reason: null,
+      },
+      {
+        state: 'blocked by unhealthy pods',
+        status: { expectedPods: 5, currentHealthy: 4, desiredHealthy: 4, disruptionsAllowed: 0 },
+        verdict: 'Blocked',
+        reason: /1 of 5 pods not healthy/,
+      },
+      {
+        state: 'blocked by a budget that requires every pod',
+        status: { expectedPods: 3, currentHealthy: 3, desiredHealthy: 3, disruptionsAllowed: 0 },
+        verdict: 'Blocked',
+        reason: /all 3 pods/,
+      },
+      {
+        state: 'no matching pods',
+        status: { expectedPods: 0, currentHealthy: 0, desiredHealthy: 1, disruptionsAllowed: 0 },
+        verdict: 'No pods',
+        reason: /matches no pods/,
+      },
+      {
+        state: 'controller sync failure',
+        status: {
+          expectedPods: 3,
+          currentHealthy: 3,
+          desiredHealthy: 1,
+          disruptionsAllowed: 0,
+          conditions: [
+            {
+              type: 'DisruptionAllowed',
+              status: 'False',
+              reason: 'SyncFailed',
+              message: 'found no controllers for pod web-0',
+            },
+          ],
+        },
+        verdict: 'Blocked',
+        reason: /found no controllers for pod web-0/,
+      },
+    ])('explains eviction state: $state', async ({ status, verdict, reason }) => {
+      await renderDescriptor(pdbDescriptor, { ...pdb, maxUnavailable: '1', ...status });
+
+      const disruptions = getValueForLabel(section('Health') ?? container, 'Disruptions');
+      expect(disruptions?.querySelector('.status-chip')?.textContent).toBe(verdict);
+      if (reason) {
+        expect(disruptions?.textContent).toMatch(reason);
+      }
     });
 
-    expect(getValueForLabel(container, 'Min Available')?.textContent).toBe('50%');
-    expect(getValueForLabel(container, 'Disruptions Allowed')?.textContent).toBe('2');
-    const selectorChip = container.querySelector('.status-chip--info');
-    expect(selectorChip?.textContent).toBe('Selector');
+    // A missing selector matches no pods, an empty one matches every pod in the namespace, and
+    // match expressions narrow the match — all three change what the budget protects.
+    it.each([
+      { case: 'missing', selector: undefined, expected: [/matches no pods/] },
+      { case: 'empty', selector: {}, expected: [/All pods in the namespace/] },
+      {
+        case: 'labels and expressions',
+        selector: {
+          matchLabels: { app: 'web' },
+          matchExpressions: [{ key: 'tier', operator: 'In', values: ['frontend', 'web'] }],
+        },
+        expected: [/app=web/, /tier In frontend, web/],
+      },
+    ])('shows which pods a $case selector covers', async ({ selector, expected }) => {
+      await renderDescriptor(pdbDescriptor, { ...pdb, minAvailable: '1', selector });
+
+      const value = getValueForLabel(section('Budget') ?? container, 'Selector');
+      for (const pattern of expected) {
+        expect(value?.textContent).toMatch(pattern);
+      }
+    });
+
+    it('shows the effective unhealthy-pod eviction policy', async () => {
+      await renderDescriptor(pdbDescriptor, { ...pdb, minAvailable: '1' });
+      expect(
+        getValueForLabel(section('Budget') ?? container, 'Unhealthy Pods')?.textContent
+      ).toMatch(/IfHealthyBudget.*default/);
+
+      await renderDescriptor(pdbDescriptor, {
+        ...pdb,
+        minAvailable: '1',
+        unhealthyPodEvictionPolicy: 'AlwaysAllow',
+      });
+      expect(
+        getValueForLabel(section('Budget') ?? container, 'Unhealthy Pods')?.textContent
+      ).toMatch(/^AlwaysAllow/);
+    });
+
+    it('opens a disrupted pod in its own cluster', async () => {
+      await renderDescriptor(pdbDescriptor, {
+        ...pdb,
+        maxUnavailable: '1',
+        expectedPods: 3,
+        currentHealthy: 2,
+        desiredHealthy: 2,
+        disruptedPods: [
+          {
+            pod: {
+              ref: {
+                clusterId: 'beta:ctx',
+                group: '',
+                version: 'v1',
+                kind: 'Pod',
+                resource: 'pods',
+                namespace: 'prod',
+                name: 'web-0',
+              },
+            },
+            disruptionTime: '2026-10-06T12:00:00Z',
+          },
+        ],
+      });
+
+      const link = getValueForLabel(section('Health') ?? container, 'Disrupted')?.querySelector(
+        '.object-panel-link'
+      );
+      expect(link?.textContent).toBe('web-0');
+      act(() => {
+        link?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(openWithObjectMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clusterId: 'beta:ctx',
+          group: '',
+          version: 'v1',
+          kind: 'Pod',
+          namespace: 'prod',
+          name: 'web-0',
+        })
+      );
+    });
   });
 
   it('renders ResourceQuota hard and used limits', async () => {

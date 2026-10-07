@@ -3,17 +3,24 @@
  *
  * Autoscaling & Policy Overview descriptors (X1). One descriptor per kind —
  * HorizontalPodAutoscaler, LimitRange, PodDisruptionBudget, ResourceQuota — split out from the
- * kind-branching PolicyOverview.tsx. Presentation ported verbatim; the renderer owns the frame
- * (ResourceHeader / ResourceMetadata).
+ * kind-branching PolicyOverview.tsx. PodDisruptionBudget groups its rows into Health and Budget
+ * sections; the renderer owns the frame (ResourceHeader / ResourceMetadata).
  */
 
 import type { hpa, limitrange, poddisruptionbudget, resourcequota } from '@core/backend-api/models';
+import { LiveAgeText } from '@shared/components/LiveAgeText';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
+import { resourceLinkToObjectReference } from '@shared/utils/resourceLinkIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
+import { OperatorList, OperatorSection, operatorSelectorValues } from '../shared/OperatorOverview';
+import { OverviewItem } from '../shared/OverviewItem';
 import '../PolicyOverview.css';
+// PDB health reuses the workload pod-state bar.
+import '../WorkloadOverview.css';
 
 type HorizontalPodAutoscalerDetails = hpa.HorizontalPodAutoscalerDetails;
 type LimitRangeDetails = limitrange.LimitRangeDetails;
@@ -380,29 +387,247 @@ export const limitRangeDescriptor: OverviewDescriptor<LimitRangeDetails> = {
 // PodDisruptionBudget
 // ---------------------------------------------------------------------------
 
+interface DisruptionVerdict {
+  variant: StatusChipVariant;
+  label: string;
+  detail?: string;
+  message?: string;
+}
+
+// Why no disruption is allowed. Each cause needs a different fix: wait for pods to recover, relax a
+// budget that can never be met, or let in-flight evictions finish.
+const blockedDetail = (d: PodDisruptionBudgetDetails): string | undefined => {
+  if (d.desiredHealthy >= d.expectedPods) {
+    return `The budget requires all ${d.expectedPods} pods to stay healthy, so evictions never proceed`;
+  }
+  const unhealthy = d.expectedPods - d.currentHealthy;
+  if (unhealthy > 0) {
+    return `${unhealthy} of ${d.expectedPods} pods not healthy; ${d.desiredHealthy} healthy pods required`;
+  }
+  // The eviction API spends the budget before the controller sees the evicted pod go.
+  return d.disruptedPods?.length ? 'Recent evictions are using the budget' : undefined;
+};
+
+// A SyncFailed condition wins: the controller could not compute the budget, so the counts may be stale.
+const disruptionVerdict = (d: PodDisruptionBudgetDetails): DisruptionVerdict => {
+  const syncFailure = d.conditions?.find(
+    (condition) => condition.type === 'DisruptionAllowed' && condition.reason === 'SyncFailed'
+  );
+  if (syncFailure) {
+    return {
+      variant: 'unhealthy',
+      label: 'Blocked',
+      detail: 'The disruption controller could not compute this budget',
+      message: syncFailure.message,
+    };
+  }
+  if (d.expectedPods <= 0) {
+    return {
+      variant: 'warning',
+      label: 'No pods',
+      detail: 'The selector matches no pods, so this budget protects nothing',
+    };
+  }
+  if (d.disruptionsAllowed > 0) {
+    return { variant: 'healthy', label: `${d.disruptionsAllowed} allowed` };
+  }
+  return { variant: 'warning', label: 'Blocked', detail: blockedDetail(d) };
+};
+
+const clampCount = (value: number, max: number): number => Math.min(Math.max(value, 0), max);
+
+// Healthy pods against the pods the budget counts, with a marker at the number that must stay healthy.
+// Reuses the workload pod-state bar.
+const PdbHealthBar: React.FC<{ data: PodDisruptionBudgetDetails }> = ({ data }) => {
+  const expected = data.expectedPods;
+  if (expected <= 0) {
+    return (
+      <div className="podstate-summary">
+        <div className="podstate-caption">
+          <span className="podstate-caption-zero">No matching pods</span>
+        </div>
+      </div>
+    );
+  }
+  const healthy = clampCount(data.currentHealthy, expected);
+  const required = clampCount(data.desiredHealthy, expected);
+  const fill =
+    data.disruptionsAllowed > 0 ? 'pdb-health-fill--allowed' : 'pdb-health-fill--blocked';
+  return (
+    <div className="podstate-summary">
+      <div className="pdb-health-track">
+        <div className="podstate-bar">
+          {healthy > 0 && <div className={`podstate-bar-seg ${fill}`} style={{ flex: healthy }} />}
+          {healthy < expected && (
+            <div className="podstate-bar-seg" style={{ flex: expected - healthy }} />
+          )}
+        </div>
+        {required > 0 && (
+          <div
+            className="pdb-health-required"
+            style={{ left: `${(required / expected) * 100}%` }}
+            aria-hidden="true"
+          />
+        )}
+      </div>
+      <div className="podstate-caption">
+        {data.currentHealthy} of {expected} healthy · {data.desiredHealthy} required
+      </div>
+    </div>
+  );
+};
+
+const renderDisruptions = (d: PodDisruptionBudgetDetails): React.ReactNode => {
+  const verdict = disruptionVerdict(d);
+  return (
+    <div className="operator-status">
+      <div className="operator-status-line">
+        <StatusChip variant={verdict.variant}>{verdict.label}</StatusChip>
+        {!!verdict.detail && <span className="operator-status-detail">{verdict.detail}</span>}
+      </div>
+      {!!verdict.message && <p className="operator-note">{verdict.message}</p>}
+    </div>
+  );
+};
+
+const disruptedPodLink = (
+  pod: poddisruptionbudget.DisruptedPod['pod'],
+  clusterName: string | undefined
+): React.ReactNode => {
+  const name = pod.ref?.name ?? pod.display?.name;
+  const ref = resourceLinkToObjectReference(pod, clusterName);
+  return ref ? <ObjectPanelLink objectRef={ref}>{name}</ObjectPanelLink> : name;
+};
+
+const renderDisruptedPods = (
+  d: PodDisruptionBudgetDetails,
+  context: OverviewContext
+): React.ReactNode => {
+  if (!d.disruptedPods?.length) {
+    return undefined;
+  }
+  return (
+    <div className="overview-ref-list">
+      {d.disruptedPods.map(({ pod, disruptionTime }) => {
+        const name = pod.ref?.name ?? pod.display?.name;
+        return (
+          <span key={name} className="overview-ref-item">
+            {disruptedPodLink(pod, context.clusterName)}{' '}
+            <span className="policy-detail-muted">
+              evicted <LiveAgeText timestamp={disruptionTime} fullDateTitle /> ago
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
+};
+
+const budgetRule = (d: PodDisruptionBudgetDetails): { label: string; value: string } | null => {
+  if (d.minAvailable) {
+    return { label: 'Min Available', value: d.minAvailable };
+  }
+  if (d.maxUnavailable) {
+    return { label: 'Max Unavailable', value: d.maxUnavailable };
+  }
+  return null;
+};
+
+const UNHEALTHY_POD_POLICY_NOTES: Record<string, string> = {
+  IfHealthyBudget: 'not-ready pods can be evicted only while the budget is met',
+  AlwaysAllow: 'not-ready pods can always be evicted',
+};
+
+// Kubernetes applies IfHealthyBudget when the policy is unset; unknown future policies show as-is.
+const renderUnhealthyPodPolicy = (d: PodDisruptionBudgetDetails): React.ReactNode => {
+  const policy = d.unhealthyPodEvictionPolicy || 'IfHealthyBudget';
+  const note = UNHEALTHY_POD_POLICY_NOTES[policy];
+  return (
+    <span>
+      {policy}
+      {!d.unhealthyPodEvictionPolicy && <span className="policy-detail-muted"> (default)</span>}
+      {!!note && <span className="policy-detail-muted"> · {note}</span>}
+    </span>
+  );
+};
+
+const PdbBudget: React.FC<{ data: PodDisruptionBudgetDetails }> = ({ data }) => {
+  const rule = budgetRule(data);
+  return (
+    <OperatorSection title="Budget">
+      {!!rule && (
+        <OverviewItem
+          label={rule.label}
+          value={
+            <span>
+              {rule.value}
+              {data.expectedPods > 0 && (
+                <span className="policy-detail-muted">
+                  {' '}
+                  · {data.desiredHealthy} of {data.expectedPods} pods must stay healthy
+                </span>
+              )}
+            </span>
+          }
+        />
+      )}
+      <OverviewItem
+        label="Selector"
+        value={
+          <OperatorList
+            values={operatorSelectorValues(data.selector, {
+              absent: 'None (matches no pods)',
+              empty: 'All pods in the namespace',
+            })}
+          />
+        }
+      />
+      <OverviewItem label="Unhealthy Pods" value={renderUnhealthyPodPolicy(data)} />
+    </OperatorSection>
+  );
+};
+
+// Health leads because the operational question is whether pods can be evicted right now; Budget
+// follows with the rule that decides it.
+const PdbOverview: React.FC<{ data: PodDisruptionBudgetDetails; context: OverviewContext }> = ({
+  data,
+  context,
+}) => (
+  <div className="operator-overview">
+    <OperatorSection title="Health">
+      <OverviewItem label="Pods" value={<PdbHealthBar data={data} />} />
+      <OverviewItem label="Disruptions" value={renderDisruptions(data)} />
+      <OverviewItem label="Disrupted" value={renderDisruptedPods(data, context)} />
+    </OperatorSection>
+    <PdbBudget data={data} />
+  </div>
+);
+
 export const pdbDescriptor: OverviewDescriptor<PodDisruptionBudgetDetails> = {
   displayKind: 'PodDisruptionBudget',
   dtoName: 'PodDisruptionBudgetDetails',
   schema: {
-    // Surface selector metadata for PDBs.
-    showSelector: true,
     items: [
-      { field: 'minAvailable', label: 'Min Available' },
-      { field: 'maxUnavailable', label: 'Max Unavailable' },
-      { field: 'currentHealthy', label: 'Current Healthy' },
-      { field: 'desiredHealthy', label: 'Desired Healthy' },
-      { field: 'disruptionsAllowed', label: 'Disruptions Allowed' },
+      {
+        kind: 'widget',
+        consumes: [
+          'currentHealthy',
+          'desiredHealthy',
+          'disruptionsAllowed',
+          'expectedPods',
+          'disruptedPods',
+          'conditions',
+          'minAvailable',
+          'maxUnavailable',
+          'selector',
+          'unhealthyPodEvictionPolicy',
+        ],
+        render: (d, context) => <PdbOverview data={d} context={context} />,
+      },
     ],
   },
-  // Not surfaced in the Overview: `details` (table-summary string), `expectedPods`,
-  // `observedGeneration`, `disruptedPods`, and `conditions` (not rendered).
-  coveredElsewhere: [
-    'details',
-    'expectedPods',
-    'observedGeneration',
-    'disruptedPods',
-    'conditions',
-  ],
+  // Not surfaced in the Overview: `details` (table-summary string) and `observedGeneration`.
+  coveredElsewhere: ['details', 'observedGeneration'],
 };
 
 // ---------------------------------------------------------------------------

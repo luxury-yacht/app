@@ -30,6 +30,34 @@
   color: var(--color-text-secondary);
 }
 
+/* PDB health bar: the workload pod-state bar plus a marker at the number of
+   pods that must stay healthy. The track matches the bar's width so the
+   marker's percentage offset lines up with the segments. */
+.pdb-health-track {
+  position: relative;
+  width: 100%;
+  max-width: 200px;
+}
+
+.pdb-health-required {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--color-text);
+}
+
+.pdb-health-fill--allowed {
+  background: var(--color-success);
+}
+
+/* No disruption allowed: evictions (and node drains) will wait. */
+.pdb-health-fill--blocked {
+  background: var(--color-warning);
+}
+
 /* Metric block styles */
 .policy-metric-block {
   display: flex;

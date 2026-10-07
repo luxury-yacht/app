@@ -7,7 +7,7 @@ import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type { ReactNode } from 'react';
 import { formatFullDate } from '@/utils/ageFormatter';
 import { ConditionChips } from './ConditionChips';
-import { labelSelectorTerms } from './labelSelector';
+import { type LabelSelectorTermsSource, labelSelectorTerms } from './labelSelector';
 import { OverviewItem } from './OverviewItem';
 import './OverviewBlocks.css';
 import './OperatorOverview.css';
@@ -136,7 +136,7 @@ export function OperatorStatus({
 // A missing selector and an explicitly empty one mean different things in operator APIs, so
 // each gets its own fallback wording.
 export const operatorSelectorValues = (
-  selector: OperatorLabelSelector | null | undefined,
+  selector: LabelSelectorTermsSource | null | undefined,
   { absent = 'None', empty = 'All' }: { absent?: string; empty?: string } = {}
 ): string[] => {
   const values = labelSelectorTerms(selector);
