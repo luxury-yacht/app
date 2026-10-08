@@ -200,7 +200,7 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     id: 'workloads',
     supportsAllNamespaces: true,
     label: 'Workloads',
-    description: 'View deployments, statefulsets, daemonsets, jobs, and pods',
+    description: 'View deployments, statefulsets, daemonsets, cronjobs, and jobs',
     keywords: [
       'workloads',
       'namespace',
@@ -209,9 +209,19 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
       'daemonsets',
       'cronjobs',
       'jobs',
-      'pods',
     ],
     refresher: 'workloads',
+  },
+  {
+    scope: 'namespace',
+    sidebarGroup: 'primary',
+    id: 'pods',
+    supportsAllNamespaces: true,
+    label: 'Pods',
+    description: 'View pods',
+    keywords: ['pods', 'namespace', 'containers'],
+    // The scoped pods domain refreshes through the orchestrator, not a view refresher.
+    refresher: null,
   },
   {
     scope: 'namespace',

@@ -11,7 +11,14 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   viewType: 'cluster',
   view: 'nodes',
   namespace: '',
-  panes: {},
+  filters: {
+    search: '',
+    kinds: { mode: 'all' },
+    namespaces: { mode: 'all' },
+    clusters: { mode: 'all' },
+    includeMetadata: false,
+  },
+  tableState: { sortColumn: 'name', sortDirection: 'asc', columnVisibility: {} },
   order: 0,
   ...overrides,
 });

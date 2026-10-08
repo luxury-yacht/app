@@ -269,6 +269,7 @@ describe('CommandPaletteCommands', () => {
       'cluster-crds',
       'cluster-custom',
       'namespace-workloads',
+      'namespace-pods',
       'namespace-browse',
       'namespace-map',
       'namespace-events',

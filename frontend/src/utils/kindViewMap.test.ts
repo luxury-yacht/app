@@ -9,9 +9,9 @@ import { describe, expect, it } from 'vitest';
 import { getViewForKind } from './kindViewMap';
 
 describe('getViewForKind', () => {
-  // One representative per destination, plus the Pods subtable and alias path.
-  const namespaceKindCases: Array<[string, string, string, string?]> = [
-    ['Pod', 'namespace', 'workloads', 'namespace-pods'],
+  // One representative per destination, plus the alias path.
+  const namespaceKindCases: Array<[string, string, string]> = [
+    ['Pod', 'namespace', 'pods'],
     ['Deployment', 'namespace', 'workloads'],
     ['ConfigMap', 'namespace', 'config'],
     ['Service', 'namespace', 'network'],
@@ -23,17 +23,9 @@ describe('getViewForKind', () => {
     ['HelmRelease', 'namespace', 'helm'],
     ['Event', 'namespace', 'events'],
   ];
-  it.each(namespaceKindCases)(
-    'maps %s to %s/%s',
-    (kind, expectedViewType, expectedTab, destinationViewId) => {
-      const result = getViewForKind(kind);
-      expect(result).toEqual({
-        viewType: expectedViewType,
-        tab: expectedTab,
-        ...(destinationViewId ? { destinationViewId } : {}),
-      });
-    }
-  );
+  it.each(namespaceKindCases)('maps %s to %s/%s', (kind, expectedViewType, expectedTab) => {
+    expect(getViewForKind(kind)).toEqual({ viewType: expectedViewType, tab: expectedTab });
+  });
 
   // Cluster-scoped kinds
   it.each([

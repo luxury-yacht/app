@@ -293,31 +293,21 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       name: 'an All Namespaces table showing the Namespaces filter shares it',
       namespace: ALL_NAMESPACES_SCOPE,
       showNamespaceFilters: true,
-      sharesAllNamespacesFilter: undefined,
       shared: true,
     },
     {
       name: 'an All Namespaces table without the Namespaces filter keeps no hidden selection',
       namespace: ALL_NAMESPACES_SCOPE,
       showNamespaceFilters: false,
-      sharesAllNamespacesFilter: undefined,
-      shared: false,
-    },
-    {
-      name: 'an All Namespaces pane can opt out',
-      namespace: ALL_NAMESPACES_SCOPE,
-      showNamespaceFilters: true,
-      sharesAllNamespacesFilter: false,
       shared: false,
     },
     {
       name: 'a single-namespace table never reads the All Namespaces selection',
       namespace: 'team-a',
       showNamespaceFilters: true,
-      sharesAllNamespacesFilter: undefined,
       shared: false,
     },
-  ])('$name', ({ namespace, showNamespaceFilters, sharesAllNamespacesFilter, shared }) => {
+  ])('$name', ({ namespace, showNamespaceFilters, shared }) => {
     const Probe: React.FC = () => {
       useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
         queryTableMode: 'Query Backed Dynamic',
@@ -330,7 +320,6 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         columns,
         supportsCustomMetadataColumns: true,
         showNamespaceFilters,
-        ...(sharesAllNamespacesFilter === undefined ? {} : { sharesAllNamespacesFilter }),
       });
       return null;
     };

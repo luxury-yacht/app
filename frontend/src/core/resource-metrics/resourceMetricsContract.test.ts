@@ -35,15 +35,12 @@ describe('resource metrics contracts', () => {
         helpers: ['nodeRowCpuValue', 'nodeRowMemoryValue'],
       },
       {
-        file: 'frontend/src/modules/namespace/components/NsViewPods.tsx',
-        helpers: ['workloadRowCpuValue', 'workloadRowMemoryValue'],
-      },
-      {
         file: 'frontend/src/modules/namespace/components/useWorkloadTableColumns.tsx',
         helpers: ['workloadRowCpuValue', 'workloadRowMemoryValue'],
       },
       {
-        file: 'frontend/src/modules/object-panel/components/ObjectPanel/Pods/PodsTab.tsx',
+        // Every pods table (namespace pods and the object panel's Pods tab) builds its columns here.
+        file: 'frontend/src/modules/resource-grid/usePodTable.tsx',
         helpers: ['workloadRowCpuValue', 'workloadRowMemoryValue'],
       },
     ];

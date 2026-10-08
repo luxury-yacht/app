@@ -57,11 +57,21 @@ const sidebarGroupPreferenceKeys = {
   },
 } as const satisfies Record<SidebarGroupScope, Record<SidebarViewGroupId, AppPreferenceKey>>;
 
+/** Tables with a "Show Pods" toggle: opening a row lands on its Pods tab. */
+export type ShowPodsView = 'workloads' | 'nodes';
+
+const showPodsPreferenceKeys = {
+  workloads: 'workloadsShowPods',
+  nodes: 'nodesShowPods',
+} as const satisfies Record<ShowPodsView, AppPreferenceKey>;
+
 export interface AppPreferences {
   sidebarClusterResourcesExpanded: boolean;
   sidebarClusterExtensionsExpanded: boolean;
   sidebarNamespaceResourcesExpanded: boolean;
   sidebarNamespaceExtensionsExpanded: boolean;
+  workloadsShowPods: boolean;
+  nodesShowPods: boolean;
   appearanceMode: AppearanceMode;
   useShortResourceNames: boolean;
   dimInactiveNamespaces: boolean;
@@ -193,6 +203,8 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   sidebarClusterExtensionsExpanded: false,
   sidebarNamespaceResourcesExpanded: false,
   sidebarNamespaceExtensionsExpanded: false,
+  workloadsShowPods: false,
+  nodesShowPods: false,
   appearanceMode: 'system',
   useShortResourceNames: false,
   dimInactiveNamespaces: true,
@@ -272,6 +284,12 @@ const FALLBACK_PREFERENCE_METADATA: {
     'boolean',
     { runtimeSideEffect: false }
   ),
+  workloadsShowPods: createPreferenceMetadata('workloadsShowPods', 'boolean', {
+    runtimeSideEffect: false,
+  }),
+  nodesShowPods: createPreferenceMetadata('nodesShowPods', 'boolean', {
+    runtimeSideEffect: false,
+  }),
   appearanceMode: createPreferenceMetadata('appearanceMode', 'enum', {
     enumOptions: ['light', 'dark', 'system'],
     runtimeSideEffect: true,
@@ -703,6 +721,14 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
         () => eventBus.emit('settings:sidebar-expansion')
       );
     }
+  }
+  for (const key of Object.values(showPodsPreferenceKeys)) {
+    emitSelectedPreferenceChange(
+      previous,
+      next,
+      (value) => value[key],
+      () => eventBus.emit('settings:show-pods')
+    );
   }
   emitSelectedPreferenceChange(
     previous,
@@ -1148,6 +1174,11 @@ const normalizePreferences = (
       'sidebarNamespaceExtensionsExpanded',
       backendSettings?.sidebarNamespaceExtensionsExpanded
     ),
+    workloadsShowPods: normalizeBooleanPreferenceValue(
+      'workloadsShowPods',
+      backendSettings?.workloadsShowPods
+    ),
+    nodesShowPods: normalizeBooleanPreferenceValue('nodesShowPods', backendSettings?.nodesShowPods),
     appearanceMode: normalizeAppearanceMode(backendSettings?.appearanceMode),
     useShortResourceNames: normalizeBooleanPreferenceValue(
       'useShortResourceNames',
@@ -1346,6 +1377,9 @@ export const getSidebarGroupExpanded = (
   group: SidebarViewGroupId
 ): boolean => preferenceCache[sidebarGroupPreferenceKeys[scope][group]];
 
+export const getShowPods = (view: ShowPodsView): boolean =>
+  preferenceCache[showPodsPreferenceKeys[view]];
+
 export const getErrorReportingEnabled = (): boolean => {
   return preferenceCache.errorReportingEnabled;
 };
@@ -1505,6 +1539,13 @@ export const setSidebarGroupExpanded = (
   commitPreferenceMutation(
     'Failed to persist sidebar group expansion:',
     singlePreferenceMutation(sidebarGroupPreferenceKeys[scope][group], expanded)
+  );
+};
+
+export const setShowPods = (view: ShowPodsView, enabled: boolean): void => {
+  commitPreferenceMutation(
+    'Failed to persist the Show Pods toggle:',
+    singlePreferenceMutation(showPodsPreferenceKeys[view], enabled)
   );
 };
 

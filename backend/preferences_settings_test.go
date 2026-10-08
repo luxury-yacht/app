@@ -502,6 +502,32 @@ func TestSidebarGroupExpansionPersistsIndependentlyWithoutLogging(t *testing.T) 
 	require.Empty(t, logger.GetEntries(), "sidebar disclosure must persist without creating application logs")
 }
 
+// Each table's "Show Pods" toggle is remembered per view across restarts.
+func TestShowPodsPreferencesPersistPerViewWithoutLogging(t *testing.T) {
+	setTestConfigEnv(t)
+	logger := NewLogger(20)
+	preferences := NewPreferencesService(nil, nil, logger)
+	read := func(owner *PreferencesService) map[string]any {
+		t.Helper()
+		schema, err := owner.GetAppSettingsSchema()
+		require.NoError(t, err)
+		values := make(map[string]any)
+		for _, preference := range schema.Preferences {
+			values[preference.Key] = preference.CurrentValue
+		}
+		return values
+	}
+	require.Equal(t, false, read(preferences)["workloadsShowPods"])
+	require.Equal(t, false, read(preferences)["nodesShowPods"])
+
+	require.NoError(t, updatePreference(preferences, "workloadsShowPods", true))
+
+	values := read(NewPreferencesService(nil, nil, nil))
+	require.Equal(t, true, values["workloadsShowPods"])
+	require.Equal(t, false, values["nodesShowPods"])
+	require.Empty(t, logger.GetEntries(), "a table toggle must persist without creating application logs")
+}
+
 func TestAppPreferenceBatchKeepsOtherLogsWithSidebarChanges(t *testing.T) {
 	setTestConfigEnv(t)
 	logger := NewLogger(20)

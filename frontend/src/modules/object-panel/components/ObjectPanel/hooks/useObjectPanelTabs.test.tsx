@@ -132,6 +132,22 @@ describe('useObjectPanelTabs', () => {
     }
   );
 
+  it('offers both the Pods and Jobs tabs for a CronJob', async () => {
+    const { availableTabs } = await renderHook({
+      objectData: {
+        kind: 'CronJob',
+        group: 'batch',
+        version: 'v1',
+        name: 'nightly',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+      },
+    });
+    const labels = availableTabs.map((tab) => tab.label);
+    expect(labels).toContain('Pods');
+    expect(labels).toContain('Jobs');
+  });
+
   it.each(['Role', 'RoleBinding'])('offers the Map tab for %s', async (kind) => {
     const { availableTabs } = await renderHook({
       objectData: { ...objectData, kind, group: 'rbac.authorization.k8s.io' },

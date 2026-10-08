@@ -31,30 +31,17 @@ Status options stay available when a Status selection or fixed health predicate
 narrows results. Rows serve from a maintained `querypage` store fed by the
 workload GVRs' reflectors; pod aggregates, HPA, and metrics join at serve.
 
-The namespace Workloads destination composes two independent query-backed
-tables, Workloads above Pods, each with its own filter, sort, cursor, page size,
-diagnostics, and persisted GridTable state:
+Workloads is one table; a workload's pods are in the Pods view or its object
+panel's Pods tab.
 
-- The split starts at 50% and resizes by pointer or keyboard through a handle on
-  the pane boundary (no divider band); its one-pixel separator thickens to the
-  shared resize highlight on hover or drag. Pointer resizing cancels native
-  selection at gesture start and disables standard and WebKit text selection for
-  the gesture, including across the native window boundary.
-- The Pods pane collapses from the left edge of its own filter bar; collapsed,
-  the boundary stays and the row shows only the expand control and `Show Pods`.
-- Selecting a Workloads row writes the normal Pods filters: Namespace (when the
-  table spans all namespaces) plus the provider-owned Owner facet, whose values
-  carry full object identity. Deployments resolve through ReplicaSets, CronJobs
-  through Jobs, direct owners match directly, and an ownerless Pod uses its own
-  core/v1 identity. Projected Pod rows keep both direct-controller and
-  resolved-ancestor identities; no generated-name parsing.
-- Manually changing Namespace or Owner clears the row highlight without
-  restoring previous filters. Changing cluster or pinned namespace while a row
-  is selected clears that selection's Owner filter before querying the new
-  scope; an Owner filter without an active selection is ordinary persisted
-  state.
-- The former standalone Pods navigation value parses as Workloads for
-  persisted-state compatibility.
+The namespace Pods view and the object panel's Pods tab render one shared pod
+table (`usePodTable`): identity, columns, actions, per-namespace permissions,
+and metrics freshness. The view queries a namespace scope; the tab queries a
+`workload:` or `node:` scope. Projected Pod rows keep both direct-controller
+and resolved-ancestor owner identity, so a Deployment's tab includes its
+ReplicaSets' pods and a CronJob's tab its Jobs' pods. Focused scopes stream
+while their tab holds the lease; namespace scopes stream only while the Pods
+view is active.
 
 ## Nodes
 

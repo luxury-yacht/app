@@ -6,16 +6,14 @@
  * a `node:` scope; everything else (and incomplete identities) resolves to null
  * so the caller never issues a cluster-wide pods fetch.
  */
+import { TABS } from '../constants';
 import type { PanelObjectData } from '../types';
 
-// These keys mirror the pods tab's `onlyForKinds` (see constants.ts) plus `node`.
-const WORKLOAD_SCOPE_KINDS = new Set([
-  'deployment',
-  'daemonset',
-  'statefulset',
-  'job',
-  'replicaset',
-]);
+const PODS_TAB_KINDS: ReadonlySet<string> = new Set(TABS.PODS.onlyForKinds);
+
+/** Whether objects of this kind have a Pods tab in the object panel. */
+export const objectKindHasPodsTab = (kind: string): boolean =>
+  PODS_TAB_KINDS.has(kind.toLowerCase());
 
 /**
  * Builds the pods-query base scope for an object panel object.
@@ -42,7 +40,7 @@ export function buildObjectPanelPodsScope(
   }
 
   const workloadNamespace = objectData.namespace?.trim();
-  if (workloadNamespace && WORKLOAD_SCOPE_KINDS.has(normalizedKind)) {
+  if (workloadNamespace && PODS_TAB_KINDS.has(normalizedKind)) {
     const workloadKindSegment = objectData.kind?.trim();
     const workloadGroup = objectData.group?.trim();
     const workloadVersion = objectData.version?.trim();

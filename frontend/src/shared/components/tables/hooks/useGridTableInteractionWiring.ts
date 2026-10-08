@@ -28,7 +28,6 @@ interface UseGridTableInteractionWiringOptions<T> {
   getRowClassName?: (item: T, index: number) => string | undefined | null;
   onRowClick?: (item: T) => void;
   onRowPointerClick?: (item: T) => void;
-  onRowSelectionClear?: () => void;
   enableContextMenu: boolean;
   getCustomContextMenuItems?: (item: T, columnKey: string) => ContextMenuItem[];
   sortConfig?: { key: string; direction: 'asc' | 'desc' | null };
@@ -77,7 +76,6 @@ export function useGridTableInteractionWiring<T>({
   getRowClassName,
   onRowClick,
   onRowPointerClick,
-  onRowSelectionClear,
   enableContextMenu,
   getCustomContextMenuItems,
   sortConfig,
@@ -204,8 +202,7 @@ export function useGridTableInteractionWiring<T>({
     pendingPointerFocusRef.current = false;
     setFocusedRowKey(null);
     updateHoverForElement(null);
-    onRowSelectionClear?.();
-  }, [onRowSelectionClear, pendingPointerFocusRef, setFocusedRowKey, updateHoverForElement]);
+  }, [pendingPointerFocusRef, setFocusedRowKey, updateHoverForElement]);
 
   const handleRowMouseLeaveWithReset = useCallback(
     (element?: HTMLDivElement | null) => {

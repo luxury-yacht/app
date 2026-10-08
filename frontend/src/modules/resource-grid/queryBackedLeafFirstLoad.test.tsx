@@ -223,6 +223,7 @@ vi.mock('@utils/errorHandler', () => ({
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
+  CategoryIcon: () => <span>category</span>,
   DeleteIcon: () => <span>delete</span>,
   DiffIcon: () => <span>diff</span>,
   DrainIcon: () => <span>drain</span>,
@@ -247,7 +248,7 @@ import NsViewPods from '@modules/namespace/components/NsViewPods';
 import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
 import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
 import NsViewStorage from '@modules/namespace/components/NsViewStorage';
-import { WorkloadsTable } from '@modules/namespace/components/NsViewWorkloads';
+import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
 
 const fixtureIdentity = (kind: string) => {
   switch (kind) {
@@ -752,7 +753,7 @@ describe('query-backed leaf first load', () => {
   it('uses the typed query result on first load for namespace workloads', async () => {
     const scope = 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc';
     const observed = await renderQueryFirstLoad({
-      element: <WorkloadsTable namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
+      element: <NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: {
         rows: [workloadRow('query-workload', '2h')],
       },
@@ -992,7 +993,7 @@ describe('query-backed leaf first load', () => {
   it('issues a namespace-scoped typed query on first load for namespace workloads', async () => {
     const scope = 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc';
     const observed = await renderQueryFirstLoad({
-      element: <WorkloadsTable namespace="team-a" showNamespaceColumn={false} />,
+      element: <NsViewWorkloads namespace="team-a" showNamespaceColumn={false} />,
       payload: {
         rows: [workloadRow('query-workload', '2h')],
       },
@@ -1232,7 +1233,7 @@ describe('query-backed leaf first load', () => {
     },
     {
       label: 'namespace workloads',
-      element: <WorkloadsTable namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
+      element: <NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { rows: [] },
       expected: [
         'age',

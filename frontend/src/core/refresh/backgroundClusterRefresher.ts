@@ -47,6 +47,10 @@ const namespaceViewToDomain = (
   if (!namespaceView) {
     return undefined;
   }
+  // The Pods view has no view refresher; its scoped domain is refreshed directly.
+  if (namespaceView === 'pods') {
+    return 'pods';
+  }
   const refresherName =
     namespaceViewToRefresher[namespaceView as keyof typeof namespaceViewToRefresher];
   if (!refresherName) {
@@ -162,13 +166,6 @@ export class BackgroundClusterRefresher {
       }
       if (ns) {
         scope = ns.startsWith('namespace:') ? ns : `namespace:${ns}`;
-      }
-      if (activeNamespaceView === 'workloads' && scope) {
-        await Promise.all([
-          refreshOrchestrator.fetchDomainForCluster('namespace-workloads', clusterId, scope),
-          refreshOrchestrator.fetchDomainForCluster('pods', clusterId, scope),
-        ]);
-        return;
       }
     }
 

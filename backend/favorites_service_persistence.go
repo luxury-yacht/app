@@ -11,24 +11,20 @@ import (
 	"github.com/luxury-yacht/app/internal/appstate"
 )
 
-// Favorite represents a user-saved view bookmark.
+// Favorite represents a user-saved view bookmark: a route plus its table's
+// filter and display state.
 type Favorite struct {
-	ID               string                       `json:"id"`
-	Name             string                       `json:"name"`
-	ClusterSelection string                       `json:"clusterSelection"`
-	ClusterID        string                       `json:"clusterId,omitempty"`
-	ClusterName      string                       `json:"clusterName,omitempty"`
-	ViewType         string                       `json:"viewType"`
-	View             string                       `json:"view"`
-	Namespace        string                       `json:"namespace"`
-	Panes            map[string]FavoritePaneState `json:"panes"`
-	Order            int                          `json:"order"`
-}
-
-// FavoritePaneState holds the complete GridTable state for one named pane.
-type FavoritePaneState struct {
-	Filters    FavoriteFilters    `json:"filters"`
-	TableState FavoriteTableState `json:"tableState"`
+	ID               string             `json:"id"`
+	Name             string             `json:"name"`
+	ClusterSelection string             `json:"clusterSelection"`
+	ClusterID        string             `json:"clusterId,omitempty"`
+	ClusterName      string             `json:"clusterName,omitempty"`
+	ViewType         string             `json:"viewType"`
+	View             string             `json:"view"`
+	Namespace        string             `json:"namespace"`
+	Filters          FavoriteFilters    `json:"filters"`
+	TableState       FavoriteTableState `json:"tableState"`
+	Order            int                `json:"order"`
 }
 
 // FavoriteFilters holds the search and filter state for a favorite.
@@ -63,10 +59,10 @@ type favoritesFile struct {
 	Favorites     []Favorite `json:"favorites"`
 }
 
-const favoritesSchemaVersion = 3
+const favoritesSchemaVersion = 4
 
-// favoriteV2 is the flat, single-table favorite written by schema v2. Keep the
-// decoder private: it exists only at the on-disk migration boundary.
+// favoriteV2 is the flat favorite written by schema v2. Keep the decoder
+// private: it exists only at the on-disk migration boundary.
 type favoriteV2 struct {
 	ID               string              `json:"id"`
 	Name             string              `json:"name"`
@@ -104,37 +100,47 @@ type favoriteV1 struct {
 	Order            int                 `json:"order"`
 }
 
-type flatFavoritesFile struct {
+// favoritePaneV3 is one table's state inside a schema v3 favorite.
+type favoritePaneV3 struct {
+	Filters    FavoriteFilters    `json:"filters"`
+	TableState FavoriteTableState `json:"tableState"`
+}
+
+// favoriteV3 is the multi-pane favorite written by schema v3 for the former
+// Workloads/Pods split. Favorites exports with export schema 1 carry it too.
+type favoriteV3 struct {
+	ID               string                    `json:"id"`
+	Name             string                    `json:"name"`
+	ClusterSelection string                    `json:"clusterSelection"`
+	ClusterID        string                    `json:"clusterId,omitempty"`
+	ClusterName      string                    `json:"clusterName,omitempty"`
+	ViewType         string                    `json:"viewType"`
+	View             string                    `json:"view"`
+	Namespace        string                    `json:"namespace"`
+	Panes            map[string]favoritePaneV3 `json:"panes"`
+	Order            int                       `json:"order"`
+}
+
+type legacyFavoritesFile struct {
 	SchemaVersion int               `json:"schemaVersion"`
 	Favorites     []json.RawMessage `json:"favorites"`
 }
 
-func defaultFavoritePaneState() FavoritePaneState {
-	return FavoritePaneState{
-		Filters: FavoriteFilters{
-			Kinds:      FavoriteFilterSelection{Mode: "all"},
-			Namespaces: FavoriteFilterSelection{Mode: "all"},
-			Clusters:   FavoriteFilterSelection{Mode: "all"},
-		},
-		TableState: FavoriteTableState{
-			SortColumn:       "name",
-			SortDirection:    "asc",
-			ColumnVisibility: map[string]bool{},
-		},
+func requireFavoriteRoute(id, name, viewType, view string) error {
+	if strings.TrimSpace(id) == "" || strings.TrimSpace(name) == "" ||
+		strings.TrimSpace(viewType) == "" || strings.TrimSpace(view) == "" {
+		return fmt.Errorf("favorite is missing required identity or route fields")
 	}
+	return nil
 }
 
 func migrateFlatFavorite(legacy favoriteV2) (Favorite, error) {
-	if strings.TrimSpace(legacy.ID) == "" || strings.TrimSpace(legacy.Name) == "" ||
-		strings.TrimSpace(legacy.ViewType) == "" || strings.TrimSpace(legacy.View) == "" {
-		return Favorite{}, fmt.Errorf("favorite is missing required identity or route fields")
+	if err := requireFavoriteRoute(legacy.ID, legacy.Name, legacy.ViewType, legacy.View); err != nil {
+		return Favorite{}, err
 	}
 	if legacy.Filters == nil || legacy.TableState == nil {
 		return Favorite{}, fmt.Errorf("favorite is missing filters or table state")
 	}
-
-	pane := FavoritePaneState{Filters: *legacy.Filters, TableState: *legacy.TableState}
-	normalizeFavoriteFilters(&pane.Filters)
 	migrated := Favorite{
 		ID:               legacy.ID,
 		Name:             legacy.Name,
@@ -144,26 +150,86 @@ func migrateFlatFavorite(legacy favoriteV2) (Favorite, error) {
 		ViewType:         legacy.ViewType,
 		View:             legacy.View,
 		Namespace:        legacy.Namespace,
-		Panes:            map[string]FavoritePaneState{"main": pane},
+		Filters:          *legacy.Filters,
+		TableState:       *legacy.TableState,
 		Order:            legacy.Order,
 	}
-	if legacy.ViewType == "namespace" {
-		switch legacy.View {
-		case "pods":
-			migrated.View = "workloads"
-			migrated.Panes = map[string]FavoritePaneState{
-				"workloads": defaultFavoritePaneState(),
-				"pods":      pane,
-			}
-		case "workloads":
-			migrated.Panes = map[string]FavoritePaneState{
-				"workloads": pane,
-				"pods":      defaultFavoritePaneState(),
-			}
+	normalizeFavoriteFilters(&migrated.Filters)
+	return migrated, nil
+}
+
+// flatten keeps one table's state. A Workloads favorite carried {workloads, pods}
+// panes: a default Workloads pane with a customised Pods pane becomes a Pods view
+// favorite; otherwise the Workloads pane wins and the Pods pane is dropped.
+func (legacy favoriteV3) flatten() (Favorite, error) {
+	view := legacy.View
+	pane, ok := legacy.Panes["main"]
+	workloads, hasWorkloads := legacy.Panes["workloads"]
+	pods, hasPods := legacy.Panes["pods"]
+	if hasWorkloads && hasPods {
+		pane, ok = workloads, true
+		if favoritePaneIsDefault(workloads) && !favoritePaneIsDefault(pods) {
+			view, pane = "pods", pods
 		}
 	}
+	if !ok {
+		return Favorite{}, fmt.Errorf("favorite has no table state")
+	}
+	return migrateFlatFavorite(favoriteV2{
+		ID:               legacy.ID,
+		Name:             legacy.Name,
+		ClusterSelection: legacy.ClusterSelection,
+		ClusterID:        legacy.ClusterID,
+		ClusterName:      legacy.ClusterName,
+		ViewType:         legacy.ViewType,
+		View:             view,
+		Namespace:        legacy.Namespace,
+		Filters:          &pane.Filters,
+		TableState:       &pane.TableState,
+		Order:            legacy.Order,
+	})
+}
 
-	return migrated, nil
+// favoritePaneIsDefault reports a pane that neither narrows rows nor changes the
+// default name-ascending sort, column visibility or column order.
+func favoritePaneIsDefault(pane favoritePaneV3) bool {
+	return favoriteFiltersAreDefault(pane.Filters) && favoriteTableStateIsDefault(pane.TableState)
+}
+
+func favoriteFiltersAreDefault(filters FavoriteFilters) bool {
+	if strings.TrimSpace(filters.Search) != "" || filters.IncludeMetadata {
+		return false
+	}
+	selections := []FavoriteFilterSelection{filters.Kinds, filters.Namespaces, filters.Clusters}
+	for _, selection := range filters.QueryFacets {
+		selections = append(selections, selection)
+	}
+	for _, selection := range selections {
+		if selection.Mode == "some" || selection.Mode == "none" {
+			return false
+		}
+	}
+	return true
+}
+
+func favoriteTableStateIsDefault(table FavoriteTableState) bool {
+	if table.SortColumn != "name" || table.SortDirection != "asc" || len(table.ColumnOrder) > 0 {
+		return false
+	}
+	for _, visible := range table.ColumnVisibility {
+		if !visible {
+			return false
+		}
+	}
+	return true
+}
+
+func migrateFavoriteV3(raw json.RawMessage) (Favorite, error) {
+	legacy := favoriteV3{}
+	if err := json.Unmarshal(raw, &legacy); err != nil {
+		return Favorite{}, err
+	}
+	return legacy.flatten()
 }
 
 func migrateFavoriteV2(raw json.RawMessage) (Favorite, error) {
@@ -216,8 +282,8 @@ func migrateFavoriteV1(raw json.RawMessage) (Favorite, error) {
 	})
 }
 
-func migrateFlatFavoritesFile(data []byte, migrate func(json.RawMessage) (Favorite, error)) *favoritesFile {
-	legacy := flatFavoritesFile{}
+func migrateFavoritesFile(data []byte, migrate func(json.RawMessage) (Favorite, error)) *favoritesFile {
+	legacy := legacyFavoritesFile{}
 	if err := json.Unmarshal(data, &legacy); err != nil {
 		return &favoritesFile{SchemaVersion: favoritesSchemaVersion, Favorites: []Favorite{}}
 	}
@@ -284,25 +350,6 @@ func normalizeFavoriteFilters(filters *FavoriteFilters) {
 	}
 }
 
-func normalizeFavoritePanes(panes map[string]FavoritePaneState) {
-	for key, pane := range panes {
-		normalizeFavoriteFilters(&pane.Filters)
-		panes[key] = pane
-	}
-}
-
-func validateFavoritePanes(panes map[string]FavoritePaneState) error {
-	if len(panes) == 0 {
-		return fmt.Errorf("favorite must contain at least one named pane")
-	}
-	for key := range panes {
-		if strings.TrimSpace(key) == "" {
-			return fmt.Errorf("favorite pane name must not be empty")
-		}
-	}
-	return nil
-}
-
 func normalizeFavoriteName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -352,9 +399,11 @@ func (s *FavoritesService) loadFavoritesFile() (*favoritesFile, error) {
 		migrate = migrateFavoriteV1
 	case 2:
 		migrate = migrateFavoriteV2
+	case 3:
+		migrate = migrateFavoriteV3
 	}
 	if migrate != nil {
-		state := migrateFlatFavoritesFile(data, migrate)
+		state := migrateFavoritesFile(data, migrate)
 		if err := s.saveFavoritesFile(state); err != nil {
 			return nil, fmt.Errorf("failed to save migrated favorites file: %w", err)
 		}
@@ -371,7 +420,7 @@ func (s *FavoritesService) loadFavoritesFile() (*favoritesFile, error) {
 		return nil, fmt.Errorf("failed to parse favorites file: %w", err)
 	}
 	for index := range state.Favorites {
-		normalizeFavoritePanes(state.Favorites[index].Panes)
+		normalizeFavoriteFilters(&state.Favorites[index].Filters)
 	}
 	state.SchemaVersion = favoritesSchemaVersion
 	return state, nil
@@ -413,16 +462,13 @@ func (s *FavoritesService) GetFavorites() ([]Favorite, error) {
 
 // AddFavorite generates an ID, assigns Order, appends the favorite, and persists.
 func (s *FavoritesService) AddFavorite(fav Favorite) (Favorite, error) {
-	if err := validateFavoritePanes(fav.Panes); err != nil {
-		return Favorite{}, err
-	}
 	name, err := normalizeFavoriteName(fav.Name)
 	if err != nil {
 		return Favorite{}, err
 	}
 	fav.Name = name
 	fav.ID = uuid.New().String()
-	normalizeFavoritePanes(fav.Panes)
+	normalizeFavoriteFilters(&fav.Filters)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -444,15 +490,12 @@ func (s *FavoritesService) AddFavorite(fav Favorite) (Favorite, error) {
 
 // UpdateFavorite replaces a favorite by ID, preserving its Order. Returns an error if not found.
 func (s *FavoritesService) UpdateFavorite(fav Favorite) error {
-	if err := validateFavoritePanes(fav.Panes); err != nil {
-		return err
-	}
 	name, err := normalizeFavoriteName(fav.Name)
 	if err != nil {
 		return err
 	}
 	fav.Name = name
-	normalizeFavoritePanes(fav.Panes)
+	normalizeFavoriteFilters(&fav.Filters)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

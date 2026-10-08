@@ -79,8 +79,7 @@ function navigationTarget(objectRef: KubernetesObjectReference) {
     destination,
     request: {
       ...focus,
-      destinationViewId:
-        destination.destinationViewId ?? `${destination.viewType}-${destination.tab}`,
+      destinationViewId: `${destination.viewType}-${destination.tab}`,
     },
   };
 }

@@ -150,7 +150,14 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   viewType: 'namespace',
   view: 'pods',
   namespace: 'default',
-  panes: {},
+  filters: {
+    search: '',
+    kinds: { mode: 'all' },
+    namespaces: { mode: 'all' },
+    clusters: { mode: 'all' },
+    includeMetadata: false,
+  },
+  tableState: { sortColumn: 'name', sortDirection: 'asc', columnVisibility: {} },
   order: 0,
   ...overrides,
 });

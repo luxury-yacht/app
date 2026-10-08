@@ -36,18 +36,14 @@ const mockExistingFavorite: Favorite = {
   viewType: 'namespace',
   view: 'pods',
   namespace: 'default',
-  panes: {
-    main: {
-      filters: {
-        search: 'nginx',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
-        includeMetadata: false,
-      },
-      tableState: mockTableState,
-    },
+  filters: {
+    search: 'nginx',
+    kinds: { mode: 'all' },
+    namespaces: { mode: 'all' },
+    clusters: { mode: 'all' },
+    includeMetadata: false,
   },
+  tableState: mockTableState,
   order: 0,
 };
 
@@ -110,7 +106,7 @@ const meta: Meta<typeof FavSaveModal> = {
     namespace: 'default',
     filters: mockFilters,
     tableState: mockTableState,
-    includeMetadata: false,
+    filterOptions: {},
     onSave: (fav: Favorite) => console.info('onSave', fav),
     onDelete: (id: string) => console.info('onDelete', id),
   },
@@ -150,26 +146,20 @@ export const EditExisting: Story = {
   args: {
     existingFavorite: mockExistingFavorite,
     defaultName: mockExistingFavorite.name,
-    filters: mockExistingFavorite.panes.main.filters,
-    panes: [
-      {
-        id: 'main',
-        label: 'Pods',
-        ...mockExistingFavorite.panes.main,
-        filterOptions: {
-          showKindDropdown: true,
-          kinds: ['Pod'],
-          showNamespaceDropdown: true,
-          namespaces: ['default', 'kube-system'],
-        },
-        columns: [
-          { key: 'name', label: 'Name', hideable: false, sortable: true },
-          { key: 'namespace', label: 'Namespace', hideable: true, sortable: true },
-          { key: 'status', label: 'Status', hideable: true, sortable: true },
-          { key: 'restarts', label: 'Restarts', hideable: true, sortable: true },
-          { key: 'age', label: 'Age', hideable: true, sortable: true },
-        ],
-      },
+    filters: mockExistingFavorite.filters,
+    tableState: mockExistingFavorite.tableState,
+    filterOptions: {
+      showKindDropdown: true,
+      kinds: ['Pod'],
+      showNamespaceDropdown: true,
+      namespaces: ['default', 'kube-system'],
+    },
+    columns: [
+      { key: 'name', label: 'Name', hideable: false, sortable: true },
+      { key: 'namespace', label: 'Namespace', hideable: true, sortable: true },
+      { key: 'status', label: 'Status', hideable: true, sortable: true },
+      { key: 'restarts', label: 'Restarts', hideable: true, sortable: true },
+      { key: 'age', label: 'Age', hideable: true, sortable: true },
     ],
   },
   decorators: [

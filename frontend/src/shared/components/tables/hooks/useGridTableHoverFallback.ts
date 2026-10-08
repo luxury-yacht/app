@@ -9,7 +9,7 @@ import type { RefObject } from 'react';
 import { useEffect } from 'react';
 
 // When the hovered row is unmounted (e.g., virtualization window shifts),
-// find a focused/selected row in the DOM and restore the hover overlay to it.
+// find the focused row in the DOM and restore the hover overlay to it.
 interface UseGridTableHoverFallbackOptions {
   hoverStateVisible: boolean;
   wrapperRef: RefObject<HTMLDivElement | null>;
@@ -32,9 +32,7 @@ export function useGridTableHoverFallback({
     if (!wrapper) {
       return;
     }
-    const fallback = wrapper.querySelector<HTMLDivElement>(
-      '[data-row-focused="true"], [data-row-selected="true"]'
-    );
+    const fallback = wrapper.querySelector<HTMLDivElement>('[data-row-focused="true"]');
     if (fallback) {
       updateHoverForElement(fallback);
     }

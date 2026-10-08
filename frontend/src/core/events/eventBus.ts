@@ -111,6 +111,7 @@ export interface AppEvents {
   'settings:dim-inactive-namespaces': boolean;
   'settings:exclusive-namespaces': boolean;
   'settings:sidebar-expansion': undefined;
+  'settings:show-pods': undefined;
   'settings:error-reporting': boolean;
   'settings:appearance-mode': 'light' | 'dark' | 'system';
   'settings:kubernetes-client-qps': number;

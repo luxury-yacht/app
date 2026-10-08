@@ -539,12 +539,6 @@ export interface QueryBackedNamespaceGridParams<
     QueryBackedGridParamsCommon<TPayload, TRow> {
   /** Optional: the wrapper resolves a canonical default when omitted. */
   keyExtractor?: (item: TRow, index: number) => string;
-  /**
-   * All Namespaces tables that show the Namespaces filter share one selection
-   * per cluster. Set false for a pane whose Namespaces filter another table's
-   * selection drives.
-   */
-  sharesAllNamespacesFilter?: boolean;
 }
 
 export function useQueryBackedNamespaceResourceGridTable<
@@ -564,7 +558,6 @@ export function useQueryBackedNamespaceResourceGridTable<
   defaultSort = { key: 'name', direction: 'asc' },
   namespace,
   supportsCustomMetadataColumns,
-  sharesAllNamespacesFilter = true,
   ...tableParams
 }: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow, TPayload> {
   const resolvedKeyExtractor = useResolvedQueryKeyExtractor(
@@ -585,8 +578,8 @@ export function useQueryBackedNamespaceResourceGridTable<
       isNamespaceScoped: !allNamespaces,
     },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
-    shareNamespaceFilter:
-      allNamespaces && Boolean(tableParams.showNamespaceFilters) && sharesAllNamespacesFilter,
+    // All Namespaces tables that show the Namespaces filter share one selection per cluster.
+    shareNamespaceFilter: allNamespaces && Boolean(tableParams.showNamespaceFilters),
   });
   const liveScope = useMemo(
     () =>

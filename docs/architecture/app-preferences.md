@@ -96,6 +96,13 @@ back into Preferences.
 - The shared sidebar hook subscribes to preference changes, so hydration,
   sibling toggles, and rollback update mounted groups.
 
+## Show Pods preferences
+
+- `workloadsShowPods` and `nodesShowPods` back the Workloads and Nodes tables'
+  "Show Pods" toggle (`useShowPodsToggle`). While on, opening a row whose kind
+  has a Pods tab opens the object panel on that tab. The value is read when a
+  row opens, so toggling never changes an open panel.
+
 ## Validation
 
 Exercise schema coverage, whole-batch rejection, persistence before effects,

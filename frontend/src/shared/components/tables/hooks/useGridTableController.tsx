@@ -185,12 +185,9 @@ export function useGridTableController<T>({
   customMetadataColumns,
   keyExtractor,
   getRowClassName,
-  isRowSelected,
   getRowStyle,
   onRowClick,
   onRowPointerClick,
-  onRowSelectionToggle,
-  onRowSelectionClear,
   onSort,
   sortConfig,
   loading = false,
@@ -392,7 +389,6 @@ export function useGridTableController<T>({
     getRowClassName,
     onRowClick,
     onRowPointerClick,
-    onRowSelectionClear,
     enableContextMenu,
     getCustomContextMenuItems,
     sortConfig,
@@ -543,24 +539,10 @@ export function useGridTableController<T>({
     suppressFocusedRowHighlight,
   });
 
-  const selectFocusedRow = useCallback(() => {
-    if (
-      !onRowSelectionToggle ||
-      focusedRowIndex === null ||
-      focusedRowIndex < 0 ||
-      focusedRowIndex >= tableData.length
-    ) {
-      return false;
-    }
-    onRowSelectionToggle(tableData[focusedRowIndex]);
-    return true;
-  }, [focusedRowIndex, onRowSelectionToggle, tableData]);
-
   useGridTableShortcuts({
     shortcutsActive,
     enableContextMenu,
     onOpenFocusedRow: activateFocusedRow,
-    onSelectFocusedRow: onRowSelectionToggle ? selectFocusedRow : undefined,
     onOpenContextMenu: openFocusedRowContextMenu,
     moveSelectionByDelta,
     jumpToIndex,
@@ -594,7 +576,6 @@ export function useGridTableController<T>({
   const renderRowContent = useGridTableRowRenderer({
     keyExtractor,
     getRowClassName: getRowClassNameWithFocus,
-    isRowSelected,
     getRowStyle,
     handleRowClick,
     handleRowMouseEnter,

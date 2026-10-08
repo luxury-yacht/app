@@ -45,9 +45,9 @@ same slot.
   Empty facet values stay distinct from literal labels such as `__empty__`.
 - `FavoritesContext` runs the handoff as waiting/restoring phases: it waits for
   the target cluster to be operational (and namespace readiness for namespace
-  routes), applies navigation, and only then exposes `favoriteToRestore`. Table
-  consumers wait for the matching route and every expected pane's persistence
-  to hydrate before restoring and consuming the request. A waiting request
+  routes), applies navigation, and only then exposes `favoriteToRestore`. The
+  table waits for the matching route and its persistence to hydrate before
+  restoring and consuming the request. A waiting request
   stays available to the cluster/navigation work that makes it ready;
   lifecycle progress extends its expiry window.
 - Reorder ignores repeated and unknown IDs, appends omitted favorites in their
@@ -94,7 +94,7 @@ resource views remain the place to browse and operate on full inventories.
 - Overview pod signals open Attention with `Kind = Pod` and Findings staged
   before navigation: starting/terminating → `pod-unhealthy`, failing →
   `error-presentation`, not-ready → `pod-not-ready`, restarts → `restarts`.
-  The ready Pod count still opens all-namespaces Workloads.
+  The ready Pod count opens all-namespaces Pods.
 - Never link Overview's whole warning-event section to Cluster Events: it
   mixes namespaced objects, while Cluster Events holds only events about
   cluster-scoped objects.

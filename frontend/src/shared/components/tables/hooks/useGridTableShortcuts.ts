@@ -44,7 +44,6 @@ type UseGridTableShortcutsOptions = {
   shortcutsActive: boolean;
   enableContextMenu: boolean;
   onOpenFocusedRow: () => boolean;
-  onSelectFocusedRow?: () => boolean;
   onOpenContextMenu: () => boolean;
   moveSelectionByDelta: (delta: number) => boolean;
   jumpToIndex: (index: number) => boolean;
@@ -66,7 +65,6 @@ export function useGridTableShortcuts({
   shortcutsActive,
   enableContextMenu,
   onOpenFocusedRow,
-  onSelectFocusedRow,
   onOpenContextMenu,
   moveSelectionByDelta,
   jumpToIndex,
@@ -147,8 +145,8 @@ export function useGridTableShortcuts({
       },
       {
         key: ' ',
-        handler: onSelectFocusedRow ?? onOpenFocusedRow,
-        description: onSelectFocusedRow ? 'Select focused row' : 'Open focused row',
+        handler: onOpenFocusedRow,
+        description: 'Open focused row',
         helpOrder: 51,
       },
       {

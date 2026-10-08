@@ -75,7 +75,7 @@ describe('useGridTableHoverSync', () => {
     );
 
     const row = document.createElement('div');
-    row.dataset.rowSelected = 'true';
+    row.dataset.rowFocused = 'true';
     row.tabIndex = 0;
     wrapper.appendChild(row);
     Object.defineProperty(row, 'getBoundingClientRect', {
@@ -108,7 +108,7 @@ describe('useGridTableHoverSync', () => {
     ).toBe(25);
     expect(
       requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
-        .hoverState.selected
+        .hoverState.focused
     ).toBe(true);
 
     document.body.classList.add('gridtable-disable-hover');
@@ -139,14 +139,14 @@ describe('useGridTableHoverSync', () => {
     document.body.removeChild(wrapper);
   });
 
-  it('keeps hover visible when leaving a selected or focused row', () => {
+  it('keeps hover visible when leaving the focused row', () => {
     const { wrapperRef, headerRef } = setupWrapper();
     const { result, unmount } = renderHook(() =>
       useGridTableHoverSync({ wrapperRef, headerInnerRef: headerRef, hideHeader: false })
     );
 
     const row = document.createElement('div');
-    row.dataset.rowSelected = 'true';
+    row.dataset.rowFocused = 'true';
     row.tabIndex = 0;
     wrapper.appendChild(row);
     Object.defineProperty(row, 'getBoundingClientRect', {
@@ -172,19 +172,6 @@ describe('useGridTableHoverSync', () => {
       ).handleRowMouseLeave(row);
     });
 
-    expect(
-      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
-        .hoverState.visible
-    ).toBe(true);
-
-    row.dataset.rowSelected = undefined;
-    row.dataset.rowFocused = 'true';
-    act(() => {
-      requireValue(
-        result.current,
-        'expected test value in useGridTableHoverSync.test.tsx'
-      ).handleRowMouseLeave(row);
-    });
     expect(
       requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
         .hoverState.visible
@@ -302,7 +289,6 @@ describe('useGridTableHoverSync', () => {
     );
 
     const row = document.createElement('div');
-    row.dataset.rowSelected = 'false';
     row.dataset.rowFocused = 'false';
     row.tabIndex = 0;
     wrapper.appendChild(row);

@@ -138,8 +138,6 @@ export interface GridTableFilterOptions {
   clusterDropdownSearchable?: boolean;
   clusterDropdownBulkActions?: boolean;
   includeClusterScopedSyntheticNamespace?: boolean;
-  /** A pane's structural control (e.g. Collapse Pods), rendered immediately before Namespace. */
-  beforeNamespaceActions?: IconBarItem[];
   /**
    * IconBar items before Download: Include metadata, the view's own icons, a
    * separator, and Favorite, in that order.
@@ -209,16 +207,10 @@ export interface GridTableProps<T> {
   diagnosticsLabel?: string;
   diagnosticsMode?: GridTableDiagnosticsMode;
   getRowClassName?: (item: T, index: number) => string | undefined | null;
-  /** Declares selected-row semantics independently from presentation classes. */
-  isRowSelected?: (item: T, index: number) => boolean;
   getRowStyle?: (item: T, index: number) => React.CSSProperties | undefined;
   onRowClick?: (item: T) => void;
   /** Called for pointer row activation after interactive descendants are excluded. */
   onRowPointerClick?: (item: T) => void;
-  /** When supplied, Space applies this selection action to the focused row. */
-  onRowSelectionToggle?: (item: T) => void;
-  /** Called when unused space in the scrollable table body is clicked. */
-  onRowSelectionClear?: () => void;
   onSort?: (key: string, targetDirection?: 'asc' | 'desc' | null) => void;
   sortConfig?: { key: string; direction: 'asc' | 'desc' | null };
   embedded?: boolean;
@@ -278,7 +270,6 @@ export interface InternalFilterOptions {
   namespaceDropdownBulkActions?: boolean;
   clusterDropdownSearchable?: boolean;
   clusterDropdownBulkActions?: boolean;
-  beforeNamespaceActions?: IconBarItem[];
   preActions?: IconBarItem[];
   totalIsExact?: boolean;
   partialDataLabel?: string;

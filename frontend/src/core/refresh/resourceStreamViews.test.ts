@@ -25,7 +25,7 @@ describe('isResourceStreamViewActive', () => {
   });
 
   it.each<[RefreshDomain, NonNullable<RefreshContext['activeNamespaceView']>]>([
-    ['pods', 'workloads'],
+    ['pods', 'pods'],
     ['namespace-workloads', 'workloads'],
     ['namespace-config', 'config'],
     ['namespace-network', 'network'],

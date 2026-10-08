@@ -18,15 +18,10 @@ virtualization, and native table accessibility. Apply the
   shared `useGridTableRowControls` implements them on committed rows and
   restores table focus when the focused control is removed, disabled, or
   hidden.
-- Row focus and row selection are separate contracts. `Enter` runs
-  `onRowClick`; when `onRowSelectionToggle` is supplied, `Space` runs it
-  instead. Pointer-only selection uses `onRowPointerClick`, which excludes
-  interactive descendants. A view that enables selection supplies
-  `isRowSelected` so the shared row renderer owns the selected class,
-  `data-row-selected`, and `aria-selected`. A primary click on unused space in
-  the scrollable body clears the focused-row highlight; controlled-selection
-  views supply `onRowSelectionClear` to clear selection at the same boundary.
-  Descendant rows, cells, and controls are excluded.
+- `Enter` and `Space` run `onRowClick` on the focused row. Pointer row
+  activation uses `onRowPointerClick`, which excludes interactive descendants.
+  A primary click on unused space in the scrollable body clears the focused-row
+  highlight; descendant rows, cells, and controls are excluded.
 - Shared filter and Columns dropdown menus measure both viewport axes on open:
   right-edge menus end-align when start alignment would overflow, and width stays
   capped to the visible viewport. The menus are portaled, so under CSS app zoom

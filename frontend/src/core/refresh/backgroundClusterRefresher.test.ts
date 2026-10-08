@@ -193,31 +193,34 @@ describe('BackgroundClusterRefresher', () => {
     await tickPromise;
   });
 
-  it('keeps background namespace pod views warm with namespace support data', async () => {
-    const fetchForCluster = vi
-      .spyOn(refreshOrchestrator, 'fetchDomainForCluster')
-      .mockResolvedValue(undefined);
-    const refresher = new BackgroundClusterRefresher(
-      () => ({
-        viewType: 'namespace',
-        previousView: 'overview',
-        activeNamespaceView: 'workloads',
-        activeClusterView: 'nodes',
-      }),
-      () => 'team-a'
-    );
-    refresher.updateClusters('cluster-a', ['cluster-a', 'cluster-b']);
+  it.each([
+    ['workloads', 'namespace-workloads'],
+    ['pods', 'pods'],
+  ] as const)(
+    'keeps a background %s view warm with only its own domain plus namespace support data',
+    async (activeNamespaceView, domain) => {
+      const fetchForCluster = vi
+        .spyOn(refreshOrchestrator, 'fetchDomainForCluster')
+        .mockResolvedValue(undefined);
+      const refresher = new BackgroundClusterRefresher(
+        () => ({
+          viewType: 'namespace',
+          previousView: 'overview',
+          activeNamespaceView,
+          activeClusterView: 'nodes',
+        }),
+        () => 'team-a'
+      );
+      refresher.updateClusters('cluster-a', ['cluster-a', 'cluster-b']);
 
-    await (refresher as unknown as { tick: () => Promise<void> }).tick();
+      await (refresher as unknown as { tick: () => Promise<void> }).tick();
 
-    expect(fetchForCluster).toHaveBeenCalledWith('namespaces', 'cluster-b');
-    expect(fetchForCluster).toHaveBeenCalledWith(
-      'namespace-workloads',
-      'cluster-b',
-      'namespace:team-a'
-    );
-    expect(fetchForCluster).toHaveBeenCalledWith('pods', 'cluster-b', 'namespace:team-a');
-  });
+      expect(fetchForCluster.mock.calls).toEqual([
+        ['namespaces', 'cluster-b'],
+        [domain, 'cluster-b', 'namespace:team-a'],
+      ]);
+    }
+  );
 
   it('does not refresh namespace content without a selected background namespace', async () => {
     const fetchForCluster = vi

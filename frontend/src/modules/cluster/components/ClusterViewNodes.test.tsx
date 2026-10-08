@@ -14,6 +14,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClusterNodeRow } from '@/core/refresh/types';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 import type { SortConfig, UseTableSortOptions } from '@/hooks/useTableSort';
 import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
@@ -268,6 +269,7 @@ describe('ClusterViewNodes', () => {
       isManual: false,
     };
     openWithObjectMock.mockReset();
+    resetAppPreferencesCacheForTesting();
     requestRefreshDomainStateMock.mockReset();
     requestRefreshDomainStateMock.mockImplementation(() =>
       Promise.resolve({
@@ -601,13 +603,36 @@ describe('ClusterViewNodes', () => {
       cell.props.onClick?.({ stopPropagation: () => undefined });
     });
 
+    // With Show Pods off the panel opens on its default (Details) tab.
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'Node',
         name: 'node-1',
         clusterId: 'alpha:ctx',
         clusterName: 'alpha',
-      })
+      }),
+      undefined
+    );
+  });
+
+  it('opens a node on its Pods tab while Show Pods is on', async () => {
+    await renderNodes([baseNode]);
+    const showPods = requireValue(
+      gridTablePropsRef.current.filters?.options?.preActions?.find(
+        (item) => 'id' in item && item.id === 'show-pods'
+      ),
+      'expected the Show Pods toggle'
+    );
+    if (showPods.type !== 'toggle') {
+      throw new Error('expected Show Pods to be a toggle');
+    }
+    act(() => showPods.onClick());
+
+    act(() => gridTablePropsRef.current.onRowClick?.(baseNode));
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'Node', name: 'node-1', clusterId: 'alpha:ctx' }),
+      { initialTab: 'pods' }
     );
   });
 

@@ -9,7 +9,7 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
 - Filter-bar `Tab`/`Shift+Tab` follows rendered control order, provider facets
   included; adding a facet must not create a focus trap.
 - One icon bar follows the search box, in order: Include metadata, the view's
-  `viewActions` (such as Clear selected workload or Manage ignored findings), a
+  `viewActions` (such as Show Pods or Manage ignored findings), a
   separator, Favorite, a separator, Download. Favorite has no leading separator
   when it is first. Include metadata shows when rows carry labels and
   annotations (`supportsCustomMetadataColumns`), except catalog-backed Browse
@@ -17,9 +17,6 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
   query-backed tables in the backend
   ([typed query contract](../architecture/large-data-query.md#typed-resource-query-contract)).
   Favorite shows on main-window views only.
-- Exception: a pane's structural control uses `beforeNamespaceActions`, its own
-  icon bar after Kind and before Namespace (the Pods pane's collapse control,
-  leftmost because Pods has no Kind filter).
 - Search ignores case on every table; there is no case-sensitive option. Saved
   state and favorites carrying the old `caseSensitive` flag load and drop it.
 - Download (`useGridTableDownloadAction` on `@shared/hooks/useDownloadMenu`,
@@ -67,9 +64,8 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
   cluster: `useGridTablePersistence({ shareNamespaceFilter })` keeps it in the
   cluster's `shared-namespace-filter` entry, saved immediately rather than
   debounced because navigation unmounts the table; the table's own entry stores
-  Namespaces as `all`. The Workloads route's Pods pane opts out because workload
-  selection rewrites its Namespaces filter. Single-namespace and cluster views
-  never read the shared selection.
+  Namespaces as `all`. Single-namespace and cluster views never read the shared
+  selection.
 - Multi-cluster local tables use the first-class Cluster filter: option values
   and row accessors carry `clusterId`; context names are display labels only.
   Build options from the table's full open-cluster scope so partial row
@@ -103,34 +99,33 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
   the full structural scope, stay stable when a selection narrows the result,
   and feed the shared typed-resource scope builder. Their providers publish
   Status, but the user-facing tables exclude it. Pods show Owner then Node,
-  after Namespace in all-namespaces views. Workloads row selection writes
-  Namespace and Owner through the same controlled filter state as the
-  dropdowns.
+  after Namespace in all-namespaces views.
 
 ### Favorite snapshots
 
 - A favorite is a main-window route (cluster, view tab, namespace) plus its
-  tables' state. Every main-window table view offers exactly one favorite
+  table's state. Every main-window table view offers exactly one favorite
   action; tables inside an object panel offer none, in either window, because
   the route they would save is not theirs.
 - A favorite snapshots the complete `GridTableFilterState` and table display
-  state (sort, visibility, column order) as one named pane. Favorites code
+  state (sort, visibility, column order) as one snapshot. Favorites code
   compares, edits, saves, and restores that state as a whole, with no separate
   allowlist of Kinds, Namespaces, or provider facet keys. Restoring reconciles
   the saved order with current definitions: removed keys drop and newly added
   columns append in declaration order.
-- The save modal derives editable controls from the pane's
+- The save modal derives editable controls from the table's
   `GridTableFilterOptions`, so structural filters and every `queryFacets` entry
   use the live table's vocabulary and selection semantics. Every favorite
   multi-select exposes the semantic `all` selection and persists it as
   `mode: all`, never a snapshot of the options at save time. Its closed control
   shows `All` for `mode: all`, `None` for `mode: none`, and `n selected` for
   `mode: some`.
-- A route with several tables stores one favorite with a named snapshot per
-  pane; the Workloads route owns `workloads` and `pods` behind one favorite
-  action (restore handoff: [navigation](navigation.md#favorites)).
-- Favorites schema v3 stores named panes only. The backend migrates v1 and v2
-  entries individually, keeping valid entries when another is malformed; legacy
-  Workloads and Pods favorites become the combined Workloads route, with the
-  unrecorded pane at defaults. The migrated collection saves as v3; a newer,
-  unsupported schema fails to load.
+- Favorites schema v4 stores one filter and table snapshot per favorite
+  (restore handoff: [navigation](navigation.md#favorites)). The backend migrates
+  older entries individually, keeping valid entries when another is malformed.
+  v3 favorites, saved while Workloads had a Pods pane, keep one table: a default
+  Workloads pane with a customised Pods pane becomes a Pods view favorite;
+  otherwise the Workloads pane wins. The migrated collection saves as v4; a
+  newer, unsupported schema fails to load.
+- Favorites exports use export schema 2. Import also accepts export schema 1,
+  flattening its panes with the same rule.

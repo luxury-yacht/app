@@ -11,9 +11,12 @@ import {
 } from './viewRegistry';
 
 describe('view registry', () => {
-  it('migrates the removed Pods route to the combined Workloads view', () => {
-    expect(parseNamespaceViewType('pods')).toBe('workloads');
-    expect(getViewDescriptor('namespace', 'pods')).toBeUndefined();
+  it('registers Pods as its own namespace view', () => {
+    expect(parseNamespaceViewType('pods')).toBe('pods');
+    // Cluster Overview's pod count opens Pods across all namespaces.
+    expect(NAMESPACE_VIEW_DESCRIPTORS.find(({ id }) => id === 'pods')?.supportsAllNamespaces).toBe(
+      true
+    );
   });
 
   it('maps target lens language onto the existing stable navigation surfaces', () => {

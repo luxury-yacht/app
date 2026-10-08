@@ -824,7 +824,7 @@ describe('ClusterOverview', () => {
     expect(navigateToClusterViewMock).toHaveBeenCalledWith('cluster');
   });
 
-  it('navigates to the Workloads Pods table without an unhealthy filter from the ready item', async () => {
+  it('navigates to the all-namespaces Pods view without an unhealthy filter from the ready item', async () => {
     mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
@@ -846,7 +846,7 @@ describe('ClusterOverview', () => {
     });
 
     expect(setSelectedNamespaceMock).toHaveBeenCalledWith(ALL_NAMESPACES_SCOPE);
-    expect(setActiveNamespaceTabMock).toHaveBeenCalledWith('workloads');
+    expect(setActiveNamespaceTabMock).toHaveBeenCalledWith('pods');
     expect(setSidebarSelectionMock).toHaveBeenCalledWith({
       type: 'namespace',
       value: ALL_NAMESPACES_SCOPE,

@@ -28,7 +28,6 @@ export type RenderRowContentFn<T> = (
 export interface UseGridTableRowRendererParams<T> {
   keyExtractor: (item: T, index: number) => string;
   getRowClassName?: (item: T, index: number) => string | undefined | null;
-  isRowSelected?: (item: T, index: number) => boolean;
   getRowStyle?: (item: T, index: number) => React.CSSProperties | undefined;
   handleRowClick: (item: T, index: number, event: React.MouseEvent) => void;
   handleRowMouseEnter: (element: HTMLDivElement) => void;
@@ -61,21 +60,11 @@ function rowPresentation<T>(
   item: T,
   index: number,
   virtualTop: number | undefined,
-  options: Pick<
-    UseGridTableRowRendererParams<T>,
-    'getRowClassName' | 'isRowSelected' | 'getRowStyle'
-  >
+  options: Pick<UseGridTableRowRendererParams<T>, 'getRowClassName' | 'getRowStyle'>
 ) {
-  const { getRowClassName, isRowSelected, getRowStyle } = options;
+  const { getRowClassName, getRowStyle } = options;
   const rowExtraClass = getRowClassName?.(item, index);
-  const selected = isRowSelected?.(item, index) ?? false;
-  const rowClassName = [
-    'gridtable-row',
-    selected ? 'gridtable-row--selected' : '',
-    rowExtraClass || '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const rowClassName = rowExtraClass ? `gridtable-row ${rowExtraClass}` : 'gridtable-row';
   const configuredRowStyle = getRowStyle ? getRowStyle(item, index) : undefined;
   const rowInlineStyle =
     virtualTop === undefined
@@ -85,16 +74,14 @@ function rowPresentation<T>(
           position: 'absolute' as const,
           transform: `translateY(${virtualTop}px)`,
         };
-  const isSelected = selected;
   const isFocused = rowClassName.includes('gridtable-row--focused');
 
-  return { rowClassName, rowInlineStyle, isSelected, isFocused };
+  return { rowClassName, rowInlineStyle, isFocused };
 }
 
 export function useGridTableRowRenderer<T>({
   keyExtractor,
   getRowClassName,
-  isRowSelected,
   getRowStyle,
   handleRowClick,
   handleRowMouseEnter,
@@ -159,11 +146,11 @@ export function useGridTableRowRenderer<T>({
       virtualTop?: number
     ): React.ReactNode => {
       const rowKey = keyExtractor(item, absoluteIndex);
-      const { rowClassName, rowInlineStyle, isSelected, isFocused } = rowPresentation(
+      const { rowClassName, rowInlineStyle, isFocused } = rowPresentation(
         item,
         absoluteIndex,
         virtualTop,
-        { getRowClassName, isRowSelected, getRowStyle }
+        { getRowClassName, getRowStyle }
       );
 
       // When shouldMeasure is true (virtualized rows), attach a ref callback
@@ -181,14 +168,13 @@ export function useGridTableRowRenderer<T>({
           id={rowId}
           className={rowClassName}
           style={rowInlineStyle}
-          aria-selected={isFocused || isSelected || undefined}
+          aria-selected={isFocused || undefined}
           data-row-key={rowKey}
           data-grid-slot={slotId}
           onClick={(e) => handleRowClick(item, absoluteIndex, e)}
           ref={setMeasurementRef}
           onMouseEnter={(e) => handleRowMouseEnter(e.currentTarget)}
           onMouseLeave={(e) => handleRowMouseLeave(e.currentTarget)}
-          data-row-selected={isSelected ? 'true' : undefined}
           data-row-focused={isFocused ? 'true' : undefined}
         >
           {visibleColumnModels.map((model) => renderCell(model, item, absoluteIndex))}
@@ -198,7 +184,6 @@ export function useGridTableRowRenderer<T>({
     [
       keyExtractor,
       getRowClassName,
-      isRowSelected,
       getRowStyle,
       handleRowClick,
       handleRowMouseEnter,

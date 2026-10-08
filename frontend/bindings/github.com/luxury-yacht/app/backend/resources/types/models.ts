@@ -45,6 +45,16 @@ export interface AppSettings {
     "sidebarNamespaceExtensionsExpanded": boolean;
 
     /**
+     * Opening a workload from Workloads lands on its Pods tab
+     */
+    "workloadsShowPods": boolean;
+
+    /**
+     * Opening a node from Nodes lands on its Pods tab
+     */
+    "nodesShowPods": boolean;
+
+    /**
      * Random local installation identifier used for pseudonymous telemetry
      */
     "anonymizedId": string;

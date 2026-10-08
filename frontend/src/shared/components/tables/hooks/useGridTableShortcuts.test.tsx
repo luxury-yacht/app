@@ -122,15 +122,13 @@ describe('useGridTableShortcuts', () => {
     );
   });
 
-  it('uses the optional row-selection action for Space while Enter still opens', async () => {
+  it('opens the focused row with both Enter and Space', async () => {
     const onOpenFocusedRow = vi.fn(() => true);
-    const onSelectFocusedRow = vi.fn(() => true);
     const Harness: React.FC = () => {
       useGridTableShortcuts({
         shortcutsActive: true,
         enableContextMenu: false,
         onOpenFocusedRow,
-        onSelectFocusedRow,
         onOpenContextMenu: () => false,
         moveSelectionByDelta: () => false,
         jumpToIndex: () => false,
@@ -155,8 +153,7 @@ describe('useGridTableShortcuts', () => {
       'Space shortcut'
     ).handler();
 
-    expect(onOpenFocusedRow).toHaveBeenCalledTimes(1);
-    expect(onSelectFocusedRow).toHaveBeenCalledTimes(1);
+    expect(onOpenFocusedRow).toHaveBeenCalledTimes(2);
   });
 
   it('wires moveSelectionByDelta and jumpToIndex to navigation shortcuts', async () => {

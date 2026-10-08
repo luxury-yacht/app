@@ -8,6 +8,7 @@
 import './ClusterViewNodes.css';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { useShowPodsToggle } from '@modules/object-panel/hooks/useShowPodsToggle';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import {
   RESOURCE_STATUS_QUERY_FACET_KEYS,
@@ -85,10 +86,12 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
       ),
     [selectedClusterId, selectedClusterName]
   );
+  const showPods = useShowPodsToggle('nodes');
   const handleNodeClick = useCallback(
-    (node: ClusterNodeRow) => openWithObject(nodeReference(node)),
-    [nodeReference, openWithObject]
+    (node: ClusterNodeRow) => openWithObject(nodeReference(node), showPods.openOptions('Node')),
+    [nodeReference, openWithObject, showPods]
   );
+  const viewActions = useMemo(() => [showPods.toggle], [showPods.toggle]);
   const handleNodeAltClick = useCallback(
     (node: ClusterNodeRow) => navigateToView(nodeReference(node)),
     [navigateToView, nodeReference]
@@ -285,6 +288,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
     showKindDropdown: false,
     diagnosticsLabel: 'Cluster Nodes',
     filterOptions: { isNamespaceScoped: false },
+    viewActions,
   });
 
   // The base query payload carries the poller freshness block for the usage

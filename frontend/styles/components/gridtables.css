@@ -462,11 +462,6 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
   opacity: 1;
 }
 
-.gridtable-hover-overlay.is-selected {
-  background-color: var(--grid-bg-selected, rgba(245, 158, 11, 0.1));
-  border-left-color: var(--color-accent);
-}
-
 /* .gridtable-hover-overlay.is-focused inherits border-left from base styles */
 
 body.gridtable-disable-hover .gridtable-hover-overlay {

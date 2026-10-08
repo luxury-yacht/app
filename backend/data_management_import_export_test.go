@@ -20,9 +20,12 @@ func dataManagementFavorite(id, name string) Favorite {
 		ViewType:  "global",
 		View:      "attention",
 		Namespace: "",
-		Panes: map[string]FavoritePaneState{
-			"main": defaultFavoritePaneState(),
+		Filters: FavoriteFilters{
+			Kinds:      FavoriteFilterSelection{Mode: "all"},
+			Namespaces: FavoriteFilterSelection{Mode: "all"},
+			Clusters:   FavoriteFilterSelection{Mode: "all"},
 		},
+		TableState: FavoriteTableState{SortColumn: "name", SortDirection: "asc", ColumnVisibility: map[string]bool{}},
 	}
 }
 
@@ -247,6 +250,42 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"favorite-a", "favorite-b"}, []string{got[0].ID, got[1].ID})
 	require.Equal(t, []int{0, 1}, []int{got[0].Order, got[1].Order})
+}
+
+// Export schema 1 carried v3 panes; import flattens them with the on-disk v3 rules.
+func TestDecodeFavoritesDataFileFlattensExportSchema1Panes(t *testing.T) {
+	data := []byte(`{
+		"format": "luxury-yacht-favorites",
+		"schemaVersion": 1,
+		"favorites": [
+			{"id":"nodes","name":"Nodes","viewType":"cluster","view":"nodes","namespace":"",
+			 "panes":{"main":{"filters":{"search":"worker","kinds":{"mode":"all"},"namespaces":{"mode":"all"},"clusters":{"mode":"all"}},"tableState":{"sortColumn":"name","sortDirection":"asc","columnVisibility":{}}}},"order":4},
+			{"id":"pods","name":"Pods","viewType":"namespace","view":"workloads","namespace":"team-a",
+			 "panes":{
+				"workloads":{"filters":{"search":"","kinds":{"mode":"all"},"namespaces":{"mode":"all"},"clusters":{"mode":"all"}},"tableState":{"sortColumn":"name","sortDirection":"asc","columnVisibility":{}}},
+				"pods":{"filters":{"search":"api","kinds":{"mode":"all"},"namespaces":{"mode":"all"},"clusters":{"mode":"all"}},"tableState":{"sortColumn":"restarts","sortDirection":"desc","columnVisibility":{}}}
+			 },"order":7}
+		]
+	}`)
+
+	favorites, err := decodeFavoritesDataFile(data)
+	require.NoError(t, err)
+	require.Len(t, favorites, 2)
+	require.Equal(t, "nodes", favorites[0].View)
+	require.Equal(t, "worker", favorites[0].Filters.Search)
+	require.Equal(t, "pods", favorites[1].View)
+	require.Equal(t, "api", favorites[1].Filters.Search)
+	require.Equal(t, "restarts", favorites[1].TableState.SortColumn)
+	require.Equal(t, []int{0, 1}, []int{favorites[0].Order, favorites[1].Order})
+}
+
+func TestDecodeFavoritesDataFileRejectsExportSchema1FavoriteWithoutState(t *testing.T) {
+	data := []byte(`{"format":"luxury-yacht-favorites","schemaVersion":1,"favorites":[
+		{"id":"empty","name":"Empty","viewType":"cluster","view":"nodes","namespace":"","panes":{},"order":0}
+	]}`)
+
+	_, err := decodeFavoritesDataFile(data)
+	require.ErrorContains(t, err, `favorite "empty"`)
 }
 
 func TestImportFavoritesRejectsDuplicateIDsWithoutChangingLibrary(t *testing.T) {
@@ -511,18 +550,6 @@ func TestDecodeFavoritesDataFileRejectsInvalidFavorites(t *testing.T) {
 				Favorites:     []Favorite{dataManagementFavorite("favorite", " ")},
 			},
 			message: "missing a name",
-		},
-		{
-			name: "missing panes",
-			document: favoritesDataFile{
-				Format:        favoritesDataFormat,
-				SchemaVersion: favoritesDataSchemaVersion,
-				Favorites: []Favorite{{
-					ID:   "favorite",
-					Name: "Favorite",
-				}},
-			},
-			message: "at least one named pane",
 		},
 		{
 			name: "duplicate name",

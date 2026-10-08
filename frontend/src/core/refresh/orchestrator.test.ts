@@ -1206,7 +1206,7 @@ describe('refreshOrchestrator', () => {
     );
   });
 
-  it('refreshes the Pods table when the combined Workloads view is active', async () => {
+  it('refreshes the namespace Pods table when the Pods view is active', async () => {
     refreshManagerMocks.triggerManualRefreshForContextMock.mockResolvedValue(
       undefined as unknown as undefined
     );
@@ -1215,7 +1215,7 @@ describe('refreshOrchestrator', () => {
     registerPodsDomain();
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
-      activeNamespaceView: 'workloads',
+      activeNamespaceView: 'pods',
       selectedNamespace: 'team-a',
       selectedClusterId: 'cluster-a',
     });
@@ -2606,7 +2606,7 @@ describe('refreshOrchestrator', () => {
     const scope = buildClusterScope('cluster-a', 'namespace:team-a');
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
-      activeNamespaceView: 'workloads',
+      activeNamespaceView: 'pods',
       selectedClusterId: 'cluster-a',
       selectedClusterIds: ['cluster-a'],
     });
@@ -2808,13 +2808,13 @@ describe('refreshOrchestrator', () => {
     refreshOrchestrator.setScopedDomainEnabled('pods', scope, true);
     await Promise.resolve();
 
-    // Not looking at the combined Workloads view: the broad namespace scope stays polled-only.
+    // Not looking at the Pods view: the broad namespace scope stays polled-only.
     expect(resourceStreamMocks.start).not.toHaveBeenCalledWith(scope);
 
-    // Switching to the combined Workloads view starts it.
+    // Switching to the Pods view starts it.
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
-      activeNamespaceView: 'workloads',
+      activeNamespaceView: 'pods',
     });
     await Promise.resolve();
 
@@ -3764,7 +3764,7 @@ describe('refreshOrchestrator', () => {
     const scopeB = buildClusterScope('cluster-b', 'namespace:default');
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
-      activeNamespaceView: 'workloads',
+      activeNamespaceView: 'pods',
       selectedClusterId: 'cluster-a',
       selectedClusterIds: ['cluster-a'],
       allConnectedClusterIds: ['cluster-a', 'cluster-b'],

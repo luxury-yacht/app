@@ -425,7 +425,8 @@ export type DebugContainerResponse = types$0.DebugContainerResponse;
 export type DrainNodeOptions = types$0.DrainNodeOptions;
 
 /**
- * Favorite represents a user-saved view bookmark.
+ * Favorite represents a user-saved view bookmark: a route plus its table's
+ * filter and display state.
  */
 export interface Favorite {
     "id": string;
@@ -436,7 +437,8 @@ export interface Favorite {
     "viewType": string;
     "view": string;
     "namespace": string;
-    "panes": { [_ in string]?: FavoritePaneState } | null;
+    "filters": FavoriteFilters;
+    "tableState": FavoriteTableState;
     "order": number;
 }
 
@@ -459,14 +461,6 @@ export interface FavoriteFilters {
     "clusters": FavoriteFilterSelection;
     "queryFacets"?: { [_ in string]?: FavoriteFilterSelection } | null;
     "includeMetadata": boolean;
-}
-
-/**
- * FavoritePaneState holds the complete GridTable state for one named pane.
- */
-export interface FavoritePaneState {
-    "filters": FavoriteFilters;
-    "tableState": FavoriteTableState;
 }
 
 /**

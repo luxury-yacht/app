@@ -50,7 +50,7 @@ describe('GridTableBody', () => {
       tableRef,
       tableClassName: '',
       useShortNames: false,
-      hoverState: { visible: false, selected: false, focused: false, top: 0, height: 0 },
+      hoverState: { visible: false, focused: false, top: 0, height: 0 },
       tableData: [{ id: '1' }, { id: '2' }],
       keyExtractor: (item) => item.id,
       emptyMessage: 'No rows',

@@ -98,8 +98,6 @@ export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   transformSortedData?: (sortedData: T[]) => T[];
   /** Surfaces without a workspace route can omit the workspace favorite control. */
   showFavoriteToggle?: boolean;
-  /** Named route-level favorite pane; omitted for ordinary one-table views. */
-  favoritePane?: { id: string; label: string };
 }
 
 export interface ClusterResourceGridTableParams<T extends ResourceGridTableRow>
@@ -194,5 +192,4 @@ export interface QueryResourceGridTableParams<T extends ResourceGridTableRow> {
   filterOptions: GridTableFilterOptions;
   rowIdentity?: (item: T, index: number) => string;
   virtualization?: GridTableVirtualizationOptions;
-  favoritePane?: { id: string; label: string };
 }

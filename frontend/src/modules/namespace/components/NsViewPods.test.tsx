@@ -6,15 +6,11 @@
  */
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { ChevronDownIcon, ChevronUpIcon } from '@shared/components/icons/SharedIcons';
-import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import type { GridTableFilterState, GridTableProps } from '@shared/components/tables/GridTable';
-import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import type React from 'react';
-import { act, isValidElement } from 'react';
+import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
 import type {
   CanonicalRowTestOverrides,
   PodMetricsInfo,
@@ -39,14 +35,12 @@ type CapturedGridTableProps = GridTableProps<PodSnapshotEntry> & {
   }>;
 };
 
-type ConfirmationProps = React.ComponentProps<typeof ConfirmationModal>;
-
 const {
   gridTablePropsRef,
-  confirmationPropsRef,
   openWithObjectMock,
   navigateToViewMock,
   namespaceColumnLinkMock,
+  namespaceColumnLinkTabRef,
   useTableSortMock,
   useUserPermissionsMock,
   queryNamespacesPermissionsMock,
@@ -59,9 +53,9 @@ const {
   errorHandlerMock,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as unknown as CapturedGridTableProps },
-  confirmationPropsRef: { current: null as unknown as ConfirmationProps },
   openWithObjectMock: vi.fn(),
   navigateToViewMock: vi.fn(),
+  namespaceColumnLinkTabRef: { current: null as string | null },
   namespaceColumnLinkMock: {
     onClick: vi.fn(),
     getClassName: () => 'object-panel-link',
@@ -88,7 +82,10 @@ const {
 }));
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
-  useNamespaceColumnLink: () => namespaceColumnLinkMock,
+  useNamespaceColumnLink: (tab: string) => {
+    namespaceColumnLinkTabRef.current = tab;
+    return namespaceColumnLinkMock;
+  },
 }));
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', async (importOriginal) => {
@@ -235,7 +232,8 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: navigateToViewMock }),
+  // The main window always has workspace navigation available.
+  useNavigateToView: () => ({ available: true, navigateToView: navigateToViewMock }),
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -243,10 +241,7 @@ vi.mock('@/hooks/useTableSort', () => ({
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: ConfirmationProps) => {
-    confirmationPropsRef.current = props;
-    return null;
-  },
+  default: () => null,
 }));
 
 vi.mock('@/core/data-access', () => ({
@@ -348,7 +343,6 @@ describe('NsViewPods', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
-    confirmationPropsRef.current = null as unknown as ConfirmationProps;
     openWithObjectMock.mockReset();
     navigateToViewMock.mockReset();
     runObjectActionMock.mockClear();
@@ -405,7 +399,10 @@ describe('NsViewPods', () => {
   });
 
   const renderPods = async (
-    props: Partial<React.ComponentProps<typeof NsViewPods>> & { data?: PodSnapshotEntry[] } = {},
+    props: Partial<React.ComponentProps<typeof NsViewPods>> & {
+      data?: PodSnapshotEntry[];
+      metrics?: PodMetricsInfo | null;
+    } = {},
     { skipDefaultQueryMock = false }: { skipDefaultQueryMock?: boolean } = {}
   ) => {
     // Include cluster metadata so GridTable key extraction stays cluster-scoped.
@@ -442,8 +439,7 @@ describe('NsViewPods', () => {
     // single-namespace assertions still see their pods. All-namespaces tests set their own mock.
     const effectiveNamespace = (props.namespace as string | undefined) ?? 'team-a';
     const effectiveData = (props.data as PodSnapshotEntry[] | undefined) ?? defaultPods;
-    const effectiveMetrics =
-      'metrics' in props ? (props.metrics ?? clusterMetricsMock.current ?? null) : defaultMetrics;
+    const effectiveMetrics = 'metrics' in props ? (props.metrics ?? null) : defaultMetrics;
     if (effectiveNamespace !== ALL_NAMESPACES_SCOPE && !skipDefaultQueryMock) {
       requestRefreshDomainStateMock.mockImplementation(() => {
         const rows = effectiveData;
@@ -467,180 +463,15 @@ describe('NsViewPods', () => {
       });
     }
 
-    // `data` is a test-only input that seeds the query mock above; pod rows are
-    // query-backed now, so it is not a NsViewPods prop.
-    const { data: _seedData, ...viewProps } = props;
+    // `data` and `metrics` are test-only inputs that seed the query payload above.
+    const { data: _seedData, metrics: _seedMetrics, ...viewProps } = props;
     await act(async () => {
-      root.render(<NsViewPods namespace="team-a" metrics={defaultMetrics} {...viewProps} />);
+      root.render(<NsViewPods namespace="team-a" {...viewProps} />);
       await Promise.resolve();
       await Promise.resolve();
     });
     return effectiveData;
   };
-
-  it.each(['Deployment', 'Widget'])(
-    'preserves the API group and row cluster for a %s owner link',
-    async (ownerKind) => {
-      const pod = createPod({
-        ref: { clusterId: 'OwnerCluster:Case', namespace: 'team-a' },
-        ownerKind,
-        ownerName: 'custom-owner',
-        ownerApiVersion: 'operators.example.io/v1beta2',
-      });
-      await renderPods({ data: [pod] });
-      const cell = requireReactElement<{
-        onClick: (event: {
-          altKey: boolean;
-          preventDefault: () => void;
-          stopPropagation: () => void;
-        }) => void;
-      }>(
-        requireValue(
-          gridTablePropsRef.current.columns.find((column) => column.key === 'owner'),
-          'expected owner column'
-        ).render(pod),
-        'expected owner link'
-      );
-      act(() =>
-        cell.props.onClick({ altKey: false, preventDefault: vi.fn(), stopPropagation: vi.fn() })
-      );
-      expect(openWithObjectMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          clusterId: 'OwnerCluster:Case',
-          namespace: 'team-a',
-          kind: ownerKind,
-          name: 'custom-owner',
-          group: 'operators.example.io',
-          version: 'v1beta2',
-        })
-      );
-      act(() =>
-        cell.props.onClick({ altKey: true, preventDefault: vi.fn(), stopPropagation: vi.fn() })
-      );
-      expect(navigateToViewMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          clusterId: 'OwnerCluster:Case',
-          namespace: 'team-a',
-          kind: ownerKind,
-          name: 'custom-owner',
-          group: 'operators.example.io',
-          version: 'v1beta2',
-        })
-      );
-    }
-  );
-
-  it.each([
-    { ownerKind: 'None', ownerName: 'None' },
-    { ownerKind: 'Deployment', ownerName: 'missing-version' },
-    { ownerKind: 'Widget', ownerName: 'missing-version' },
-  ])('keeps incomplete owner identity display-only: $ownerKind/$ownerName', async (owner) => {
-    const pod = createPod({ ...owner, ownerApiVersion: undefined });
-    await renderPods({ data: [pod] });
-    const cell = requireValue(
-      gridTablePropsRef.current.columns.find((column) => column.key === 'owner'),
-      'expected owner column'
-    ).render(pod);
-    expect(
-      isValidElement<{ onClick?: unknown }>(cell) ? cell.props.onClick : undefined
-    ).toBeUndefined();
-    expect(openWithObjectMock).not.toHaveBeenCalled();
-    expect(navigateToViewMock).not.toHaveBeenCalled();
-  });
-
-  const openDeleteConfirmation = () => {
-    const deleteItem = gridTablePropsRef.current
-      .getCustomContextMenuItems(gridTablePropsRef.current.data[0], 'name')
-      .find((item) => item.label === 'Delete');
-    act(() => {
-      requireValue(deleteItem, 'expected Delete context menu item').onClick?.();
-    });
-    if (!confirmationPropsRef.current?.isOpen) {
-      throw new Error('Expected delete confirmation to open');
-    }
-  };
-
-  it('puts the Pods collapse action left of the Namespace dropdown', async () => {
-    const onPodsCollapsedChange = vi.fn();
-    await renderPods({ onPodsCollapsedChange });
-
-    // The pane's collapse control stays left of the Namespace dropdown, out of the main icon bar.
-    const options = gridTablePropsRef.current.filters?.options;
-    const paneActions = options?.beforeNamespaceActions ?? [];
-    expect(
-      paneActions.map((action) => (action.type === 'separator' ? null : action.title))
-    ).toEqual(['Collapse Pods']);
-    expect(
-      (options?.preActions ?? []).some(
-        (action) => action.type !== 'separator' && action.title === 'Collapse Pods'
-      )
-    ).toBe(false);
-    const collapseAction = paneActions[0];
-    if (!collapseAction || collapseAction.type !== 'action') {
-      throw new Error('Expected the Collapse Pods action');
-    }
-    expect(requireReactElement(collapseAction.icon, 'expected collapse icon').type).toBe(
-      ChevronDownIcon
-    );
-
-    act(() => {
-      collapseAction.onClick();
-    });
-    expect(onPodsCollapsedChange).toHaveBeenCalledWith(true);
-  });
-
-  it('shows only the expand control and Show Pods text while collapsed', async () => {
-    const onPodsCollapsedChange = vi.fn();
-    await renderPods({ collapsed: true, onPodsCollapsedChange });
-
-    expect(scopedLifecycleMock).toHaveBeenCalledWith(
-      expect.objectContaining({ domain: 'pods', enabled: false })
-    );
-
-    expect(container.querySelector('[data-testid="grid-table"]')).toBeNull();
-    expect(container.querySelector('.gridtable-filter-bar')?.textContent).toBe('Show Pods');
-    expect(container.querySelectorAll('.gridtable-filter-bar button')).toHaveLength(1);
-    const expandButton = container.querySelector<HTMLButtonElement>(
-      '.gridtable-filter-bar button[title="Expand Pods"]'
-    );
-    expect(expandButton).not.toBeNull();
-    const renderedCollapseIcon = ChevronUpIcon({});
-    if (renderedCollapseIcon instanceof Promise) {
-      throw new Error('Expected ChevronUpIcon to render synchronously');
-    }
-    const collapseSvg = requireReactElement<{ children: React.ReactNode }>(
-      renderedCollapseIcon,
-      'expected collapsed-state icon'
-    );
-    expect(expandButton?.querySelector('svg path')?.getAttribute('d')).toBe(
-      requireReactElement<{ d: string }>(
-        collapseSvg.props.children,
-        'expected collapsed-state icon path'
-      ).props.d
-    );
-
-    act(() => expandButton?.click());
-    expect(onPodsCollapsedChange).toHaveBeenCalledWith(false);
-  });
-
-  it('expands a collapsed Pods pane when a Pod focus request targets it', async () => {
-    const onPodsCollapsedChange = vi.fn();
-    await renderPods({ collapsed: true, onPodsCollapsedChange });
-
-    act(() => {
-      eventBus.emit('gridtable:focus-request', {
-        clusterId: 'alpha:ctx',
-        group: '',
-        version: 'v1',
-        kind: 'Pod',
-        namespace: 'team-a',
-        name: 'web-1',
-        destinationViewId: 'namespace-pods',
-      });
-    });
-
-    expect(onPodsCollapsedChange).toHaveBeenCalledWith(false);
-  });
 
   it('uses the typed query result for all-namespaces pods on first render', async () => {
     const localPod = createPod({ ref: { name: 'local-provider-row', namespace: 'team-a' } });
@@ -688,126 +519,10 @@ describe('NsViewPods', () => {
     );
   });
 
-  it('populates Namespace and Owner filters for an embedded Workloads selection', async () => {
-    const onWorkloadFilterMismatch = vi.fn();
-    const workloadFilterRequest = {
-      type: 'set' as const,
-      workload: {
-        clusterId: 'alpha:ctx',
-        group: 'apps',
-        version: 'v1',
-        kind: 'Deployment',
-        namespace: 'team-a',
-        name: 'api',
-      },
-    };
-    const props = {
-      namespace: ALL_NAMESPACES_SCOPE,
-      workloadFilterRequest,
-      onWorkloadFilterMismatch,
-    };
-    await renderPods(props);
+  it('shares the All Namespaces namespace selection with the other views', async () => {
+    await renderPods({ namespace: ALL_NAMESPACES_SCOPE, showNamespaceColumn: true });
 
-    // Workload selection rewrites this pane's Namespace filter, so it must not
-    // leak into the selection the All Namespaces views share.
-    expect(gridPersistenceParamsRef.current?.shareNamespaceFilter ?? false).toBe(false);
-    expect(setFiltersMock).toHaveBeenCalledWith({
-      search: '',
-      kinds: { mode: 'all' },
-      namespaces: { mode: 'some', values: ['team-a'] },
-      clusters: { mode: 'all' },
-      queryFacets: {
-        owners: {
-          mode: 'some',
-          values: ['["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]'],
-        },
-      },
-      includeMetadata: false,
-    });
-    expect(container.querySelector('.metrics-warning-banner')).toBeNull();
-
-    act(() => gridTablePropsRef.current.filters?.onReset?.());
-    expect(onWorkloadFilterMismatch).toHaveBeenCalledOnce();
-    onWorkloadFilterMismatch.mockClear();
-
-    setFiltersMock.mockClear();
-    const currentFilters = requireValue(
-      gridTablePropsRef.current.filters?.value,
-      'expected controlled Pod filters'
-    );
-    act(() =>
-      gridTablePropsRef.current.filters?.onChange?.({
-        ...currentFilters,
-        queryFacets: {
-          ...currentFilters.queryFacets,
-          owners: { mode: 'some', values: ['another-owner'] },
-        },
-      })
-    );
-    expect(onWorkloadFilterMismatch).toHaveBeenCalledOnce();
-    expect(setFiltersMock).toHaveBeenCalledOnce();
-
-    await renderPods(props);
-    expect(setFiltersMock).toHaveBeenCalledOnce();
-  });
-
-  // A workload selected while the pane is collapsed is applied by the time it expands.
-  it('applies a workload selection made while the pane was collapsed', async () => {
-    const workloadFilterRequest = {
-      type: 'set' as const,
-      workload: {
-        clusterId: 'alpha:ctx',
-        group: 'apps',
-        version: 'v1',
-        kind: 'Deployment',
-        namespace: 'team-a',
-        name: 'api',
-      },
-    };
-    const props = {
-      namespace: ALL_NAMESPACES_SCOPE,
-      workloadFilterRequest,
-      onWorkloadFilterMismatch: vi.fn(),
-      onPodsCollapsedChange: vi.fn(),
-    };
-    await renderPods({ ...props, collapsed: true });
-    await renderPods({ ...props, collapsed: false });
-
-    expect(setFiltersMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        namespaces: { mode: 'some', values: ['team-a'] },
-        queryFacets: {
-          owners: {
-            mode: 'some',
-            values: ['["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]'],
-          },
-        },
-      })
-    );
-  });
-
-  it('preserves a persisted owner facet when the embedded pane has no workload selection', async () => {
-    persistedFiltersRef.current = {
-      search: '',
-      kinds: { mode: 'none' },
-      namespaces: { mode: 'some', values: ['team-b'] },
-      clusters: { mode: 'all' },
-      queryFacets: {
-        nodes: { mode: 'some', values: ['node-a'] },
-        owners: {
-          mode: 'some',
-          values: ['["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]'],
-        },
-      },
-      includeMetadata: false,
-    };
-
-    await renderPods({
-      namespace: ALL_NAMESPACES_SCOPE,
-      onWorkloadFilterMismatch: vi.fn(),
-    });
-
-    expect(setFiltersMock).not.toHaveBeenCalled();
+    expect(gridPersistenceParamsRef.current?.shareNamespaceFilter).toBe(true);
   });
 
   it('omits Status while preserving the backend-owned Node query facet', async () => {
@@ -905,60 +620,12 @@ describe('NsViewPods', () => {
     ]);
   });
 
-  it('uses backend statusPresentation for the pod status class', async () => {
-    const pods = [
-      createPod({
-        ref: { name: 'api' },
-
-        status: 'Running',
-        statusState: 'Running',
-        statusPresentation: 'warning',
-      }),
-    ];
-    await renderPods({ data: pods });
-
-    const statusColumn = requireValue(
-      gridTablePropsRef.current.columns.find((col) => col.key === 'status'),
-      'expected the pod status column'
-    );
-    const cell = requireReactElement<{ className?: string }>(
-      statusColumn.render(gridTablePropsRef.current.data[0]),
-      'expected the pod status cell element'
-    );
-    expect(cell.props.className).toBe('status-text warning');
-  });
-
-  it('renders zero pod restarts as no value without changing numeric sorting', async () => {
-    const pods = [createPod(), createPod({ ref: { name: 'restarted' }, restarts: 2 })];
-    await renderPods({ data: pods });
-
-    const column = requireValue(
-      gridTablePropsRef.current.columns.find(({ key }) => key === 'restarts'),
-      'expected pod restarts column'
-    );
-    expect(getTextContent(column.render(pods[0]))).toBe('-');
-    expect(getTextContent(column.render(pods[1]))).toBe('2');
-    expect(column.sortValue?.(pods[0])).toBe(0);
-    expect(column.sortValue?.(pods[1])).toBe(2);
-  });
-
-  it('passes keyed sort reuse and numeric pod sort values into useTableSort', async () => {
+  it('passes the canonical cluster-scoped pod row identity into useTableSort', async () => {
     const pods = await renderPods();
 
     expect(useTableSortMock).toHaveBeenCalled();
     const [, , , options] = useTableSortMock.mock.calls[0];
     expect(options.rowIdentity(pods[0], 0)).toBe('alpha:ctx|/v1/Pod/team-a/api');
-
-    const columns = options.columns as Array<{
-      key: string;
-      sortValue?: (item: PodSnapshotEntry) => unknown;
-    }>;
-    const cpuColumn = columns.find((column) => column.key === 'cpu');
-    const memoryColumn = columns.find((column) => column.key === 'memory');
-    const readyColumn = columns.find((column) => column.key === 'ready');
-    expect(cpuColumn?.sortValue?.(pods[0])).toBe(500);
-    expect(memoryColumn?.sortValue?.(pods[0])).toBe(200 * 1024 ** 2);
-    expect(readyColumn?.sortValue?.(pods[0])).toBe(2000002);
   });
 
   it('opens the object panel when a row name is clicked', async () => {
@@ -1062,59 +729,12 @@ describe('NsViewPods', () => {
     expect(cpuElement.props.metricsError).toBe('metrics api unavailable');
   });
 
-  it('omits delete context action when permission data is unavailable', async () => {
-    useUserPermissionsMock.mockReturnValue(new Map());
-    await renderPods();
-
-    const items = gridTablePropsRef.current.getCustomContextMenuItems(
-      gridTablePropsRef.current.data[0],
-      'name'
-    );
-    expect(items.find((item) => item.label === 'Delete')).toBeUndefined();
-  });
-
-  it('disables port forward in the context menu when the pod exposes no forwardable ports', async () => {
-    await renderPods({
-      data: [createPod({ ref: { name: 'no-ports' }, portForwardAvailable: false })],
-    });
-
-    const items = gridTablePropsRef.current.getCustomContextMenuItems(
-      gridTablePropsRef.current.data[0],
-      'name'
-    );
-    const portForwardItem = items.find((item) => item.label?.includes('Port Forward'));
-    expect(portForwardItem).toMatchObject({
-      label: 'Port Forward',
-      disabled: true,
-    });
-  });
-
-  it('suppresses delete action when permission is pending or denied', async () => {
-    useUserPermissionsMock.mockReturnValue(
-      new Map([['Pod:delete:team-a', { allowed: true, pending: true }]])
-    );
-    await renderPods();
-    const pendingItems = gridTablePropsRef.current.getCustomContextMenuItems(
-      gridTablePropsRef.current.data[0],
-      'name'
-    );
-    expect(pendingItems.find((item) => item.label === 'Delete')).toBeUndefined();
-
-    useUserPermissionsMock.mockReturnValue(
-      new Map([['Pod:delete:team-a', { allowed: false, pending: false }]])
-    );
-    await renderPods();
-    const deniedItems = gridTablePropsRef.current.getCustomContextMenuItems(
-      gridTablePropsRef.current.data[0],
-      'name'
-    );
-    expect(deniedItems.find((item) => item.label === 'Delete')).toBeUndefined();
-  });
-
   it('exposes namespace column and prefixed keys when namespace visibility is enabled', async () => {
     const pods = await renderPods({ showNamespaceColumn: true });
     const columns = gridTablePropsRef.current.columns;
     expect(columns.find((col) => col.key === 'namespace')).toBeTruthy();
+    // Namespace links open that namespace's Pods view.
+    expect(namespaceColumnLinkTabRef.current).toBe('pods');
     const key = gridTablePropsRef.current.keyExtractor(pods[0], 0);
     expect(key).toBe('alpha:ctx|/v1/Pod/team-a/api');
   });
@@ -1142,32 +762,6 @@ describe('NsViewPods', () => {
     expect(cpuElement.props.metricsError).toBe('cpu metrics unavailable');
   });
 
-  it('keeps the column definitions stable across metric interval rerenders', async () => {
-    await renderPods({
-      metrics: {
-        stale: false,
-        lastError: '',
-        collectedAt: 1700001000,
-        successCount: 1,
-        failureCount: 0,
-      },
-    });
-
-    const firstColumnsRef = gridTablePropsRef.current.columns;
-
-    await renderPods({
-      metrics: {
-        stale: true,
-        lastError: 'metrics stale',
-        collectedAt: 1700001001,
-        successCount: 1,
-        failureCount: 1,
-      },
-    });
-
-    expect(gridTablePropsRef.current.columns).toBe(firstColumnsRef);
-  });
-
   it('does not render a competing unhealthy-pods filter action', async () => {
     await renderPods({
       data: [
@@ -1178,44 +772,5 @@ describe('NsViewPods', () => {
 
     expect(container.querySelector('[title^="Show unhealthy pods"]')).toBeNull();
     expect(container.querySelector('[title="Show all pods"]')).toBeNull();
-  });
-
-  it('deletes a pod when confirmation succeeds', async () => {
-    await renderPods();
-    openDeleteConfirmation();
-
-    await act(async () => {
-      await confirmationPropsRef.current?.onConfirm?.();
-    });
-
-    expect(runObjectActionMock).toHaveBeenCalledWith({
-      action: 'delete',
-      target: {
-        clusterId: 'alpha:ctx',
-        group: '',
-        version: 'v1',
-        kind: 'Pod',
-        namespace: 'team-a',
-        name: 'api',
-      },
-    });
-  });
-
-  it('handles delete failure with errorHandler and resets confirmation state', async () => {
-    runObjectActionMock.mockRejectedValueOnce(new Error('boom'));
-
-    await renderPods();
-    openDeleteConfirmation();
-
-    await act(async () => {
-      await confirmationPropsRef.current?.onConfirm?.();
-    });
-
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
-      action: 'delete',
-      kind: 'Pod',
-      name: 'api',
-    });
-    expect(confirmationPropsRef.current?.isOpen).toBe(false);
   });
 });

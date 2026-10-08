@@ -83,7 +83,6 @@ describe('useGridTableRowRenderer', () => {
       useGridTableRowRenderer({
         keyExtractor: (_item, index) => `row-${index}`,
         getRowClassName: () => 'custom-row',
-        isRowSelected: () => true,
         getRowStyle: () => ({ color: 'red' }),
         handleRowClick,
         handleRowMouseEnter: vi.fn(),
@@ -114,7 +113,6 @@ describe('useGridTableRowRenderer', () => {
     };
     expect(rowProps.className).toContain('gridtable-row');
     expect(rowProps.className).toContain('custom-row');
-    expect(rowProps['data-row-selected']).toBe('true');
 
     const fakeEvent = {
       stopPropagation: vi.fn(),

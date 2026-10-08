@@ -6,11 +6,9 @@
  * using the panel-scoped clusterId — never the global sidebar selection.
  */
 
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type ResourceBar from '@shared/components/ResourceBar';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
-import { getTextContent } from '@shared/components/tables/GridTable.utils';
-import React, { act, isValidElement } from 'react';
+import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanonicalRowTestOverrides, PodSnapshotEntry } from '@/core/refresh/types';
@@ -191,12 +189,6 @@ const getGridColumn = (key: string) =>
     `expected ${key} column in PodsTab.test.tsx`
   );
 
-const getContextMenuItems = (row: PodSnapshotEntry) =>
-  requireValue(
-    getGridTableProps().getCustomContextMenuItems,
-    'expected context-menu factory in PodsTab.test.tsx'
-  )(row, 'name');
-
 const DEPLOYMENT_OBJECT_DATA = {
   clusterId: PANEL_CLUSTER_ID,
   clusterName: 'Panel Cluster A',
@@ -321,69 +313,6 @@ describe('PodsTab (query-backed)', () => {
       await Promise.resolve();
     });
   };
-
-  it.each(['Deployment', 'Widget'])(
-    'preserves the API group and row cluster for a %s owner link',
-    async (ownerKind) => {
-      const pod = createPod({
-        ref: { clusterId: 'OwnerCluster:Case', namespace: 'team-a' },
-        ownerKind,
-        ownerName: 'custom-owner',
-        ownerApiVersion: 'operators.example.io/v1beta2',
-      });
-      mockQueryRows([pod]);
-      await renderPods();
-      const cell = requireReactElement<{
-        onClick: (event: {
-          altKey: boolean;
-          preventDefault: () => void;
-          stopPropagation: () => void;
-        }) => void;
-      }>(getGridColumn('owner').render(pod), 'expected owner link');
-      act(() =>
-        cell.props.onClick({ altKey: false, preventDefault: vi.fn(), stopPropagation: vi.fn() })
-      );
-      expect(mockOpenWithObject).toHaveBeenCalledWith(
-        expect.objectContaining({
-          clusterId: 'OwnerCluster:Case',
-          namespace: 'team-a',
-          kind: ownerKind,
-          name: 'custom-owner',
-          group: 'operators.example.io',
-          version: 'v1beta2',
-        })
-      );
-      act(() =>
-        cell.props.onClick({ altKey: true, preventDefault: vi.fn(), stopPropagation: vi.fn() })
-      );
-      expect(navigateToViewMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          clusterId: 'OwnerCluster:Case',
-          namespace: 'team-a',
-          kind: ownerKind,
-          name: 'custom-owner',
-          group: 'operators.example.io',
-          version: 'v1beta2',
-        })
-      );
-    }
-  );
-
-  it.each([
-    { ownerKind: 'None', ownerName: 'None' },
-    { ownerKind: 'Deployment', ownerName: 'missing-version' },
-    { ownerKind: 'Widget', ownerName: 'missing-version' },
-  ])('keeps incomplete owner identity display-only: $ownerKind/$ownerName', async (owner) => {
-    const pod = createPod({ ...owner, ownerApiVersion: undefined });
-    mockQueryRows([pod]);
-    await renderPods();
-    const cell = getGridColumn('owner').render(pod);
-    expect(
-      isValidElement<{ onClick?: unknown }>(cell) ? cell.props.onClick : undefined
-    ).toBeUndefined();
-    expect(mockOpenWithObject).not.toHaveBeenCalled();
-    expect(navigateToViewMock).not.toHaveBeenCalled();
-  });
 
   it('renders a workload-scoped page in a native panel without workspace favorites providers', async () => {
     mockQueryRows([createPod({ ref: { name: 'query-pod' } })]);
@@ -542,102 +471,6 @@ describe('PodsTab (query-backed)', () => {
     expect(getGridTableProps().keyExtractor(pod, 0)).toBe('panel-cluster-A|/v1/Pod/team-a/api');
   });
 
-  it('uses backend statusPresentation for the pod status class', async () => {
-    const pod = createPod({ statusPresentation: 'warning' });
-    mockQueryRows([pod]);
-
-    await renderPods();
-
-    const podRow = requireValue(getGridTableProps().data[0], 'expected pod row');
-    const cell = requireReactElement<{ className?: string }>(
-      getGridColumn('status').render(podRow),
-      'expected status cell element in PodsTab.test.tsx'
-    );
-    expect(cell.props.className).toBe('status-text warning');
-  });
-
-  it('renders zero pod restarts as no value without changing numeric sorting', async () => {
-    const pods = [createPod(), createPod({ ref: { name: 'restarted' }, restarts: 2 })];
-    mockQueryRows(pods);
-    await renderPods();
-
-    const column = getGridColumn('restarts');
-    expect(getTextContent(column.render(pods[0]))).toBe('-');
-    expect(getTextContent(column.render(pods[1]))).toBe('2');
-    expect(column.sortValue?.(pods[0])).toBe(0);
-    expect(column.sortValue?.(pods[1])).toBe(2);
-  });
-
-  it('opens the Map from the pod context menu using the pod identity', async () => {
-    const pod = createPod({ ref: { name: 'api', namespace: 'team-a' } });
-    mockQueryRows([pod]);
-
-    await renderPods();
-
-    const podRow = requireValue(getGridTableProps().data[0], 'expected pod row');
-    const objectMapItem = getContextMenuItems(podRow).find(
-      (item) => item.actionId === OBJECT_ACTION_IDS.viewMap
-    );
-    expect(objectMapItem).toBeTruthy();
-
-    act(() => {
-      objectMapItem?.onClick?.();
-    });
-
-    expect(mockOpenWithObject).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'Pod',
-        name: 'api',
-        namespace: 'team-a',
-        clusterId: PANEL_CLUSTER_ID,
-        group: '',
-        version: 'v1',
-      }),
-      { initialTab: 'map' }
-    );
-  });
-
-  it('shows enabled Port Forward and Delete in the pod row context menu when permitted', async () => {
-    const pod = createPod({
-      ref: { name: 'api', namespace: 'team-a' },
-      portForwardAvailable: true,
-    });
-    mockQueryRows([pod]);
-
-    await renderPods();
-
-    const podRow = requireValue(getGridTableProps().data[0], 'expected pod row');
-    const items = getContextMenuItems(podRow);
-    const portForwardItem = requireValue(
-      items.find((item) => item.actionId === OBJECT_ACTION_IDS.portForward),
-      'expected port-forward item in PodsTab.test.tsx'
-    );
-    const deleteItem = items.find((item) => item.actionId === OBJECT_ACTION_IDS.delete);
-
-    expect(portForwardItem).toBeTruthy();
-    expect(portForwardItem.disabled).toBeFalsy();
-    expect(deleteItem).toBeTruthy();
-  });
-
-  it('shows Port Forward disabled when the pod has no forwardable ports', async () => {
-    const pod = createPod({
-      ref: { name: 'api', namespace: 'team-a' },
-      portForwardAvailable: false,
-    });
-    mockQueryRows([pod]);
-
-    await renderPods();
-
-    const podRow = requireValue(getGridTableProps().data[0], 'expected pod row');
-    const portForwardItem = requireValue(
-      getContextMenuItems(podRow).find((item) => item.actionId === OBJECT_ACTION_IDS.portForward),
-      'expected port-forward item in PodsTab.test.tsx'
-    );
-
-    expect(portForwardItem).toBeTruthy();
-    expect(portForwardItem.disabled).toBe(true);
-  });
-
   it('queries pod permissions for the namespaces of visible pods using the pod cluster', async () => {
     const pod = createPod({ ref: { name: 'api', namespace: 'team-a' } });
     mockQueryRows([pod]);
@@ -678,7 +511,7 @@ describe('PodsTab (query-backed)', () => {
     act(() => namespace.props.onClick({ altKey: false }));
     expect(setSelectedNamespaceMock).toHaveBeenCalledWith('team-b', 'RowCluster:Case');
     expect(optionalViewState.current?.onNamespaceSelect).toHaveBeenCalledWith('team-b');
-    expect(optionalViewState.current?.setActiveNamespaceTab).toHaveBeenCalledWith('workloads');
+    expect(optionalViewState.current?.setActiveNamespaceTab).toHaveBeenCalledWith('pods');
   });
 
   it('projects CPU and memory values and freshness from the panel-scoped query into metric cells', async () => {

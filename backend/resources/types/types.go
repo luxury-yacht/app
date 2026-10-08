@@ -39,6 +39,8 @@ type AppSettings struct {
 	SidebarClusterExtensionsExpanded         bool     `json:"sidebarClusterExtensionsExpanded"`
 	SidebarNamespaceResourcesExpanded        bool     `json:"sidebarNamespaceResourcesExpanded"`
 	SidebarNamespaceExtensionsExpanded       bool     `json:"sidebarNamespaceExtensionsExpanded"`
+	WorkloadsShowPods                        bool     `json:"workloadsShowPods"`                        // Opening a workload from Workloads lands on its Pods tab
+	NodesShowPods                            bool     `json:"nodesShowPods"`                            // Opening a node from Nodes lands on its Pods tab
 	AnonymizedID                             string   `json:"anonymizedId"`                             // Random local installation identifier used for pseudonymous telemetry
 	AppearanceMode                           string   `json:"appearanceMode"`                           // "light", "dark", or "system"
 	SelectedKubeconfigs                      []string `json:"selectedKubeconfigs"`                      // Multi-cluster selections in "path:context" form

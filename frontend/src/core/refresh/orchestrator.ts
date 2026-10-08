@@ -331,7 +331,7 @@ class RefreshOrchestrator {
     // Refresh namespaces across all enabled scopes.
     tasks.push(this.refreshEnabledScopes('namespaces', { isManual: true }));
 
-    const podsRefresh = this.triggerActiveWorkloadsPodsRefresh(targetContext);
+    const podsRefresh = this.triggerActiveNamespacePodsRefresh(targetContext);
     if (podsRefresh) {
       tasks.push(podsRefresh);
     }
@@ -1064,8 +1064,8 @@ class RefreshOrchestrator {
     });
   }
 
-  private triggerActiveWorkloadsPodsRefresh(context: RefreshContext): Promise<void> | null {
-    if (context.currentView !== 'namespace' || context.activeNamespaceView !== 'workloads') {
+  private triggerActiveNamespacePodsRefresh(context: RefreshContext): Promise<void> | null {
+    if (context.currentView !== 'namespace' || context.activeNamespaceView !== 'pods') {
       return null;
     }
 

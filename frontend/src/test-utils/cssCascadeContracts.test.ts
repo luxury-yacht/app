@@ -194,32 +194,6 @@ describe('strict CSS cascade contracts', () => {
     expect(filterContainer).toContain('margin-right: var(--dock-right-offset, 0px)');
   });
 
-  it.each([false, true])(
-    'applies the dock offset once to split filters (global styles last=%s)',
-    (globalLast) => {
-      const grid = readProjectFile('styles/components/gridtables.css').replace(
-        /var\(--dock-right-offset, 0px\)/g,
-        '320px'
-      );
-      const split = readProjectFile(
-        'src/modules/namespace/components/WorkloadsPodsSplit.css'
-      ).replace(/var\(--dock-right-offset, 0px\)/g, '320px');
-      const style = installStyles(...(globalLast ? [split, grid] : [grid, split]));
-      style.dataset.cssContract = 'split-filter-offset';
-      document.body.innerHTML = `
-      <div class="content-body">
-        <div class="gridtable-filter-container" id="ordinary"></div>
-        <div class="workloads-pods-split"><div class="gridtable-filter-container" id="split"></div></div>
-      </div>`;
-      expect(
-        window.getComputedStyle(document.querySelector('#ordinary') as HTMLElement).marginRight
-      ).toBe('320px');
-      expect(
-        window.getComputedStyle(document.querySelector('#split') as HTMLElement).marginRight
-      ).toBe('0px');
-    }
-  );
-
   it('keeps frameless window drag regions out of every header control surface', () => {
     const appHeaderCSS = readProjectFile('src/ui/layout/AppHeader.css');
     const appMenuCSS = readProjectFile('src/ui/layout/AppMenuBar.css');

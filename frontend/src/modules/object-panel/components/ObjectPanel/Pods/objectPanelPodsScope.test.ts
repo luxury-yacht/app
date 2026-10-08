@@ -51,13 +51,17 @@ describe('buildObjectPanelPodsScope', () => {
     ).toBeNull();
   });
 
-  it('uses the batch group for jobs', () => {
+  // The backend's workload scope reaches a CronJob's pods through its Jobs.
+  it.each([
+    ['Job', 'backup'],
+    ['CronJob', 'nightly'],
+  ])('scopes a %s through the batch group', (kind, name) => {
     expect(
       buildObjectPanelPodsScope(
-        { kind: 'Job', name: 'backup', namespace: 'team-a', group: 'batch', version: 'v1' },
-        'job'
+        { kind, name, namespace: 'team-a', group: 'batch', version: 'v1' },
+        kind.toLowerCase()
       )
-    ).toBe('workload:team-a:batch:v1:Job:backup');
+    ).toBe(`workload:team-a:batch:v1:${kind}:${name}`);
   });
 
   it('returns null for a workload without a namespace', () => {

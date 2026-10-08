@@ -3,119 +3,66 @@
  *
  * Query-backed Pods tab for the object panel. It scopes a typed `pods` query to
  * the panel's workload (`workload:…`) or node (`node:…`) and renders the
- * server-paginated, server-filtered page through the shared resource-inventory
- * table. The query is gated to the active pods tab.
+ * server-paginated, server-filtered page through the shared pod table. The
+ * query is gated to the active pods tab.
  */
 
 import { useOptionalViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import {
-  type ColumnSizingMap,
-  createAgeColumn,
-  createKindColumn,
-  createResourceBarColumn,
-  createResourceNameColumn,
-  createTextColumn,
-  withColumnSizing,
-  withNamespaceColumn,
-} from '@shared/components/tables/columnFactories';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { formatRestartCount } from '@shared/components/tables/restartCount';
-import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { useObjectLink } from '@shared/hooks/useObjectLink';
-import React, { useCallback, useEffect, useMemo } from 'react';
-import {
-  type PermissionSpecList,
-  POD_PERMISSIONS,
-  queryNamespacesPermissions,
-} from '@/core/capabilities';
-import type { PodMetricsInfo, PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
-import { workloadRowCpuValue, workloadRowMemoryValue } from '@/core/resource-metrics';
+import type React from 'react';
+import { useMemo } from 'react';
+import type { PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
 import '../shared.css';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import {
   RESOURCE_STATUS_QUERY_FACET_KEYS,
   selectPayloadRows,
 } from '@modules/resource-grid/typedResourceQueryScope';
+import {
+  type PodNamespaceLink,
+  usePodNamespacePermissions,
+  usePodTable,
+} from '@modules/resource-grid/usePodTable';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
-import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import { podNamespacePermissionTargets, podOwnerReference } from '@shared/utils/podTableModel';
 import { buildObjectPanelPodsScope } from './objectPanelPodsScope';
 
 interface PodsTabProps {
   isActive: boolean;
 }
 
-const COLUMN_SIZING: ColumnSizingMap = {
-  kind: { autoWidth: true },
-  name: { autoWidth: true },
-  status: { autoWidth: true },
-  ready: { autoWidth: true },
-  restarts: { autoWidth: true },
-  owner: { autoWidth: true },
-  node: { autoWidth: true },
-  namespace: { autoWidth: true },
-  cpu: { width: 200, minWidth: 200 },
-  memory: { width: 200, minWidth: 200 },
-  age: { autoWidth: true },
-};
-
-const workloadNameFromOwner = (pod: PodSnapshotEntry) => {
-  if (pod.ownerName) {
-    const ownerKindSuffix = pod.ownerKind ? ` (${pod.ownerKind})` : '';
-    return `${pod.ownerName}${ownerKindSuffix}`;
-  } else {
-    return '—';
-  }
-};
-
 export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
-  const { openWithObject, objectData } = useObjectPanel();
-  const { available: navigationAvailable, navigateToView } = useNavigateToView();
-  const objectLink = useObjectLink();
+  const { objectData } = useObjectPanel();
   const viewState = useOptionalViewState();
   const namespaceContext = useNamespace();
-  // Per-pod staleness comes from the pods query payload's metrics meta, which
-  // is scoped to the PANEL OBJECT's cluster (the globally selected cluster can
-  // be a different one). The query hook needs `columns`, so the column
-  // callbacks read this ref instead of closing over the query result.
-  const metricsRef = React.useRef<PodMetricsInfo | null>(null);
 
-  const getPodIdentity = useCallback(
-    (pod: PodSnapshotEntry) => ({
-      ...pod.ref,
-      clusterName: objectData?.clusterName,
+  // Namespace links switch the main window to that namespace's Pods view.
+  // A native panel window has no view state, so there they stay display-only.
+  const namespaceLink = useMemo<PodNamespaceLink>(
+    () => ({
+      onClick: (pod: PodSnapshotEntry) => {
+        if (!pod.ref.namespace || !viewState) {
+          return;
+        }
+        namespaceContext.setSelectedNamespace(pod.ref.namespace, pod.ref.clusterId);
+        viewState.onNamespaceSelect(pod.ref.namespace);
+        viewState.setActiveNamespaceTab('pods');
+      },
+      isInteractive: (pod: PodSnapshotEntry) => Boolean(pod.ref.namespace && viewState),
+      getClassName: (pod: PodSnapshotEntry) =>
+        pod.ref.namespace && viewState ? 'object-panel-link' : undefined,
     }),
-    [objectData?.clusterName]
-  );
-  const podIdentity = useResourceGridObjectIdentity({
-    fallbackClusterId: objectData?.clusterId,
-    getObject: getPodIdentity,
-    openWithObject,
-    navigateToView,
-  });
-  const { open: openPod, navigate: navigatePodForWorkspace } = podIdentity;
-  const navigatePod = navigationAvailable ? navigatePodForWorkspace : undefined;
-  const getOwnerReference = useCallback(
-    (pod: PodSnapshotEntry) => podOwnerReference(pod, objectData?.clusterName),
-    [objectData?.clusterName]
-  );
-  const handleNamespaceSelect = useCallback(
-    (pod: PodSnapshotEntry) => {
-      if (!pod.ref.namespace || !viewState) {
-        return;
-      }
-      // Route namespace clicks to the sidebar selection instead of the object panel.
-      namespaceContext.setSelectedNamespace(pod.ref.namespace, pod.ref.clusterId);
-      viewState.onNamespaceSelect(pod.ref.namespace);
-      viewState.setActiveNamespaceTab('workloads');
-    },
     [namespaceContext, viewState]
   );
+
+  // Pod identities, links and metrics staleness are scoped to the PANEL OBJECT's
+  // cluster; the globally selected cluster can be a different one.
+  const pods = usePodTable({
+    fallbackClusterId: objectData?.clusterId,
+    clusterName: objectData?.clusterName,
+    showNamespaceColumn: true,
+    namespaceLink,
+  });
 
   // Scope the pods query to the panel's workload/node. Null for objects we
   // cannot scope, which keeps the query gated off (see queryClusterId).
@@ -131,113 +78,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   // cluster-wide pods fetch when the object has no resolvable pod scope.
   const queryClusterId = isActive && podsScope ? (objectData?.clusterId ?? null) : null;
 
-  const columns = useMemo<GridColumnDefinition<PodSnapshotEntry>[]>(() => {
-    // Match workloads warning styling when restarts are non-zero.
-    const getRestartsClassName = (pod: PodSnapshotEntry) =>
-      (pod.restarts ?? 0) > 0 ? 'status-text warning' : undefined;
-
-    const base: GridColumnDefinition<PodSnapshotEntry>[] = [
-      createKindColumn<PodSnapshotEntry>({
-        getKind: () => 'Pod',
-        onClick: openPod,
-        onAltClick: navigatePod,
-        sortable: false,
-      }),
-      createResourceNameColumn<PodSnapshotEntry>((pod) => pod.ref.name, {
-        onClick: openPod,
-        onAltClick: navigatePod,
-        getClassName: () => 'object-panel-link',
-        getTitle: (pod) => pod.ref.name,
-      }),
-      createTextColumn<PodSnapshotEntry>('status', 'Status', (pod) => pod.status || '—', {
-        getClassName: (pod) => backendStatusTextClass(pod.statusPresentation),
-      }),
-      createTextColumn<PodSnapshotEntry>('ready', 'Ready', (pod) => pod.ready || '—', {
-        alignData: 'right',
-      }),
-      createTextColumn<PodSnapshotEntry>(
-        'restarts',
-        'Restarts',
-        (pod) => formatRestartCount(pod.restarts),
-        {
-          alignData: 'right',
-          sortValue: (pod) => pod.restarts ?? 0,
-          getTitle: (pod) => `${pod.restarts ?? 0} restarts`,
-          getClassName: getRestartsClassName,
-        }
-      ),
-      createTextColumn<PodSnapshotEntry>('owner', 'Owner', workloadNameFromOwner, {
-        ...objectLink(getOwnerReference),
-        isInteractive: (pod) => Boolean(getOwnerReference(pod)),
-        getClassName: (pod) => (getOwnerReference(pod) ? 'object-panel-link' : undefined),
-      }),
-      createTextColumn<PodSnapshotEntry>('node', 'Node', (pod) => pod.node || '—', {
-        ...objectLink((pod) =>
-          pod.node
-            ? buildRequiredObjectReference(
-                {
-                  kind: 'Node',
-                  name: pod.node,
-                  clusterId: pod.ref.clusterId,
-                  clusterName: objectData?.clusterName,
-                },
-                { fallbackClusterId: objectData?.clusterId }
-              )
-            : undefined
-        ),
-        isInteractive: (pod) => Boolean(pod.node),
-        getClassName: (pod) => (pod.node ? 'object-panel-link' : undefined),
-      }),
-    ];
-
-    const withNamespace = withNamespaceColumn(base, {
-      afterColumnKey: 'name',
-      accessor: (pod) => pod.ref.namespace,
-      onClick: handleNamespaceSelect,
-      isInteractive: (pod) => Boolean(pod.ref.namespace && viewState),
-      getClassName: (pod) => (pod.ref.namespace && viewState ? 'object-panel-link' : undefined),
-    });
-
-    withNamespace.push(
-      createResourceBarColumn<PodSnapshotEntry>({
-        key: 'cpu',
-        header: 'CPU',
-        type: 'cpu',
-        getUsage: (pod) => workloadRowCpuValue(pod, 'usage'),
-        getRequest: (pod) => workloadRowCpuValue(pod, 'request'),
-        getLimit: (pod) => workloadRowCpuValue(pod, 'limit'),
-        getMetricsStale: () => Boolean(metricsRef.current?.stale),
-        getMetricsError: () => metricsRef.current?.lastError || undefined,
-        getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:cpu`,
-        getShowEmptyState: () => true,
-      }),
-      createResourceBarColumn<PodSnapshotEntry>({
-        key: 'memory',
-        header: 'Memory',
-        type: 'memory',
-        getUsage: (pod) => workloadRowMemoryValue(pod, 'usage'),
-        getRequest: (pod) => workloadRowMemoryValue(pod, 'request'),
-        getLimit: (pod) => workloadRowMemoryValue(pod, 'limit'),
-        getMetricsStale: () => Boolean(metricsRef.current?.stale),
-        getMetricsError: () => metricsRef.current?.lastError || undefined,
-        getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:memory`,
-        getShowEmptyState: () => true,
-      }),
-      createAgeColumn<PodSnapshotEntry>('age', 'Age', (pod) => pod.age ?? '—')
-    );
-
-    return withColumnSizing(withNamespace, COLUMN_SIZING);
-  }, [
-    handleNamespaceSelect,
-    openPod,
-    objectData?.clusterId,
-    objectData?.clusterName,
-    objectLink,
-    getOwnerReference,
-    navigatePod,
-    viewState,
-  ]);
-
   const { gridTableProps, source, queryPayload } = useQueryBackedClusterResourceGridTable<
     PodSnapshotPayload,
     PodSnapshotEntry
@@ -251,8 +91,8 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     baseScope: podsScope ?? undefined,
     selectRows: selectPayloadRows,
     viewId: 'object-panel-pods',
-    columns,
-    objectIdentity: podIdentity,
+    columns: pods.columns,
+    objectIdentity: pods.identity,
     diagnosticsLabel: 'Object Panel Pods',
     // A favorite saves a main-window view, which this panel table is not.
     showFavoriteToggle: false,
@@ -264,47 +104,11 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
 
   // The base query payload carries the poller freshness block for the usage
   // joined onto the rows at serve.
-  const effectiveMetrics = queryPayload?.metrics ?? null;
-  metricsRef.current = effectiveMetrics;
-  // Query pod-action permissions for every (cluster, namespace) pair visible
-  // in this tab. Workload-scoped pods share the panel object's namespace, but
-  // node-scoped pods span arbitrary namespaces that the panel-level namespace
-  // query never covers. Keyed off the visible rows so permissions also
-  // self-heal after a permission-store reset; the store's TTL and in-flight
-  // dedup keep repeat calls cheap.
-  const visiblePermissionTargets = useMemo(
-    () => podNamespacePermissionTargets(source.rows, objectData?.clusterId),
-    [source.rows, objectData?.clusterId]
-  );
+  pods.metricsRef.current = queryPayload?.metrics ?? null;
 
-  useEffect(() => {
-    if (visiblePermissionTargets.length === 0) {
-      return;
-    }
-    void queryNamespacesPermissions(visiblePermissionTargets, {
-      specLists: [POD_PERMISSIONS] satisfies PermissionSpecList[],
-    });
-  }, [visiblePermissionTargets]);
-
-  const objectActions = useObjectActionController({
-    context: 'gridtable',
-    onOpen: (object) => openWithObject(object),
-    onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
-  });
-
-  // Context-menu references carry row facts (forwardable ports) on top of
-  // the shared identity so the action policy can gate Port Forward per pod.
-  const getContextMenuItems = useCallback(
-    (pod: PodSnapshotEntry) =>
-      objectActions.getMenuItems(
-        buildRequiredObjectReference(
-          getPodIdentity(pod),
-          { fallbackClusterId: objectData?.clusterId },
-          { portForwardAvailable: pod.portForwardAvailable }
-        )
-      ),
-    [getPodIdentity, objectActions, objectData?.clusterId]
-  );
+  // Workload-scoped pods share the panel object's namespace, but node-scoped
+  // pods span arbitrary namespaces that the panel-level namespace query never covers.
+  usePodNamespacePermissions(source.rows, objectData?.clusterId);
 
   return (
     <div className="object-panel-pods">
@@ -312,12 +116,12 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         <ResourceInventoryTable<PodSnapshotEntry>
           source={source}
           gridTableProps={gridTableProps}
-          columns={columns}
+          columns={pods.columns}
           diagnosticsLabel="Object Panel Pods"
           diagnosticsMode="live"
-          onRowClick={openPod}
+          onRowClick={pods.identity.open}
           enableContextMenu
-          getCustomContextMenuItems={getContextMenuItems}
+          getCustomContextMenuItems={pods.getContextMenuItems}
           tableClassName="gridtable-pods gridtable-pods--namespaced"
           spinnerMessage="Loading pods..."
           updatingMessage="Updating pods..."
@@ -325,7 +129,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
           emptyMessage="No pods found"
         />
       </div>
-      {objectActions.modals}
+      {pods.actionModals}
     </div>
   );
 };
