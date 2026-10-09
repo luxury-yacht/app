@@ -31,6 +31,10 @@ interface PodsTabProps {
   isActive: boolean;
 }
 
+// The panel's workload or node already fixes which pods are listed, so the
+// Owner and Node filters would only repeat it.
+const EXCLUDED_QUERY_FACET_KEYS = [...RESOURCE_STATUS_QUERY_FACET_KEYS, 'owners', 'nodes'];
+
 export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   const { objectData } = useObjectPanel();
   const viewState = useOptionalViewState();
@@ -86,7 +90,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     supportsCustomMetadataColumns: true,
     clusterId: queryClusterId,
     domain: 'pods',
-    excludedQueryFacetKeys: RESOURCE_STATUS_QUERY_FACET_KEYS,
+    excludedQueryFacetKeys: EXCLUDED_QUERY_FACET_KEYS,
     label: 'Object Panel Pods',
     baseScope: podsScope ?? undefined,
     selectRows: selectPayloadRows,

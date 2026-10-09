@@ -36,9 +36,6 @@ vi.mock('@/utils/errorHandler', () => ({ errorHandler: { warn: vi.fn(), handle: 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterId: 'alpha:ctx', managedClusterIds: ['alpha:ctx'] }),
 }));
-vi.mock('../components/ObjectPanel/ObjectPanelHeader', () => ({
-  ObjectPanelHeader: () => null,
-}));
 vi.mock('../components/ObjectPanel/Pods/PodsTab', () => ({
   PodsTab: () => {
     const { objectData } = useCurrentObjectPanel();

@@ -12,7 +12,6 @@ import { DockablePanel, useDockablePanelContext } from '@ui/dockable';
 import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
 import { useEffect, useMemo, useRef } from 'react';
 import { PanelLifecycleClusterSurface } from '@/core/panel-windows/panelLifecycleGuards';
-import { ObjectPanelHeader } from '../components/ObjectPanel/ObjectPanelHeader';
 import { PanelTabBoundary } from '../components/ObjectPanel/PanelTabBoundary';
 import { PodsTab } from '../components/ObjectPanel/Pods/PodsTab';
 import type { PodsPanelTarget } from '../contexts/PodsPanelStateContext';
@@ -62,7 +61,6 @@ export default function PodsPanel({
         onClose={onClose}
       >
         <PanelLifecycleClusterSurface clusterId={object.clusterId}>
-          <ObjectPanelHeader kind={object.kind} kindAlias={null} name={object.name} />
           <div className="object-panel-content">
             <PanelTabBoundary
               scope="pods-panel"

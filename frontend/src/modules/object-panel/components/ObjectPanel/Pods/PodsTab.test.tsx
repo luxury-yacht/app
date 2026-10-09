@@ -360,7 +360,9 @@ describe('PodsTab (query-backed)', () => {
     expect(getGridColumn('namespace').render(row)).toBe('team-a');
   });
 
-  it('omits Status while preserving the backend-owned Node query facet', async () => {
+  // The clicked workload or node already fixes which pods are listed.
+  it('offers no Status, Owner, or Node dropdowns', async () => {
+    const facet = (key: string, label: string) => ({ key, label, placeholder: `All ${key}` });
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
       data: {
@@ -370,33 +372,16 @@ describe('PodsTab (query-backed)', () => {
           total: 1,
           totalIsExact: true,
           facetValues: [
-            {
-              key: 'statuses',
-              options: [{ value: 'Running', label: 'Running' }],
-              exact: true,
-            },
-            {
-              key: 'nodes',
-              options: [{ value: 'node-a', label: 'node-a' }],
-              exact: true,
-            },
+            { key: 'statuses', options: [{ value: 'Running', label: 'Running' }], exact: true },
+            { key: 'owners', options: [{ value: 'owner-a', label: 'api' }], exact: true },
+            { key: 'nodes', options: [{ value: 'node-a', label: 'node-a' }], exact: true },
           ],
           facetsExact: true,
           capabilities: {
             queryFacets: [
-              {
-                key: 'statuses',
-                label: 'Status',
-                placeholder: 'All statuses',
-                bulkActions: true,
-              },
-              {
-                key: 'nodes',
-                label: 'Node',
-                placeholder: 'All nodes',
-                searchable: true,
-                bulkActions: true,
-              },
+              facet('statuses', 'Status'),
+              facet('owners', 'Owner'),
+              facet('nodes', 'Node'),
             ],
           },
         },
@@ -405,13 +390,7 @@ describe('PodsTab (query-backed)', () => {
 
     await renderPods();
 
-    expect(getGridTableProps().filters?.options?.queryFacets).toEqual([
-      expect.objectContaining({
-        key: 'nodes',
-        label: 'Node',
-        options: [{ value: 'node-a', label: 'node-a' }],
-      }),
-    ]);
+    expect(getGridTableProps().filters?.options?.queryFacets ?? []).toEqual([]);
   });
 
   it('issues a node-scoped pods query for Node panels', async () => {

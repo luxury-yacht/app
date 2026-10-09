@@ -321,6 +321,8 @@ tests, coverage of changed code, and the complexity check.
     closed dock state. `PodsPanelHost` now discards the tab's dock state whenever it closes.
   - Evidence: every behaviour test failed first, then passed; `PodsPanelLifecycle.test.tsx` runs the
     real dock provider (reopen after a group close; no tab left behind after a toggle-off close).
+  - Follow-ups from John's testing (2026-10-09): Show Pods on by default; the tab drops the kind/name
+    header row; the Pods tab content (dock tab and object panel) drops the Owner and Node dropdowns.
 
 ## Acceptance criteria
 

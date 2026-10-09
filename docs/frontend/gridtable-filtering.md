@@ -98,8 +98,10 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
 - Pods, Workloads, and Nodes are the reference implementations: options describe
   the full structural scope, stay stable when a selection narrows the result,
   and feed the shared typed-resource scope builder. Their providers publish
-  Status, but the user-facing tables exclude it. Pods show Owner then Node,
-  after Namespace in all-namespaces views.
+  Status, but the user-facing tables exclude it. The Pods view shows Owner
+  then Node, after Namespace in all-namespaces views; the object panel's Pods
+  tab and the Pods dock tab show neither, since their workload or node fixes
+  the pods listed.
 
 ### Favorite snapshots
 
