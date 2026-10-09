@@ -181,6 +181,37 @@ describe('useGridTableHoverSync', () => {
     document.body.removeChild(wrapper);
   });
 
+  // A selected row (the Pods dock tab's row) keeps its overlay when the pointer leaves.
+  it('marks the overlay selected and keeps it when leaving a selected row', () => {
+    const { wrapperRef, headerRef } = setupWrapper();
+    const { result, unmount } = renderHook(() =>
+      useGridTableHoverSync({ wrapperRef, headerInnerRef: headerRef, hideHeader: false })
+    );
+    const hover = () =>
+      requireValue(result.current, 'expected hover sync result in useGridTableHoverSync.test.tsx');
+
+    const row = document.createElement('div');
+    row.dataset.rowSelected = 'true';
+    row.tabIndex = 0;
+    wrapper.appendChild(row);
+    Object.defineProperty(row, 'getBoundingClientRect', {
+      value: () => ({ top: 15, height: 25 }) as DOMRect,
+    });
+    Object.defineProperty(wrapper, 'getBoundingClientRect', {
+      value: () => ({ top: 5 }) as DOMRect,
+    });
+    row.focus();
+
+    act(() => hover().updateHoverForElement(row));
+    expect(hover().hoverState.selected).toBe(true);
+
+    act(() => hover().handleRowMouseLeave(row));
+    expect(hover().hoverState.visible).toBe(true);
+
+    unmount();
+    document.body.removeChild(wrapper);
+  });
+
   it('aligns header and reschedules hover in animation frame', () => {
     const { wrapperRef, headerRef } = setupWrapper();
     const { result, unmount } = renderHook(() =>

@@ -1,6 +1,6 @@
 # One pods table: Pods view and Pods tab
 
-Status: implemented 2026-10-08; native check pending.
+Status: phases 1–6 implemented 2026-10-08; phase 7 (Pods dock tab) in progress; native check pending.
 
 Today pods are rendered by two separate implementations:
 
@@ -42,8 +42,8 @@ plus a shared component and the toggle.
 
 - **"Show Pods" is an icon-bar toggle**, not a menu item or a filtered jump into
   the Pods view.
-- **The toggle's state is an app preference per view** (Workloads, Nodes), kept
-  across restarts, through the preferences path
+- **The toggle's state is an app preference per view** (Workloads, Nodes), on
+  by default (decided 2026-10-09), kept across restarts, through the preferences path
   (`docs/architecture/app-preferences.md`). It is not part of table state or
   favorites.
 - **Turning the toggle on affects only the next object opened.** An open panel
@@ -199,6 +199,39 @@ plus a shared component and the toggle.
 - Frontend: `Favorite` carries `filters` and `tableState`; `FavoritePaneGroup`,
   pane ids and labels, and pane-keyed drafts in the save modal go away.
 
+## Phase 7: Pods dock tab (decided 2026-10-08)
+
+Phase 5 made "Show Pods" open the full object panel on its Pods tab. It is
+replaced by a dedicated dock tab.
+
+- **What it is.** One "Pods · <name>" tab per cluster, shared by Workloads and
+  Nodes. It is a dock tab like Application Logs and Diagnostics
+  (`AppLogsPanel.tsx:771`): it opens at the bottom by default and keeps the
+  standard dock controls (dock right/bottom, float, maximize, close;
+  `DockablePanelGroup.tsx:541`). It has no native window, which carries object
+  panels only (`WorkspacePanelCoordinator.tsx:142`). It shows the existing Pods
+  tab content for one workload or node at a time.
+- **Opening it.** While a table's "Show Pods" toggle is on:
+  - a click anywhere in a row outside its links and controls
+    (`onRowPointerClick`), or Enter/Space on the focused row, shows that row's
+    pods in the tab, opening it if needed and bringing it to the front of its
+    dock group without taking keyboard focus (`switchTab`,
+    `DockablePanelProvider.tsx:499-503`);
+  - the Kind badge and Name link open the full object panel on Details;
+  - a row without pods (a standalone Pod) does nothing.
+  This is a deliberate exception to "a mouse click on a row never opens a
+  panel", limited to the toggle being on.
+- **Highlight.** The row whose pods the tab shows is highlighted: GridTable's
+  `isRowSelected` (selected class, `data-row-selected`, `aria-selected`, hover
+  overlay) comes back; Space and background-click selection do not.
+- **Closing.** The tab's close control closes it. Turning a table's toggle off
+  closes any Pods tab that table opened. However it closes, its dock state is
+  discarded, so the next row click opens a fresh tab at the bottom.
+- **State.** A small per-cluster provider (`PodsPanelStateContext`) holds the
+  target object and the table that opened it; closed clusters are pruned, as in
+  `ObjectPanelStateContext.tsx:305-320`. `AppLayout` lazily mounts the tab for
+  the selected cluster, beside the object panels.
+
 ## Phases
 
 Use red/green TDD for each behaviour change. Finish each phase with focused
@@ -221,6 +254,8 @@ tests, coverage of changed code, and the complexity check.
 6. **Docs, release notes, gate, native check.**
    - `mise exec -- wails3 task qc:prerelease`.
    - Native check in `mise exec -- wails3 dev` with the Playwright MCP.
+7. **Pods dock tab** (see Phase 7 above): row highlight, per-cluster state, the
+   dock tab, table wiring, docs and gate.
 
 ## Progress
 
@@ -277,6 +312,15 @@ tests, coverage of changed code, and the complexity check.
     `eventBus.ts` (type-only change).
   - Native check not run: no Playwright MCP in the session, and `~/.kube` holds production
     kubeconfigs.
+- **Phase 7 (Pods dock tab): done 2026-10-08.**
+  - `PodsPanelStateContext` (per-cluster target), `pods-panel/PodsPanel` (dock tab reusing the Pods
+    tab content), `PodsPanelHost` (lazy mount + dock-state discard), `useShowPodsToggle` (toggle, row
+    activation, highlight key), GridTable `isRowSelected` restored, `PanelTabBoundary` extracted.
+  - Fix found in John's testing: after another panel shared the bottom dock and the dock's close
+    control closed the group, row clicks no longer reopened the tab — its reused panel ID kept a
+    closed dock state. `PodsPanelHost` now discards the tab's dock state whenever it closes.
+  - Evidence: every behaviour test failed first, then passed; `PodsPanelLifecycle.test.tsx` runs the
+    real dock provider (reopen after a group close; no tab left behind after a toggle-off close).
 
 ## Acceptance criteria
 
@@ -286,14 +330,15 @@ tests, coverage of changed code, and the complexity check.
 | 2 | The Pods tab shows a workload's or node's pods from the same component, scoped as today, with favorites off. | automated (`PodsTab.test.tsx`); native pending |
 | 3 | Pod columns, actions, permissions and metrics behave the same in the Pods view and the Pods tab; node pods across namespaces get per-namespace permissions. | automated (`usePodTable.test.tsx`) |
 | 4 | Workloads is a single table: no split, no Pods pane, and Space opens the focused workload. | automated (single-table and Enter/Space tests) |
-| 5 | With "Show Pods" on, opening a workload or node from its table (link or Enter) opens its panel on the Pods tab, and an already-open panel for it switches to Pods. With it off, Details opens. Rows without a Pods tab open as usual. | automated for open handlers; already-open panel switching relies on `useObjectPanel.ts:147-153` (not re-tested); native pending |
-| 6 | The toggle is remembered per view across restarts; turning it on leaves an open panel's tab alone. | automated (backend persistence and hook tests); open panel untouched by design (read at open) |
+| 5 | With "Show Pods" on, a row click or Enter/Space shows that workload's or node's pods in the cluster's Pods dock tab and highlights the row; the Kind badge and Name link open the full panel on Details; a standalone Pod row does nothing. With it off, rows behave as before. | automated (Workloads/Nodes Show Pods tests, `useShowPodsToggle`, `PodsPanel`, `PodsPanelHost`); native pending |
+| 6 | The toggle is remembered per view across restarts; turning it off closes the Pods tab that table opened. | automated (backend persistence test; hook "closes the Pods tab a table opened" test) |
 | 6a | A CronJob's panel has a Pods tab listing the pods of all its Jobs, live, alongside its Jobs tab. | automated (tabs, scope, backend owner tests); native pending |
 | 7 | Pod "Go to Table View" from the object panel, object map and other tables lands on and focuses that pod in the Pods view. | automated (`kindViewMap.test.ts`, default focus id); native pending |
 | 8 | Cluster Overview's unfiltered pod count opens all-namespaces Pods. | automated (`ClusterOverview.test.tsx`) |
 | 9 | Old Workloads favorites migrate as decided, on load and on import, and restore without a `pods` pane; old Pods-view favorites become Pods view favorites. | automated (Go migration and import tests) |
 | 10 | The removed split-only options and selection API have no remaining consumers; contract tests pass. | done (grep shows no references) |
-| 11 | `qc:prerelease` passes on the final tree; native check of the Pods view, the Pods tab, and the toggle in both views. | `qc:prerelease` passed; native check pending |
+| 12 | The Pods dock tab is one per cluster, titled "Pods · name", opens at the bottom with standard dock controls, comes to the front for each request without taking focus, and its pods query pauses while another tab is in front. | automated (`PodsPanel.test.tsx`, `PodsPanelStateContext.test.tsx`); native pending |
+| 11 | `qc:prerelease` passes on the final tree; native check of the Pods view, the Pods tab, the Pods dock tab, and the toggle in both views. | phase 7 gate below; native check pending |
 
 ## Docs and release notes
 

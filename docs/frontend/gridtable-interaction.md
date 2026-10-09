@@ -20,8 +20,14 @@ virtualization, and native table accessibility. Apply the
   hidden.
 - `Enter` and `Space` run `onRowClick` on the focused row. Pointer row
   activation uses `onRowPointerClick`, which excludes interactive descendants.
-  A primary click on unused space in the scrollable body clears the focused-row
+  A mouse click on a row opens nothing unless the view opts in; Workloads and
+  Nodes do so only while "Show Pods" is on, to fill the Pods dock tab. A
+  primary click on unused space in the scrollable body clears the focused-row
   highlight; descendant rows, cells, and controls are excluded.
+- A view marks rows selected through `isRowSelected`; the shared row renderer
+  owns the selected class, `data-row-selected`, and `aria-selected`, and the
+  hover overlay stays on a selected row. Workloads and Nodes select the row
+  whose pods the Pods dock tab shows.
 - Shared filter and Columns dropdown menus measure both viewport axes on open:
   right-edge menus end-align when start alignment would overflow, and width stays
   capped to the visible viewport. The menus are portaled, so under CSS app zoom

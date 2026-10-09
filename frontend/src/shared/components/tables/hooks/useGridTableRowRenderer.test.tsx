@@ -235,6 +235,44 @@ describe('useGridTableRowRenderer', () => {
     renderers.cleanup();
   });
 
+  // The Pods dock tab highlights the row whose pods it shows.
+  it('marks only the rows the view selects as selected', () => {
+    const renderers = renderHook(() =>
+      useGridTableRowRenderer({
+        keyExtractor: (item) => item.name,
+        isRowSelected: (item) => item.name === 'api',
+        handleRowClick: vi.fn(),
+        handleRowMouseEnter: vi.fn(),
+        handleRowMouseLeave: vi.fn(),
+        columnRenderModels: baseColumns,
+        columnVirtualizationConfig: {
+          enabled: false,
+          overscanColumns: 0,
+          stickyStart: 0,
+          stickyEnd: 0,
+        },
+        columnWindowRange: { startIndex: 0, endIndex: 1 },
+        handleContextMenu: vi.fn(),
+        getCachedCellContent: () => ({ content: 'cell', text: 'cell' }),
+        measureRowRef: vi.fn(),
+      })
+    );
+    const rowProps = (name: string) =>
+      (renderers.get()({ name }, 0, false, `row-${name}`) as React.ReactElement).props as {
+        className: string;
+        'aria-selected'?: boolean;
+        'data-row-selected'?: string;
+      };
+
+    expect(rowProps('api').className).toContain('gridtable-row--selected');
+    expect(rowProps('api')['data-row-selected']).toBe('true');
+    expect(rowProps('api')['aria-selected']).toBe(true);
+    expect(rowProps('web').className).not.toContain('gridtable-row--selected');
+    expect(rowProps('web')['data-row-selected']).toBeUndefined();
+    expect(rowProps('web')['aria-selected']).toBeUndefined();
+    renderers.cleanup();
+  });
+
   it('supports right-aligned data independently from header alignment', () => {
     const rightAlignedColumns: RowRendererOptions['columnRenderModels'] = [
       {

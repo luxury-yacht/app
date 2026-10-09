@@ -14,6 +14,7 @@ export interface HoverState {
   visible: boolean;
   top: number;
   height: number;
+  selected: boolean;
   focused: boolean;
 }
 
@@ -47,6 +48,7 @@ export function useGridTableHoverSync({
     visible: false,
     top: 0,
     height: 0,
+    selected: false,
     focused: false,
   });
 
@@ -74,6 +76,7 @@ export function useGridTableHoverSync({
                 visible: false,
                 top: prev.top,
                 height: prev.height,
+                selected: false,
                 focused: false,
               }
             : prev
@@ -88,6 +91,7 @@ export function useGridTableHoverSync({
       const rowRect = element.getBoundingClientRect();
       const top = rowRect.top - wrapperRect.top + wrapper.scrollTop;
       const height = rowRect.height;
+      const selected = element.dataset.rowSelected === 'true';
       const focused = element.dataset.rowFocused === 'true';
       hoverRowRef.current = element;
       setHoverState((prev) => {
@@ -95,11 +99,12 @@ export function useGridTableHoverSync({
           prev.visible &&
           Math.abs(prev.top - top) < 0.5 &&
           Math.abs(prev.height - height) < 0.5 &&
+          prev.selected === selected &&
           prev.focused === focused
         ) {
           return prev;
         }
-        return { visible: true, top, height, focused };
+        return { visible: true, top, height, selected, focused };
       });
     },
     [isHoverSuppressed, wrapperRef]
@@ -131,13 +136,19 @@ export function useGridTableHoverSync({
       if (wrapper && !wrapper.contains(document.activeElement)) {
         return;
       }
-      if (element?.dataset.rowFocused === 'true') {
-        updateHoverForElement(element);
-        return;
+      if (element) {
+        const selected = element.dataset.rowSelected === 'true';
+        const focused = element.dataset.rowFocused === 'true';
+        if (selected || focused) {
+          updateHoverForElement(element);
+          return;
+        }
       }
       hoverRowRef.current = null;
       setHoverState((prev) =>
-        prev.visible ? { visible: false, top: prev.top, height: prev.height, focused: false } : prev
+        prev.visible
+          ? { visible: false, top: prev.top, height: prev.height, selected: false, focused: false }
+          : prev
       );
     },
     [updateHoverForElement, isHoverSuppressed, wrapperRef]

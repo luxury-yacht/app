@@ -21,10 +21,8 @@ import type {
   ViewType,
 } from '@modules/object-panel/components/ObjectPanel/types';
 import { loadObjectPanelDetails } from '@modules/object-panel/objectPanelDetailsLazyModule';
-import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
-import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
-import LoadingSpinner from '@shared/components/LoadingSpinner';
 import React, { lazy, type ReactNode, useMemo } from 'react';
+import { PanelTabBoundary } from './PanelTabBoundary';
 
 const DetailsTab = lazy(loadObjectPanelDetails);
 const EventsTab = lazy(
@@ -54,45 +52,6 @@ const PodsTab = lazy(() =>
 );
 const ShellTab = lazy(() => import('@modules/object-panel/components/ObjectPanel/Shell/ShellTab'));
 const YamlTab = lazy(() => import('@modules/object-panel/components/ObjectPanel/Yaml/YamlTab'));
-
-const createTabErrorFallback = (tabName: string) => (_error: Error, reset: () => void) => (
-  <TabErrorFallback tabName={tabName} reset={reset} />
-);
-
-// Tab implementations share recovery/loading policy while retaining their own reset keys.
-const PanelTabBoundary = ({
-  scope,
-  resetKeys,
-  tabName,
-  loadingName,
-  children,
-}: {
-  scope: string;
-  resetKeys?: string[];
-  tabName: string;
-  loadingName: string;
-  children: ReactNode;
-}) => (
-  <ErrorBoundary scope={scope} resetKeys={resetKeys} fallback={createTabErrorFallback(tabName)}>
-    <React.Suspense fallback={<LoadingSpinner message={`Loading ${loadingName}...`} />}>
-      {children}
-    </React.Suspense>
-  </ErrorBoundary>
-);
-
-const TabErrorFallback = ({ tabName, reset }: { tabName: string; reset: () => void }) => (
-  <div className="object-panel-tab-content">
-    <div className="object-panel-tab-error">
-      <h4>
-        Failed to load <ErrorSurface kind="reported" message={tabName} />
-      </h4>
-      <p>An error occurred while rendering this tab.</p>
-      <button type="button" className="button generic" onClick={reset}>
-        Retry
-      </button>
-    </div>
-  </div>
-);
 
 // Retained tabs mount on first view and then stay mounted, hidden from input and assistive tech
 // while another tab is shown, so their state survives tab switches.

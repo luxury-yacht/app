@@ -1,14 +1,24 @@
 /**
  * frontend/src/modules/object-panel/hooks/useShowPodsToggle.test.tsx
  *
- * The "Show Pods" table toggle: a per-view remembered preference that makes
- * opening a workload or node land on its object panel's Pods tab.
+ * The "Show Pods" table toggle: a per-view remembered preference under which
+ * activating a workload or node row shows its pods in the Pods dock tab.
  */
 
+import {
+  PodsPanelStateProvider,
+  type PodsPanelStateValue,
+  useOptionalPodsPanelState,
+} from '@modules/object-panel/contexts/PodsPanelStateContext';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getShowPods, resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireValue } from '@/test-utils/requireValue';
 import { type ShowPodsToggle, useShowPodsToggle } from './useShowPodsToggle';
 
@@ -17,20 +27,51 @@ vi.mock('@core/desktop-runtime', () => ({
   onEvent: vi.fn(),
 }));
 
-const results: Partial<Record<'workloads' | 'nodes', ShowPodsToggle>> = {};
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({ selectedClusterId: 'alpha:ctx', managedClusterIds: ['alpha:ctx'] }),
+}));
 
-const Harness: React.FC<{ view: 'workloads' | 'nodes' }> = ({ view }) => {
+type View = 'workloads' | 'nodes';
+const results: Partial<Record<View, ShowPodsToggle>> = {};
+const podsTab: { current: PodsPanelStateValue | null } = { current: null };
+
+const Harness: React.FC<{ view: View }> = ({ view }) => {
   results[view] = useShowPodsToggle(view);
   return null;
 };
+const PodsTabProbe: React.FC = () => {
+  podsTab.current = useOptionalPodsPanelState();
+  return null;
+};
 
-const toggleOf = (view: 'workloads' | 'nodes') => {
-  const item = requireValue(results[view], `expected ${view} toggle`).toggle;
+const table = (view: View) => requireValue(results[view], `expected the ${view} toggle`);
+const clickToggle = (view: View) => {
+  const item = table(view).toggle;
   if (item.type !== 'toggle') {
     throw new Error('expected an icon-bar toggle');
   }
-  return item;
+  act(() => item.onClick());
 };
+const toggleActive = (view: View) => {
+  const item = table(view).toggle;
+  return item.type === 'toggle' && item.active;
+};
+
+const deployment = buildRequiredObjectReference(
+  makeResourceRef({
+    group: 'apps',
+    kind: 'Deployment',
+    resource: 'deployments',
+    namespace: 'team-a',
+    name: 'api',
+  })
+);
+const standalonePod = buildRequiredObjectReference(
+  makeResourceRef({ kind: 'Pod', resource: 'pods', namespace: 'team-a', name: 'debug' })
+);
+const node = buildRequiredObjectReference(
+  makeResourceRef({ kind: 'Node', resource: 'nodes', name: 'worker-1' })
+);
 
 describe('useShowPodsToggle', () => {
   let container: HTMLDivElement;
@@ -41,6 +82,15 @@ describe('useShowPodsToggle', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
+    act(() => {
+      root.render(
+        <PodsPanelStateProvider>
+          <Harness view="workloads" />
+          <Harness view="nodes" />
+          <PodsTabProbe />
+        </PodsPanelStateProvider>
+      );
+    });
   });
 
   afterEach(() => {
@@ -48,43 +98,44 @@ describe('useShowPodsToggle', () => {
     container.remove();
   });
 
-  const render = () =>
-    act(() => {
-      root.render(
-        <>
-          <Harness view="workloads" />
-          <Harness view="nodes" />
-        </>
-      );
-    });
+  it('starts on and remembers the toggle per view', () => {
+    expect(toggleActive('workloads')).toBe(true);
+    expect(toggleActive('nodes')).toBe(true);
 
-  it('remembers the toggle per view', () => {
-    render();
-    expect(toggleOf('workloads').active).toBe(false);
-    expect(toggleOf('nodes').active).toBe(false);
+    clickToggle('workloads');
 
-    act(() => toggleOf('workloads').onClick());
-
-    expect(toggleOf('workloads').active).toBe(true);
-    expect(toggleOf('nodes').active).toBe(false);
-    expect(getShowPods('workloads')).toBe(true);
-    expect(getShowPods('nodes')).toBe(false);
+    expect(toggleActive('workloads')).toBe(false);
+    expect(toggleActive('nodes')).toBe(true);
+    expect(getShowPods('workloads')).toBe(false);
+    expect(getShowPods('nodes')).toBe(true);
   });
 
-  it('opens objects that have a Pods tab on that tab only while the toggle is on', () => {
-    render();
-    const workloads = () => requireValue(results.workloads, 'expected workloads toggle');
-    const nodes = () => requireValue(results.nodes, 'expected nodes toggle');
-    expect(workloads().openOptions('Deployment')).toBeUndefined();
+  it('shows the pods of objects that have a Pods tab, only while the toggle is on', () => {
+    act(() => table('workloads').showPods?.(deployment));
 
-    act(() => toggleOf('workloads').onClick());
-    act(() => toggleOf('nodes').onClick());
+    expect(podsTab.current?.target).toMatchObject({
+      object: { kind: 'Deployment', name: 'api' },
+      source: 'workloads',
+    });
+    expect(table('workloads').shownRowKey).toBe(buildRequiredCanonicalObjectRowKey(deployment));
+    expect(table('nodes').shownRowKey).toBeNull();
 
-    for (const kind of ['Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'CronJob', 'ReplicaSet']) {
-      expect(workloads().openOptions(kind)).toEqual({ initialTab: 'pods' });
-    }
-    expect(nodes().openOptions('Node')).toEqual({ initialTab: 'pods' });
-    // A standalone Pod has no Pods tab, so it opens on Details as usual.
-    expect(workloads().openOptions('Pod')).toBeUndefined();
+    // A standalone Pod has no pods of its own; the tab keeps its object.
+    act(() => table('workloads').showPods?.(standalonePod));
+    expect(podsTab.current?.target?.object.name).toBe('api');
+
+    clickToggle('workloads');
+    expect(table('workloads').showPods).toBeUndefined();
+  });
+
+  it('closes the Pods tab a table opened when that table’s toggle turns off', () => {
+    act(() => table('nodes').showPods?.(node));
+
+    // The Workloads toggle did not open the tab, so turning it off leaves it.
+    clickToggle('workloads');
+    expect(podsTab.current?.target?.object.name).toBe('worker-1');
+
+    clickToggle('nodes');
+    expect(podsTab.current?.target).toBeNull();
   });
 });

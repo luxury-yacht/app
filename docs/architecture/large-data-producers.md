@@ -34,8 +34,9 @@ workload GVRs' reflectors; pod aggregates, HPA, and metrics join at serve.
 Workloads is one table; a workload's pods are in the Pods view or its object
 panel's Pods tab.
 
-The namespace Pods view and the object panel's Pods tab render one shared pod
-table (`usePodTable`): identity, columns, actions, per-namespace permissions,
+The namespace Pods view, the object panel's Pods tab, and the Pods dock tab
+(the Pods tab content for one workload or node, opened from Workloads or Nodes
+while "Show Pods" is on) render one shared pod table (`usePodTable`): identity, columns, actions, per-namespace permissions,
 and metrics freshness. The view queries a namespace scope; the tab queries a
 `workload:` or `node:` scope. Projected Pod rows keep both direct-controller
 and resolved-ancestor owner identity, so a Deployment's tab includes its

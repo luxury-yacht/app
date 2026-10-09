@@ -21,6 +21,7 @@ import {
   ObjectPanelStateProvider,
   useObjectPanelState,
 } from '@modules/object-panel/contexts/ObjectPanelStateContext';
+import { PodsPanelStateProvider } from '@modules/object-panel/contexts/PodsPanelStateContext';
 import type React from 'react';
 import {
   createContext,
@@ -542,13 +543,15 @@ export const ViewStateProvider: React.FC<ViewStateProviderProps> = ({ children }
   return (
     <SidebarStateProvider>
       <ObjectPanelStateProvider>
-        <ModalStateProvider>
-          <NavigationStateProvider>
-            <RefreshSyncProvider>
-              <CombinedViewStateProvider>{children}</CombinedViewStateProvider>
-            </RefreshSyncProvider>
-          </NavigationStateProvider>
-        </ModalStateProvider>
+        <PodsPanelStateProvider>
+          <ModalStateProvider>
+            <NavigationStateProvider>
+              <RefreshSyncProvider>
+                <CombinedViewStateProvider>{children}</CombinedViewStateProvider>
+              </RefreshSyncProvider>
+            </NavigationStateProvider>
+          </ModalStateProvider>
+        </PodsPanelStateProvider>
       </ObjectPanelStateProvider>
     </SidebarStateProvider>
   );

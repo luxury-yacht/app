@@ -207,6 +207,8 @@ export interface GridTableProps<T> {
   diagnosticsLabel?: string;
   diagnosticsMode?: GridTableDiagnosticsMode;
   getRowClassName?: (item: T, index: number) => string | undefined | null;
+  /** Declares selected-row semantics independently from presentation classes. */
+  isRowSelected?: (item: T, index: number) => boolean;
   getRowStyle?: (item: T, index: number) => React.CSSProperties | undefined;
   onRowClick?: (item: T) => void;
   /** Called for pointer row activation after interactive descendants are excluded. */

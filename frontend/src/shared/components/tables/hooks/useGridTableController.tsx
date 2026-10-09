@@ -185,6 +185,7 @@ export function useGridTableController<T>({
   customMetadataColumns,
   keyExtractor,
   getRowClassName,
+  isRowSelected,
   getRowStyle,
   onRowClick,
   onRowPointerClick,
@@ -576,6 +577,7 @@ export function useGridTableController<T>({
   const renderRowContent = useGridTableRowRenderer({
     keyExtractor,
     getRowClassName: getRowClassNameWithFocus,
+    isRowSelected,
     getRowStyle,
     handleRowClick,
     handleRowMouseEnter,

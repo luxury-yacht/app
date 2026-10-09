@@ -99,9 +99,11 @@ back into Preferences.
 ## Show Pods preferences
 
 - `workloadsShowPods` and `nodesShowPods` back the Workloads and Nodes tables'
-  "Show Pods" toggle (`useShowPodsToggle`). While on, opening a row whose kind
-  has a Pods tab opens the object panel on that tab. The value is read when a
-  row opens, so toggling never changes an open panel.
+  "Show Pods" toggle (`useShowPodsToggle`). Both default on, including for
+  settings saved before they existed. While on, a row click or Enter on a
+  row whose kind has pods shows them in the cluster's Pods dock tab; turning the
+  toggle off closes the tab that table opened. The Kind badge and Name link
+  always open the full object panel.
 
 ## Validation
 

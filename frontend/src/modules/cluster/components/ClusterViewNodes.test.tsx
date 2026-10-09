@@ -6,6 +6,11 @@
  */
 
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
+import {
+  PodsPanelStateProvider,
+  type PodsPanelStateValue,
+  useOptionalPodsPanelState,
+} from '@modules/object-panel/contexts/PodsPanelStateContext';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
@@ -603,37 +608,47 @@ describe('ClusterViewNodes', () => {
       cell.props.onClick?.({ stopPropagation: () => undefined });
     });
 
-    // With Show Pods off the panel opens on its default (Details) tab.
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'Node',
         name: 'node-1',
         clusterId: 'alpha:ctx',
         clusterName: 'alpha',
-      }),
-      undefined
+      })
     );
   });
 
-  it('opens a node on its Pods tab while Show Pods is on', async () => {
-    await renderNodes([baseNode]);
-    const showPods = requireValue(
-      gridTablePropsRef.current.filters?.options?.preActions?.find(
-        (item) => 'id' in item && item.id === 'show-pods'
-      ),
-      'expected the Show Pods toggle'
-    );
-    if (showPods.type !== 'toggle') {
-      throw new Error('expected Show Pods to be a toggle');
-    }
-    act(() => showPods.onClick());
+  it('by default, a row click shows the node’s pods and highlights the row', async () => {
+    const podsTab: { current: PodsPanelStateValue | null } = { current: null };
+    const PodsTabProbe = () => {
+      podsTab.current = useOptionalPodsPanelState();
+      return null;
+    };
+    const workerA = { ...baseNode, ref: { ...baseNode.ref, clusterId: 'path:context' } };
+    const workerB = {
+      ...baseNode,
+      ref: { ...baseNode.ref, clusterId: 'path:context', name: 'node-2' },
+    };
+    typedQueryRowsRef.current = [workerA, workerB];
+    await act(async () => {
+      root.render(
+        <PodsPanelStateProvider>
+          <PodsTabProbe />
+          <ClusterViewNodes />
+        </PodsPanelStateProvider>
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    act(() => gridTablePropsRef.current.onRowPointerClick?.(workerB));
 
-    act(() => gridTablePropsRef.current.onRowClick?.(baseNode));
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'Node', name: 'node-1', clusterId: 'alpha:ctx' }),
-      { initialTab: 'pods' }
-    );
+    expect(podsTab.current?.target).toMatchObject({
+      object: { kind: 'Node', name: 'node-2' },
+      source: 'nodes',
+    });
+    expect(gridTablePropsRef.current.isRowSelected?.(workerB, 1)).toBe(true);
+    expect(gridTablePropsRef.current.isRowSelected?.(workerA, 0)).toBe(false);
+    expect(openWithObjectMock).not.toHaveBeenCalled();
   });
 
   it('opens the Map from the node context menu', async () => {

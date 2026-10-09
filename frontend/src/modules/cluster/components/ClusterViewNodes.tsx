@@ -86,12 +86,19 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
       ),
     [selectedClusterId, selectedClusterName]
   );
-  const showPods = useShowPodsToggle('nodes');
+  // The Kind badge and Name link always open the full object panel.
   const handleNodeClick = useCallback(
-    (node: ClusterNodeRow) => openWithObject(nodeReference(node), showPods.openOptions('Node')),
-    [nodeReference, openWithObject, showPods]
+    (node: ClusterNodeRow) => openWithObject(nodeReference(node)),
+    [nodeReference, openWithObject]
   );
-  const viewActions = useMemo(() => [showPods.toggle], [showPods.toggle]);
+  // While Show Pods is on, activating a row shows its pods in the Pods dock tab.
+  const showPodsTable = useShowPodsToggle('nodes');
+  const { showPods, shownRowKey } = showPodsTable;
+  const handleShowPods = useMemo(
+    () => (showPods ? (node: ClusterNodeRow) => showPods(nodeReference(node)) : undefined),
+    [nodeReference, showPods]
+  );
+  const viewActions = useMemo(() => [showPodsTable.toggle], [showPodsTable.toggle]);
   const handleNodeAltClick = useCallback(
     (node: ClusterNodeRow) => navigateToView(nodeReference(node)),
     [navigateToView, nodeReference]
@@ -269,6 +276,10 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
       buildRequiredCanonicalObjectRowKey(row.ref, { fallbackClusterId: selectedClusterId }),
     [selectedClusterId]
   );
+  const isRowSelected = useMemo(
+    () => (shownRowKey ? (row: ClusterNodeRow) => keyExtractor(row) === shownRowKey : undefined),
+    [keyExtractor, shownRowKey]
+  );
 
   const { gridTableProps, favModal, source, queryPayload } = useQueryBackedClusterResourceGridTable<
     ClusterNodeSnapshotPayload,
@@ -357,7 +368,9 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         columns={tableColumns}
         diagnosticsLabel="Cluster Nodes"
         diagnosticsMode="live"
-        onRowClick={handleNodeClick}
+        onRowClick={handleShowPods ?? handleNodeClick}
+        onRowPointerClick={handleShowPods}
+        isRowSelected={isRowSelected}
         tableClassName="gridtable-nodes"
         enableContextMenu={true}
         getCustomContextMenuItems={getRowContextMenuItems}

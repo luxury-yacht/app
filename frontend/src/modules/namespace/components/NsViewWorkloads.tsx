@@ -53,33 +53,36 @@ const NsViewWorkloads: React.FC<WorkloadsViewProps> = React.memo(
     const { selectedNamespaceClusterId } = useNamespace();
     const queryClusterId = selectedNamespaceClusterId ?? selectedClusterId;
     const [metricsInfo, setMetricsInfo] = useState<PodMetricsInfo | null>(null);
-    const showPods = useShowPodsToggle('workloads');
+    const showPodsTable = useShowPodsToggle('workloads');
 
-    const handleWorkloadClick = useCallback(
-      (workload: WorkloadData) => {
-        openWithObject(
-          buildRequiredObjectReference(
-            { ...workload.ref, clusterName: selectedClusterName },
-            { fallbackClusterId: queryClusterId }
-          ),
-          showPods.openOptions(workload.ref.kind)
-        );
-      },
-      [openWithObject, queryClusterId, selectedClusterName, showPods]
+    const workloadReference = useCallback(
+      (workload: WorkloadData) =>
+        buildRequiredObjectReference(
+          { ...workload.ref, clusterName: selectedClusterName },
+          { fallbackClusterId: queryClusterId }
+        ),
+      [queryClusterId, selectedClusterName]
     );
-    const viewActions = useMemo(() => [showPods.toggle], [showPods.toggle]);
+
+    // The Kind badge and Name link always open the full object panel.
+    const handleWorkloadClick = useCallback(
+      (workload: WorkloadData) => openWithObject(workloadReference(workload)),
+      [openWithObject, workloadReference]
+    );
 
     const handleWorkloadAltClick = useCallback(
-      (workload: WorkloadData) => {
-        navigateToView(
-          buildRequiredObjectReference(
-            { ...workload.ref, clusterName: selectedClusterName },
-            { fallbackClusterId: queryClusterId }
-          )
-        );
-      },
-      [navigateToView, queryClusterId, selectedClusterName]
+      (workload: WorkloadData) => navigateToView(workloadReference(workload)),
+      [navigateToView, workloadReference]
     );
+
+    // While Show Pods is on, activating a row shows its pods in the Pods dock tab.
+    const { showPods, shownRowKey } = showPodsTable;
+    const handleShowPods = useMemo(
+      () =>
+        showPods ? (workload: WorkloadData) => showPods(workloadReference(workload)) : undefined,
+      [showPods, workloadReference]
+    );
+    const viewActions = useMemo(() => [showPodsTable.toggle], [showPodsTable.toggle]);
 
     const objectActions = useObjectActionController({
       context: 'gridtable',
@@ -163,6 +166,11 @@ const NsViewWorkloads: React.FC<WorkloadsViewProps> = React.memo(
       []
     );
 
+    const isRowSelected = useMemo(
+      () => (shownRowKey ? (row: WorkloadData) => keyExtractor(row) === shownRowKey : undefined),
+      [keyExtractor, shownRowKey]
+    );
+
     const emptyMessage = useMemo(
       () =>
         resolveEmptyStateMessage(
@@ -184,7 +192,9 @@ const NsViewWorkloads: React.FC<WorkloadsViewProps> = React.memo(
           columns={tableColumns}
           diagnosticsLabel={diagnosticsLabel}
           diagnosticsMode="live"
-          onRowClick={handleWorkloadClick}
+          onRowClick={handleShowPods ?? handleWorkloadClick}
+          onRowPointerClick={handleShowPods}
+          isRowSelected={isRowSelected}
           getRowClassName={getRowClassName}
           tableClassName="gridtable-workloads"
           enableContextMenu={true}

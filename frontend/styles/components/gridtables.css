@@ -440,7 +440,8 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
     border-left-color var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
-.gridtable-row.gridtable-row--focused {
+.gridtable-row.gridtable-row--focused,
+.gridtable-row.gridtable-row--selected {
   background-color: var(--color-bg-secondary);
   border-left-color: var(--color-accent);
 }
@@ -460,6 +461,11 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
 
 .gridtable-hover-overlay.is-visible {
   opacity: 1;
+}
+
+.gridtable-hover-overlay.is-selected {
+  background-color: var(--grid-bg-selected, rgba(245, 158, 11, 0.1));
+  border-left-color: var(--color-accent);
 }
 
 /* .gridtable-hover-overlay.is-focused inherits border-left from base styles */

@@ -25,6 +25,7 @@ import {
   loadObjectPanel,
   preloadObjectPanelModules,
 } from '@modules/object-panel/objectPanelLazyModules';
+import { PodsPanelHost } from '@modules/object-panel/pods-panel/PodsPanelHost';
 // Error Handling
 import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotificationSystem';
 import { withLazyBoundary } from '@shared/utils/react/withLazyBoundary';
@@ -369,6 +370,8 @@ export const AppLayout: React.FC = () => {
           </PanelErrorBoundary>
         );
       })}
+
+      <PodsPanelHost />
 
       <PanelErrorBoundary onClose={() => viewState.setIsSettingsOpen(false)} panelName="settings">
         <SettingsModal

@@ -90,6 +90,11 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', async (importOriginal) =
 });
 
 import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
+import {
+  PodsPanelStateProvider,
+  type PodsPanelStateValue,
+  useOptionalPodsPanelState,
+} from '@modules/object-panel/contexts/PodsPanelStateContext';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -767,7 +772,6 @@ describe('NsViewWorkloads', () => {
       cell.props.onClick?.({ stopPropagation: () => undefined });
     });
 
-    // With Show Pods off the panel opens on its default (Details) tab.
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'Deployment',
@@ -775,59 +779,113 @@ describe('NsViewWorkloads', () => {
         namespace: 'team-a',
         clusterId: 'alpha:ctx',
         clusterName: 'alpha',
-      }),
-      undefined
+      })
     );
   });
 
-  it('opens workloads on their Pods tab while Show Pods is on, and standalone Pods on Details', async () => {
-    const deployment = makeWorkload('Deployment', 'api', 'team-a', 'alpha:ctx');
-    const pod = makeWorkload('Pod', 'debug', 'team-a', 'alpha:ctx');
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: {
-        status: 'ready',
+  describe('Show Pods', () => {
+    const podsTab: { current: PodsPanelStateValue | null } = { current: null };
+    const PodsTabProbe = () => {
+      podsTab.current = useOptionalPodsPanelState();
+      return null;
+    };
+    const api = makeWorkload('Deployment', 'api', 'team-a', 'path:context');
+    const web = makeWorkload('StatefulSet', 'web', 'team-a', 'path:context');
+    const debugPod = makeWorkload('Pod', 'debug', 'team-a', 'path:context');
+
+    const renderWithShowPods = async () => {
+      requestRefreshDomainStateMock.mockResolvedValue({
+        status: 'executed',
         data: {
-          rows: [deployment, pod],
-          total: 2,
-          totalIsExact: true,
-          namespaces: ['team-a'],
-          kinds: ['Deployment', 'Pod'],
-          facetsExact: true,
+          status: 'ready',
+          data: {
+            rows: [api, web, debugPod],
+            total: 3,
+            totalIsExact: true,
+            namespaces: ['team-a'],
+            kinds: ['Deployment', 'StatefulSet', 'Pod'],
+            facetsExact: true,
+          },
         },
-      },
+      });
+      await act(async () => {
+        root.render(
+          <PodsPanelStateProvider>
+            <PodsTabProbe />
+            <NsViewWorkloads namespace="team-a" />
+          </PodsPanelStateProvider>
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    };
+    const clickShowPods = () => {
+      const toggle = requireValue(
+        gridTablePropsRef.current.filters?.options?.preActions?.find(
+          (item) => 'id' in item && item.id === 'show-pods'
+        ),
+        'expected the Show Pods toggle'
+      );
+      if (toggle.type !== 'toggle') {
+        throw new Error('expected Show Pods to be a toggle');
+      }
+      act(() => toggle.onClick());
+    };
+    const props = () => gridTablePropsRef.current;
+
+    it('shows a row’s pods on a row click or Enter by default, and highlights that row', async () => {
+      await renderWithShowPods();
+
+      act(() => props().onRowPointerClick?.(api));
+      expect(podsTab.current?.target).toMatchObject({
+        object: { kind: 'Deployment', name: 'api', clusterId: 'path:context' },
+        source: 'workloads',
+      });
+      expect(props().isRowSelected?.(api, 0)).toBe(true);
+      expect(props().isRowSelected?.(web, 1)).toBe(false);
+
+      // Enter (and Space) on the focused row does the same.
+      act(() => props().onRowClick?.(web));
+      expect(podsTab.current?.target?.object.name).toBe('web');
+      expect(props().isRowSelected?.(web, 1)).toBe(true);
+      expect(openWithObjectMock).not.toHaveBeenCalled();
+
+      // A standalone Pod has no pods of its own.
+      act(() => props().onRowPointerClick?.(debugPod));
+      expect(podsTab.current?.target?.object.name).toBe('web');
     });
-    await act(async () => {
-      root.render(<NsViewWorkloads namespace="team-a" />);
-      await Promise.resolve();
-      await Promise.resolve();
+
+    it('keeps the Name link opening the full panel on Details', async () => {
+      await renderWithShowPods();
+
+      const nameColumn = requireValue(
+        props().columns.find((column) => column.key === 'name'),
+        'expected the workload name column'
+      );
+      const link = requireReactElement<{
+        onClick?: (event: { stopPropagation: () => void }) => void;
+      }>(nameColumn.render(api), 'expected the workload name link');
+      act(() => link.props.onClick?.({ stopPropagation: () => undefined }));
+
+      expect(openWithObjectMock).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'Deployment', name: 'api' })
+      );
+      expect(podsTab.current?.target).toBeNull();
     });
 
-    const showPods = requireValue(
-      gridTablePropsRef.current.filters?.options?.preActions?.find(
-        (item) => 'id' in item && item.id === 'show-pods'
-      ),
-      'expected the Show Pods toggle'
-    );
-    if (showPods.type !== 'toggle') {
-      throw new Error('expected Show Pods to be a toggle');
-    }
-    act(() => showPods.onClick());
+    it('turning the toggle off closes the tab and restores normal row activation', async () => {
+      await renderWithShowPods();
+      act(() => props().onRowPointerClick?.(api));
 
-    // Enter on a focused row and the Name link share the open handler.
-    act(() => gridTablePropsRef.current.onRowClick?.(deployment));
-    act(() => gridTablePropsRef.current.onRowClick?.(pod));
+      clickShowPods();
 
-    expect(openWithObjectMock).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ kind: 'Deployment', name: 'api' }),
-      { initialTab: 'pods' }
-    );
-    expect(openWithObjectMock).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ kind: 'Pod', name: 'debug' }),
-      undefined
-    );
+      expect(podsTab.current?.target).toBeNull();
+      expect(props().onRowPointerClick).toBeUndefined();
+      act(() => props().onRowClick?.(api));
+      expect(openWithObjectMock).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'Deployment', name: 'api' })
+      );
+    });
   });
 
   it('disables port forward in the context menu when the workload exposes no forwardable ports', async () => {

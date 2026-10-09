@@ -502,8 +502,8 @@ func TestSidebarGroupExpansionPersistsIndependentlyWithoutLogging(t *testing.T) 
 	require.Empty(t, logger.GetEntries(), "sidebar disclosure must persist without creating application logs")
 }
 
-// Each table's "Show Pods" toggle is remembered per view across restarts.
-func TestShowPodsPreferencesPersistPerViewWithoutLogging(t *testing.T) {
+// Each table's "Show Pods" toggle starts on and is remembered per view across restarts.
+func TestShowPodsPreferencesDefaultOnAndPersistPerViewWithoutLogging(t *testing.T) {
 	setTestConfigEnv(t)
 	logger := NewLogger(20)
 	preferences := NewPreferencesService(nil, nil, logger)
@@ -517,15 +517,29 @@ func TestShowPodsPreferencesPersistPerViewWithoutLogging(t *testing.T) {
 		}
 		return values
 	}
-	require.Equal(t, false, read(preferences)["workloadsShowPods"])
-	require.Equal(t, false, read(preferences)["nodesShowPods"])
+	require.Equal(t, true, read(preferences)["workloadsShowPods"])
+	require.Equal(t, true, read(preferences)["nodesShowPods"])
 
-	require.NoError(t, updatePreference(preferences, "workloadsShowPods", true))
+	require.NoError(t, updatePreference(preferences, "workloadsShowPods", false))
 
 	values := read(NewPreferencesService(nil, nil, nil))
-	require.Equal(t, true, values["workloadsShowPods"])
-	require.Equal(t, false, values["nodesShowPods"])
+	require.Equal(t, false, values["workloadsShowPods"])
+	require.Equal(t, true, values["nodesShowPods"])
 	require.Empty(t, logger.GetEntries(), "a table toggle must persist without creating application logs")
+}
+
+// Settings saved before the toggle existed have no value for it; it starts on.
+func TestShowPodsPreferencesStartOnForSettingsWithoutThem(t *testing.T) {
+	setTestConfigEnv(t)
+	preferences := NewPreferencesService(nil, nil, nil)
+	path, err := preferences.getSettingsFilePath()
+	require.NoError(t, err)
+	writeTestFileWithParents(t, path, []byte(`{"schemaVersion":1,"preferences":{"appearanceMode":"dark"}}`), 0o644)
+
+	settings, err := preferences.GetAppSettings()
+	require.NoError(t, err)
+	require.True(t, settings.WorkloadsShowPods)
+	require.True(t, settings.NodesShowPods)
 }
 
 func TestAppPreferenceBatchKeepsOtherLogsWithSidebarChanges(t *testing.T) {

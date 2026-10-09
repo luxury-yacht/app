@@ -19,6 +19,7 @@ import { useEffect, useRef } from 'react';
 
 interface HoverState {
   visible: boolean;
+  selected: boolean;
   focused: boolean;
   top: number;
   height: number;
@@ -241,6 +242,7 @@ function GridTableBody<T>({
           className={[
             'gridtable-hover-overlay',
             hoverState.visible ? 'is-visible' : '',
+            hoverState.selected ? 'is-selected' : '',
             hoverState.focused ? 'is-focused' : '',
           ]
             .filter(Boolean)

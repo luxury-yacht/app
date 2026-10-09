@@ -32,6 +32,14 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   types use the `obj:` panel ID prefix for layout preferences; identity IDs
   encode cluster, subject kind, and name.
 - One native window holds one same-cluster group; clusters never share a group.
+- Utility tabs (Application Logs, Diagnostics, and the per-cluster Pods tab,
+  `pods:<clusterId>`) dock only. Float carries a group's object tabs and leaves
+  utility tabs docked; it does nothing when a utility tab leads the group
+  (`WorkspacePanelCoordinator.tsx` snapshots only object-panel targets).
+- A tab that mounts per open and reuses its panel ID must discard its dock state
+  when it closes, or the remounted tab stays closed. Object panels do this in
+  `PanelLayoutLifecycle`; the Pods tab in `PodsPanelHost`, whichever way it
+  closed (its group's close control closes every tab in the group).
 - Renderers project the shared directory and acknowledge changes through its
   owner.
 - Docked and native renderers share group chrome and object content. Native

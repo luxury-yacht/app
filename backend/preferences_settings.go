@@ -113,8 +113,8 @@ type settingsPreferences struct {
 	SidebarClusterExtensionsExpanded   bool                   `json:"sidebarClusterExtensionsExpanded"`
 	SidebarNamespaceResourcesExpanded  bool                   `json:"sidebarNamespaceResourcesExpanded"`
 	SidebarNamespaceExtensionsExpanded bool                   `json:"sidebarNamespaceExtensionsExpanded"`
-	WorkloadsShowPods                  bool                   `json:"workloadsShowPods"`
-	NodesShowPods                      bool                   `json:"nodesShowPods"`
+	WorkloadsShowPods                  *bool                  `json:"workloadsShowPods,omitempty"`
+	NodesShowPods                      *bool                  `json:"nodesShowPods,omitempty"`
 	AppearanceMode                     string                 `json:"appearanceMode"`
 	UseShortResourceNames              bool                   `json:"useShortResourceNames"`
 	DimInactiveNamespaces              *bool                  `json:"dimInactiveNamespaces,omitempty"`
@@ -293,6 +293,8 @@ func defaultSettingsFile() *settingsFile {
 			AppearanceMode:        "system",
 			DimInactiveNamespaces: boolPtr(true),
 			ExclusiveNamespaces:   boolPtr(true),
+			WorkloadsShowPods:     boolPtr(true),
+			NodesShowPods:         boolPtr(true),
 			ErrorReportingEnabled: boolPtr(true),
 			Refresh:               &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
 			KubernetesAPI: &settingsKubernetesAPI{
@@ -361,6 +363,12 @@ func normalizeCorePreferences(preferences *settingsPreferences) {
 	}
 	if preferences.ErrorReportingEnabled == nil {
 		preferences.ErrorReportingEnabled = boolPtr(true)
+	}
+	if preferences.WorkloadsShowPods == nil {
+		preferences.WorkloadsShowPods = boolPtr(true)
+	}
+	if preferences.NodesShowPods == nil {
+		preferences.NodesShowPods = boolPtr(true)
 	}
 }
 
@@ -730,8 +738,8 @@ func appSettingsFromFile(settings *settingsFile) *AppSettings {
 		SidebarClusterExtensionsExpanded:         settings.Preferences.SidebarClusterExtensionsExpanded,
 		SidebarNamespaceResourcesExpanded:        settings.Preferences.SidebarNamespaceResourcesExpanded,
 		SidebarNamespaceExtensionsExpanded:       settings.Preferences.SidebarNamespaceExtensionsExpanded,
-		WorkloadsShowPods:                        settings.Preferences.WorkloadsShowPods,
-		NodesShowPods:                            settings.Preferences.NodesShowPods,
+		WorkloadsShowPods:                        *settings.Preferences.WorkloadsShowPods,
+		NodesShowPods:                            *settings.Preferences.NodesShowPods,
 		ExclusiveNamespaces:                      *settings.Preferences.ExclusiveNamespaces,
 		ErrorReportingEnabled:                    *settings.Preferences.ErrorReportingEnabled,
 		AutoRefreshEnabled:                       settings.Preferences.Refresh.Auto,
@@ -784,8 +792,8 @@ func (p *PreferencesService) saveAppSettings() error {
 	settings.Preferences.SidebarClusterExtensionsExpanded = p.appSettings.SidebarClusterExtensionsExpanded
 	settings.Preferences.SidebarNamespaceResourcesExpanded = p.appSettings.SidebarNamespaceResourcesExpanded
 	settings.Preferences.SidebarNamespaceExtensionsExpanded = p.appSettings.SidebarNamespaceExtensionsExpanded
-	settings.Preferences.WorkloadsShowPods = p.appSettings.WorkloadsShowPods
-	settings.Preferences.NodesShowPods = p.appSettings.NodesShowPods
+	settings.Preferences.WorkloadsShowPods = boolPtr(p.appSettings.WorkloadsShowPods)
+	settings.Preferences.NodesShowPods = boolPtr(p.appSettings.NodesShowPods)
 	settings.Preferences.ErrorReportingEnabled = boolPtr(p.appSettings.ErrorReportingEnabled)
 	if settings.Preferences.Refresh == nil {
 		settings.Preferences.Refresh = &settingsRefresh{}
