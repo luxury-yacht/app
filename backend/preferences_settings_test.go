@@ -476,30 +476,60 @@ func TestSidebarGroupExpansionPersistsIndependentlyWithoutLogging(t *testing.T) 
 	logger := NewLogger(20)
 	preferences := NewPreferencesService(nil, nil, logger)
 	keys := []string{"sidebarClusterResourcesExpanded", "sidebarClusterExtensionsExpanded", "sidebarNamespaceResourcesExpanded", "sidebarNamespaceExtensionsExpanded"}
-	read := func(owner *PreferencesService) map[string]any {
-		t.Helper()
-		schema, err := owner.GetAppSettingsSchema()
-		require.NoError(t, err)
-		values := make(map[string]any)
-		for _, preference := range schema.Preferences {
-			values[preference.Key] = preference.CurrentValue
-		}
-		return values
-	}
-	for _, key := range keys {
-		require.Equal(t, false, read(preferences)[key], key)
-	}
+	defaults := readSchemaValues(t, preferences)
+	require.Equal(t, true, defaults[keys[0]], "Resources holds the default namespace view, so it starts open")
+	require.Equal(t, false, defaults[keys[1]])
+	require.Equal(t, true, defaults[keys[2]], "Resources holds the default namespace view, so it starts open")
+	require.Equal(t, false, defaults[keys[3]])
 	for _, key := range keys {
 		require.NoError(t, updatePreference(preferences, key, true))
 	}
 	require.NoError(t, updatePreference(preferences, keys[0], false))
 	require.NoError(t, updatePreference(preferences, keys[3], false))
-	values := read(NewPreferencesService(nil, nil, nil))
+	values := readSchemaValues(t, NewPreferencesService(nil, nil, nil))
 	require.Equal(t, false, values[keys[0]])
 	require.Equal(t, true, values[keys[1]])
 	require.Equal(t, true, values[keys[2]])
 	require.Equal(t, false, values[keys[3]])
 	require.Empty(t, logger.GetEntries(), "sidebar disclosure must persist without creating application logs")
+}
+
+// Installations that already saved a Resources state keep it; only a missing
+// value takes the open default.
+func TestSidebarResourcesSavedStateSurvivesTheOpenDefault(t *testing.T) {
+	setTestConfigEnv(t)
+	preferences := NewPreferencesService(nil, nil, nil)
+	configPath, err := preferences.getSettingsFilePath()
+	require.NoError(t, err)
+	writeTestFileWithParents(t, configPath, []byte(`{
+		"schemaVersion": 1,
+		"preferences": {
+			"sidebarClusterResourcesExpanded": false,
+			"appearanceMode": "dark"
+		}
+	}`), 0o644)
+
+	values := readSchemaValues(t, preferences)
+	require.Equal(t, false, values[appPreferenceSidebarClusterResourcesExpanded])
+	require.Equal(t, true, values[appPreferenceSidebarNamespaceResourcesExpanded])
+
+	require.NoError(t, updatePreference(preferences, appPreferenceSidebarNamespaceExtensionsExpanded, true))
+	values = readSchemaValues(t, NewPreferencesService(nil, nil, nil))
+	require.Equal(t, false, values[appPreferenceSidebarClusterResourcesExpanded])
+	require.Equal(t, true, values[appPreferenceSidebarNamespaceResourcesExpanded])
+	require.Equal(t, true, values[appPreferenceSidebarNamespaceExtensionsExpanded])
+	require.Equal(t, "dark", values[appPreferenceAppearanceMode])
+}
+
+func readSchemaValues(t *testing.T, owner *PreferencesService) map[string]any {
+	t.Helper()
+	schema, err := owner.GetAppSettingsSchema()
+	require.NoError(t, err)
+	values := make(map[string]any)
+	for _, preference := range schema.Preferences {
+		values[preference.Key] = preference.CurrentValue
+	}
+	return values
 }
 
 func TestAppPreferenceBatchKeepsOtherLogsWithSidebarChanges(t *testing.T) {

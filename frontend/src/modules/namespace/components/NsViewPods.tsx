@@ -5,15 +5,14 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
+import './NsViewPods.css';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
-  applyPodWorkloadFilterRequest,
-  type PodWorkloadFilterRequest,
-  podFiltersMatchWorkload,
-} from '@modules/namespace/components/podOwnerFilter';
+  POD_SELECTION_QUERY_FACET_KEYS,
+  podSelectionQueryFacets,
+} from '@modules/namespace/components/podSelectionFacets';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import {
@@ -33,7 +32,10 @@ import { formatRestartCount } from '@shared/components/tables/restartCount';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import {
+  buildRequiredObjectReference,
+  type ClusterObjectReference,
+} from '@shared/utils/objectIdentity';
 import { podNamespacePermissionTargets, podOwnerReference } from '@shared/utils/podTableModel';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
@@ -49,13 +51,26 @@ import { resolveEmptyStateMessage } from '@/utils/emptyState';
 
 interface PodsViewProps {
   namespace: string;
+  /** The cluster whose pods the pane lists. */
+  clusterId: string | null | undefined;
+  /** Saved-table key: each split keeps its own pane state. */
+  viewId: string;
+  label?: string;
   showNamespaceColumn?: boolean;
   metrics?: PodMetricsInfo | null;
-  workloadFilterRequest?: PodWorkloadFilterRequest;
-  onWorkloadFilterMismatch?: () => void;
+  /** The row selected in the split's upper table; only its pods are shown. */
+  selectedObject?: ClusterObjectReference | null;
+  onSelectionClear?: () => void;
   collapsed?: boolean;
   onPodsCollapsedChange?: (collapsed: boolean) => void;
 }
+
+// Owner and Node belong to the split's row selection, so the pane offers no
+// dropdowns for them (nor for Status, like every user-facing pods table).
+const POD_PANE_EXCLUDED_QUERY_FACET_KEYS = [
+  ...RESOURCE_STATUS_QUERY_FACET_KEYS,
+  ...POD_SELECTION_QUERY_FACET_KEYS,
+];
 
 const parseReadyCounts = (value?: string | null): { ready: number; total: number } | null => {
   if (!value) {
@@ -90,10 +105,13 @@ const podMetricsState = (info: PodMetricsInfo | null | undefined) => ({
 const NsViewPods: React.FC<PodsViewProps> = React.memo(
   ({
     namespace,
+    clusterId: queryClusterId,
+    viewId,
+    label,
     showNamespaceColumn = false,
     metrics,
-    workloadFilterRequest,
-    onWorkloadFilterMismatch,
+    selectedObject = null,
+    onSelectionClear,
     collapsed = false,
     onPodsCollapsedChange,
   }) => {
@@ -103,25 +121,33 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const clusterMetrics = useClusterMetricsAvailability();
     const fallbackMetrics = metrics ?? clusterMetrics ?? null;
     const { selectedClusterId, selectedClusterName } = useKubeconfig();
-    const { selectedNamespaceClusterId } = useNamespace();
-    const queryClusterId = selectedNamespaceClusterId ?? selectedClusterId;
+    const selectionQueryFacets = useMemo(
+      () => podSelectionQueryFacets(selectedObject, queryClusterId),
+      [queryClusterId, selectedObject]
+    );
 
+    // A jump to a pod in this pane must find it: expand a collapsed pane and
+    // drop a selection that could exclude the pod.
+    const expandPane = collapsed ? onPodsCollapsedChange : undefined;
+    const clearSelection = selectionQueryFacets ? onSelectionClear : undefined;
     useEffect(() => {
-      if (!collapsed || !onPodsCollapsedChange) {
+      if (!expandPane && !clearSelection) {
         return;
       }
-      const expandForPodFocus = (request: GridTableFocusRequest | null) => {
+      const revealPod = (request: GridTableFocusRequest | null) => {
         if (
-          request?.destinationViewId === 'namespace-pods' &&
-          request.clusterId === queryClusterId &&
-          request.kind.toLowerCase() === 'pod'
+          request?.destinationViewId !== viewId ||
+          request.clusterId !== queryClusterId ||
+          request.kind.toLowerCase() !== 'pod'
         ) {
-          onPodsCollapsedChange(false);
+          return;
         }
+        expandPane?.(false);
+        clearSelection?.();
       };
-      expandForPodFocus(peekPendingFocusRequest());
-      return eventBus.on('gridtable:focus-request', expandForPodFocus);
-    }, [collapsed, onPodsCollapsedChange, queryClusterId]);
+      revealPod(peekPendingFocusRequest());
+      return eventBus.on('gridtable:focus-request', revealPod);
+    }, [clearSelection, expandPane, queryClusterId, viewId]);
 
     const getPodIdentity = useCallback(
       (pod: PodSnapshotEntry) => ({ ...pod.ref, clusterName: selectedClusterName }),
@@ -329,8 +355,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     ]);
 
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
-    const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Pods' : 'Namespace Pods';
-    const showNamespaceFilter = isAllNamespaces;
+    const diagnosticsLabel = label ?? (isAllNamespaces ? 'All Namespaces Pods' : 'Namespace Pods');
     const podsPaneActions = useMemo<IconBarItem[]>(
       () =>
         onPodsCollapsedChange
@@ -362,10 +387,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       enabled: !collapsed,
       clusterId: queryClusterId,
       domain: 'pods',
-      excludedQueryFacetKeys: RESOURCE_STATUS_QUERY_FACET_KEYS,
+      excludedQueryFacetKeys: POD_PANE_EXCLUDED_QUERY_FACET_KEYS,
+      selectionQueryFacets,
       label: diagnosticsLabel,
       selectRows: selectPayloadRows,
-      viewId: 'namespace-pods',
+      viewId,
       namespace,
       columns,
       keyExtractor,
@@ -373,74 +399,13 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       diagnosticsLabel,
       rowIdentity: keyExtractor,
       showKindDropdown: false,
-      showNamespaceFilters: showNamespaceFilter,
-      // Workload selection rewrites this pane's Namespace filter.
-      sharesAllNamespacesFilter: false,
+      showNamespaceFilters: false,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-      // The pane's collapse control sits left of the Namespace dropdown.
+      // The pane's collapse control uses the pane's own structural icon bar.
       filterOptionOverrides:
         podsPaneActions.length > 0 ? { beforeNamespaceActions: podsPaneActions } : undefined,
       favoritePane: { id: 'pods', label: 'Pods' },
     });
-
-    const currentFilters = resolvedGridTableProps.filters?.value;
-    const setFilters = resolvedGridTableProps.filters?.onChange;
-    const appliedWorkloadFilterRequestRef = useRef<PodWorkloadFilterRequest | undefined>(undefined);
-    useEffect(() => {
-      if (!currentFilters || !setFilters) {
-        return;
-      }
-      if (!workloadFilterRequest) {
-        appliedWorkloadFilterRequestRef.current = undefined;
-        return;
-      }
-      if (appliedWorkloadFilterRequestRef.current === workloadFilterRequest) {
-        return;
-      }
-      appliedWorkloadFilterRequestRef.current = workloadFilterRequest;
-      const next = applyPodWorkloadFilterRequest(
-        currentFilters,
-        workloadFilterRequest,
-        showNamespaceFilter
-      );
-      if (next !== currentFilters) {
-        setFilters(next);
-      }
-    }, [currentFilters, setFilters, showNamespaceFilter, workloadFilterRequest]);
-
-    const gridTableProps = useMemo(() => {
-      const filters = resolvedGridTableProps.filters;
-      if (
-        !filters?.onChange ||
-        workloadFilterRequest?.type !== 'set' ||
-        !onWorkloadFilterMismatch
-      ) {
-        return resolvedGridTableProps;
-      }
-      return {
-        ...resolvedGridTableProps,
-        filters: {
-          ...filters,
-          onChange: (next: Parameters<NonNullable<typeof filters.onChange>>[0]) => {
-            filters.onChange?.(next);
-            if (
-              !podFiltersMatchWorkload(next, workloadFilterRequest.workload, showNamespaceFilter)
-            ) {
-              onWorkloadFilterMismatch();
-            }
-          },
-          onReset: () => {
-            filters.onReset?.();
-            onWorkloadFilterMismatch();
-          },
-        },
-      };
-    }, [
-      onWorkloadFilterMismatch,
-      resolvedGridTableProps,
-      showNamespaceFilter,
-      workloadFilterRequest,
-    ]);
 
     // The base query payload carries the poller freshness block for the usage
     // joined onto the rows at serve.
@@ -478,14 +443,18 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       [objectActions, podReference]
     );
 
-    const emptyMessage = useMemo(
-      () =>
-        resolveEmptyStateMessage(
+    const emptyMessage = useMemo(() => {
+      if (selectionQueryFacets && selectedObject) {
+        return resolveEmptyStateMessage(
           undefined,
-          `No pods found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`
-        ),
-      [namespace]
-    );
+          `No pods found for ${selectedObject.kind} ${selectedObject.name}`
+        );
+      }
+      return resolveEmptyStateMessage(
+        undefined,
+        `No pods found ${isAllNamespaces ? 'in any namespaces' : 'in this namespace'}`
+      );
+    }, [isAllNamespaces, selectedObject, selectionQueryFacets]);
 
     if (collapsed) {
       return (
@@ -502,14 +471,12 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       <>
         <ResourceInventoryTable
           source={source}
-          gridTableProps={gridTableProps}
+          gridTableProps={resolvedGridTableProps}
           spinnerMessage="Loading pods..."
           updatingMessage="Updating pods…"
           favModal={favModal}
           columns={columns}
-          diagnosticsLabel={
-            namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Pods' : 'Namespace Pods'
-          }
+          diagnosticsLabel={diagnosticsLabel}
           diagnosticsMode="live"
           onRowClick={handlePodOpen}
           tableClassName={`gridtable-pods${showNamespaceColumn ? ' gridtable-pods--namespaced' : ''}`}

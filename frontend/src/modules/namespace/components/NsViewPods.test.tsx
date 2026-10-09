@@ -471,7 +471,15 @@ describe('NsViewPods', () => {
     // query-backed now, so it is not a NsViewPods prop.
     const { data: _seedData, ...viewProps } = props;
     await act(async () => {
-      root.render(<NsViewPods namespace="team-a" metrics={defaultMetrics} {...viewProps} />);
+      root.render(
+        <NsViewPods
+          namespace="team-a"
+          clusterId="alpha:ctx"
+          viewId="namespace-pods"
+          metrics={defaultMetrics}
+          {...viewProps}
+        />
+      );
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -688,108 +696,60 @@ describe('NsViewPods', () => {
     );
   });
 
-  it('populates Namespace and Owner filters for an embedded Workloads selection', async () => {
-    const onWorkloadFilterMismatch = vi.fn();
-    const workloadFilterRequest = {
-      type: 'set' as const,
-      workload: {
-        clusterId: 'alpha:ctx',
-        group: 'apps',
-        version: 'v1',
-        kind: 'Deployment',
-        namespace: 'team-a',
-        name: 'api',
-      },
-    };
-    const props = {
-      namespace: ALL_NAMESPACES_SCOPE,
-      workloadFilterRequest,
-      onWorkloadFilterMismatch,
-    };
-    await renderPods(props);
+  const lastQueryParams = () => {
+    const calls = requestRefreshDomainStateMock.mock.calls;
+    const request = calls[calls.length - 1]?.[0] as { scope?: string } | undefined;
+    const scope = request?.scope ?? '';
+    return new URLSearchParams(scope.slice(scope.indexOf('?') + 1));
+  };
+  const selectedDeployment = {
+    clusterId: 'alpha:ctx',
+    group: 'apps',
+    version: 'v1',
+    kind: 'Deployment',
+    namespace: 'team-a',
+    name: 'api',
+  };
 
-    // Workload selection rewrites this pane's Namespace filter, so it must not
-    // leak into the selection the All Namespaces views share.
-    expect(gridPersistenceParamsRef.current?.shareNamespaceFilter ?? false).toBe(false);
-    expect(setFiltersMock).toHaveBeenCalledWith({
-      search: '',
-      kinds: { mode: 'all' },
-      namespaces: { mode: 'some', values: ['team-a'] },
-      clusters: { mode: 'all' },
-      queryFacets: {
-        owners: {
-          mode: 'some',
-          values: ['["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]'],
-        },
+  it('shows only the selected workload pods without saving the selection as a filter', async () => {
+    await renderPods({ namespace: ALL_NAMESPACES_SCOPE, selectedObject: selectedDeployment });
+
+    expect(lastQueryParams().getAll('facet.owners')).toEqual([
+      '["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]',
+    ]);
+    expect(lastQueryParams().get('namespaces')).toBeNull();
+    expect(setFiltersMock).not.toHaveBeenCalled();
+  });
+
+  it('shows only the selected node pods', async () => {
+    await renderPods({
+      namespace: ALL_NAMESPACES_SCOPE,
+      selectedObject: {
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'Node',
+        name: 'node-a',
       },
-      includeMetadata: false,
     });
-    expect(container.querySelector('.metrics-warning-banner')).toBeNull();
 
-    act(() => gridTablePropsRef.current.filters?.onReset?.());
-    expect(onWorkloadFilterMismatch).toHaveBeenCalledOnce();
-    onWorkloadFilterMismatch.mockClear();
-
-    setFiltersMock.mockClear();
-    const currentFilters = requireValue(
-      gridTablePropsRef.current.filters?.value,
-      'expected controlled Pod filters'
-    );
-    act(() =>
-      gridTablePropsRef.current.filters?.onChange?.({
-        ...currentFilters,
-        queryFacets: {
-          ...currentFilters.queryFacets,
-          owners: { mode: 'some', values: ['another-owner'] },
-        },
-      })
-    );
-    expect(onWorkloadFilterMismatch).toHaveBeenCalledOnce();
-    expect(setFiltersMock).toHaveBeenCalledOnce();
-
-    await renderPods(props);
-    expect(setFiltersMock).toHaveBeenCalledOnce();
+    expect(lastQueryParams().getAll('facet.nodes')).toEqual(['node-a']);
+    expect(lastQueryParams().getAll('facet.owners')).toEqual([]);
   });
 
-  // A workload selected while the pane is collapsed is applied by the time it expands.
-  it('applies a workload selection made while the pane was collapsed', async () => {
-    const workloadFilterRequest = {
-      type: 'set' as const,
-      workload: {
-        clusterId: 'alpha:ctx',
-        group: 'apps',
-        version: 'v1',
-        kind: 'Deployment',
-        namespace: 'team-a',
-        name: 'api',
-      },
-    };
-    const props = {
+  it('ignores a selection from another cluster', async () => {
+    await renderPods({
       namespace: ALL_NAMESPACES_SCOPE,
-      workloadFilterRequest,
-      onWorkloadFilterMismatch: vi.fn(),
-      onPodsCollapsedChange: vi.fn(),
-    };
-    await renderPods({ ...props, collapsed: true });
-    await renderPods({ ...props, collapsed: false });
+      selectedObject: { ...selectedDeployment, clusterId: 'beta:ctx' },
+    });
 
-    expect(setFiltersMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        namespaces: { mode: 'some', values: ['team-a'] },
-        queryFacets: {
-          owners: {
-            mode: 'some',
-            values: ['["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]'],
-          },
-        },
-      })
-    );
+    expect(lastQueryParams().getAll('facet.owners')).toEqual([]);
   });
 
-  it('preserves a persisted owner facet when the embedded pane has no workload selection', async () => {
+  it('drops saved Namespaces, Owner, and Node filters so nothing filters the pane invisibly', async () => {
     persistedFiltersRef.current = {
-      search: '',
-      kinds: { mode: 'none' },
+      search: 'web',
+      kinds: { mode: 'all' },
       namespaces: { mode: 'some', values: ['team-b'] },
       clusters: { mode: 'all' },
       queryFacets: {
@@ -802,15 +762,23 @@ describe('NsViewPods', () => {
       includeMetadata: false,
     };
 
-    await renderPods({
-      namespace: ALL_NAMESPACES_SCOPE,
-      onWorkloadFilterMismatch: vi.fn(),
-    });
+    await renderPods({ namespace: ALL_NAMESPACES_SCOPE });
 
-    expect(setFiltersMock).not.toHaveBeenCalled();
+    // The pane neither reads nor writes the Namespaces selection All Namespaces views share.
+    expect(gridPersistenceParamsRef.current?.shareNamespaceFilter ?? false).toBe(false);
+    expect(setFiltersMock).toHaveBeenCalledWith({
+      search: 'web',
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
+      includeMetadata: false,
+    });
+    expect(lastQueryParams().get('namespaces')).toBeNull();
+    expect(lastQueryParams().getAll('facet.owners')).toEqual([]);
+    expect(lastQueryParams().getAll('facet.nodes')).toEqual([]);
   });
 
-  it('omits Status while preserving the backend-owned Node query facet', async () => {
+  it('offers no Status, Owner, Node, or Namespaces dropdowns', async () => {
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
       data: {
@@ -819,17 +787,10 @@ describe('NsViewPods', () => {
           rows: [createPod()],
           total: 1,
           totalIsExact: true,
-          namespaces: ['team-a'],
+          namespaces: ['team-a', 'team-b'],
           kinds: ['Pod'],
           facetValues: [
-            {
-              key: 'statuses',
-              options: [
-                { value: 'Pending', label: 'Pending' },
-                { value: 'Running', label: 'Running' },
-              ],
-              exact: true,
-            },
+            { key: 'statuses', options: [{ value: 'Running', label: 'Running' }], exact: true },
             {
               key: 'owners',
               options: [
@@ -840,40 +801,15 @@ describe('NsViewPods', () => {
               ],
               exact: true,
             },
-            {
-              key: 'nodes',
-              options: [
-                { value: 'node-a', label: 'node-a' },
-                { value: 'node-b', label: 'node-b' },
-              ],
-              exact: true,
-            },
+            { key: 'nodes', options: [{ value: 'node-a', label: 'node-a' }], exact: true },
           ],
           facetsExact: true,
           capabilities: {
             filterableFields: ['kinds', 'namespaces'],
             queryFacets: [
-              {
-                key: 'statuses',
-                label: 'Status',
-                placeholder: 'All statuses',
-                searchable: false,
-                bulkActions: true,
-              },
-              {
-                key: 'owners',
-                label: 'Owner',
-                placeholder: 'All owners',
-                searchable: true,
-                bulkActions: true,
-              },
-              {
-                key: 'nodes',
-                label: 'Node',
-                placeholder: 'All nodes',
-                searchable: true,
-                bulkActions: true,
-              },
+              { key: 'statuses', label: 'Status', placeholder: 'All statuses' },
+              { key: 'owners', label: 'Owner', placeholder: 'All owners', searchable: true },
+              { key: 'nodes', label: 'Node', placeholder: 'All nodes', searchable: true },
             ],
           },
           metrics: { stale: false, successCount: 1, failureCount: 0 },
@@ -881,28 +817,30 @@ describe('NsViewPods', () => {
       },
     });
 
-    await renderPods({}, { skipDefaultQueryMock: true });
+    await renderPods({ namespace: ALL_NAMESPACES_SCOPE });
 
-    expect(gridTablePropsRef.current.filters?.options?.queryFacets).toEqual([
-      expect.objectContaining({
-        key: 'owners',
-        label: 'Owner',
-        options: [
-          {
-            value: '["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]',
-            label: 'Deployment/api',
-          },
-        ],
-      }),
-      expect.objectContaining({
-        key: 'nodes',
-        label: 'Node',
-        options: [
-          { value: 'node-a', label: 'node-a' },
-          { value: 'node-b', label: 'node-b' },
-        ],
-      }),
-    ]);
+    const options = gridTablePropsRef.current.filters?.options;
+    expect(options?.queryFacets ?? []).toEqual([]);
+    expect(options?.showNamespaceDropdown ?? false).toBe(false);
+  });
+
+  it('clears the selection when a Pod focus request targets the pane', async () => {
+    const onSelectionClear = vi.fn();
+    await renderPods({ selectedObject: selectedDeployment, onSelectionClear });
+
+    act(() => {
+      eventBus.emit('gridtable:focus-request', {
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'team-a',
+        name: 'web-1',
+        destinationViewId: 'namespace-pods',
+      });
+    });
+
+    expect(onSelectionClear).toHaveBeenCalledOnce();
   });
 
   it('uses backend statusPresentation for the pod status class', async () => {

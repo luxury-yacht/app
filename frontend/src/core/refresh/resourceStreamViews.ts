@@ -8,13 +8,20 @@ const resourceStreamDomains = new Set<RefreshDomain>(RESOURCE_STREAM_DOMAINS);
 export const isResourceStreamDomain = (domain: RefreshDomain): domain is ResourceDomain =>
   resourceStreamDomains.has(domain);
 
-// Focused Pod scopes are small leased windows used by the combined Workloads
-// view and object panels. Their owning component controls the lease lifetime,
-// so they remain active independently of the broad namespace-table view gate.
+// Focused Pod scopes are small leased windows used by object panels. Their
+// owning component controls the lease lifetime, so they remain active
+// independently of the broad namespace-table view gate.
 const isFocusedPodsScope = (scope?: string): boolean => {
   const base = stripClusterScope(scope);
   return base.startsWith('workload:') || base.startsWith('node:');
 };
+
+// The Nodes view's pods pane lists every pod in the cluster under the
+// cluster-wide namespace scope.
+const isNodesViewPodsScope = (context: RefreshContext, scope?: string): boolean =>
+  context.currentView === 'cluster' &&
+  context.activeClusterView === 'nodes' &&
+  stripClusterScope(scope) === 'namespace:all';
 
 const NAMESPACE_VIEW_BY_DOMAIN: Partial<
   Record<ResourceDomain, NonNullable<RefreshContext['activeNamespaceView']>>
@@ -49,10 +56,8 @@ export const isResourceStreamViewActive = (
     return true;
   }
 
-  if (domain === 'pods') {
-    if (isFocusedPodsScope(scope)) {
-      return true;
-    }
+  if (domain === 'pods' && (isFocusedPodsScope(scope) || isNodesViewPodsScope(context, scope))) {
+    return true;
   }
   const namespaceView = NAMESPACE_VIEW_BY_DOMAIN[domain];
   if (namespaceView) {

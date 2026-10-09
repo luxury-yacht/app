@@ -27,6 +27,11 @@ virtualization, and native table accessibility. Apply the
   the scrollable body clears the focused-row highlight; controlled-selection
   views supply `onRowSelectionClear` to clear selection at the same boundary.
   Descendant rows, cells, and controls are excluded.
+- The Workloads and Nodes split views select with a pointer click or `Space`;
+  `Enter` and the Kind/Name links still open the object. The selection lives
+  only while the view is mounted and clears when its row leaves the settled
+  rows (`useClearHiddenRowSelection`), the scope changes, or a pod jump
+  targets the pane, so the pane is never narrowed without a highlighted row.
 - Shared filter and Columns dropdown menus measure both viewport axes on open:
   right-edge menus end-align when start alignment would overflow, and width stays
   capped to the visible viewport. The menus are portaled, so under CSS app zoom

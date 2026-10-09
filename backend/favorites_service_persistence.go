@@ -124,6 +124,23 @@ func defaultFavoritePaneState() FavoritePaneState {
 	}
 }
 
+// upgradeNodesFavoritePanes gives a Nodes favorite saved as one table the two
+// panes of the Nodes/Pods split: its table state becomes the Nodes pane and the
+// Pods pane starts at defaults. Favorites already holding named panes are kept.
+func upgradeNodesFavoritePanes(favorite *Favorite) {
+	if favorite.ViewType != "cluster" || favorite.View != "nodes" || len(favorite.Panes) != 1 {
+		return
+	}
+	table, ok := favorite.Panes["main"]
+	if !ok {
+		return
+	}
+	favorite.Panes = map[string]FavoritePaneState{
+		"nodes": table,
+		"pods":  defaultFavoritePaneState(),
+	}
+}
+
 func migrateFlatFavorite(legacy favoriteV2) (Favorite, error) {
 	if strings.TrimSpace(legacy.ID) == "" || strings.TrimSpace(legacy.Name) == "" ||
 		strings.TrimSpace(legacy.ViewType) == "" || strings.TrimSpace(legacy.View) == "" {
@@ -162,6 +179,7 @@ func migrateFlatFavorite(legacy favoriteV2) (Favorite, error) {
 			}
 		}
 	}
+	upgradeNodesFavoritePanes(&migrated)
 
 	return migrated, nil
 }
@@ -371,6 +389,7 @@ func (s *FavoritesService) loadFavoritesFile() (*favoritesFile, error) {
 		return nil, fmt.Errorf("failed to parse favorites file: %w", err)
 	}
 	for index := range state.Favorites {
+		upgradeNodesFavoritePanes(&state.Favorites[index])
 		normalizeFavoritePanes(state.Favorites[index].Panes)
 	}
 	state.SchemaVersion = favoritesSchemaVersion

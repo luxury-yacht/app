@@ -58,11 +58,13 @@ same slot.
 
 | Scope | Direct links | Resources (in order) | Extensions |
 | --- | --- | --- | --- |
-| Cluster | Overview, Attention, Browse, Events, Identities | Config, Namespaces, Nodes, RBAC, Storage | CRDs, Custom Resources, then Cert Manager, External Secrets, Karpenter |
-| Namespace | Workloads, Browse, Map, Events | Autoscaling, Config, Network, Quotas, RBAC, Storage | Custom Resources, Argo CD, Cert Manager, External Secrets, Helm, Prometheus Operator |
+| Cluster | Overview, Attention, Events, Identities | Browse, Config, Namespaces, Nodes, RBAC, Storage | CRDs, Custom Resources, then Cert Manager, External Secrets, Karpenter |
+| Namespace | Events, Map | Browse, Workloads, Autoscaling, Config, Network, Quotas, RBAC, Storage | Custom Resources, Argo CD, Cert Manager, External Secrets, Helm, Prometheus Operator |
 
 - Identities is an observed-subject view, not a resource category, so it stays
   outside Resources ([cluster identities](../architecture/cluster-identities.md)).
+- Workloads stays the default namespace view inside Resources; the default
+  lives in `ViewStateContext`, not in descriptor order.
 - `viewRegistry.ts` owns ordered view descriptors and their required
   `sidebarGroup`. Filter resource families by active-cluster discovery (and,
   for namespaces, the All Namespaces support filter, so Map appears only for
@@ -70,7 +72,8 @@ same slot.
   choices consume the same ordered descriptors. Grouping changes neither
   stable view IDs nor route-update ordering before entering the Cluster view.
 - Both scopes use `SIDEBAR_VIEW_GROUPS` and the shared `SidebarViewGroup`
-  renderer with compact rows and no separators. All groups start collapsed.
+  renderer with compact rows and no separators. Resources starts expanded so
+  the default namespace view is visible; Extensions starts collapsed.
 - Disclosure state uses four persisted app preferences (Resources and
   Extensions × Cluster and Namespace) and the existing keyboard navigation
   surface; target parsing accepts only registered group IDs. Namespace group

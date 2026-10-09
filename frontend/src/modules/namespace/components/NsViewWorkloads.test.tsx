@@ -317,7 +317,7 @@ describe('NsViewWorkloads', () => {
     );
   });
 
-  it('selects a workload row by populating the Pods table filters without opening the object', async () => {
+  it('selects a workload row to show its pods without opening the object', async () => {
     const workload = makeWorkload('Deployment', 'api', 'team-a', 'path:context');
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
@@ -340,33 +340,38 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
 
+    expect(podsViewPropsRef.current).toMatchObject({
+      namespace: 'team-a',
+      clusterId: 'path:context',
+      viewId: 'namespace-pods',
+      selectedObject: null,
+    });
+
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
 
     expect(openWithObjectMock).not.toHaveBeenCalled();
     expect(podsViewPropsRef.current).toMatchObject({
       namespace: 'team-a',
-      workloadFilterRequest: {
-        type: 'set',
-        workload: {
-          clusterId: 'path:context',
-          group: 'apps',
-          version: 'v1',
-          kind: 'Deployment',
-          namespace: 'team-a',
-          name: 'api',
-        },
+      selectedObject: {
+        clusterId: 'path:context',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'team-a',
+        name: 'api',
       },
     });
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
 
+    // A pod jump into the pane drops the selection through the pane's callback.
     act(() => {
-      const onWorkloadFilterMismatch = podsViewPropsRef.current?.onWorkloadFilterMismatch;
-      if (typeof onWorkloadFilterMismatch !== 'function') {
-        throw new Error('Expected the Pods filter mismatch callback');
+      const onSelectionClear = podsViewPropsRef.current?.onSelectionClear;
+      if (typeof onSelectionClear !== 'function') {
+        throw new Error('Expected the Pods selection clear callback');
       }
-      onWorkloadFilterMismatch();
+      onSelectionClear();
     });
-    expect(podsViewPropsRef.current?.workloadFilterRequest).toBeUndefined();
+    expect(podsViewPropsRef.current?.selectedObject).toBeNull();
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(false);
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
@@ -381,10 +386,7 @@ describe('NsViewWorkloads', () => {
         clearAction.onClick();
       }
     });
-    expect(podsViewPropsRef.current).toMatchObject({
-      namespace: 'team-a',
-      workloadFilterRequest: { type: 'clear' },
-    });
+    expect(podsViewPropsRef.current?.selectedObject).toBeNull();
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(false);
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
@@ -406,11 +408,11 @@ describe('NsViewWorkloads', () => {
     });
     expect(podsViewPropsRef.current).toMatchObject({ collapsed: true });
     // Selecting a workload while Pods is collapsed leaves it collapsed but still
-    // filters the pane, so expanding it later shows that workload's pods.
+    // narrows the pane, so expanding it later shows that workload's pods.
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
     expect(podsViewPropsRef.current).toMatchObject({
       collapsed: true,
-      workloadFilterRequest: { type: 'set', workload: expect.objectContaining({ name: 'api' }) },
+      selectedObject: expect.objectContaining({ name: 'api' }),
     });
   });
 
@@ -450,13 +452,40 @@ describe('NsViewWorkloads', () => {
       clearSelection();
     });
 
-    expect(podsViewPropsRef.current).toMatchObject({
-      workloadFilterRequest: { type: 'clear' },
-    });
+    expect(podsViewPropsRef.current?.selectedObject).toBeNull();
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(false);
   });
 
-  it('clears a workload-owned Pods filter when the namespace scope changes', async () => {
+  it('drops a selection the settled table does not show', async () => {
+    const workload = makeWorkload('Deployment', 'api', 'team-a', 'path:context');
+    const hidden = makeWorkload('Deployment', 'gone', 'team-a', 'path:context');
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [workload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    act(() => gridTablePropsRef.current.onRowPointerClick?.(hidden));
+
+    // No highlighted row means nothing may narrow the pane.
+    expect(podsViewPropsRef.current?.selectedObject).toBeNull();
+  });
+
+  it('clears the workload selection when the namespace scope changes', async () => {
     const workload = makeWorkload('Deployment', 'api', 'team-a', 'path:context');
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
@@ -479,24 +508,21 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-    expect(podsViewPropsRef.current?.workloadFilterRequest).toMatchObject({ type: 'set' });
+    expect(podsViewPropsRef.current?.selectedObject).toMatchObject({ name: 'api' });
 
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-b" metrics={null} />);
       await Promise.resolve();
     });
 
-    expect(podsViewPropsRef.current).toMatchObject({
-      namespace: 'team-b',
-      workloadFilterRequest: { type: 'clear' },
-    });
+    expect(podsViewPropsRef.current).toMatchObject({ namespace: 'team-b', selectedObject: null });
 
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
-    expect(podsViewPropsRef.current?.workloadFilterRequest).toEqual({ type: 'clear' });
+    expect(podsViewPropsRef.current?.selectedObject).toBeNull();
   });
 
   it('issues a namespace-scoped typed query for a single namespace and renders the query rows', async () => {

@@ -12,9 +12,7 @@ import {
   appendWorkloadTokens,
   type WorkloadData,
 } from '@modules/namespace/components/NsViewWorkloads.helpers';
-import type { PodWorkloadFilterRequest } from '@modules/namespace/components/podOwnerFilter';
 import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
-import WorkloadsPodsSplit from '@modules/namespace/components/WorkloadsPodsSplit';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
@@ -23,10 +21,12 @@ import {
   RESOURCE_STATUS_QUERY_FACET_KEYS,
   selectPayloadRows,
 } from '@modules/resource-grid/typedResourceQueryScope';
+import { useClearHiddenRowSelection } from '@modules/resource-grid/useClearHiddenRowSelection';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import StackedSplitPane from '@shared/components/StackedSplitPane';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -49,7 +49,6 @@ interface WorkloadsViewProps {
 }
 
 const WORKLOAD_FAVORITE_PANES = ['workloads', 'pods'] as const;
-const CLEAR_POD_WORKLOAD_FILTER_REQUEST: PodWorkloadFilterRequest = { type: 'clear' };
 
 interface WorkloadsTableProps extends WorkloadsViewProps {
   clusterId?: string | null;
@@ -187,6 +186,13 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       setTableMetricsInfo(queryPayload?.metrics ?? null);
     }, [queryPayload?.metrics]);
 
+    useClearHiddenRowSelection({
+      selectedKey: selectedWorkloadKey,
+      source,
+      keyExtractor,
+      onClear: onWorkloadSelectionClear,
+    });
+
     const getContextMenuItems = useCallback(
       (row: WorkloadData): ContextMenuItem[] => {
         return objectActions.getMenuItems(
@@ -220,8 +226,8 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
     );
 
     return (
-      <div className="workloads-pods-table-surface">
-        <div className="workloads-pods-table-surface__table">
+      <div className="stacked-split-table-surface">
+        <div className="stacked-split-table-surface__table">
           <ResourceInventoryTable
             source={source}
             gridTableProps={resolvedGridTableProps}
@@ -265,40 +271,34 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
   selectedClusterId,
 }) => {
   const { selectedClusterName } = useKubeconfig();
+  // The selection lives only in this mounted view: leaving the view, a favorite,
+  // or a remount starts with every pod in scope.
   const [selectedWorkload, setSelectedWorkload] = useState<ClusterObjectReference | null>(null);
-  const [podFilterRequest, setPodFilterRequest] = useState<PodWorkloadFilterRequest>();
   const [podsCollapsed, setPodsCollapsed] = useState(false);
 
-  // Keep selection provenance across a scope change long enough to remove only
-  // its Owner facet from shared persistence. Manual and favorite Owner filters
-  // have no selected workload and remain ordinary persisted table state.
   const selectedWorkloadMatchesScope =
     selectedWorkload === null ||
     (selectedWorkload.clusterId === selectedClusterId &&
       (namespace === ALL_NAMESPACES_SCOPE || selectedWorkload.namespace === namespace));
   const scopedSelectedWorkload = selectedWorkloadMatchesScope ? selectedWorkload : null;
-  const scopedPodFilterRequest = selectedWorkloadMatchesScope
-    ? podFilterRequest
-    : CLEAR_POD_WORKLOAD_FILTER_REQUEST;
 
   useEffect(() => {
     if (selectedWorkloadMatchesScope) {
       return;
     }
     setSelectedWorkload(null);
-    setPodFilterRequest(CLEAR_POD_WORKLOAD_FILTER_REQUEST);
     setPodsCollapsed(false);
   }, [selectedWorkloadMatchesScope]);
 
+  // A collapsed Pods pane stays collapsed; it shows this workload's pods once expanded.
   const handleWorkloadSelect = useCallback(
     (workload: WorkloadData) => {
-      const ref = buildRequiredObjectReference(
-        { ...workload.ref, clusterName: selectedClusterName },
-        { fallbackClusterId: selectedClusterId }
+      setSelectedWorkload(
+        buildRequiredObjectReference(
+          { ...workload.ref, clusterName: selectedClusterName },
+          { fallbackClusterId: selectedClusterId }
+        )
       );
-      setSelectedWorkload(ref);
-      // A collapsed Pods pane stays collapsed; it shows this workload's pods once expanded.
-      setPodFilterRequest({ type: 'set', workload: ref });
     },
     [selectedClusterId, selectedClusterName]
   );
@@ -314,11 +314,12 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
   );
   const handleWorkloadSelectionClear = useCallback(() => {
     setSelectedWorkload(null);
-    setPodFilterRequest(CLEAR_POD_WORKLOAD_FILTER_REQUEST);
   }, []);
   return (
     <FavoritePaneGroup primaryPaneId="workloads" expectedPaneIds={WORKLOAD_FAVORITE_PANES}>
-      <WorkloadsPodsSplit
+      <StackedSplitPane
+        upperLabel="Workloads"
+        lowerLabel="Pods"
         collapsed={podsCollapsed}
         upper={
           <WorkloadsTable
@@ -334,13 +335,12 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
         lower={
           <NsViewPods
             namespace={namespace}
+            clusterId={selectedClusterId}
+            viewId="namespace-pods"
             showNamespaceColumn={showNamespaceColumn}
             metrics={metrics}
-            workloadFilterRequest={scopedPodFilterRequest}
-            onWorkloadFilterMismatch={() => {
-              setSelectedWorkload(null);
-              setPodFilterRequest(undefined);
-            }}
+            selectedObject={scopedSelectedWorkload}
+            onSelectionClear={handleWorkloadSelectionClear}
             collapsed={podsCollapsed}
             onPodsCollapsedChange={setPodsCollapsed}
           />

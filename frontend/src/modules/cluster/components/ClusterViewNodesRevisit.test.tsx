@@ -112,6 +112,7 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
   FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock('@ui/favorites/FavToggle', () => ({
+  FavoritePaneGroup: ({ children }: { children: React.ReactNode }) => children,
   useFavToggle: () => ({
     type: 'toggle',
     id: 'favorite',
@@ -121,6 +122,11 @@ vi.mock('@ui/favorites/FavToggle', () => ({
     title: 'fav',
   }),
 }));
+// The revisit contract belongs to the Nodes table; the pods pane has its own tests.
+vi.mock('@modules/namespace/components/NsViewPods', () => ({
+  default: () => null,
+}));
+
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({ openWithObject: vi.fn() }),
 }));

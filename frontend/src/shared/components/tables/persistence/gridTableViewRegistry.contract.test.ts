@@ -139,6 +139,9 @@ function extractViewIds(sourceRoot: string): { viewId: string; file: string }[] 
     /useGridTablePersistence|useNamespaceGridTablePersistence|useClusterResourceGridTable|useNamespaceResourceGridTable|useQueryBackedNamespaceResourceGridTable|useQueryBackedClusterResourceGridTable|useObjectPanelResourceGridTable|AggregatedResourceGridView/;
   const staticViewIdPattern = /viewId:\s*['"]([^'"]+)['"]/g;
   const dynamicViewIdPattern = /viewId:\s*([a-zA-Z_$][a-zA-Z0-9_$]*)/g;
+  // A view that hands its saved-table key to a shared table component (the
+  // split views' pods pane) passes it as a JSX prop.
+  const jsxViewIdPattern = /\bviewId=\{?['"]([^'"]+)['"]\}?/g;
 
   const found: { viewId: string; file: string }[] = [];
 
@@ -152,6 +155,9 @@ function extractViewIds(sourceRoot: string): { viewId: string; file: string }[] 
       continue;
     }
     const content = fs.readFileSync(filePath, 'utf-8');
+    for (const match of content.matchAll(jsxViewIdPattern)) {
+      found.push({ viewId: match[1], file: filePath });
+    }
     if (!hookPattern.test(content)) {
       continue;
     }

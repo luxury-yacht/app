@@ -288,6 +288,80 @@ func TestLoadFavoritesFileMigratesV2WorkloadsAndPodsIntoBothPanes(t *testing.T) 
 	require.Equal(t, defaultPane, pods.Panes["workloads"])
 }
 
+// The Nodes route became a Nodes/Pods split; a favorite saved as one table
+// keeps its Nodes state and gains the Pods pane at defaults.
+func TestLoadFavoritesFileGivesSingleTableNodesFavoritesBothPanes(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newPersistenceTestFixture()
+	path, err := app.Favorites.getFavoritesFilePath()
+	require.NoError(t, err)
+	writeTestFileWithParents(t, path, []byte(`{
+		"schemaVersion": 3,
+		"favorites": [
+			{
+				"id":"nodes","name":"Nodes","viewType":"cluster","view":"nodes",
+				"panes":{"main":{"filters":{"search":"worker","kinds":{"mode":"all"},"namespaces":{"mode":"all"},"clusters":{"mode":"all"}},
+				"tableState":{"sortColumn":"cpu","sortDirection":"desc","columnVisibility":{}}}},"order":0
+			},
+			{
+				"id":"events","name":"Events","viewType":"cluster","view":"events",
+				"panes":{"main":{"filters":{"search":"warn","kinds":{"mode":"all"},"namespaces":{"mode":"all"},"clusters":{"mode":"all"}},
+				"tableState":{"sortColumn":"age","sortDirection":"asc","columnVisibility":{}}}},"order":1
+			},
+			{
+				"id":"split","name":"Split","viewType":"cluster","view":"nodes",
+				"panes":{
+					"nodes":{"filters":{"search":"a","kinds":{"mode":"all"},"namespaces":{"mode":"all"},"clusters":{"mode":"all"}},"tableState":{"sortColumn":"name","sortDirection":"asc","columnVisibility":{}}},
+					"pods":{"filters":{"search":"b","kinds":{"mode":"all"},"namespaces":{"mode":"all"},"clusters":{"mode":"all"}},"tableState":{"sortColumn":"age","sortDirection":"desc","columnVisibility":{}}}
+				},"order":2
+			}
+		]
+	}`), 0o644)
+
+	state, err := app.Favorites.loadFavoritesFile()
+	require.NoError(t, err)
+	require.Len(t, state.Favorites, 3)
+
+	nodes := state.Favorites[0]
+	require.Len(t, nodes.Panes, 2)
+	require.Equal(t, "worker", nodes.Panes["nodes"].Filters.Search)
+	require.Equal(t, "cpu", nodes.Panes["nodes"].TableState.SortColumn)
+	require.Equal(t, defaultFavoritePaneState(), nodes.Panes["pods"])
+
+	events := state.Favorites[1]
+	require.Len(t, events.Panes, 1)
+	require.Equal(t, "warn", events.Panes["main"].Filters.Search)
+
+	split := state.Favorites[2]
+	require.Len(t, split.Panes, 2)
+	require.Equal(t, "a", split.Panes["nodes"].Filters.Search)
+	require.Equal(t, "b", split.Panes["pods"].Filters.Search)
+}
+
+func TestLoadFavoritesFileMigratesV2NodesIntoBothPanes(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newPersistenceTestFixture()
+	path, err := app.Favorites.getFavoritesFilePath()
+	require.NoError(t, err)
+	writeTestFileWithParents(t, path, []byte(`{
+		"schemaVersion": 2,
+		"favorites": [
+			{
+				"id":"nodes","name":"Nodes","viewType":"cluster","view":"nodes",
+				"filters":{"search":"worker","kinds":{"mode":"all"},"namespaces":{"mode":"all"},"clusters":{"mode":"all"}},
+				"tableState":{"sortColumn":"cpu","sortDirection":"desc","columnVisibility":{}},"order":0
+			}
+		]
+	}`), 0o644)
+
+	state, err := app.Favorites.loadFavoritesFile()
+	require.NoError(t, err)
+	require.Len(t, state.Favorites, 1)
+	require.Equal(t, "worker", state.Favorites[0].Panes["nodes"].Filters.Search)
+	require.Equal(t, defaultFavoritePaneState(), state.Favorites[0].Panes["pods"])
+	require.NotContains(t, state.Favorites[0].Panes, "main")
+}
+
 func TestLoadFavoritesFileMigratesV1FavoritesLeftOnDiskByV2(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newPersistenceTestFixture()
@@ -553,7 +627,8 @@ func TestFavoriteFiltersPreserveClusterIdentityAndEmptyValues(t *testing.T) {
 	require.NoError(t, err)
 	favorites, err := app.Favorites.GetFavorites()
 	require.NoError(t, err)
-	filters := favorites[0].Panes["main"].Filters
+	// A single-table Nodes favorite loads as the Nodes pane of the Nodes/Pods split.
+	filters := favorites[0].Panes["nodes"].Filters
 	require.Equal(t, []string{"Prod:context", "prod:context"}, filters.Clusters.Values)
 	require.Equal(t, []string{"", "__empty__"}, filters.QueryFacets["team"].Values)
 }
@@ -567,5 +642,5 @@ func TestFavoriteV1MigrationPreservesCaseDistinctClusters(t *testing.T) {
 	favorites, err := app.Favorites.GetFavorites()
 	require.NoError(t, err)
 	require.Len(t, favorites, 1)
-	require.Equal(t, []string{"Prod:context", "prod:context"}, favorites[0].Panes["main"].Filters.Clusters.Values)
+	require.Equal(t, []string{"Prod:context", "prod:context"}, favorites[0].Panes["nodes"].Filters.Clusters.Values)
 }

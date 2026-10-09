@@ -6,6 +6,7 @@
  */
 
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
@@ -92,19 +93,39 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
   FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+const podsPanePropsRef = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
+const favoritePaneGroupPropsRef = vi.hoisted(() => ({
+  current: null as Record<string, unknown> | null,
+}));
+const favToggleStatesRef = vi.hoisted(() => ({ current: [] as Array<Record<string, unknown>> }));
+
+vi.mock('@modules/namespace/components/NsViewPods', () => ({
+  default: (props: Record<string, unknown>) => {
+    podsPanePropsRef.current = props;
+    return <div data-testid="pods-pane" />;
+  },
+}));
+
 vi.mock('@ui/favorites/FavToggle', () => ({
+  FavoritePaneGroup: (props: { children: React.ReactNode } & Record<string, unknown>) => {
+    favoritePaneGroupPropsRef.current = props;
+    return props.children;
+  },
   // Matches the real hook's shape: { item, modal }.
-  useFavToggle: () => ({
-    item: {
-      type: 'toggle',
-      id: 'favorite',
-      icon: null,
-      active: false,
-      onClick: () => undefined,
-      title: 'Save as favorite',
-    },
-    modal: null,
-  }),
+  useFavToggle: (state: Record<string, unknown>) => {
+    favToggleStatesRef.current.push(state);
+    return {
+      item: {
+        type: 'toggle',
+        id: 'favorite',
+        icon: null,
+        active: false,
+        onClick: () => undefined,
+        title: 'Save as favorite',
+      },
+      modal: null,
+    };
+  },
 }));
 
 const gridTablePropsRef: { current: CapturedGridTableProps } = {
@@ -268,6 +289,9 @@ describe('ClusterViewNodes', () => {
       isManual: false,
     };
     openWithObjectMock.mockReset();
+    podsPanePropsRef.current = null;
+    favoritePaneGroupPropsRef.current = null;
+    favToggleStatesRef.current = [];
     requestRefreshDomainStateMock.mockReset();
     requestRefreshDomainStateMock.mockImplementation(() =>
       Promise.resolve({
@@ -307,6 +331,89 @@ describe('ClusterViewNodes', () => {
     requestRefreshDomainStateMock.mock.calls.filter(
       ([request]) => (request as { domain?: string } | undefined)?.domain === domain
     );
+
+  it('shows the Nodes table above a pane of every pod in the cluster', async () => {
+    await renderNodes([baseNode]);
+
+    expect(podsPanePropsRef.current).toMatchObject({
+      namespace: ALL_NAMESPACES_SCOPE,
+      clusterId: 'path:context',
+      viewId: 'cluster-node-pods',
+      showNamespaceColumn: true,
+      selectedObject: null,
+    });
+    // One favorite saves both panes, under the pane ids the backend upgrade writes.
+    expect(favoritePaneGroupPropsRef.current).toMatchObject({
+      primaryPaneId: 'nodes',
+      expectedPaneIds: ['nodes', 'pods'],
+    });
+    expect(favToggleStatesRef.current[favToggleStatesRef.current.length - 1]).toMatchObject({
+      paneId: 'nodes',
+    });
+  });
+
+  it('selects a node row to show its pods without opening the node', async () => {
+    await renderNodes([baseNode]);
+
+    act(() => gridTablePropsRef.current.onRowPointerClick?.(baseNode));
+
+    expect(openWithObjectMock).not.toHaveBeenCalled();
+    expect(podsPanePropsRef.current?.selectedObject).toEqual(
+      expect.objectContaining({
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'Node',
+        name: 'node-1',
+      })
+    );
+    expect(gridTablePropsRef.current.isRowSelected?.(baseNode, 0)).toBe(true);
+
+    // Enter on the focused row still opens the node.
+    act(() => gridTablePropsRef.current.onRowClick?.(baseNode));
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'Node', name: 'node-1' })
+    );
+
+    const clearAction = gridTablePropsRef.current.filters?.options?.preActions?.find(
+      (action) => action.type !== 'separator' && action.title === 'Clear selected node'
+    );
+    act(() => {
+      if (clearAction?.type !== 'action') {
+        throw new Error('Expected the Clear selected node action');
+      }
+      clearAction.onClick();
+    });
+    expect(podsPanePropsRef.current?.selectedObject).toBeNull();
+    expect(gridTablePropsRef.current.isRowSelected?.(baseNode, 0)).toBe(false);
+
+    act(() => gridTablePropsRef.current.onRowPointerClick?.(baseNode));
+    act(() => requireValue(gridTablePropsRef.current.onRowSelectionClear, 'clear')());
+    expect(podsPanePropsRef.current?.selectedObject).toBeNull();
+
+    act(() => gridTablePropsRef.current.onRowPointerClick?.(baseNode));
+    act(() => {
+      const onSelectionClear = podsPanePropsRef.current?.onSelectionClear;
+      if (typeof onSelectionClear !== 'function') {
+        throw new Error('Expected the pods pane selection clear callback');
+      }
+      onSelectionClear();
+    });
+    expect(podsPanePropsRef.current?.selectedObject).toBeNull();
+  });
+
+  it('drops a node selection the settled table does not show', async () => {
+    await renderNodes([baseNode]);
+
+    act(() =>
+      gridTablePropsRef.current.onRowPointerClick?.({
+        ...baseNode,
+        ref: { ...baseNode.ref, name: 'gone' },
+      })
+    );
+
+    expect(podsPanePropsRef.current?.selectedObject).toBeNull();
+  });
 
   it('wires the Include metadata search toggle for the query-backed nodes table', async () => {
     await renderNodes([baseNode]);

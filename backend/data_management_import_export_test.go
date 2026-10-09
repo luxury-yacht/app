@@ -249,6 +249,30 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 	require.Equal(t, []int{0, 1}, []int{got[0].Order, got[1].Order})
 }
 
+func TestDecodeFavoritesDataFileGivesSingleTableNodesFavoritesBothPanes(t *testing.T) {
+	nodes := dataManagementFavorite("nodes", "Nodes")
+	nodes.ViewType = "cluster"
+	nodes.View = "nodes"
+	nodes.Panes = map[string]FavoritePaneState{
+		"main": {
+			Filters:    FavoriteFilters{Search: "worker"},
+			TableState: FavoriteTableState{SortColumn: "cpu", SortDirection: "desc"},
+		},
+	}
+	data, err := json.Marshal(favoritesDataFile{
+		Format:        favoritesDataFormat,
+		SchemaVersion: favoritesDataSchemaVersion,
+		Favorites:     []Favorite{nodes},
+	})
+	require.NoError(t, err)
+
+	document, err := decodeFavoritesDataFile(data)
+	require.NoError(t, err)
+	require.Len(t, document.Favorites[0].Panes, 2)
+	require.Equal(t, "worker", document.Favorites[0].Panes["nodes"].Filters.Search)
+	require.Equal(t, defaultFavoritePaneState(), document.Favorites[0].Panes["pods"])
+}
+
 func TestImportFavoritesRejectsDuplicateIDsWithoutChangingLibrary(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)

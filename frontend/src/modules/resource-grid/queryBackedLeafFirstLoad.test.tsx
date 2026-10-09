@@ -29,6 +29,7 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
 }));
 
 vi.mock('@ui/favorites/FavToggle', () => ({
+  FavoritePaneGroup: ({ children }: { children: React.ReactNode }) => children,
   useFavToggle: () => ({
     type: 'toggle',
     id: 'favorite',
@@ -223,6 +224,9 @@ vi.mock('@utils/errorHandler', () => ({
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
+  ChevronDownIcon: () => <span>collapse</span>,
+  ChevronUpIcon: () => <span>expand</span>,
+  CloseIcon: () => <span>close</span>,
   DeleteIcon: () => <span>delete</span>,
   DiffIcon: () => <span>diff</span>,
   DrainIcon: () => <span>drain</span>,
@@ -235,7 +239,7 @@ vi.mock('@shared/components/icons/SharedIcons', () => ({
 import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
 import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
-import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
+import ClusterViewNodes, { NodesTable } from '@modules/cluster/components/ClusterViewNodes';
 import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
 import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
 import NsViewAutoscaling from '@modules/namespace/components/NsViewAutoscaling';
@@ -737,7 +741,14 @@ describe('query-backed leaf first load', () => {
   it('uses the typed query result on first load for namespace pods', async () => {
     const scope = 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc';
     const observed = await renderQueryFirstLoad({
-      element: <NsViewPods namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
+      element: (
+        <NsViewPods
+          clusterId="cluster-a"
+          viewId="namespace-pods"
+          namespace={ALL_NAMESPACES_SCOPE}
+          showNamespaceColumn={true}
+        />
+      ),
       payload: {
         rows: [podRow('query-pod', '2h')],
       },
@@ -977,7 +988,14 @@ describe('query-backed leaf first load', () => {
   it('issues a namespace-scoped typed query on first load for namespace pods', async () => {
     const scope = 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc';
     const observed = await renderQueryFirstLoad({
-      element: <NsViewPods namespace="team-a" showNamespaceColumn={false} />,
+      element: (
+        <NsViewPods
+          clusterId="cluster-a"
+          viewId="namespace-pods"
+          namespace="team-a"
+          showNamespaceColumn={false}
+        />
+      ),
       payload: {
         rows: [podRow('query-pod', '2h')],
       },
@@ -1215,7 +1233,14 @@ describe('query-backed leaf first load', () => {
     },
     {
       label: 'namespace pods',
-      element: <NsViewPods namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
+      element: (
+        <NsViewPods
+          clusterId="cluster-a"
+          viewId="namespace-pods"
+          namespace={ALL_NAMESPACES_SCOPE}
+          showNamespaceColumn={true}
+        />
+      ),
       payload: { rows: [] },
       expected: [
         'age',
@@ -1287,7 +1312,7 @@ describe('query-backed leaf first load', () => {
     },
     {
       label: 'cluster nodes',
-      element: <ClusterViewNodes />,
+      element: <NodesTable />,
       payload: { rows: [] },
       expected: ['age', 'cpu', 'kind', 'memory', 'name', 'pods', 'restarts', 'status', 'version'],
     },

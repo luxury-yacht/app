@@ -1,4 +1,4 @@
-import './WorkloadsPodsSplit.css';
+import './StackedSplitPane.css';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -6,20 +6,26 @@ const MIN_UPPER_PERCENT = 10;
 const MAX_UPPER_PERCENT = 90;
 const KEYBOARD_RESIZE_STEP_PX = 16;
 
-interface WorkloadsPodsSplitProps {
+interface StackedSplitPaneProps {
   upper: React.ReactNode;
   lower: React.ReactNode;
+  /** Accessible names of the two regions; the resizer names both. */
+  upperLabel: string;
+  lowerLabel: string;
   collapsed?: boolean;
 }
 
 const clampResizePercent = (value: number) =>
   Math.round(Math.min(MAX_UPPER_PERCENT, Math.max(MIN_UPPER_PERCENT, value)) * 1000) / 1000;
 
-export default function WorkloadsPodsSplit({
+/** Two tables stacked vertically with a resizable boundary; the lower one can collapse. */
+export default function StackedSplitPane({
   upper,
   lower,
+  upperLabel,
+  lowerLabel,
   collapsed = false,
-}: Readonly<WorkloadsPodsSplitProps>) {
+}: Readonly<StackedSplitPaneProps>) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const resizingRef = useRef(false);
   const resizeStartRef = useRef({ clientY: 0, upperPercent: 50 });
@@ -30,13 +36,13 @@ export default function WorkloadsPodsSplit({
     if (!isResizing) {
       return;
     }
-    document.body.classList.add('workloads-pods-resizing');
-    return () => document.body.classList.remove('workloads-pods-resizing');
+    document.body.classList.add('stacked-split-resizing');
+    return () => document.body.classList.remove('stacked-split-resizing');
   }, [isResizing]);
 
   const applyUpperPercent = useCallback((value: number) => {
     const next = clampResizePercent(value);
-    rootRef.current?.style.setProperty('--workloads-pods-upper-size', `${next}%`);
+    rootRef.current?.style.setProperty('--stacked-split-upper-size', `${next}%`);
     setUpperPercent(next);
   }, []);
 
@@ -99,18 +105,15 @@ export default function WorkloadsPodsSplit({
   return (
     <div
       ref={rootRef}
-      className={`workloads-pods-split${collapsed ? ' workloads-pods-split--collapsed' : ''}${isResizing ? ' workloads-pods-split--resizing' : ''}`}
+      className={`stacked-split${collapsed ? ' stacked-split--collapsed' : ''}${isResizing ? ' stacked-split--resizing' : ''}`}
     >
-      <section
-        className="workloads-pods-split__pane workloads-pods-split__pane--upper"
-        aria-label="Workloads"
-      >
+      <section className="stacked-split__pane stacked-split__pane--upper" aria-label={upperLabel}>
         {upper}
       </section>
       {!collapsed && (
         <hr
-          className="workloads-pods-split__resizer"
-          aria-label="Resize Workloads and Pods"
+          className="stacked-split__resizer"
+          aria-label={`Resize ${upperLabel} and ${lowerLabel}`}
           aria-orientation="horizontal"
           aria-valuemin={MIN_UPPER_PERCENT}
           aria-valuemax={MAX_UPPER_PERCENT}
@@ -123,10 +126,7 @@ export default function WorkloadsPodsSplit({
           onPointerCancel={stopPointerResize}
         />
       )}
-      <section
-        className="workloads-pods-split__pane workloads-pods-split__pane--lower"
-        aria-label="Pods"
-      >
+      <section className="stacked-split__pane stacked-split__pane--lower" aria-label={lowerLabel}>
         {lower}
       </section>
     </div>

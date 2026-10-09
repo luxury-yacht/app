@@ -270,33 +270,42 @@ func decodeFavoritesDataFile(data []byte) (*favoritesDataFile, error) {
 	if document.SchemaVersion != favoritesDataSchemaVersion {
 		return nil, fmt.Errorf("unsupported favorites export schema version %d", document.SchemaVersion)
 	}
-	seen := make(map[string]struct{}, len(document.Favorites))
+	seenIDs := make(map[string]struct{}, len(document.Favorites))
 	seenNames := make(map[string]struct{}, len(document.Favorites))
 	for index := range document.Favorites {
-		favorite := &document.Favorites[index]
-		favorite.ID = strings.TrimSpace(favorite.ID)
-		favorite.Name = strings.TrimSpace(favorite.Name)
-		if favorite.ID == "" {
-			return nil, fmt.Errorf("favorite at index %d is missing an ID", index)
+		if err := normalizeImportedFavorite(&document.Favorites[index], index, seenIDs, seenNames); err != nil {
+			return nil, err
 		}
-		if favorite.Name == "" {
-			return nil, fmt.Errorf("favorite %q is missing a name", favorite.ID)
-		}
-		if _, exists := seen[favorite.ID]; exists {
-			return nil, fmt.Errorf("duplicate favorite ID %q", favorite.ID)
-		}
-		seen[favorite.ID] = struct{}{}
-		if _, exists := seenNames[favorite.Name]; exists {
-			return nil, fmt.Errorf("duplicate favorite name %q", favorite.Name)
-		}
-		seenNames[favorite.Name] = struct{}{}
-		if err := validateFavoritePanes(favorite.Panes); err != nil {
-			return nil, fmt.Errorf("favorite %q: %w", favorite.ID, err)
-		}
-		normalizeFavoritePanes(favorite.Panes)
-		favorite.Order = index
 	}
 	return &document, nil
+}
+
+// normalizeImportedFavorite validates one imported favorite against the ones
+// before it and brings its panes to the current shape.
+func normalizeImportedFavorite(favorite *Favorite, index int, seenIDs, seenNames map[string]struct{}) error {
+	favorite.ID = strings.TrimSpace(favorite.ID)
+	favorite.Name = strings.TrimSpace(favorite.Name)
+	if favorite.ID == "" {
+		return fmt.Errorf("favorite at index %d is missing an ID", index)
+	}
+	if favorite.Name == "" {
+		return fmt.Errorf("favorite %q is missing a name", favorite.ID)
+	}
+	if _, exists := seenIDs[favorite.ID]; exists {
+		return fmt.Errorf("duplicate favorite ID %q", favorite.ID)
+	}
+	seenIDs[favorite.ID] = struct{}{}
+	if _, exists := seenNames[favorite.Name]; exists {
+		return fmt.Errorf("duplicate favorite name %q", favorite.Name)
+	}
+	seenNames[favorite.Name] = struct{}{}
+	if err := validateFavoritePanes(favorite.Panes); err != nil {
+		return fmt.Errorf("favorite %q: %w", favorite.ID, err)
+	}
+	upgradeNodesFavoritePanes(favorite)
+	normalizeFavoritePanes(favorite.Panes)
+	favorite.Order = index
+	return nil
 }
 
 func cloneFavorites(favorites []Favorite) []Favorite {

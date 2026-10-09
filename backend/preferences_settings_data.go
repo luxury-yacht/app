@@ -204,11 +204,11 @@ func appPreferenceDescriptors() []preferenceDescriptor {
 	}
 
 	return []preferenceDescriptor{
-		unloggedPreference(boolPreference(appPreferenceSidebarClusterResourcesExpanded, false, false,
+		unloggedPreference(boolPreference(appPreferenceSidebarClusterResourcesExpanded, true, false,
 			"", func(s *AppSettings) *bool { return &s.SidebarClusterResourcesExpanded })),
 		unloggedPreference(boolPreference(appPreferenceSidebarClusterExtensionsExpanded, false, false,
 			"", func(s *AppSettings) *bool { return &s.SidebarClusterExtensionsExpanded })),
-		unloggedPreference(boolPreference(appPreferenceSidebarNamespaceResourcesExpanded, false, false,
+		unloggedPreference(boolPreference(appPreferenceSidebarNamespaceResourcesExpanded, true, false,
 			"", func(s *AppSettings) *bool { return &s.SidebarNamespaceResourcesExpanded })),
 		unloggedPreference(boolPreference(appPreferenceSidebarNamespaceExtensionsExpanded, false, false,
 			"", func(s *AppSettings) *bool { return &s.SidebarNamespaceExtensionsExpanded })),

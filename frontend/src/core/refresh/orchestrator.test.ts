@@ -2795,6 +2795,22 @@ describe('refreshOrchestrator', () => {
     expect(resourceStreamMocks.start).toHaveBeenCalledWith(scope);
   });
 
+  it('streams the cluster-wide pods scope while the Nodes view shows its pods pane', async () => {
+    registerStreamingPodsDomain();
+    refreshOrchestrator.updateContext({
+      currentView: 'cluster',
+      activeClusterView: 'nodes',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+    });
+
+    const scope = buildClusterScope('cluster-a', 'namespace:all');
+    refreshOrchestrator.setScopedDomainEnabled('pods', scope, true);
+    await Promise.resolve();
+
+    expect(resourceStreamMocks.start).toHaveBeenCalledWith(scope);
+  });
+
   it('keeps the view gate for namespace-shaped pods scopes', async () => {
     registerStreamingPodsDomain();
     refreshOrchestrator.updateContext({
