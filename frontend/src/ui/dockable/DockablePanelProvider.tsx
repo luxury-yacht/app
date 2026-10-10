@@ -899,8 +899,8 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
               this element via setDragImage at dragstart; DockableTabBar's
               per-tab getDragImage callback writes the dragged tab's
               label + kind class into the inner spans before handing the
-              element off. Offscreen by default via CSS fallback
-              (`transform: translate3d(var(--dockable-tab-drag-x, -9999px), ...)`). */}
+              element off. Offscreen by default through its fixed -9999px
+              position (DockablePanel.css). */}
           <div ref={dragPreviewRef} className="dockable-tab-drag-preview" aria-hidden="true">
             <span className="dockable-tab-drag-preview__kind kind-badge" aria-hidden="true" />
             <span className="dockable-tab-drag-preview__label" />

@@ -206,7 +206,7 @@
 .yaml-error-details {
   margin-top: 0.5rem;
   padding-left: 1.25rem;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   line-height: 1.4;
 }
 

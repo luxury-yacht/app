@@ -211,9 +211,8 @@ function ObjectTabsPreviewStrip({
         />
       </div>
       {/* Custom drag preview owned by this strip. Each strip mounts its
-          own preview element offscreen (via the class's default
-          `transform: translate3d(var(--dockable-tab-drag-x, -9999px), ...)`
-          rule). Only one is ever the active drag source at a time. */}
+          own preview element offscreen (the class's fixed -9999px
+          position). Only one is ever the active drag source at a time. */}
       <div ref={previewRef} className="dockable-tab-drag-preview" aria-hidden="true">
         <span
           ref={previewKindRef}

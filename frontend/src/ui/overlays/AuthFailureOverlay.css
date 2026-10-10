@@ -58,7 +58,7 @@
   padding: 0.75rem;
   border-radius: 4px;
   margin: 0 0 1.5rem 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-family-mono);
   overflow-wrap: anywhere;
   word-break: normal;
 }

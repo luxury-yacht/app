@@ -463,7 +463,7 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
 }
 
 .gridtable-hover-overlay.is-selected {
-  background-color: var(--grid-bg-selected, rgba(245, 158, 11, 0.1));
+  background-color: var(--color-bg-secondary);
   border-left-color: var(--color-accent);
 }
 

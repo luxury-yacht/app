@@ -179,7 +179,7 @@
   transform: translateX(-50%);
   padding: var(--spacing-xs) var(--spacing-md);
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius);
+  border-radius: var(--border-radius-sm);
   background: var(--button-generic-bg);
   color: var(--button-generic-text);
   box-shadow: var(--dropdown-menu-shadow);
@@ -313,7 +313,7 @@
 
 /* GridTable renders separate header/body tables; keep log-specific paint on both. */
 .gridtable.gridtable-parsed-logs {
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-parsed-logs);
   width: 100%;
   border-collapse: collapse;
   background-color: transparent;

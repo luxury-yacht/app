@@ -18,5 +18,14 @@
 ### Fixed
 
 - Error statuses such as CrashLoopBackOff, Failed, and NotReady show in red again, in tables and status chips.
+- Styling fixes:
+  - Invalid fields in dialogs show a red outline and red error text.
+  - Dropdown options highlight on hover in light mode.
+  - Binary values in the Details tab use the theme's warning colors instead of a cream box in dark mode.
+  - Hovering a selected table row no longer tints it amber in light mode.
+  - App Logs and the cluster authentication failure reason use a monospace font.
+  - Help text and hints in Settings and dialogs use the smaller secondary text size.
+  - Header buttons, the sidebar toggle, and Details tab values highlight on hover.
+  - Cluster Overview node links use the link color.
 - Tables with 25 or fewer rows no longer show pagination controls when some of their data is unavailable (for example, a resource type you can't list).
 - Paste from clipboard into a shell session no longer prompts with a context menu to confirm the paste.

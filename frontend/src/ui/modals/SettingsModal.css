@@ -46,7 +46,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-family: var(--font-family-display, var(--font-family-base));
+  font-family: var(--font-family-base);
   font-size: 1rem;
   color: var(--color-text-secondary);
 }
@@ -76,7 +76,7 @@
   display: block;
   margin-top: 1rem;
   padding: 0.5rem 0.75rem;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   letter-spacing: 0.04em;
 }

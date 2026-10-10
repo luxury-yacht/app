@@ -13,6 +13,10 @@ features to reusable building blocks.
 | `shared/` | Reusable components, hooks, icons, actions, constants, and pure utilities |
 | `styles/` | Global and shared CSS loaded by the app |
 
+- Style with the tokens in `styles/tokens/` and `styles/appearance-modes/`. A
+  `var(--name)` without a fallback must name a property something defines; an
+  undefined one silently drops the declaration. `cssCascadeContracts.test.ts`
+  enforces this.
 - `shared/` never depends on a feature module and holds rendering primitives
   only when they are independent of module state. Feature-local `hooks/`,
   `utils/`, and `types/` stay local; promote only when the dependency direction

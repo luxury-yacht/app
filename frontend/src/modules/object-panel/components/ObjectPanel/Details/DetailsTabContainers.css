@@ -92,7 +92,6 @@
   align-items: center;
   gap: 0.5rem 1.5rem;
   font-size: 0.75rem;
-  background-color: var(--color-background-tertiary);
 }
 
 .containers-resource {
