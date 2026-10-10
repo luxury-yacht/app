@@ -225,11 +225,14 @@ export function DockablePanelGroup({
     lastFocusedGroupKey,
     setLastFocusedGroupKey,
     requestGroupMove,
+    canFloatPanel,
     nativeWindowMode,
   } = useDockablePanelContext();
   const layoutStore = usePanelLayoutStoreContext();
   const panelState = useDockableGroupState(groupKey, true);
   const activePanelId = activeTab && tabs.includes(activeTab) ? activeTab : tabs[0];
+  // Float moves the whole group, so every tab must be able to float.
+  const canFloatGroup = tabs.every(canFloatPanel);
   const active = panelRegistrations.get(activePanelId);
   const initial = panelRegistrations.get(tabs[0]);
   const {
@@ -542,6 +545,7 @@ export function DockablePanelGroup({
             position={panelState.position}
             isMaximized={isMaximized}
             allowMaximize={allowMaximize}
+            canFloat={canFloatGroup}
             onDock={handleDock}
             onToggleMaximize={toggleMaximize}
             onClose={handleClose}

@@ -87,6 +87,7 @@ describe('DockablePanelControls', () => {
           position="right"
           isMaximized={false}
           allowMaximize={false}
+          canFloat
           onDock={onDock}
           onToggleMaximize={onToggleMaximize}
           onClose={onClose}
@@ -129,6 +130,7 @@ describe('DockablePanelControls', () => {
         position="bottom"
         isMaximized={false}
         allowMaximize
+        canFloat
         onDock={onDock}
         onToggleMaximize={onToggleMaximize}
         onClose={onClose}

@@ -221,7 +221,12 @@ interface DockablePanelProviderProps {
     targetPosition: DockPosition
   ) => void;
   canStartTabDrag?: (panelId: string) => boolean;
+  // Float is offered only for panels the native-window owner can transfer.
+  // Without an owner nothing can float.
+  canFloatPanel?: (panelId: string) => boolean;
 }
+
+const cannotFloatPanel = () => false;
 
 export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   children,
@@ -235,6 +240,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   onTabMoveRequest,
   onClusterTabTearOff,
   canStartTabDrag,
+  canFloatPanel = cannotFloatPanel,
 }) => {
   const lifecycleGuards = useOptionalPanelLifecycleGuardRegistry();
   // Per-cluster panel layout stores. Each open cluster gets its own
@@ -855,6 +861,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       getClusterTabGroups,
       requestGroupMove,
       requestTabMove,
+      canFloatPanel,
       nativeWindowMode,
     }),
     [
@@ -886,6 +893,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       getClusterTabGroups,
       requestGroupMove,
       requestTabMove,
+      canFloatPanel,
       nativeWindowMode,
     ]
   );
