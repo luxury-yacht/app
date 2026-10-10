@@ -1,0 +1,27 @@
+/* Floats at the bottom of a log view's content frame (position: relative)
+   while the view is scrolled away from the newest line. */
+.log-resume-scrolling {
+  position: absolute;
+  left: 50%;
+  bottom: var(--spacing-sm);
+  z-index: 2;
+  transform: translateX(-50%);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--button-generic-bg);
+  color: var(--button-generic-text);
+  box-shadow: var(--dropdown-menu-shadow);
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.log-resume-scrolling:hover {
+  background: var(--button-generic-hover);
+}
+
+.log-resume-scrolling:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

@@ -101,129 +101,19 @@
   overflow: hidden;
 }
 
-.app-logs-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.5;
-  background: var(--color-bg);
-  min-height: 0;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.app-logs-container * {
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.app-logs-header,
-.log-entry {
-  display: grid;
-  grid-template-columns:
-    var(--app-log-timestamp-width, 90px) var(--app-log-level-width, 60px)
-    var(--app-log-source-width, 120px) var(--app-log-cluster-width, 140px) minmax(0, 1fr);
-}
-
-.app-logs-header {
-  flex-shrink: 0;
-  padding: 5px 10px;
-  background: var(--color-bg-secondary);
-  border-bottom: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.5;
-  text-transform: uppercase;
-}
-
-.app-logs-header > thead,
-.app-logs-header > thead > tr {
-  display: contents;
-}
-
-.app-logs-header-cell {
+/* Positions the Resume scrolling button over the bottom of the log body. */
+.app-logs-content-frame {
   position: relative;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.app-logs-header-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.app-logs-column-resizer {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  position: absolute;
-  top: -5px;
-  right: -4px;
-  bottom: -5px;
-  z-index: 1;
-  width: 8px;
-  cursor: col-resize;
-  touch-action: none;
-}
-
-.app-logs-column-resizer::after {
-  content: "";
-  position: absolute;
-  top: 4px;
-  right: 3px;
-  bottom: 4px;
-  width: 1px;
-  background: var(--color-border);
-  opacity: 0;
-}
-
-.app-logs-column-resizer:hover::after,
-.app-logs-column-resizer:focus-visible::after {
-  opacity: 1;
-}
-
-.app-logs-column-resizer:focus-visible {
-  outline: 1px solid var(--color-accent);
-  outline-offset: -1px;
-}
-
-.app-logs-container.empty {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-tertiary);
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
 }
 
-/* Log entries */
-.log-entry {
-  padding: 2px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.log-entry:hover {
-  background: rgba(255, 255, 255, 0.02);
-}
-
+/* The shared log table (LogTable.css) owns cell layout, wrapping, and expansion,
+   as in the Logs tab's Table format; Application Logs keeps only its colours. */
 .log-timestamp {
   color: var(--color-text-tertiary);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.log-level {
-  font-weight: 600;
-  text-transform: uppercase;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .log-level.DEBUG {
@@ -245,36 +135,15 @@
 .log-source {
   color: var(--color-text-secondary);
   opacity: 0.7;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .log-cluster {
   color: var(--color-text-secondary);
   opacity: 0.85;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .log-message {
-  min-width: 0;
   color: var(--color-text);
-  word-wrap: break-word;
-  white-space: pre-wrap;
-  padding-left: 10px;
-}
-
-.app-logs-header .log-timestamp,
-.app-logs-header .log-level,
-.app-logs-header .log-source,
-.app-logs-header .log-cluster,
-.app-logs-header .log-message {
-  color: inherit;
-  opacity: 1;
 }
 
 /* Loading state */

@@ -926,8 +926,8 @@ describe('appPreferences', () => {
         {
           key: 'sidebarClusterResourcesExpanded',
           type: 'boolean',
-          defaultValue: false,
-          currentValue: true,
+          defaultValue: true,
+          currentValue: false,
         },
         {
           key: 'sidebarNamespaceExtensionsExpanded',
@@ -938,9 +938,10 @@ describe('appPreferences', () => {
       ],
     });
     await hydrateAppPreferences({ force: true });
-    expect(getSidebarGroupExpanded('cluster', 'resources')).toBe(true);
+    expect(getSidebarGroupExpanded('cluster', 'resources')).toBe(false);
     expect(getSidebarGroupExpanded('cluster', 'extensions')).toBe(false);
-    expect(getSidebarGroupExpanded('namespace', 'resources')).toBe(false);
+    // Unsent Resources disclosure falls back to its open default.
+    expect(getSidebarGroupExpanded('namespace', 'resources')).toBe(true);
     expect(getSidebarGroupExpanded('namespace', 'extensions')).toBe(true);
     const observed: boolean[] = [];
     const unsubscribe = eventBus.on('settings:sidebar-expansion', () => {
@@ -964,7 +965,7 @@ describe('appPreferences', () => {
       expect(getSidebarGroupExpanded('namespace', 'extensions')).toBe(true);
       await flushPromises();
       expect(getSidebarGroupExpanded('namespace', 'extensions')).toBe(false);
-      expect(getSidebarGroupExpanded('cluster', 'resources')).toBe(true);
+      expect(getSidebarGroupExpanded('cluster', 'resources')).toBe(false);
       expect(observed).toEqual([false, true, false]);
       expect(desktopRuntimeMocks.emitBroadcastEvent).not.toHaveBeenCalled();
     } finally {

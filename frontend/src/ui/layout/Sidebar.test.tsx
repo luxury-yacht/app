@@ -244,20 +244,76 @@ describe('Sidebar', () => {
     });
   };
 
-  it('opens cluster identities while Resources remains collapsed', () => {
+  it('shows only Browse, Events, and Map (plus Attention and Identities for clusters) directly, with the rest under an initially open Resources', () => {
     renderSidebar();
     const host = requireValue(container, 'expected Sidebar container');
-    const resources = host.querySelector<HTMLButtonElement>(
-      '[data-sidebar-target-kind="cluster-toggle"][data-sidebar-target-id="resources"]'
+    const describeTarget = (element: HTMLElement) =>
+      element.dataset.sidebarTargetView ??
+      `${element.dataset.sidebarTargetKind}:${element.dataset.sidebarTargetId ?? ''}`;
+    const clusterSection = requireValue(
+      Array.from(host.querySelectorAll<HTMLElement>('.sidebar-section')).find(
+        (section) => section.querySelector('h3')?.textContent === 'Cluster'
+      ),
+      'expected Cluster section'
     );
-    expect(resources?.getAttribute('aria-expanded')).toBe('false');
-    const identities = host.querySelector<HTMLButtonElement>(
-      '[data-sidebar-target-view="identities"]'
+    expect(
+      Array.from(
+        clusterSection.querySelectorAll<HTMLElement>('[data-sidebar-focusable="true"]'),
+        describeTarget
+      )
+    ).toEqual([
+      'overview:',
+      'attention',
+      'browse',
+      'events',
+      'identities',
+      'cluster-toggle:resources',
+      'config',
+      'namespaces',
+      'nodes',
+      'rbac',
+      'storage',
+      'cluster-toggle:extensions',
+    ]);
+
+    act(() =>
+      requireValue(
+        host.querySelector<HTMLButtonElement>('[data-sidebar-target-kind="namespace-toggle"]'),
+        'expected namespace toggle'
+      ).click()
     );
-    expect(identities).not.toBeNull();
-    act(() => identities?.click());
-    expect(viewStateMock.setActiveClusterView).toHaveBeenCalledWith('identities');
-    expect(resources?.getAttribute('aria-expanded')).toBe('false');
+    expect(
+      Array.from(
+        host.querySelectorAll<HTMLElement>(
+          `[data-sidebar-target-namespace="${namespaceKey('default')}"]:not([data-sidebar-target-kind="namespace-toggle"])`
+        ),
+        describeTarget
+      )
+    ).toEqual([
+      'browse',
+      'events',
+      'map',
+      'namespace-group-toggle:resources',
+      'workloads',
+      'pods',
+      'autoscaling',
+      'config',
+      'network',
+      'quotas',
+      'rbac',
+      'storage',
+      'namespace-group-toggle:extensions',
+    ]);
+    act(() =>
+      requireValue(
+        host.querySelector<HTMLButtonElement>(
+          `[data-sidebar-target-namespace="${namespaceKey('default')}"][data-sidebar-target-view="workloads"]`
+        ),
+        'expected Workloads item'
+      ).click()
+    );
+    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('workloads');
+    expect(namespaceState.setSelectedNamespace).toHaveBeenLastCalledWith('default', 'cluster-a');
   });
 
   it('exposes navigation items and disclosure state with native buttons', () => {
@@ -275,14 +331,14 @@ describe('Sidebar', () => {
     expect(overview?.tagName).toBe('BUTTON');
     expect(overview?.getAttribute('aria-current')).toBe('page');
     expect(resources?.tagName).toBe('BUTTON');
-    expect(resources?.getAttribute('aria-expanded')).toBe('false');
+    expect(resources?.getAttribute('aria-expanded')).toBe('true');
     expect(resources?.getAttribute('aria-controls')).toBeTruthy();
     expect(namespace?.tagName).toBe('BUTTON');
     expect(namespace?.getAttribute('aria-expanded')).toBe('false');
     expect(namespace?.getAttribute('aria-controls')).toBeTruthy();
 
     act(() => resources?.click());
-    expect(resources?.getAttribute('aria-expanded')).toBe('true');
+    expect(resources?.getAttribute('aria-expanded')).toBe('false');
   });
 
   const pressKey = (key: string, shiftKey = false) => {
@@ -302,7 +358,6 @@ describe('Sidebar', () => {
   };
 
   const clickNodes = () => {
-    toggleClusterGroup('resources');
     const nodes = requireValue(
       container?.querySelector<HTMLButtonElement>('[data-sidebar-target-view="nodes"]'),
       'expected Nodes item'
@@ -504,6 +559,7 @@ describe('Sidebar', () => {
   });
 
   it('keeps primary views reachable while Resources and Extensions collapse independently', () => {
+    setAppPreferencesForTesting({ sidebarClusterResourcesExpanded: false });
     discoveredFamilies.byCluster['cluster-a'] = { cluster: ['karpenter'] };
     renderSidebar();
     const host = requireValue(container, 'expected Sidebar test container');
@@ -522,7 +578,6 @@ describe('Sidebar', () => {
     const extensions = toggle('extensions');
     expect(resources.getAttribute('aria-expanded')).toBe('false');
     expect(extensions.getAttribute('aria-expanded')).toBe('false');
-    expect(view('namespaces')).toBeNull();
     expect(view('nodes')).toBeNull();
     expect(view('karpenter')).toBeNull();
     expect(view('custom')).toBeNull();
@@ -593,7 +648,10 @@ describe('Sidebar', () => {
   });
 
   it('shares namespace group state across namespaces and clusters and routes keyboard selection', () => {
-    setAppPreferencesForTesting({ exclusiveNamespaces: false });
+    setAppPreferencesForTesting({
+      exclusiveNamespaces: false,
+      sidebarNamespaceResourcesExpanded: false,
+    });
     discoveredFamilies.byCluster['cluster-a'] = { namespaced: ['argocd'] };
     const defaultNamespace = requireValue(
       namespaceState.namespaces[0],
@@ -628,9 +686,9 @@ describe('Sidebar', () => {
     expect(view('default', 'custom')).toBeNull();
     act(() => namespace('default').focus());
     pressKey('ArrowDown');
-    expect(document.activeElement).toBe(view('default', 'workloads'));
+    expect(document.activeElement).toBe(view('default', 'browse'));
     pressKey('Enter');
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('workloads');
+    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('browse');
     expect(namespaceState.setSelectedNamespace).toHaveBeenLastCalledWith('default', 'cluster-a');
     act(() => resources.focus());
     pressKey(' ');
@@ -638,9 +696,9 @@ describe('Sidebar', () => {
     expect(view('other', 'autoscaling')).not.toBeNull();
     expect(view('default', 'argocd')).toBeNull();
     pressKey('ArrowDown');
-    expect(document.activeElement).toBe(view('default', 'autoscaling'));
+    expect(document.activeElement).toBe(view('default', 'workloads'));
     pressKey('Enter');
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('autoscaling');
+    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('workloads');
     expect(namespaceState.setSelectedNamespace).toHaveBeenLastCalledWith('default', 'cluster-a');
     act(() => resources.focus());
     pressKey(' ');
@@ -650,7 +708,7 @@ describe('Sidebar', () => {
     expect(view('default', 'custom')).not.toBeNull();
     expect(view('default', 'argocd')).not.toBeNull();
     expect(view('other', 'custom')).not.toBeNull();
-    for (const id of ['workloads', 'browse', 'events']) {
+    for (const id of ['events', 'map']) {
       act(() => requireValue(view('default', id), `expected direct view ${id}`).click());
       expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith(id);
       expect(namespaceState.setSelectedNamespace).toHaveBeenLastCalledWith('default', 'cluster-a');
@@ -691,13 +749,14 @@ describe('Sidebar', () => {
     kubeconfigState.selectedClusterId = 'cluster-b';
     renderSidebar();
     act(() => find('namespace-toggle').click());
-    expect(find('cluster-toggle', 'resources').getAttribute('aria-expanded')).toBe('true');
+    expect(find('cluster-toggle', 'resources').getAttribute('aria-expanded')).toBe('false');
     expect(find('cluster-toggle', 'extensions').getAttribute('aria-expanded')).toBe('false');
-    expect(find('namespace-group-toggle', 'resources').getAttribute('aria-expanded')).toBe('false');
+    expect(find('namespace-group-toggle', 'resources').getAttribute('aria-expanded')).toBe('true');
     expect(find('namespace-group-toggle', 'extensions').getAttribute('aria-expanded')).toBe('true');
   });
 
   it('preserves a persisted collapse on mount with a grouped view selected, then reveals fresh navigation', () => {
+    setAppPreferencesForTesting({ sidebarClusterResourcesExpanded: false });
     viewStateMock.viewType = 'cluster';
     viewStateMock.sidebarSelection = { type: 'cluster', value: 'nodes' };
     renderSidebar();
@@ -1089,7 +1148,6 @@ describe('Sidebar', () => {
 
   it('collapses cluster resources when toggled', () => {
     renderSidebar();
-    toggleClusterGroup('resources');
     const nodesItemBefore = requireValue(
       container,
       'expected test value in Sidebar.test.tsx'
@@ -1118,7 +1176,6 @@ describe('Sidebar', () => {
 
   it('activates a specific cluster resource view when clicked', () => {
     renderSidebar();
-    toggleClusterGroup('resources');
     const nodesItem = requireValue(
       container,
       'expected test value in Sidebar.test.tsx'
@@ -1228,18 +1285,18 @@ describe('Sidebar', () => {
 
     expect(namespaceGroupScroll).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' });
     namespaceGroupScroll.mockClear();
-    const resourcesToggle = requireValue(
+    const extensionsToggle = requireValue(
       namespaceGroup.querySelector<HTMLButtonElement>(
-        '[data-sidebar-target-kind="namespace-group-toggle"][data-sidebar-target-id="resources"]'
+        '[data-sidebar-target-kind="namespace-group-toggle"][data-sidebar-target-id="extensions"]'
       ),
-      'expected namespace Resources disclosure'
+      'expected namespace Extensions disclosure'
     );
-    act(() => resourcesToggle.click());
-    const resourceViews = requireValue(
-      document.getElementById(resourcesToggle.getAttribute('aria-controls') ?? ''),
-      'expected expanded resource views'
+    act(() => extensionsToggle.click());
+    const extensionViews = requireValue(
+      document.getElementById(extensionsToggle.getAttribute('aria-controls') ?? ''),
+      'expected expanded extension views'
     );
-    act(() => resourceViews.dispatchEvent(new Event('animationend', { bubbles: true })));
+    act(() => extensionViews.dispatchEvent(new Event('animationend', { bubbles: true })));
     expect(namespaceGroupScroll).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' });
     vi.useRealTimers();
   });

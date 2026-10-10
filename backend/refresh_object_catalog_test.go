@@ -213,7 +213,7 @@ func TestCatalogWaitsForRebuiltIngestStoreBeforeFirstCollection(t *testing.T) {
 func TestCatalogStartsForNamespaceScopedIdentityDeniedClusterWideInformers(t *testing.T) {
 	const namespace = "team-a"
 	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
-	app.Refresh.allowedNamespaces = func(string) []string { return []string{namespace} }
+	app.Refresh.allowedNamespaces = func(string) ([]string, error) { return []string{namespace}, nil }
 	clients := app.ClusterRuntime.clusterClientsForID(target.meta.ID)
 	kube := clients.client.(*cgofake.Clientset)
 	// Only ReplicaSets in the scope namespace are granted. Denying the other kinds

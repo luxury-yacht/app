@@ -221,7 +221,12 @@ interface DockablePanelProviderProps {
     targetPosition: DockPosition
   ) => void;
   canStartTabDrag?: (panelId: string) => boolean;
+  // Float is offered only for panels the native-window owner can transfer.
+  // Without an owner nothing can float.
+  canFloatPanel?: (panelId: string) => boolean;
 }
+
+const cannotFloatPanel = () => false;
 
 export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   children,
@@ -235,6 +240,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   onTabMoveRequest,
   onClusterTabTearOff,
   canStartTabDrag,
+  canFloatPanel = cannotFloatPanel,
 }) => {
   const lifecycleGuards = useOptionalPanelLifecycleGuardRegistry();
   // Per-cluster panel layout stores. Each open cluster gets its own
@@ -855,6 +861,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       getClusterTabGroups,
       requestGroupMove,
       requestTabMove,
+      canFloatPanel,
       nativeWindowMode,
     }),
     [
@@ -886,6 +893,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       getClusterTabGroups,
       requestGroupMove,
       requestTabMove,
+      canFloatPanel,
       nativeWindowMode,
     ]
   );
@@ -899,8 +907,8 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
               this element via setDragImage at dragstart; DockableTabBar's
               per-tab getDragImage callback writes the dragged tab's
               label + kind class into the inner spans before handing the
-              element off. Offscreen by default via CSS fallback
-              (`transform: translate3d(var(--dockable-tab-drag-x, -9999px), ...)`). */}
+              element off. Offscreen by default through its fixed -9999px
+              position (DockablePanel.css). */}
           <div ref={dragPreviewRef} className="dockable-tab-drag-preview" aria-hidden="true">
             <span className="dockable-tab-drag-preview__kind kind-badge" aria-hidden="true" />
             <span className="dockable-tab-drag-preview__label" />

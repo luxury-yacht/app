@@ -2,7 +2,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-3, 0.75rem);
+  gap: var(--spacing-md);
   flex-wrap: nowrap;
   width: 100%;
   min-width: 0;
@@ -12,7 +12,7 @@
 .table-pagination-page-size {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2, 0.5rem);
+  gap: var(--spacing-sm);
   flex: 0 0 auto;
   min-width: 0;
 }
@@ -38,7 +38,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-1, 0.25rem);
+  gap: var(--spacing-xs);
   flex: 0 1 auto;
   min-width: 8.5rem;
   color: var(--color-text-secondary);
@@ -71,7 +71,7 @@
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  gap: var(--space-1, 0.25rem);
+  gap: var(--spacing-xs);
 }
 
 .table-pagination-button {
@@ -133,8 +133,8 @@
 .table-pagination-page-jump {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--space-1, 0.25rem);
-  margin: 0 var(--space-1, 0.25rem);
+  gap: var(--spacing-xs);
+  margin: 0 var(--spacing-xs);
   white-space: nowrap;
   font-size: var(--font-size-sm, 0.875rem);
 }

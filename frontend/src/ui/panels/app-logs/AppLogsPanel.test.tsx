@@ -14,8 +14,12 @@ import { act, type ComponentProps, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eventBus } from '@/core/events';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
-import { installWailsDragRuntime } from '@/test-utils/wailsDragRuntime.test.helpers';
 
 interface CapturedDropdownProps {
   value: string | string[];
@@ -94,7 +98,12 @@ vi.mock('@core/desktop-runtime', () => ({
   writeClipboardText: (...args: unknown[]) => nativeClipboardWriteTextMock(...args),
   onEvent: (eventName: string, handler: (...args: unknown[]) => void) => {
     runtimeEventHandlers.set(eventName, handler);
-    return runtimeDisposerMock;
+    return () => {
+      if (runtimeEventHandlers.get(eventName) === handler) {
+        runtimeEventHandlers.delete(eventName);
+      }
+      runtimeDisposerMock(eventName);
+    };
   },
 }));
 
@@ -157,7 +166,8 @@ const renderPanel = async (initialIsOpen = true) => {
           </ZoomProvider>
         </KeyboardProvider>
       ) : (
-        panel
+        // The log table is a GridTable, which registers with the keyboard owner.
+        <KeyboardProvider>{panel}</KeyboardProvider>
       )
     );
     await Promise.resolve();
@@ -169,7 +179,11 @@ const renderPanel = async (initialIsOpen = true) => {
     onCloseMock,
     rerender: async (nextIsOpen = true) => {
       await act(async () => {
-        root.render(<AppLogsPanel isOpen={nextIsOpen} onClose={onCloseMock} />);
+        root.render(
+          <KeyboardProvider>
+            <AppLogsPanel isOpen={nextIsOpen} onClose={onCloseMock} />
+          </KeyboardProvider>
+        );
         await Promise.resolve();
       });
     },
@@ -237,8 +251,49 @@ beforeEach(() => {
 afterEach(() => {
   restoreClipboard?.();
   restoreClipboard = undefined;
+  resetAppPreferencesCacheForTesting();
   vi.useRealTimers();
 });
+
+const logLine = (sequence: number, message = `line ${sequence}`) => ({
+  sequence,
+  timestamp: '2024-01-01T00:00:00.000Z',
+  level: 'info',
+  message,
+  source: 'core',
+});
+
+const logLines = (from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_value, index) => logLine(from + index));
+
+// Delivers one app-logs:added event the way the backend does after a write.
+const emitAppLogsAdded = async (sequence: number) => {
+  await act(async () => {
+    runtimeEventHandlers.get('app-logs:added')?.({ sequence });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+};
+
+// The panel's line count, "(N)": every kept line, drawn or not.
+const lineCount = (container: HTMLElement) =>
+  container.querySelector('.app-logs-count')?.textContent;
+
+// Messages of the rows actually drawn; a long log draws only the rows in view.
+const drawnMessages = (container: HTMLElement) =>
+  Array.from(container.querySelectorAll('.log-message'), (element) => element.textContent);
+
+// Scroll and row measurement settle on animation frames.
+const flushFrames = async () => {
+  await act(async () => {
+    vi.advanceTimersByTime(100);
+  });
+};
+
+const autoRefreshButton = (container: HTMLElement) =>
+  container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Stop auto-refresh"], button[aria-label="Start auto-refresh"]'
+  );
 
 afterAll(() => {
   restoreClipboard?.();
@@ -281,76 +336,69 @@ describe('AppLogsPanel', () => {
 
     await flushInitialLoad();
 
-    const entries = container.querySelectorAll('.log-entry');
+    const entries = container.querySelectorAll('.gridtable-row');
     expect(entries.length).toBe(2);
     expect(getAppLogsMock).toHaveBeenCalledTimes(1);
 
     cleanup();
   });
 
-  it('resizes log columns from the header row', async () => {
+  it('shows each log field in its own column under the standard table header', async () => {
     vi.useFakeTimers();
     getAppLogsMock.mockResolvedValue([
       {
         sequence: 1,
         timestamp: '2024-01-01T00:00:00.000Z',
-        level: 'info',
-        message: 'Ready',
-        source: 'core',
+        level: 'warn',
+        message: 'Slow response',
+        source: 'refresh',
+        clusterId: 'kube:alpha',
+        clusterName: 'alpha',
       },
     ]);
 
     const { container, cleanup } = await renderPanel();
-
     await flushInitialLoad();
 
-    const header = container.querySelector<HTMLElement>('.app-logs-header');
-    const clusterResizer = container.querySelector<HTMLElement>(
-      '[aria-label="Resize Cluster column"]'
+    const headers = Array.from(
+      container.querySelectorAll('.gridtable-header .grid-cell-header'),
+      (cell) => cell.textContent
     );
-    expect(header?.style.getPropertyValue('--app-log-cluster-width')).toBe('140px');
-    expect(clusterResizer).not.toBeNull();
-
-    await act(async () => {
-      requireValue(clusterResizer, 'expected test value in AppLogsPanel.test.tsx').dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(header?.style.getPropertyValue('--app-log-cluster-width')).toBe('150px');
+    expect(headers).toEqual(['Time', 'Level', 'Source', 'Cluster', 'Message']);
+    const cells = Array.from(
+      container.querySelectorAll('.gridtable-row .grid-cell'),
+      (cell) => cell.textContent
+    );
+    expect(cells.slice(1)).toEqual(['warn', '[refresh]', '[alpha]', 'Slow response']);
 
     cleanup();
   });
 
-  it('does not restore a finished log-column cursor after leaving a window edge', async () => {
+  // Long messages sit on one line like any table cell; expanding a row shows all
+  // of it, as in the Logs tab's Table format.
+  it('expands a row to read a long message in full', async () => {
     vi.useFakeTimers();
-    const runtime = await installWailsDragRuntime('linux');
+    getAppLogsMock.mockResolvedValue([logLine(1, `start ${'x'.repeat(400)} end`)]);
+
     const { container, cleanup } = await renderPanel();
-    try {
-      await flushInitialLoad();
-      const resizer = container.querySelector<HTMLElement>('[aria-label="Resize Cluster column"]');
+    await flushInitialLoad();
+    const row = () =>
+      requireValue(container.querySelector<HTMLElement>('.gridtable-row'), 'expected a log row');
+    const clickMessage = async () => {
       await act(async () => {
-        resizer?.dispatchEvent(
-          new MouseEvent('pointerdown', { bubbles: true, clientX: 200, button: 0 })
-        );
+        row()
+          .querySelector('.log-message')
+          ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
-      document.body.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 1, clientY: 300, buttons: 1 })
-      );
-      expect(document.body.style.cursor).toBe('ew-resize');
-      await act(async () => {
-        window.dispatchEvent(new MouseEvent('pointerup'));
-      });
-      document.body.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 400, clientY: 300 })
-      );
-      expect(document.body.style.cursor).not.toBe('col-resize');
-    } finally {
-      cleanup();
-      runtime.cleanup();
-      document.body.style.cursor = '';
-    }
+    };
+
+    expect(row().classList.contains('parsed-row-expanded')).toBe(false);
+    await clickMessage();
+    expect(row().classList.contains('parsed-row-expanded')).toBe(true);
+    await clickMessage();
+    expect(row().classList.contains('parsed-row-expanded')).toBe(false);
+
+    cleanup();
   });
 
   it('appends new logs from app-logs events using delta reads and listener disposers', async () => {
@@ -377,7 +425,7 @@ describe('AppLogsPanel', () => {
     const { container, cleanup } = await renderPanel();
 
     await flushInitialLoad();
-    expect(container.querySelectorAll('.log-entry')).toHaveLength(1);
+    expect(container.querySelectorAll('.gridtable-row')).toHaveLength(1);
 
     const handler = runtimeEventHandlers.get('app-logs:added');
     expect(handler).toBeTruthy();
@@ -389,12 +437,14 @@ describe('AppLogsPanel', () => {
 
     expect(getAppLogsSinceMock).toHaveBeenCalledWith(1);
     expect(getAppLogsMock).toHaveBeenCalledTimes(1);
-    expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+    expect(container.querySelectorAll('.gridtable-row')).toHaveLength(2);
     expect(container.textContent).toContain('Delta');
 
     cleanup();
 
-    expect(runtimeDisposerMock).toHaveBeenCalledTimes(1);
+    expect(
+      runtimeDisposerMock.mock.calls.filter(([eventName]) => eventName === 'app-logs:added')
+    ).toHaveLength(1);
   });
 
   it('does not duplicate logs when overlapping app-logs events read the same delta', async () => {
@@ -432,7 +482,7 @@ describe('AppLogsPanel', () => {
     });
 
     expect(getAppLogsSinceMock).toHaveBeenCalledTimes(2);
-    expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+    expect(container.querySelectorAll('.gridtable-row')).toHaveLength(2);
     expect(container.textContent?.match(/Delta/g)).toHaveLength(1);
 
     cleanup();
@@ -539,9 +589,7 @@ describe('AppLogsPanel', () => {
 
     await flushInitialLoad();
 
-    expect(container.querySelector('.app-logs-container .log-cluster')?.textContent).toBe(
-      '[alpha]'
-    );
+    expect(container.querySelector('.gridtable-row .log-cluster')?.textContent).toBe('[alpha]');
 
     const clustersDropdown = latestDropdown('Filter by cluster');
     expect(clustersDropdown).toBeTruthy();
@@ -572,7 +620,7 @@ describe('AppLogsPanel', () => {
       await Promise.resolve();
     });
 
-    const entries = Array.from(container.querySelectorAll('.log-entry'));
+    const entries = Array.from(container.querySelectorAll('.gridtable-row'));
     expect(entries.length).toBe(1);
     expect(entries[0]?.textContent).toContain('Cluster B ready');
     expect(entries[0]?.textContent).toContain('[bravo]');
@@ -606,7 +654,7 @@ describe('AppLogsPanel', () => {
       });
       expect(
         Array.from(
-          container.querySelectorAll('.log-entry .log-message'),
+          container.querySelectorAll('.gridtable-row .log-message'),
           (entry) => entry.textContent
         )
       ).toEqual([clusterIds[0]]);
@@ -615,7 +663,7 @@ describe('AppLogsPanel', () => {
       await act(async () => {
         latestDropdown('Filter by cluster')?.onChange(clusterIds);
       });
-      expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+      expect(container.querySelectorAll('.gridtable-row')).toHaveLength(2);
       getAppLogsSinceMock.mockResolvedValue([
         { sequence: 4, timestamp, level: 'info', message: 'Another global message' },
       ]);
@@ -623,7 +671,7 @@ describe('AppLogsPanel', () => {
         runtimeEventHandlers.get('app-logs:added')?.({ sequence: 4 });
         await Promise.resolve();
       });
-      expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+      expect(container.querySelectorAll('.gridtable-row')).toHaveLength(2);
       expect(latestDropdown('Filter by cluster')?.value).toEqual(clusterIds);
     } finally {
       cleanup();
@@ -653,7 +701,7 @@ describe('AppLogsPanel', () => {
 
     await flushInitialLoad();
 
-    const clusters = Array.from(container.querySelectorAll('.app-logs-container .log-cluster')).map(
+    const clusters = Array.from(container.querySelectorAll('.gridtable-row .log-cluster')).map(
       (entry) => entry.textContent
     );
     expect(clusters).toEqual(['[Global]', '[alpha]']);
@@ -669,7 +717,7 @@ describe('AppLogsPanel', () => {
       await Promise.resolve();
     });
 
-    const entries = Array.from(container.querySelectorAll('.log-entry'));
+    const entries = Array.from(container.querySelectorAll('.gridtable-row'));
     expect(entries).toHaveLength(1);
     expect(entries[0]?.textContent).toContain('[Global]');
     expect(entries[0]?.textContent).toContain('Settings loaded');
@@ -739,9 +787,7 @@ describe('AppLogsPanel', () => {
     expect(iconbar).toBeTruthy();
     expect(iconbar?.querySelectorAll('.icon-bar-button')).toHaveLength(3);
 
-    const autoScrollButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Toggle auto-scroll"]'
-    );
+    const refreshButton = autoRefreshButton(container);
     const downloadButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Download logs"]'
     );
@@ -749,18 +795,207 @@ describe('AppLogsPanel', () => {
       'button[aria-label="Clear logs"]'
     );
 
-    expect(autoScrollButton?.getAttribute('aria-pressed')).toBe('true');
+    // Named for what a click does, like the container logs' button; no pressed state.
+    expect(refreshButton?.getAttribute('aria-label')).toBe('Stop auto-refresh');
+    expect(refreshButton?.hasAttribute('aria-pressed')).toBe(false);
     expect(downloadButton?.disabled).toBe(false);
     expect(clearButton?.disabled).toBe(false);
 
+    cleanup();
+  });
+
+  it('stops applying new lines while auto-refresh is off and catches up when it starts', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([logLine(1, 'Ready')]);
+    getAppLogsSinceMock.mockResolvedValue([logLine(2, 'Missed while stopped')]);
+
+    const { container, cleanup } = await renderPanel();
+    await flushInitialLoad();
+
     await act(async () => {
-      autoScrollButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      autoRefreshButton(container)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(autoRefreshButton(container)?.getAttribute('aria-label')).toBe('Start auto-refresh');
+
+    await emitAppLogsAdded(2);
+    expect(getAppLogsSinceMock).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('Missed while stopped');
+
+    // R toggles it, as in container logs.
+    const toggleShortcut = [...useShortcutMock.mock.calls]
+      .map(([options]) => options as { key: string; handler: () => boolean })
+      .reverse()
+      .find((options) => options.key === 'r');
+    await act(async () => {
+      requireValue(toggleShortcut, 'expected the R auto-refresh shortcut').handler();
+      await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(autoScrollButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(autoRefreshButton(container)?.getAttribute('aria-label')).toBe('Stop auto-refresh');
+    expect(getAppLogsSinceMock).toHaveBeenCalledWith(1);
+    expect(container.textContent).toContain('Missed while stopped');
 
     cleanup();
+  });
+
+  it('drops a read already in flight when auto-refresh stops', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([logLine(1, 'Ready')]);
+    let finishRead: (lines: ReturnType<typeof logLine>[]) => void = () => undefined;
+    getAppLogsSinceMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRead = resolve;
+        })
+    );
+
+    const { container, cleanup } = await renderPanel();
+    await flushInitialLoad();
+    await emitAppLogsAdded(2);
+    expect(getAppLogsSinceMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      autoRefreshButton(container)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      finishRead([logLine(2, 'Late line')]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain('Late line');
+
+    cleanup();
+  });
+
+  // Troubleshooting the app can need more history than a Logs tab keeps, so the
+  // panel keeps a fixed 10,000 lines whatever the Logs tabs' Buffer size is.
+  it('keeps the newest 10,000 lines regardless of the Logs tabs buffer size', async () => {
+    vi.useFakeTimers();
+    setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 100 });
+    getAppLogsMock.mockResolvedValue(logLines(1, 9_990));
+    getAppLogsSinceMock.mockResolvedValue(logLines(9_991, 10_010));
+
+    const { container, cleanup } = await renderPanel();
+    await flushInitialLoad();
+    expect(lineCount(container)).toBe('(9990)');
+
+    await emitAppLogsAdded(10_010);
+    await flushFrames();
+    expect(lineCount(container)).toBe('(10000)');
+    expect(drawnMessages(container)).not.toContain('line 10');
+
+    await act(async () => {
+      eventBus.emit('settings:obj-panel-logs-buffer-size', 100);
+      await Promise.resolve();
+    });
+    expect(lineCount(container)).toBe('(10000)');
+
+    cleanup();
+  });
+
+  it('draws only the rows in view of a long log, like container logs', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue(logLines(1, 5_000));
+
+    const { container, cleanup } = await renderPanel();
+    await flushInitialLoad();
+    await flushFrames();
+
+    expect(lineCount(container)).toBe('(5000)');
+    const drawn = container.querySelectorAll('.gridtable-row').length;
+    expect(drawn).toBeGreaterThan(0);
+    expect(drawn).toBeLessThan(200);
+
+    cleanup();
+  });
+
+  it('holds shown lines while scrolled up and resumes from a bottom button', async () => {
+    vi.useFakeTimers();
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollHeight'
+    );
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientHeight'
+    );
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return this.classList.contains('gridtable-wrapper') ? 400 : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return this.classList.contains('gridtable-wrapper') ? 100 : 0;
+      },
+    });
+    getAppLogsMock.mockResolvedValue(logLines(1, 10_000));
+    getAppLogsSinceMock.mockResolvedValue(logLines(10_001, 10_010));
+
+    const { container, cleanup } = await renderPanel();
+    try {
+      await flushInitialLoad();
+      const content = requireValue(
+        container.querySelector<HTMLElement>('.gridtable-wrapper'),
+        'expected the log body'
+      );
+      expect(container.querySelector('button[aria-label="Resume scrolling"]')).toBeNull();
+
+      await act(async () => {
+        content.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+        content.scrollTop = 0;
+        content.dispatchEvent(new Event('scroll'));
+      });
+      await flushFrames();
+      const resumeButton = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Resume scrolling"]'
+      );
+      expect(resumeButton).not.toBeNull();
+
+      // New lines arrive while scrolled up: the oldest shown line stays put.
+      await emitAppLogsAdded(10_010);
+      await flushFrames();
+      expect(lineCount(container)).toBe('(10010)');
+      expect(drawnMessages(container)).toContain('line 1');
+      expect(content.scrollTop).toBe(0);
+
+      await act(async () => {
+        autoRefreshButton(container)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+      expect(autoRefreshButton(container)?.getAttribute('aria-label')).toBe('Start auto-refresh');
+
+      // Resuming follows the tail again, restarts auto-refresh, and applies the 10,000-line cap.
+      await act(async () => {
+        resumeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await flushFrames();
+      expect(container.querySelector('button[aria-label="Resume scrolling"]')).toBeNull();
+      expect(autoRefreshButton(container)?.getAttribute('aria-label')).toBe('Stop auto-refresh');
+      expect(lineCount(container)).toBe('(10000)');
+      expect(drawnMessages(container)).not.toContain('line 1');
+      expect(content.scrollTop).toBe(400);
+    } finally {
+      cleanup();
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight');
+      }
+      if (originalClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+      }
+    }
   });
 
   // The Download menu is the log viewers' menu: Copy to Clipboard through the
@@ -819,7 +1054,7 @@ describe('AppLogsPanel', () => {
     await act(async () => undefined);
 
     const emptyMessage = container.querySelector('.app-logs-empty');
-    const remainingEntries = container.querySelectorAll('.log-entry');
+    const remainingEntries = container.querySelectorAll('.gridtable-row');
     expect(remainingEntries.length).toBe(0);
     expect(emptyMessage?.textContent ?? '').toContain('No logs match the selected filter');
 
@@ -835,7 +1070,7 @@ describe('AppLogsPanel', () => {
     const { cleanup } = await renderPanel();
     await flushInitialLoad();
     const logs = requireValue(
-      document.querySelector<HTMLElement>('.app-logs-container'),
+      document.querySelector<HTMLElement>('.app-logs-table .gridtable--body'),
       'log body'
     );
     const panel = requireValue(logs.closest<HTMLElement>('.dockable-panel'), 'real dockable panel');
@@ -964,6 +1199,10 @@ describe('AppLogsPanel', () => {
     const { container, cleanup } = await renderPanel();
 
     await flushInitialLoad();
+    // The log body settles at the newest line over a few animation frames first.
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
 
     await chooseDownload(container, 'Copy to Clipboard');
     // Let the menu's immediate work run; the feedback reset is still pending.

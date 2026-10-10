@@ -15,7 +15,7 @@ const (
 	settingsDataFormat           = "luxury-yacht-settings"
 	settingsDataSchemaVersion    = 1
 	favoritesDataFormat          = "luxury-yacht-favorites"
-	favoritesDataSchemaVersion   = 1
+	favoritesDataSchemaVersion   = 2
 	maximumDataImportFileBytes   = 10 << 20
 	settingsDataDefaultFilename  = "luxury-yacht-settings.json"
 	favoritesDataDefaultFilename = "luxury-yacht-favorites.json"
@@ -259,44 +259,86 @@ func validateImportedThemes(themes []Theme) error {
 	return nil
 }
 
+// favoritesDataFileV1 is the version 1 export: schema v3 favorites with one
+// table state per split-view pane.
+type favoritesDataFileV1 struct {
+	Favorites []json.RawMessage `json:"favorites"`
+}
+
 func decodeFavoritesDataFile(data []byte) (*favoritesDataFile, error) {
 	var document favoritesDataFile
-	if err := json.Unmarshal(data, &document); err != nil {
+	header := struct {
+		Format        string `json:"format"`
+		SchemaVersion int    `json:"schemaVersion"`
+	}{}
+	if err := json.Unmarshal(data, &header); err != nil {
 		return nil, fmt.Errorf("parse favorites import: %w", err)
 	}
-	if document.Format != favoritesDataFormat {
+	if header.Format != favoritesDataFormat {
 		return nil, fmt.Errorf("selected file is not a Luxury Yacht favorites export")
 	}
-	if document.SchemaVersion != favoritesDataSchemaVersion {
-		return nil, fmt.Errorf("unsupported favorites export schema version %d", document.SchemaVersion)
+	switch header.SchemaVersion {
+	case 1:
+		favorites, err := decodeFavoritesDataV1(data)
+		if err != nil {
+			return nil, err
+		}
+		document = favoritesDataFile{Format: header.Format, SchemaVersion: favoritesDataSchemaVersion, Favorites: favorites}
+	case favoritesDataSchemaVersion:
+		if err := json.Unmarshal(data, &document); err != nil {
+			return nil, fmt.Errorf("parse favorites import: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported favorites export schema version %d", header.SchemaVersion)
 	}
-	seen := make(map[string]struct{}, len(document.Favorites))
+	seenIDs := make(map[string]struct{}, len(document.Favorites))
 	seenNames := make(map[string]struct{}, len(document.Favorites))
 	for index := range document.Favorites {
-		favorite := &document.Favorites[index]
-		favorite.ID = strings.TrimSpace(favorite.ID)
-		favorite.Name = strings.TrimSpace(favorite.Name)
-		if favorite.ID == "" {
-			return nil, fmt.Errorf("favorite at index %d is missing an ID", index)
+		if err := normalizeImportedFavorite(&document.Favorites[index], index, seenIDs, seenNames); err != nil {
+			return nil, err
 		}
-		if favorite.Name == "" {
-			return nil, fmt.Errorf("favorite %q is missing a name", favorite.ID)
-		}
-		if _, exists := seen[favorite.ID]; exists {
-			return nil, fmt.Errorf("duplicate favorite ID %q", favorite.ID)
-		}
-		seen[favorite.ID] = struct{}{}
-		if _, exists := seenNames[favorite.Name]; exists {
-			return nil, fmt.Errorf("duplicate favorite name %q", favorite.Name)
-		}
-		seenNames[favorite.Name] = struct{}{}
-		if err := validateFavoritePanes(favorite.Panes); err != nil {
-			return nil, fmt.Errorf("favorite %q: %w", favorite.ID, err)
-		}
-		normalizeFavoritePanes(favorite.Panes)
-		favorite.Order = index
 	}
 	return &document, nil
+}
+
+func decodeFavoritesDataV1(data []byte) ([]Favorite, error) {
+	var legacy favoritesDataFileV1
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return nil, fmt.Errorf("parse favorites import: %w", err)
+	}
+	favorites := make([]Favorite, 0, len(legacy.Favorites))
+	for _, raw := range legacy.Favorites {
+		favorite, err := migrateFavoriteV3(raw)
+		if err != nil {
+			return nil, err
+		}
+		favorites = append(favorites, favorite)
+	}
+	return favorites, nil
+}
+
+// normalizeImportedFavorite validates one imported favorite against the ones
+// before it and normalizes its filters.
+func normalizeImportedFavorite(favorite *Favorite, index int, seenIDs, seenNames map[string]struct{}) error {
+	favorite.ID = strings.TrimSpace(favorite.ID)
+	favorite.Name = strings.TrimSpace(favorite.Name)
+	if favorite.ID == "" {
+		return fmt.Errorf("favorite at index %d is missing an ID", index)
+	}
+	if favorite.Name == "" {
+		return fmt.Errorf("favorite %q is missing a name", favorite.ID)
+	}
+	if _, exists := seenIDs[favorite.ID]; exists {
+		return fmt.Errorf("duplicate favorite ID %q", favorite.ID)
+	}
+	seenIDs[favorite.ID] = struct{}{}
+	if _, exists := seenNames[favorite.Name]; exists {
+		return fmt.Errorf("duplicate favorite name %q", favorite.Name)
+	}
+	seenNames[favorite.Name] = struct{}{}
+	normalizeFavoriteFilters(&favorite.Filters)
+	favorite.Order = index
+	return nil
 }
 
 func cloneFavorites(favorites []Favorite) []Favorite {

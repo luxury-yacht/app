@@ -83,8 +83,12 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
 - Panel-header Dock, Float, Maximize/Restore, and Close act on the whole group.
   Changing dock edge appends the whole group to an occupied destination, keeping
   source order and active tab.
+- Only object panels can float. The workspace owner supplies `canFloatPanel`;
+  the header offers Float only when every tab can float, so a group holding an
+  app-wide panel (Application Logs, Diagnostics) stays docked.
 - A panel tab's context menu acts on that tab only, even when inactive: docked
-  tabs offer the other edge and Float, native tabs both edges, all Close.
+  tabs offer the other edge and, for an object panel, Float; native tabs both
+  edges; all Close.
   Docking a native tab resolves a same-cluster app view and waits for its
   readiness; a cancelled transfer must not deliver a queued insertion later.
 - A same-cluster link in a child may join that group after owner authorization.

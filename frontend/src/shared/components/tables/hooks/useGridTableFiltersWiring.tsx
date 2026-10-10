@@ -280,6 +280,7 @@ export function useGridTableFiltersPresentation<T>({
       searchShortcutPriority,
       preActions: resolvedPreActions,
       postActions: resolvedPostActions,
+      trailingActions: resolvedFilterOptions.trailingActions,
       resultCount,
     }),
     [

@@ -20,7 +20,9 @@ rules: [large data](large-data.md); query mechanics, including single-namespace
 All-namespaces Pods are `Query Backed Dynamic`: search, namespace/status/node
 filters, health predicates, pagination, and CPU/memory sort are backend-owned
 for the current metrics snapshot. Rows serve from a maintained `querypage` store
-fed by owned-reflector ingest ([data-layer.md](data-layer.md)).
+fed by owned-reflector ingest ([data-layer.md](data-layer.md)). One frontend
+`PodsTable` (`NsViewPods.tsx`) serves the namespace Pods view, with the full
+filter set, and the Pods table attached under a Workloads or Nodes row.
 
 ## Workloads
 
@@ -31,30 +33,24 @@ Status options stay available when a Status selection or fixed health predicate
 narrows results. Rows serve from a maintained `querypage` store fed by the
 workload GVRs' reflectors; pod aggregates, HPA, and metrics join at serve.
 
-The namespace Workloads destination composes two independent query-backed
-tables, Workloads above Pods, each with its own filter, sort, cursor, page size,
-diagnostics, and persisted GridTable state:
+The namespace Workloads and cluster Nodes destinations are one query-backed
+table each. A row's Pods count or `Space` opens that row's pods in a Pods table
+attached under it ([row detail](../frontend/gridtable-interaction.md#row-detail));
+a row click only highlights. The attached table is its own query-backed table
+with its own filter, sort, cursor, page size, and diagnostics, but its table
+state lives in memory only and is never in favorites:
 
-- The split starts at 50% and resizes by pointer or keyboard through a handle on
-  the pane boundary (no divider band); its one-pixel separator thickens to the
-  shared resize highlight on hover or drag. Pointer resizing cancels native
-  selection at gesture start and disables standard and WebKit text selection for
-  the gesture, including across the native window boundary.
-- The Pods pane collapses from the left edge of its own filter bar; collapsed,
-  the boundary stays and the row shows only the expand control and `Show Pods`.
-- Selecting a Workloads row writes the normal Pods filters: Namespace (when the
-  table spans all namespaces) plus the provider-owned Owner facet, whose values
-  carry full object identity. Deployments resolve through ReplicaSets, CronJobs
-  through Jobs, direct owners match directly, and an ownerless Pod uses its own
-  core/v1 identity. Projected Pod rows keep both direct-controller and
-  resolved-ancestor identities; no generated-name parsing.
-- Manually changing Namespace or Owner clears the row highlight without
-  restoring previous filters. Changing cluster or pinned namespace while a row
-  is selected clears that selection's Owner filter before querying the new
-  scope; an Owner filter without an active selection is ordinary persisted
-  state.
-- The former standalone Pods navigation value parses as Workloads for
-  persisted-state compatibility.
+- Opening a row narrows the attached Pods table through a request-only
+  selection facet: the provider-owned Owner facet for a workload, whose values
+  carry full object identity, or the Node facet for a node. Deployments resolve
+  through ReplicaSets, CronJobs through Jobs, direct owners match directly, and
+  an ownerless Pod uses its own core/v1 identity. Projected Pod rows keep both
+  direct-controller and resolved-ancestor identities; no generated-name parsing.
+- The attached table shows no Namespaces, Owner, or Node control, and no Owner
+  column under a workload or Node column under a node; changing cluster or
+  pinned namespace, or the open row leaving the table, closes it.
+- A workload's pods use the namespace scope; a node's pods use `namespace:all`,
+  which streams while the Nodes view is active.
 
 ## Nodes
 

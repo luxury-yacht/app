@@ -25,27 +25,55 @@ export interface TablePaginationControlsProps {
 
 type TablePaginationVisibility = Pick<
   TablePaginationControlsProps,
-  'pageSizeOptions' | 'totalCount' | 'totalIsExact' | 'hasPrevious' | 'hasNext'
+  'pageSizeOptions' | 'totalCount' | 'hasPrevious' | 'hasNext'
 >;
 
+// The footer appears only when there is something to page: another page, or
+// more rows than the smallest page size. An approximate total (a degraded
+// result) that fits one page with no other page has nothing to page.
 export const shouldRenderTablePaginationControls = ({
   pageSizeOptions,
   totalCount,
-  totalIsExact,
   hasPrevious,
   hasNext,
 }: TablePaginationVisibility): boolean => {
   const smallestPageSize = pageSizeOptions.length > 0 ? Math.min(...pageSizeOptions) : 0;
-  return !(
-    totalIsExact &&
-    smallestPageSize > 0 &&
-    totalCount <= smallestPageSize &&
-    !hasPrevious &&
-    !hasNext
-  );
+  return smallestPageSize <= 0 || hasPrevious || hasNext || totalCount > smallestPageSize;
 };
 
 const formatCount = (value: number): string => Math.max(0, value).toLocaleString();
+
+// The footer's "start-end of total" text, and the page count when the total is
+// exact (an approximate total is a lower bound, shown as "N+", with no count).
+const paginationStatus = ({
+  pageIndex,
+  pageSize,
+  visibleItemCount,
+  totalCount,
+  totalIsExact,
+}: Pick<
+  TablePaginationControlsProps,
+  'pageIndex' | 'pageSize' | 'visibleItemCount' | 'totalCount' | 'totalIsExact'
+>) => {
+  const empty = totalCount === 0 || visibleItemCount === 0;
+  const pageOffset = (pageIndex - 1) * pageSize;
+  const rangeStart = empty ? 0 : pageOffset + 1;
+  const visibleEnd = pageOffset + visibleItemCount;
+  let rangeEnd = visibleEnd;
+  if (empty) {
+    rangeEnd = 0;
+  } else if (totalIsExact) {
+    rangeEnd = Math.min(visibleEnd, Math.max(totalCount, 0));
+  }
+  return {
+    rangeLabel:
+      rangeStart > 0 && rangeEnd >= rangeStart
+        ? `${formatCount(rangeStart)}-${formatCount(rangeEnd)}`
+        : '0',
+    totalLabel: totalIsExact ? formatCount(totalCount) : `${formatCount(totalCount)}+`,
+    totalPages: totalIsExact && pageSize > 0 ? Math.max(1, Math.ceil(totalCount / pageSize)) : 0,
+  };
+};
 
 const PaginationArrowIcon: React.FC<{ direction: 'previous' | 'next' }> = ({ direction }) => (
   <svg
@@ -92,7 +120,6 @@ const TablePaginationControls: React.FC<TablePaginationControlsProps> = ({
     !shouldRenderTablePaginationControls({
       pageSizeOptions,
       totalCount,
-      totalIsExact,
       hasPrevious,
       hasNext,
     })
@@ -100,26 +127,13 @@ const TablePaginationControls: React.FC<TablePaginationControlsProps> = ({
     return null;
   }
 
-  const rangeStart =
-    totalCount === 0 || visibleItemCount === 0 ? 0 : (pageIndex - 1) * pageSize + 1;
-  const rawRangeEnd = (pageIndex - 1) * pageSize + visibleItemCount;
-  let rangeEnd: number;
-
-  if (totalCount === 0 || visibleItemCount === 0) {
-    rangeEnd = 0;
-  } else if (totalIsExact) {
-    rangeEnd = Math.min(rawRangeEnd, Math.max(totalCount, 0));
-  } else {
-    rangeEnd = rawRangeEnd;
-  }
-
-  const rangeLabel =
-    rangeStart > 0 && rangeEnd >= rangeStart
-      ? `${formatCount(rangeStart)}-${formatCount(rangeEnd)}`
-      : '0';
-  const totalLabel = totalIsExact ? formatCount(totalCount) : `${formatCount(totalCount)}+`;
-  const totalPages =
-    totalIsExact && pageSize > 0 ? Math.max(1, Math.ceil(totalCount / pageSize)) : 0;
+  const { rangeLabel, totalLabel, totalPages } = paginationStatus({
+    pageIndex,
+    pageSize,
+    visibleItemCount,
+    totalCount,
+    totalIsExact,
+  });
   const showPageJump = Boolean(onPageJump) && totalIsExact && totalPages > 1;
   const pageNavigationModifiers = isMacPlatform() ? { meta: true } : { ctrl: true };
   const previousPageTitle = `Previous page (${formatShortcut('ArrowLeft', pageNavigationModifiers)})`;

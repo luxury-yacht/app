@@ -44,7 +44,6 @@ export type {
     Favorite,
     FavoriteFilterSelection,
     FavoriteFilters,
-    FavoritePaneState,
     FavoriteTableState,
     HelmReleaseDetails,
     KubeconfigDiscoveryResult,

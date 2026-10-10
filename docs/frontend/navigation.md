@@ -45,9 +45,9 @@ same slot.
   Empty facet values stay distinct from literal labels such as `__empty__`.
 - `FavoritesContext` runs the handoff as waiting/restoring phases: it waits for
   the target cluster to be operational (and namespace readiness for namespace
-  routes), applies navigation, and only then exposes `favoriteToRestore`. Table
-  consumers wait for the matching route and every expected pane's persistence
-  to hydrate before restoring and consuming the request. A waiting request
+  routes), applies navigation, and only then exposes `favoriteToRestore`. The
+  view's table waits for the matching route and its own persistence to hydrate
+  before restoring and consuming the request. A waiting request
   stays available to the cluster/navigation work that makes it ready;
   lifecycle progress extends its expiry window.
 - Reorder ignores repeated and unknown IDs, appends omitted favorites in their
@@ -59,10 +59,12 @@ same slot.
 | Scope | Direct links | Resources (in order) | Extensions |
 | --- | --- | --- | --- |
 | Cluster | Overview, Attention, Browse, Events, Identities | Config, Namespaces, Nodes, RBAC, Storage | CRDs, Custom Resources, then Cert Manager, External Secrets, Karpenter |
-| Namespace | Workloads, Browse, Map, Events | Autoscaling, Config, Network, Quotas, RBAC, Storage | Custom Resources, Argo CD, Cert Manager, External Secrets, Helm, Prometheus Operator |
+| Namespace | Browse, Events, Map | Workloads, Pods, Autoscaling, Config, Network, Quotas, RBAC, Storage | Custom Resources, Argo CD, Cert Manager, External Secrets, Helm, Prometheus Operator |
 
 - Identities is an observed-subject view, not a resource category, so it stays
   outside Resources ([cluster identities](../architecture/cluster-identities.md)).
+- Workloads stays the default namespace view inside Resources; the default
+  lives in `ViewStateContext`, not in descriptor order.
 - `viewRegistry.ts` owns ordered view descriptors and their required
   `sidebarGroup`. Filter resource families by active-cluster discovery (and,
   for namespaces, the All Namespaces support filter, so Map appears only for
@@ -70,7 +72,8 @@ same slot.
   choices consume the same ordered descriptors. Grouping changes neither
   stable view IDs nor route-update ordering before entering the Cluster view.
 - Both scopes use `SIDEBAR_VIEW_GROUPS` and the shared `SidebarViewGroup`
-  renderer with compact rows and no separators. All groups start collapsed.
+  renderer with compact rows and no separators. Resources starts expanded so
+  the default namespace view is visible; Extensions starts collapsed.
 - Disclosure state uses four persisted app preferences (Resources and
   Extensions × Cluster and Namespace) and the existing keyboard navigation
   surface; target parsing accepts only registered group IDs. Namespace group
@@ -94,7 +97,7 @@ resource views remain the place to browse and operate on full inventories.
 - Overview pod signals open Attention with `Kind = Pod` and Findings staged
   before navigation: starting/terminating → `pod-unhealthy`, failing →
   `error-presentation`, not-ready → `pod-not-ready`, restarts → `restarts`.
-  The ready Pod count still opens all-namespaces Workloads.
+  The ready Pod count opens the all-namespaces Pods view.
 - Never link Overview's whole warning-event section to Cluster Events: it
   mixes namespaced objects, while Cluster Events holds only events about
   cluster-scoped objects.

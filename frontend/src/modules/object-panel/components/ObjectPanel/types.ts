@@ -146,11 +146,6 @@ export type LogDisplayMode = 'raw' | 'pretty' | 'parsed';
 /** What the text filter does: show every line, only matching lines, or only the others. */
 export type LogFilterMode = 'all' | 'filtered' | 'invert';
 
-export interface LogScrollPosition {
-  scrollTop: number;
-  isTailFollowing: boolean;
-}
-
 /**
  * Persistent subset of LogViewerState — the user-facing view preferences
  * that should survive ObjectPanelContent unmount/remount caused by

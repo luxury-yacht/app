@@ -223,6 +223,9 @@ vi.mock('@utils/errorHandler', () => ({
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
+  ChevronDownIcon: () => <span>collapse</span>,
+  ChevronUpIcon: () => <span>expand</span>,
+  CloseIcon: () => <span>close</span>,
   DeleteIcon: () => <span>delete</span>,
   DiffIcon: () => <span>diff</span>,
   DrainIcon: () => <span>drain</span>,
@@ -235,7 +238,7 @@ vi.mock('@shared/components/icons/SharedIcons', () => ({
 import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
 import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
-import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
+import ClusterViewNodes, { NodesTable } from '@modules/cluster/components/ClusterViewNodes';
 import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
 import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
 import NsViewAutoscaling from '@modules/namespace/components/NsViewAutoscaling';
@@ -1287,7 +1290,7 @@ describe('query-backed leaf first load', () => {
     },
     {
       label: 'cluster nodes',
-      element: <ClusterViewNodes />,
+      element: <NodesTable />,
       payload: { rows: [] },
       expected: ['age', 'cpu', 'kind', 'memory', 'name', 'pods', 'restarts', 'status', 'version'],
     },

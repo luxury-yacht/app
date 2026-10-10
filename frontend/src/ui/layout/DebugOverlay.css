@@ -49,7 +49,7 @@
   cursor: move;
   user-select: none;
   -webkit-user-select: none;
-  font-family: var(--font-family-display, var(--font-family-base));
+  font-family: var(--font-family-base);
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -85,7 +85,7 @@
 }
 
 .debug-overlay__close:hover {
-  background-color: var(--color-surface-hover, var(--color-bg-tertiary));
+  background-color: var(--color-bg-tertiary);
   border-color: var(--color-border);
   color: var(--color-text);
 }

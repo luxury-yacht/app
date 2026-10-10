@@ -67,7 +67,7 @@
 
 .shell-tab__button {
   border: 1px solid var(--color-border);
-  background: var(--color-surface-secondary);
+  background: var(--color-bg-secondary);
   padding: 0.25rem 0.6rem;
   border-radius: 4px;
   font-size: 0.8rem;
@@ -77,7 +77,7 @@
 
 .shell-tab__debug-button {
   border: 1px solid var(--color-border);
-  background: var(--color-surface-secondary);
+  background: var(--color-bg-secondary);
   padding: 0.25rem 0.6rem;
   border-radius: 4px;
   font-size: 0.8rem;
@@ -88,7 +88,7 @@
 .shell-tab__notice {
   padding: 0.5rem 0.75rem;
   border-radius: 4px;
-  background: var(--color-surface-warning);
+  background: var(--color-warning-bg);
   color: var(--color-text);
 }
 

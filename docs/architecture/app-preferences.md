@@ -90,7 +90,9 @@ back into Preferences.
 
 - Four global preferences drive Resources and Extensions expansion: one per
   group for Cluster (shared across clusters) and one per group for Namespaces
-  (shared across namespaces and clusters). Missing values mean collapsed.
+  (shared across namespaces and clusters). A missing Resources value means
+  expanded (it holds the default namespace view); a missing Extensions value
+  means collapsed. Saved values, which earlier versions always wrote, are kept.
 - Manual disclosure and explicit navigation reveal both update the shared
   state; namespace row expansion is separate.
 - The shared sidebar hook subscribes to preference changes, so hydration,

@@ -135,7 +135,7 @@
 }
 
 .fav-dropdown-action-btn.danger:hover {
-  color: var(--color-danger);
+  color: var(--color-error);
 }
 
 .fav-dropdown-action-btn.disabled {

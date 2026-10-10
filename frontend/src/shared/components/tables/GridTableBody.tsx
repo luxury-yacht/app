@@ -12,6 +12,7 @@ import {
   AriaGridRowGroup,
 } from '@shared/components/tables/AriaGridPrimitives';
 import type { GridTableFilteredEmptyState } from '@shared/components/tables/GridTable.types';
+import type { RenderRowDetailFn } from '@shared/components/tables/hooks/useGridTableRowDetail';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import type React from 'react';
 import type { RefObject } from 'react';
@@ -42,6 +43,9 @@ interface GridTableBodyProps<T> {
   totalVirtualHeight: number;
   getRowTop: (index: number) => number;
   renderRowContent: RenderRowContentFn<T>;
+  /** Index of the row whose detail is open, or null. */
+  rowDetailIndex?: number | null;
+  renderRowDetail?: RenderRowDetailFn<T>;
   onWrapperFocus: (event: React.FocusEvent<HTMLElement>) => void;
   onWrapperBlur: (event: React.FocusEvent<HTMLElement>) => void;
   onWrapperBackgroundClick: () => void;
@@ -53,6 +57,112 @@ interface GridTableBodyProps<T> {
   hasActiveFilters: boolean;
   /** Callback to clear all active filters. */
   onClearFilters: () => void;
+}
+
+const noRowDetail = () => null;
+
+function GridTableEmptyRow({
+  emptyMessage,
+  filteredEmptyState,
+  hasActiveFilters,
+  onClearFilters,
+}: Readonly<{
+  emptyMessage: string;
+  filteredEmptyState?: GridTableFilteredEmptyState;
+  hasActiveFilters: boolean;
+  onClearFilters: () => void;
+}>) {
+  const clearFilters = (event: React.MouseEvent) => {
+    event.preventDefault();
+    onClearFilters();
+  };
+  let filterGuidance: React.ReactNode = null;
+  if (hasActiveFilters && filteredEmptyState) {
+    filterGuidance = (
+      <>
+        <div className="gridtable-empty-filter-hint">{filteredEmptyState.description}</div>
+        <div className="gridtable-empty-filter-actions">
+          <button
+            type="button"
+            className="gridtable-empty-filter-hint__link"
+            onClick={clearFilters}
+          >
+            {filteredEmptyState.clearFiltersLabel ?? 'Clear filters'}
+          </button>
+          {!!filteredEmptyState.secondaryAction && (
+            <>
+              <span aria-hidden="true">•</span>
+              <button
+                type="button"
+                className="gridtable-empty-filter-hint__link"
+                onClick={filteredEmptyState.secondaryAction.onClick}
+              >
+                {filteredEmptyState.secondaryAction.label}
+              </button>
+            </>
+          )}
+        </div>
+      </>
+    );
+  } else if (hasActiveFilters) {
+    filterGuidance = (
+      <div className="gridtable-empty-filter-hint">
+        Filters are enabled that may be hiding objects.{' '}
+        <button type="button" className="gridtable-empty-filter-hint__link" onClick={clearFilters}>
+          Clear filters
+        </button>
+      </div>
+    );
+  }
+  return (
+    <AriaGridRow>
+      <AriaGridCell colSpan={1000}>
+        <div className="gridtable-empty">
+          {hasActiveFilters ? 'No matching items' : (emptyMessage ?? '')}
+          {filterGuidance}
+        </div>
+      </AriaGridCell>
+    </AriaGridRow>
+  );
+}
+
+interface VirtualRowsInput<T> {
+  tableData: T[];
+  virtualRows: T[];
+  virtualRangeStart: number;
+  keyExtractor: (item: T, index: number) => string;
+  getRowTop: (index: number) => number;
+  renderRowContent: RenderRowContentFn<T>;
+  rowDetailIndex: number | null;
+  renderRowDetail: RenderRowDetailFn<T>;
+}
+
+function renderVirtualRows<T>({
+  tableData,
+  virtualRows,
+  virtualRangeStart,
+  keyExtractor,
+  getRowTop,
+  renderRowContent,
+  rowDetailIndex,
+  renderRowDetail,
+}: VirtualRowsInput<T>): React.ReactNode[] {
+  const renderRow = (item: T, index: number, slotId: string) => [
+    renderRowContent(item, index, true, keyExtractor(item, index), slotId, getRowTop(index)),
+    renderRowDetail(item, index, true),
+  ];
+  const rows = virtualRows.flatMap((item, idx) =>
+    renderRow(item, virtualRangeStart + idx, `slot-${idx}`)
+  );
+  // The open row stays mounted outside the virtual window so its detail keeps its state.
+  const openRowOutsideWindow =
+    rowDetailIndex !== null &&
+    (rowDetailIndex < virtualRangeStart ||
+      rowDetailIndex >= virtualRangeStart + virtualRows.length);
+  if (openRowOutsideWindow) {
+    rows.push(...renderRow(tableData[rowDetailIndex], rowDetailIndex, 'open-row'));
+  }
+  return rows;
 }
 
 function GridTableBody<T>({
@@ -72,6 +182,8 @@ function GridTableBody<T>({
   totalVirtualHeight,
   getRowTop,
   renderRowContent,
+  rowDetailIndex = null,
+  renderRowDetail = noRowDetail,
   onWrapperFocus,
   onWrapperBlur,
   onWrapperBackgroundClick,
@@ -147,84 +259,33 @@ function GridTableBody<T>({
 
   const renderRows = () => {
     if (tableData.length === 0) {
-      let filterGuidance: React.ReactNode = null;
-      if (hasActiveFilters && filteredEmptyState) {
-        filterGuidance = (
-          <>
-            <div className="gridtable-empty-filter-hint">{filteredEmptyState.description}</div>
-            <div className="gridtable-empty-filter-actions">
-              <button
-                type="button"
-                className="gridtable-empty-filter-hint__link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onClearFilters();
-                }}
-              >
-                {filteredEmptyState.clearFiltersLabel ?? 'Clear filters'}
-              </button>
-              {!!filteredEmptyState.secondaryAction && (
-                <>
-                  <span aria-hidden="true">•</span>
-                  <button
-                    type="button"
-                    className="gridtable-empty-filter-hint__link"
-                    onClick={filteredEmptyState.secondaryAction.onClick}
-                  >
-                    {filteredEmptyState.secondaryAction.label}
-                  </button>
-                </>
-              )}
-            </div>
-          </>
-        );
-      } else if (hasActiveFilters) {
-        filterGuidance = (
-          <div className="gridtable-empty-filter-hint">
-            Filters are enabled that may be hiding objects.{' '}
-            <button
-              type="button"
-              className="gridtable-empty-filter-hint__link"
-              onClick={(e) => {
-                e.preventDefault();
-                onClearFilters();
-              }}
-            >
-              Clear filters
-            </button>
-          </div>
-        );
-      }
       return (
-        <AriaGridRow>
-          <AriaGridCell colSpan={1000}>
-            <div className="gridtable-empty">
-              {hasActiveFilters ? 'No matching items' : (emptyMessage ?? '')}
-              {filterGuidance}
-            </div>
-          </AriaGridCell>
-        </AriaGridRow>
+        <GridTableEmptyRow
+          emptyMessage={emptyMessage}
+          filteredEmptyState={filteredEmptyState}
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={onClearFilters}
+        />
       );
     }
 
     if (shouldVirtualize) {
-      return virtualRows.map((item, idx) => {
-        const absoluteIndex = virtualRangeStart + idx;
-        const rowKey = keyExtractor(item, absoluteIndex);
-        return renderRowContent(
-          item,
-          absoluteIndex,
-          true,
-          rowKey,
-          `slot-${idx}`,
-          getRowTop(absoluteIndex)
-        );
+      return renderVirtualRows({
+        tableData,
+        virtualRows,
+        virtualRangeStart,
+        keyExtractor,
+        getRowTop,
+        renderRowContent,
+        rowDetailIndex,
+        renderRowDetail,
       });
     }
 
-    return tableData.map((item, index) =>
-      renderRowContent(item, index, false, keyExtractor(item, index))
-    );
+    return tableData.flatMap((item, index) => [
+      renderRowContent(item, index, false, keyExtractor(item, index)),
+      renderRowDetail(item, index, false),
+    ]);
   };
 
   return (

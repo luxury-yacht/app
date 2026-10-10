@@ -1,5 +1,10 @@
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
-import type { LogScrollPosition } from '../../types';
+
+/** Where a log view was scrolled, and whether it was following new lines. */
+export interface LogScrollPosition {
+  scrollTop: number;
+  isTailFollowing: boolean;
+}
 
 interface LogScrollRestorationOptions {
   rootRef: RefObject<HTMLElement | null>;

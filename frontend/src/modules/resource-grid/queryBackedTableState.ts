@@ -72,6 +72,40 @@ export function excludeQueryFacetsFromTableState(
   };
 }
 
+export interface HiddenFilterRules {
+  excludedQueryFacetKeys?: readonly string[];
+  /** An All Namespaces table without a Namespaces control applies no Namespaces selection. */
+  namespaceFilterHidden?: boolean;
+}
+
+// Removes filters the view shows no control for, so a saved value can never
+// narrow the table invisibly.
+export function removeHiddenFilters(
+  state: QueryBackedTableState,
+  { excludedQueryFacetKeys, namespaceFilterHidden }: HiddenFilterRules
+): QueryBackedTableState {
+  const withoutFacets = excludeQueryFacetsFromTableState(state, excludedQueryFacetKeys);
+  if (!namespaceFilterHidden || withoutFacets.filters.namespaces.mode === 'all') {
+    return withoutFacets;
+  }
+  return {
+    ...withoutFacets,
+    filters: { ...withoutFacets.filters, namespaces: ALL_MULTISELECT_FILTER },
+  };
+}
+
+// Selection facets belong to the view's row selection, not the user: they
+// shape the request only and never enter table state.
+export function withSelectionQueryFacets(
+  filters: GridTableFilterState,
+  selectionQueryFacets: GridTableFilterState['queryFacets']
+): GridTableFilterState {
+  if (!selectionQueryFacets || Object.keys(selectionQueryFacets).length === 0) {
+    return filters;
+  }
+  return { ...filters, queryFacets: { ...filters.queryFacets, ...selectionQueryFacets } };
+}
+
 const normalizeOptionSet = (values: string[] | undefined): Set<string> =>
   new Set((values ?? []).map((value) => value.trim()).filter(Boolean));
 

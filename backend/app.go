@@ -2,7 +2,6 @@ package backend
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -85,7 +84,7 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 	if options.Reporter != nil {
 		reporters = append(reporters, options.Reporter)
 	}
-	appLogs := NewAppLogService(NewLogger(1000, reporters...))
+	appLogs := NewApplicationLogs(reporters...)
 	signals := newApplicationRuntimeSignals(
 		func(_ context.Context, name string, data ...interface{}) {
 			if wailsApplication != nil {
@@ -146,7 +145,7 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		Projection: clusterWorkspace, EmitEvent: signals.emitEvent, Context: signals.CtxOrBackground,
 		RateLimitsBridge: clusterRateLimits,
 	})
-	attention := NewClusterAttentionService(preferences, appLogs.Logger())
+	attention := NewClusterAttentionService(preferences, appLogs.Logger(), clusterRuntime.clusterNameForID)
 	resourceProjection := newRefreshResourceProjection()
 	nodeMaintenanceStore := nodemaintenance.NewStore(5)
 	operations := newApplicationOperationsCoordinator(
@@ -177,15 +176,8 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 	refresh := newRefreshCoordinator(RefreshCoordinatorDependencies{
 		ClusterRuntime: clusterRuntime, ClusterWorkspace: clusterWorkspace,
 		Attention: attention, Logger: appLogs.Logger(),
-		AllowedNamespaces: func(clusterID string) []string {
-			namespaces, err := preferences.clusterAllowedNamespaces(clusterID)
-			if err != nil {
-				appLogs.Logger().Warn(fmt.Sprintf("Could not read allowed namespaces for cluster %s (running cluster-wide): %v", clusterID, err), "Settings", clusterID, clusterID)
-				return nil
-			}
-			return namespaces
-		},
-		Preferences: preferences, ContainerLogsPolicy: containerLogsPolicy,
+		AllowedNamespaces: preferences.clusterAllowedNamespaces, Preferences: preferences,
+		ContainerLogsPolicy:   containerLogsPolicy,
 		PermissionFetchPolicy: permissionFetchPolicy, Resources: resources,
 		Context:          signals.CtxOrBackground,
 		RuntimeAvailable: signals.runtimeAvailable, EmitEvent: signals.emitEvent,

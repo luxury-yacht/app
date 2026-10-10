@@ -351,6 +351,11 @@ func (e *refreshGovernorExecutor) ensureRunning(clusterID string) bool {
 	subsystem := a.getRefreshSubsystem(clusterID)
 	switch {
 	case subsystem == nil:
+		// A visible cluster that is still connecting has no clients yet; its
+		// connect path builds the subsystem, and a rebuild now could only fail.
+		if a.clusterRuntime.clusterClientsForID(clusterID) == nil {
+			return false
+		}
 		// Re-warm a Cold (or never-started) cluster by reusing the same per-cluster
 		// build+start path used by auth recovery: it builds the subsystem, starts
 		// the manager, updates the aggregate handlers, and starts the object catalog.

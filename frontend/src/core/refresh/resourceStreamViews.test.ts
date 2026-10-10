@@ -24,8 +24,39 @@ describe('isResourceStreamViewActive', () => {
     expect(isResourceStreamViewActive('pods', inactiveView, 'cluster-a|node:worker-a')).toBe(true);
   });
 
+  it('streams the cluster-wide pods scope behind the Nodes view pods pane', () => {
+    const nodesView = context({ currentView: 'cluster', activeClusterView: 'nodes' });
+    expect(isResourceStreamViewActive('pods', nodesView, 'cluster-a|namespace:all')).toBe(true);
+    expect(isResourceStreamViewActive('pods', nodesView, 'cluster-a|namespace:team-a')).toBe(false);
+    expect(
+      isResourceStreamViewActive(
+        'pods',
+        context({ currentView: 'cluster', activeClusterView: 'config' }),
+        'cluster-a|namespace:all'
+      )
+    ).toBe(false);
+  });
+
+  it('streams namespace-shaped pods scopes only behind the Workloads and Pods views', () => {
+    for (const activeNamespaceView of ['workloads', 'pods'] as const) {
+      expect(
+        isResourceStreamViewActive(
+          'pods',
+          context({ currentView: 'namespace', activeNamespaceView }),
+          'cluster-a|namespace:team-a'
+        )
+      ).toBe(true);
+    }
+    expect(
+      isResourceStreamViewActive(
+        'pods',
+        context({ currentView: 'namespace', activeNamespaceView: 'config' }),
+        'cluster-a|namespace:team-a'
+      )
+    ).toBe(false);
+  });
+
   it.each<[RefreshDomain, NonNullable<RefreshContext['activeNamespaceView']>]>([
-    ['pods', 'workloads'],
     ['namespace-workloads', 'workloads'],
     ['namespace-config', 'config'],
     ['namespace-network', 'network'],

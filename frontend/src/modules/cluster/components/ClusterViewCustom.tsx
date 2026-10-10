@@ -10,7 +10,6 @@ import { operatorColumns } from '@modules/browse/components/operatorColumns';
  * Handles rendering and interactions for the cluster feature.
  */
 
-import './ClusterViewCustom.css';
 import {
   CustomResourceGridFrame,
   type CustomResourceGridRow,

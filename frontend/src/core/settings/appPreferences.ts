@@ -189,9 +189,10 @@ export const OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX = 1000;
 export const OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT = 200;
 
 const DEFAULT_PREFERENCES: AppPreferences = {
-  sidebarClusterResourcesExpanded: false,
+  // Resources holds the default namespace view (Workloads), so it starts open.
+  sidebarClusterResourcesExpanded: true,
   sidebarClusterExtensionsExpanded: false,
-  sidebarNamespaceResourcesExpanded: false,
+  sidebarNamespaceResourcesExpanded: true,
   sidebarNamespaceExtensionsExpanded: false,
   appearanceMode: 'system',
   useShortResourceNames: false,

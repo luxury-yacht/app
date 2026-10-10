@@ -8,6 +8,7 @@
 import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads.helpers';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { getGridTableRowDetailId } from '@shared/components/tables/GridTable.utils';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -69,11 +70,46 @@ const podsViewPropsRef = vi.hoisted(() => ({ current: null as Record<string, unk
 const namespaceClusterIdRef = vi.hoisted(() => ({ current: 'path:context' }));
 
 vi.mock('@modules/namespace/components/NsViewPods', () => ({
-  default: (props: Record<string, unknown>) => {
+  PodsTable: (props: Record<string, unknown>) => {
     podsViewPropsRef.current = props;
     return <div data-testid="pods-view" />;
   },
 }));
+
+const rowDetail = () =>
+  requireValue(gridTablePropsRef.current.rowDetail, 'expected the Workloads row detail');
+
+const attachedPods = (workload: WorkloadData) =>
+  requireReactElement<Record<string, unknown>>(
+    rowDetail().render(workload),
+    'expected the attached Pods table'
+  ).props;
+
+// Renders the Pods cell on its own to read or click its pods toggle.
+const withPodsCount = <R,>(workload: WorkloadData, use: (button: HTMLButtonElement) => R): R => {
+  const column = requireValue(
+    gridTablePropsRef.current.columns.find((candidate) => candidate.key === 'ready'),
+    'expected the Pods column'
+  );
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const cellRoot = ReactDOM.createRoot(host);
+  act(() => cellRoot.render(<>{column.render(workload)}</>));
+  try {
+    return use(requireValue(host.querySelector('button'), 'expected the Pods count toggle'));
+  } finally {
+    act(() => cellRoot.unmount());
+    host.remove();
+  }
+};
+const podsCount = (workload: WorkloadData) =>
+  withPodsCount(workload, (button) => ({
+    expanded: button.getAttribute('aria-expanded'),
+    controls: button.getAttribute('aria-controls'),
+    text: button.textContent,
+  }));
+const clickPodsCount = (workload: WorkloadData) =>
+  withPodsCount(workload, (button) => act(() => button.click()));
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -107,7 +143,6 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
 }));
 
 vi.mock('@ui/favorites/FavToggle', () => ({
-  FavoritePaneGroup: ({ children }: { children: React.ReactNode }) => children,
   useFavToggle: () => ({
     item: {
       type: 'toggle',
@@ -317,7 +352,72 @@ describe('NsViewWorkloads', () => {
     );
   });
 
-  it('selects a workload row by populating the Pods table filters without opening the object', async () => {
+  it("opens a workload's pods under its row from the Pods count without opening the object", async () => {
+    const workload = makeWorkload('Deployment', 'api', 'team-a', 'path:context', { ready: '2/3' });
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [workload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const rowKey = gridTablePropsRef.current.keyExtractor(workload, 0);
+    expect(rowDetail().openRowKey).toBeNull();
+    expect(podsCount(workload)).toMatchObject({ expanded: 'false', text: '2/3' });
+
+    clickPodsCount(workload);
+
+    expect(openWithObjectMock).not.toHaveBeenCalled();
+    expect(rowDetail().openRowKey).toBe(rowKey);
+    expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
+    expect(podsCount(workload)).toMatchObject({
+      expanded: 'true',
+      controls: getGridTableRowDetailId(rowKey),
+    });
+    expect(rowDetail().getLabel(workload)).toBe('Pods for api');
+    expect(attachedPods(workload)).toMatchObject({
+      namespace: 'team-a',
+      clusterId: 'path:context',
+      namespaceLinkView: 'workloads',
+      attachedTo: {
+        clusterId: 'path:context',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'team-a',
+        name: 'api',
+      },
+    });
+
+    clickPodsCount(workload);
+    expect(rowDetail().openRowKey).toBeNull();
+    expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
+
+    // The attached table's own Close closes it too; the workload stays highlighted.
+    clickPodsCount(workload);
+    const close = requireValue(
+      attachedPods(workload).onClose as (() => void) | undefined,
+      'expected the attached table Close'
+    );
+    act(() => close());
+    expect(rowDetail().openRowKey).toBeNull();
+    expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
+  });
+
+  it('highlights a workload on a row click and opens or closes its pods with Space', async () => {
     const workload = makeWorkload('Deployment', 'api', 'team-a', 'path:context');
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
@@ -339,82 +439,20 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+    const rowKey = gridTablePropsRef.current.keyExtractor(workload, 0);
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-
-    expect(openWithObjectMock).not.toHaveBeenCalled();
-    expect(podsViewPropsRef.current).toMatchObject({
-      namespace: 'team-a',
-      workloadFilterRequest: {
-        type: 'set',
-        workload: {
-          clusterId: 'path:context',
-          group: 'apps',
-          version: 'v1',
-          kind: 'Deployment',
-          namespace: 'team-a',
-          name: 'api',
-        },
-      },
-    });
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
+    expect(rowDetail().openRowKey).toBeNull();
 
-    act(() => {
-      const onWorkloadFilterMismatch = podsViewPropsRef.current?.onWorkloadFilterMismatch;
-      if (typeof onWorkloadFilterMismatch !== 'function') {
-        throw new Error('Expected the Pods filter mismatch callback');
-      }
-      onWorkloadFilterMismatch();
-    });
-    expect(podsViewPropsRef.current?.workloadFilterRequest).toBeUndefined();
-    expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(false);
-
-    act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-
-    // The view's own icon sits in the main icon bar, with the search options and Favorite.
-    const clearAction = gridTablePropsRef.current.filters?.options?.preActions?.find(
-      (action) => action.type !== 'separator' && action.title === 'Clear selected workload'
-    );
-    expect(clearAction?.type).toBe('action');
-    act(() => {
-      if (clearAction?.type === 'action') {
-        clearAction.onClick();
-      }
-    });
-    expect(podsViewPropsRef.current).toMatchObject({
-      namespace: 'team-a',
-      workloadFilterRequest: { type: 'clear' },
-    });
-    expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(false);
-
-    act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-    expect(
-      gridTablePropsRef.current.filters?.options?.preActions?.find(
-        (action) => action.type !== 'separator' && action.title === 'Collapse Pods'
-      )
-    ).toBeUndefined();
-    expect(podsViewPropsRef.current).toMatchObject({
-      collapsed: false,
-      onPodsCollapsedChange: expect.any(Function),
-    });
-    act(() => {
-      const onPodsCollapsedChange = podsViewPropsRef.current?.onPodsCollapsedChange;
-      if (typeof onPodsCollapsedChange !== 'function') {
-        throw new Error('Expected the Pods collapse callback');
-      }
-      onPodsCollapsedChange(true);
-    });
-    expect(podsViewPropsRef.current).toMatchObject({ collapsed: true });
-    // Selecting a workload while Pods is collapsed leaves it collapsed but still
-    // filters the pane, so expanding it later shows that workload's pods.
-    act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-    expect(podsViewPropsRef.current).toMatchObject({
-      collapsed: true,
-      workloadFilterRequest: { type: 'set', workload: expect.objectContaining({ name: 'api' }) },
-    });
+    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(workload));
+    expect(rowDetail().openRowKey).toBe(rowKey);
+    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(workload));
+    expect(rowDetail().openRowKey).toBeNull();
+    expect(openWithObjectMock).not.toHaveBeenCalled();
   });
 
-  it('clears the selected workload when GridTable reports an unused-body click', async () => {
+  it('clears the highlighted workload when GridTable reports an unused-body click', async () => {
     const workload = makeWorkload('Deployment', 'api', 'team-a', 'path:context');
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
@@ -440,23 +478,43 @@ describe('NsViewWorkloads', () => {
     expect(gridTablePropsRef.current.onRowSelectionClear).toBeUndefined();
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
-    expect(gridTablePropsRef.current.onRowSelectionClear).toEqual(expect.any(Function));
 
-    act(() => {
-      const clearSelection = gridTablePropsRef.current.onRowSelectionClear;
-      if (!clearSelection) {
-        throw new Error('Expected the workload table to provide a row-selection clear callback');
-      }
-      clearSelection();
-    });
+    act(() => requireValue(gridTablePropsRef.current.onRowSelectionClear, 'clear callback')());
 
-    expect(podsViewPropsRef.current).toMatchObject({
-      workloadFilterRequest: { type: 'clear' },
-    });
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(false);
   });
 
-  it('clears a workload-owned Pods filter when the namespace scope changes', async () => {
+  it('opens nothing for a workload the settled table does not show', async () => {
+    const workload = makeWorkload('Deployment', 'api', 'team-a', 'path:context');
+    const hidden = makeWorkload('Deployment', 'gone', 'team-a', 'path:context');
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [workload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(hidden));
+
+    // No highlighted row may have pods open under it.
+    expect(rowDetail().openRowKey).toBeNull();
+    expect(gridTablePropsRef.current.isRowSelected?.(hidden, 0)).toBe(false);
+  });
+
+  it('closes the open pods when the namespace scope changes', async () => {
     const workload = makeWorkload('Deployment', 'api', 'team-a', 'path:context');
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
@@ -478,25 +536,20 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-    expect(podsViewPropsRef.current?.workloadFilterRequest).toMatchObject({ type: 'set' });
+    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(workload));
+    expect(rowDetail().openRowKey).not.toBeNull();
 
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-b" metrics={null} />);
       await Promise.resolve();
     });
-
-    expect(podsViewPropsRef.current).toMatchObject({
-      namespace: 'team-b',
-      workloadFilterRequest: { type: 'clear' },
-    });
+    expect(rowDetail().openRowKey).toBeNull();
 
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
-
-    expect(podsViewPropsRef.current?.workloadFilterRequest).toEqual({ type: 'clear' });
+    expect(rowDetail().openRowKey).toBeNull();
   });
 
   it('issues a namespace-scoped typed query for a single namespace and renders the query rows', async () => {

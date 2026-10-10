@@ -436,7 +436,7 @@ func (a *RefreshCoordinator) catalogNamespaceGroups() []snapshot.CatalogNamespac
 		// A scoped cluster's namespace list is synthesized from the
 		// configured scope (docs/architecture/namespace-scope.md) so Browse agrees
 		// with the sidebar even before anything is catalogued.
-		if scope := a.allowedNamespaces(entry.meta.ID); len(scope) > 0 {
+		if scope := a.refreshAllowedNamespaces(entry.meta.ID); len(scope) > 0 {
 			namespaces = append([]string(nil), scope...)
 			sort.Strings(namespaces)
 		}

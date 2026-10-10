@@ -49,6 +49,32 @@ describe('TablePaginationControls', () => {
     expect(container.querySelector('.table-pagination-controls')).toBeNull();
   });
 
+  // A degraded result (an unreadable kind, a source still syncing) reports an
+  // approximate total, but with no other page there is still nothing to page.
+  it('hides controls for an approximate result that fits one page with no other page', () => {
+    act(() => {
+      root.render(
+        <TablePaginationControls
+          idPrefix="degraded-table"
+          pageIndex={1}
+          pageSize={50}
+          visibleItemCount={3}
+          pageSizeOptions={[25, 50, 100, 250, 500, 1000]}
+          totalCount={3}
+          totalIsExact={false}
+          hasPrevious={false}
+          hasNext={false}
+          loading={false}
+          onPrevious={vi.fn()}
+          onNext={vi.fn()}
+          onPageSizeChange={vi.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('.table-pagination-controls')).toBeNull();
+  });
+
   it('shows controls when an exact total exceeds the smallest page size', () => {
     act(() => {
       root.render(

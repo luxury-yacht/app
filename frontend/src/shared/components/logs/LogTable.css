@@ -1,0 +1,79 @@
+/* Log lines in a GridTable: the container Table format and Application Logs. */
+
+/* GridTable renders separate header/body tables; keep log-specific paint on both. */
+.gridtable.gridtable-parsed-logs {
+  font-size: var(--font-size-parsed-logs);
+  width: 100%;
+  border-collapse: collapse;
+  background-color: transparent;
+}
+
+.gridtable-parsed-logs .gridtable-row {
+  border-bottom: 1px solid var(--log-table-row-border);
+  cursor: pointer;
+}
+
+.gridtable-parsed-logs .gridtable-row:hover {
+  background-color: var(--log-table-row-hover-bg);
+}
+
+.gridtable-parsed-logs .grid-cell {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-parsed-logs);
+  font-weight: var(--font-weight-parsed-logs);
+  color: var(--log-table-cell-text);
+}
+
+.gridtable-parsed-logs .grid-cell-content {
+  font-size: inherit;
+}
+
+.parsed-log-cell {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.parsed-log-cell:hover {
+  background-color: var(--log-cell-hover-bg);
+}
+
+.parsed-log-cell:active {
+  background-color: var(--log-cell-active-bg);
+}
+
+/* Expanded parsed log rows — click to expand, click to collapse */
+.gridtable-parsed-logs .parsed-row-expanded {
+  background-color: var(--log-table-row-hover-bg);
+}
+
+/* When expanded, remove truncation so full cell content is visible with word wrap */
+.gridtable-parsed-logs .parsed-row-expanded .grid-cell {
+  align-items: flex-start;
+  overflow: visible;
+  max-width: none;
+}
+
+.gridtable-parsed-logs .parsed-row-expanded .grid-cell-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.gridtable-parsed-logs .parsed-row-expanded .parsed-log-cell {
+  max-width: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow: visible;
+  text-overflow: clip;
+}

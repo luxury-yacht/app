@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
@@ -195,27 +195,25 @@ describe('strict CSS cascade contracts', () => {
   });
 
   it.each([false, true])(
-    'applies the dock offset once to split filters (global styles last=%s)',
+    'applies the dock offset once to a table nested in a row detail (global styles last=%s)',
     (globalLast) => {
       const grid = readProjectFile('styles/components/gridtables.css').replace(
         /var\(--dock-right-offset, 0px\)/g,
         '320px'
       );
-      const split = readProjectFile(
-        'src/modules/namespace/components/WorkloadsPodsSplit.css'
-      ).replace(/var\(--dock-right-offset, 0px\)/g, '320px');
-      const style = installStyles(...(globalLast ? [split, grid] : [grid, split]));
-      style.dataset.cssContract = 'split-filter-offset';
+      const rowDetail = readProjectFile('src/shared/components/tables/GridTableRowDetail.css');
+      const style = installStyles(...(globalLast ? [rowDetail, grid] : [grid, rowDetail]));
+      style.dataset.cssContract = 'row-detail-dock-offset';
       document.body.innerHTML = `
       <div class="content-body">
         <div class="gridtable-filter-container" id="ordinary"></div>
-        <div class="workloads-pods-split"><div class="gridtable-filter-container" id="split"></div></div>
+        <div class="gridtable-row-detail"><div class="gridtable-filter-container" id="nested"></div></div>
       </div>`;
       expect(
         window.getComputedStyle(document.querySelector('#ordinary') as HTMLElement).marginRight
       ).toBe('320px');
       expect(
-        window.getComputedStyle(document.querySelector('#split') as HTMLElement).marginRight
+        window.getComputedStyle(document.querySelector('#nested') as HTMLElement).marginRight
       ).toBe('0px');
     }
   );
@@ -306,5 +304,43 @@ describe('strict CSS cascade contracts', () => {
       expect(Number(duration?.[1])).toBeLessThanOrEqual(200);
       expect(containerClosing).toMatch(/\b(both|forwards)\b/);
     });
+  });
+});
+
+// An undefined custom property makes its declaration invalid at computed-value
+// time, so the property silently falls back to inherited or initial (error
+// statuses lost their red, bordered controls drew no border), or to a fallback
+// tuned for one theme (a cream warning box in dark mode).
+describe('CSS custom property references', () => {
+  const productionSources = () =>
+    ['src', 'styles'].flatMap((root) =>
+      readdirSync(resolve(process.cwd(), root), { recursive: true })
+        .map((path) => `${root}/${String(path)}`)
+        .filter((path) => /\.(css|tsx?)$/.test(path) && !/\.(test|stories)\.tsx?$/.test(path))
+        .map((path) => ({ path, text: readProjectFile(path) }))
+    );
+
+  it('reads only custom properties that a stylesheet or inline style defines', () => {
+    const sources = productionSources();
+    // Stylesheet declarations (`--name:`) and inline-style keys or
+    // setProperty names (`'--name'`).
+    const defined = new Set(
+      sources.flatMap(({ text }) =>
+        Array.from(text.matchAll(/(--[\w-]+)\s*:|['"`](--[\w-]+)['"`]/g), (match) =>
+          String(match[1] ?? match[2])
+        )
+      )
+    );
+    // A fallback does not excuse an undefined name: it pins one hard-coded
+    // value in every theme.
+    const undefinedReads = sources.flatMap(({ path, text }) =>
+      text.split('\n').flatMap((line, index) =>
+        Array.from(line.matchAll(/var\(\s*(--[\w-]+)\s*[),]/g), (match) => String(match[1]))
+          .filter((name) => !defined.has(name))
+          .map((name) => `${name} at ${path}:${index + 1}`)
+      )
+    );
+
+    expect(undefinedReads).toEqual([]);
   });
 });

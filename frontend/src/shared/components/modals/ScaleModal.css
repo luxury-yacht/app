@@ -69,7 +69,7 @@
 
 .scale-modal-error {
   color: var(--color-error);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   padding: 0 1.5rem;
 }
 

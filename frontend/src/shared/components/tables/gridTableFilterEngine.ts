@@ -127,8 +127,8 @@ const buildBaseFilterOptions = (options: GridTableFilterOptions | undefined) => 
   clusterDropdownSearchable: options?.clusterDropdownSearchable ?? false,
   clusterDropdownBulkActions: options?.clusterDropdownBulkActions ?? false,
   queryFacets: options?.searchBehavior === 'query' ? (options.queryFacets ?? []) : [],
-  beforeNamespaceActions: options?.beforeNamespaceActions,
   preActions: options?.preActions,
+  trailingActions: options?.trailingActions,
   totalIsExact: options?.totalIsExact ?? true,
   partialDataLabel: options?.partialDataLabel,
 });

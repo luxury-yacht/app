@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   selectedClusterIds: ['cluster-1'],
   requestClusterTransfer: vi.fn(async (_caller: string, _request: unknown) => undefined),
   canStartTabDrag: null as null | ((panelId: string) => boolean),
+  canFloatPanel: null as null | ((panelId: string) => boolean),
   tabDragIdentity: null as null | {
     windowName: string;
     clusterId: string;
@@ -228,6 +229,7 @@ vi.mock('@/ui/dockable', () => ({
     onClusterTabTearOff,
     tabDragIdentity,
     canStartTabDrag,
+    canFloatPanel,
   }: {
     children: React.ReactNode;
     onGroupMoveRequest: typeof mocks.moveRequest;
@@ -237,6 +239,7 @@ vi.mock('@/ui/dockable', () => ({
     onClusterTabTearOff: typeof mocks.clusterTearOff;
     tabDragIdentity: typeof mocks.tabDragIdentity;
     canStartTabDrag: typeof mocks.canStartTabDrag;
+    canFloatPanel: typeof mocks.canFloatPanel;
   }) => {
     mocks.moveRequest = onGroupMoveRequest;
     mocks.tabMoveRequest = onTabMoveRequest;
@@ -245,6 +248,7 @@ vi.mock('@/ui/dockable', () => ({
     mocks.clusterTearOff = onClusterTabTearOff;
     mocks.tabDragIdentity = tabDragIdentity;
     mocks.canStartTabDrag = canStartTabDrag;
+    mocks.canFloatPanel = canFloatPanel;
     return children;
   },
   useDockablePanelContext: () => ({
@@ -481,6 +485,12 @@ describe('WorkspacePanelCoordinator', () => {
     mocks.blocker = { reason: 'unsaved-yaml', focus };
     expect(mocks.canStartTabDrag?.('panel-a')).toBe(false);
     expect(focus).toHaveBeenCalledOnce();
+  });
+
+  it('offers Float only for open object panels, never for app-wide panels', () => {
+    expect(mocks.canFloatPanel?.('panel-a')).toBe(true);
+    expect(mocks.canFloatPanel?.('app-logs')).toBe(false);
+    expect(mocks.canFloatPanel?.('diagnostics')).toBe(false);
   });
 
   it('rejects workspace drops outside the docked edges', () => {

@@ -128,6 +128,30 @@ export const getStableRowId = (rowKey: string): string => {
   return `gridtable-row-${safe}`;
 };
 
+/** Id of an open row's detail region, for the opening control's aria-controls. */
+export const getGridTableRowDetailId = (rowKey: string): string =>
+  `${getStableRowId(rowKey)}-detail`;
+
+const GRIDTABLE_ROW_DETAIL_SELECTOR = '[data-gridtable-row-detail]';
+
+/**
+ * Whether `element` sits in a row detail inside `root`, so it belongs to a
+ * table nested there rather than to root's own table.
+ */
+export const isInNestedRowDetail = (root: Element, element: EventTarget | null): boolean => {
+  const detail = element instanceof Element ? element.closest(GRIDTABLE_ROW_DETAIL_SELECTOR) : null;
+  return detail !== null && root.contains(detail);
+};
+
+/** Elements under `root` that match `selector` and belong to root's own table. */
+export const queryOwnGridTableElements = <E extends Element = HTMLElement>(
+  root: Element,
+  selector: string
+): E[] =>
+  Array.from(root.querySelectorAll<E>(selector)).filter(
+    (element) => !isInNestedRowDetail(root, element)
+  );
+
 export const findGridTableRowByKey = (
   wrapper: HTMLElement | null | undefined,
   rowKey: string
@@ -135,7 +159,7 @@ export const findGridTableRowByKey = (
   if (!wrapper) {
     return null;
   }
-  const rows = wrapper.querySelectorAll<HTMLDivElement>('.gridtable-row[data-row-key]');
+  const rows = queryOwnGridTableElements<HTMLDivElement>(wrapper, '.gridtable-row[data-row-key]');
   for (const row of rows) {
     if (row.dataset.rowKey === rowKey) {
       return row;

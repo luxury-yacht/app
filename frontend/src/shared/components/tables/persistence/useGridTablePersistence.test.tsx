@@ -169,6 +169,46 @@ describe('useGridTablePersistence', () => {
     }
   );
 
+  it('keeps transient table state in memory: ready at once, from defaults, never saved', async () => {
+    stateMap['key:clusterhash:namespace-pods:team-a'] = {
+      version: 1,
+      columnVisibility: { age: false },
+    };
+    const TransientHarness = () => {
+      const result = useGridTablePersistence({
+        viewId: 'namespace-pods',
+        clusterIdentity: 'path:context',
+        namespace: 'team-a',
+        isNamespaceScoped: true,
+        columns,
+        transient: true,
+      });
+      useEffect(() => {
+        latestState = result;
+      }, [result]);
+      return null;
+    };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = ReactDOM.createRoot(container);
+    await act(async () => {
+      root.render(<TransientHarness />);
+      await Promise.resolve();
+    });
+
+    expect(getLatestState().hydrated).toBe(true);
+    expect(getLatestState().columnVisibility).toBeNull();
+
+    await act(async () => getLatestState().setSortConfig({ key: 'age', direction: 'desc' }));
+    expect(getLatestState().sortConfig).toEqual({ key: 'age', direction: 'desc' });
+    expect(savePersistedState).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   it('persists and scopes column visibility per namespace', async () => {
     stateMap['key:clusterhash:namespace-pods:team-a'] = {
       version: 1,

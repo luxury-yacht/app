@@ -610,3 +610,18 @@ func TestApplicationRuntimePassesErrorReporterToApplicationLogger(t *testing.T) 
 		context: sentryreporting.Context{Source: "App"},
 	}}, reporter.messages)
 }
+
+// Application Logs keep a fixed 10,000 entries, enough history to troubleshoot
+// the app; older entries give way to new ones.
+func TestApplicationLogsKeepTheNewestTenThousandEntries(t *testing.T) {
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs.logger.Clear()
+	for i := range 10_005 {
+		app.AppLogs.logger.Info(fmt.Sprintf("line %d", i))
+	}
+
+	entries := app.AppLogs.logger.GetEntries()
+	require.Len(t, entries, 10_000)
+	require.Equal(t, "line 5", entries[0].Message)
+	require.Equal(t, "line 10004", entries[len(entries)-1].Message)
+}

@@ -183,6 +183,12 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     [activeTabs, openPanels]
   );
 
+  // Only object panels can be packaged into a native window (see handleGroupMove).
+  const canFloatPanel = useCallback(
+    (panelId: string) => Boolean(openPanels.get(panelId)?.clusterId),
+    [openPanels]
+  );
+
   const tabDragIdentity = useMemo(
     () => ({
       windowName,
@@ -299,6 +305,7 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
   return (
     <DockablePanelProvider
       onGroupMoveRequest={handleGroupMove}
+      canFloatPanel={canFloatPanel}
       onTabMoveRequest={(payload, target) => {
         void requestPanelTabMove(payload, target, workspacePanelPublication, windowName).catch(
           (error) =>

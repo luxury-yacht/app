@@ -8,18 +8,37 @@ const resourceStreamDomains = new Set<RefreshDomain>(RESOURCE_STREAM_DOMAINS);
 export const isResourceStreamDomain = (domain: RefreshDomain): domain is ResourceDomain =>
   resourceStreamDomains.has(domain);
 
-// Focused Pod scopes are small leased windows used by the combined Workloads
-// view and object panels. Their owning component controls the lease lifetime,
-// so they remain active independently of the broad namespace-table view gate.
+// Focused Pod scopes are small leased windows used by object panels. Their
+// owning component controls the lease lifetime, so they remain active
+// independently of the broad namespace-table view gate.
 const isFocusedPodsScope = (scope?: string): boolean => {
   const base = stripClusterScope(scope);
   return base.startsWith('workload:') || base.startsWith('node:');
 };
 
+// Views whose tables list pods: the Workloads and Pods views under the
+// selected namespace scope, and the Nodes view's pane under the cluster-wide one.
+const PODS_TABLE_NAMESPACE_VIEWS: ReadonlySet<RefreshContext['activeNamespaceView']> = new Set([
+  'workloads',
+  'pods',
+]);
+export const NODES_VIEW_PODS_SCOPE = 'namespace:all';
+
+export const isPodsTableNamespaceView = (context: RefreshContext): boolean =>
+  context.currentView === 'namespace' &&
+  PODS_TABLE_NAMESPACE_VIEWS.has(context.activeNamespaceView);
+
+export const isNodesView = (context: RefreshContext): boolean =>
+  context.currentView === 'cluster' && context.activeClusterView === 'nodes';
+
+const isPodsTableScopeActive = (context: RefreshContext, scope?: string): boolean =>
+  isFocusedPodsScope(scope) ||
+  isPodsTableNamespaceView(context) ||
+  (isNodesView(context) && stripClusterScope(scope) === NODES_VIEW_PODS_SCOPE);
+
 const NAMESPACE_VIEW_BY_DOMAIN: Partial<
   Record<ResourceDomain, NonNullable<RefreshContext['activeNamespaceView']>>
 > = {
-  pods: 'workloads',
   'namespace-workloads': 'workloads',
   'namespace-config': 'config',
   'namespace-network': 'network',
@@ -50,9 +69,7 @@ export const isResourceStreamViewActive = (
   }
 
   if (domain === 'pods') {
-    if (isFocusedPodsScope(scope)) {
-      return true;
-    }
+    return isPodsTableScopeActive(context, scope);
   }
   const namespaceView = NAMESPACE_VIEW_BY_DOMAIN[domain];
   if (namespaceView) {

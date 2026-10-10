@@ -13,7 +13,7 @@
 
 .namespace-map__message {
   margin: auto;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 

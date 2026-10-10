@@ -293,31 +293,21 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       name: 'an All Namespaces table showing the Namespaces filter shares it',
       namespace: ALL_NAMESPACES_SCOPE,
       showNamespaceFilters: true,
-      sharesAllNamespacesFilter: undefined,
       shared: true,
     },
     {
       name: 'an All Namespaces table without the Namespaces filter keeps no hidden selection',
       namespace: ALL_NAMESPACES_SCOPE,
       showNamespaceFilters: false,
-      sharesAllNamespacesFilter: undefined,
-      shared: false,
-    },
-    {
-      name: 'an All Namespaces pane can opt out',
-      namespace: ALL_NAMESPACES_SCOPE,
-      showNamespaceFilters: true,
-      sharesAllNamespacesFilter: false,
       shared: false,
     },
     {
       name: 'a single-namespace table never reads the All Namespaces selection',
       namespace: 'team-a',
       showNamespaceFilters: true,
-      sharesAllNamespacesFilter: undefined,
       shared: false,
     },
-  ])('$name', ({ namespace, showNamespaceFilters, sharesAllNamespacesFilter, shared }) => {
+  ])('$name', ({ namespace, showNamespaceFilters, shared }) => {
     const Probe: React.FC = () => {
       useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
         queryTableMode: 'Query Backed Dynamic',
@@ -330,7 +320,6 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         columns,
         supportsCustomMetadataColumns: true,
         showNamespaceFilters,
-        ...(sharesAllNamespacesFilter === undefined ? {} : { sharesAllNamespacesFilter }),
       });
       return null;
     };
@@ -514,6 +503,93 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         nodes: { mode: 'some', values: ['node-a'] },
       },
     });
+  });
+
+  it('applies view-owned selection facets to the query without saving them', async () => {
+    const ownerSelection = { owners: { mode: 'some' as const, values: ['owner:api'] } };
+    const Probe: React.FC = () => {
+      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'Namespace Pods',
+        selectRows,
+        viewId: 'namespace-pods',
+        namespace: 'team-a',
+        columns,
+        supportsCustomMetadataColumns: true,
+        keyExtractor: (item) => item.name,
+        excludedQueryFacetKeys: ['statuses', 'owners'],
+        selectionQueryFacets: ownerSelection,
+      });
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<Probe />);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      const calls = useNamespaceResourceGridTableMock.mock.calls;
+      requireTableStatePublisher(calls[calls.length - 1]?.[0])({
+        filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, search: 'web' },
+        sortConfig: { key: 'name', direction: 'asc' },
+      });
+      await Promise.resolve();
+    });
+
+    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ search: 'web', queryFacets: ownerSelection }),
+      })
+    );
+    // The selection never becomes table state, so persistence, favorites, and
+    // the filter bar cannot hold it.
+    expect(setFiltersMock).not.toHaveBeenCalled();
+  });
+
+  it('ignores a saved Namespaces filter in an All Namespaces table without a Namespaces control', async () => {
+    const savedNamespaces = { mode: 'some' as const, values: ['team-a'] };
+    persistedFiltersRef.current = {
+      ...DEFAULT_GRID_TABLE_FILTER_STATE,
+      namespaces: savedNamespaces,
+    };
+    const Probe: React.FC = () => {
+      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'Node Pods',
+        selectRows,
+        viewId: 'cluster-node-pods',
+        namespace: ALL_NAMESPACES_SCOPE,
+        columns,
+        supportsCustomMetadataColumns: true,
+        keyExtractor: (item) => item.name,
+        showNamespaceFilters: false,
+      });
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<Probe />);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      const calls = useNamespaceResourceGridTableMock.mock.calls;
+      requireTableStatePublisher(calls[calls.length - 1]?.[0])({
+        filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, namespaces: savedNamespaces },
+        sortConfig: { key: 'name', direction: 'asc' },
+      });
+      await Promise.resolve();
+    });
+
+    expect(setFiltersMock).toHaveBeenCalledWith(DEFAULT_GRID_TABLE_FILTER_STATE);
+    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          namespaces: DEFAULT_GRID_TABLE_FILTER_STATE.namespaces,
+        }),
+      })
+    );
   });
 
   it('passes cluster scoped live refresh revisions into typed queries', () => {

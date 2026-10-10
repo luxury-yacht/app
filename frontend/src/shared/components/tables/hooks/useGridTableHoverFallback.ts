@@ -5,6 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
+import { queryOwnGridTableElements } from '@shared/components/tables/GridTable.utils';
 import type { RefObject } from 'react';
 import { useEffect } from 'react';
 
@@ -32,7 +33,8 @@ export function useGridTableHoverFallback({
     if (!wrapper) {
       return;
     }
-    const fallback = wrapper.querySelector<HTMLDivElement>(
+    const [fallback] = queryOwnGridTableElements<HTMLDivElement>(
+      wrapper,
       '[data-row-focused="true"], [data-row-selected="true"]'
     );
     if (fallback) {

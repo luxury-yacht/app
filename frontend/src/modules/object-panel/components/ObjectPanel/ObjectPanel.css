@@ -75,7 +75,7 @@
 .object-panel-empty-state h3 {
   margin: 0;
   font-size: var(--font-size-title);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-bold);
   color: var(--color-text);
 }
 

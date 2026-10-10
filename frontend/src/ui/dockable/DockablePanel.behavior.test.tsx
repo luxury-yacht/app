@@ -557,7 +557,7 @@ describe('DockablePanel docked behaviour', () => {
           <div>B</div>
         </DockablePanel>
       </>,
-      { onGroupMoveRequest: requestMove }
+      { onGroupMoveRequest: requestMove, canFloatPanel: () => true }
     );
     await act(async () =>
       document.querySelector<HTMLButtonElement>('[aria-label="Dock panel to right side"]')?.click()
@@ -576,6 +576,46 @@ describe('DockablePanel docked behaviour', () => {
     await unmount();
   });
 
+  it('offers Float only where every moved tab can open in a native window', async () => {
+    const groupMove = vi.fn(() => true);
+    const tabMove = vi.fn();
+    const unmount = await renderPanel(
+      <>
+        <DockablePanel panelId="panel-object" title="Object" defaultPosition="bottom" isOpen>
+          <div>Object</div>
+        </DockablePanel>
+        <DockablePanel panelId="app-logs" title="Application Logs" defaultPosition="bottom" isOpen>
+          <div>Logs</div>
+        </DockablePanel>
+      </>,
+      {
+        onGroupMoveRequest: groupMove,
+        onTabMoveRequest: tabMove,
+        canFloatPanel: (panelId) => panelId !== 'app-logs',
+      }
+    );
+    const menuLabels = async (panelId: string) => {
+      await act(async () =>
+        document
+          .querySelector(`[role="tab"][data-panel-id="${panelId}"]`)
+          ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+      );
+      return Array.from(document.querySelectorAll('[role="menuitem"]')).map(
+        (item) => item.textContent
+      );
+    };
+
+    // The header moves the whole group, so one non-floatable tab hides Float.
+    expect(document.querySelector('[aria-label="Undock panel to floating window"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Dock panel to right side"]')).not.toBeNull();
+    // A tab menu moves only its tab, so the object tab can still float alone.
+    expect(await menuLabels('app-logs')).not.toContain('Float');
+    expect(await menuLabels('panel-object')).toContain('Float');
+    expect(groupMove).not.toHaveBeenCalled();
+    expect(tabMove).not.toHaveBeenCalled();
+    await unmount();
+  });
+
   it.each([
     { ids: ['a'], target: 'a', moves: [] },
     { ids: ['a', 'b', 'c'], target: 'a', moves: ['Move tab right'] },
@@ -589,7 +629,8 @@ describe('DockablePanel docked behaviour', () => {
           <DockablePanel key={id} panelId={id} title={id} defaultPosition="right" isOpen>
             <div>{id}</div>
           </DockablePanel>
-        ))
+        )),
+        { canFloatPanel: () => true }
       );
       const tab = document.querySelector(`[role="tab"][data-panel-id="${target}"]`);
       expect(tab).not.toBeNull();
@@ -620,7 +661,7 @@ describe('DockablePanel docked behaviour', () => {
           <div>B</div>
         </DockablePanel>
       </>,
-      { onTabMoveRequest: nativeMove }
+      { onTabMoveRequest: nativeMove, canFloatPanel: () => true }
     );
     await act(async () =>
       document.querySelector('[role="tab"][data-panel-id="panel-menu-a"]')?.dispatchEvent(
@@ -740,7 +781,7 @@ describe('DockablePanel docked behaviour', () => {
           <div>B</div>
         </DockablePanel>
       </>,
-      { onTabMoveRequest: move, onGroupMoveRequest: groupMove }
+      { onTabMoveRequest: move, onGroupMoveRequest: groupMove, canFloatPanel: () => true }
     );
     const openMenu = async () =>
       act(async () =>

@@ -1,3 +1,45 @@
-Feature ideas
-
-- Read-only mode
+- In the Workloads view, we have two panes, one for workloads and one for pods. Clicking a workload filters the pods pane to only show pods owned by that workload. I want the same two-pane view for Nodes.
+    - Clicking a node filters the pods pane to that node's pods across all namespaces.
+    - With no node selected, the pane shows all pods in the cluster, as the Workloads pane shows all pods in the namespace.
+- In the pods pane (not the Pods view), remove the Namespaces, Owner, and Node dropdowns.
+    - The selected row is the only thing that filters the pane. It lasts only while you stay on the view.
+    - Coming back to the view starts unfiltered. Favorites don't save the selection, and Owner filters already saved in favorites are dropped.
+    - The pane must never be filtered without a visible highlighted row.
+- Status: items 1 and 2 are implemented. Nodes favorites save both panes; existing ones keep their Nodes settings. The rendered check in the running app is still to do.
+- Add the Pods view back, with the full set of filter controls.
+    - Pod "Go to Table View" and other jumps to a pod's row land in the Pods view, not the pods pane.
+    - Old favorites and links that point to `pods` open the Pods view instead of Workloads.
+    - Status: implemented, including the Cluster Overview ready-Pod count opening it. The rendered check in the running app is still to do.
+- In the Sidebar, in the Namespaces section, only Events and Map stay at the top level. Everything else goes in the "Resources" expandable section:
+    - Events
+    - Map
+    - Resources
+        - Browse
+        - Workloads (remains the default)
+        - Pods
+        - Autoscaling
+        - Config
+        - Network
+        - Quotas
+        - RBAC
+        - Storage
+    - Extensions
+        - Custom Resources
+        - etc...
+- In the Sidebar, the cluster section follows the same rule, except Identities stays at the top level:
+    - Overview
+    - Attention
+    - Events
+    - Identities
+    - Resources
+        - Browse
+        - Config
+        - Namespaces
+        - Nodes
+        - RBAC
+        - Storage
+    - Extensions
+        - CRDs
+        - etc...
+- Resources starts expanded in both sections. Extensions starts collapsed. Installs that already saved a Resources state keep it.
+- Status: the sidebar is implemented except Pods, which comes with the Pods view. The rendered check in the running app is still to do.

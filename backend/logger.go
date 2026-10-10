@@ -69,6 +69,7 @@ type Logger struct {
 	maxSize       int
 	nextSequence  uint64
 	eventEmitter  func(string, ...interface{}) // Function to emit log events
+	addedEvents   addedEventBatch
 	errorReporter sentryreporting.Reporter
 }
 
@@ -85,6 +86,7 @@ func NewLogger(maxSize int, reporters ...sentryreporting.Reporter) *Logger {
 		entries:       make([]LogEntry, 0, maxSize),
 		maxSize:       maxSize,
 		errorReporter: reporter,
+		addedEvents:   addedEventBatch{window: appLogsAddedEventWindow},
 	}
 }
 
@@ -95,9 +97,23 @@ func (l *Logger) Log(level LogLevel, message string, source ...string) {
 	l.log(level, message, nil, nil, sentryreporting.Operation{}, source...)
 }
 
+// appLogsAddedEventWindow batches app-logs:added like container log lines are
+// batched (one delivery per 250 ms window), so a burst of writes costs the panel
+// one read instead of one per write.
+const appLogsAddedEventWindow = 250 * time.Millisecond
+
+// addedEventBatch holds the newest unsent sequence until its window closes. The
+// panel reads every entry after the last one it has, so one event per window
+// delivers every write.
+type addedEventBatch struct {
+	mu       sync.Mutex
+	window   time.Duration
+	timer    *time.Timer
+	sequence uint64
+}
+
 type logDispatch struct {
 	entry    LogEntry
-	emit     func(string, ...interface{})
 	reporter sentryreporting.Reporter
 }
 
@@ -142,14 +158,37 @@ func (l *Logger) recordLogEntry(level LogLevel, message string, source []string)
 	l.entries = appendBoundedLogEntry(l.entries, l.maxSize, entry)
 	return logDispatch{
 		entry:    entry,
-		emit:     l.eventEmitter,
 		reporter: l.errorReporter,
 	}
 }
 
-func (dispatch logDispatch) emitAddedEvent() {
-	if dispatch.emit != nil {
-		dispatch.emit(appLogsAddedEventName, AppLogsAddedEvent{Sequence: dispatch.entry.Sequence})
+// queueAddedEvent raises the pending sequence and opens a window if none is open.
+// Racing writers can arrive out of order, so the pending sequence only grows.
+func (l *Logger) queueAddedEvent(sequence uint64) {
+	batch := &l.addedEvents
+	batch.mu.Lock()
+	defer batch.mu.Unlock()
+	if sequence > batch.sequence {
+		batch.sequence = sequence
+	}
+	if batch.timer == nil {
+		batch.timer = time.AfterFunc(batch.window, l.sendAddedEvent)
+	}
+}
+
+// sendAddedEvent closes the window and tells the panel the newest sequence.
+func (l *Logger) sendAddedEvent() {
+	batch := &l.addedEvents
+	batch.mu.Lock()
+	sequence := batch.sequence
+	batch.timer = nil
+	batch.mu.Unlock()
+
+	l.mu.RLock()
+	emit := l.eventEmitter
+	l.mu.RUnlock()
+	if emit != nil {
+		emit(appLogsAddedEventName, AppLogsAddedEvent{Sequence: sequence})
 	}
 }
 
@@ -238,9 +277,9 @@ func (l *Logger) log(
 	}
 
 	dispatch := l.recordLogEntry(level, message, source)
-	// Emit outside the logger lock so event handlers cannot block log writes
-	// or deadlock by synchronously reading the logger.
-	dispatch.emitAddedEvent()
+	// Queue outside the logger lock; the batch emits on its own timer, so event
+	// handlers cannot block log writes or deadlock by reading the logger.
+	l.queueAddedEvent(dispatch.entry.Sequence)
 	// ErrorCapture republishes third-party stderr (klog from client-go and
 	// friends). Those lines are not this application failing and their stack is
 	// the scraper, so they stay in the local log but never reach the reporter.

@@ -5,7 +5,10 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { act, createContext, type ReactNode, StrictMode, useContext, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import Sidebar from './Sidebar';
@@ -150,6 +153,11 @@ describe('resource link sidebar navigation', () => {
       category: 'extensions',
     },
   ])('reveals $kind navigation and can reveal it again after manual collapse', async (target) => {
+    // Start from saved collapsed groups so every destination needs revealing.
+    setAppPreferencesForTesting({
+      sidebarClusterResourcesExpanded: false,
+      sidebarNamespaceResourcesExpanded: false,
+    });
     const ref = {
       ...target,
       clusterId: 'cluster-a',

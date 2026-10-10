@@ -154,7 +154,7 @@
   min-width: 18px;
   height: 18px;
   border-radius: 999px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   font-size: 11px;
   display: inline-flex;
@@ -170,7 +170,7 @@
 }
 
 .sessions-status-message .as-section-empty {
-  border: 1px dashed var(--border-color);
+  border: 1px dashed var(--color-border);
   border-radius: 6px;
   padding: 8px;
   font-size: 12px;
@@ -178,7 +178,7 @@
 }
 
 .sessions-status-message .ss-session-item {
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 6px;
   display: flex;

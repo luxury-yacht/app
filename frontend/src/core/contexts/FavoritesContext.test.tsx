@@ -102,7 +102,14 @@ function makeFavorite(overrides: Partial<Favorite> = {}): Favorite {
     viewType: 'namespace',
     view: 'workloads',
     namespace: 'default',
-    panes: {},
+    filters: {
+      search: '',
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
+      includeMetadata: false,
+    },
+    tableState: { sortColumn: 'name', sortDirection: 'asc', columnVisibility: {} },
     order: 0,
     ...overrides,
   };
@@ -422,17 +429,12 @@ describe('FavoritesContext', () => {
       await render();
       const favorite = makeFavorite({
         clusterId: 'cluster-1',
-        panes: {
-          main: {
-            filters: {
-              search: 'saved filter',
-              kinds: { mode: 'all' },
-              namespaces: { mode: 'all' },
-              clusters: { mode: 'all' },
-              includeMetadata: false,
-            },
-            tableState: { sortColumn: 'name', sortDirection: 'asc', columnVisibility: {} },
-          },
+        filters: {
+          search: 'saved filter',
+          kinds: { mode: 'all' },
+          namespaces: { mode: 'all' },
+          clusters: { mode: 'all' },
+          includeMetadata: false,
         },
       });
       act(() => stateRef.current?.setPendingFavorite(favorite));
@@ -442,7 +444,7 @@ describe('FavoritesContext', () => {
       mockClusterLifecycleState = 'ready';
       mockNamespaceReady = true;
       await render();
-      expect(restore).toHaveBeenCalledWith(favorite.panes.main.filters);
+      expect(restore).toHaveBeenCalledWith(favorite.filters);
       expect(order).toEqual(['navigate', 'restore']);
       expect(stateRef.current?.pendingFavorite).toBeNull();
     }

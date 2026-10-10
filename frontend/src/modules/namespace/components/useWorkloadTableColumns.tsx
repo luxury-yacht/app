@@ -10,6 +10,10 @@ import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespa
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { formatRestartCount } from '@shared/components/tables/restartCount';
+import {
+  type RowDetailToggleOptions,
+  withRowDetailToggle,
+} from '@shared/components/tables/rowDetailToggle';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useMemo } from 'react';
@@ -21,6 +25,8 @@ interface UseWorkloadTableColumnsParams {
   onAltClick?: (row: WorkloadData) => void;
   showNamespaceColumn: boolean;
   useShortResourceNames: boolean;
+  /** Makes the Pods count open and close the workload's pods under its row. */
+  podsToggle?: RowDetailToggleOptions<WorkloadData>;
   metrics?: {
     stale?: boolean;
     lastError?: string;
@@ -59,6 +65,7 @@ const useWorkloadTableColumns = ({
   onAltClick,
   showNamespaceColumn,
   useShortResourceNames,
+  podsToggle,
   metrics,
 }: UseWorkloadTableColumnsParams): GridColumnDefinition<WorkloadData>[] => {
   const namespaceColumnLink = useNamespaceColumnLink<WorkloadData>('workloads');
@@ -74,6 +81,21 @@ const useWorkloadTableColumns = ({
 
     const getRestartsClassName = (workload: WorkloadData) =>
       (workload.restarts ?? 0) > 0 ? 'status-text warning' : undefined;
+
+    const plainReadyColumn = cf.createTextColumn<WorkloadData>(
+      'ready',
+      'Pods',
+      (row) => row.ready ?? '—',
+      {
+        alignHeader: 'center',
+        alignData: 'center',
+        getClassName: getReadyClassName,
+        sortValue: (row) => getReadySortValue(row.ready),
+      }
+    );
+    const readyColumn = podsToggle
+      ? withRowDetailToggle(plainReadyColumn, podsToggle)
+      : plainReadyColumn;
 
     const metricsStale = Boolean(metrics?.stale);
     const metricsError = metrics?.lastError ?? undefined;
@@ -98,12 +120,7 @@ const useWorkloadTableColumns = ({
         getClassName: (row) => backendStatusTextClass(row.statusPresentation),
         sortValue: (row) => row.status.toLowerCase(),
       }),
-      cf.createTextColumn<WorkloadData>('ready', 'Ready', (row) => row.ready ?? '—', {
-        alignHeader: 'center',
-        alignData: 'center',
-        getClassName: getReadyClassName,
-        sortValue: (row) => getReadySortValue(row.ready),
-      }),
+      readyColumn,
       cf.createTextColumn<WorkloadData>(
         'restarts',
         'Restarts',
@@ -173,6 +190,7 @@ const useWorkloadTableColumns = ({
     metrics?.stale,
     namespaceColumnLink,
     onAltClick,
+    podsToggle,
     showNamespaceColumn,
     useShortResourceNames,
   ]);

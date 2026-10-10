@@ -881,3 +881,22 @@ func TestCooledMappingsOutliveSnapshotRouting(t *testing.T) {
 		})
 	}
 }
+
+// A visible cluster is still connecting until its clients exist. Rebuilding it
+// then can only fail, so the governor leaves the build to the connect path.
+func TestGovernorWaitsForClientsBeforeRebuildingVisibleCluster(t *testing.T) {
+	app := newWorkspaceCoordinatorTestFixture(t)
+	logger := app.AppLogs.Logger()
+
+	app.Refresh.SetVisibleCluster("connecting-config:connecting")
+	requireClusterLogNames(t, logger, "connecting-config:connecting", "Rebuilding subsystem", 0, "")
+	requireClusterLogNames(t, logger, "connecting-config:connecting", "Cannot rebuild subsystem", 0, "")
+
+	// With clients the governor still builds it. These clients have no kubeconfig
+	// selection, so the rebuild stops after logging.
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
+		"connected-config:connected": {meta: ClusterMeta{ID: "connected-config:connected", Name: "connected"}},
+	}
+	app.Refresh.SetVisibleCluster("connected-config:connected")
+	requireClusterLogNames(t, logger, "connected-config:connected", "Rebuilding subsystem", 1, "connected")
+}

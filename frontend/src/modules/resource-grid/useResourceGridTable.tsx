@@ -67,7 +67,7 @@ const buildFavoriteColumns = <T,>(
 interface ResourceGridFavoriteOptions<T extends ResourceGridTableRow>
   extends Pick<
       QueryResourceGridTableParams<T>,
-      'columns' | 'supportsCustomMetadataColumns' | 'persistence' | 'favoritePane'
+      'columns' | 'supportsCustomMetadataColumns' | 'persistence'
     >,
     Pick<
       FavToggleState,
@@ -81,7 +81,6 @@ function useResourceGridFavorite<T extends ResourceGridTableRow>({
   supportsCustomMetadataColumns,
   persistence,
   sortConfig,
-  favoritePane,
   ...options
 }: ResourceGridFavoriteOptions<T>) {
   const favoriteColumns = useMemo(
@@ -105,8 +104,6 @@ function useResourceGridFavorite<T extends ResourceGridTableRow>({
     setColumnVisibility: persistence.setColumnVisibility,
     setColumnOrder: persistence.setColumnOrder,
     hydrated: persistence.hydrated,
-    paneId: favoritePane?.id,
-    paneLabel: favoritePane?.label,
   });
 }
 
@@ -273,7 +270,6 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
   keyExtractor,
   rowIdentity,
   virtualization = GRIDTABLE_VIRTUALIZATION_DEFAULT,
-  favoritePane,
 }: QueryResourceGridTableParams<T>): ResourceGridTableResult<T> {
   const defaultKeyExtractor = useDefaultResourceGridKey<T>();
   const resolvedKeyExtractor = keyExtractor ?? defaultKeyExtractor;
@@ -295,7 +291,6 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
     supportsCustomMetadataColumns,
     persistence,
     sortConfig: binding.sortConfig,
-    favoritePane,
     availableKinds: filterOptions.kinds,
     availableFilterNamespaces: filterOptions.namespaces,
     filterOptions,
@@ -361,7 +356,6 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   showKindDropdown = false,
   transformSortedData,
   showFavoriteToggle = true,
-  favoritePane,
 }: ResourceGridCommonParams<T>): ResourceGridTableResult<T> {
   const binding = useGridTableBinding({
     data,
@@ -483,7 +477,6 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     supportsCustomMetadataColumns,
     persistence,
     sortConfig,
-    favoritePane,
     enabled: showFavoriteToggle,
     availableKinds,
     availableFilterNamespaces: showNamespaceFilters ? availableFilterNamespaces : undefined,

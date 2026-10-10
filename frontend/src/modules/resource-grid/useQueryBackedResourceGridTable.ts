@@ -1,5 +1,8 @@
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
+import type {
+  GridTableFilterOptions,
+  GridTableFilterState,
+} from '@shared/components/tables/GridTable';
 import {
   type GridTableFocusRequest,
   matchesGridTableFocusRequest,
@@ -29,8 +32,9 @@ import { backendQuerySource } from './backendQuerySource';
 import type { QueryBackedTableState } from './queryBackedTableState';
 import {
   excludeQueryFacetsFromFilterOptions,
-  excludeQueryFacetsFromTableState,
+  removeHiddenFilters,
   useQueryBackedTableState,
+  withSelectionQueryFacets,
 } from './queryBackedTableState';
 import type {
   ClusterResourceGridTableParams,
@@ -52,6 +56,18 @@ import {
 // which splits the scope on ':' and rejects a bare name). Normalize before building any scope.
 const namespaceScopeKey = (namespace: string): string =>
   namespace.startsWith('namespace:') ? namespace : `namespace:${namespace}`;
+
+// The revisit replay cache's identity. A row selection narrows the rows, so it
+// is part of it: another parent's rows must never replay while this one loads.
+// The cluster stays its own '|' segment (from liveScope) for cluster eviction.
+const replayCacheKey = (
+  viewId: string,
+  liveScope: string,
+  selectionQueryFacets: GridTableFilterState['queryFacets']
+): string =>
+  selectionQueryFacets
+    ? `${viewId}|${liveScope}|${JSON.stringify(selectionQueryFacets)}`
+    : `${viewId}|${liveScope}`;
 
 // A view's persisted page size wins when it is a real option; otherwise the
 // fallback applies (the app-wide Default Page Size preference).
@@ -152,6 +168,15 @@ interface QueryBackedGridParamsCommon<
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
   excludedQueryFacetKeys?: readonly string[];
+  /**
+   * Facets owned by the view's row selection. They narrow the request only and
+   * never enter table state, persistence, favorites, or the filter bar; their
+   * keys belong in `excludedQueryFacetKeys` so the user cannot also hold them.
+   * Memoize the object: a new identity re-derives the request.
+   */
+  selectionQueryFacets?: NonNullable<GridTableFilterState['queryFacets']>;
+  /** Keep sort, filters, and columns in memory only; they start fresh on every mount. */
+  transientTableState?: boolean;
 }
 
 interface TypedQueryLifecycle<
@@ -189,6 +214,8 @@ function useTypedQueryLifecycle<
   predicates,
   filterOptionOverrides,
   excludedQueryFacetKeys,
+  selectionQueryFacets,
+  namespaceFilterHidden = false,
   defaultSort,
   persistence,
   liveScope,
@@ -204,6 +231,8 @@ function useTypedQueryLifecycle<
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
   excludedQueryFacetKeys?: readonly string[];
+  selectionQueryFacets?: NonNullable<GridTableFilterState['queryFacets']>;
+  namespaceFilterHidden?: boolean;
   defaultSort: SortConfig;
   persistence: UseGridTablePersistenceResult;
   liveScope: string;
@@ -213,14 +242,14 @@ function useTypedQueryLifecycle<
   const defaultPageSize = useDefaultTablePageSize();
   const pageLimit = typedQueryPageLimitOrDefault(persistence.pageSize, defaultPageSize);
   useEffect(() => {
-    const sanitized = excludeQueryFacetsFromTableState(
+    const sanitized = removeHiddenFilters(
       { filters: persistence.filters, sortConfig: null },
-      excludedQueryFacetKeys
+      { excludedQueryFacetKeys, namespaceFilterHidden }
     );
     if (sanitized.filters !== persistence.filters) {
       persistence.setFilters(sanitized.filters);
     }
-  }, [excludedQueryFacetKeys, persistence.filters, persistence.setFilters]);
+  }, [excludedQueryFacetKeys, namespaceFilterHidden, persistence.filters, persistence.setFilters]);
   useScopedRefreshDomainLifecycle({
     domain,
     scope: liveScope || null,
@@ -244,9 +273,11 @@ function useTypedQueryLifecycle<
       if (hydratedRef.current) {
         setTableStateReady(true);
       }
-      handleTableStateChange(excludeQueryFacetsFromTableState(next, excludedQueryFacetKeys));
+      handleTableStateChange(
+        removeHiddenFilters(next, { excludedQueryFacetKeys, namespaceFilterHidden })
+      );
     },
-    [excludedQueryFacetKeys, handleTableStateChange]
+    [excludedQueryFacetKeys, handleTableStateChange, namespaceFilterHidden]
   );
   // clusterId is required: without it buildTypedResourceQueryScope returns null and no fetch is
   // ever issued, so the query path could never settle. Gating here holds the table in its gating
@@ -261,13 +292,21 @@ function useTypedQueryLifecycle<
   // One query serves every sort, including cpu/memory: the backend joins live
   // usage onto the rows at serve and sorts by it, so there is no separate
   // metric-domain query and no row-key hydration leg.
+  const queryFilters = useMemo(
+    () =>
+      withSelectionQueryFacets(
+        removeHiddenFilters(tableState, { excludedQueryFacetKeys, namespaceFilterHidden }).filters,
+        selectionQueryFacets
+      ),
+    [excludedQueryFacetKeys, namespaceFilterHidden, selectionQueryFacets, tableState]
+  );
   const query = useTypedResourceQuery<TPayload, TRow>({
     enabled: queryEnabled,
     clusterId,
     domain,
     label,
     baseScope,
-    filters: excludeQueryFacetsFromTableState(tableState, excludedQueryFacetKeys).filters,
+    filters: queryFilters,
     sortConfig: tableState.sortConfig,
     pageLimit,
     predicates,
@@ -539,12 +578,6 @@ export interface QueryBackedNamespaceGridParams<
     QueryBackedGridParamsCommon<TPayload, TRow> {
   /** Optional: the wrapper resolves a canonical default when omitted. */
   keyExtractor?: (item: TRow, index: number) => string;
-  /**
-   * All Namespaces tables that show the Namespaces filter share one selection
-   * per cluster. Set false for a pane whose Namespaces filter another table's
-   * selection drives.
-   */
-  sharesAllNamespacesFilter?: boolean;
 }
 
 export function useQueryBackedNamespaceResourceGridTable<
@@ -561,10 +594,11 @@ export function useQueryBackedNamespaceResourceGridTable<
   predicates,
   filterOptionOverrides,
   excludedQueryFacetKeys,
+  selectionQueryFacets,
+  transientTableState = false,
   defaultSort = { key: 'name', direction: 'asc' },
   namespace,
   supportsCustomMetadataColumns,
-  sharesAllNamespacesFilter = true,
   ...tableParams
 }: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow, TPayload> {
   const resolvedKeyExtractor = useResolvedQueryKeyExtractor(
@@ -585,8 +619,9 @@ export function useQueryBackedNamespaceResourceGridTable<
       isNamespaceScoped: !allNamespaces,
     },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
-    shareNamespaceFilter:
-      allNamespaces && Boolean(tableParams.showNamespaceFilters) && sharesAllNamespacesFilter,
+    // All Namespaces tables showing the Namespaces filter share one selection per cluster.
+    shareNamespaceFilter: allNamespaces && Boolean(tableParams.showNamespaceFilters),
+    transient: transientTableState,
   });
   const liveScope = useMemo(
     () =>
@@ -608,6 +643,8 @@ export function useQueryBackedNamespaceResourceGridTable<
     predicates,
     filterOptionOverrides,
     excludedQueryFacetKeys,
+    selectionQueryFacets,
+    namespaceFilterHidden: allNamespaces && !tableParams.showNamespaceFilters,
     defaultSort,
     persistence,
     liveScope,
@@ -631,7 +668,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   });
   return useQueryBackedGridResult<TPayload, TRow>({
     viewId: tableParams.viewId,
-    cacheKey: `${tableParams.viewId}|${liveScope}`,
+    cacheKey: replayCacheKey(tableParams.viewId, liveScope, selectionQueryFacets),
     table,
     query: lifecycle.query,
     persistence,
@@ -674,6 +711,8 @@ export function useQueryBackedClusterResourceGridTable<
   predicates,
   filterOptionOverrides,
   excludedQueryFacetKeys,
+  selectionQueryFacets,
+  transientTableState = false,
   defaultSortKey = 'name',
   defaultSortDirection = 'asc',
   supportsCustomMetadataColumns,
@@ -697,6 +736,7 @@ export function useQueryBackedClusterResourceGridTable<
 
     filterOptions: { ...tableParams.filterOptions, isNamespaceScoped: false },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+    transient: transientTableState,
   });
   const liveScope = useMemo(
     () => (clusterId ? buildClusterScope(clusterId, baseScope) : ''),
@@ -714,6 +754,7 @@ export function useQueryBackedClusterResourceGridTable<
     predicates,
     filterOptionOverrides,
     excludedQueryFacetKeys,
+    selectionQueryFacets,
     defaultSort,
     persistence,
     liveScope,
@@ -735,7 +776,7 @@ export function useQueryBackedClusterResourceGridTable<
   });
   return useQueryBackedGridResult<TPayload, TRow>({
     viewId: tableParams.viewId,
-    cacheKey: `${tableParams.viewId}|${liveScope}`,
+    cacheKey: replayCacheKey(tableParams.viewId, liveScope, selectionQueryFacets),
     table,
     query: lifecycle.query,
     persistence,

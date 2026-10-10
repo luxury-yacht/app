@@ -47,7 +47,7 @@
 .confirmation-modal-details-table th {
   text-align: left;
   font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
+  color: var(--color-text);
   border-bottom: 1px solid var(--color-border);
   padding: 0 1rem 0.25rem 0;
 }

@@ -21,8 +21,14 @@ export function DockableTabMenu({
   position: { x: number; y: number };
   onClose: () => void;
 }>) {
-  const { requestTabMove, closeTab, nativeWindowMode, tabGroups, reorderTabInGroup } =
-    useDockablePanelContext();
+  const {
+    requestTabMove,
+    canFloatPanel,
+    closeTab,
+    nativeWindowMode,
+    tabGroups,
+    reorderTabInGroup,
+  } = useDockablePanelContext();
   const ids = getGroupTabs(tabGroups, groupKey)?.tabs ?? [];
   const orderActions = tabReorderMenuItems(ids, panelId, (index) =>
     reorderTabInGroup(groupKey, panelId, index)
@@ -37,7 +43,7 @@ export function DockableTabMenu({
   if (nativeWindowMode || groupKey !== 'bottom') {
     addMove('Dock to bottom', 'bottom', <DockBottomIcon width={16} height={16} />);
   }
-  if (!nativeWindowMode) {
+  if (!nativeWindowMode && canFloatPanel(panelId)) {
     addMove('Float', 'floating', <FloatPanelIcon width={16} height={16} />);
   }
   items.push(
