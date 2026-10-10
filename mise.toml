@@ -1,8 +1,8 @@
 [tools]
 # Canonical tool versions. Compatibility metadata in go.mod and
 # frontend/package.json must mirror these values.
-go = "1.26.8"
-node = "26.10.0"
+go = "1.26.9"
+node = "26.11.1"
 npm = "12.2.0"
 "go:honnef.co/go/tools/cmd/staticcheck" = "0.8.1"
 trivy = "0.75.0"
@@ -10,4 +10,4 @@ trivy = "0.75.0"
 
 [vars]
 # NSIS is installed by the Windows-specific release action rather than Mise.
-nsis_version = "3.12"
+nsis_version = "3.13"
