@@ -16,4 +16,5 @@
 
 ### Fixed
 
+- Tables with 25 or fewer rows no longer show pagination controls when some of their data is unavailable (for example, a resource type you can't list).
 - Paste from clipboard into a shell session no longer prompts with a context menu to confirm the paste.
