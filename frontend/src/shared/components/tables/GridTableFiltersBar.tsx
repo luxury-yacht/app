@@ -71,6 +71,8 @@ interface GridTableFiltersBarProps {
   preActions?: IconBarItem[];
   /** IconBar items rendered after a separator following the preceding actions (e.g. Load More). */
   postActions?: IconBarItem[];
+  /** IconBar items at the end of the bar, after Columns (e.g. an attached table's Close). */
+  trailingActions?: IconBarItem[];
   /** Filter feedback shown after the active filter chips: N matching of M in scope. */
   resultCount?: {
     /** N — items matching the active filters (a total, not the current page). */
@@ -371,6 +373,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   containerRef,
   preActions,
   postActions,
+  trailingActions,
   resultCount,
 }) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -599,6 +602,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
             onAddCustomMetadataColumn,
             hiddenCount: columnsHiddenCount,
           })}
+          {!!trailingActions?.length && <IconBar items={trailingActions} />}
         </div>
       </div>
       <ActiveFilterChips

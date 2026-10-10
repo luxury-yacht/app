@@ -46,7 +46,9 @@ virtualization, and native table accessibility. Apply the
   in a native detail row directly under it: a full-width cell holding a
   labelled region whose id is `getGridTableRowDetailId(rowKey)`.
   `withRowDetailToggle` turns a count column into the opener ("2/3 ›") with
-  `aria-expanded` and `aria-controls`; the view owns which row is open.
+  `aria-expanded` and `aria-controls`; the view owns which row is open. A
+  nested table can also close it with a Close in
+  `filters.options.trailingActions`, which sits at the end of its filter bar.
 - The detail and the open row share the accent rail. Its content stays pinned to
   the visible width and is capped at a share of the table viewport; a nested
   table renders `embedded`, sizes to its rows up to the cap, then scrolls inside.
@@ -57,7 +59,8 @@ virtualization, and native table accessibility. Apply the
   sorting and refreshes.
 - A nested table owns its focus and keys. The parent treats focus and pointer
   input inside its detail as not its own, so only the nested table's shortcuts
-  run; `Escape` from the detail (outside text inputs) returns to the open row.
+  run; `Escape` from the detail (outside text inputs) returns to the open row,
+  and so does closing the detail while focus is inside it.
   Shared DOM queries that search a wrapper or table use
   `queryOwnGridTableElements`/`isInNestedRowDetail` so they never reach a nested
   table's rows, cells, or controls. The parent already takes the dock offsets,

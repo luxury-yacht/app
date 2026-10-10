@@ -143,6 +143,8 @@ export interface GridTableFilterOptions {
    * separator, and Favorite, in that order.
    */
   preActions?: IconBarItem[];
+  /** IconBar items at the end of the bar, after Columns, such as an attached table's Close. */
+  trailingActions?: IconBarItem[];
   /** Override the total item count shown in the filter bar (e.g. server-side total for paginated views). */
   totalCount?: number;
   /**
@@ -291,6 +293,7 @@ export interface InternalFilterOptions {
   clusterDropdownSearchable?: boolean;
   clusterDropdownBulkActions?: boolean;
   preActions?: IconBarItem[];
+  trailingActions?: IconBarItem[];
   totalIsExact?: boolean;
   partialDataLabel?: string;
 }

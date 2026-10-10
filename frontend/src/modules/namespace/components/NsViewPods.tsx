@@ -24,8 +24,10 @@ import {
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import type { GridTableFilterOptions } from '@shared/components/tables/GridTable.types';
 import { formatRestartCount } from '@shared/components/tables/restartCount';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -63,6 +65,8 @@ interface PodsTableProps {
    * filters start fresh each time and are never saved or in favorites.
    */
   attachedTo?: ClusterObjectReference;
+  /** Closes an attached table from the end of its filter bar. */
+  onClose?: () => void;
 }
 
 // The Pods view offers every filter except Status, like every user-facing
@@ -114,6 +118,7 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
     showNamespaceColumn = false,
     metrics,
     attachedTo,
+    onClose,
   }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
@@ -336,6 +341,22 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
       showNamespaceColumn,
     ]);
 
+    const filterOptionOverrides = useMemo<Partial<GridTableFilterOptions> | undefined>(
+      () =>
+        onClose && {
+          trailingActions: [
+            {
+              type: 'action',
+              id: 'attached-pods-close',
+              icon: <CloseIcon width={16} height={16} />,
+              title: 'Close pods',
+              onClick: onClose,
+            },
+          ],
+        },
+      [onClose]
+    );
+
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
     const diagnosticsLabel = label ?? (isAllNamespaces ? 'All Namespaces Pods' : 'Namespace Pods');
     const {
@@ -352,6 +373,7 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
         ? POD_ATTACHED_EXCLUDED_QUERY_FACET_KEYS
         : POD_VIEW_EXCLUDED_QUERY_FACET_KEYS,
       selectionQueryFacets,
+      filterOptionOverrides,
       transientTableState: Boolean(attachedTo),
       showFavoriteToggle: !attachedTo,
       label: diagnosticsLabel,

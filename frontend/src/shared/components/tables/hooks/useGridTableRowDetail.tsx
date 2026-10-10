@@ -76,7 +76,8 @@ interface RowDetailRowProps {
   maxHeight: number;
   onHeight: (rowKey: string, height: number) => void;
   consumeScroll: (rowKey: string) => boolean;
-  onEscape: (event: KeyboardEvent) => void;
+  /** Moves the keyboard back to the open row. */
+  onReturnFocus: () => void;
   children: React.ReactNode;
 }
 
@@ -88,14 +89,14 @@ function GridTableRowDetailRow({
   maxHeight,
   onHeight,
   consumeScroll,
-  onEscape,
+  onReturnFocus,
   children,
 }: Readonly<RowDetailRowProps>) {
   const rowRef = useRef<HTMLTableRowElement | null>(null);
   const onHeightRef = useRef(onHeight);
   onHeightRef.current = onHeight;
-  const onEscapeRef = useRef(onEscape);
-  onEscapeRef.current = onEscape;
+  const onReturnFocusRef = useRef(onReturnFocus);
+  onReturnFocusRef.current = onReturnFocus;
 
   useLayoutEffect(() => {
     const node = rowRef.current;
@@ -112,8 +113,16 @@ function GridTableRowDetailRow({
     if (consumeScroll(rowKey)) {
       node.scrollIntoView?.({ block: 'nearest' });
     }
-    // Keys pressed in the nested content bubble here after the content handled them.
-    const handleKeyDown = (event: KeyboardEvent) => onEscapeRef.current(event);
+    // Keys pressed in the nested content bubble here after the content handled
+    // them; an unhandled Escape returns to the open row.
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || isEditableTarget(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      onReturnFocusRef.current();
+    };
     node.addEventListener('keydown', handleKeyDown);
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(report);
     observer?.observe(node);
@@ -122,6 +131,17 @@ function GridTableRowDetailRow({
       observer?.disconnect();
     };
   }, [consumeScroll, rowKey]);
+
+  // Closing with focus inside (its own Close, or the row leaving the table)
+  // would drop the keyboard to the page, so it returns to the open row.
+  useLayoutEffect(() => {
+    const node = rowRef.current;
+    return () => {
+      if (node?.contains(document.activeElement)) {
+        onReturnFocusRef.current();
+      }
+    };
+  }, []);
 
   return (
     <AriaGridRow
@@ -188,26 +208,15 @@ export function useGridTableRowDetailRenderer<T>({
     return true;
   }, []);
 
-  // Escape inside the detail returns the keyboard to the open row.
   const openIndex = state.index;
-  const handleEscape = useCallback(
-    (event: KeyboardEvent) => {
-      if (
-        event.key !== 'Escape' ||
-        event.defaultPrevented ||
-        openIndex === null ||
-        isEditableTarget(event.target)
-      ) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      lastNavigationMethodRef.current = 'keyboard';
-      focusByIndex(openIndex);
-      gridRef.current?.focus();
-    },
-    [focusByIndex, gridRef, lastNavigationMethodRef, openIndex]
-  );
+  const returnFocus = useCallback(() => {
+    if (openIndex === null) {
+      return;
+    }
+    lastNavigationMethodRef.current = 'keyboard';
+    focusByIndex(openIndex);
+    gridRef.current?.focus();
+  }, [focusByIndex, gridRef, lastNavigationMethodRef, openIndex]);
 
   const { rowKey: openRowKey, height: detailHeight, reportHeight } = state;
   return useCallback(
@@ -228,7 +237,7 @@ export function useGridTableRowDetailRenderer<T>({
           )}
           onHeight={reportHeight}
           consumeScroll={consumeScroll}
-          onEscape={handleEscape}
+          onReturnFocus={returnFocus}
         >
           {rowDetail.render(item)}
         </GridTableRowDetailRow>
@@ -238,7 +247,7 @@ export function useGridTableRowDetailRenderer<T>({
       consumeScroll,
       detailHeight,
       getRowTop,
-      handleEscape,
+      returnFocus,
       openIndex,
       openRowKey,
       reportHeight,

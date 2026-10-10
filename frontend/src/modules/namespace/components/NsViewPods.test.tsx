@@ -783,6 +783,26 @@ describe('NsViewPods', () => {
     expect(lastQueryParams().getAll('facet.nodes')).toEqual([]);
   });
 
+  it('closes an attached table from its own filter bar', async () => {
+    const onClose = vi.fn();
+    await renderPods({ namespace: ALL_NAMESPACES_SCOPE, attachedTo: selectedDeployment, onClose });
+
+    const close = requireValue(
+      gridTablePropsRef.current?.filters?.options?.trailingActions?.find(
+        (item) => item.type === 'action' && item.title === 'Close pods'
+      ),
+      'expected the attached table Close'
+    );
+    if (close.type === 'action') {
+      close.onClick();
+    }
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    // The Pods view has nothing to close.
+    await renderPods({ namespace: ALL_NAMESPACES_SCOPE });
+    expect(gridTablePropsRef.current?.filters?.options?.trailingActions ?? []).toEqual([]);
+  });
+
   it('offers no Status, Owner, Node, or Namespaces dropdowns', async () => {
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',

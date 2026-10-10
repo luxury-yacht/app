@@ -6,7 +6,7 @@
 - Pods view: a namespace Pods view is back, under Resources after Workloads, with every filter (Namespaces, Owner, Node).
   - "Go to Table View" on a pod, the Cluster Overview's ready-Pod count, and older Pods favorites open it.
 - Workloads and Nodes: a row's pods now open in their own table right under that row, replacing the Pods pane below Workloads.
-  - Click a row's Pods count, shown as `2/3 ›`, or press Space to open or close its pods. The Workloads Ready column is now called Pods. A plain click only highlights the row; Enter still opens the object.
+  - Click a row's Pods count, shown as `2/3 ›`, or press Space to open or close its pods. The pods table also has a Close button at the right end of its toolbar. The Workloads Ready column is now called Pods. A plain click only highlights the row; Enter still opens the object.
   - The pods table has its own filter, sort, and columns, starting fresh each time it opens. It has no Namespaces, Owner, or Node dropdowns, and never changes the Workloads or Nodes table.
   - It skips the column that would repeat its row: no Owner column under a workload, no Node column under a node.
   - The Clear selected button is gone from the Workloads toolbar. Click empty space below the rows to clear the highlight.

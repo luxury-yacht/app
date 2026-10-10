@@ -507,9 +507,10 @@ const ClusterViewNodes: React.FC<NodesViewProps> = ({ error }) => {
           label="Node Pods"
           showNamespaceColumn
           attachedTo={openNode}
+          onClose={handleNodePodsClose}
         />
       ) : null,
-    [openNode, selectedClusterId]
+    [handleNodePodsClose, openNode, selectedClusterId]
   );
 
   return (

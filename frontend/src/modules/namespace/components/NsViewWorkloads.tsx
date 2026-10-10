@@ -364,9 +364,17 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
           showNamespaceColumn={showNamespaceColumn}
           metrics={metrics}
           attachedTo={scopedOpenWorkload}
+          onClose={handleWorkloadPodsClose}
         />
       ) : null,
-    [metrics, namespace, scopedOpenWorkload, selectedClusterId, showNamespaceColumn]
+    [
+      handleWorkloadPodsClose,
+      metrics,
+      namespace,
+      scopedOpenWorkload,
+      selectedClusterId,
+      showNamespaceColumn,
+    ]
   );
 
   return (

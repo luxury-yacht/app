@@ -405,6 +405,16 @@ describe('NsViewWorkloads', () => {
     clickPodsCount(workload);
     expect(rowDetail().openRowKey).toBeNull();
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
+
+    // The attached table's own Close closes it too; the workload stays highlighted.
+    clickPodsCount(workload);
+    const close = requireValue(
+      attachedPods(workload).onClose as (() => void) | undefined,
+      'expected the attached table Close'
+    );
+    act(() => close());
+    expect(rowDetail().openRowKey).toBeNull();
+    expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
   });
 
   it('highlights a workload on a row click and opens or closes its pods with Space', async () => {

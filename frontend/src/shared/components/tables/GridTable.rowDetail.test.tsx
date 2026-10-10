@@ -31,13 +31,34 @@ const nestedRows: Row[] = ['x', 'y'].map((id) => ({ id: `cluster-a|pod-${id}`, n
 const columns = [{ key: 'name', header: 'Name', render: (row: Row) => row.name }];
 const keyOf = (row: Row) => row.id;
 
-const NestedTable = () => (
-  <GridTable data={nestedRows} columns={columns} keyExtractor={keyOf} tableClassName="nested" />
+const NestedTable = ({ onClose }: { onClose?: () => void }) => (
+  <GridTable
+    data={nestedRows}
+    columns={columns}
+    keyExtractor={keyOf}
+    tableClassName="nested"
+    filters={
+      onClose && {
+        enabled: true,
+        options: {
+          trailingActions: [
+            {
+              type: 'action',
+              id: 'close',
+              icon: <span>×</span>,
+              title: 'Close pods',
+              onClick: onClose,
+            },
+          ],
+        },
+      }
+    }
+  />
 );
 
-const detailFor = (openRowKey: string | null): GridTableRowDetail<Row> => ({
+const detailFor = (openRowKey: string | null, onClose?: () => void): GridTableRowDetail<Row> => ({
   openRowKey,
-  render: () => <NestedTable />,
+  render: () => <NestedTable onClose={onClose} />,
   getLabel: (row) => `Pods for ${row.name}`,
 });
 
@@ -151,6 +172,30 @@ describe('GridTable row detail', () => {
 
     await press('ArrowDown');
     expect(parentRow('c').classList.contains('gridtable-row--focused')).toBe(true);
+  });
+
+  it("closes from the nested table's own Close and returns the keyboard to the open row", async () => {
+    const onClose = vi.fn();
+    await renderTable(detailFor('cluster-a|b', onClose));
+    const close = requireValue(
+      container.querySelector<HTMLButtonElement>(
+        '[data-gridtable-row-detail] .gridtable-filter-bar button[aria-label="Close pods"]'
+      ),
+      'nested Close'
+    );
+
+    await act(async () => {
+      close.focus();
+      close.click();
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await renderTable(detailFor(null, onClose));
+
+    expect(container.querySelector('[data-gridtable-row-detail]')).toBeNull();
+    expect(document.activeElement).toBe(
+      container.querySelector<HTMLElement>('.parent.gridtable--body')
+    );
+    expect(parentRow('b').classList.contains('gridtable-row--focused')).toBe(true);
   });
 
   it('still starts keyboard row focus in the parent after a click inside the nested table', async () => {

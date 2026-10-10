@@ -390,6 +390,16 @@ describe('ClusterViewNodes', () => {
 
     withPodsCount(baseNode, (button) => act(() => button.click()));
     expect(rowDetail().openRowKey).toBeNull();
+
+    // The attached table's own Close closes it too; the node stays highlighted.
+    withPodsCount(baseNode, (button) => act(() => button.click()));
+    const close = requireValue(
+      attachedPods(baseNode).onClose as (() => void) | undefined,
+      'expected the attached table Close'
+    );
+    act(() => close());
+    expect(rowDetail().openRowKey).toBeNull();
+    expect(gridTablePropsRef.current.isRowSelected?.(baseNode, 0)).toBe(true);
   });
 
   it('highlights a node on a row click, opens its pods with Space, and clears the highlight on an unused-body click', async () => {
