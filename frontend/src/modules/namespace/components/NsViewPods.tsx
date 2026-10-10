@@ -1,8 +1,8 @@
 /**
  * frontend/src/modules/namespace/components/NsViewPods.tsx
  *
- * The namespace Pods view, and the pods table it shares with the Workloads and
- * Nodes splits' lower pane.
+ * The namespace Pods view, and the pods table the Workloads and Nodes views
+ * attach under an open row.
  */
 
 import './NsViewPods.css';
@@ -23,8 +23,6 @@ import {
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { ChevronDownIcon, ChevronUpIcon } from '@shared/components/icons/SharedIcons';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { formatRestartCount } from '@shared/components/tables/restartCount';
@@ -48,34 +46,29 @@ import { workloadRowCpuValue, workloadRowMemoryValue } from '@/core/resource-met
 import type { NamespaceViewType } from '@/types/navigation/views';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 
-/** What a split view hands its lower pods pane. */
-export interface PodsPaneControls {
-  /** The row selected in the split's upper table; only its pods are shown. */
-  selectedObject: ClusterObjectReference | null;
-  collapsed: boolean;
-  onCollapsedChange: (collapsed: boolean) => void;
-}
-
 interface PodsTableProps {
   namespace: string;
   /** The cluster whose pods the table lists. */
   clusterId: string | null | undefined;
-  /** Saved-table key: the Pods view and each split's pane keep their own state. */
+  /** Table identity for the query and diagnostics; only the Pods view saves its state. */
   viewId: string;
   /** Where a pod's Namespace link goes. */
   namespaceLinkView: NamespaceViewType;
   label?: string;
   showNamespaceColumn?: boolean;
   metrics?: PodMetricsInfo | null;
-  /** Present when the table is a split's lower pane. */
-  pane?: PodsPaneControls;
+  /**
+   * The workload or node whose pods an attached table lists. Its sort and
+   * filters start fresh each time and are never saved or in favorites.
+   */
+  attachedTo?: ClusterObjectReference;
 }
 
 // The Pods view offers every filter except Status, like every user-facing
-// pods table. A pane's Owner and Node belong to its split's row selection, and
-// it has no Namespaces control either.
+// pods table. An attached table's Owner or Node is its parent row, and it has
+// no Namespaces control either.
 const POD_VIEW_EXCLUDED_QUERY_FACET_KEYS = RESOURCE_STATUS_QUERY_FACET_KEYS;
-const POD_PANE_EXCLUDED_QUERY_FACET_KEYS = [
+const POD_ATTACHED_EXCLUDED_QUERY_FACET_KEYS = [
   ...RESOURCE_STATUS_QUERY_FACET_KEYS,
   ...POD_SELECTION_QUERY_FACET_KEYS,
 ];
@@ -119,7 +112,7 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
     label,
     showNamespaceColumn = false,
     metrics,
-    pane,
+    attachedTo,
   }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
@@ -127,9 +120,7 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
     const clusterMetrics = useClusterMetricsAvailability();
     const fallbackMetrics = metrics ?? clusterMetrics ?? null;
     const { selectedClusterId, selectedClusterName } = useKubeconfig();
-    const selectedObject = pane?.selectedObject ?? null;
-    const collapsed = pane?.collapsed ?? false;
-    const onCollapsedChange = pane?.onCollapsedChange;
+    const selectedObject = attachedTo ?? null;
     const selectionQueryFacets = useMemo(
       () => podSelectionQueryFacets(selectedObject, queryClusterId),
       [queryClusterId, selectedObject]
@@ -342,26 +333,6 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
 
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
     const diagnosticsLabel = label ?? (isAllNamespaces ? 'All Namespaces Pods' : 'Namespace Pods');
-    const podsPaneActions = useMemo<IconBarItem[]>(
-      () =>
-        onCollapsedChange
-          ? [
-              {
-                type: 'action',
-                id: 'pods-pane',
-                // The chevron points the way the pane moves: down to collapse, up to expand.
-                icon: collapsed ? (
-                  <ChevronUpIcon width={18} height={18} />
-                ) : (
-                  <ChevronDownIcon width={18} height={18} />
-                ),
-                onClick: () => onCollapsedChange(!collapsed),
-                title: collapsed ? 'Expand Pods' : 'Collapse Pods',
-              },
-            ]
-          : [],
-      [collapsed, onCollapsedChange]
-    );
     const {
       gridTableProps: resolvedGridTableProps,
       favModal,
@@ -370,13 +341,14 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
     } = useQueryBackedNamespaceResourceGridTable<PodSnapshotPayload, PodSnapshotEntry>({
       queryTableMode: 'Query Backed Dynamic',
       supportsCustomMetadataColumns: true,
-      enabled: !collapsed,
       clusterId: queryClusterId,
       domain: 'pods',
-      excludedQueryFacetKeys: pane
-        ? POD_PANE_EXCLUDED_QUERY_FACET_KEYS
+      excludedQueryFacetKeys: attachedTo
+        ? POD_ATTACHED_EXCLUDED_QUERY_FACET_KEYS
         : POD_VIEW_EXCLUDED_QUERY_FACET_KEYS,
       selectionQueryFacets,
+      transientTableState: Boolean(attachedTo),
+      showFavoriteToggle: !attachedTo,
       label: diagnosticsLabel,
       selectRows: selectPayloadRows,
       viewId,
@@ -387,12 +359,8 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
       diagnosticsLabel,
       rowIdentity: keyExtractor,
       showKindDropdown: false,
-      showNamespaceFilters: !pane && isAllNamespaces,
+      showNamespaceFilters: !attachedTo && isAllNamespaces,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-      // The pane's collapse control uses the pane's own structural icon bar.
-      filterOptionOverrides:
-        podsPaneActions.length > 0 ? { beforeNamespaceActions: podsPaneActions } : undefined,
-      favoritePane: { id: 'pods', label: 'Pods' },
     });
 
     // The base query payload carries the poller freshness block for the usage
@@ -444,17 +412,6 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
       );
     }, [isAllNamespaces, selectedObject, selectionQueryFacets]);
 
-    if (collapsed) {
-      return (
-        <div className="gridtable-filter-bar pods-collapsed-filter-bar">
-          <div className="gridtable-filter-cluster" data-gridtable-filter-cluster="primary">
-            <IconBar items={podsPaneActions} />
-            <span className="pods-collapsed-filter-bar__label">Show Pods</span>
-          </div>
-        </div>
-      );
-    }
-
     return (
       <>
         <ResourceInventoryTable
@@ -468,6 +425,7 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
           diagnosticsMode="live"
           onRowClick={handlePodOpen}
           tableClassName={`gridtable-pods${showNamespaceColumn ? ' gridtable-pods--namespaced' : ''}`}
+          embedded={Boolean(attachedTo)}
           enableContextMenu
           getCustomContextMenuItems={getContextMenuItems}
           emptyMessage={emptyMessage}

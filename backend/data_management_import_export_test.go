@@ -20,9 +20,12 @@ func dataManagementFavorite(id, name string) Favorite {
 		ViewType:  "global",
 		View:      "attention",
 		Namespace: "",
-		Panes: map[string]FavoritePaneState{
-			"main": defaultFavoritePaneState(),
+		Filters: FavoriteFilters{
+			Kinds:      FavoriteFilterSelection{Mode: "all"},
+			Namespaces: FavoriteFilterSelection{Mode: "all"},
+			Clusters:   FavoriteFilterSelection{Mode: "all"},
 		},
+		TableState: FavoriteTableState{SortColumn: "name", SortDirection: "asc", ColumnVisibility: map[string]bool{}},
 	}
 }
 
@@ -249,28 +252,31 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 	require.Equal(t, []int{0, 1}, []int{got[0].Order, got[1].Order})
 }
 
-func TestDecodeFavoritesDataFileGivesSingleTableNodesFavoritesBothPanes(t *testing.T) {
-	nodes := dataManagementFavorite("nodes", "Nodes")
-	nodes.ViewType = "cluster"
-	nodes.View = "nodes"
-	nodes.Panes = map[string]FavoritePaneState{
-		"main": {
-			Filters:    FavoriteFilters{Search: "worker"},
-			TableState: FavoriteTableState{SortColumn: "cpu", SortDirection: "desc"},
-		},
+// Version 1 exports hold schema v3 favorites with one table state per pane of
+// a split view. Importing keeps each favorite's own view table.
+func TestDecodeFavoritesDataFileFlattensPanedExports(t *testing.T) {
+	pane := func(search string) string {
+		return `{"filters":{"search":"` + search + `","kinds":{"mode":"all"},"namespaces":{"mode":"all"},"clusters":{"mode":"all"}},` +
+			`"tableState":{"sortColumn":"name","sortDirection":"asc","columnVisibility":{}}}`
 	}
-	data, err := json.Marshal(favoritesDataFile{
-		Format:        favoritesDataFormat,
-		SchemaVersion: favoritesDataSchemaVersion,
-		Favorites:     []Favorite{nodes},
-	})
-	require.NoError(t, err)
+	export := func(favorites string) []byte {
+		return []byte(`{"format":"` + favoritesDataFormat + `","schemaVersion":1,"favorites":[` + favorites + `]}`)
+	}
 
-	document, err := decodeFavoritesDataFile(data)
+	document, err := decodeFavoritesDataFile(export(
+		`{"id":"nodes","name":"Nodes","viewType":"cluster","view":"nodes","panes":{"nodes":` + pane("worker") + `,"pods":` + pane("pods") + `}},` +
+			`{"id":"events","name":"Events","viewType":"cluster","view":"events","panes":{"main":` + pane("warn") + `}}`,
+	))
 	require.NoError(t, err)
-	require.Len(t, document.Favorites[0].Panes, 2)
-	require.Equal(t, "worker", document.Favorites[0].Panes["nodes"].Filters.Search)
-	require.Equal(t, defaultFavoritePaneState(), document.Favorites[0].Panes["pods"])
+	require.Equal(t, []string{"worker", "warn"}, []string{
+		document.Favorites[0].Filters.Search, document.Favorites[1].Filters.Search,
+	})
+	require.Equal(t, []int{0, 1}, []int{document.Favorites[0].Order, document.Favorites[1].Order})
+
+	_, err = decodeFavoritesDataFile(export(
+		`{"id":"lost","name":"Lost","viewType":"cluster","view":"nodes","panes":{"pods":` + pane("pods") + `,"other":` + pane("x") + `}}`,
+	))
+	require.ErrorContains(t, err, `favorite "lost" has no table state for its view`)
 }
 
 func TestImportFavoritesRejectsDuplicateIDsWithoutChangingLibrary(t *testing.T) {
@@ -535,18 +541,6 @@ func TestDecodeFavoritesDataFileRejectsInvalidFavorites(t *testing.T) {
 				Favorites:     []Favorite{dataManagementFavorite("favorite", " ")},
 			},
 			message: "missing a name",
-		},
-		{
-			name: "missing panes",
-			document: favoritesDataFile{
-				Format:        favoritesDataFormat,
-				SchemaVersion: favoritesDataSchemaVersion,
-				Favorites: []Favorite{{
-					ID:   "favorite",
-					Name: "Favorite",
-				}},
-			},
-			message: "at least one named pane",
 		},
 		{
 			name: "duplicate name",

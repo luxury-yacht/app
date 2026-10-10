@@ -3,15 +3,13 @@
 - Sidebar: Workloads and the other built-in resource views now sit in the Resources group.
   - Only Overview, Attention, Browse, Events, and Identities (Cluster) and Browse, Events, and Map (Namespace) stay at the top level.
   - Resources starts expanded on new installs. Existing installs keep their saved Resources state.
-- Nodes: the Nodes view now has a Pods pane below the node list, like Workloads.
-  - Click a node to see only its pods. With no node selected, the pane shows every pod in the cluster.
-  - Existing Nodes favorites keep their settings.
 - Pods view: a namespace Pods view is back, under Resources after Workloads, with every filter (Namespaces, Owner, Node).
   - "Go to Table View" on a pod, the Cluster Overview's ready-Pod count, and older Pods favorites open it.
-- Pods pane (Workloads and Nodes): the selected row is now the pane's only filter.
-  - The Namespaces, Owner, and Node dropdowns are gone, and Owner filters saved in favorites are dropped.
-  - The selection is not saved: leaving the view or opening a favorite shows every pod again.
-  - The Clear selected button is gone from the Workloads toolbar. Click empty space below the rows to clear the selection.
+- Workloads and Nodes: a row's pods now open in their own table right under that row, replacing the Pods pane below Workloads.
+  - Click a row's Ready (Workloads) or Pods (Nodes) count, shown as `2/3 ›`, or press Space to open or close its pods. A plain click only highlights the row; Enter still opens the object.
+  - The pods table has its own filter, sort, and columns, starting fresh each time it opens. It has no Namespaces, Owner, or Node dropdowns, and never changes the Workloads or Nodes table.
+  - The Clear selected button is gone from the Workloads toolbar. Click empty space below the rows to clear the highlight.
+- Favorites save one table: the view's own. Favorites saved with the Workloads Pods pane keep only their Workloads settings.
 - Application Logs work like a pod's Logs tab:
   - A Stop/Start auto-refresh button (or `R`) replaces the auto-scroll toggle.
   - New lines follow at the bottom. Scroll up to hold your place, then Resume scrolling.

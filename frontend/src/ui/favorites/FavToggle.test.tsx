@@ -130,7 +130,14 @@ vi.mock('./FavSaveModal', () => ({
               viewType: 'namespace',
               view: 'pods',
               namespace: 'default',
-              panes: {},
+              filters: {
+                search: '',
+                kinds: { mode: 'all' },
+                namespaces: { mode: 'all' },
+                clusters: { mode: 'all' },
+                includeMetadata: false,
+              },
+              tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },
               order: 0,
             });
             onClose();
@@ -159,7 +166,7 @@ vi.mock('./FavSaveModal', () => ({
 }));
 
 // Import after mocks
-import { FavoritePaneGroup, useFavToggle } from './FavToggle';
+import { useFavToggle } from './FavToggle';
 
 // ---------------------------------------------------------------------------
 // Helpers — wrapper component that renders the hook result into the DOM.
@@ -172,18 +179,14 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   viewType: 'namespace',
   view: 'pods',
   namespace: 'default',
-  panes: {
-    main: {
-      filters: {
-        search: '',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
-        includeMetadata: false,
-      },
-      tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },
-    },
+  filters: {
+    search: '',
+    kinds: { mode: 'all' },
+    namespaces: { mode: 'all' },
+    clusters: { mode: 'all' },
+    includeMetadata: false,
   },
+  tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },
   order: 0,
   ...overrides,
 });
@@ -232,22 +235,16 @@ const HookWrapper: React.FC<{
   return null;
 };
 
-const WORKLOAD_PANES = ['workloads', 'pods'] as const;
-const paneSetters = {
-  workloads: { filters: vi.fn(), sort: vi.fn(), visibility: vi.fn(), order: vi.fn() },
-  pods: { filters: vi.fn(), sort: vi.fn(), visibility: vi.fn(), order: vi.fn() },
-};
+const tableSetters = { filters: vi.fn(), sort: vi.fn(), visibility: vi.fn(), order: vi.fn() };
 
-const GroupedPane: React.FC<{ pane: 'workloads' | 'pods' }> = ({ pane }) => {
-  const { item, modal } = useFavToggle({
-    paneId: pane,
-    paneLabel: pane === 'workloads' ? 'Workloads' : 'Pods',
+// One hydrated table whose settings a pending favorite restores.
+const RestorableTable: React.FC = () => {
+  const { modal } = useFavToggle({
     filters: {
-      search: pane === 'workloads' ? 'api' : '',
+      search: 'current',
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
       clusters: { mode: 'all' },
-      queryFacets: pane === 'pods' ? { owners: { mode: 'none' } } : undefined,
       includeMetadata: false,
     },
     sortColumn: 'name',
@@ -255,28 +252,14 @@ const GroupedPane: React.FC<{ pane: 'workloads' | 'pods' }> = ({ pane }) => {
     columnVisibility: {},
     columnOrder: ['kind', 'name', 'age'],
     hydrated: true,
-    setFilters: paneSetters[pane].filters,
-    setSortConfig: paneSetters[pane].sort,
-    setColumnVisibility: paneSetters[pane].visibility,
-    setColumnOrder: paneSetters[pane].order,
+    setFilters: tableSetters.filters,
+    setSortConfig: tableSetters.sort,
+    setColumnVisibility: tableSetters.visibility,
+    setColumnOrder: tableSetters.order,
     filterOptions: {},
   });
-  return (
-    <>
-      {item?.type === 'toggle' ? (
-        <button type="button" data-testid={`group-toggle-${pane}`} />
-      ) : null}
-      {modal}
-    </>
-  );
+  return modal;
 };
-
-const GroupedWrapper: React.FC = () => (
-  <FavoritePaneGroup primaryPaneId="workloads" expectedPaneIds={WORKLOAD_PANES}>
-    <GroupedPane pane="workloads" />
-    <GroupedPane pane="pods" />
-  </FavoritePaneGroup>
-);
 
 const MetadataFavoriteRestoreWrapper: React.FC = () => {
   const [filters, setFilters] = useState<GridTableFilterState>({
@@ -329,12 +312,7 @@ describe('useFavToggle', () => {
     mockUpdateFavorite.mockClear();
     mockDeleteFavorite.mockClear();
     favSaveModalPropsRef.current = null;
-    Object.values(paneSetters).forEach((setters) => {
-      setters.filters.mockClear();
-      setters.sort.mockClear();
-      setters.visibility.mockClear();
-      setters.order.mockClear();
-    });
+    Object.values(tableSetters).forEach((setter) => setter.mockClear());
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -359,7 +337,7 @@ describe('useFavToggle', () => {
     });
     await clickToggle();
 
-    expect(favSaveModalPropsRef.current?.filters.clusters).toEqual({
+    expect(favSaveModalPropsRef.current?.table.filters.clusters).toEqual({
       mode: 'some',
       values: ['Cluster-A', 'cluster-a'],
     });
@@ -436,7 +414,7 @@ describe('useFavToggle', () => {
 
     const modal = document.querySelector('[data-testid="fav-save-modal"]');
     expect(modal).toBeTruthy();
-    expect(favSaveModalPropsRef.current?.panes?.[0]?.columns).toEqual([
+    expect(favSaveModalPropsRef.current?.table.columns).toEqual([
       { key: 'name', label: 'Name', hideable: false, sortable: true },
       { key: 'age', label: 'Age', hideable: true, sortable: true },
     ]);
@@ -547,29 +525,14 @@ describe('useFavToggle', () => {
     expect(mockAddFavorite).not.toHaveBeenCalled();
   });
 
-  it('exposes one favorite action for a grouped two-pane view', async () => {
-    await act(async () => {
-      root.render(<GroupedWrapper />);
-      await Promise.resolve();
-    });
-
-    expect(container.querySelector('[data-testid="group-toggle-workloads"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="group-toggle-pods"]')).toBeNull();
-  });
-
   it('applies saved filter text atomically when metadata search is available', async () => {
     mockPendingFavorite = makeFavorite({
-      panes: {
-        main: {
-          filters: {
-            search: 'saved filter',
-            kinds: { mode: 'all' },
-            namespaces: { mode: 'all' },
-            clusters: { mode: 'all' },
-            includeMetadata: true,
-          },
-          tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },
-        },
+      filters: {
+        search: 'saved filter',
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
+        includeMetadata: true,
       },
     });
     mockSetPendingFavorite.mockImplementationOnce((favorite) => {
@@ -586,119 +549,46 @@ describe('useFavToggle', () => {
     ).toBe('saved filter');
   });
 
-  it('restores both hydrated panes before consuming a grouped favorite', async () => {
-    mockPendingFavorite = makeFavorite({
-      panes: {
-        workloads: {
-          filters: {
-            search: 'saved workloads',
-            kinds: { mode: 'all' },
-            namespaces: { mode: 'all' },
-            clusters: { mode: 'all' },
-            includeMetadata: false,
-          },
-          tableState: {
-            sortColumn: 'kind',
-            sortDirection: 'desc',
-            columnVisibility: {},
-            columnOrder: ['name', 'kind', 'age'],
-          },
-        },
-        pods: {
-          filters: {
-            search: 'saved pods',
-            kinds: { mode: 'all' },
-            namespaces: { mode: 'all' },
-            clusters: { mode: 'all' },
-            queryFacets: { owners: { mode: 'none' } },
-            includeMetadata: false,
-          },
-          tableState: {
-            sortColumn: 'node',
-            sortDirection: 'asc',
-            columnVisibility: { cpu: false },
-            columnOrder: ['name', 'node', 'cpu'],
-          },
-        },
+  it('restores the saved table settings before consuming the favorite', async () => {
+    const pending = makeFavorite({
+      filters: {
+        search: 'saved pods',
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
+        queryFacets: { owners: { mode: 'none' } },
+        includeMetadata: false,
+      },
+      tableState: {
+        sortColumn: 'node',
+        sortDirection: 'asc',
+        columnVisibility: { cpu: false },
+        columnOrder: ['name', 'node', 'cpu'],
       },
     });
+    mockPendingFavorite = pending;
 
     await act(async () => {
-      root.render(<GroupedWrapper />);
+      root.render(<RestorableTable />);
       await Promise.resolve();
     });
 
-    expect(paneSetters.workloads.filters).toHaveBeenCalledWith(
-      mockPendingFavorite.panes.workloads.filters
-    );
-    expect(paneSetters.pods.filters).toHaveBeenCalledWith(mockPendingFavorite.panes.pods.filters);
-    expect(paneSetters.pods.sort).toHaveBeenCalledWith({ key: 'node', direction: 'asc' });
-    expect(paneSetters.pods.visibility).toHaveBeenCalledWith({ cpu: false });
-    expect(paneSetters.workloads.order).toHaveBeenCalledWith(['name', 'kind', 'age']);
-    expect(paneSetters.pods.order).toHaveBeenCalledWith(['name', 'node', 'cpu']);
+    expect(tableSetters.filters).toHaveBeenCalledWith(pending.filters);
+    expect(tableSetters.sort).toHaveBeenCalledWith({ key: 'node', direction: 'asc' });
+    expect(tableSetters.visibility).toHaveBeenCalledWith({ cpu: false });
+    expect(tableSetters.order).toHaveBeenCalledWith(['name', 'node', 'cpu']);
     expect(mockSetPendingFavorite).toHaveBeenCalledWith(null);
   });
 
-  it('clears a pending grouped favorite that is missing a required saved pane', async () => {
-    mockPendingFavorite = makeFavorite({
-      panes: {
-        workloads: {
-          filters: {
-            search: '',
-            kinds: { mode: 'all' },
-            namespaces: { mode: 'all' },
-            clusters: { mode: 'all' },
-            includeMetadata: false,
-          },
-          tableState: { sortColumn: 'name', sortDirection: 'asc', columnVisibility: {} },
-        },
-      },
-    });
+  it('restores an explicitly unsorted table', async () => {
+    mockPendingFavorite = makeFavorite();
 
     await act(async () => {
-      root.render(<GroupedWrapper />);
+      root.render(<RestorableTable />);
       await Promise.resolve();
     });
 
-    expect(mockSetPendingFavorite).toHaveBeenCalledWith(null);
-    expect(paneSetters.workloads.filters).not.toHaveBeenCalled();
-    expect(paneSetters.pods.filters).not.toHaveBeenCalled();
-  });
-
-  it('restores an explicitly unsorted pane', async () => {
-    mockPendingFavorite = makeFavorite({
-      panes: {
-        workloads: {
-          filters: {
-            search: '',
-            kinds: { mode: 'all' },
-            namespaces: { mode: 'all' },
-            clusters: { mode: 'all' },
-            includeMetadata: false,
-          },
-          tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },
-        },
-        pods: {
-          filters: {
-            search: '',
-            kinds: { mode: 'all' },
-            namespaces: { mode: 'all' },
-            clusters: { mode: 'all' },
-            includeMetadata: false,
-          },
-          tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },
-        },
-      },
-    });
-
-    await act(async () => {
-      root.render(<GroupedWrapper />);
-      await Promise.resolve();
-    });
-
-    expect(paneSetters.workloads.sort).toHaveBeenCalledWith(null);
-    expect(paneSetters.pods.sort).toHaveBeenCalledWith(null);
-    expect(paneSetters.workloads.order).toHaveBeenCalledWith([]);
-    expect(paneSetters.pods.order).toHaveBeenCalledWith([]);
+    expect(tableSetters.sort).toHaveBeenCalledWith(null);
+    expect(tableSetters.order).toHaveBeenCalledWith([]);
   });
 });

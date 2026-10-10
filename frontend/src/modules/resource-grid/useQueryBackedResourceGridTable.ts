@@ -163,6 +163,8 @@ interface QueryBackedGridParamsCommon<
    * Memoize the object: a new identity re-derives the request.
    */
   selectionQueryFacets?: NonNullable<GridTableFilterState['queryFacets']>;
+  /** Keep sort, filters, and columns in memory only; they start fresh on every mount. */
+  transientTableState?: boolean;
 }
 
 interface TypedQueryLifecycle<
@@ -581,6 +583,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   filterOptionOverrides,
   excludedQueryFacetKeys,
   selectionQueryFacets,
+  transientTableState = false,
   defaultSort = { key: 'name', direction: 'asc' },
   namespace,
   supportsCustomMetadataColumns,
@@ -606,6 +609,7 @@ export function useQueryBackedNamespaceResourceGridTable<
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     // All Namespaces tables showing the Namespaces filter share one selection per cluster.
     shareNamespaceFilter: allNamespaces && Boolean(tableParams.showNamespaceFilters),
+    transient: transientTableState,
   });
   const liveScope = useMemo(
     () =>
@@ -696,6 +700,7 @@ export function useQueryBackedClusterResourceGridTable<
   filterOptionOverrides,
   excludedQueryFacetKeys,
   selectionQueryFacets,
+  transientTableState = false,
   defaultSortKey = 'name',
   defaultSortDirection = 'asc',
   supportsCustomMetadataColumns,
@@ -719,6 +724,7 @@ export function useQueryBackedClusterResourceGridTable<
 
     filterOptions: { ...tableParams.filterOptions, isNamespaceScoped: false },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+    transient: transientTableState,
   });
   const liveScope = useMemo(
     () => (clusterId ? buildClusterScope(clusterId, baseScope) : ''),

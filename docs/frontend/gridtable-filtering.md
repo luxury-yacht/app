@@ -17,9 +17,6 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
   query-backed tables in the backend
   ([typed query contract](../architecture/large-data-query.md#typed-resource-query-contract)).
   Favorite shows on main-window views only.
-- Exception: a pane's structural control uses `beforeNamespaceActions`, its own
-  icon bar after Kind and before Namespace (the Pods pane's collapse control,
-  leftmost because Pods has no Kind filter).
 - Search ignores case on every table; there is no case-sensitive option. Saved
   state and favorites carrying the old `caseSensitive` flag load and drop it.
 - Download (`useGridTableDownloadAction` on `@shared/hooks/useDownloadMenu`,
@@ -97,11 +94,12 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
 - A view may exclude provider facets through the shared query wrapper. Exclusion
   removes both the control and its active query state; hiding only the control
   would leave an invisible persisted filter.
-- A split view's row selection narrows the pane below it through the wrapper's
-  `selectionQueryFacets`: they join the request only, never table state,
-  persistence, favorites, or the filter bar, and their keys are excluded so the
-  pane offers no control for them. A filter change keeps the pane's rows while
-  the narrowed page loads (quiet filtering), unlike a scope or predicate change.
+- A table attached under a parent row (a GridTable row detail) is narrowed by
+  that row through the wrapper's `selectionQueryFacets`: they join the request
+  only, never table state, persistence, favorites, or the filter bar, and their
+  keys are excluded so the table offers no control for them. A filter change
+  keeps its rows while the narrowed page loads (quiet filtering), unlike a scope
+  or predicate change.
 - Publish a facet only after request serialization, backend
   extraction/filtering, full-structural-scope options, UI projection, and shared
   persistence exist. Rejected: advertising status, owner, node, application, or
@@ -111,40 +109,41 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
   and feed the shared typed-resource scope builder. Their providers publish
   Status, but the user-facing tables exclude it. The Pods view and the object
   panel's Pods tab show Owner then Node, after Namespace in all-namespaces
-  views. The split views' Pods pane (Workloads, Nodes) shows no
-  Namespaces, Owner, or Node control: the upper table's selected row narrows it
-  as a selection facet (`owners` for a workload or standalone Pod, `nodes` for a
-  node), and saved values of those filters are dropped.
+  views. The Pods table attached under a Workloads or Nodes row shows no
+  Namespaces, Owner, or Node control: its parent row narrows it as a selection
+  facet (`owners` for a workload or standalone Pod, `nodes` for a node). Its
+  table state is in memory only (`transientTableState`): it starts fresh each
+  time it opens.
 
 ### Favorite snapshots
 
-- A favorite is a main-window route (cluster, view tab, namespace) plus its
-  tables' state. Every main-window table view offers exactly one favorite
-  action; tables inside an object panel offer none, in either window, because
-  the route they would save is not theirs.
-- A favorite snapshots the complete `GridTableFilterState` and table display
-  state (sort, visibility, column order) as one named pane. Favorites code
+- A favorite is a main-window route (cluster, view tab, namespace) plus that
+  view's table state. Every main-window table view offers exactly one favorite
+  action; tables inside an object panel, and tables attached under a row,
+  offer none, because the route they would save is not theirs. An attached
+  table's state is never saved and never changes the view's own table.
+- A favorite snapshots the view table's complete `GridTableFilterState` and
+  display state (sort, visibility, column order). Favorites code
   compares, edits, saves, and restores that state as a whole, with no separate
   allowlist of Kinds, Namespaces, or provider facet keys. Restoring reconciles
   the saved order with current definitions: removed keys drop and newly added
   columns append in declaration order.
-- The save modal derives editable controls from the pane's
+- The save modal derives editable controls from the table's
   `GridTableFilterOptions`, so structural filters and every `queryFacets` entry
   use the live table's vocabulary and selection semantics. Every favorite
   multi-select exposes the semantic `all` selection and persists it as
   `mode: all`, never a snapshot of the options at save time. Its closed control
   shows `All` for `mode: all`, `None` for `mode: none`, and `n selected` for
   `mode: some`.
-- A route with several tables stores one favorite with a named snapshot per
-  pane; the Workloads route owns `workloads` and `pods`, and the Nodes route
-  `nodes` and `pods`, each behind one favorite action (restore handoff:
-  [navigation](navigation.md#favorites)). A split's row selection is never
+- Restore waits for the route and the table's own persistence (handoff:
+  [navigation](navigation.md#favorites)). A highlighted or open row is never
   saved.
-- Favorites schema v3 stores named panes only. The backend migrates v1 and v2
-  entries individually, keeping valid entries when another is malformed; legacy
-  Workloads favorites become the Workloads split with Pods at defaults, and
-  legacy Pods favorites open the Pods view. A Nodes favorite saved as one table (`main`)
-  loads, migrates, and imports as the Nodes pane with Pods at defaults; the
-  pane shape is unchanged, so the schema stays v3. The migrated collection
-  saves as v3; a newer,
-  unsupported schema fails to load.
+- Favorites schema v4 stores the table state on the favorite itself. The
+  backend migrates v1, v2, and v3 entries individually, keeping valid entries
+  when another is malformed. A v3 favorite (one state per split-view pane)
+  keeps the pane named after its view (`workloads`, `nodes`, `pods`), else
+  `main`, else its only pane, and drops the rest; one with no table for its view
+  is dropped. Favorites exports are version 2; importing a version 1 export
+  flattens it the same way and rejects a favorite with no table for its view.
+  The migrated collection saves as v4; a newer, unsupported schema fails to
+  load.

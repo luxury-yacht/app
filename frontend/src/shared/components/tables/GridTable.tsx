@@ -29,6 +29,7 @@ export type {
   GridTableFilterOptions,
   GridTableFilterState,
   GridTableProps,
+  GridTableRowDetail,
   GridTableVirtualizationOptions,
 } from '@shared/components/tables/GridTable.types';
 export { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable.types';
@@ -70,6 +71,8 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
     tableContentWidth,
     tableViewportWidth,
     renderRowContent,
+    rowDetailIndex,
+    renderRowDetail,
     headerRow,
     showLoadingOverlay,
     loadingOverlayMessage,
@@ -117,6 +120,8 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
       totalVirtualHeight={totalVirtualHeight}
       getRowTop={getRowTop}
       renderRowContent={renderRowContent}
+      rowDetailIndex={rowDetailIndex}
+      renderRowDetail={renderRowDetail}
       onWrapperFocus={handleWrapperFocus}
       onWrapperBlur={handleWrapperBlur}
       onWrapperBackgroundClick={handleWrapperBackgroundClick}

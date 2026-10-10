@@ -37,6 +37,11 @@ import { useGridTableInteractionWiring } from '@shared/components/tables/hooks/u
 import { useGridTableKeyboardNavigation } from '@shared/components/tables/hooks/useGridTableKeyboardNavigation';
 import { useGridTableLocalPagination } from '@shared/components/tables/hooks/useGridTableLocalPagination';
 import { useGridTableProfiler } from '@shared/components/tables/hooks/useGridTableProfiler';
+import {
+  type RenderRowDetailFn,
+  useGridTableRowDetailRenderer,
+  useGridTableRowDetailState,
+} from '@shared/components/tables/hooks/useGridTableRowDetail';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import { useGridTableRowRenderer } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import { useGridTableShortcuts } from '@shared/components/tables/hooks/useGridTableShortcuts';
@@ -161,6 +166,8 @@ export interface GridTableControllerResult<T> {
 
   // Rendering
   renderRowContent: RenderRowContentFn<T>;
+  rowDetailIndex: number | null;
+  renderRowDetail: RenderRowDetailFn<T>;
   headerRow: ReactNode;
 
   // Loading
@@ -219,6 +226,7 @@ export function useGridTableController<T>({
   exportFilename,
   diagnosticsLabel,
   diagnosticsMode = 'local',
+  rowDetail,
 }: GridTableProps<T>): GridTableControllerResult<T> {
   const sourceData = useMemo<T[]>(
     () => (Array.isArray(inputData) ? inputData : ([] as T[])),
@@ -483,6 +491,8 @@ export function useGridTableController<T>({
     data: tableData,
   });
 
+  const rowDetailState = useGridTableRowDetailState(rowDetail, tableData, keyExtractor);
+
   const {
     shouldVirtualize,
     virtualRows,
@@ -509,7 +519,31 @@ export function useGridTableController<T>({
     stopFrameSampler,
     updateColumnWindowRange,
     hideHeader,
+    detailRowKey: rowDetailState.rowKey,
+    detailHeight: rowDetailState.height,
   });
+
+  const renderRowDetail = useGridTableRowDetailRenderer({
+    rowDetail,
+    state: rowDetailState,
+    getRowTop,
+    viewportWidth: tableViewportWidth,
+    viewportHeight,
+    gridRef,
+    focusByIndex,
+    lastNavigationMethodRef,
+  });
+  // The open row and its detail share the accent rail.
+  const openDetailRowKey = rowDetailState.rowKey;
+  const getRowClassNameWithDetail = useCallback(
+    (item: T, index: number) => {
+      const base = getRowClassNameWithFocus(item, index);
+      return openDetailRowKey !== null && keyExtractor(item, index) === openDetailRowKey
+        ? `${base} gridtable-row--detail-open`.trim()
+        : base;
+    },
+    [getRowClassNameWithFocus, keyExtractor, openDetailRowKey]
+  );
 
   // The dirty queue hashes rendered cells before measuring. Row virtualization changes that
   // visible signature without changing the callback identity, so both range bounds must invalidate
@@ -593,7 +627,7 @@ export function useGridTableController<T>({
 
   const renderRowContent = useGridTableRowRenderer({
     keyExtractor,
-    getRowClassName: getRowClassNameWithFocus,
+    getRowClassName: getRowClassNameWithDetail,
     isRowSelected,
     getRowStyle,
     handleRowClick,
@@ -645,6 +679,8 @@ export function useGridTableController<T>({
     tableContentWidth,
     tableViewportWidth,
     renderRowContent,
+    rowDetailIndex: rowDetailState.index,
+    renderRowDetail,
     headerRow,
     showLoadingOverlay,
     loadingOverlayMessage,

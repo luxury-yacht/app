@@ -39,6 +39,9 @@ export interface UseGridTableVirtualizationParams<T> {
   stopFrameSampler: (reason: 'timeout' | 'manual' | 'unmount') => void;
   updateColumnWindowRange: () => void;
   hideHeader: boolean;
+  /** The row whose detail is open; its span grows by detailHeight. */
+  detailRowKey?: string | null;
+  detailHeight?: number;
 }
 
 /**
@@ -98,6 +101,8 @@ export function useGridTableVirtualization<T>({
   stopFrameSampler,
   updateColumnWindowRange,
   hideHeader,
+  detailRowKey = null,
+  detailHeight = 0,
 }: UseGridTableVirtualizationParams<T>): UseGridTableVirtualizationResult<T> {
   const virtualizationConfig = useMemo(
     () => ({
@@ -217,12 +222,19 @@ export function useGridTableVirtualization<T>({
     const fallback = virtualizationConfig.estimateRowHeight;
     for (let i = 0; i < n; i++) {
       const key = keyExtractor(data[i], i);
-      const h = cache.get(key) ?? fallback;
+      const h = (cache.get(key) ?? fallback) + (key === detailRowKey ? detailHeight : 0);
       pos[i + 1] = pos[i] + h;
     }
     return pos;
     // heightCacheVersion is included so positions recompute after measurements.
-  }, [data, keyExtractor, virtualizationConfig.estimateRowHeight, heightCacheVersion]);
+  }, [
+    data,
+    keyExtractor,
+    virtualizationConfig.estimateRowHeight,
+    heightCacheVersion,
+    detailRowKey,
+    detailHeight,
+  ]);
 
   // Reset scroll position when filters change
   useEffect(() => {

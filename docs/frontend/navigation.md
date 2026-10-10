@@ -45,9 +45,9 @@ same slot.
   Empty facet values stay distinct from literal labels such as `__empty__`.
 - `FavoritesContext` runs the handoff as waiting/restoring phases: it waits for
   the target cluster to be operational (and namespace readiness for namespace
-  routes), applies navigation, and only then exposes `favoriteToRestore`. Table
-  consumers wait for the matching route and every expected pane's persistence
-  to hydrate before restoring and consuming the request. A waiting request
+  routes), applies navigation, and only then exposes `favoriteToRestore`. The
+  view's table waits for the matching route and its own persistence to hydrate
+  before restoring and consuming the request. A waiting request
   stays available to the cluster/navigation work that makes it ready;
   lifecycle progress extends its expiry window.
 - Reorder ignores repeated and unknown IDs, appends omitted favorites in their

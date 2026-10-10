@@ -7,7 +7,7 @@
 
 import './NsViewWorkloads.css';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { type PodsPaneControls, PodsTable } from '@modules/namespace/components/NsViewPods';
+import { PodsTable } from '@modules/namespace/components/NsViewPods';
 import {
   appendWorkloadTokens,
   type WorkloadData,
@@ -24,8 +24,11 @@ import {
 import { useClearHiddenRowSelection } from '@modules/resource-grid/useClearHiddenRowSelection';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import StackedSplitPane from '@shared/components/StackedSplitPane';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import type {
+  GridColumnDefinition,
+  GridTableRowDetail,
+} from '@shared/components/tables/GridTable.types';
+import type { RowDetailToggleOptions } from '@shared/components/tables/rowDetailToggle';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import {
@@ -33,7 +36,6 @@ import {
   buildRequiredObjectReference,
   type ClusterObjectReference,
 } from '@shared/utils/objectIdentity';
-import { FavoritePaneGroup } from '@ui/favorites/FavToggle';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { NamespaceWorkloadSnapshotPayload, PodMetricsInfo } from '@/core/refresh/types';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -46,17 +48,21 @@ interface WorkloadsViewProps {
   metrics?: PodMetricsInfo | null;
 }
 
-const WORKLOAD_FAVORITE_PANES = ['workloads', 'pods'] as const;
-
 interface WorkloadsTableProps extends WorkloadsViewProps {
   clusterId?: string | null;
+  /** The highlighted row. */
   selectedWorkloadKey?: string | null;
+  /** The row whose pods are open under it. */
+  openWorkloadKey?: string | null;
   onWorkloadSelect?: (workload: WorkloadData) => void;
   onWorkloadSelectionClear?: () => void;
+  onWorkloadPodsToggle?: (workload: WorkloadData) => void;
+  onWorkloadPodsClose?: () => void;
+  renderWorkloadPods?: (workload: WorkloadData) => React.ReactNode;
 }
 
 /**
- * GridTable component for namespace workloads without nested pod expansion
+ * GridTable of namespace workloads; a workload's pods open under its row.
  */
 export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
   ({
@@ -65,8 +71,12 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
     showNamespaceColumn = false,
     metrics = null,
     selectedWorkloadKey = null,
+    openWorkloadKey = null,
     onWorkloadSelect,
     onWorkloadSelectionClear,
+    onWorkloadPodsToggle,
+    onWorkloadPodsClose,
+    renderWorkloadPods,
   }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
@@ -112,13 +122,41 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       [queryClusterId]
     );
 
+    const podsToggle = useMemo<RowDetailToggleOptions<WorkloadData> | undefined>(
+      () =>
+        onWorkloadPodsToggle
+          ? {
+              getRowKey: keyExtractor,
+              isOpen: (row) => keyExtractor(row) === openWorkloadKey,
+              onToggle: onWorkloadPodsToggle,
+              getLabel: (row, open) =>
+                `${open ? 'Hide' : 'Show'} pods for ${row.ref.name} (${row.ready ?? 'no'} ready)`,
+              getText: (row) => row.ready ?? '—',
+            }
+          : undefined,
+      [keyExtractor, onWorkloadPodsToggle, openWorkloadKey]
+    );
+
     const tableColumns = useWorkloadTableColumns({
       handleWorkloadClick,
       onAltClick: handleWorkloadAltClick,
       showNamespaceColumn,
       useShortResourceNames,
+      podsToggle,
       metrics: metricsInfo ?? null,
     });
+
+    const rowDetail = useMemo<GridTableRowDetail<WorkloadData> | undefined>(
+      () =>
+        renderWorkloadPods
+          ? {
+              openRowKey: openWorkloadKey,
+              render: renderWorkloadPods,
+              getLabel: (row) => `Pods for ${row.ref.name}`,
+            }
+          : undefined,
+      [openWorkloadKey, renderWorkloadPods]
+    );
 
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
     const showNamespaceFilter = isAllNamespaces;
@@ -157,7 +195,6 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       showNamespaceFilters: showNamespaceFilter,
       diagnosticsLabel,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-      favoritePane: { id: 'workloads', label: 'Workloads' },
     });
 
     // The base query payload carries the poller freshness block for the usage
@@ -171,6 +208,12 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       source,
       keyExtractor,
       onClear: onWorkloadSelectionClear,
+    });
+    useClearHiddenRowSelection({
+      selectedKey: openWorkloadKey,
+      source,
+      keyExtractor,
+      onClear: onWorkloadPodsClose,
     });
 
     const getContextMenuItems = useCallback(
@@ -206,34 +249,33 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
     );
 
     return (
-      <div className="stacked-split-table-surface">
-        <div className="stacked-split-table-surface__table">
-          <ResourceInventoryTable
-            source={source}
-            gridTableProps={resolvedGridTableProps}
-            spinnerMessage="Loading workloads..."
-            updatingMessage="Updating workloads…"
-            allowPartial
-            favModal={favModal}
-            columns={tableColumns}
-            diagnosticsLabel={diagnosticsLabel}
-            diagnosticsMode="live"
-            onRowClick={handleWorkloadClick}
-            onRowPointerClick={onWorkloadSelect}
-            onRowSelectionToggle={onWorkloadSelect}
-            onRowSelectionClear={selectedWorkloadKey ? onWorkloadSelectionClear : undefined}
-            getRowClassName={getRowClassName}
-            isRowSelected={isRowSelected}
-            tableClassName="gridtable-workloads"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            emptyMessage={emptyMessage}
-            enableColumnVisibilityMenu
-          />
-        </div>
+      <>
+        <ResourceInventoryTable
+          source={source}
+          gridTableProps={resolvedGridTableProps}
+          spinnerMessage="Loading workloads..."
+          updatingMessage="Updating workloads…"
+          allowPartial
+          favModal={favModal}
+          columns={tableColumns}
+          diagnosticsLabel={diagnosticsLabel}
+          diagnosticsMode="live"
+          onRowClick={handleWorkloadClick}
+          onRowPointerClick={onWorkloadSelect}
+          onRowSelectionToggle={onWorkloadPodsToggle}
+          onRowSelectionClear={selectedWorkloadKey ? onWorkloadSelectionClear : undefined}
+          getRowClassName={getRowClassName}
+          isRowSelected={isRowSelected}
+          rowDetail={rowDetail}
+          tableClassName="gridtable-workloads"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          emptyMessage={emptyMessage}
+          enableColumnVisibilityMenu
+        />
 
         {objectActions.modals}
-      </div>
+      </>
     );
   }
 );
@@ -244,6 +286,17 @@ interface ScopedWorkloadsViewProps extends WorkloadsViewProps {
   selectedClusterId?: string | null;
 }
 
+// Highlight and open pods live only in this mounted view and only for the
+// current cluster and namespace scope.
+const refInScope = (
+  ref: ClusterObjectReference | null,
+  clusterId: string | null | undefined,
+  namespace: string
+) =>
+  ref === null ||
+  (ref.clusterId === clusterId &&
+    (namespace === ALL_NAMESPACES_SCOPE || ref.namespace === namespace));
+
 const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
   namespace,
   showNamespaceColumn = false,
@@ -251,88 +304,83 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
   selectedClusterId,
 }) => {
   const { selectedClusterName } = useKubeconfig();
-  // The selection lives only in this mounted view: leaving the view, a favorite,
-  // or a remount starts with every pod in scope.
   const [selectedWorkload, setSelectedWorkload] = useState<ClusterObjectReference | null>(null);
-  const [podsCollapsed, setPodsCollapsed] = useState(false);
-
-  const selectedWorkloadMatchesScope =
-    selectedWorkload === null ||
-    (selectedWorkload.clusterId === selectedClusterId &&
-      (namespace === ALL_NAMESPACES_SCOPE || selectedWorkload.namespace === namespace));
-  const scopedSelectedWorkload = selectedWorkloadMatchesScope ? selectedWorkload : null;
+  const [openWorkload, setOpenWorkload] = useState<ClusterObjectReference | null>(null);
+  const selectionInScope = refInScope(selectedWorkload, selectedClusterId, namespace);
+  const openInScope = refInScope(openWorkload, selectedClusterId, namespace);
+  const scopedSelectedWorkload = selectionInScope ? selectedWorkload : null;
+  const scopedOpenWorkload = openInScope ? openWorkload : null;
 
   useEffect(() => {
-    if (selectedWorkloadMatchesScope) {
-      return;
+    if (!selectionInScope) {
+      setSelectedWorkload(null);
     }
-    setSelectedWorkload(null);
-    setPodsCollapsed(false);
-  }, [selectedWorkloadMatchesScope]);
+    if (!openInScope) {
+      setOpenWorkload(null);
+    }
+  }, [openInScope, selectionInScope]);
 
-  // A collapsed Pods pane stays collapsed; it shows this workload's pods once expanded.
-  const handleWorkloadSelect = useCallback(
-    (workload: WorkloadData) => {
-      setSelectedWorkload(
-        buildRequiredObjectReference(
-          { ...workload.ref, clusterName: selectedClusterName },
-          { fallbackClusterId: selectedClusterId }
-        )
-      );
-    },
+  const toReference = useCallback(
+    (workload: WorkloadData) =>
+      buildRequiredObjectReference(
+        { ...workload.ref, clusterName: selectedClusterName },
+        { fallbackClusterId: selectedClusterId }
+      ),
     [selectedClusterId, selectedClusterName]
   );
+  const keyOf = useCallback(
+    (ref: ClusterObjectReference | null) =>
+      ref ? buildRequiredCanonicalObjectRowKey(ref, { fallbackClusterId: selectedClusterId }) : null,
+    [selectedClusterId]
+  );
 
-  const selectedWorkloadKey = useMemo(
+  const handleWorkloadSelect = useCallback(
+    (workload: WorkloadData) => setSelectedWorkload(toReference(workload)),
+    [toReference]
+  );
+  const handleWorkloadSelectionClear = useCallback(() => setSelectedWorkload(null), []);
+  // The Ready count and Space open or close a workload's pods and highlight it.
+  const handleWorkloadPodsToggle = useCallback(
+    (workload: WorkloadData) => {
+      const ref = toReference(workload);
+      setSelectedWorkload(ref);
+      setOpenWorkload((current) => (keyOf(current) === keyOf(ref) ? null : ref));
+    },
+    [keyOf, toReference]
+  );
+  const handleWorkloadPodsClose = useCallback(() => setOpenWorkload(null), []);
+  // The attached table follows the open reference, not the row object, so a
+  // workload refresh never rebuilds its query.
+  const renderWorkloadPods = useCallback(
     () =>
-      scopedSelectedWorkload
-        ? buildRequiredCanonicalObjectRowKey(scopedSelectedWorkload, {
-            fallbackClusterId: selectedClusterId,
-          })
-        : null,
-    [scopedSelectedWorkload, selectedClusterId]
+      scopedOpenWorkload ? (
+        <PodsTable
+          namespace={namespace}
+          clusterId={selectedClusterId}
+          viewId="namespace-workload-pods"
+          namespaceLinkView="workloads"
+          showNamespaceColumn={showNamespaceColumn}
+          metrics={metrics}
+          attachedTo={scopedOpenWorkload}
+        />
+      ) : null,
+    [metrics, namespace, scopedOpenWorkload, selectedClusterId, showNamespaceColumn]
   );
-  const handleWorkloadSelectionClear = useCallback(() => {
-    setSelectedWorkload(null);
-  }, []);
-  const podsPane = useMemo<PodsPaneControls>(
-    () => ({
-      selectedObject: scopedSelectedWorkload,
-      collapsed: podsCollapsed,
-      onCollapsedChange: setPodsCollapsed,
-    }),
-    [podsCollapsed, scopedSelectedWorkload]
-  );
+
   return (
-    <FavoritePaneGroup primaryPaneId="workloads" expectedPaneIds={WORKLOAD_FAVORITE_PANES}>
-      <StackedSplitPane
-        upperLabel="Workloads"
-        lowerLabel="Pods"
-        collapsed={podsCollapsed}
-        upper={
-          <WorkloadsTable
-            namespace={namespace}
-            clusterId={selectedClusterId}
-            showNamespaceColumn={showNamespaceColumn}
-            metrics={metrics}
-            selectedWorkloadKey={selectedWorkloadKey}
-            onWorkloadSelect={handleWorkloadSelect}
-            onWorkloadSelectionClear={handleWorkloadSelectionClear}
-          />
-        }
-        lower={
-          <PodsTable
-            namespace={namespace}
-            clusterId={selectedClusterId}
-            viewId="namespace-workload-pods"
-            namespaceLinkView="workloads"
-            showNamespaceColumn={showNamespaceColumn}
-            metrics={metrics}
-            pane={podsPane}
-          />
-        }
-      />
-    </FavoritePaneGroup>
+    <WorkloadsTable
+      namespace={namespace}
+      clusterId={selectedClusterId}
+      showNamespaceColumn={showNamespaceColumn}
+      metrics={metrics}
+      selectedWorkloadKey={keyOf(scopedSelectedWorkload)}
+      openWorkloadKey={keyOf(scopedOpenWorkload)}
+      onWorkloadSelect={handleWorkloadSelect}
+      onWorkloadSelectionClear={handleWorkloadSelectionClear}
+      onWorkloadPodsToggle={handleWorkloadPodsToggle}
+      onWorkloadPodsClose={handleWorkloadPodsClose}
+      renderWorkloadPods={renderWorkloadPods}
+    />
   );
 };
 

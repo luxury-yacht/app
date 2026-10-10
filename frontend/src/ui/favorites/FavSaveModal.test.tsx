@@ -266,7 +266,7 @@ vi.mock('react-dom', async (importOriginal) => {
   };
 });
 
-import type { FavSaveModalProps } from './FavSaveModal';
+import type { FavoriteModalTable, FavSaveModalProps } from './FavSaveModal';
 // Import after all mocks are established.
 import FavSaveModal from './FavSaveModal';
 
@@ -299,10 +299,16 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   viewType: 'namespace',
   view: 'pods',
   namespace: 'default',
-  panes: {
-    main: { filters: { ...defaultFilters }, tableState: { ...defaultTableState } },
-  },
+  filters: { ...defaultFilters },
+  tableState: { ...defaultTableState },
   order: 0,
+  ...overrides,
+});
+
+const makeTable = (overrides: Partial<FavoriteModalTable> = {}): FavoriteModalTable => ({
+  filters: { ...defaultFilters },
+  tableState: { ...defaultTableState },
+  filterOptions: {},
   ...overrides,
 });
 
@@ -315,9 +321,7 @@ const makeProps = (overrides: Partial<FavSaveModalProps> = {}): FavSaveModalProp
   viewType: 'namespace',
   viewLabel: 'Pods',
   namespace: 'default',
-  filters: { ...defaultFilters },
-  tableState: { ...defaultTableState },
-  includeMetadata: false,
+  table: makeTable(),
   onSave: vi.fn(),
   onDelete: vi.fn(),
   ...overrides,
@@ -372,50 +376,37 @@ describe('FavSaveModal', () => {
   // 2. Renders when isOpen is true
   // -----------------------------------------------------------------------
 
-  it('renders and saves all declared filters for both Workloads panes', async () => {
+  it('renders and saves every declared filter of the table', async () => {
     const onSave = vi.fn();
     await renderComponent(
       makeProps({
         onSave,
-        panes: [
-          {
-            id: 'workloads',
-            label: 'Workloads',
-            filters: defaultFilters,
-            tableState: defaultTableState,
-            filterOptions: { showKindDropdown: true, kinds: ['Deployment'] },
+        table: makeTable({
+          filters: {
+            ...defaultFilters,
+            clusters: { mode: 'some', values: ['cluster-a'] },
+            queryFacets: { owners: { mode: 'some', values: ['Deployment/api'] } },
           },
-          {
-            id: 'pods',
-            label: 'Pods',
-            filters: {
-              ...defaultFilters,
-              clusters: { mode: 'some', values: ['cluster-a'] },
-              queryFacets: { owners: { mode: 'some', values: ['Deployment/api'] } },
-            },
-            tableState: { ...defaultTableState, sortColumn: 'node' },
-            filterOptions: {
-              showClusterDropdown: true,
-              clusters: [{ value: 'cluster-a', label: 'Production' }],
-              queryFacets: [
-                {
-                  key: 'owners',
-                  label: 'Owners',
-                  placeholder: 'All owners',
-                  options: [
-                    { value: 'Deployment/api', label: 'Deployment/api' },
-                    { value: 'StatefulSet/db', label: 'StatefulSet/db' },
-                  ],
-                },
-              ],
-            },
+          tableState: { ...defaultTableState, sortColumn: 'node' },
+          filterOptions: {
+            showClusterDropdown: true,
+            clusters: [{ value: 'cluster-a', label: 'Production' }],
+            queryFacets: [
+              {
+                key: 'owners',
+                label: 'Owners',
+                placeholder: 'All owners',
+                options: [
+                  { value: 'Deployment/api', label: 'Deployment/api' },
+                  { value: 'StatefulSet/db', label: 'StatefulSet/db' },
+                ],
+              },
+            ],
           },
-        ],
+        }),
       })
     );
 
-    expect(container.textContent).toContain('Workloads Filters');
-    expect(container.textContent).toContain('Pods Filters');
     expect(container.textContent).toContain('Clusters');
     expect(container.textContent).toContain('Owners');
 
@@ -436,15 +427,15 @@ describe('FavSaveModal', () => {
     });
 
     const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.panes.pods.filters.clusters).toEqual({
+    expect(saved.filters.clusters).toEqual({
       mode: 'some',
       values: ['cluster-a'],
     });
-    expect(saved.panes.pods.filters.queryFacets?.owners).toEqual({
+    expect(saved.filters.queryFacets?.owners).toEqual({
       mode: 'some',
       values: ['StatefulSet/db'],
     });
-    expect(saved.panes.pods.tableState.sortColumn).toBe('node');
+    expect(saved.tableState.sortColumn).toBe('node');
   });
 
   it('retains and edits case-distinct saved cluster identities', async () => {
@@ -453,15 +444,10 @@ describe('FavSaveModal', () => {
     await renderComponent(
       makeProps({
         onSave,
-        panes: [
-          {
-            id: 'main',
-            label: 'Namespaces',
-            filters: { ...defaultFilters, clusters: { mode: 'some', values } },
-            tableState: defaultTableState,
-            filterOptions: { showClusterDropdown: true, clusters: [] },
-          },
-        ],
+        table: makeTable({
+          filters: { ...defaultFilters, clusters: { mode: 'some', values } },
+          filterOptions: { showClusterDropdown: true, clusters: [] },
+        }),
       })
     );
     const clusters = requireValue(
@@ -477,7 +463,7 @@ describe('FavSaveModal', () => {
       container.querySelector<HTMLButtonElement>('button.save')?.click();
     });
     const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.panes.main.filters.clusters).toEqual({ mode: 'some', values: [values[0]] });
+    expect(saved.filters.clusters).toEqual({ mode: 'some', values: [values[0]] });
   });
 
   it('saves Select all as a semantic all selection for provider facets', async () => {
@@ -485,30 +471,25 @@ describe('FavSaveModal', () => {
     await renderComponent(
       makeProps({
         onSave,
-        panes: [
-          {
-            id: 'main',
-            label: 'Pods',
-            filters: {
-              ...defaultFilters,
-              queryFacets: { owners: { mode: 'some', values: ['Deployment/api'] } },
-            },
-            tableState: defaultTableState,
-            filterOptions: {
-              queryFacets: [
-                {
-                  key: 'owners',
-                  label: 'Owners',
-                  placeholder: 'All owners',
-                  options: [
-                    { value: 'Deployment/api', label: 'Deployment/api' },
-                    { value: 'StatefulSet/db', label: 'StatefulSet/db' },
-                  ],
-                },
-              ],
-            },
+        table: makeTable({
+          filters: {
+            ...defaultFilters,
+            queryFacets: { owners: { mode: 'some', values: ['Deployment/api'] } },
           },
-        ],
+          filterOptions: {
+            queryFacets: [
+              {
+                key: 'owners',
+                label: 'Owners',
+                placeholder: 'All owners',
+                options: [
+                  { value: 'Deployment/api', label: 'Deployment/api' },
+                  { value: 'StatefulSet/db', label: 'StatefulSet/db' },
+                ],
+              },
+            ],
+          },
+        }),
       })
     );
 
@@ -526,18 +507,21 @@ describe('FavSaveModal', () => {
     });
 
     const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.panes.main.filters.queryFacets?.owners).toEqual({ mode: 'all' });
+    expect(saved.filters.queryFacets?.owners).toEqual({ mode: 'all' });
   });
 
   it('summarizes semantic all and none selections instead of listing option values', async () => {
     await renderComponent(
       makeProps({
-        filters: {
-          ...defaultFilters,
-          namespaces: { mode: 'none' },
-        },
-        availableKinds: ['Pod', 'Deployment'],
-        availableFilterNamespaces: ['default', 'kube-system'],
+        table: makeTable({
+          filters: { ...defaultFilters, namespaces: { mode: 'none' } },
+          filterOptions: {
+            kinds: ['Pod', 'Deployment'],
+            namespaces: ['default', 'kube-system'],
+            showKindDropdown: true,
+            showNamespaceDropdown: true,
+          },
+        }),
       })
     );
 
@@ -612,15 +596,11 @@ describe('FavSaveModal', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it('preserves an edited name when live pane props refresh while open', async () => {
-    const pane = {
-      id: 'main',
-      label: 'Pods',
-      filters: defaultFilters,
-      tableState: defaultTableState,
+  it('preserves an edited name when live table props refresh while open', async () => {
+    const table = makeTable({
       filterOptions: { showKindDropdown: true, kinds: ['Pod', 'Deployment'] },
-    };
-    const props = makeProps({ panes: [pane] });
+    });
+    const props = makeProps({ table });
     await renderComponent(props);
 
     const input = requireValue(
@@ -639,12 +619,10 @@ describe('FavSaveModal', () => {
 
     await renderComponent({
       ...props,
-      panes: [
-        {
-          ...pane,
-          filterOptions: { ...pane.filterOptions, kinds: [...pane.filterOptions.kinds] },
-        },
-      ],
+      table: {
+        ...table,
+        filterOptions: { ...table.filterOptions, kinds: [...(table.filterOptions.kinds ?? [])] },
+      },
     });
 
     expect(input.value).toBe('My custom favorite');
@@ -690,7 +668,7 @@ describe('FavSaveModal', () => {
     expect(savedFav.clusterSelection).toBe('/home/user/.kube/config:prod-cluster');
     expect(savedFav.clusterId).toBe('config:prod-cluster');
     expect(savedFav.clusterName).toBe('prod-cluster');
-    expect(savedFav.panes.main.filters.queryFacets).toEqual(defaultFilters.queryFacets);
+    expect(savedFav.filters.queryFacets).toEqual(defaultFilters.queryFacets);
     expect(savedFav.id).toBe(''); // New favorite has empty id.
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -729,7 +707,9 @@ describe('FavSaveModal', () => {
         statuses: { mode: 'some', values: ['Needs attention'] },
       },
     };
-    await renderComponent(makeProps({ onSave, filters, viewLabel: 'Events' }));
+    await renderComponent(
+      makeProps({ onSave, table: makeTable({ filters }), viewLabel: 'Events' })
+    );
 
     await act(async () => {
       container.querySelector<HTMLButtonElement>('button.save')?.click();
@@ -737,7 +717,7 @@ describe('FavSaveModal', () => {
     });
 
     const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.panes.main.filters.queryFacets).toEqual(filters.queryFacets);
+    expect(saved.filters.queryFacets).toEqual(filters.queryFacets);
     expect(saved.clusterId).toBe('config:prod-cluster');
   });
 
@@ -747,7 +727,9 @@ describe('FavSaveModal', () => {
       ...defaultFilters,
       clusters: { mode: 'some', values: ['cluster-a', 'cluster-b'] },
     };
-    await renderComponent(makeProps({ onSave, filters, viewLabel: 'Namespaces' }));
+    await renderComponent(
+      makeProps({ onSave, table: makeTable({ filters }), viewLabel: 'Namespaces' })
+    );
 
     await act(async () => {
       container.querySelector<HTMLButtonElement>('button.save')?.click();
@@ -755,7 +737,7 @@ describe('FavSaveModal', () => {
     });
 
     const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.panes.main.filters.clusters).toEqual({
+    expect(saved.filters.clusters).toEqual({
       mode: 'some',
       values: ['cluster-a', 'cluster-b'],
     });
@@ -823,7 +805,7 @@ describe('FavSaveModal', () => {
       viewType: existingFav.viewType,
       viewLabel: 'Pods',
       namespace: existingFav.namespace,
-      filters: existingFav.panes.main.filters,
+      table: makeTable({ filters: existingFav.filters }),
     });
     await renderComponent(props);
 
@@ -834,39 +816,26 @@ describe('FavSaveModal', () => {
     );
   });
 
-  it('edits column visibility, ordering, and sort for a saved pane', async () => {
+  it('edits column visibility, ordering, and sort for a saved table', async () => {
     const onSave = vi.fn();
     const existingFavorite = makeFavorite({
-      panes: {
-        main: {
-          filters: defaultFilters,
-          tableState: {
-            sortColumn: 'name',
-            sortDirection: 'asc',
-            columnVisibility: { status: false },
-            columnOrder: ['name', 'status', 'age'],
-          },
-        },
+      tableState: {
+        sortColumn: 'name',
+        sortDirection: 'asc',
+        columnVisibility: { status: false },
+        columnOrder: ['name', 'status', 'age'],
       },
     });
-    const pane = {
-      id: 'main',
-      label: 'Pods',
-      ...existingFavorite.panes.main,
-      filterOptions: {},
+    const table = makeTable({
+      filters: existingFavorite.filters,
+      tableState: existingFavorite.tableState,
       columns: [
         { key: 'name', label: 'Name', hideable: false, sortable: true },
         { key: 'status', label: 'Status', hideable: true, sortable: true },
         { key: 'age', label: 'Age', hideable: true, sortable: true },
       ],
-    };
-    await renderComponent(
-      makeProps({
-        existingFavorite,
-        panes: [pane],
-        onSave,
-      })
-    );
+    });
+    await renderComponent(makeProps({ existingFavorite, table, onSave }));
 
     const columnsMenu = requireValue(
       container.querySelector<HTMLElement>('.dropdown-columns-menu'),
@@ -929,7 +898,7 @@ describe('FavSaveModal', () => {
     });
 
     const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.panes.main.tableState).toEqual({
+    expect(saved.tableState).toEqual({
       sortColumn: 'age',
       sortDirection: 'desc',
       columnVisibility: {},
@@ -941,34 +910,25 @@ describe('FavSaveModal', () => {
   it('hides a column and drops the sort on it', async () => {
     const onSave = vi.fn();
     const existingFavorite = makeFavorite({
-      panes: {
-        main: {
-          filters: defaultFilters,
-          tableState: {
-            sortColumn: 'status',
-            sortDirection: 'asc',
-            columnVisibility: {},
-            columnOrder: ['name', 'status', 'age'],
-          },
-        },
+      tableState: {
+        sortColumn: 'status',
+        sortDirection: 'asc',
+        columnVisibility: {},
+        columnOrder: ['name', 'status', 'age'],
       },
     });
     await renderComponent(
       makeProps({
         existingFavorite,
-        panes: [
-          {
-            id: 'main',
-            label: 'Pods',
-            ...existingFavorite.panes.main,
-            filterOptions: {},
-            columns: [
-              { key: 'name', label: 'Name', hideable: false, sortable: true },
-              { key: 'status', label: 'Status', hideable: true, sortable: true },
-              { key: 'age', label: 'Age', hideable: true, sortable: true },
-            ],
-          },
-        ],
+        table: makeTable({
+          filters: existingFavorite.filters,
+          tableState: existingFavorite.tableState,
+          columns: [
+            { key: 'name', label: 'Name', hideable: false, sortable: true },
+            { key: 'status', label: 'Status', hideable: true, sortable: true },
+            { key: 'age', label: 'Age', hideable: true, sortable: true },
+          ],
+        }),
         onSave,
       })
     );
@@ -986,7 +946,7 @@ describe('FavSaveModal', () => {
     });
 
     const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.panes.main.tableState).toMatchObject({
+    expect(saved.tableState).toMatchObject({
       sortColumn: '',
       columnVisibility: { status: false },
     });
@@ -996,7 +956,7 @@ describe('FavSaveModal', () => {
   // 8. View dropdown changes update the scope correctly
   // -----------------------------------------------------------------------
 
-  it('does not allow retargeting saved pane state to a different view', async () => {
+  it('does not allow retargeting saved table settings to a different view', async () => {
     const onSave = vi.fn();
     const props = makeProps({ onSave });
     await renderComponent(props);
@@ -1022,9 +982,8 @@ describe('FavSaveModal', () => {
     expect(savedFav.viewType).toBe('namespace');
     expect(savedFav.view).toBe('pods');
     expect(savedFav.namespace).toBe('default');
-    expect(savedFav.panes).toEqual({
-      main: { filters: defaultFilters, tableState: defaultTableState },
-    });
+    expect(savedFav.filters).toEqual(defaultFilters);
+    expect(savedFav.tableState).toEqual(defaultTableState);
   });
 
   it('offers every registered global, cluster, and namespace view', async () => {

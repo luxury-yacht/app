@@ -138,8 +138,6 @@ export interface GridTableFilterOptions {
   clusterDropdownSearchable?: boolean;
   clusterDropdownBulkActions?: boolean;
   includeClusterScopedSyntheticNamespace?: boolean;
-  /** A pane's structural control (e.g. Collapse Pods), rendered immediately before Namespace. */
-  beforeNamespaceActions?: IconBarItem[];
   /**
    * IconBar items before Download: Include metadata, the view's own icons, a
    * separator, and Favorite, in that order.
@@ -192,6 +190,19 @@ export interface GridTableFilteredEmptyState {
     label: string;
     onClick: () => void;
   };
+}
+
+/**
+ * One open row shows `render(row)` in a full-width detail directly under it,
+ * for example a nested table. The detail is a labelled region whose id is
+ * getGridTableRowDetailId(openRowKey), for the opening control's aria-controls.
+ */
+export interface GridTableRowDetail<T> {
+  /** keyExtractor key of the open row; null when no row is open. */
+  openRowKey: string | null;
+  render: (item: T) => React.ReactNode;
+  /** Accessible name of the detail region. */
+  getLabel: (item: T) => string;
 }
 
 export interface GridTableProps<T> {
@@ -253,6 +264,7 @@ export interface GridTableProps<T> {
   /** Gates the next-page shortcut (e.g. last page, request in flight). */
   canPageNext?: boolean;
   virtualization?: GridTableVirtualizationOptions;
+  rowDetail?: GridTableRowDetail<T>;
   loadingOverlay?: {
     show: boolean;
     message?: string;
@@ -278,7 +290,6 @@ export interface InternalFilterOptions {
   namespaceDropdownBulkActions?: boolean;
   clusterDropdownSearchable?: boolean;
   clusterDropdownBulkActions?: boolean;
-  beforeNamespaceActions?: IconBarItem[];
   preActions?: IconBarItem[];
   totalIsExact?: boolean;
   partialDataLabel?: string;

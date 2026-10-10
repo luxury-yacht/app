@@ -112,7 +112,6 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
   FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock('@ui/favorites/FavToggle', () => ({
-  FavoritePaneGroup: ({ children }: { children: React.ReactNode }) => children,
   useFavToggle: () => ({
     type: 'toggle',
     id: 'favorite',

@@ -6,7 +6,6 @@
  */
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { ChevronDownIcon, ChevronUpIcon } from '@shared/components/icons/SharedIcons';
 import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import type { GridTableFilterState, GridTableProps } from '@shared/components/tables/GridTable';
 import { getTextContent } from '@shared/components/tables/GridTable.utils';
@@ -135,8 +134,12 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
   FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+const favToggleStateRef = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
+
 vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: () => ({
+  useFavToggle: (state: Record<string, unknown>) => {
+    favToggleStateRef.current = state;
+    return {
     item: {
       type: 'toggle',
       id: 'favorite',
@@ -144,9 +147,10 @@ vi.mock('@ui/favorites/FavToggle', () => ({
       active: false,
       onClick: () => undefined,
       title: 'Save as favorite',
-    },
-    modal: null,
-  }),
+      },
+      modal: null,
+    };
+  },
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
@@ -411,15 +415,6 @@ describe('NsViewPods', () => {
     window.sessionStorage.clear();
   });
 
-  const paneControls = (
-    overrides: Partial<NonNullable<React.ComponentProps<typeof PodsTable>['pane']>> = {}
-  ) => ({
-    selectedObject: null,
-    collapsed: false,
-    onCollapsedChange: vi.fn(),
-    ...overrides,
-  });
-
   const renderPods = async (
     props: Partial<React.ComponentProps<typeof PodsTable>> & { data?: PodSnapshotEntry[] } = {},
     { skipDefaultQueryMock = false }: { skipDefaultQueryMock?: boolean } = {}
@@ -625,69 +620,6 @@ describe('NsViewPods', () => {
     }
   };
 
-  it('puts the Pods collapse action left of the Namespace dropdown', async () => {
-    const onCollapsedChange = vi.fn();
-    await renderPods({ pane: paneControls({ onCollapsedChange }) });
-
-    // The pane's collapse control stays left of the Namespace dropdown, out of the main icon bar.
-    const options = gridTablePropsRef.current.filters?.options;
-    const paneActions = options?.beforeNamespaceActions ?? [];
-    expect(
-      paneActions.map((action) => (action.type === 'separator' ? null : action.title))
-    ).toEqual(['Collapse Pods']);
-    expect(
-      (options?.preActions ?? []).some(
-        (action) => action.type !== 'separator' && action.title === 'Collapse Pods'
-      )
-    ).toBe(false);
-    const collapseAction = paneActions[0];
-    if (!collapseAction || collapseAction.type !== 'action') {
-      throw new Error('Expected the Collapse Pods action');
-    }
-    expect(requireReactElement(collapseAction.icon, 'expected collapse icon').type).toBe(
-      ChevronDownIcon
-    );
-
-    act(() => {
-      collapseAction.onClick();
-    });
-    expect(onCollapsedChange).toHaveBeenCalledWith(true);
-  });
-
-  it('shows only the expand control and Show Pods text while collapsed', async () => {
-    const onCollapsedChange = vi.fn();
-    await renderPods({ pane: paneControls({ collapsed: true, onCollapsedChange }) });
-
-    expect(scopedLifecycleMock).toHaveBeenCalledWith(
-      expect.objectContaining({ domain: 'pods', enabled: false })
-    );
-
-    expect(container.querySelector('[data-testid="grid-table"]')).toBeNull();
-    expect(container.querySelector('.gridtable-filter-bar')?.textContent).toBe('Show Pods');
-    expect(container.querySelectorAll('.gridtable-filter-bar button')).toHaveLength(1);
-    const expandButton = container.querySelector<HTMLButtonElement>(
-      '.gridtable-filter-bar button[title="Expand Pods"]'
-    );
-    expect(expandButton).not.toBeNull();
-    const renderedCollapseIcon = ChevronUpIcon({});
-    if (renderedCollapseIcon instanceof Promise) {
-      throw new Error('Expected ChevronUpIcon to render synchronously');
-    }
-    const collapseSvg = requireReactElement<{ children: React.ReactNode }>(
-      renderedCollapseIcon,
-      'expected collapsed-state icon'
-    );
-    expect(expandButton?.querySelector('svg path')?.getAttribute('d')).toBe(
-      requireReactElement<{ d: string }>(
-        collapseSvg.props.children,
-        'expected collapsed-state icon path'
-      ).props.d
-    );
-
-    act(() => expandButton?.click());
-    expect(onCollapsedChange).toHaveBeenCalledWith(false);
-  });
-
   it('uses the typed query result for all-namespaces pods on first render', async () => {
     const localPod = createPod({ ref: { name: 'local-provider-row', namespace: 'team-a' } });
     const queryPod = createPod({ ref: { name: 'query-row', namespace: 'team-b' } });
@@ -752,7 +684,7 @@ describe('NsViewPods', () => {
   it('shows only the selected workload pods without saving the selection as a filter', async () => {
     await renderPods({
       namespace: ALL_NAMESPACES_SCOPE,
-      pane: paneControls({ selectedObject: selectedDeployment }),
+      attachedTo: selectedDeployment,
     });
 
     expect(lastQueryParams().getAll('facet.owners')).toEqual([
@@ -765,15 +697,13 @@ describe('NsViewPods', () => {
   it('shows only the selected node pods', async () => {
     await renderPods({
       namespace: ALL_NAMESPACES_SCOPE,
-      pane: paneControls({
-        selectedObject: {
-          clusterId: 'alpha:ctx',
-          group: '',
-          version: 'v1',
-          kind: 'Node',
-          name: 'node-a',
-        },
-      }),
+      attachedTo: {
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'Node',
+        name: 'node-a',
+      },
     });
 
     expect(lastQueryParams().getAll('facet.nodes')).toEqual(['node-a']);
@@ -783,13 +713,13 @@ describe('NsViewPods', () => {
   it('ignores a selection from another cluster', async () => {
     await renderPods({
       namespace: ALL_NAMESPACES_SCOPE,
-      pane: paneControls({ selectedObject: { ...selectedDeployment, clusterId: 'beta:ctx' } }),
+      attachedTo: { ...selectedDeployment, clusterId: 'beta:ctx' },
     });
 
     expect(lastQueryParams().getAll('facet.owners')).toEqual([]);
   });
 
-  it('drops saved Namespaces, Owner, and Node filters so nothing filters the pane invisibly', async () => {
+  it('keeps an attached table in memory and out of favorites, with no hidden Namespaces, Owner, or Node filter', async () => {
     persistedFiltersRef.current = {
       search: 'web',
       kinds: { mode: 'all' },
@@ -805,10 +735,13 @@ describe('NsViewPods', () => {
       includeMetadata: false,
     };
 
-    await renderPods({ namespace: ALL_NAMESPACES_SCOPE, pane: paneControls() });
+    await renderPods({ namespace: ALL_NAMESPACES_SCOPE, attachedTo: selectedDeployment });
 
-    // The pane neither reads nor writes the Namespaces selection All Namespaces views share.
+    // It starts fresh every time, is never saved or offered as a favorite, and
+    // neither reads nor writes the Namespaces selection All Namespaces views share.
+    expect(gridPersistenceParamsRef.current).toMatchObject({ transient: true });
     expect(gridPersistenceParamsRef.current?.shareNamespaceFilter ?? false).toBe(false);
+    expect(favToggleStateRef.current).toMatchObject({ enabled: false });
     expect(setFiltersMock).toHaveBeenCalledWith({
       search: 'web',
       kinds: { mode: 'all' },
@@ -817,7 +750,10 @@ describe('NsViewPods', () => {
       includeMetadata: false,
     });
     expect(lastQueryParams().get('namespaces')).toBeNull();
-    expect(lastQueryParams().getAll('facet.owners')).toEqual([]);
+    // Only the attached workload narrows the pods, never a saved Owner or Node.
+    expect(lastQueryParams().getAll('facet.owners')).toEqual([
+      '["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]',
+    ]);
     expect(lastQueryParams().getAll('facet.nodes')).toEqual([]);
   });
 
@@ -860,7 +796,7 @@ describe('NsViewPods', () => {
       },
     });
 
-    await renderPods({ namespace: ALL_NAMESPACES_SCOPE, pane: paneControls() });
+    await renderPods({ namespace: ALL_NAMESPACES_SCOPE, attachedTo: selectedDeployment });
 
     const options = gridTablePropsRef.current.filters?.options;
     expect(options?.queryFacets ?? []).toEqual([]);
@@ -900,7 +836,7 @@ describe('NsViewPods', () => {
     },
   });
 
-  it('offers the Pods view every filter, saved apart from the Workloads pane', async () => {
+  it('offers the Pods view every filter and saves its own table state', async () => {
     requestRefreshDomainStateMock.mockResolvedValue(facetedPodsResponse());
 
     await act(async () => {

@@ -5,6 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
+import { queryOwnGridTableElements } from '@shared/components/tables/GridTable.utils';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import {
   clampAutoSizeColumnWidth,
@@ -58,7 +59,7 @@ const createVisibleColumnSignature = (
   if (!table) {
     return null;
   }
-  const nodes = Array.from(table.querySelectorAll<HTMLElement>('.grid-cell[data-column]'))
+  const nodes = queryOwnGridTableElements(table, '.grid-cell[data-column]')
     .filter((cell) => cell.dataset.column === columnKey)
     .map((cell) => cell.querySelector<HTMLElement>('.grid-cell-content'))
     .filter((node): node is HTMLElement => node !== null && node !== undefined);

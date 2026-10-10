@@ -30,7 +30,6 @@ import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import Tooltip from '@shared/components/Tooltip';
 import type { GridTableFilterOptions } from '@shared/components/tables/GridTable.types';
 import { reorderColumnOrder } from '@shared/components/tables/gridTableColumnOrder';
-import { areGridTableFilterStatesEqual } from '@shared/components/tables/gridTableFilterState';
 import { useGridTableColumnOptionRows } from '@shared/components/tables/hooks/useGridTableColumnOptionRows';
 import { errorHandler } from '@utils/errorHandler';
 import type React from 'react';
@@ -44,12 +43,12 @@ import {
 import type {
   Favorite,
   FavoriteFilters,
-  FavoritePaneState,
+  FavoriteTableSnapshot,
   FavoriteTableState,
 } from '@/core/persistence/favorites';
 import { runUserAction } from '@/core/telemetry/sentry';
 import './FavSaveModal.css';
-import { compareUtf16Strings } from '@/shared/utils/sort';
+import { favoriteTableSnapshotsEqual } from './favoriteTableSnapshot';
 
 // ---------------------------------------------------------------------------
 // View list derived from the same registry as shell navigation.
@@ -98,59 +97,57 @@ const mergeSavedOptions = (
   ];
 };
 
-interface FavoritePaneFiltersProps {
+interface FavoriteTableFiltersProps {
   elementIdPrefix: string;
-  pane: FavoriteModalPane;
-  state: FavoritePaneState;
-  showPaneLabel: boolean;
+  table: FavoriteModalTable;
+  state: FavoriteTableSnapshot;
   onChange: (filters: FavoriteFilters) => void;
 }
 
-const FavoritePaneFilters: React.FC<FavoritePaneFiltersProps> = ({
+const FavoriteTableFilters: React.FC<FavoriteTableFiltersProps> = ({
   elementIdPrefix,
-  pane,
+  table,
   state,
-  showPaneLabel,
   onChange,
 }) => {
   const definitions = [
-    ...(pane.filterOptions.showKindDropdown
+    ...(table.filterOptions.showKindDropdown
       ? [
           {
             key: 'kinds',
             label: 'Kinds',
             placeholder: 'All kinds',
-            options: (pane.filterOptions.kinds ?? []).map((value) => ({ value, label: value })),
+            options: (table.filterOptions.kinds ?? []).map((value) => ({ value, label: value })),
             searchable: true,
           },
         ]
       : []),
-    ...(pane.filterOptions.showNamespaceDropdown
+    ...(table.filterOptions.showNamespaceDropdown
       ? [
           {
             key: 'namespaces',
             label: 'Namespaces',
             placeholder: 'All namespaces',
-            options: (pane.filterOptions.namespaces ?? []).map((value) => ({
+            options: (table.filterOptions.namespaces ?? []).map((value) => ({
               value,
               label: value,
             })),
-            searchable: pane.filterOptions.namespaceDropdownSearchable,
+            searchable: table.filterOptions.namespaceDropdownSearchable,
           },
         ]
       : []),
-    ...(pane.filterOptions.showClusterDropdown
+    ...(table.filterOptions.showClusterDropdown
       ? [
           {
             key: 'clusters',
             label: 'Clusters',
             placeholder: 'All clusters',
-            options: pane.filterOptions.clusters ?? [],
-            searchable: pane.filterOptions.clusterDropdownSearchable,
+            options: table.filterOptions.clusters ?? [],
+            searchable: table.filterOptions.clusterDropdownSearchable,
           },
         ]
       : []),
-    ...(pane.filterOptions.queryFacets ?? []).map((facet) => ({
+    ...(table.filterOptions.queryFacets ?? []).map((facet) => ({
       key: `query:${facet.key}`,
       label: facet.label,
       placeholder: facet.placeholder,
@@ -161,7 +158,7 @@ const FavoritePaneFilters: React.FC<FavoritePaneFiltersProps> = ({
 
   return (
     <div className="modal-form-section">
-      <h3>{showPaneLabel ? `${pane.label} Filters` : 'Filters'}</h3>
+      <h3>Filters</h3>
       <div className="modal-form-items">
         {definitions.map((definition) => {
           const queryKey = definition.key.startsWith('query:')
@@ -177,11 +174,9 @@ const FavoritePaneFilters: React.FC<FavoritePaneFiltersProps> = ({
               className="modal-form-field modal-form-field-inline fav-save-inline-row"
               key={definition.key}
             >
-              <label htmlFor={`${elementIdPrefix}-${pane.id}-${definition.key}`}>
-                {definition.label}
-              </label>
+              <label htmlFor={`${elementIdPrefix}-${definition.key}`}>{definition.label}</label>
               <Dropdown
-                id={`${elementIdPrefix}-${pane.id}-${definition.key}`}
+                id={`${elementIdPrefix}-${definition.key}`}
                 options={options}
                 value={filterSelectionToDropdownValues(selection, options, comparison)}
                 renderValue={(value) =>
@@ -215,9 +210,9 @@ const FavoritePaneFilters: React.FC<FavoritePaneFiltersProps> = ({
           );
         })}
         <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
-          <label htmlFor={`${elementIdPrefix}-${pane.id}-filter-text`}>Filter Text</label>
+          <label htmlFor={`${elementIdPrefix}-filter-text`}>Filter Text</label>
           <input
-            id={`${elementIdPrefix}-${pane.id}-filter-text`}
+            id={`${elementIdPrefix}-filter-text`}
             type="text"
             className="modal-input"
             value={state.filters.search}
@@ -291,22 +286,20 @@ const favoriteColumnVisibility = (
 const sortColumnIfShown = (sortColumn: string, shown: ReadonlySet<string>): string =>
   sortColumn && !shown.has(sortColumn) ? '' : sortColumn;
 
-interface FavoritePaneTableStateProps {
+interface FavoriteTableSettingsProps {
   elementIdPrefix: string;
-  pane: FavoriteModalPane;
-  state: FavoritePaneState;
-  showPaneLabel: boolean;
+  table: FavoriteModalTable;
+  state: FavoriteTableSnapshot;
   onChange: (tableState: FavoriteTableState) => void;
 }
 
-const FavoritePaneTableState: React.FC<FavoritePaneTableStateProps> = ({
+const FavoriteTableSettings: React.FC<FavoriteTableSettingsProps> = ({
   elementIdPrefix,
-  pane,
+  table,
   state,
-  showPaneLabel,
   onChange,
 }) => {
-  const columns = pane.columns ?? [];
+  const columns = table.columns ?? [];
   const orderedColumns = reconcileFavoriteColumnOrder(columns, state.tableState.columnOrder);
   const isColumnVisible = (column: FavoriteModalColumn) =>
     !column.hideable || state.tableState.columnVisibility[column.key] !== false;
@@ -386,12 +379,12 @@ const FavoritePaneTableState: React.FC<FavoritePaneTableStateProps> = ({
 
   return (
     <div className="modal-form-section">
-      <h3>{showPaneLabel ? `${pane.label} Columns & Sort` : 'Columns & Sort'}</h3>
+      <h3>Columns & Sort</h3>
       <div className="modal-form-items">
         <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
-          <label htmlFor={`${elementIdPrefix}-${pane.id}-columns`}>Columns</label>
+          <label htmlFor={`${elementIdPrefix}-columns`}>Columns</label>
           <Dropdown
-            id={`${elementIdPrefix}-${pane.id}-columns`}
+            id={`${elementIdPrefix}-columns`}
             name="favorite-table-columns"
             multiple
             showBulkActions
@@ -410,9 +403,9 @@ const FavoritePaneTableState: React.FC<FavoritePaneTableStateProps> = ({
           />
         </div>
         <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
-          <label htmlFor={`${elementIdPrefix}-${pane.id}-sort-column`}>Sort by</label>
+          <label htmlFor={`${elementIdPrefix}-sort-column`}>Sort by</label>
           <Dropdown
-            id={`${elementIdPrefix}-${pane.id}-sort-column`}
+            id={`${elementIdPrefix}-sort-column`}
             options={sortOptions}
             value={state.tableState.sortColumn}
             onChange={(value) => onChange({ ...state.tableState, sortColumn: value as string })}
@@ -420,9 +413,9 @@ const FavoritePaneTableState: React.FC<FavoritePaneTableStateProps> = ({
           />
         </div>
         <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
-          <label htmlFor={`${elementIdPrefix}-${pane.id}-sort-direction`}>Direction</label>
+          <label htmlFor={`${elementIdPrefix}-sort-direction`}>Direction</label>
           <Dropdown
-            id={`${elementIdPrefix}-${pane.id}-sort-direction`}
+            id={`${elementIdPrefix}-sort-direction`}
             options={[
               { value: 'asc', label: 'Ascending' },
               { value: 'desc', label: 'Descending' },
@@ -457,18 +450,8 @@ export interface FavSaveModalProps {
   viewLabel: string;
   /** Current namespace (empty for cluster views). */
   namespace: string;
-  /** Snapshot of current filter state. */
-  filters: FavoriteFilters;
-  /** Snapshot of current table state. */
-  tableState: FavoriteTableState;
-  /** Whether the include-metadata toggle is active. */
-  includeMetadata: boolean;
-  /** Available kind values for the kind filter dropdown. */
-  availableKinds?: string[];
-  /** Available namespace values for the namespace filter dropdown. */
-  availableFilterNamespaces?: string[];
-  /** Named table panes. Multi-table views supply every pane in route order. */
-  panes?: FavoriteModalPane[];
+  /** The view's live table settings and what its filter controls offer. */
+  table: FavoriteModalTable;
   /** Favorite names already owned by other saved Favorites. */
   unavailableNames?: readonly string[];
   /** Called to save (add or update) the favorite. */
@@ -477,9 +460,7 @@ export interface FavSaveModalProps {
   onDelete: (id: string) => void;
 }
 
-export interface FavoriteModalPane extends FavoritePaneState {
-  id: string;
-  label: string;
+export interface FavoriteModalTable extends FavoriteTableSnapshot {
   filterOptions: GridTableFilterOptions;
   columns?: FavoriteModalColumn[];
 }
@@ -509,45 +490,12 @@ interface FavoriteFormState {
   scope: FavoriteRouteScope;
   view: string;
   namespace: string;
-  panes: Record<string, FavoritePaneState>;
+  table: FavoriteTableSnapshot;
 }
-
-const favoritePaneMapsEqual = (
-  left: Record<string, FavoritePaneState>,
-  right: Record<string, FavoritePaneState>
-): boolean => {
-  const keys = Object.keys(left).sort(compareUtf16Strings);
-  if (JSON.stringify(keys) !== JSON.stringify(Object.keys(right).sort(compareUtf16Strings))) {
-    return false;
-  }
-  return keys.every((key) => {
-    const leftPane = left[key];
-    const rightPane = right[key];
-    return (
-      Boolean(leftPane) &&
-      Boolean(rightPane) &&
-      areGridTableFilterStatesEqual(leftPane.filters, rightPane.filters) &&
-      leftPane.tableState.sortColumn === rightPane.tableState.sortColumn &&
-      leftPane.tableState.sortDirection === rightPane.tableState.sortDirection &&
-      JSON.stringify(
-        Object.entries(leftPane.tableState.columnVisibility).sort(([leftKey], [rightKey]) =>
-          compareUtf16Strings(leftKey, rightKey)
-        )
-      ) ===
-        JSON.stringify(
-          Object.entries(rightPane.tableState.columnVisibility).sort(([leftKey], [rightKey]) =>
-            compareUtf16Strings(leftKey, rightKey)
-          )
-        ) &&
-      JSON.stringify(leftPane.tableState.columnOrder ?? []) ===
-        JSON.stringify(rightPane.tableState.columnOrder ?? [])
-    );
-  });
-};
 
 const hasFormChanges = (
   existing: Favorite,
-  { name, clusterSpecific, clusterSelection, scope, view, namespace, panes }: FavoriteFormState
+  { name, clusterSpecific, clusterSelection, scope, view, namespace, table }: FavoriteFormState
 ): boolean => {
   if (name !== existing.name) {
     return true;
@@ -570,10 +518,7 @@ const hasFormChanges = (
   if (scope === 'namespace' && namespace !== existing.namespace) {
     return true;
   }
-  if (!favoritePaneMapsEqual(panes, existing.panes)) {
-    return true;
-  }
-  return false;
+  return !favoriteTableSnapshotsEqual(table, existing);
 };
 
 type FavoriteDraftInput = Pick<
@@ -584,7 +529,7 @@ type FavoriteDraftInput = Pick<
   | 'viewType'
   | 'viewLabel'
   | 'namespace'
-> & { panes: FavoriteModalPane[] };
+> & { table: FavoriteTableSnapshot };
 
 function createFavoriteDraft({
   existingFavorite,
@@ -593,7 +538,7 @@ function createFavoriteDraft({
   viewType,
   viewLabel,
   namespace,
-  panes,
+  table,
 }: FavoriteDraftInput): FavoriteFormState {
   if (existingFavorite) {
     const route = resolveFavoriteRoute(existingFavorite.viewType, existingFavorite.view);
@@ -604,7 +549,7 @@ function createFavoriteDraft({
       scope: route.scope,
       view: route.view,
       namespace: existingFavorite.namespace || ALL_NAMESPACES_SCOPE,
-      panes: existingFavorite.panes,
+      table: { filters: existingFavorite.filters, tableState: existingFavorite.tableState },
     };
   }
   const route = resolveFavoriteRoute(viewType, resolveViewId(viewLabel, viewType));
@@ -615,9 +560,7 @@ function createFavoriteDraft({
     scope: route.scope,
     view: route.view,
     namespace: namespace || ALL_NAMESPACES_SCOPE,
-    panes: Object.fromEntries(
-      panes.map((pane) => [pane.id, { filters: pane.filters, tableState: pane.tableState }])
-    ),
+    table: { filters: table.filters, tableState: table.tableState },
   };
 }
 
@@ -696,12 +639,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   viewType,
   viewLabel,
   namespace,
-  filters,
-  tableState,
-  includeMetadata,
-  availableKinds,
-  availableFilterNamespaces,
-  panes,
+  table,
   unavailableNames = [],
   onSave,
   onDelete,
@@ -721,37 +659,13 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   // Combined "scope:view" value (e.g. "cluster:nodes", "namespace:pods").
   const [selectedView, setSelectedView] = useState('cluster:browse');
   const [selectedNamespace, setSelectedNamespace] = useState(ALL_NAMESPACES_SCOPE);
-  const [paneStates, setPaneStates] = useState<Record<string, FavoritePaneState>>({});
+  const [tableSnapshot, setTableSnapshot] = useState<FavoriteTableSnapshot>(() => ({
+    filters: table.filters,
+    tableState: table.tableState,
+  }));
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
-
-  const modalPanes = useMemo<FavoriteModalPane[]>(
-    () =>
-      panes ?? [
-        {
-          id: 'main',
-          label: viewLabel,
-          filters: { ...filters, includeMetadata },
-          tableState,
-          filterOptions: {
-            kinds: availableKinds,
-            namespaces: availableFilterNamespaces,
-            showKindDropdown: Boolean(availableKinds?.length),
-            showNamespaceDropdown: Boolean(availableFilterNamespaces?.length),
-          },
-        },
-      ],
-    [
-      availableFilterNamespaces,
-      availableKinds,
-      filters,
-      includeMetadata,
-      panes,
-      tableState,
-      viewLabel,
-    ]
-  );
 
   // ----- Initialize form when modal opens -----
   useEffect(() => {
@@ -770,14 +684,14 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       viewType,
       viewLabel,
       namespace,
-      panes: modalPanes,
+      table,
     });
     setName(draft.name);
     setClusterSpecific(draft.clusterSpecific);
     setClusterSelection(draft.clusterSelection);
     setSelectedView(buildViewValue(draft.scope, draft.view));
     setSelectedNamespace(draft.namespace);
-    setPaneStates(draft.panes);
+    setTableSnapshot(draft.table);
     setShowDeleteConfirm(false);
     setSaving(false);
     setSaveError('');
@@ -789,7 +703,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     viewType,
     viewLabel,
     namespace,
-    modalPanes,
+    table,
   ]);
 
   useModalFocusTrap({
@@ -835,19 +749,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     return opts;
   }, [namespaces]);
 
-  const updatePaneFilters = (
-    paneId: string,
-    update: (current: FavoriteFilters) => FavoriteFilters
-  ) => {
-    setPaneStates((current) => {
-      const pane = current[paneId];
-      if (!pane) {
-        return current;
-      }
-      return { ...current, [paneId]: { ...pane, filters: update(pane.filters) } };
-    });
-  };
-
   // ----- Derived state -----
 
   // When Type changes to "Any Cluster", clear cluster selection.
@@ -881,7 +782,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
         scope,
         view: activeView,
         namespace: selectedNamespace,
-        panes: paneStates,
+        table: tableSnapshot,
       })
     : true;
   const resolvedName = name.trim() || defaultName.trim();
@@ -904,7 +805,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       viewType: scope,
       view: activeView,
       namespace: scope === 'namespace' ? selectedNamespace : '',
-      panes: paneStates,
+      filters: tableSnapshot.filters,
+      tableState: tableSnapshot.tableState,
       order: existingFavorite?.order ?? 0,
     };
     setSaving(true);
@@ -1072,36 +974,18 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
             </div>
           </div>
 
-          {modalPanes.flatMap((pane) => {
-            const paneState = paneStates[pane.id];
-            return paneState
-              ? [
-                  <FavoritePaneFilters
-                    key={`${pane.id}-filters`}
-                    elementIdPrefix={elementIdPrefix}
-                    pane={pane}
-                    state={paneState}
-                    showPaneLabel={modalPanes.length > 1}
-                    onChange={(next) => updatePaneFilters(pane.id, () => next)}
-                  />,
-                  <FavoritePaneTableState
-                    key={`${pane.id}-table-state`}
-                    elementIdPrefix={elementIdPrefix}
-                    pane={pane}
-                    state={paneState}
-                    showPaneLabel={modalPanes.length > 1}
-                    onChange={(next) =>
-                      setPaneStates((current) => {
-                        const currentPane = current[pane.id];
-                        return currentPane
-                          ? { ...current, [pane.id]: { ...currentPane, tableState: next } }
-                          : current;
-                      })
-                    }
-                  />,
-                ]
-              : [];
-          })}
+          <FavoriteTableFilters
+            elementIdPrefix={elementIdPrefix}
+            table={table}
+            state={tableSnapshot}
+            onChange={(filters) => setTableSnapshot((current) => ({ ...current, filters }))}
+          />
+          <FavoriteTableSettings
+            elementIdPrefix={elementIdPrefix}
+            table={table}
+            state={tableSnapshot}
+            onChange={(tableState) => setTableSnapshot((current) => ({ ...current, tableState }))}
+          />
         </div>
 
         <FavoriteSaveFooter

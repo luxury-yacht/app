@@ -5,7 +5,10 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { findGridTableRowByKey } from '@shared/components/tables/GridTable.utils';
+import {
+  findGridTableRowByKey,
+  isInNestedRowDetail,
+} from '@shared/components/tables/GridTable.utils';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -89,6 +92,11 @@ export function useGridTableFocusNavigation<T>({
 
   const handleWrapperFocus = useCallback(
     (event: React.FocusEvent<HTMLElement>) => {
+      // Focus inside a row detail belongs to the table nested there.
+      if (wrapperRef.current && isInNestedRowDetail(wrapperRef.current, event.target)) {
+        setIsWrapperFocused(false);
+        return;
+      }
       const shouldSuppress = isShortcutOptOutTarget(event.target);
       setIsWrapperFocused(true);
       setIsShortcutsSuppressed(shouldSuppress);
@@ -119,7 +127,7 @@ export function useGridTableFocusNavigation<T>({
         });
       }
     },
-    [isShortcutOptOutTarget, keyExtractor, tableData]
+    [isShortcutOptOutTarget, keyExtractor, tableData, wrapperRef]
   );
 
   const handleWrapperBlur = useCallback((_event: React.FocusEvent<HTMLElement>) => {
@@ -185,7 +193,10 @@ export function useGridTableFocusNavigation<T>({
     if (!wrapper) {
       return;
     }
-    const handlePointerDown = () => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (isInNestedRowDetail(wrapper, event.target)) {
+        return;
+      }
       pendingPointerFocusRef.current = true;
       lastNavigationMethodRef.current = 'pointer';
     };

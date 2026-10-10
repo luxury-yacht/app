@@ -2,10 +2,10 @@ import { useEffect } from 'react';
 import type { ResourceInventorySourceState } from './useResourceInventoryTable';
 
 /**
- * A split view's row selection narrows the pane below it, so it must stay
- * visible: once the table settles on rows that no longer include the selected
- * one (filtered, paged, or deleted away), the selection clears. Loading and
- * errored states keep it, since their rows are not the settled result.
+ * A row's highlight, or the detail open under it, must stay on a visible row:
+ * once the table settles on rows that no longer include that row (filtered,
+ * paged, or deleted away), it clears. Loading and errored states keep it,
+ * since their rows are not the settled result.
  */
 export function useClearHiddenRowSelection<T>({
   selectedKey,

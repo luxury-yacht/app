@@ -1,3 +1,7 @@
+import {
+  isInNestedRowDetail,
+  queryOwnGridTableElements,
+} from '@shared/components/tables/GridTable.utils';
 import type { RefObject } from 'react';
 import { useLayoutEffect, useRef } from 'react';
 
@@ -5,7 +9,7 @@ export const GRIDTABLE_INTERACTIVE_STOP_SELECTOR =
   'button, a[href], input, textarea, select, summary, [role="button"], [role="menuitem"], [data-gridtable-interactive="true"]';
 
 const updateRowTabStops = (wrapper: HTMLElement, rowKey: string | null, hasRowAction: boolean) => {
-  for (const row of wrapper.querySelectorAll<HTMLElement>('.gridtable-row')) {
+  for (const row of queryOwnGridTableElements(wrapper, '.gridtable-row')) {
     for (const control of row.querySelectorAll<HTMLElement>(GRIDTABLE_INTERACTIVE_STOP_SELECTOR)) {
       const repeatsRowAction =
         hasRowAction && Boolean(control.closest('[data-gridtable-row-action="true"]'));
@@ -53,6 +57,7 @@ export function useGridTableRowControls(
       focusedChild.current =
         active instanceof HTMLElement &&
         wrapper.contains(active) &&
+        !isInNestedRowDetail(wrapper, active) &&
         active.closest('.gridtable-row')
           ? active
           : null;

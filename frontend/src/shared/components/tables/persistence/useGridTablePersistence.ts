@@ -52,6 +52,11 @@ export interface UseGridTablePersistenceParams<T> {
   pageSizeOptions?: readonly number[];
   enabled?: boolean;
   /**
+   * Keep the table's state in memory only: it starts from defaults, is ready at
+   * once, and is never saved (for example a table attached under a parent row).
+   */
+  transient?: boolean;
+  /**
    * Keep the Namespaces filter in one per-cluster entry shared by every table
    * that sets this, instead of in this table's own entry.
    */
@@ -106,7 +111,7 @@ interface SharedNamespaceFilter {
 }
 
 type GridTablePersistenceAction =
-  | { type: 'scopeChanged' }
+  | { type: 'scopeChanged'; transient: boolean }
   | {
       type: 'hydrated';
       persisted: ReturnType<typeof prunePersistedState>;
@@ -154,7 +159,8 @@ const gridTablePersistenceReducer = (
 ): GridTablePersistenceState => {
   switch (action.type) {
     case 'scopeChanged':
-      return createPendingPersistenceState();
+      // In-memory state has nothing to load, so it is ready immediately.
+      return { ...createPendingPersistenceState(), hydrated: action.transient };
     case 'hydrated':
       return hydratePersistenceState(action.persisted, action.sharedNamespaceFilter);
     case 'reset':
@@ -180,6 +186,7 @@ export function useGridTablePersistence<T>({
   filterOptions: requestedFilterOptions,
   pageSizeOptions,
   enabled = true,
+  transient = false,
   shareNamespaceFilter = false,
 }: UseGridTablePersistenceParams<T>): UseGridTablePersistenceResult {
   const filterOptions = useStableSelectedValue(requestedFilterOptions);
@@ -190,8 +197,8 @@ export function useGridTablePersistence<T>({
   );
   const [persistenceState, dispatchPersistence] = useReducer(
     gridTablePersistenceReducer,
-    undefined,
-    createPendingPersistenceState
+    transient,
+    (isTransient: boolean) => ({ ...createPendingPersistenceState(), hydrated: isTransient })
   );
   const {
     sortConfig,
@@ -261,16 +268,16 @@ export function useGridTablePersistence<T>({
       viewId,
       namespace: persistenceNamespace,
     };
-    const key = enabled ? buildGridTableStorageKey(keyParts) : null;
+    const key = enabled && !transient ? buildGridTableStorageKey(keyParts) : null;
     setStorageKey(key);
-  }, [clusterHash, viewId, namespace, isNamespaceScoped, enabled, persistenceMode]);
+  }, [clusterHash, viewId, namespace, isNamespaceScoped, enabled, transient, persistenceMode]);
 
   const sharedNamespaceKey = useMemo(
     () =>
-      enabled && shareNamespaceFilter
+      enabled && !transient && shareNamespaceFilter
         ? buildGridTableStorageKey({ clusterHash, viewId: SHARED_NAMESPACE_FILTER_VIEW_ID })
         : null,
-    [clusterHash, enabled, shareNamespaceFilter]
+    [clusterHash, enabled, transient, shareNamespaceFilter]
   );
 
   useEffect(() => {
@@ -278,8 +285,8 @@ export function useGridTablePersistence<T>({
     void sharedNamespaceKey;
     // Force re-hydration when the storage key changes (e.g., namespace switch).
     lastSavePayloadRef.current = '';
-    dispatchPersistence({ type: 'scopeChanged' });
-  }, [storageKey, sharedNamespaceKey]);
+    dispatchPersistence({ type: 'scopeChanged', transient });
+  }, [storageKey, sharedNamespaceKey, transient]);
 
   useEffect(() => {
     let active = true;
