@@ -312,7 +312,9 @@ describe('useFavToggle', () => {
     mockUpdateFavorite.mockClear();
     mockDeleteFavorite.mockClear();
     favSaveModalPropsRef.current = null;
-    Object.values(tableSetters).forEach((setter) => setter.mockClear());
+    for (const setter of Object.values(tableSetters)) {
+      setter.mockClear();
+    }
 
     container = document.createElement('div');
     document.body.appendChild(container);

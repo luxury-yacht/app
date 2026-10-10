@@ -5,6 +5,7 @@
  * open, the detail's measured height for the virtualizer, and the detail row.
  */
 
+import '@shared/components/tables/GridTableRowDetail.css';
 import { AriaGridCell, AriaGridRow } from '@shared/components/tables/AriaGridPrimitives';
 import type { GridTableRowDetail } from '@shared/components/tables/GridTable.types';
 import { getGridTableRowDetailId } from '@shared/components/tables/GridTable.utils';

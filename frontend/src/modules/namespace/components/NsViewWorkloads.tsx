@@ -330,7 +330,9 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
   );
   const keyOf = useCallback(
     (ref: ClusterObjectReference | null) =>
-      ref ? buildRequiredCanonicalObjectRowKey(ref, { fallbackClusterId: selectedClusterId }) : null,
+      ref
+        ? buildRequiredCanonicalObjectRowKey(ref, { fallbackClusterId: selectedClusterId })
+        : null,
     [selectedClusterId]
   );
 
@@ -339,7 +341,7 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
     [toReference]
   );
   const handleWorkloadSelectionClear = useCallback(() => setSelectedWorkload(null), []);
-  // The Ready count and Space open or close a workload's pods and highlight it.
+  // The Pods count and Space open or close a workload's pods and highlight it.
   const handleWorkloadPodsToggle = useCallback(
     (workload: WorkloadData) => {
       const ref = toReference(workload);

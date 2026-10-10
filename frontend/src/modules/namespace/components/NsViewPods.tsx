@@ -9,6 +9,7 @@ import './NsViewPods.css';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
   POD_SELECTION_QUERY_FACET_KEYS,
+  podParentColumnKey,
   podSelectionQueryFacets,
 } from '@modules/namespace/components/podSelectionFacets';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
@@ -309,16 +310,20 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
         memory: { width: 200, minWidth: 200 },
         age: { autoWidth: true },
       };
+      // An attached table drops the column that would only repeat its parent row.
+      const parentColumnKey = attachedTo ? podParentColumnKey(attachedTo) : null;
+      const shownColumns = baseColumns.filter((column) => column.key !== parentColumnKey);
       const withNamespace = showNamespaceColumn
-        ? cf.withNamespaceColumn(baseColumns, {
+        ? cf.withNamespaceColumn(shownColumns, {
             afterColumnKey: 'name',
             accessor: (pod) => pod.ref.namespace || '—',
             sortValue: (pod) => (pod.ref.namespace || '').toLowerCase(),
             ...namespaceColumnLink,
           })
-        : baseColumns;
+        : shownColumns;
       return cf.withColumnSizing(withNamespace, sizing);
     }, [
+      attachedTo,
       handleNodeOpen,
       handleOwnerOpen,
       getOwnerReference,

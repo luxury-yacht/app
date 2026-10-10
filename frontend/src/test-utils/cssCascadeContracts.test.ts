@@ -194,25 +194,29 @@ describe('strict CSS cascade contracts', () => {
     expect(filterContainer).toContain('margin-right: var(--dock-right-offset, 0px)');
   });
 
-  it('applies the dock offset once to a table nested in a row detail', () => {
-    const grid = readProjectFile('styles/components/gridtables.css').replace(
-      /var\(--dock-right-offset, 0px\)/g,
-      '320px'
-    );
-    const style = installStyles(grid);
-    style.dataset.cssContract = 'row-detail-dock-offset';
-    document.body.innerHTML = `
+  it.each([false, true])(
+    'applies the dock offset once to a table nested in a row detail (global styles last=%s)',
+    (globalLast) => {
+      const grid = readProjectFile('styles/components/gridtables.css').replace(
+        /var\(--dock-right-offset, 0px\)/g,
+        '320px'
+      );
+      const rowDetail = readProjectFile('src/shared/components/tables/GridTableRowDetail.css');
+      const style = installStyles(...(globalLast ? [rowDetail, grid] : [grid, rowDetail]));
+      style.dataset.cssContract = 'row-detail-dock-offset';
+      document.body.innerHTML = `
       <div class="content-body">
         <div class="gridtable-filter-container" id="ordinary"></div>
         <div class="gridtable-row-detail"><div class="gridtable-filter-container" id="nested"></div></div>
       </div>`;
-    expect(
-      window.getComputedStyle(document.querySelector('#ordinary') as HTMLElement).marginRight
-    ).toBe('320px');
-    expect(
-      window.getComputedStyle(document.querySelector('#nested') as HTMLElement).marginRight
-    ).toBe('0px');
-  });
+      expect(
+        window.getComputedStyle(document.querySelector('#ordinary') as HTMLElement).marginRight
+      ).toBe('320px');
+      expect(
+        window.getComputedStyle(document.querySelector('#nested') as HTMLElement).marginRight
+      ).toBe('0px');
+    }
+  );
 
   it('keeps frameless window drag regions out of every header control surface', () => {
     const appHeaderCSS = readProjectFile('src/ui/layout/AppHeader.css');

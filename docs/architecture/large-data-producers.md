@@ -46,8 +46,9 @@ state lives in memory only and is never in favorites:
   through ReplicaSets, CronJobs through Jobs, direct owners match directly, and
   an ownerless Pod uses its own core/v1 identity. Projected Pod rows keep both
   direct-controller and resolved-ancestor identities; no generated-name parsing.
-- The attached table shows no Namespaces, Owner, or Node control; changing
-  cluster or pinned namespace, or the open row leaving the table, closes it.
+- The attached table shows no Namespaces, Owner, or Node control, and no Owner
+  column under a workload or Node column under a node; changing cluster or
+  pinned namespace, or the open row leaving the table, closes it.
 - A workload's pods use the namespace scope; a node's pods use `namespace:all`,
   which streams while the Nodes view is active.
 

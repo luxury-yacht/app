@@ -114,7 +114,10 @@ describe('GridTable row detail', () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
 
     // A parent refresh keeps the open detail where it is without scrolling again.
-    await renderTable(detailFor('cluster-a|b'), parentRows.map((row) => ({ ...row })));
+    await renderTable(
+      detailFor('cluster-a|b'),
+      parentRows.map((row) => ({ ...row }))
+    );
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
 
     await renderTable(detailFor(null));

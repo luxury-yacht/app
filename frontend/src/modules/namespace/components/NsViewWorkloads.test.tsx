@@ -85,31 +85,31 @@ const attachedPods = (workload: WorkloadData) =>
     'expected the attached Pods table'
   ).props;
 
-// Renders the Ready cell on its own to read or click its pods toggle.
-const withReadyCount = <R,>(workload: WorkloadData, use: (button: HTMLButtonElement) => R): R => {
+// Renders the Pods cell on its own to read or click its pods toggle.
+const withPodsCount = <R,>(workload: WorkloadData, use: (button: HTMLButtonElement) => R): R => {
   const column = requireValue(
     gridTablePropsRef.current.columns.find((candidate) => candidate.key === 'ready'),
-    'expected the Ready column'
+    'expected the Pods column'
   );
   const host = document.createElement('div');
   document.body.appendChild(host);
   const cellRoot = ReactDOM.createRoot(host);
   act(() => cellRoot.render(<>{column.render(workload)}</>));
   try {
-    return use(requireValue(host.querySelector('button'), 'expected the Ready count toggle'));
+    return use(requireValue(host.querySelector('button'), 'expected the Pods count toggle'));
   } finally {
     act(() => cellRoot.unmount());
     host.remove();
   }
 };
-const readyCount = (workload: WorkloadData) =>
-  withReadyCount(workload, (button) => ({
+const podsCount = (workload: WorkloadData) =>
+  withPodsCount(workload, (button) => ({
     expanded: button.getAttribute('aria-expanded'),
     controls: button.getAttribute('aria-controls'),
     text: button.textContent,
   }));
-const clickReadyCount = (workload: WorkloadData) =>
-  withReadyCount(workload, (button) => act(() => button.click()));
+const clickPodsCount = (workload: WorkloadData) =>
+  withPodsCount(workload, (button) => act(() => button.click()));
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -352,7 +352,7 @@ describe('NsViewWorkloads', () => {
     );
   });
 
-  it("opens a workload's pods under its row from the Ready count without opening the object", async () => {
+  it("opens a workload's pods under its row from the Pods count without opening the object", async () => {
     const workload = makeWorkload('Deployment', 'api', 'team-a', 'path:context', { ready: '2/3' });
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
@@ -376,14 +376,14 @@ describe('NsViewWorkloads', () => {
     });
     const rowKey = gridTablePropsRef.current.keyExtractor(workload, 0);
     expect(rowDetail().openRowKey).toBeNull();
-    expect(readyCount(workload)).toMatchObject({ expanded: 'false', text: '2/3' });
+    expect(podsCount(workload)).toMatchObject({ expanded: 'false', text: '2/3' });
 
-    clickReadyCount(workload);
+    clickPodsCount(workload);
 
     expect(openWithObjectMock).not.toHaveBeenCalled();
     expect(rowDetail().openRowKey).toBe(rowKey);
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
-    expect(readyCount(workload)).toMatchObject({
+    expect(podsCount(workload)).toMatchObject({
       expanded: 'true',
       controls: getGridTableRowDetailId(rowKey),
     });
@@ -402,7 +402,7 @@ describe('NsViewWorkloads', () => {
       },
     });
 
-    clickReadyCount(workload);
+    clickPodsCount(workload);
     expect(rowDetail().openRowKey).toBeNull();
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
   });

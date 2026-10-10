@@ -132,7 +132,7 @@ export const getStableRowId = (rowKey: string): string => {
 export const getGridTableRowDetailId = (rowKey: string): string =>
   `${getStableRowId(rowKey)}-detail`;
 
-export const GRIDTABLE_ROW_DETAIL_SELECTOR = '[data-gridtable-row-detail]';
+const GRIDTABLE_ROW_DETAIL_SELECTOR = '[data-gridtable-row-detail]';
 
 /**
  * Whether `element` sits in a row detail inside `root`, so it belongs to a

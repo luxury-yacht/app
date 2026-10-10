@@ -140,13 +140,13 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   useFavToggle: (state: Record<string, unknown>) => {
     favToggleStateRef.current = state;
     return {
-    item: {
-      type: 'toggle',
-      id: 'favorite',
-      icon: null,
-      active: false,
-      onClick: () => undefined,
-      title: 'Save as favorite',
+      item: {
+        type: 'toggle',
+        id: 'favorite',
+        icon: null,
+        active: false,
+        onClick: () => undefined,
+        title: 'Save as favorite',
       },
       modal: null,
     };
@@ -708,6 +708,32 @@ describe('NsViewPods', () => {
 
     expect(lastQueryParams().getAll('facet.nodes')).toEqual(['node-a']);
     expect(lastQueryParams().getAll('facet.owners')).toEqual([]);
+  });
+
+  it('drops the column that only repeats the parent row', async () => {
+    const columnKeys = () => gridTablePropsRef.current.columns.map((column) => column.key);
+
+    await renderPods({ namespace: ALL_NAMESPACES_SCOPE, attachedTo: selectedDeployment });
+    // Every pod under a workload has that Owner.
+    expect(columnKeys()).not.toContain('owner');
+    expect(columnKeys()).toContain('node');
+
+    await renderPods({
+      namespace: ALL_NAMESPACES_SCOPE,
+      attachedTo: {
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'Node',
+        name: 'node-a',
+      },
+    });
+    // Every pod under a node runs on that Node.
+    expect(columnKeys()).not.toContain('node');
+    expect(columnKeys()).toContain('owner');
+
+    await renderPods({ namespace: ALL_NAMESPACES_SCOPE });
+    expect(columnKeys()).toEqual(expect.arrayContaining(['owner', 'node']));
   });
 
   it('ignores a selection from another cluster', async () => {

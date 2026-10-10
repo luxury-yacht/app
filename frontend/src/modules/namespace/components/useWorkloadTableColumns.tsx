@@ -25,7 +25,7 @@ interface UseWorkloadTableColumnsParams {
   onAltClick?: (row: WorkloadData) => void;
   showNamespaceColumn: boolean;
   useShortResourceNames: boolean;
-  /** Makes the Ready count open and close the workload's pods under its row. */
+  /** Makes the Pods count open and close the workload's pods under its row. */
   podsToggle?: RowDetailToggleOptions<WorkloadData>;
   metrics?: {
     stale?: boolean;
@@ -84,7 +84,7 @@ const useWorkloadTableColumns = ({
 
     const plainReadyColumn = cf.createTextColumn<WorkloadData>(
       'ready',
-      'Ready',
+      'Pods',
       (row) => row.ready ?? '—',
       {
         alignHeader: 'center',

@@ -5,6 +5,7 @@
  * detail (GridTableProps.rowDetail), shown as "2/3 ›".
  */
 
+import '@shared/components/tables/GridTableRowDetail.css';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { getGridTableRowDetailId } from '@shared/components/tables/GridTable.utils';
 

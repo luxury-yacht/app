@@ -474,7 +474,9 @@ const ClusterViewNodes: React.FC<NodesViewProps> = ({ error }) => {
   );
   const keyOf = useCallback(
     (ref: ClusterObjectReference | null) =>
-      ref ? buildRequiredCanonicalObjectRowKey(ref, { fallbackClusterId: selectedClusterId }) : null,
+      ref
+        ? buildRequiredCanonicalObjectRowKey(ref, { fallbackClusterId: selectedClusterId })
+        : null,
     [selectedClusterId]
   );
 

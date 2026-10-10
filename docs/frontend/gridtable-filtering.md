@@ -111,9 +111,10 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
   panel's Pods tab show Owner then Node, after Namespace in all-namespaces
   views. The Pods table attached under a Workloads or Nodes row shows no
   Namespaces, Owner, or Node control: its parent row narrows it as a selection
-  facet (`owners` for a workload or standalone Pod, `nodes` for a node). Its
-  table state is in memory only (`transientTableState`): it starts fresh each
-  time it opens.
+  facet (`owners` for a workload or standalone Pod, `nodes` for a node), and it
+  omits the column that would only repeat that row (Owner under a workload,
+  Node under a node). Its table state is in memory only (`transientTableState`):
+  it starts fresh each time it opens.
 
 ### Favorite snapshots
 

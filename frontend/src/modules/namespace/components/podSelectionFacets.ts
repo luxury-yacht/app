@@ -4,7 +4,7 @@ import type { ClusterObjectReference } from '@shared/utils/objectIdentity';
 const POD_OWNER_QUERY_FACET_KEY = 'owners';
 const POD_NODE_QUERY_FACET_KEY = 'nodes';
 
-/** Facets a pods pane reserves for its split's row selection; the user never holds them. */
+/** Facets an attached pods table reserves for its parent row; the user never holds them. */
 export const POD_SELECTION_QUERY_FACET_KEYS = [
   POD_OWNER_QUERY_FACET_KEY,
   POD_NODE_QUERY_FACET_KEY,
@@ -30,9 +30,17 @@ const isNodeReference = (object: ClusterObjectReference): boolean =>
   object.kind === 'Node' && object.group === '';
 
 /**
- * The query facets that narrow a pods pane to the row selected above it: a
+ * The pods column that only repeats the parent row a pods table is attached
+ * to: every pod under a node runs on it, every pod under a workload has it as
+ * owner.
+ */
+export const podParentColumnKey = (parent: ClusterObjectReference): 'node' | 'owner' =>
+  isNodeReference(parent) ? 'node' : 'owner';
+
+/**
+ * The query facets that narrow an attached pods table to its parent row: a
  * node's pods by node name, otherwise the pods a workload (or a standalone
- * Pod) owns. A selection from another cluster narrows nothing.
+ * Pod) owns. A parent from another cluster narrows nothing.
  */
 export const podSelectionQueryFacets = (
   selected: ClusterObjectReference | null | undefined,

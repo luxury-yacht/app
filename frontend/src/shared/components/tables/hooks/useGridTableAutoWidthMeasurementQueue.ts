@@ -5,8 +5,8 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { queryOwnGridTableElements } from '@shared/components/tables/GridTable.utils';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { queryOwnGridTableElements } from '@shared/components/tables/GridTable.utils';
 import {
   clampAutoSizeColumnWidth,
   getColumnMinWidth,
