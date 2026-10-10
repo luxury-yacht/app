@@ -162,7 +162,9 @@ const useFavoriteViewContext = (enabled: boolean) => {
   }
   const viewType = viewState?.viewType ?? 'cluster';
   return {
-    favoritesContext: favoritesContext ?? DISABLED_FAVORITES_CONTEXT,
+    // A table without the favorite control never restores or matches favorites;
+    // a pending favorite belongs to its view's own table.
+    favoritesContext: (enabled ? favoritesContext : null) ?? DISABLED_FAVORITES_CONTEXT,
     viewType,
     activeViewTab: getActiveViewTab(
       viewType,

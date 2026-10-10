@@ -222,6 +222,8 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
   const isTailFollowingRef = useRef(true);
   const scrollPositionRef = useRef<LogScrollPosition | undefined>(undefined);
   const latestSequenceRef = useRef(0);
+  // Ends with each new-lines subscription, so reads it started are dropped.
+  const deltaGenerationRef = useRef(0);
 
   // Keep backend menu/panel visibility aligned with this panel's open state.
   useEffect(() => {
@@ -261,9 +263,11 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
       return;
     }
 
+    const generation = deltaGenerationRef.current;
     try {
       const deltaEntries = await readAppLogsSince(latestSequenceRef.current);
-      if (deltaEntries.length === 0) {
+      // A read that finishes after new lines stopped (Stop, or the panel closed) is dropped.
+      if (generation !== deltaGenerationRef.current || deltaEntries.length === 0) {
         return;
       }
 
@@ -459,7 +463,11 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
     if (!isOpen || !autoRefresh) {
       return;
     }
-    return subscribeAppLogsAdded(loadLogDeltas);
+    const unsubscribe = subscribeAppLogsAdded(loadLogDeltas);
+    return () => {
+      unsubscribe();
+      deltaGenerationRef.current += 1;
+    };
   }, [autoRefresh, isOpen, loadLogDeltas]);
 
   // ESC key to close panel

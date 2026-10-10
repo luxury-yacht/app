@@ -57,6 +57,18 @@ import {
 const namespaceScopeKey = (namespace: string): string =>
   namespace.startsWith('namespace:') ? namespace : `namespace:${namespace}`;
 
+// The revisit replay cache's identity. A row selection narrows the rows, so it
+// is part of it: another parent's rows must never replay while this one loads.
+// The cluster stays its own '|' segment (from liveScope) for cluster eviction.
+const replayCacheKey = (
+  viewId: string,
+  liveScope: string,
+  selectionQueryFacets: GridTableFilterState['queryFacets']
+): string =>
+  selectionQueryFacets
+    ? `${viewId}|${liveScope}|${JSON.stringify(selectionQueryFacets)}`
+    : `${viewId}|${liveScope}`;
+
 // A view's persisted page size wins when it is a real option; otherwise the
 // fallback applies (the app-wide Default Page Size preference).
 export const typedQueryPageLimitOrDefault = (
@@ -656,7 +668,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   });
   return useQueryBackedGridResult<TPayload, TRow>({
     viewId: tableParams.viewId,
-    cacheKey: `${tableParams.viewId}|${liveScope}`,
+    cacheKey: replayCacheKey(tableParams.viewId, liveScope, selectionQueryFacets),
     table,
     query: lifecycle.query,
     persistence,
@@ -764,7 +776,7 @@ export function useQueryBackedClusterResourceGridTable<
   });
   return useQueryBackedGridResult<TPayload, TRow>({
     viewId: tableParams.viewId,
-    cacheKey: `${tableParams.viewId}|${liveScope}`,
+    cacheKey: replayCacheKey(tableParams.viewId, liveScope, selectionQueryFacets),
     table,
     query: lifecycle.query,
     persistence,

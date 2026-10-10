@@ -840,6 +840,37 @@ describe('AppLogsPanel', () => {
     cleanup();
   });
 
+  it('drops a read already in flight when auto-refresh stops', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([logLine(1, 'Ready')]);
+    let finishRead: (lines: ReturnType<typeof logLine>[]) => void = () => undefined;
+    getAppLogsSinceMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRead = resolve;
+        })
+    );
+
+    const { container, cleanup } = await renderPanel();
+    await flushInitialLoad();
+    await emitAppLogsAdded(2);
+    expect(getAppLogsSinceMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      autoRefreshButton(container)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      finishRead([logLine(2, 'Late line')]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain('Late line');
+
+    cleanup();
+  });
+
   // Troubleshooting the app can need more history than a Logs tab keeps, so the
   // panel keeps a fixed 10,000 lines whatever the Logs tabs' Buffer size is.
   it('keeps the newest 10,000 lines regardless of the Logs tabs buffer size', async () => {

@@ -238,8 +238,9 @@ const HookWrapper: React.FC<{
 const tableSetters = { filters: vi.fn(), sort: vi.fn(), visibility: vi.fn(), order: vi.fn() };
 
 // One hydrated table whose settings a pending favorite restores.
-const RestorableTable: React.FC = () => {
+const RestorableTable: React.FC<{ enabled?: boolean }> = ({ enabled }) => {
   const { modal } = useFavToggle({
+    enabled,
     filters: {
       search: 'current',
       kinds: { mode: 'all' },
@@ -580,6 +581,21 @@ describe('useFavToggle', () => {
     expect(tableSetters.visibility).toHaveBeenCalledWith({ cpu: false });
     expect(tableSetters.order).toHaveBeenCalledWith(['name', 'node', 'cpu']);
     expect(mockSetPendingFavorite).toHaveBeenCalledWith(null);
+  });
+
+  it('leaves a pending favorite to the table that offers favorites', async () => {
+    // An attached table offers no favorites but sits on the same view as the
+    // table the favorite belongs to.
+    mockPendingFavorite = makeFavorite();
+
+    await act(async () => {
+      root.render(<RestorableTable enabled={false} />);
+      await Promise.resolve();
+    });
+
+    expect(tableSetters.filters).not.toHaveBeenCalled();
+    expect(tableSetters.sort).not.toHaveBeenCalled();
+    expect(mockSetPendingFavorite).not.toHaveBeenCalled();
   });
 
   it('restores an explicitly unsorted table', async () => {

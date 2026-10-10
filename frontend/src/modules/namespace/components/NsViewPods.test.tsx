@@ -6,6 +6,7 @@
  */
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { resetResourceInventoryRowCache } from '@modules/resource-grid/useResourceInventoryTable';
 import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import type { GridTableFilterState, GridTableProps } from '@shared/components/tables/GridTable';
 import { getTextContent } from '@shared/components/tables/GridTable.utils';
@@ -692,6 +693,37 @@ describe('NsViewPods', () => {
     ]);
     expect(lastQueryParams().get('namespaces')).toBeNull();
     expect(setFiltersMock).not.toHaveBeenCalled();
+  });
+
+  it("never shows another parent's pods while a newly attached table loads", async () => {
+    resetResourceInventoryRowCache();
+    const apiPod = createPod({ ref: { name: 'api-1', namespace: 'team-a' } });
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [apiPod],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Pod'],
+          facetsExact: true,
+        },
+      },
+    });
+    await renderPods({ namespace: ALL_NAMESPACES_SCOPE, attachedTo: selectedDeployment });
+    expect(gridTablePropsRef.current.data).toEqual([apiPod]);
+
+    // Close api's pods, then open web's: its first query is still in flight.
+    act(() => root.render(null));
+    requestRefreshDomainStateMock.mockReturnValue(new Promise(() => undefined));
+    await renderPods({
+      namespace: ALL_NAMESPACES_SCOPE,
+      attachedTo: { ...selectedDeployment, name: 'web' },
+    });
+
+    expect(gridTablePropsRef.current.data).toEqual([]);
   });
 
   it('shows only the selected node pods', async () => {
