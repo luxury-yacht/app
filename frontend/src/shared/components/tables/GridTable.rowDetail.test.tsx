@@ -13,8 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 import { requireValue } from '@/test-utils/requireValue';
 import GridTable from './GridTable';
-import type { GridTableRowDetail } from './GridTable.types';
+import type { GridColumnDefinition, GridTableRowDetail } from './GridTable.types';
 import { getGridTableRowDetailId } from './GridTable.utils';
+import { withRowDetailToggle } from './rowDetailToggle';
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
@@ -28,7 +29,9 @@ interface Row {
 
 const parentRows: Row[] = ['a', 'b', 'c'].map((id) => ({ id: `cluster-a|${id}`, name: id }));
 const nestedRows: Row[] = ['x', 'y'].map((id) => ({ id: `cluster-a|pod-${id}`, name: id }));
-const columns = [{ key: 'name', header: 'Name', render: (row: Row) => row.name }];
+const columns: GridColumnDefinition<Row>[] = [
+  { key: 'name', header: 'Name', render: (row: Row) => row.name },
+];
 const keyOf = (row: Row) => row.id;
 
 const NestedTable = ({ onClose }: { onClose?: () => void }) => (
@@ -83,7 +86,9 @@ describe('GridTable row detail', () => {
   const renderTable = (
     detail: GridTableRowDetail<Row>,
     data: Row[] = parentRows,
-    virtualization = { enabled: false }
+    virtualization = { enabled: false },
+    parentColumns = columns,
+    onRowPointerClick?: (row: Row) => void
   ) =>
     act(async () => {
       root.render(
@@ -93,11 +98,12 @@ describe('GridTable row detail', () => {
               <main data-app-region="content">
                 <GridTable
                   data={data}
-                  columns={columns}
+                  columns={parentColumns}
                   keyExtractor={keyOf}
                   tableClassName="parent"
                   rowDetail={detail}
                   virtualization={virtualization}
+                  onRowPointerClick={onRowPointerClick}
                 />
               </main>
             </ZoomProvider>
@@ -143,6 +149,46 @@ describe('GridTable row detail', () => {
 
     await renderTable(detailFor(null));
     expect(container.querySelector('[data-gridtable-row-detail]')).toBeNull();
+  });
+
+  it('treats a click on the count chevron as the toggle, not as a row click', async () => {
+    const onToggle = vi.fn();
+    const onRowPointerClick = vi.fn();
+    const toggleColumns = [
+      withRowDetailToggle<Row>(
+        { key: 'pods', header: 'Pods', render: () => '2/3' },
+        {
+          getRowKey: keyOf,
+          isOpen: () => false,
+          onToggle,
+          getLabel: (row) => `Pods for ${row.name}`,
+          getText: () => '2/3',
+        }
+      ),
+    ];
+    await renderTable(
+      detailFor(null),
+      parentRows,
+      { enabled: false },
+      toggleColumns,
+      onRowPointerClick
+    );
+    const chevron = requireValue(
+      parentRow('b').querySelector('.gridtable-row-detail-toggle__chevron path'),
+      'count chevron'
+    );
+
+    await act(async () => {
+      chevron.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })
+      );
+    });
+
+    // The same as clicking the count text: the view toggles, and the table does
+    // not also run its own row click.
+    expect(onToggle).toHaveBeenCalledWith(parentRows[1]);
+    expect(onRowPointerClick).not.toHaveBeenCalled();
+    expect(parentRow('b').classList.contains('gridtable-row--focused')).toBe(false);
   });
 
   it('keeps arrow keys inside the nested table and returns to the open row on Escape', async () => {

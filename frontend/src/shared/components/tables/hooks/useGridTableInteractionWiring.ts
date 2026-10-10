@@ -103,8 +103,9 @@ export function useGridTableInteractionWiring<T>({
     if (event.defaultPrevented || event.isDefaultPrevented?.() || event.isPropagationStopped?.()) {
       return true;
     }
+    // Element, not HTMLElement: a click on an icon (SVG) inside a control counts as the control's.
     const target = event.target;
-    if (!(target instanceof HTMLElement)) {
+    if (!(target instanceof Element)) {
       return false;
     }
     const isOptInTarget = Boolean(target.closest(GRIDTABLE_ROWCLICK_ALLOW_SELECTOR));
