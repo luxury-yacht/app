@@ -9,7 +9,7 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
 - Filter-bar `Tab`/`Shift+Tab` follows rendered control order, provider facets
   included; adding a facet must not create a focus trap.
 - One icon bar follows the search box, in order: Include metadata, the view's
-  `viewActions` (such as Clear selected workload or node, or Manage ignored findings), a
+  `viewActions` (such as Manage ignored findings), a
   separator, Favorite, a separator, Download. Favorite has no leading separator
   when it is first. Include metadata shows when rows carry labels and
   annotations (`supportsCustomMetadataColumns`), except catalog-backed Browse

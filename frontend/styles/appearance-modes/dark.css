@@ -101,7 +101,7 @@
   --status-available-text: var(--color-text);
   --status-failed-bg: rgba(239, 68, 68, 0.2);
   --status-failed-border: rgba(239, 68, 68, 0.25);
-  --status-failed-text: var(--badge-red-text);
+  --status-failed-text: var(--color-error-text);
   --status-released-bg: rgba(249, 115, 22, 0.25);
   --status-released-text: var(--badge-orange-text);
   --status-warning-bg: rgba(245, 158, 11, 0.25);

@@ -355,6 +355,11 @@ describe('ClusterViewNodes', () => {
 
   it('selects a node row to show its pods without opening the node', async () => {
     await renderNodes([baseNode]);
+    const iconBarIds = () =>
+      (gridTablePropsRef.current.filters?.options?.preActions ?? []).map((action) =>
+        action.type === 'separator' ? 'separator' : action.id
+      );
+    const iconBarBeforeSelection = iconBarIds();
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(baseNode));
 
@@ -378,25 +383,13 @@ describe('ClusterViewNodes', () => {
       expect.objectContaining({ kind: 'Node', name: 'node-1' })
     );
 
-    const clearAction = gridTablePropsRef.current.filters?.options?.preActions?.find(
-      (action) => action.type !== 'separator' && action.title === 'Clear selected node'
-    );
-    act(() => {
-      if (clearAction?.type !== 'action') {
-        throw new Error('Expected the Clear selected node action');
-      }
-      clearAction.onClick();
-    });
-    expect(
-      (podsPanePropsRef.current?.pane as { selectedObject?: unknown } | undefined)?.selectedObject
-    ).toBeNull();
-    expect(gridTablePropsRef.current.isRowSelected?.(baseNode, 0)).toBe(false);
-
-    act(() => gridTablePropsRef.current.onRowPointerClick?.(baseNode));
+    // Selecting a row adds no control to the main icon bar; an unused-body click clears it.
+    expect(iconBarIds()).toEqual(iconBarBeforeSelection);
     act(() => requireValue(gridTablePropsRef.current.onRowSelectionClear, 'clear')());
     expect(
       (podsPanePropsRef.current?.pane as { selectedObject?: unknown } | undefined)?.selectedObject
     ).toBeNull();
+    expect(gridTablePropsRef.current.isRowSelected?.(baseNode, 0)).toBe(false);
   });
 
   it('drops a node selection the settled table does not show', async () => {

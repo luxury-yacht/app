@@ -24,8 +24,6 @@ import {
 import { useClearHiddenRowSelection } from '@modules/resource-grid/useClearHiddenRowSelection';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import StackedSplitPane from '@shared/components/StackedSplitPane';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
@@ -125,23 +123,6 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
     const showNamespaceFilter = isAllNamespaces;
     const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Workloads' : 'Namespace Workloads';
-    const viewActions = useMemo<IconBarItem[]>(
-      () => [
-        ...(selectedWorkloadKey && onWorkloadSelectionClear
-          ? [
-              {
-                type: 'action' as const,
-                id: 'clear-workload-selection',
-                icon: <CloseIcon width={18} height={18} />,
-                onClick: onWorkloadSelectionClear,
-                title: 'Clear selected workload',
-              },
-            ]
-          : []),
-      ],
-      [onWorkloadSelectionClear, selectedWorkloadKey]
-    );
-
     const getRowSearchValues = useCallback((row: WorkloadData) => {
       const tokens: string[] = [];
       appendWorkloadTokens(tokens, row);
@@ -176,7 +157,6 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       showNamespaceFilters: showNamespaceFilter,
       diagnosticsLabel,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-      viewActions,
       favoritePane: { id: 'workloads', label: 'Workloads' },
     });
 

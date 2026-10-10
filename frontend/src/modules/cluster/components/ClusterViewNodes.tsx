@@ -18,8 +18,7 @@ import {
 import { useClearHiddenRowSelection } from '@modules/resource-grid/useClearHiddenRowSelection';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CloseIcon, DrainIcon } from '@shared/components/icons/SharedIcons';
+import { DrainIcon } from '@shared/components/icons/SharedIcons';
 import StackedSplitPane from '@shared/components/StackedSplitPane';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
@@ -283,22 +282,6 @@ export const NodesTable: React.FC<NodesTableProps> = React.memo(
       [selectedClusterId]
     );
 
-    const viewActions = useMemo<IconBarItem[]>(
-      () =>
-        selectedNodeKey && onNodeSelectionClear
-          ? [
-              {
-                type: 'action',
-                id: 'clear-node-selection',
-                icon: <CloseIcon width={18} height={18} />,
-                onClick: onNodeSelectionClear,
-                title: 'Clear selected node',
-              },
-            ]
-          : [],
-      [onNodeSelectionClear, selectedNodeKey]
-    );
-
     const { gridTableProps, favModal, source, queryPayload } =
       useQueryBackedClusterResourceGridTable<ClusterNodeSnapshotPayload, ClusterNodeRow>({
         queryTableMode: 'Query Backed Dynamic',
@@ -315,7 +298,6 @@ export const NodesTable: React.FC<NodesTableProps> = React.memo(
         showKindDropdown: false,
         diagnosticsLabel: 'Cluster Nodes',
         filterOptions: { isNamespaceScoped: false },
-        viewActions,
         favoritePane: { id: 'nodes', label: 'Nodes' },
       });
 

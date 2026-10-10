@@ -11,10 +11,12 @@
 - Pods pane (Workloads and Nodes): the selected row is now the pane's only filter.
   - The Namespaces, Owner, and Node dropdowns are gone, and Owner filters saved in favorites are dropped.
   - The selection is not saved: leaving the view or opening a favorite shows every pod again.
+  - The Clear selected button is gone from the Workloads toolbar. Click empty space below the rows to clear the selection.
 - Improved Details tab for PodDisruptionBudgets.
 - Columns dropdown menu changed to an icon to save space and reduce visual clutter. Functionality is the same.
 
 ### Fixed
 
+- Error statuses such as CrashLoopBackOff, Failed, and NotReady show in red again, in tables and status chips.
 - Tables with 25 or fewer rows no longer show pagination controls when some of their data is unavailable (for example, a resource type you can't list).
 - Paste from clipboard into a shell session no longer prompts with a context menu to confirm the paste.

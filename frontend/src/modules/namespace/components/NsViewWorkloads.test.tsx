@@ -75,6 +75,11 @@ vi.mock('@modules/namespace/components/NsViewPods', () => ({
   },
 }));
 
+const iconBarIds = () =>
+  (gridTablePropsRef.current.filters?.options?.preActions ?? []).map((action) =>
+    action.type === 'separator' ? 'separator' : action.id
+  );
+
 const podsPane = () =>
   (podsViewPropsRef.current?.pane ?? {}) as {
     selectedObject?: unknown;
@@ -354,6 +359,7 @@ describe('NsViewWorkloads', () => {
       namespaceLinkView: 'workloads',
       pane: { selectedObject: null },
     });
+    const iconBarBeforeSelection = iconBarIds();
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
 
@@ -367,21 +373,9 @@ describe('NsViewWorkloads', () => {
       name: 'api',
     });
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
+    // Selecting a row adds no control to the main icon bar.
+    expect(iconBarIds()).toEqual(iconBarBeforeSelection);
 
-    // The view's own icon sits in the main icon bar, with the search options and Favorite.
-    const clearAction = gridTablePropsRef.current.filters?.options?.preActions?.find(
-      (action) => action.type !== 'separator' && action.title === 'Clear selected workload'
-    );
-    expect(clearAction?.type).toBe('action');
-    act(() => {
-      if (clearAction?.type === 'action') {
-        clearAction.onClick();
-      }
-    });
-    expect(podsPane().selectedObject).toBeNull();
-    expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(false);
-
-    act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
     expect(
       gridTablePropsRef.current.filters?.options?.preActions?.find(
         (action) => action.type !== 'separator' && action.title === 'Collapse Pods'
