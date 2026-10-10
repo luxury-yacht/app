@@ -1,7 +1,7 @@
 ### Changed
 
-- Sidebar: Browse, Workloads, and the other built-in resource views now sit in the Resources group.
-  - Only Overview, Attention, Events, and Identities (Cluster) and Events and Map (Namespace) stay at the top level.
+- Sidebar: Workloads and the other built-in resource views now sit in the Resources group.
+  - Only Overview, Attention, Browse, Events, and Identities (Cluster) and Browse, Events, and Map (Namespace) stay at the top level.
   - Resources starts expanded on new installs. Existing installs keep their saved Resources state.
 - Nodes: the Nodes view now has a Pods pane below the node list, like Workloads.
   - Click a node to see only its pods. With no node selected, the pane shows every pod in the cluster.

@@ -58,8 +58,8 @@ same slot.
 
 | Scope | Direct links | Resources (in order) | Extensions |
 | --- | --- | --- | --- |
-| Cluster | Overview, Attention, Events, Identities | Browse, Config, Namespaces, Nodes, RBAC, Storage | CRDs, Custom Resources, then Cert Manager, External Secrets, Karpenter |
-| Namespace | Events, Map | Browse, Workloads, Pods, Autoscaling, Config, Network, Quotas, RBAC, Storage | Custom Resources, Argo CD, Cert Manager, External Secrets, Helm, Prometheus Operator |
+| Cluster | Overview, Attention, Browse, Events, Identities | Config, Namespaces, Nodes, RBAC, Storage | CRDs, Custom Resources, then Cert Manager, External Secrets, Karpenter |
+| Namespace | Browse, Events, Map | Workloads, Pods, Autoscaling, Config, Network, Quotas, RBAC, Storage | Custom Resources, Argo CD, Cert Manager, External Secrets, Helm, Prometheus Operator |
 
 - Identities is an observed-subject view, not a resource category, so it stays
   outside Resources ([cluster identities](../architecture/cluster-identities.md)).

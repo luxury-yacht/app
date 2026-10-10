@@ -244,7 +244,7 @@ describe('Sidebar', () => {
     });
   };
 
-  it('shows only Events and Map (plus Attention and Identities for clusters) directly, with the rest under an initially open Resources', () => {
+  it('shows only Browse, Events, and Map (plus Attention and Identities for clusters) directly, with the rest under an initially open Resources', () => {
     renderSidebar();
     const host = requireValue(container, 'expected Sidebar container');
     const describeTarget = (element: HTMLElement) =>
@@ -264,10 +264,10 @@ describe('Sidebar', () => {
     ).toEqual([
       'overview:',
       'attention',
+      'browse',
       'events',
       'identities',
       'cluster-toggle:resources',
-      'browse',
       'config',
       'namespaces',
       'nodes',
@@ -290,10 +290,10 @@ describe('Sidebar', () => {
         describeTarget
       )
     ).toEqual([
+      'browse',
       'events',
       'map',
       'namespace-group-toggle:resources',
-      'browse',
       'workloads',
       'pods',
       'autoscaling',
@@ -578,11 +578,10 @@ describe('Sidebar', () => {
     const extensions = toggle('extensions');
     expect(resources.getAttribute('aria-expanded')).toBe('false');
     expect(extensions.getAttribute('aria-expanded')).toBe('false');
-    expect(view('browse')).toBeNull();
     expect(view('nodes')).toBeNull();
     expect(view('karpenter')).toBeNull();
     expect(view('custom')).toBeNull();
-    for (const id of ['events']) {
+    for (const id of ['browse', 'events']) {
       act(() => view(id)?.click());
       expect(viewStateMock.setActiveClusterView).toHaveBeenLastCalledWith(id);
     }
@@ -600,9 +599,9 @@ describe('Sidebar', () => {
     expect(resources.getAttribute('aria-expanded')).toBe('true');
     expect(view('karpenter')).not.toBeNull();
     pressKey('ArrowDown');
-    expect(document.activeElement).toBe(view('browse'));
+    expect(document.activeElement).toBe(view('config'));
     pressKey('Enter');
-    expect(viewStateMock.setActiveClusterView).toHaveBeenLastCalledWith('browse');
+    expect(viewStateMock.setActiveClusterView).toHaveBeenLastCalledWith('config');
     act(() => {
       extensions.focus();
       extensions.click();
@@ -687,9 +686,9 @@ describe('Sidebar', () => {
     expect(view('default', 'custom')).toBeNull();
     act(() => namespace('default').focus());
     pressKey('ArrowDown');
-    expect(document.activeElement).toBe(view('default', 'events'));
+    expect(document.activeElement).toBe(view('default', 'browse'));
     pressKey('Enter');
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('events');
+    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('browse');
     expect(namespaceState.setSelectedNamespace).toHaveBeenLastCalledWith('default', 'cluster-a');
     act(() => resources.focus());
     pressKey(' ');
@@ -697,9 +696,9 @@ describe('Sidebar', () => {
     expect(view('other', 'autoscaling')).not.toBeNull();
     expect(view('default', 'argocd')).toBeNull();
     pressKey('ArrowDown');
-    expect(document.activeElement).toBe(view('default', 'browse'));
+    expect(document.activeElement).toBe(view('default', 'workloads'));
     pressKey('Enter');
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('browse');
+    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('workloads');
     expect(namespaceState.setSelectedNamespace).toHaveBeenLastCalledWith('default', 'cluster-a');
     act(() => resources.focus());
     pressKey(' ');
