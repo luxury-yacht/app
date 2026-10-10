@@ -13,7 +13,7 @@ import type { MultiSelectFilterSelection } from '@shared/components/dropdowns/mu
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import LogResumeScrollingButton from '@shared/components/logs/LogResumeScrollingButton';
-import RawLogViewer from '@shared/components/logs/RawLogViewer';
+import LogTable from '@shared/components/logs/LogTable';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import type React from 'react';
@@ -28,7 +28,8 @@ import {
 import type { LogOptionsState, ParsedLogEntry } from './logOptionsReducer';
 import { LogSearchRow } from './logToolbar';
 import type { LogViewerAction } from './logViewerReducer';
-import ParsedLogTable from './ParsedLogTable';
+import { getParsedLogRowKey } from './parsedLogUtils';
+import RawLogViewer from './RawLogViewer';
 
 export const renderLogViewerContent = ({
   isParsedView,
@@ -53,11 +54,13 @@ export const renderLogViewerContent = ({
 }): React.ReactNode => {
   if (isParsedView) {
     return (
-      <ParsedLogTable
+      <LogTable
         rows={parsedLogs}
         columns={tableColumns}
+        keyExtractor={getParsedLogRowKey}
         expandedRows={expandedRows}
         onToggleRow={onToggleParsedRow}
+        className="parsed-logs-table"
       />
     );
   }

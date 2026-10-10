@@ -37,11 +37,11 @@ const DIRECT_GRIDTABLE_USAGE_EXCEPTIONS = {
     reason:
       'Object-scoped recent-events feed (Event resources). Its display lifecycle is now controller-owned (boundedRowsSource Local Partial + useResourceInventoryTable, so empty/loading/partial cannot regress into a false-empty); the direct GridTable is presentation-only — a bespoke no-filter, age-sorted activity feed, not a browsable resource inventory.',
   },
-  'modules/object-panel/components/ObjectPanel/Logs/ParsedLogTable.tsx': {
+  'shared/components/logs/LogTable.tsx': {
     kind: 'classified-table',
     mode: 'Local Partial',
     reason:
-      'Parsed container log lines — NOT a Kubernetes resource inventory. A bounded log buffer with log-line expansion behavior; legitimately not a resource table, so it stays direct.',
+      'Log lines (the container Logs tab Table format and Application Logs) — NOT a Kubernetes resource inventory. A bounded log buffer with log-line expansion behavior; legitimately not a resource table, so it stays direct.',
   },
   'modules/object-panel/components/ObjectPanel/Details/DetailsTabRBACRules.tsx': {
     kind: 'classified-table',

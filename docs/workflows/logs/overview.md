@@ -71,12 +71,12 @@ features; Node Logs passes neither.
 - `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts; `T` (timestamps) and
   `V` (previous logs) exist only when the viewer passes those features.
 - Shared with Application Logs: `@shared/hooks/useLogScrollRestoration.ts`
-  (tail-following and scroll restore) and `@shared/components/logs/`:
-  `RawLogViewer` (the line list: `RawLogViewer.css` line text, and only the rows
-  in view are drawn from 120 rows, via `@shared/hooks/useVirtualizedLogRows`),
-  `LogResumeScrollingButton` (Resume scrolling), and `buildLogAutoRefreshItem`
-  (the Stop/Start auto-refresh button, first in the icon bar; `R` toggles it).
-  Container-specific line styling (pod colours, metadata) stays in `LogViewer.css`.
+  (tail-following and scroll restore) and `@shared/components/logs/`: `LogTable`
+  (log lines in a GridTable, the Table format; `LogTable.css` rows, cells, and
+  expansion), `LogResumeScrollingButton` (Resume scrolling), and
+  `buildLogAutoRefreshItem` (the Stop/Start auto-refresh button, first in the
+  icon bar; `R` toggles it). The Table format's log-tinted header stays
+  container-only (`.parsed-logs-table` in `LogViewer.css`).
 - `@shared/hooks/useLogDownloadMenu.tsx`: the Download button of every log view,
   App Logs included, on the `useDownloadMenu` tables use (busy while a choice
   runs, then success/error feedback). Both choices take the same text: CSV in

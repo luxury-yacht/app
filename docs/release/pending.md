@@ -16,8 +16,8 @@
   - A Stop/Start auto-refresh button (or `R`) replaces the auto-scroll toggle.
   - New lines follow at the bottom. Scroll up to hold your place, then Resume scrolling.
   - They keep the newest 10,000 lines instead of 1,000. This is fixed, separate from the Logs tabs' Buffer size setting.
-  - Column headers match the other tables, and log lines use the same text style as a Logs tab.
-  - Only the rows in view are drawn, so a full log stays responsive.
+  - They are a table like the others: columns size to their content and can be resized, and a click on a row (or Enter) expands it to show a long message in full.
+  - Only the rows in view are drawn, and new lines arrive at most four times a second, so a busy or full log stays responsive.
 - Improved Details tab for PodDisruptionBudgets.
 - Columns dropdown menu changed to an icon to save space and reduce visual clutter. Functionality is the same.
 

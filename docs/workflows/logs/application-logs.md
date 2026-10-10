@@ -17,6 +17,10 @@ container or node logs.
 - Clearing empties only the app diagnostic buffer; it never affects Kubernetes
   log viewers.
 - Event subscriptions are per-listener and cleaned up on unmount.
+- `app-logs:added` is batched like container live batches: the first write
+  opens a 250 ms window and the window sends one event with the newest sequence.
+  The panel reads every entry after its last one, so a batch never drops a
+  write; bursts cost one read per window, not one per write.
 - Cluster, component, and level multiselects use explicit `all`, `some`, and
   `none` states. Deselecting the final option shows no entries; it never
   reverts to unrestricted. Dynamic cluster and component options keep `all`
@@ -32,9 +36,15 @@ container or node logs.
     the panel's rows keep a fixed 10,000 entries. It is not a setting and never
     follows the Logs tabs' Buffer size: troubleshooting the app can need more
     history than a pod's logs.
-  - Rows render through `RawLogViewer`: Container Logs' line text (font, size,
-    line height, spacing) and row virtualization, with App Logs' own colours.
-  - The column header uses the GridTable header tokens and typography.
+  - Rows are a GridTable through the shared `LogTable`, like the Logs tab's Table
+    format: Time, Level, Source, Cluster, Message columns that size to content
+    up to the Table format's 520px cap (so a docked panel does not scroll
+    sideways) and can be resized (not persisted), the standard GridTable header, the
+    Table format's cells with App Logs' own colours, and Enter or a click on a
+    row to expand it and read long values in full.
+  - Each column declares `measurementSampleKey`: GridTable re-measures auto-width
+    columns as streamed rows change, and without keys that walks every row of
+    the 10,000-line buffer each time.
 - The panel's Download button is the shared log-view menu
   (`useLogDownloadMenu`): Copy to Clipboard, or Save to File as `.log`, with the
   shown entries as the text.

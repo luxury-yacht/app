@@ -8,7 +8,6 @@
  * formatting; Container Logs adds metadata columns to the table.
  */
 
-import type { RenderedLogRow } from '@shared/components/logs/RawLogViewer';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { type Dispatch, useCallback, useDeferredValue, useEffect, useMemo, useRef } from 'react';
 import { stripAnsi } from '../ansi';
@@ -16,6 +15,7 @@ import type { LogOptionsAction, LogOptionsState, ParsedLogEntry } from '../logOp
 import { buildLogSearchRegex } from '../logSearch';
 import { buildParsedLogCsv, buildParsedLogDataColumns } from '../parsedLogColumns';
 import { deriveParsedLogFieldKeys, formatParsedValue, tryParseJSONObject } from '../parsedLogUtils';
+import type { RenderedLogRow } from '../RawLogViewer';
 
 export type LogPresentationSource<T> = {
   entries: T[];

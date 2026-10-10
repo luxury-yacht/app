@@ -3,7 +3,7 @@ import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Drop
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar from '@shared/components/IconBar/IconBar';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
-import RawLogViewer, { type RenderedLogRow } from '@shared/components/logs/RawLogViewer';
+import LogTable from '@shared/components/logs/LogTable';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
@@ -30,7 +30,8 @@ import {
   getLogViewerScrollPosition,
   setLogViewerScrollPosition,
 } from '../Logs/logViewerPrefsCache';
-import { formatRawOrPrettyJsonLine } from '../Logs/parsedLogUtils';
+import { formatRawOrPrettyJsonLine, getParsedLogRowKey } from '../Logs/parsedLogUtils';
+import RawLogViewer, { type RenderedLogRow } from '../Logs/RawLogViewer';
 import type { CapabilityState } from '../types';
 import { fetchNodeLogs, type NodeLogFetchResponse, type NodeLogSource } from './nodeLogsApi';
 import '../Logs/LogViewer.css';
@@ -50,7 +51,6 @@ import {
 } from '../Logs/hooks/useLogPresentation';
 import { useLogSelectionCopy } from '../Logs/hooks/useLogSelectionCopy';
 import { useTerminalTheme } from '../Logs/hooks/useTerminalTheme';
-import ParsedLogTable from '../Logs/ParsedLogTable';
 
 const NODE_LOG_TAIL_BYTES = 256 * 1024;
 
@@ -576,11 +576,13 @@ const NodeLogContent = ({
   }
   if (showTable) {
     return (
-      <ParsedLogTable
+      <LogTable
         rows={parsedLogs}
         columns={tableColumns}
+        keyExtractor={getParsedLogRowKey}
         expandedRows={expandedRows}
         onToggleRow={onToggleParsedRow}
+        className="parsed-logs-table"
       />
     );
   }

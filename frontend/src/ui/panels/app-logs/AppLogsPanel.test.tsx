@@ -20,7 +20,6 @@ import {
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
-import { installWailsDragRuntime } from '@/test-utils/wailsDragRuntime.test.helpers';
 
 interface CapturedDropdownProps {
   value: string | string[];
@@ -103,7 +102,7 @@ vi.mock('@core/desktop-runtime', () => ({
       if (runtimeEventHandlers.get(eventName) === handler) {
         runtimeEventHandlers.delete(eventName);
       }
-      runtimeDisposerMock();
+      runtimeDisposerMock(eventName);
     };
   },
 }));
@@ -167,7 +166,8 @@ const renderPanel = async (initialIsOpen = true) => {
           </ZoomProvider>
         </KeyboardProvider>
       ) : (
-        panel
+        // The log table is a GridTable, which registers with the keyboard owner.
+        <KeyboardProvider>{panel}</KeyboardProvider>
       )
     );
     await Promise.resolve();
@@ -179,7 +179,11 @@ const renderPanel = async (initialIsOpen = true) => {
     onCloseMock,
     rerender: async (nextIsOpen = true) => {
       await act(async () => {
-        root.render(<AppLogsPanel isOpen={nextIsOpen} onClose={onCloseMock} />);
+        root.render(
+          <KeyboardProvider>
+            <AppLogsPanel isOpen={nextIsOpen} onClose={onCloseMock} />
+          </KeyboardProvider>
+        );
         await Promise.resolve();
       });
     },
@@ -332,76 +336,69 @@ describe('AppLogsPanel', () => {
 
     await flushInitialLoad();
 
-    const entries = container.querySelectorAll('.log-entry');
+    const entries = container.querySelectorAll('.gridtable-row');
     expect(entries.length).toBe(2);
     expect(getAppLogsMock).toHaveBeenCalledTimes(1);
 
     cleanup();
   });
 
-  it('resizes log columns from the header row', async () => {
+  it('shows each log field in its own column under the standard table header', async () => {
     vi.useFakeTimers();
     getAppLogsMock.mockResolvedValue([
       {
         sequence: 1,
         timestamp: '2024-01-01T00:00:00.000Z',
-        level: 'info',
-        message: 'Ready',
-        source: 'core',
+        level: 'warn',
+        message: 'Slow response',
+        source: 'refresh',
+        clusterId: 'kube:alpha',
+        clusterName: 'alpha',
       },
     ]);
 
     const { container, cleanup } = await renderPanel();
-
     await flushInitialLoad();
 
-    const header = container.querySelector<HTMLElement>('.app-logs-header');
-    const clusterResizer = container.querySelector<HTMLElement>(
-      '[aria-label="Resize Cluster column"]'
+    const headers = Array.from(
+      container.querySelectorAll('.gridtable-header .grid-cell-header'),
+      (cell) => cell.textContent
     );
-    expect(header?.style.getPropertyValue('--app-log-cluster-width')).toBe('140px');
-    expect(clusterResizer).not.toBeNull();
-
-    await act(async () => {
-      requireValue(clusterResizer, 'expected test value in AppLogsPanel.test.tsx').dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(header?.style.getPropertyValue('--app-log-cluster-width')).toBe('150px');
+    expect(headers).toEqual(['Time', 'Level', 'Source', 'Cluster', 'Message']);
+    const cells = Array.from(
+      container.querySelectorAll('.gridtable-row .grid-cell'),
+      (cell) => cell.textContent
+    );
+    expect(cells.slice(1)).toEqual(['warn', '[refresh]', '[alpha]', 'Slow response']);
 
     cleanup();
   });
 
-  it('does not restore a finished log-column cursor after leaving a window edge', async () => {
+  // Long messages sit on one line like any table cell; expanding a row shows all
+  // of it, as in the Logs tab's Table format.
+  it('expands a row to read a long message in full', async () => {
     vi.useFakeTimers();
-    const runtime = await installWailsDragRuntime('linux');
+    getAppLogsMock.mockResolvedValue([logLine(1, `start ${'x'.repeat(400)} end`)]);
+
     const { container, cleanup } = await renderPanel();
-    try {
-      await flushInitialLoad();
-      const resizer = container.querySelector<HTMLElement>('[aria-label="Resize Cluster column"]');
+    await flushInitialLoad();
+    const row = () =>
+      requireValue(container.querySelector<HTMLElement>('.gridtable-row'), 'expected a log row');
+    const clickMessage = async () => {
       await act(async () => {
-        resizer?.dispatchEvent(
-          new MouseEvent('pointerdown', { bubbles: true, clientX: 200, button: 0 })
-        );
+        row()
+          .querySelector('.log-message')
+          ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
-      document.body.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 1, clientY: 300, buttons: 1 })
-      );
-      expect(document.body.style.cursor).toBe('ew-resize');
-      await act(async () => {
-        window.dispatchEvent(new MouseEvent('pointerup'));
-      });
-      document.body.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 400, clientY: 300 })
-      );
-      expect(document.body.style.cursor).not.toBe('col-resize');
-    } finally {
-      cleanup();
-      runtime.cleanup();
-      document.body.style.cursor = '';
-    }
+    };
+
+    expect(row().classList.contains('parsed-row-expanded')).toBe(false);
+    await clickMessage();
+    expect(row().classList.contains('parsed-row-expanded')).toBe(true);
+    await clickMessage();
+    expect(row().classList.contains('parsed-row-expanded')).toBe(false);
+
+    cleanup();
   });
 
   it('appends new logs from app-logs events using delta reads and listener disposers', async () => {
@@ -428,7 +425,7 @@ describe('AppLogsPanel', () => {
     const { container, cleanup } = await renderPanel();
 
     await flushInitialLoad();
-    expect(container.querySelectorAll('.log-entry')).toHaveLength(1);
+    expect(container.querySelectorAll('.gridtable-row')).toHaveLength(1);
 
     const handler = runtimeEventHandlers.get('app-logs:added');
     expect(handler).toBeTruthy();
@@ -440,12 +437,14 @@ describe('AppLogsPanel', () => {
 
     expect(getAppLogsSinceMock).toHaveBeenCalledWith(1);
     expect(getAppLogsMock).toHaveBeenCalledTimes(1);
-    expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+    expect(container.querySelectorAll('.gridtable-row')).toHaveLength(2);
     expect(container.textContent).toContain('Delta');
 
     cleanup();
 
-    expect(runtimeDisposerMock).toHaveBeenCalledTimes(1);
+    expect(
+      runtimeDisposerMock.mock.calls.filter(([eventName]) => eventName === 'app-logs:added')
+    ).toHaveLength(1);
   });
 
   it('does not duplicate logs when overlapping app-logs events read the same delta', async () => {
@@ -483,7 +482,7 @@ describe('AppLogsPanel', () => {
     });
 
     expect(getAppLogsSinceMock).toHaveBeenCalledTimes(2);
-    expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+    expect(container.querySelectorAll('.gridtable-row')).toHaveLength(2);
     expect(container.textContent?.match(/Delta/g)).toHaveLength(1);
 
     cleanup();
@@ -590,9 +589,7 @@ describe('AppLogsPanel', () => {
 
     await flushInitialLoad();
 
-    expect(container.querySelector('.app-logs-container .log-cluster')?.textContent).toBe(
-      '[alpha]'
-    );
+    expect(container.querySelector('.gridtable-row .log-cluster')?.textContent).toBe('[alpha]');
 
     const clustersDropdown = latestDropdown('Filter by cluster');
     expect(clustersDropdown).toBeTruthy();
@@ -623,7 +620,7 @@ describe('AppLogsPanel', () => {
       await Promise.resolve();
     });
 
-    const entries = Array.from(container.querySelectorAll('.log-entry'));
+    const entries = Array.from(container.querySelectorAll('.gridtable-row'));
     expect(entries.length).toBe(1);
     expect(entries[0]?.textContent).toContain('Cluster B ready');
     expect(entries[0]?.textContent).toContain('[bravo]');
@@ -657,7 +654,7 @@ describe('AppLogsPanel', () => {
       });
       expect(
         Array.from(
-          container.querySelectorAll('.log-entry .log-message'),
+          container.querySelectorAll('.gridtable-row .log-message'),
           (entry) => entry.textContent
         )
       ).toEqual([clusterIds[0]]);
@@ -666,7 +663,7 @@ describe('AppLogsPanel', () => {
       await act(async () => {
         latestDropdown('Filter by cluster')?.onChange(clusterIds);
       });
-      expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+      expect(container.querySelectorAll('.gridtable-row')).toHaveLength(2);
       getAppLogsSinceMock.mockResolvedValue([
         { sequence: 4, timestamp, level: 'info', message: 'Another global message' },
       ]);
@@ -674,7 +671,7 @@ describe('AppLogsPanel', () => {
         runtimeEventHandlers.get('app-logs:added')?.({ sequence: 4 });
         await Promise.resolve();
       });
-      expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+      expect(container.querySelectorAll('.gridtable-row')).toHaveLength(2);
       expect(latestDropdown('Filter by cluster')?.value).toEqual(clusterIds);
     } finally {
       cleanup();
@@ -704,7 +701,7 @@ describe('AppLogsPanel', () => {
 
     await flushInitialLoad();
 
-    const clusters = Array.from(container.querySelectorAll('.app-logs-container .log-cluster')).map(
+    const clusters = Array.from(container.querySelectorAll('.gridtable-row .log-cluster')).map(
       (entry) => entry.textContent
     );
     expect(clusters).toEqual(['[Global]', '[alpha]']);
@@ -720,7 +717,7 @@ describe('AppLogsPanel', () => {
       await Promise.resolve();
     });
 
-    const entries = Array.from(container.querySelectorAll('.log-entry'));
+    const entries = Array.from(container.querySelectorAll('.gridtable-row'));
     expect(entries).toHaveLength(1);
     expect(entries[0]?.textContent).toContain('[Global]');
     expect(entries[0]?.textContent).toContain('Settings loaded');
@@ -878,7 +875,7 @@ describe('AppLogsPanel', () => {
     await flushFrames();
 
     expect(lineCount(container)).toBe('(5000)');
-    const drawn = container.querySelectorAll('.log-entry').length;
+    const drawn = container.querySelectorAll('.gridtable-row').length;
     expect(drawn).toBeGreaterThan(0);
     expect(drawn).toBeLessThan(200);
 
@@ -898,13 +895,13 @@ describe('AppLogsPanel', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       configurable: true,
       get() {
-        return this.classList.contains('app-logs-container') ? 400 : 0;
+        return this.classList.contains('gridtable-wrapper') ? 400 : 0;
       },
     });
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
       configurable: true,
       get() {
-        return this.classList.contains('app-logs-container') ? 100 : 0;
+        return this.classList.contains('gridtable-wrapper') ? 100 : 0;
       },
     });
     getAppLogsMock.mockResolvedValue(logLines(1, 10_000));
@@ -914,7 +911,7 @@ describe('AppLogsPanel', () => {
     try {
       await flushInitialLoad();
       const content = requireValue(
-        container.querySelector<HTMLElement>('.app-logs-container'),
+        container.querySelector<HTMLElement>('.gridtable-wrapper'),
         'expected the log body'
       );
       expect(container.querySelector('button[aria-label="Resume scrolling"]')).toBeNull();
@@ -1026,7 +1023,7 @@ describe('AppLogsPanel', () => {
     await act(async () => undefined);
 
     const emptyMessage = container.querySelector('.app-logs-empty');
-    const remainingEntries = container.querySelectorAll('.log-entry');
+    const remainingEntries = container.querySelectorAll('.gridtable-row');
     expect(remainingEntries.length).toBe(0);
     expect(emptyMessage?.textContent ?? '').toContain('No logs match the selected filter');
 
@@ -1042,7 +1039,7 @@ describe('AppLogsPanel', () => {
     const { cleanup } = await renderPanel();
     await flushInitialLoad();
     const logs = requireValue(
-      document.querySelector<HTMLElement>('.app-logs-container'),
+      document.querySelector<HTMLElement>('.app-logs-table .gridtable--body'),
       'log body'
     );
     const panel = requireValue(logs.closest<HTMLElement>('.dockable-panel'), 'real dockable panel');

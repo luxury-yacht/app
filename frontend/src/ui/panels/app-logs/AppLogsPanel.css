@@ -1,8 +1,5 @@
 /* Application Logs Panel Styles */
 
-/* The column header uses the GridTable header tokens and typography. */
-@import "@styles/components/gridtables.css";
-
 .app-logs-panel-toolbar {
   flex-shrink: 0;
   background-color: var(--color-bg-secondary);
@@ -113,123 +110,10 @@
   min-height: 0;
 }
 
-/* Line text (size, line height, side padding, row spacing) comes from the log
-   views' shared .logs-viewer-text, as in Container Logs; App Logs keeps its colours. */
-.app-logs-container {
-  flex: 1;
-  overflow-y: auto;
-  font-family: var(--font-family-mono);
-  background: var(--color-bg);
-  min-height: 0;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.app-logs-container * {
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.app-logs-header,
-.log-entry {
-  display: grid;
-  grid-template-columns:
-    var(--app-log-timestamp-width, 90px) var(--app-log-level-width, 60px)
-    var(--app-log-source-width, 120px) var(--app-log-cluster-width, 140px) minmax(0, 1fr);
-}
-
-/* Styled like every table's column header (.gridtable-header, .grid-cell-header);
-   the 0.5rem sides match .logs-viewer-text, keeping each label over its column. */
-.app-logs-header {
-  flex-shrink: 0;
-  padding: var(--grid-spacing-cell-y) 0.5rem;
-  background: var(--grid-bg-header);
-  border-bottom: 1px solid var(--grid-border-color);
-  color: var(--grid-text-secondary);
-  font-size: var(--grid-font-size-header);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0.04em;
-  line-height: var(--grid-cell-line-height);
-  text-transform: uppercase;
-}
-
-.app-logs-header > thead,
-.app-logs-header > thead > tr {
-  display: contents;
-}
-
-.app-logs-header-cell {
-  position: relative;
-  min-width: 0;
-  padding: 0;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.app-logs-header-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.app-logs-column-resizer {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  position: absolute;
-  top: calc(-1 * var(--grid-spacing-cell-y));
-  right: -4px;
-  bottom: calc(-1 * var(--grid-spacing-cell-y));
-  z-index: 1;
-  width: 8px;
-  cursor: col-resize;
-  touch-action: none;
-}
-
-.app-logs-column-resizer::after {
-  content: "";
-  position: absolute;
-  top: 4px;
-  right: 3px;
-  bottom: 4px;
-  width: 1px;
-  background: var(--color-border);
-  opacity: 0;
-}
-
-.app-logs-column-resizer:hover::after,
-.app-logs-column-resizer:focus-visible::after {
-  opacity: 1;
-}
-
-.app-logs-column-resizer:focus-visible {
-  outline: 1px solid var(--color-accent);
-  outline-offset: -1px;
-}
-
-.app-logs-container.empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-tertiary);
-}
-
-/* Log entries */
+/* The shared log table (LogTable.css) owns cell layout, wrapping, and expansion,
+   as in the Logs tab's Table format; Application Logs keeps only its colours. */
 .log-timestamp {
   color: var(--color-text-tertiary);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.log-level {
-  font-weight: 600;
-  text-transform: uppercase;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .log-level.DEBUG {
@@ -251,38 +135,15 @@
 .log-source {
   color: var(--color-text-secondary);
   opacity: 0.7;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .log-cluster {
   color: var(--color-text-secondary);
   opacity: 0.85;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .log-message {
-  min-width: 0;
   color: var(--color-text);
-  /* Wraps like a container log line (.log-viewer-line). */
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  word-break: break-all;
-  padding-left: 10px;
-}
-
-.app-logs-header .log-timestamp,
-.app-logs-header .log-level,
-.app-logs-header .log-source,
-.app-logs-header .log-cluster,
-.app-logs-header .log-message {
-  color: inherit;
-  opacity: 1;
 }
 
 /* Loading state */
