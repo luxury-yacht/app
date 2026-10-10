@@ -232,7 +232,7 @@ export function DockablePanelGroup({
   const panelState = useDockableGroupState(groupKey, true);
   const activePanelId = activeTab && tabs.includes(activeTab) ? activeTab : tabs[0];
   // Float moves the whole group, so every tab must be able to float.
-  const canFloatGroup = tabs.every(canFloatPanel);
+  const canFloatGroup = tabs.every((panelId) => canFloatPanel(panelId));
   const active = panelRegistrations.get(activePanelId);
   const initial = panelRegistrations.get(tabs[0]);
   const {

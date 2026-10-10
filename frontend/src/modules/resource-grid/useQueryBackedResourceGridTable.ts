@@ -162,7 +162,7 @@ interface QueryBackedGridParamsCommon<
    * keys belong in `excludedQueryFacetKeys` so the user cannot also hold them.
    * Memoize the object: a new identity re-derives the request.
    */
-  selectionQueryFacets?: GridTableFilterState['queryFacets'];
+  selectionQueryFacets?: NonNullable<GridTableFilterState['queryFacets']>;
 }
 
 interface TypedQueryLifecycle<
@@ -217,7 +217,7 @@ function useTypedQueryLifecycle<
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
   excludedQueryFacetKeys?: readonly string[];
-  selectionQueryFacets?: GridTableFilterState['queryFacets'];
+  selectionQueryFacets?: NonNullable<GridTableFilterState['queryFacets']>;
   namespaceFilterHidden?: boolean;
   defaultSort: SortConfig;
   persistence: UseGridTablePersistenceResult;
