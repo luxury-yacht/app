@@ -1,5 +1,14 @@
+/**
+ * frontend/src/shared/components/logs/RawLogViewer.tsx
+ *
+ * The log views' line list: the shared log text style, and only the rows in
+ * view are drawn once a log reaches the virtualization threshold. Container,
+ * Node, and Application Logs supply their own row content.
+ */
+
 import { type ReactNode, type RefObject, useCallback } from 'react';
-import { useVirtualizedLogRows } from './hooks/useVirtualizedLogRows';
+import './RawLogViewer.css';
+import { useVirtualizedLogRows } from '@shared/hooks/useVirtualizedLogRows';
 
 export interface RenderedLogRow {
   key: string;

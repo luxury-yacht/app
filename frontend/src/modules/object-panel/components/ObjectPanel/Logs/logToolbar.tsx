@@ -21,12 +21,8 @@ import {
   TimestampIcon,
   WrapTextIcon,
 } from '@shared/components/icons/LogIcons';
-import {
-  CaseSensitiveIcon,
-  PlayOutlineIcon,
-  SearchIcon,
-  StopOutlineIcon,
-} from '@shared/components/icons/SharedIcons';
+import { CaseSensitiveIcon, SearchIcon } from '@shared/components/icons/SharedIcons';
+import { buildLogAutoRefreshItem } from '@shared/components/logs/logAutoRefreshItem';
 import type { Dispatch, ReactNode, RefObject } from 'react';
 import { flushSync } from 'react-dom';
 import { isMacPlatform } from '@/utils/platform';
@@ -300,20 +296,9 @@ const searchButton = ({
 
 /** Builds the log viewer icon bar: auto-refresh, search, source and display, actions. */
 export const buildLogToolbarItems = (toolbar: LogToolbarOptions): IconBarItem[] => [
-  {
-    // Like the other choice buttons it is never highlighted: the icon and name say what a click does.
-    type: 'action',
-    id: 'autoRefresh',
-    // The icon shows what a click does: stop while refreshing, play while stopped.
-    icon: toolbar.options.autoRefresh ? (
-      <StopOutlineIcon width={18} height={18} className="logs-viewer-stop-icon" />
-    ) : (
-      <PlayOutlineIcon width={18} height={18} className="logs-viewer-play-icon" />
-    ),
-    onClick: () => toolbar.dispatch({ type: 'TOGGLE_AUTO_REFRESH' }),
-    title: `${toolbar.options.autoRefresh ? 'Stop' : 'Start'} auto-refresh (R)`,
-    ariaLabel: `${toolbar.options.autoRefresh ? 'Stop' : 'Start'} auto-refresh`,
-  },
+  buildLogAutoRefreshItem(toolbar.options.autoRefresh, () =>
+    toolbar.dispatch({ type: 'TOGGLE_AUTO_REFRESH' })
+  ),
   { type: 'separator' },
   searchButton(toolbar),
   { type: 'separator' },

@@ -85,7 +85,7 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 	if options.Reporter != nil {
 		reporters = append(reporters, options.Reporter)
 	}
-	appLogs := NewAppLogService(NewLogger(1000, reporters...))
+	appLogs := NewApplicationLogs(reporters...)
 	signals := newApplicationRuntimeSignals(
 		func(_ context.Context, name string, data ...interface{}) {
 			if wailsApplication != nil {

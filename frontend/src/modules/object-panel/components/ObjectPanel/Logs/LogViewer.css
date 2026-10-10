@@ -51,15 +51,6 @@
   color: var(--color-warning);
 }
 
-/* The auto-refresh icon: red stop while logs refresh, green play while they are stopped. */
-.logs-viewer-stop-icon {
-  color: var(--color-error);
-}
-
-.logs-viewer-play-icon {
-  color: var(--color-success);
-}
-
 /* The summary style sets the text; even-width digits stop it jittering as logs stream in. */
 .logs-viewer-count {
   font-variant-numeric: tabular-nums;
@@ -171,32 +162,6 @@
   -webkit-user-select: text;
 }
 
-.logs-viewer-resume-scrolling {
-  position: absolute;
-  left: 50%;
-  bottom: var(--spacing-sm);
-  z-index: 2;
-  transform: translateX(-50%);
-  padding: var(--spacing-xs) var(--spacing-md);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  background: var(--button-generic-bg);
-  color: var(--button-generic-text);
-  box-shadow: var(--dropdown-menu-shadow);
-  cursor: pointer;
-  font: inherit;
-  white-space: nowrap;
-}
-
-.logs-viewer-resume-scrolling:hover {
-  background: var(--button-generic-hover);
-}
-
-.logs-viewer-resume-scrolling:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
 .logs-viewer-content * {
   user-select: text;
   -webkit-user-select: text;
@@ -214,72 +179,6 @@
   border: 1px solid var(--color-border);
   color: var(--color-text);
   font-weight: 500;
-}
-
-.logs-viewer-text {
-  color: var(--log-text-primary);
-  font-size: var(--font-size-mono);
-  line-height: 1.5;
-  padding: 0 0.5rem;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.logs-viewer-text.logs-viewer-text--virtualized {
-  padding: 0 0.5rem;
-}
-
-.logs-viewer-text.no-wrap {
-  display: inline-block;
-  min-width: 100%;
-  width: max-content;
-}
-
-.logs-viewer-virtual-body {
-  position: relative;
-}
-
-.logs-viewer-virtual-inner {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-}
-
-.log-viewer-row {
-  padding-bottom: 0.1rem;
-}
-
-/* Individual log line with hanging indent for wrapped text */
-.log-viewer-line {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  word-break: break-all;
-  /* Create hanging indent: first line flush left, wrapped lines indented */
-  padding-left: 1rem;
-  text-indent: -1rem;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-/* No wrap mode - disable text wrapping */
-.logs-viewer-text.no-wrap .log-viewer-line {
-  white-space: pre;
-  word-wrap: normal;
-  word-break: normal;
-  overflow-x: visible;
-}
-
-.logs-viewer-text.no-wrap .logs-viewer-virtual-body,
-.logs-viewer-text.no-wrap .logs-viewer-virtual-inner,
-.logs-viewer-text.no-wrap .log-viewer-row,
-.logs-viewer-text.no-wrap .log-viewer-line {
-  min-width: 100%;
-  width: max-content;
-}
-
-.logs-viewer-text.no-wrap .logs-viewer-virtual-inner {
-  right: auto;
 }
 
 .log-viewer-line .log-viewer-metadata {

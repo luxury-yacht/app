@@ -752,6 +752,22 @@ func TestAppSetObjPanelLogsTargetPerScopeLimitPersistsAndClamps(t *testing.T) {
 	require.Equal(t, maxObjPanelLogsTargetPerScopeLimit, app.Preferences.appSettings.ObjPanelLogsTargetPerScopeLimit)
 }
 
+// Troubleshooting the app can need more history than a Logs tab keeps, so the
+// Logs tabs' Buffer size never shrinks Application Logs.
+func TestAppSetObjPanelLogsBufferMaxSizeLeavesApplicationLogsAlone(t *testing.T) {
+	setTestConfigEnv(t)
+
+	app := newSettingsEffectsTestFixture(t)
+	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsBufferMaxSize, 150))
+	for i := range 200 {
+		app.AppLogs.logger.Info(fmt.Sprintf("line %d", i))
+	}
+
+	entries := app.AppLogs.logger.GetEntries()
+	require.Len(t, entries, 201)
+	require.Equal(t, "line 199", entries[len(entries)-1].Message)
+}
+
 func TestAppSetObjPanelLogsTargetGlobalLimitPersistsAndClamps(t *testing.T) {
 	setTestConfigEnv(t)
 

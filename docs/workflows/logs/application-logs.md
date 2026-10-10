@@ -21,6 +21,20 @@ container or node logs.
   `none` states. Deselecting the final option shows no entries; it never
   reverts to unrestricted. Dynamic cluster and component options keep `all`
   open-ended as new log sources appear.
+- The panel behaves like a Logs tab, with the shared pieces
+  ([overview.md](overview.md#shared-viewer-shell)):
+  - Stop/Start auto-refresh (`R`) is local and starts on. Stopping unsubscribes
+    from `app-logs:added`; starting catches up with one sequence read.
+  - It follows new lines at the bottom. Scrolling up holds the shown lines,
+    deferring the buffer cap; Resume scrolling follows again and restarts
+    auto-refresh when it is stopped.
+  - The backend buffer (`appLogsMaxEntries`, built by `NewApplicationLogs`) and
+    the panel's rows keep a fixed 10,000 entries. It is not a setting and never
+    follows the Logs tabs' Buffer size: troubleshooting the app can need more
+    history than a pod's logs.
+  - Rows render through `RawLogViewer`: Container Logs' line text (font, size,
+    line height, spacing) and row virtualization, with App Logs' own colours.
+  - The column header uses the GridTable header tokens and typography.
 - The panel's Download button is the shared log-view menu
   (`useLogDownloadMenu`): Copy to Clipboard, or Save to File as `.log`, with the
   shown entries as the text.

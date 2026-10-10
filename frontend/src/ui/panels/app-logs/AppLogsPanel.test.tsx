@@ -14,6 +14,11 @@ import { act, type ComponentProps, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eventBus } from '@/core/events';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
 import { installWailsDragRuntime } from '@/test-utils/wailsDragRuntime.test.helpers';
 
@@ -94,7 +99,12 @@ vi.mock('@core/desktop-runtime', () => ({
   writeClipboardText: (...args: unknown[]) => nativeClipboardWriteTextMock(...args),
   onEvent: (eventName: string, handler: (...args: unknown[]) => void) => {
     runtimeEventHandlers.set(eventName, handler);
-    return runtimeDisposerMock;
+    return () => {
+      if (runtimeEventHandlers.get(eventName) === handler) {
+        runtimeEventHandlers.delete(eventName);
+      }
+      runtimeDisposerMock();
+    };
   },
 }));
 
@@ -237,8 +247,49 @@ beforeEach(() => {
 afterEach(() => {
   restoreClipboard?.();
   restoreClipboard = undefined;
+  resetAppPreferencesCacheForTesting();
   vi.useRealTimers();
 });
+
+const logLine = (sequence: number, message = `line ${sequence}`) => ({
+  sequence,
+  timestamp: '2024-01-01T00:00:00.000Z',
+  level: 'info',
+  message,
+  source: 'core',
+});
+
+const logLines = (from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_value, index) => logLine(from + index));
+
+// Delivers one app-logs:added event the way the backend does after a write.
+const emitAppLogsAdded = async (sequence: number) => {
+  await act(async () => {
+    runtimeEventHandlers.get('app-logs:added')?.({ sequence });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+};
+
+// The panel's line count, "(N)": every kept line, drawn or not.
+const lineCount = (container: HTMLElement) =>
+  container.querySelector('.app-logs-count')?.textContent;
+
+// Messages of the rows actually drawn; a long log draws only the rows in view.
+const drawnMessages = (container: HTMLElement) =>
+  Array.from(container.querySelectorAll('.log-message'), (element) => element.textContent);
+
+// Scroll and row measurement settle on animation frames.
+const flushFrames = async () => {
+  await act(async () => {
+    vi.advanceTimersByTime(100);
+  });
+};
+
+const autoRefreshButton = (container: HTMLElement) =>
+  container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Stop auto-refresh"], button[aria-label="Start auto-refresh"]'
+  );
 
 afterAll(() => {
   restoreClipboard?.();
@@ -739,9 +790,7 @@ describe('AppLogsPanel', () => {
     expect(iconbar).toBeTruthy();
     expect(iconbar?.querySelectorAll('.icon-bar-button')).toHaveLength(3);
 
-    const autoScrollButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Toggle auto-scroll"]'
-    );
+    const refreshButton = autoRefreshButton(container);
     const downloadButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Download logs"]'
     );
@@ -749,18 +798,176 @@ describe('AppLogsPanel', () => {
       'button[aria-label="Clear logs"]'
     );
 
-    expect(autoScrollButton?.getAttribute('aria-pressed')).toBe('true');
+    // Named for what a click does, like the container logs' button; no pressed state.
+    expect(refreshButton?.getAttribute('aria-label')).toBe('Stop auto-refresh');
+    expect(refreshButton?.hasAttribute('aria-pressed')).toBe(false);
     expect(downloadButton?.disabled).toBe(false);
     expect(clearButton?.disabled).toBe(false);
 
+    cleanup();
+  });
+
+  it('stops applying new lines while auto-refresh is off and catches up when it starts', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([logLine(1, 'Ready')]);
+    getAppLogsSinceMock.mockResolvedValue([logLine(2, 'Missed while stopped')]);
+
+    const { container, cleanup } = await renderPanel();
+    await flushInitialLoad();
+
     await act(async () => {
-      autoScrollButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      autoRefreshButton(container)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(autoRefreshButton(container)?.getAttribute('aria-label')).toBe('Start auto-refresh');
+
+    await emitAppLogsAdded(2);
+    expect(getAppLogsSinceMock).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('Missed while stopped');
+
+    // R toggles it, as in container logs.
+    const toggleShortcut = [...useShortcutMock.mock.calls]
+      .map(([options]) => options as { key: string; handler: () => boolean })
+      .reverse()
+      .find((options) => options.key === 'r');
+    await act(async () => {
+      requireValue(toggleShortcut, 'expected the R auto-refresh shortcut').handler();
+      await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(autoScrollButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(autoRefreshButton(container)?.getAttribute('aria-label')).toBe('Stop auto-refresh');
+    expect(getAppLogsSinceMock).toHaveBeenCalledWith(1);
+    expect(container.textContent).toContain('Missed while stopped');
 
     cleanup();
+  });
+
+  // Troubleshooting the app can need more history than a Logs tab keeps, so the
+  // panel keeps a fixed 10,000 lines whatever the Logs tabs' Buffer size is.
+  it('keeps the newest 10,000 lines regardless of the Logs tabs buffer size', async () => {
+    vi.useFakeTimers();
+    setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 100 });
+    getAppLogsMock.mockResolvedValue(logLines(1, 9_990));
+    getAppLogsSinceMock.mockResolvedValue(logLines(9_991, 10_010));
+
+    const { container, cleanup } = await renderPanel();
+    await flushInitialLoad();
+    expect(lineCount(container)).toBe('(9990)');
+
+    await emitAppLogsAdded(10_010);
+    await flushFrames();
+    expect(lineCount(container)).toBe('(10000)');
+    expect(drawnMessages(container)).not.toContain('line 10');
+
+    await act(async () => {
+      eventBus.emit('settings:obj-panel-logs-buffer-size', 100);
+      await Promise.resolve();
+    });
+    expect(lineCount(container)).toBe('(10000)');
+
+    cleanup();
+  });
+
+  it('draws only the rows in view of a long log, like container logs', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue(logLines(1, 5_000));
+
+    const { container, cleanup } = await renderPanel();
+    await flushInitialLoad();
+    await flushFrames();
+
+    expect(lineCount(container)).toBe('(5000)');
+    const drawn = container.querySelectorAll('.log-entry').length;
+    expect(drawn).toBeGreaterThan(0);
+    expect(drawn).toBeLessThan(200);
+
+    cleanup();
+  });
+
+  it('holds shown lines while scrolled up and resumes from a bottom button', async () => {
+    vi.useFakeTimers();
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollHeight'
+    );
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientHeight'
+    );
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return this.classList.contains('app-logs-container') ? 400 : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return this.classList.contains('app-logs-container') ? 100 : 0;
+      },
+    });
+    getAppLogsMock.mockResolvedValue(logLines(1, 10_000));
+    getAppLogsSinceMock.mockResolvedValue(logLines(10_001, 10_010));
+
+    const { container, cleanup } = await renderPanel();
+    try {
+      await flushInitialLoad();
+      const content = requireValue(
+        container.querySelector<HTMLElement>('.app-logs-container'),
+        'expected the log body'
+      );
+      expect(container.querySelector('button[aria-label="Resume scrolling"]')).toBeNull();
+
+      await act(async () => {
+        content.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+        content.scrollTop = 0;
+        content.dispatchEvent(new Event('scroll'));
+      });
+      await flushFrames();
+      const resumeButton = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Resume scrolling"]'
+      );
+      expect(resumeButton).not.toBeNull();
+
+      // New lines arrive while scrolled up: the oldest shown line stays put.
+      await emitAppLogsAdded(10_010);
+      await flushFrames();
+      expect(lineCount(container)).toBe('(10010)');
+      expect(drawnMessages(container)).toContain('line 1');
+      expect(content.scrollTop).toBe(0);
+
+      await act(async () => {
+        autoRefreshButton(container)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+      expect(autoRefreshButton(container)?.getAttribute('aria-label')).toBe('Start auto-refresh');
+
+      // Resuming follows the tail again, restarts auto-refresh, and applies the 10,000-line cap.
+      await act(async () => {
+        resumeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await flushFrames();
+      expect(container.querySelector('button[aria-label="Resume scrolling"]')).toBeNull();
+      expect(autoRefreshButton(container)?.getAttribute('aria-label')).toBe('Stop auto-refresh');
+      expect(lineCount(container)).toBe('(10000)');
+      expect(drawnMessages(container)).not.toContain('line 1');
+      expect(content.scrollTop).toBe(400);
+    } finally {
+      cleanup();
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight');
+      }
+      if (originalClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+      }
+    }
   });
 
   // The Download menu is the log viewers' menu: Copy to Clipboard through the
@@ -964,6 +1171,10 @@ describe('AppLogsPanel', () => {
     const { container, cleanup } = await renderPanel();
 
     await flushInitialLoad();
+    // The log body settles at the newest line over a few animation frames first.
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
 
     await chooseDownload(container, 'Copy to Clipboard');
     // Let the menu's immediate work run; the feedback reset is still pending.

@@ -12,6 +12,12 @@
   - The Namespaces, Owner, and Node dropdowns are gone, and Owner filters saved in favorites are dropped.
   - The selection is not saved: leaving the view or opening a favorite shows every pod again.
   - The Clear selected button is gone from the Workloads toolbar. Click empty space below the rows to clear the selection.
+- Application Logs work like a pod's Logs tab:
+  - A Stop/Start auto-refresh button (or `R`) replaces the auto-scroll toggle.
+  - New lines follow at the bottom. Scroll up to hold your place, then Resume scrolling.
+  - They keep the newest 10,000 lines instead of 1,000. This is fixed, separate from the Logs tabs' Buffer size setting.
+  - Column headers match the other tables, and log lines use the same text style as a Logs tab.
+  - Only the rows in view are drawn, so a full log stays responsive.
 - Improved Details tab for PodDisruptionBudgets.
 - Columns dropdown menu changed to an icon to save space and reduce visual clutter. Functionality is the same.
 

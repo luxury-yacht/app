@@ -12,6 +12,8 @@ import { normalizeDropdownValue } from '@shared/components/dropdowns/dropdownVal
 import type { MultiSelectFilterSelection } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import LogResumeScrollingButton from '@shared/components/logs/LogResumeScrollingButton';
+import RawLogViewer from '@shared/components/logs/RawLogViewer';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import type React from 'react';
@@ -27,7 +29,6 @@ import type { LogOptionsState, ParsedLogEntry } from './logOptionsReducer';
 import { LogSearchRow } from './logToolbar';
 import type { LogViewerAction } from './logViewerReducer';
 import ParsedLogTable from './ParsedLogTable';
-import RawLogViewer from './RawLogViewer';
 
 export const renderLogViewerContent = ({
   isParsedView,
@@ -270,16 +271,7 @@ export const LogViewerReadyView = ({
         >
           {renderedLogContent}
         </ScrollableRegion>
-        {!isTailFollowing && (
-          <button
-            type="button"
-            className="logs-viewer-resume-scrolling"
-            aria-label="Resume scrolling"
-            onClick={resumeScrolling}
-          >
-            Resume scrolling
-          </button>
-        )}
+        {!isTailFollowing && <LogResumeScrollingButton onResume={resumeScrolling} />}
       </div>
     </div>
   </div>

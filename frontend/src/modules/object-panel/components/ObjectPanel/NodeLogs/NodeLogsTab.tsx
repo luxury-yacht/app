@@ -3,6 +3,7 @@ import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Drop
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar from '@shared/components/IconBar/IconBar';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import RawLogViewer, { type RenderedLogRow } from '@shared/components/logs/RawLogViewer';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
@@ -35,6 +36,7 @@ import { fetchNodeLogs, type NodeLogFetchResponse, type NodeLogSource } from './
 import '../Logs/LogViewer.css';
 import './NodeLogsTab.css';
 import { useLogDownloadMenu } from '@shared/hooks/useLogDownloadMenu';
+import { useLogScrollRestoration } from '@shared/hooks/useLogScrollRestoration';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
 import { getObjPanelLogsBufferMaxSize } from '@/core/settings/appPreferences';
@@ -46,11 +48,9 @@ import {
   useLogPresentation,
   useRawViewFallback,
 } from '../Logs/hooks/useLogPresentation';
-import { useLogScrollRestoration } from '../Logs/hooks/useLogScrollRestoration';
 import { useLogSelectionCopy } from '../Logs/hooks/useLogSelectionCopy';
 import { useTerminalTheme } from '../Logs/hooks/useTerminalTheme';
 import ParsedLogTable from '../Logs/ParsedLogTable';
-import RawLogViewer, { type RenderedLogRow } from '../Logs/RawLogViewer';
 
 const NODE_LOG_TAIL_BYTES = 256 * 1024;
 

@@ -5,6 +5,7 @@
  * carries its timestamp, pod and container, and the copy text reads the same.
  */
 
+import type { RenderedLogRow } from '@shared/components/logs/RawLogViewer';
 import type React from 'react';
 import { useMemo, useRef } from 'react';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
@@ -17,7 +18,6 @@ import {
 } from './containerLogFilters';
 import { LogMetadataButton } from './LogMetadataButton';
 import { formatRawOrPrettyJsonLine } from './parsedLogUtils';
-import type { RenderedLogRow } from './RawLogViewer';
 
 const EMPTY_CONTAINER_LOG_PLACEHOLDER = '[container emitted an empty log]';
 

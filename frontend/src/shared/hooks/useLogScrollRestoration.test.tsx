@@ -1,8 +1,7 @@
 import { act, useRef, useState } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LogScrollPosition } from '../../types';
-import { useLogScrollRestoration } from './useLogScrollRestoration';
+import { type LogScrollPosition, useLogScrollRestoration } from './useLogScrollRestoration';
 
 const getScrollPosition = vi.fn<() => LogScrollPosition | undefined>(() => undefined);
 const setScrollPosition = vi.fn();

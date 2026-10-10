@@ -21,7 +21,7 @@ type lifecycleOwnerFixture struct {
 
 func newLifecycleOwnerFixture(t testing.TB, reporters ...sentryreporting.Reporter) *lifecycleOwnerFixture {
 	t.Helper()
-	logs := NewAppLogService(NewLogger(1000, reporters...))
+	logs := NewApplicationLogs(reporters...)
 	signals := newApplicationRuntimeSignals(func(context.Context, string, ...interface{}) {})
 	fixture := &lifecycleOwnerFixture{
 		AppLogs:     logs,

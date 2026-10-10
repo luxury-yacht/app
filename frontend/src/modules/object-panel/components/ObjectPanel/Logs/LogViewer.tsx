@@ -15,6 +15,7 @@ import {
   isNarrowingFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { useLogDownloadMenu } from '@shared/hooks/useLogDownloadMenu';
+import { useLogScrollRestoration } from '@shared/hooks/useLogScrollRestoration';
 import React, { useCallback, useEffect, useId, useMemo, useReducer, useRef } from 'react';
 import { useContainerLogsStream } from './hooks/useContainerLogsStream';
 import { useLogFiltering } from './hooks/useLogFiltering';
@@ -72,7 +73,6 @@ import { getWorkloadPodNames, useActivePodSet, useHiddenPods } from './hooks/use
 import { useAnchoredLogEntries } from './hooks/useAnchoredLogEntries';
 import { useLogMessageRenderer } from './hooks/useLogMessageRenderer';
 import { containersOfEntries, useLogScopeContainers } from './hooks/useLogScopeContainers';
-import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
 import {
   type BackendLogSelection,
   type PreviousContainerLogs,

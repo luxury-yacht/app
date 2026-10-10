@@ -1,5 +1,8 @@
 /* Application Logs Panel Styles */
 
+/* The column header uses the GridTable header tokens and typography. */
+@import "@styles/components/gridtables.css";
+
 .app-logs-panel-toolbar {
   flex-shrink: 0;
   background-color: var(--color-bg-secondary);
@@ -101,13 +104,21 @@
   overflow: hidden;
 }
 
+/* Positions the Resume scrolling button over the bottom of the log body. */
+.app-logs-content-frame {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Line text (size, line height, side padding, row spacing) comes from the log
+   views' shared .logs-viewer-text, as in Container Logs; App Logs keeps its colours. */
 .app-logs-container {
   flex: 1;
   overflow-y: auto;
-  padding: 10px;
   font-family: var(--font-family-mono);
-  font-size: 12px;
-  line-height: 1.5;
   background: var(--color-bg);
   min-height: 0;
   user-select: text;
@@ -127,16 +138,18 @@
     var(--app-log-source-width, 120px) var(--app-log-cluster-width, 140px) minmax(0, 1fr);
 }
 
+/* Styled like every table's column header (.gridtable-header, .grid-cell-header);
+   the 0.5rem sides match .logs-viewer-text, keeping each label over its column. */
 .app-logs-header {
   flex-shrink: 0;
-  padding: 5px 10px;
-  background: var(--color-bg-secondary);
-  border-bottom: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font-family: var(--font-family-mono);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.5;
+  padding: var(--grid-spacing-cell-y) 0.5rem;
+  background: var(--grid-bg-header);
+  border-bottom: 1px solid var(--grid-border-color);
+  color: var(--grid-text-secondary);
+  font-size: var(--grid-font-size-header);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.04em;
+  line-height: var(--grid-cell-line-height);
   text-transform: uppercase;
 }
 
@@ -148,6 +161,8 @@
 .app-logs-header-cell {
   position: relative;
   min-width: 0;
+  padding: 0;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -163,9 +178,9 @@
   margin: 0;
   padding: 0;
   position: absolute;
-  top: -5px;
+  top: calc(-1 * var(--grid-spacing-cell-y));
   right: -4px;
-  bottom: -5px;
+  bottom: calc(-1 * var(--grid-spacing-cell-y));
   z-index: 1;
   width: 8px;
   cursor: col-resize;
@@ -201,15 +216,6 @@
 }
 
 /* Log entries */
-.log-entry {
-  padding: 2px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.log-entry:hover {
-  background: rgba(255, 255, 255, 0.02);
-}
-
 .log-timestamp {
   color: var(--color-text-tertiary);
   min-width: 0;
@@ -263,8 +269,10 @@
 .log-message {
   min-width: 0;
   color: var(--color-text);
-  word-wrap: break-word;
+  /* Wraps like a container log line (.log-viewer-line). */
   white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-all;
   padding-left: 10px;
 }
 
