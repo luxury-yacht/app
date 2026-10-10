@@ -27,7 +27,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 6px 12px 10px 28px;
+  padding: 0 0 10px 0;
   overflow: hidden;
 }
 
