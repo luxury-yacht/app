@@ -26,6 +26,7 @@ const VIEW_IDS = new Set<string>([
   'cluster-external-secrets',
   'namespace-workloads',
   'namespace-pods',
+  'namespace-workload-pods',
   'namespace-events',
   'namespace-network',
   'namespace-storage',

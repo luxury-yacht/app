@@ -19,7 +19,7 @@ export interface ViewDestination {
 
 // Namespace-scoped resource kind → view destination
 const NAMESPACE_SCOPED_MAP: Record<string, ViewDestination> = {
-  pod: { viewType: 'namespace', tab: 'workloads', destinationViewId: 'namespace-pods' },
+  pod: { viewType: 'namespace', tab: 'pods' },
   deployment: { viewType: 'namespace', tab: 'workloads' },
   statefulset: { viewType: 'namespace', tab: 'workloads' },
   daemonset: { viewType: 'namespace', tab: 'workloads' },

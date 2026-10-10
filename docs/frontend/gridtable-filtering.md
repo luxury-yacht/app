@@ -109,8 +109,9 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
 - Pods, Workloads, and Nodes are the reference implementations: options describe
   the full structural scope, stay stable when a selection narrows the result,
   and feed the shared typed-resource scope builder. Their providers publish
-  Status, but the user-facing tables exclude it. The object panel's Pods tab
-  shows Owner then Node. The split views' Pods pane (Workloads, Nodes) shows no
+  Status, but the user-facing tables exclude it. The Pods view and the object
+  panel's Pods tab show Owner then Node, after Namespace in all-namespaces
+  views. The split views' Pods pane (Workloads, Nodes) shows no
   Namespaces, Owner, or Node control: the upper table's selected row narrows it
   as a selection facet (`owners` for a workload or standalone Pod, `nodes` for a
   node), and saved values of those filters are dropped.
@@ -141,8 +142,8 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
   saved.
 - Favorites schema v3 stores named panes only. The backend migrates v1 and v2
   entries individually, keeping valid entries when another is malformed; legacy
-  Workloads and Pods favorites become the combined Workloads route, with the
-  unrecorded pane at defaults. A Nodes favorite saved as one table (`main`)
+  Workloads favorites become the Workloads split with Pods at defaults, and
+  legacy Pods favorites open the Pods view. A Nodes favorite saved as one table (`main`)
   loads, migrates, and imports as the Nodes pane with Pods at defaults; the
   pane shape is unchanged, so the schema stays v3. The migrated collection
   saves as v3; a newer,

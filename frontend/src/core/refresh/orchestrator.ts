@@ -37,7 +37,13 @@ import {
   makeInFlightKey,
   type RefreshDemand,
 } from './refreshRuntime';
-import { isResourceStreamDomain, isResourceStreamViewActive } from './resourceStreamViews';
+import {
+  isNodesView,
+  isPodsTableNamespaceView,
+  isResourceStreamDomain,
+  isResourceStreamViewActive,
+  NODES_VIEW_PODS_SCOPE,
+} from './resourceStreamViews';
 import {
   normalizeNamespaceScope as normalizeNamespaceScopeValue,
   normalizeRefreshDomainScope,
@@ -331,7 +337,7 @@ class RefreshOrchestrator {
     // Refresh namespaces across all enabled scopes.
     tasks.push(this.refreshEnabledScopes('namespaces', { isManual: true }));
 
-    const podsRefresh = this.triggerActiveWorkloadsPodsRefresh(targetContext);
+    const podsRefresh = this.triggerActivePodsTableRefresh(targetContext);
     if (podsRefresh) {
       tasks.push(podsRefresh);
     }
@@ -1064,20 +1070,26 @@ class RefreshOrchestrator {
     });
   }
 
-  private triggerActiveWorkloadsPodsRefresh(context: RefreshContext): Promise<void> | null {
-    if (context.currentView !== 'namespace' || context.activeNamespaceView !== 'workloads') {
+  // The pods table a view leases is a query lease, not the view's refresher,
+  // so manual refresh reaches it here.
+  private activePodsTableScope(context: RefreshContext): string | null {
+    if (isPodsTableNamespaceView(context)) {
+      return this.normalizeNamespaceScope(context.selectedNamespace);
+    }
+    if (isNodesView(context)) {
+      return normalizeNamespaceScopeValue(
+        NODES_VIEW_PODS_SCOPE,
+        context.selectedClusterId ?? undefined
+      );
+    }
+    return null;
+  }
+
+  private triggerActivePodsTableRefresh(context: RefreshContext): Promise<void> | null {
+    const scope = this.activePodsTableScope(context);
+    if (!scope || !this.isScopedDomainEnabledInternal('pods', scope)) {
       return null;
     }
-
-    const scope = this.normalizeNamespaceScope(context.selectedNamespace);
-    if (!scope) {
-      return null;
-    }
-
-    if (!this.isScopedDomainEnabledInternal('pods', scope)) {
-      return null;
-    }
-
     return this.fetchScopedDomain('pods', scope, { isManual: true });
   }
 

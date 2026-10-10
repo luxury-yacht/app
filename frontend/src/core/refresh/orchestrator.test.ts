@@ -1230,6 +1230,43 @@ describe('refreshOrchestrator', () => {
     );
   });
 
+  it.each([
+    {
+      view: 'Pods',
+      context: {
+        currentView: 'namespace',
+        activeNamespaceView: 'pods',
+        selectedNamespace: 'team-a',
+      },
+      scope: 'namespace:team-a',
+    },
+    {
+      view: 'Nodes',
+      context: { currentView: 'cluster', activeClusterView: 'nodes' },
+      scope: 'namespace:all',
+    },
+  ] as const)(
+    'refreshes the pods table when the $view view is active',
+    async ({ context, scope }) => {
+      refreshManagerMocks.triggerManualRefreshForContextMock.mockResolvedValue(
+        undefined as unknown as undefined
+      );
+      scopedFetch.mockResolvedValue(undefined as unknown as undefined);
+
+      registerPodsDomain();
+      refreshOrchestrator.updateContext({ ...context, selectedClusterId: 'cluster-a' });
+      refreshOrchestrator.setScopedDomainEnabled('pods', scope, true);
+
+      await refreshOrchestrator.triggerManualRefreshForContext();
+
+      expect(scopedFetch).toHaveBeenCalledWith(
+        'pods',
+        `cluster-a|${scope}`,
+        expect.objectContaining({ isManual: true })
+      );
+    }
+  );
+
   it('enables and disables scoped refreshers when pods scopes change', () => {
     refreshManagerMocks.enableMock.mockReset();
     refreshManagerMocks.disableMock.mockReset();

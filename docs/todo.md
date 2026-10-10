@@ -9,6 +9,7 @@
 - Add the Pods view back, with the full set of filter controls.
     - Pod "Go to Table View" and other jumps to a pod's row land in the Pods view, not the pods pane.
     - Old favorites and links that point to `pods` open the Pods view instead of Workloads.
+    - Status: implemented, including the Cluster Overview ready-Pod count opening it. The rendered check in the running app is still to do.
 - In the Sidebar, in the Namespaces section, only Events and Map stay at the top level. Everything else goes in the "Resources" expandable section:
     - Events
     - Map

@@ -30,8 +30,9 @@ virtualization, and native table accessibility. Apply the
 - The Workloads and Nodes split views select with a pointer click or `Space`;
   `Enter` and the Kind/Name links still open the object. The selection lives
   only while the view is mounted and clears when its row leaves the settled
-  rows (`useClearHiddenRowSelection`), the scope changes, or a pod jump
-  targets the pane, so the pane is never narrowed without a highlighted row.
+  rows (`useClearHiddenRowSelection`) or the scope changes, so the pane is never
+  narrowed without a highlighted row. Pod jumps land in the Pods view, never a
+  pane.
 - Shared filter and Columns dropdown menus measure both viewport axes on open:
   right-edge menus end-align when start alignment would overflow, and width stays
   capped to the visible viewport. The menus are portaled, so under CSS app zoom

@@ -16,17 +16,29 @@ const isFocusedPodsScope = (scope?: string): boolean => {
   return base.startsWith('workload:') || base.startsWith('node:');
 };
 
-// The Nodes view's pods pane lists every pod in the cluster under the
-// cluster-wide namespace scope.
-const isNodesViewPodsScope = (context: RefreshContext, scope?: string): boolean =>
-  context.currentView === 'cluster' &&
-  context.activeClusterView === 'nodes' &&
-  stripClusterScope(scope) === 'namespace:all';
+// Views whose tables list pods: the Workloads and Pods views under the
+// selected namespace scope, and the Nodes view's pane under the cluster-wide one.
+const PODS_TABLE_NAMESPACE_VIEWS: ReadonlySet<RefreshContext['activeNamespaceView']> = new Set([
+  'workloads',
+  'pods',
+]);
+export const NODES_VIEW_PODS_SCOPE = 'namespace:all';
+
+export const isPodsTableNamespaceView = (context: RefreshContext): boolean =>
+  context.currentView === 'namespace' &&
+  PODS_TABLE_NAMESPACE_VIEWS.has(context.activeNamespaceView);
+
+export const isNodesView = (context: RefreshContext): boolean =>
+  context.currentView === 'cluster' && context.activeClusterView === 'nodes';
+
+const isPodsTableScopeActive = (context: RefreshContext, scope?: string): boolean =>
+  isFocusedPodsScope(scope) ||
+  isPodsTableNamespaceView(context) ||
+  (isNodesView(context) && stripClusterScope(scope) === NODES_VIEW_PODS_SCOPE);
 
 const NAMESPACE_VIEW_BY_DOMAIN: Partial<
   Record<ResourceDomain, NonNullable<RefreshContext['activeNamespaceView']>>
 > = {
-  pods: 'workloads',
   'namespace-workloads': 'workloads',
   'namespace-config': 'config',
   'namespace-network': 'network',
@@ -56,8 +68,8 @@ export const isResourceStreamViewActive = (
     return true;
   }
 
-  if (domain === 'pods' && (isFocusedPodsScope(scope) || isNodesViewPodsScope(context, scope))) {
-    return true;
+  if (domain === 'pods') {
+    return isPodsTableScopeActive(context, scope);
   }
   const namespaceView = NAMESPACE_VIEW_BY_DOMAIN[domain];
   if (namespaceView) {

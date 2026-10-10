@@ -237,7 +237,7 @@ func TestLoadFavoritesFileMigratesV2FavoritesIndividually(t *testing.T) {
 	require.NotContains(t, string(rewritten), "caseSensitive")
 }
 
-func TestLoadFavoritesFileMigratesV2WorkloadsAndPodsIntoBothPanes(t *testing.T) {
+func TestLoadFavoritesFileMigratesV2WorkloadsAndPodsToTheirRoutes(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newPersistenceTestFixture()
 	path, err := app.Favorites.getFavoritesFilePath()
@@ -280,12 +280,13 @@ func TestLoadFavoritesFileMigratesV2WorkloadsAndPodsIntoBothPanes(t *testing.T) 
 	require.Equal(t, "kind", workloads.Panes["workloads"].TableState.SortColumn)
 	require.Equal(t, defaultPane, workloads.Panes["pods"])
 
+	// A flat Pods favorite opens the Pods view, a single-table route.
 	pods := state.Favorites[1]
-	require.Equal(t, "workloads", pods.View)
-	require.Equal(t, "worker", pods.Panes["pods"].Filters.Search)
-	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"node-a"}}, pods.Panes["pods"].Filters.QueryFacets["nodes"])
-	require.Equal(t, "node", pods.Panes["pods"].TableState.SortColumn)
-	require.Equal(t, defaultPane, pods.Panes["workloads"])
+	require.Equal(t, "pods", pods.View)
+	require.Len(t, pods.Panes, 1)
+	require.Equal(t, "worker", pods.Panes["main"].Filters.Search)
+	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"node-a"}}, pods.Panes["main"].Filters.QueryFacets["nodes"])
+	require.Equal(t, "node", pods.Panes["main"].TableState.SortColumn)
 }
 
 // The Nodes route became a Nodes/Pods split; a favorite saved as one table
@@ -430,12 +431,12 @@ func TestLoadFavoritesFileMigratesV1FavoritesLeftOnDiskByV2(t *testing.T) {
 	require.Equal(t, []int{0, 1}, []int{state.Favorites[0].Order, state.Favorites[1].Order})
 
 	pods := state.Favorites[0]
-	require.Equal(t, "workloads", pods.View)
+	require.Equal(t, "pods", pods.View)
 	require.Equal(t, "alpha:context", pods.ClusterID)
-	require.Equal(t, FavoriteFilterSelection{Mode: "all"}, pods.Panes["pods"].Filters.Kinds)
-	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"team-a"}}, pods.Panes["pods"].Filters.Namespaces)
-	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"node-a"}}, pods.Panes["pods"].Filters.QueryFacets["nodes"])
-	require.Equal(t, "node", pods.Panes["pods"].TableState.SortColumn)
+	require.Equal(t, FavoriteFilterSelection{Mode: "all"}, pods.Panes["main"].Filters.Kinds)
+	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"team-a"}}, pods.Panes["main"].Filters.Namespaces)
+	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"node-a"}}, pods.Panes["main"].Filters.QueryFacets["nodes"])
+	require.Equal(t, "node", pods.Panes["main"].TableState.SortColumn)
 
 	config := state.Favorites[1]
 	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"ConfigMap"}}, config.Panes["main"].Filters.Kinds)

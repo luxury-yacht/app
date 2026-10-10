@@ -295,6 +295,7 @@ describe('Sidebar', () => {
       'namespace-group-toggle:resources',
       'browse',
       'workloads',
+      'pods',
       'autoscaling',
       'config',
       'network',

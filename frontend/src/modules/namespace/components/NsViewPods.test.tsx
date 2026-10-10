@@ -14,7 +14,6 @@ import type React from 'react';
 import { act, isValidElement } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
 import type {
   CanonicalRowTestOverrides,
   PodMetricsInfo,
@@ -57,6 +56,7 @@ const {
   gridPersistenceParamsRef,
   runObjectActionMock,
   errorHandlerMock,
+  namespaceLinkTabsRef,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as unknown as CapturedGridTableProps },
   confirmationPropsRef: { current: null as unknown as ConfirmationProps },
@@ -82,13 +82,19 @@ const {
       includeMetadata: false,
     } as GridTableFilterState,
   },
-  gridPersistenceParamsRef: { current: null as { shareNamespaceFilter?: boolean } | null },
+  gridPersistenceParamsRef: {
+    current: null as { shareNamespaceFilter?: boolean; viewId?: string } | null,
+  },
+  namespaceLinkTabsRef: { current: [] as string[] },
   runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   errorHandlerMock: { handle: vi.fn() },
 }));
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
-  useNamespaceColumnLink: () => namespaceColumnLinkMock,
+  useNamespaceColumnLink: (tab: string) => {
+    namespaceLinkTabsRef.current.push(tab);
+    return namespaceColumnLinkMock;
+  },
 }));
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', async (importOriginal) => {
@@ -209,7 +215,7 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => {
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => {
   return {
-    useGridTablePersistence: (params: { shareNamespaceFilter?: boolean }) => {
+    useGridTablePersistence: (params: { shareNamespaceFilter?: boolean; viewId?: string }) => {
       gridPersistenceParamsRef.current = params;
       return {
         storageKey: 'gridtable:v1:alpha:namespace-pods',
@@ -303,7 +309,7 @@ vi.mock('@utils/errorHandler', () => ({
   errorHandler: errorHandlerMock,
 }));
 
-import NsViewPods from '@modules/namespace/components/NsViewPods';
+import NsViewPods, { PodsTable } from '@modules/namespace/components/NsViewPods';
 
 const createPod = (
   override: CanonicalRowTestOverrides<PodSnapshotEntry> = {}
@@ -356,6 +362,7 @@ describe('NsViewPods', () => {
     requestRefreshDomainStateMock.mockReset();
     scopedLifecycleMock.mockReset();
     setFiltersMock.mockReset();
+    namespaceLinkTabsRef.current = [];
     persistedFiltersRef.current = {
       search: '',
       kinds: { mode: 'all' },
@@ -404,8 +411,17 @@ describe('NsViewPods', () => {
     window.sessionStorage.clear();
   });
 
+  const paneControls = (
+    overrides: Partial<NonNullable<React.ComponentProps<typeof PodsTable>['pane']>> = {}
+  ) => ({
+    selectedObject: null,
+    collapsed: false,
+    onCollapsedChange: vi.fn(),
+    ...overrides,
+  });
+
   const renderPods = async (
-    props: Partial<React.ComponentProps<typeof NsViewPods>> & { data?: PodSnapshotEntry[] } = {},
+    props: Partial<React.ComponentProps<typeof PodsTable>> & { data?: PodSnapshotEntry[] } = {},
     { skipDefaultQueryMock = false }: { skipDefaultQueryMock?: boolean } = {}
   ) => {
     // Include cluster metadata so GridTable key extraction stays cluster-scoped.
@@ -472,10 +488,11 @@ describe('NsViewPods', () => {
     const { data: _seedData, ...viewProps } = props;
     await act(async () => {
       root.render(
-        <NsViewPods
+        <PodsTable
           namespace="team-a"
           clusterId="alpha:ctx"
-          viewId="namespace-pods"
+          viewId="namespace-workload-pods"
+          namespaceLinkView="workloads"
           metrics={defaultMetrics}
           {...viewProps}
         />
@@ -538,6 +555,46 @@ describe('NsViewPods', () => {
     }
   );
 
+  it('opens and navigates to a pod node in the pod cluster', async () => {
+    const pod = createPod({ ref: { clusterId: 'NodeCluster:Case', namespace: 'team-a' } });
+    await renderPods({ data: [pod] });
+    const nodeColumn = requireValue(
+      gridTablePropsRef.current.columns.find((column) => column.key === 'node'),
+      'expected node column'
+    );
+    const cell = requireReactElement<{
+      onClick: (event: {
+        altKey: boolean;
+        preventDefault: () => void;
+        stopPropagation: () => void;
+      }) => void;
+    }>(nodeColumn.render(pod), 'expected node link');
+    const nodeIdentity = {
+      clusterId: 'NodeCluster:Case',
+      group: '',
+      version: 'v1',
+      kind: 'Node',
+      name: 'node-a',
+    };
+
+    act(() =>
+      cell.props.onClick({ altKey: false, preventDefault: vi.fn(), stopPropagation: vi.fn() })
+    );
+    expect(openWithObjectMock).toHaveBeenCalledWith(expect.objectContaining(nodeIdentity));
+    act(() =>
+      cell.props.onClick({ altKey: true, preventDefault: vi.fn(), stopPropagation: vi.fn() })
+    );
+    expect(navigateToViewMock).toHaveBeenCalledWith(expect.objectContaining(nodeIdentity));
+
+    // An unscheduled pod has no node to open.
+    const unscheduledCell = nodeColumn.render(createPod({ node: '' }));
+    expect(
+      isValidElement<{ onClick?: unknown }>(unscheduledCell)
+        ? unscheduledCell.props.onClick
+        : undefined
+    ).toBeUndefined();
+  });
+
   it.each([
     { ownerKind: 'None', ownerName: 'None' },
     { ownerKind: 'Deployment', ownerName: 'missing-version' },
@@ -569,8 +626,8 @@ describe('NsViewPods', () => {
   };
 
   it('puts the Pods collapse action left of the Namespace dropdown', async () => {
-    const onPodsCollapsedChange = vi.fn();
-    await renderPods({ onPodsCollapsedChange });
+    const onCollapsedChange = vi.fn();
+    await renderPods({ pane: paneControls({ onCollapsedChange }) });
 
     // The pane's collapse control stays left of the Namespace dropdown, out of the main icon bar.
     const options = gridTablePropsRef.current.filters?.options;
@@ -594,12 +651,12 @@ describe('NsViewPods', () => {
     act(() => {
       collapseAction.onClick();
     });
-    expect(onPodsCollapsedChange).toHaveBeenCalledWith(true);
+    expect(onCollapsedChange).toHaveBeenCalledWith(true);
   });
 
   it('shows only the expand control and Show Pods text while collapsed', async () => {
-    const onPodsCollapsedChange = vi.fn();
-    await renderPods({ collapsed: true, onPodsCollapsedChange });
+    const onCollapsedChange = vi.fn();
+    await renderPods({ pane: paneControls({ collapsed: true, onCollapsedChange }) });
 
     expect(scopedLifecycleMock).toHaveBeenCalledWith(
       expect.objectContaining({ domain: 'pods', enabled: false })
@@ -628,26 +685,7 @@ describe('NsViewPods', () => {
     );
 
     act(() => expandButton?.click());
-    expect(onPodsCollapsedChange).toHaveBeenCalledWith(false);
-  });
-
-  it('expands a collapsed Pods pane when a Pod focus request targets it', async () => {
-    const onPodsCollapsedChange = vi.fn();
-    await renderPods({ collapsed: true, onPodsCollapsedChange });
-
-    act(() => {
-      eventBus.emit('gridtable:focus-request', {
-        clusterId: 'alpha:ctx',
-        group: '',
-        version: 'v1',
-        kind: 'Pod',
-        namespace: 'team-a',
-        name: 'web-1',
-        destinationViewId: 'namespace-pods',
-      });
-    });
-
-    expect(onPodsCollapsedChange).toHaveBeenCalledWith(false);
+    expect(onCollapsedChange).toHaveBeenCalledWith(false);
   });
 
   it('uses the typed query result for all-namespaces pods on first render', async () => {
@@ -712,7 +750,10 @@ describe('NsViewPods', () => {
   };
 
   it('shows only the selected workload pods without saving the selection as a filter', async () => {
-    await renderPods({ namespace: ALL_NAMESPACES_SCOPE, selectedObject: selectedDeployment });
+    await renderPods({
+      namespace: ALL_NAMESPACES_SCOPE,
+      pane: paneControls({ selectedObject: selectedDeployment }),
+    });
 
     expect(lastQueryParams().getAll('facet.owners')).toEqual([
       '["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]',
@@ -724,13 +765,15 @@ describe('NsViewPods', () => {
   it('shows only the selected node pods', async () => {
     await renderPods({
       namespace: ALL_NAMESPACES_SCOPE,
-      selectedObject: {
-        clusterId: 'alpha:ctx',
-        group: '',
-        version: 'v1',
-        kind: 'Node',
-        name: 'node-a',
-      },
+      pane: paneControls({
+        selectedObject: {
+          clusterId: 'alpha:ctx',
+          group: '',
+          version: 'v1',
+          kind: 'Node',
+          name: 'node-a',
+        },
+      }),
     });
 
     expect(lastQueryParams().getAll('facet.nodes')).toEqual(['node-a']);
@@ -740,7 +783,7 @@ describe('NsViewPods', () => {
   it('ignores a selection from another cluster', async () => {
     await renderPods({
       namespace: ALL_NAMESPACES_SCOPE,
-      selectedObject: { ...selectedDeployment, clusterId: 'beta:ctx' },
+      pane: paneControls({ selectedObject: { ...selectedDeployment, clusterId: 'beta:ctx' } }),
     });
 
     expect(lastQueryParams().getAll('facet.owners')).toEqual([]);
@@ -762,7 +805,7 @@ describe('NsViewPods', () => {
       includeMetadata: false,
     };
 
-    await renderPods({ namespace: ALL_NAMESPACES_SCOPE });
+    await renderPods({ namespace: ALL_NAMESPACES_SCOPE, pane: paneControls() });
 
     // The pane neither reads nor writes the Namespaces selection All Namespaces views share.
     expect(gridPersistenceParamsRef.current?.shareNamespaceFilter ?? false).toBe(false);
@@ -817,30 +860,72 @@ describe('NsViewPods', () => {
       },
     });
 
-    await renderPods({ namespace: ALL_NAMESPACES_SCOPE });
+    await renderPods({ namespace: ALL_NAMESPACES_SCOPE, pane: paneControls() });
 
     const options = gridTablePropsRef.current.filters?.options;
     expect(options?.queryFacets ?? []).toEqual([]);
     expect(options?.showNamespaceDropdown ?? false).toBe(false);
   });
 
-  it('clears the selection when a Pod focus request targets the pane', async () => {
-    const onSelectionClear = vi.fn();
-    await renderPods({ selectedObject: selectedDeployment, onSelectionClear });
+  const facetedPodsResponse = () => ({
+    status: 'executed',
+    data: {
+      status: 'ready',
+      data: {
+        rows: [createPod()],
+        total: 1,
+        totalIsExact: true,
+        namespaces: ['team-a', 'team-b'],
+        kinds: ['Pod'],
+        facetValues: [
+          { key: 'statuses', options: [{ value: 'Running', label: 'Running' }], exact: true },
+          {
+            key: 'owners',
+            options: [{ value: 'owner:api', label: 'Deployment/api' }],
+            exact: true,
+          },
+          { key: 'nodes', options: [{ value: 'node-a', label: 'node-a' }], exact: true },
+        ],
+        facetsExact: true,
+        capabilities: {
+          filterableFields: ['kinds', 'namespaces'],
+          queryFacets: [
+            { key: 'statuses', label: 'Status', placeholder: 'All statuses' },
+            { key: 'owners', label: 'Owner', placeholder: 'All owners', searchable: true },
+            { key: 'nodes', label: 'Node', placeholder: 'All nodes', searchable: true },
+          ],
+        },
+        metrics: { stale: false, successCount: 1, failureCount: 0 },
+      },
+    },
+  });
 
-    act(() => {
-      eventBus.emit('gridtable:focus-request', {
-        clusterId: 'alpha:ctx',
-        group: '',
-        version: 'v1',
-        kind: 'Pod',
-        namespace: 'team-a',
-        name: 'web-1',
-        destinationViewId: 'namespace-pods',
-      });
+  it('offers the Pods view every filter, saved apart from the Workloads pane', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue(facetedPodsResponse());
+
+    await act(async () => {
+      root.render(<NsViewPods namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />);
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
-    expect(onSelectionClear).toHaveBeenCalledOnce();
+    const options = gridTablePropsRef.current.filters?.options;
+    expect((options?.queryFacets ?? []).map((facet) => facet.key)).toEqual(['owners', 'nodes']);
+    expect(options?.showNamespaceDropdown).toBe(true);
+    // Like every All Namespaces view, it shares the cluster's Namespaces selection.
+    expect(gridPersistenceParamsRef.current).toMatchObject({
+      viewId: 'namespace-pods',
+      shareNamespaceFilter: true,
+    });
+  });
+
+  it('opens a pod namespace in the Pods view from the Namespace column', async () => {
+    await act(async () => {
+      root.render(<NsViewPods namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />);
+      await Promise.resolve();
+    });
+
+    expect(namespaceLinkTabsRef.current[namespaceLinkTabsRef.current.length - 1]).toBe('pods');
   });
 
   it('uses backend statusPresentation for the pod status class', async () => {

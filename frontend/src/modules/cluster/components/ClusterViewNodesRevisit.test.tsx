@@ -124,7 +124,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 }));
 // The revisit contract belongs to the Nodes table; the pods pane has its own tests.
 vi.mock('@modules/namespace/components/NsViewPods', () => ({
-  default: () => null,
+  PodsTable: () => null,
 }));
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({

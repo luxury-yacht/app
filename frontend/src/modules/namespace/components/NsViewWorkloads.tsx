@@ -7,7 +7,7 @@
 
 import './NsViewWorkloads.css';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import NsViewPods from '@modules/namespace/components/NsViewPods';
+import { type PodsPaneControls, PodsTable } from '@modules/namespace/components/NsViewPods';
 import {
   appendWorkloadTokens,
   type WorkloadData,
@@ -315,6 +315,14 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
   const handleWorkloadSelectionClear = useCallback(() => {
     setSelectedWorkload(null);
   }, []);
+  const podsPane = useMemo<PodsPaneControls>(
+    () => ({
+      selectedObject: scopedSelectedWorkload,
+      collapsed: podsCollapsed,
+      onCollapsedChange: setPodsCollapsed,
+    }),
+    [podsCollapsed, scopedSelectedWorkload]
+  );
   return (
     <FavoritePaneGroup primaryPaneId="workloads" expectedPaneIds={WORKLOAD_FAVORITE_PANES}>
       <StackedSplitPane
@@ -333,16 +341,14 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
           />
         }
         lower={
-          <NsViewPods
+          <PodsTable
             namespace={namespace}
             clusterId={selectedClusterId}
-            viewId="namespace-pods"
+            viewId="namespace-workload-pods"
+            namespaceLinkView="workloads"
             showNamespaceColumn={showNamespaceColumn}
             metrics={metrics}
-            selectedObject={scopedSelectedWorkload}
-            onSelectionClear={handleWorkloadSelectionClear}
-            collapsed={podsCollapsed}
-            onPodsCollapsedChange={setPodsCollapsed}
+            pane={podsPane}
           />
         }
       />

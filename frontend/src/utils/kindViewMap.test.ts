@@ -11,7 +11,7 @@ import { getViewForKind } from './kindViewMap';
 describe('getViewForKind', () => {
   // One representative per destination, plus the Pods subtable and alias path.
   const namespaceKindCases: Array<[string, string, string, string?]> = [
-    ['Pod', 'namespace', 'workloads', 'namespace-pods'],
+    ['Pod', 'namespace', 'pods'],
     ['Deployment', 'namespace', 'workloads'],
     ['ConfigMap', 'namespace', 'config'],
     ['Service', 'namespace', 'network'],

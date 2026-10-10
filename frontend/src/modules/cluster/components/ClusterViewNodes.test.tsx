@@ -100,7 +100,7 @@ const favoritePaneGroupPropsRef = vi.hoisted(() => ({
 const favToggleStatesRef = vi.hoisted(() => ({ current: [] as Array<Record<string, unknown>> }));
 
 vi.mock('@modules/namespace/components/NsViewPods', () => ({
-  default: (props: Record<string, unknown>) => {
+  PodsTable: (props: Record<string, unknown>) => {
     podsPanePropsRef.current = props;
     return <div data-testid="pods-pane" />;
   },
@@ -340,7 +340,8 @@ describe('ClusterViewNodes', () => {
       clusterId: 'path:context',
       viewId: 'cluster-node-pods',
       showNamespaceColumn: true,
-      selectedObject: null,
+      namespaceLinkView: 'pods',
+      pane: { selectedObject: null },
     });
     // One favorite saves both panes, under the pane ids the backend upgrade writes.
     expect(favoritePaneGroupPropsRef.current).toMatchObject({
@@ -358,7 +359,9 @@ describe('ClusterViewNodes', () => {
     act(() => gridTablePropsRef.current.onRowPointerClick?.(baseNode));
 
     expect(openWithObjectMock).not.toHaveBeenCalled();
-    expect(podsPanePropsRef.current?.selectedObject).toEqual(
+    expect(
+      (podsPanePropsRef.current?.pane as { selectedObject?: unknown } | undefined)?.selectedObject
+    ).toEqual(
       expect.objectContaining({
         clusterId: 'alpha:ctx',
         group: '',
@@ -384,22 +387,16 @@ describe('ClusterViewNodes', () => {
       }
       clearAction.onClick();
     });
-    expect(podsPanePropsRef.current?.selectedObject).toBeNull();
+    expect(
+      (podsPanePropsRef.current?.pane as { selectedObject?: unknown } | undefined)?.selectedObject
+    ).toBeNull();
     expect(gridTablePropsRef.current.isRowSelected?.(baseNode, 0)).toBe(false);
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(baseNode));
     act(() => requireValue(gridTablePropsRef.current.onRowSelectionClear, 'clear')());
-    expect(podsPanePropsRef.current?.selectedObject).toBeNull();
-
-    act(() => gridTablePropsRef.current.onRowPointerClick?.(baseNode));
-    act(() => {
-      const onSelectionClear = podsPanePropsRef.current?.onSelectionClear;
-      if (typeof onSelectionClear !== 'function') {
-        throw new Error('Expected the pods pane selection clear callback');
-      }
-      onSelectionClear();
-    });
-    expect(podsPanePropsRef.current?.selectedObject).toBeNull();
+    expect(
+      (podsPanePropsRef.current?.pane as { selectedObject?: unknown } | undefined)?.selectedObject
+    ).toBeNull();
   });
 
   it('drops a node selection the settled table does not show', async () => {
@@ -412,7 +409,9 @@ describe('ClusterViewNodes', () => {
       })
     );
 
-    expect(podsPanePropsRef.current?.selectedObject).toBeNull();
+    expect(
+      (podsPanePropsRef.current?.pane as { selectedObject?: unknown } | undefined)?.selectedObject
+    ).toBeNull();
   });
 
   it('wires the Include metadata search toggle for the query-backed nodes table', async () => {

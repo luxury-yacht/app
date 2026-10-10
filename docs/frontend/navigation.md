@@ -59,7 +59,7 @@ same slot.
 | Scope | Direct links | Resources (in order) | Extensions |
 | --- | --- | --- | --- |
 | Cluster | Overview, Attention, Events, Identities | Browse, Config, Namespaces, Nodes, RBAC, Storage | CRDs, Custom Resources, then Cert Manager, External Secrets, Karpenter |
-| Namespace | Events, Map | Browse, Workloads, Autoscaling, Config, Network, Quotas, RBAC, Storage | Custom Resources, Argo CD, Cert Manager, External Secrets, Helm, Prometheus Operator |
+| Namespace | Events, Map | Browse, Workloads, Pods, Autoscaling, Config, Network, Quotas, RBAC, Storage | Custom Resources, Argo CD, Cert Manager, External Secrets, Helm, Prometheus Operator |
 
 - Identities is an observed-subject view, not a resource category, so it stays
   outside Resources ([cluster identities](../architecture/cluster-identities.md)).
@@ -97,7 +97,7 @@ resource views remain the place to browse and operate on full inventories.
 - Overview pod signals open Attention with `Kind = Pod` and Findings staged
   before navigation: starting/terminating → `pod-unhealthy`, failing →
   `error-presentation`, not-ready → `pod-not-ready`, restarts → `restarts`.
-  The ready Pod count still opens all-namespaces Workloads.
+  The ready Pod count opens the all-namespaces Pods view.
 - Never link Overview's whole warning-event section to Cluster Events: it
   mixes namespaced objects, while Cluster Events holds only events about
   cluster-scoped objects.

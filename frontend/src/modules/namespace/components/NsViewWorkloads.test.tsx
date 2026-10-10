@@ -69,11 +69,18 @@ const podsViewPropsRef = vi.hoisted(() => ({ current: null as Record<string, unk
 const namespaceClusterIdRef = vi.hoisted(() => ({ current: 'path:context' }));
 
 vi.mock('@modules/namespace/components/NsViewPods', () => ({
-  default: (props: Record<string, unknown>) => {
+  PodsTable: (props: Record<string, unknown>) => {
     podsViewPropsRef.current = props;
     return <div data-testid="pods-view" />;
   },
 }));
+
+const podsPane = () =>
+  (podsViewPropsRef.current?.pane ?? {}) as {
+    selectedObject?: unknown;
+    collapsed?: boolean;
+    onCollapsedChange?: (collapsed: boolean) => void;
+  };
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -343,38 +350,23 @@ describe('NsViewWorkloads', () => {
     expect(podsViewPropsRef.current).toMatchObject({
       namespace: 'team-a',
       clusterId: 'path:context',
-      viewId: 'namespace-pods',
-      selectedObject: null,
+      viewId: 'namespace-workload-pods',
+      namespaceLinkView: 'workloads',
+      pane: { selectedObject: null },
     });
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
 
     expect(openWithObjectMock).not.toHaveBeenCalled();
-    expect(podsViewPropsRef.current).toMatchObject({
+    expect(podsPane().selectedObject).toMatchObject({
+      clusterId: 'path:context',
+      group: 'apps',
+      version: 'v1',
+      kind: 'Deployment',
       namespace: 'team-a',
-      selectedObject: {
-        clusterId: 'path:context',
-        group: 'apps',
-        version: 'v1',
-        kind: 'Deployment',
-        namespace: 'team-a',
-        name: 'api',
-      },
+      name: 'api',
     });
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
-
-    // A pod jump into the pane drops the selection through the pane's callback.
-    act(() => {
-      const onSelectionClear = podsViewPropsRef.current?.onSelectionClear;
-      if (typeof onSelectionClear !== 'function') {
-        throw new Error('Expected the Pods selection clear callback');
-      }
-      onSelectionClear();
-    });
-    expect(podsViewPropsRef.current?.selectedObject).toBeNull();
-    expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(false);
-
-    act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
 
     // The view's own icon sits in the main icon bar, with the search options and Favorite.
     const clearAction = gridTablePropsRef.current.filters?.options?.preActions?.find(
@@ -386,7 +378,7 @@ describe('NsViewWorkloads', () => {
         clearAction.onClick();
       }
     });
-    expect(podsViewPropsRef.current?.selectedObject).toBeNull();
+    expect(podsPane().selectedObject).toBeNull();
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(false);
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
@@ -395,22 +387,19 @@ describe('NsViewWorkloads', () => {
         (action) => action.type !== 'separator' && action.title === 'Collapse Pods'
       )
     ).toBeUndefined();
-    expect(podsViewPropsRef.current).toMatchObject({
-      collapsed: false,
-      onPodsCollapsedChange: expect.any(Function),
-    });
+    expect(podsPane().collapsed).toBe(false);
     act(() => {
-      const onPodsCollapsedChange = podsViewPropsRef.current?.onPodsCollapsedChange;
-      if (typeof onPodsCollapsedChange !== 'function') {
+      const onCollapsedChange = podsPane().onCollapsedChange;
+      if (typeof onCollapsedChange !== 'function') {
         throw new Error('Expected the Pods collapse callback');
       }
-      onPodsCollapsedChange(true);
+      onCollapsedChange(true);
     });
-    expect(podsViewPropsRef.current).toMatchObject({ collapsed: true });
+    expect(podsPane().collapsed).toBe(true);
     // Selecting a workload while Pods is collapsed leaves it collapsed but still
     // narrows the pane, so expanding it later shows that workload's pods.
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-    expect(podsViewPropsRef.current).toMatchObject({
+    expect(podsPane()).toMatchObject({
       collapsed: true,
       selectedObject: expect.objectContaining({ name: 'api' }),
     });
@@ -452,7 +441,7 @@ describe('NsViewWorkloads', () => {
       clearSelection();
     });
 
-    expect(podsViewPropsRef.current?.selectedObject).toBeNull();
+    expect(podsPane().selectedObject).toBeNull();
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(false);
   });
 
@@ -482,7 +471,7 @@ describe('NsViewWorkloads', () => {
     act(() => gridTablePropsRef.current.onRowPointerClick?.(hidden));
 
     // No highlighted row means nothing may narrow the pane.
-    expect(podsViewPropsRef.current?.selectedObject).toBeNull();
+    expect(podsPane().selectedObject).toBeNull();
   });
 
   it('clears the workload selection when the namespace scope changes', async () => {
@@ -508,21 +497,24 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-    expect(podsViewPropsRef.current?.selectedObject).toMatchObject({ name: 'api' });
+    expect(podsPane().selectedObject).toMatchObject({ name: 'api' });
 
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-b" metrics={null} />);
       await Promise.resolve();
     });
 
-    expect(podsViewPropsRef.current).toMatchObject({ namespace: 'team-b', selectedObject: null });
+    expect(podsViewPropsRef.current).toMatchObject({
+      namespace: 'team-b',
+      pane: { selectedObject: null },
+    });
 
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
-    expect(podsViewPropsRef.current?.selectedObject).toBeNull();
+    expect(podsPane().selectedObject).toBeNull();
   });
 
   it('issues a namespace-scoped typed query for a single namespace and renders the query rows', async () => {

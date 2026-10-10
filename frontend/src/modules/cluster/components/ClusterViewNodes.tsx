@@ -7,7 +7,7 @@
 
 import './ClusterViewNodes.css';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import NsViewPods from '@modules/namespace/components/NsViewPods';
+import { type PodsPaneControls, PodsTable } from '@modules/namespace/components/NsViewPods';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
@@ -440,6 +440,14 @@ const ClusterViewNodes: React.FC<NodesViewProps> = ({ error }) => {
     [selectedClusterId, selectedClusterName]
   );
   const handleNodeSelectionClear = useCallback(() => setSelectedNode(null), []);
+  const podsPane = useMemo<PodsPaneControls>(
+    () => ({
+      selectedObject: selectedNode,
+      collapsed: podsCollapsed,
+      onCollapsedChange: setPodsCollapsed,
+    }),
+    [podsCollapsed, selectedNode]
+  );
   const selectedNodeKey = useMemo(
     () =>
       selectedNode
@@ -463,16 +471,14 @@ const ClusterViewNodes: React.FC<NodesViewProps> = ({ error }) => {
           />
         }
         lower={
-          <NsViewPods
+          <PodsTable
             namespace={ALL_NAMESPACES_SCOPE}
             clusterId={selectedClusterId}
             viewId="cluster-node-pods"
+            namespaceLinkView="pods"
             label="Node Pods"
             showNamespaceColumn
-            selectedObject={selectedNode}
-            onSelectionClear={handleNodeSelectionClear}
-            collapsed={podsCollapsed}
-            onPodsCollapsedChange={setPodsCollapsed}
+            pane={podsPane}
           />
         }
       />

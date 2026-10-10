@@ -72,6 +72,7 @@ const NAMESPACE_FEATURE_MAP: Record<NamespaceViewType, readonly PermissionFeatur
   browse: [], // Empty = show all namespace-scoped permissions (browse spans all resource types).
   map: [PERMISSION_FEATURES.objectMapResources],
   workloads: [PERMISSION_FEATURES.namespaceWorkloads, PERMISSION_FEATURES.namespacePods],
+  pods: [PERMISSION_FEATURES.namespacePods],
   config: [PERMISSION_FEATURES.namespaceConfig],
   network: [PERMISSION_FEATURES.namespaceNetwork],
   rbac: [PERMISSION_FEATURES.namespaceRBAC],

@@ -164,19 +164,12 @@ func migrateFlatFavorite(legacy favoriteV2) (Favorite, error) {
 		Panes:            map[string]FavoritePaneState{"main": pane},
 		Order:            legacy.Order,
 	}
-	if legacy.ViewType == "namespace" {
-		switch legacy.View {
-		case "pods":
-			migrated.View = "workloads"
-			migrated.Panes = map[string]FavoritePaneState{
-				"workloads": defaultFavoritePaneState(),
-				"pods":      pane,
-			}
-		case "workloads":
-			migrated.Panes = map[string]FavoritePaneState{
-				"workloads": pane,
-				"pods":      defaultFavoritePaneState(),
-			}
+	// The Workloads route is a Workloads/Pods split; a flat Pods favorite keeps
+	// the single-table Pods view.
+	if legacy.ViewType == "namespace" && legacy.View == "workloads" {
+		migrated.Panes = map[string]FavoritePaneState{
+			"workloads": pane,
+			"pods":      defaultFavoritePaneState(),
 		}
 	}
 	upgradeNodesFavoritePanes(&migrated)

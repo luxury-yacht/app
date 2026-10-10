@@ -246,6 +246,18 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
   {
     scope: 'namespace',
     sidebarGroup: 'resources',
+    id: 'pods',
+    supportsAllNamespaces: true,
+    label: 'Pods',
+    description: 'View and filter pods by namespace, owner, and node',
+    keywords: ['pods', 'namespace', 'containers', 'owner', 'node'],
+    // The pods table holds its own query lease; manual refresh reaches it
+    // through the orchestrator's pods-table views.
+    refresher: null,
+  },
+  {
+    scope: 'namespace',
+    sidebarGroup: 'resources',
     id: 'autoscaling',
     supportsAllNamespaces: true,
     label: 'Autoscaling',

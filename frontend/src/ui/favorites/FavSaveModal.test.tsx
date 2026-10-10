@@ -1056,6 +1056,7 @@ describe('FavSaveModal', () => {
       'namespace:map',
       'namespace:browse',
       'namespace:workloads',
+      'namespace:pods',
       'namespace:autoscaling',
       'namespace:config',
       'namespace:network',
