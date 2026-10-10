@@ -22,7 +22,7 @@ func (a *RefreshCoordinator) teardownClusterSubsystem(clusterID string) {
 		return
 	}
 
-	a.logger.Info(fmt.Sprintf("Tearing down subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
+	a.logger.Info(fmt.Sprintf("Tearing down subsystem for cluster %s", clusterID), logsources.Auth, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 
 	if aggregates := a.refreshAggregates.Load(); aggregates != nil {
 		subsystems, order := refreshSubsystemTopology(a.snapshotRefreshSubsystems())
@@ -50,7 +50,7 @@ func (a *RefreshCoordinator) rebuildClusterSubsystem(clusterID string) {
 	if a == nil || clusterID == "" {
 		return
 	}
-	a.logger.Info(fmt.Sprintf("Rebuilding subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
+	a.logger.Info(fmt.Sprintf("Rebuilding subsystem for cluster %s", clusterID), logsources.Auth, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 	rebuild, ok := a.prepareClusterSubsystemRebuild(clusterID)
 	if !ok {
 		return
@@ -61,7 +61,7 @@ func (a *RefreshCoordinator) rebuildClusterSubsystem(clusterID string) {
 func (a *RefreshCoordinator) prepareClusterSubsystemRebuild(clusterID string) (clusterSubsystemRebuild, bool) {
 	oldClients := a.clusterRuntime.clusterClientsForID(clusterID)
 	if oldClients == nil {
-		a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: clients not found", clusterID), logsources.Auth, clusterID, clusterID)
+		a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: clients not found", clusterID), logsources.Auth, clusterID, a.clusterRuntime.clusterNameForID(clusterID))
 		return clusterSubsystemRebuild{}, false
 	}
 	selection := kubeconfigSelection{Path: oldClients.kubeconfigPath, Context: oldClients.kubeconfigContext}

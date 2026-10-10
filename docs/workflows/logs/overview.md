@@ -94,7 +94,11 @@ work must scale with new lines, not the buffer. Container Logs formats each
 entry once per display-option set (`useContainerLogDisplay`), JSON views reuse
 the cached parse (`jsonOf`), and copy text and table CSV are built only when
 copying. Check with `mise exec -- wails3 task qc:benchmark-logs` (1,000 and
-10,000 lines).
+10,000 lines; raw, Pretty, and Table views). Besides a batch's own time it
+reports the first full render and the follow-up a batch triggers: GridTable
+re-measures auto-width columns from a debounced timer, so an auto-width Table
+column without `measurementSampleKey` shows up there as measured cells per batch,
+not in the batch time.
 
 ## Shared raw-log layout
 

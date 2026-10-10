@@ -3,8 +3,10 @@
  *
  * How long the Logs tab takes to take in one stream batch at 1,000 and 10,000
  * held lines. A busy workload sends a batch up to every 250 ms; work that grows
- * with the buffer makes the tab stutter. Skipped unless LOGS_BENCHMARK=1; run it
- * with `mise exec -- wails3 task qc:benchmark-logs`.
+ * with the buffer makes the tab stutter. It also times the first full render and,
+ * for the Table view's GridTable, the work a batch triggers after its debounce
+ * (column re-measuring), which a batch's own time does not show. Skipped unless
+ * LOGS_BENCHMARK=1; run it with `mise exec -- wails3 task qc:benchmark-logs`.
  */
 
 import { act } from 'react';
@@ -38,6 +40,7 @@ vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
 }));
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: vi.fn(),
+  useShortcuts: vi.fn(),
   useKeyboardSurface: vi.fn(),
   useKeyboardContext: () => ({
     registerShortcut: vi.fn(),
@@ -60,9 +63,12 @@ const PODS = ['web-1', 'web-2', 'web-3', 'web-4', 'web-5'];
 const BATCH = 64;
 const WARM_UP_BATCHES = 5;
 const TIMED_BATCHES = 40;
+const FOLLOW_UP_BATCHES = 8;
+// Longer than GridTable's 280 ms auto-width re-measure debounce.
+const FOLLOW_UP_WINDOW_MS = 600;
 const START = Date.UTC(2026, 8, 29, 10, 0, 0);
 
-type Case = { bufferSize: number; json: boolean; displayMode: 'raw' | 'pretty' };
+type Case = { bufferSize: number; json: boolean; displayMode: 'raw' | 'pretty' | 'parsed' };
 
 // Request lines of about 150-200 bytes from five pods, as plain text or JSON.
 const makeEntries = (from: number, count: number, json: boolean) =>
@@ -89,6 +95,51 @@ const makeEntries = (from: number, count: number, json: boolean) =>
 
 const percentile = (values: number[], fraction: number) =>
   [...values].sort((a, b) => a - b)[Math.floor(values.length * fraction)];
+
+// Work a batch leaves for later: GridTable re-measures auto-width columns from a
+// debounced timer, adding hidden measuring cells for every row it measures.
+const watchFollowUpWork = () => {
+  let measuredCells = 0;
+  let timerMs = 0;
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      record.addedNodes.forEach((node) => {
+        if (
+          node instanceof HTMLElement &&
+          node.classList.contains('gridtable-column-measurement-sample')
+        ) {
+          measuredCells += 1;
+        }
+      });
+    }
+  });
+  observer.observe(document.body, { childList: true });
+  const realSetTimeout = window.setTimeout;
+  window.setTimeout = ((handler: TimerHandler, delay?: number, ...args: unknown[]) =>
+    realSetTimeout(() => {
+      const start = performance.now();
+      try {
+        if (typeof handler === 'function') {
+          handler(...args);
+        }
+      } finally {
+        timerMs += performance.now() - start;
+      }
+    }, delay)) as typeof window.setTimeout;
+  return {
+    wait: () => new Promise((resolve) => realSetTimeout(resolve, FOLLOW_UP_WINDOW_MS)),
+    take: () => {
+      const taken = { measuredCells, timerMs };
+      measuredCells = 0;
+      timerMs = 0;
+      return taken;
+    },
+    stop: () => {
+      window.setTimeout = realSetTimeout;
+      observer.disconnect();
+    },
+  };
+};
 
 describe.runIf(process.env.LOGS_BENCHMARK === '1')('Logs tab stream-batch benchmark', () => {
   let container: HTMLDivElement;
@@ -174,7 +225,9 @@ describe.runIf(process.env.LOGS_BENCHMARK === '1')('Logs tab stream-batch benchm
       );
       await Promise.resolve();
     });
+    const snapshotStart = performance.now();
     await send({ reset: true, snapshotComplete: true, entries: makeEntries(0, bufferSize, json) });
+    const snapshotMs = performance.now() - snapshotStart;
     let next = bufferSize;
     const times: number[] = [];
     for (let batch = 0; batch < WARM_UP_BATCHES + TIMED_BATCHES; batch += 1) {
@@ -186,13 +239,33 @@ describe.runIf(process.env.LOGS_BENCHMARK === '1')('Logs tab stream-batch benchm
         times.push(performance.now() - start);
       }
     }
+    const followUp = watchFollowUpWork();
+    const followUpMs: number[] = [];
+    const measuredCells: number[] = [];
+    try {
+      for (let batch = 0; batch < FOLLOW_UP_BATCHES; batch += 1) {
+        const entries = makeEntries(next, BATCH, json);
+        next += BATCH;
+        followUp.take();
+        await send({ entries });
+        await act(followUp.wait);
+        const work = followUp.take();
+        followUpMs.push(work.timerMs);
+        measuredCells.push(work.measuredCells);
+      }
+    } finally {
+      followUp.stop();
+    }
     return {
-      renderedRows: container.querySelectorAll('.log-viewer-line').length,
+      renderedRows: container.querySelectorAll('.log-viewer-line, .gridtable-row').length,
       buffer: bufferSize,
       lines: json ? 'JSON' : 'plain',
       view: displayMode,
+      'first render ms': Number(snapshotMs.toFixed(1)),
       'median ms': Number(percentile(times, 0.5).toFixed(1)),
       'p95 ms': Number(percentile(times, 0.95).toFixed(1)),
+      'follow-up ms': Number(percentile(followUpMs, 0.5).toFixed(1)),
+      'measured cells': percentile(measuredCells, 0.5),
     };
   };
 
@@ -203,6 +276,7 @@ describe.runIf(process.env.LOGS_BENCHMARK === '1')('Logs tab stream-batch benchm
         [false, 'raw'],
         [true, 'raw'],
         [true, 'pretty'],
+        [true, 'parsed'],
       ] as const) {
         results.push(await measure({ bufferSize, json, displayMode }));
         act(() => root.unmount());

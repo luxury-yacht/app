@@ -174,7 +174,7 @@ func (s *ClusterAttentionService) syncTarget(clusterID string, target attentionI
 	rules, err := s.GetClusterAttentionIgnoreRules(clusterID)
 	if err != nil {
 		if s.logger != nil {
-			s.logger.Warn(fmt.Sprintf("Could not read Attention ignores for cluster %s: %v", clusterID, err), logsources.Settings, clusterID, clusterID)
+			s.logger.Warn(fmt.Sprintf("Could not read Attention ignores for cluster %s: %v", clusterID, err), logsources.Settings, clusterID, s.clusterName(clusterID))
 		}
 		return
 	}
@@ -197,7 +197,7 @@ func (s *ClusterAttentionService) attentionIgnoreRulesForCluster(clusterID strin
 	rules, err := s.GetClusterAttentionIgnoreRules(clusterID)
 	if err != nil {
 		if s.logger != nil {
-			s.logger.Warn(fmt.Sprintf("Could not read Attention ignores for cluster %s: %v", clusterID, err), logsources.Settings, clusterID, clusterID)
+			s.logger.Warn(fmt.Sprintf("Could not read Attention ignores for cluster %s: %v", clusterID, err), logsources.Settings, clusterID, s.clusterName(clusterID))
 		}
 		return snapshot.AttentionIgnoreRules{}
 	}

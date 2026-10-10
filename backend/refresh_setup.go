@@ -299,7 +299,7 @@ func (a *RefreshCoordinator) buildRefreshSubsystemForSelection(
 		AttentionIgnoreRules:       a.attention.attentionIgnoreRulesForCluster(clusterMeta.ID),
 		AttentionIgnoredObjectPruner: func(ref resourcemodel.ResourceRef) {
 			if err := a.attention.pruneClusterAttentionIgnoredObject(clusterMeta.ID, ref); err != nil {
-				a.logger.Warn(fmt.Sprintf("Could not prune obsolete Attention ignore for cluster %s: %v", clusterMeta.ID, err), logsources.Settings, clusterMeta.ID, clusterMeta.ID)
+				a.logger.Warn(fmt.Sprintf("Could not prune obsolete Attention ignore for cluster %s: %v", clusterMeta.ID, err), logsources.Settings, clusterMeta.ID, clusterMeta.Name)
 			}
 		},
 	}

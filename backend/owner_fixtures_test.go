@@ -106,7 +106,7 @@ type refreshCoordinatorTestFixture struct {
 func newRefreshCoordinatorTestFixture(t testing.TB, reporters ...sentryreporting.Reporter) *refreshCoordinatorTestFixture {
 	t.Helper()
 	cluster := newClusterRuntimeTestFixture(t, reporters...)
-	attention := NewClusterAttentionService(cluster.Preferences, cluster.AppLogs.Logger())
+	attention := NewClusterAttentionService(cluster.Preferences, cluster.AppLogs.Logger(), cluster.ClusterRuntime.clusterNameForID)
 	resourceProjection := newRefreshResourceProjection()
 	nodeMaintenanceStore := nodemaintenance.NewStore(5)
 	operations := newApplicationOperationsCoordinator(
@@ -149,10 +149,7 @@ func newRefreshCoordinatorTestFixture(t testing.TB, reporters ...sentryreporting
 		ResourceProjection:   resourceProjection,
 		NodeMaintenanceStore: nodeMaintenanceStore,
 		SettingsBridge:       cluster.refreshSettings,
-		AllowedNamespaces: func(clusterID string) []string {
-			namespaces, _ := cluster.Preferences.clusterAllowedNamespaces(clusterID)
-			return namespaces
-		},
+		AllowedNamespaces:    cluster.Preferences.clusterAllowedNamespaces,
 	})
 	refreshCoordinator.initGovernor()
 	cluster.Lifecycle = newApplicationLifecycle(cluster.signals, ApplicationLifecycleDependencies{

@@ -24,6 +24,7 @@
 ### Fixed
 
 - Error statuses such as CrashLoopBackOff, Failed, and NotReady show in red again, in tables and status chips.
+- Application Logs show the cluster name instead of `<kubeconfig file>:<context>`, including on lines logged before a cluster finishes connecting.
 - Styling fixes:
   - Invalid fields in dialogs show a red outline and red error text.
   - Dropdown options highlight on hover in light mode.
