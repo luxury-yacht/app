@@ -269,11 +269,25 @@ type ShellOutputEvent struct {
 
 // ShellStatusEvent reports lifecycle changes for a shell session.
 type ShellStatusEvent struct {
-	SessionID string `json:"sessionId"`
-	ClusterID string `json:"clusterId"`
-	Status    string `json:"status"`
-	Reason    string `json:"reason,omitempty"`
+	SessionID string             `json:"sessionId"`
+	ClusterID string             `json:"clusterId"`
+	Status    ShellSessionStatus `json:"status"`
+	Reason    string             `json:"reason,omitempty"`
 }
+
+// ShellSessionStatus is the lifecycle status a shell session reports. It is a
+// closed set so every emitter and the generated frontend enum agree.
+type ShellSessionStatus string
+
+const (
+	ShellSessionStatusOpen ShellSessionStatus = "open"
+	// ShellSessionStatusClosed means the shell exited or the app tore it down.
+	ShellSessionStatusClosed ShellSessionStatus = "closed"
+	// ShellSessionStatusEnded means a user asked to end the session, from any window.
+	ShellSessionStatusEnded   ShellSessionStatus = "ended"
+	ShellSessionStatusTimeout ShellSessionStatus = "timeout"
+	ShellSessionStatusError   ShellSessionStatus = "error"
+)
 
 // PodSimpleInfo represents basic pod information for list views
 type PodSimpleInfo struct {

@@ -593,13 +593,26 @@ describe('ShellTab', () => {
 
     // The backend confirms the close right away; ending a session the user just
     // opened must not look like a failed connection.
-    emitEvent('object-shell:status', {
-      sessionId: 'sess-1',
-      status: 'closed',
-      reason: 'terminated',
-    });
+    emitEvent('object-shell:status', { sessionId: 'sess-1', status: 'ended' });
     await flushAsync();
 
+    expect(container.querySelector('.shell-tab__button')).not.toBeNull();
+    expect(container.querySelector('.shell-tab__connection-error')).toBeNull();
+    expect(handleInlineMock).not.toHaveBeenCalled();
+  });
+
+  it('treats a session ended from the Sessions list as a normal close right after connecting', async () => {
+    await renderShellTab();
+    clickConnectButton();
+    await flushAsync();
+    emitEvent('object-shell:status', { sessionId: 'sess-1', status: 'open' });
+    await flushAsync();
+
+    // Stop was requested outside this tab, so only the backend status says it was intentional.
+    emitEvent('object-shell:status', { sessionId: 'sess-1', status: 'ended' });
+    await flushAsync();
+
+    expect(wailsMocks.CloseShellSession).not.toHaveBeenCalled();
     expect(container.querySelector('.shell-tab__button')).not.toBeNull();
     expect(container.querySelector('.shell-tab__connection-error')).toBeNull();
     expect(handleInlineMock).not.toHaveBeenCalled();

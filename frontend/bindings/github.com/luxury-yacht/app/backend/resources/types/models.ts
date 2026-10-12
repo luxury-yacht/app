@@ -793,12 +793,37 @@ export interface ShellSessionRequest {
 }
 
 /**
+ * ShellSessionStatus is the lifecycle status a shell session reports. It is a
+ * closed set so every emitter and the generated frontend enum agree.
+ */
+export enum ShellSessionStatus {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    ShellSessionStatusOpen = "open",
+
+    /**
+     * ShellSessionStatusClosed means the shell exited or the app tore it down.
+     */
+    ShellSessionStatusClosed = "closed",
+
+    /**
+     * ShellSessionStatusEnded means a user asked to end the session, from any window.
+     */
+    ShellSessionStatusEnded = "ended",
+    ShellSessionStatusTimeout = "timeout",
+    ShellSessionStatusError = "error",
+};
+
+/**
  * ShellStatusEvent reports lifecycle changes for a shell session.
  */
 export interface ShellStatusEvent {
     "sessionId": string;
     "clusterId": string;
-    "status": string;
+    "status": ShellSessionStatus;
     "reason"?: string;
 }
 

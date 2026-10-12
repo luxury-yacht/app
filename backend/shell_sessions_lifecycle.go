@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/resources/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -46,7 +47,7 @@ func (l shellSessionLifecycle) registerRuntimeOperation(sess *shellSession) bool
 }
 
 func (l shellSessionLifecycle) closeByUser(sessionID string) error {
-	if !l.finishStream(sessionID, "closed", "terminated") {
+	if !l.finishStream(sessionID, types.ShellSessionStatusEnded, "") {
 		return fmt.Errorf("shell session %q not found", sessionID)
 	}
 	return nil
@@ -57,11 +58,11 @@ func (l shellSessionLifecycle) closeForRuntime(sessionID, reason string) error {
 	if reason == "" {
 		reason = "cluster disconnected"
 	}
-	l.close(sessionID, "closed", reason)
+	l.close(sessionID, types.ShellSessionStatusClosed, reason)
 	return nil
 }
 
-func (l shellSessionLifecycle) finishStream(sessionID, status, reason string) bool {
+func (l shellSessionLifecycle) finishStream(sessionID string, status types.ShellSessionStatus, reason string) bool {
 	if !l.close(sessionID, status, reason) {
 		return false
 	}
@@ -70,7 +71,7 @@ func (l shellSessionLifecycle) finishStream(sessionID, status, reason string) bo
 	return true
 }
 
-func (l shellSessionLifecycle) close(sessionID, status, reason string) bool {
+func (l shellSessionLifecycle) close(sessionID string, status types.ShellSessionStatus, reason string) bool {
 	sess, removed := l.remove(sessionID)
 	if !removed {
 		return false
@@ -156,7 +157,7 @@ func (l shellSessionLifecycle) emitOutput(sessionID, clusterID, stream, data str
 	})
 }
 
-func (l shellSessionLifecycle) emitStatus(sessionID, clusterID, status, reason string) {
+func (l shellSessionLifecycle) emitStatus(sessionID, clusterID string, status types.ShellSessionStatus, reason string) {
 	if l.coordinator == nil || sessionID == "" || status == "" {
 		return
 	}

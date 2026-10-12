@@ -19,8 +19,9 @@ runtime operations ([operation-lifecycle.md](operation-lifecycle.md)).
   not leak after tab close, panel close, cluster removal, or app shutdown.
 - Closing the Shell tab or panel detaches without ending the session. Users end
   it with the Shell tab's End Session control or the Sessions-list Stop action,
-  both of which call `CloseShellSession`. A close the user requested is a normal
-  close, never a failed connection, even right after connecting.
+  both of which call `CloseShellSession`. The backend reports that close with
+  the `ended` `ShellSessionStatus`, so a Shell tab in any window treats it as a
+  normal close, never a failed connection, even right after connecting.
 - Reattach and backlog stay scoped to the originating cluster and session.
 - Ephemeral debug containers persist on the Pod until Pod deletion; the app
   does not remove them.

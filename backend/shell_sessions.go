@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -215,7 +216,7 @@ func (o *OperationsCoordinator) StartShellSession(clusterID string, req ShellSes
 	}
 	go o.monitorShellTimeout(sessionCtx, sess)
 	o.startShellSessionStream(lifecycle, sessionCtx, sess, launch.executor)
-	lifecycle.emitStatus(sess.id, clusterID, "open", "")
+	lifecycle.emitStatus(sess.id, clusterID, types.ShellSessionStatusOpen, "")
 	return shellSessionResponse(sess, launch.pod), nil
 }
 
@@ -404,9 +405,9 @@ func (o *OperationsCoordinator) startShellSessionStream(
 		})
 
 		if streamErr != nil {
-			lifecycle.finishStream(sess.id, "error", streamErr.Error())
+			lifecycle.finishStream(sess.id, types.ShellSessionStatusError, streamErr.Error())
 		} else {
-			lifecycle.finishStream(sess.id, "closed", "")
+			lifecycle.finishStream(sess.id, types.ShellSessionStatusClosed, "")
 		}
 	}()
 }
@@ -535,28 +536,35 @@ func (o *OperationsCoordinator) monitorShellTimeout(ctx context.Context, sess *s
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Check max duration first (hard limit)
-			if sess.totalDuration() >= config.ShellSessionMaxDuration {
-				if o.logger != nil {
-					o.logger.Warn(fmt.Sprintf("Shell session %s exceeded max duration (%s), terminating", sess.id, config.ShellSessionMaxDuration), logsources.ShellSession)
-				}
-				o.terminateShellWithReason(sess.id, "timeout", "session exceeded maximum duration")
-				return
-			}
-
-			// Check idle timeout
-			if sess.idleDuration() >= config.ShellSessionIdleTimeout {
-				if o.logger != nil {
-					o.logger.Warn(fmt.Sprintf("Shell session %s idle for %s, terminating", sess.id, config.ShellSessionIdleTimeout), logsources.ShellSession)
-				}
-				o.terminateShellWithReason(sess.id, "timeout", "session idle timeout")
+			if o.endExpiredShellSession(sess) {
 				return
 			}
 		}
 	}
 }
 
+// endExpiredShellSession ends a session past its maximum lifetime (checked
+// first, as the hard limit) or its idle window, and reports whether it did.
+func (o *OperationsCoordinator) endExpiredShellSession(sess *shellSession) bool {
+	var logMessage, reason string
+	switch {
+	case sess.totalDuration() >= config.ShellSessionMaxDuration:
+		logMessage = fmt.Sprintf("Shell session %s exceeded max duration (%s), terminating", sess.id, config.ShellSessionMaxDuration)
+		reason = "session exceeded maximum duration"
+	case sess.idleDuration() >= config.ShellSessionIdleTimeout:
+		logMessage = fmt.Sprintf("Shell session %s idle for %s, terminating", sess.id, config.ShellSessionIdleTimeout)
+		reason = "session idle timeout"
+	default:
+		return false
+	}
+	if o.logger != nil {
+		o.logger.Warn(logMessage, logsources.ShellSession)
+	}
+	o.terminateShellWithReason(sess.id, types.ShellSessionStatusTimeout, reason)
+	return true
+}
+
 // terminateShellWithReason closes a shell session and emits a status with the given reason.
-func (o *OperationsCoordinator) terminateShellWithReason(sessionID, status, reason string) {
+func (o *OperationsCoordinator) terminateShellWithReason(sessionID string, status types.ShellSessionStatus, reason string) {
 	o.shellSessionLifecycle().finishStream(sessionID, status, reason)
 }

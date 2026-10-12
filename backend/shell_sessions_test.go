@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -121,7 +122,9 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 	if operations.shellSessionLifecycle().get("sess") != nil {
 		t.Fatalf("expected session to be removed")
 	}
-	if len(events) != 1 || events[0].Status != "closed" || events[0].ClusterID != "cluster1" {
+	// Every renderer must be able to tell a user-requested end from a remote
+	// exit, whichever window asked for it.
+	if len(events) != 1 || events[0].Status != types.ShellSessionStatusEnded || events[0].ClusterID != "cluster1" {
 		t.Fatalf("unexpected status events %+v", events)
 	}
 }

@@ -13,7 +13,7 @@ import {
 } from '@/core/app-state-access';
 import { readPodContainers, requestData } from '@/core/data-access';
 import '@xterm/xterm/css/xterm.css';
-import type { types } from '@core/backend-api/models';
+import { types } from '@core/backend-api/models';
 import {
   type DesktopEventPayload,
   onEvent,
@@ -173,8 +173,6 @@ function attachedShellSession(session: TrackedShellSession): types.ShellSession 
 const resolveCustomOption = (selected: string, custom: string): string =>
   selected === '__custom__' ? custom.trim() : selected;
 
-const isSameSession = (a: string | null, b: string | null): boolean => a !== null && a === b;
-
 // A close while connecting or right after opening usually means the shell never started.
 const isPrematureClose = (status: ShellStatus, openedAt: number | null): boolean =>
   status === 'connecting' ||
@@ -230,8 +228,6 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const [contextMenu, setContextMenu] = useState<ShellContextMenuState | null>(null);
   const [endingSession, setEndingSession] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
-  // Session the user asked to end; its close is expected, not a failed connection.
-  const userEndedSessionIdRef = useRef<string | null>(null);
   const statusRef = useRef<ShellStatus>('idle');
   const terminalRef = useRef<Xterm.Terminal | null>(null);
   const fitAddonRef = useRef<XtermFit.FitAddon | null>(null);
@@ -691,10 +687,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
   ]);
 
   const handleSessionClosed = useCallback(
-    (reason?: string) => {
+    (reason?: string, endedByUser = false) => {
       pendingReplayRef.current = null;
-      const endedByUser = isSameSession(userEndedSessionIdRef.current, sessionIdRef.current);
-      userEndedSessionIdRef.current = null;
       const closedTooSoon =
         !endedByUser && isPrematureClose(statusRef.current, sessionOpenedAtRef.current);
       clearSession();
@@ -740,7 +734,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
         return;
       }
       switch (evt.status) {
-        case 'error': {
+        case types.ShellSessionStatus.ShellSessionStatusError: {
           const details = errorHandler.handleInline(
             new Error(evt.reason || 'Shell session failed.'),
             {
@@ -758,11 +752,15 @@ const ShellTab: React.FC<ShellTabProps> = ({
           disposeTerminal();
           return;
         }
-        case 'closed':
-        case 'timeout':
+        case types.ShellSessionStatus.ShellSessionStatusEnded:
+          // A user ended it, from this tab or any other window; never a failed connection.
+          handleSessionClosed(evt.reason, true);
+          return;
+        case types.ShellSessionStatus.ShellSessionStatusClosed:
+        case types.ShellSessionStatus.ShellSessionStatusTimeout:
           handleSessionClosed(evt.reason);
           return;
-        case 'open':
+        case types.ShellSessionStatus.ShellSessionStatusOpen:
           sessionOpenedAtRef.current = Date.now();
           ensureTerminal();
           writeLine('\x1b[32mConnected\x1b[0m\r\n');
@@ -797,18 +795,16 @@ const ShellTab: React.FC<ShellTabProps> = ({
     initiateConnection();
   }, [initiateConnection]);
 
-  // The backend publishes the closed status; a failed request leaves the session attached.
+  // The backend publishes the ended status; a failed request leaves the session attached.
   const handleEndSession = useCallback(async () => {
     const sessionId = sessionIdRef.current;
     if (!sessionId) {
       return;
     }
-    userEndedSessionIdRef.current = sessionId;
     setEndingSession(true);
     try {
       await CloseShellSession(sessionId);
     } catch (error) {
-      userEndedSessionIdRef.current = null;
       errorHandler.handle(error, { action: 'closeShellSession', sessionId, source: 'ShellTab' });
     } finally {
       setEndingSession(false);
