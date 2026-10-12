@@ -11,14 +11,20 @@ type TabRequestListener = (panelId: string, tab: ViewType) => void;
 const pendingTabByPanel = new Map<string, ViewType>();
 const listeners = new Set<TabRequestListener>();
 
-export function requestObjectPanelTab(panelId: string, tab: ViewType): void {
+/**
+ * Queues a tab for a panel and notifies mounted panels, which may apply and
+ * clear it before this returns. Returns false only when there is no panel to
+ * target; callers must not re-read the pending state to confirm delivery.
+ */
+export function requestObjectPanelTab(panelId: string, tab: ViewType): boolean {
   if (!panelId) {
-    return;
+    return false;
   }
   pendingTabByPanel.set(panelId, tab);
   listeners.forEach((listener) => {
     listener(panelId, tab);
   });
+  return true;
 }
 
 export function getRequestedObjectPanelTab(panelId: string): ViewType | undefined {

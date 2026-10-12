@@ -21,9 +21,9 @@ func TestPortForwardStartupResultOwnsSessionLifetime(t *testing.T) {
 				defer cancel()
 				session := &portForwardSessionInternal{
 					PortForwardSession: PortForwardSession{
-						ID: "starting-session", ClusterID: "cluster-a", Namespace: "default",
-						PodName: "pod-1", ContainerPort: 8080, TargetKind: "Pod", TargetVersion: "v1",
-						TargetName: "pod-1", Status: PortForwardStatusConnecting, StartedAt: time.Now().Format(time.RFC3339),
+						ID: "starting-session", ClusterID: "cluster-a", Target: *runtimeOperationTarget("cluster-a", "", "v1", "Pod", "default", "pod-1"),
+						PodName: "pod-1", ContainerPort: 8080,
+						Status: PortForwardStatusConnecting, StartedAt: time.Now().Format(time.RFC3339),
 					},
 					stopChan: make(chan struct{}), readyChan: make(chan error, 1), cancel: cancel,
 				}

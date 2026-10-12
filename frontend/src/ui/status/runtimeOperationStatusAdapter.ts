@@ -65,12 +65,12 @@ export interface PortForwardSession {
   id: string;
   clusterId: string;
   clusterName: string;
-  namespace: string;
+  /** Complete identity of the object the user forwarded. */
+  target: ResourceRef;
+  /** Pod currently serving the forward; changes when a forward reconnects. */
   podName: string;
   containerPort: number;
   localPort: number;
-  targetKind?: string;
-  targetName?: string;
   status: PortForwardStatus;
   statusReason?: string;
   startedAt: string;

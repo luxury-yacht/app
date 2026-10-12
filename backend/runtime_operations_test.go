@@ -159,16 +159,12 @@ func TestRuntimeOperationTargetIdentityIsFullObjectReference(t *testing.T) {
 	now := "2026-05-17T00:00:00Z"
 	session := &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{
-			ID:            "pf",
-			ClusterID:     "cluster-a",
-			ClusterName:   "Cluster A",
-			Namespace:     "default",
-			TargetGroup:   "apps",
-			TargetVersion: "v1",
-			TargetKind:    "Deployment",
-			TargetName:    "web",
-			Status:        "active",
-			StartedAt:     now,
+			ID:          "pf",
+			ClusterID:   "cluster-a",
+			Target:      *runtimeOperationTarget("cluster-a", "apps", "v1", "Deployment", "default", "web"),
+			ClusterName: "Cluster A",
+			Status:      "active",
+			StartedAt:   now,
 		},
 	}
 

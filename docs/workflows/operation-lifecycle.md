@@ -13,7 +13,10 @@ are cleaned up when their cluster goes away.
   - `backend/runtime_operations.go`: active-operation envelope and the
     `runtime-operations:list` event.
   - `backend/shell_sessions*.go`: shell lifecycle and backlog.
-  - `backend/portforward*.go`: forwarding lifecycle and status.
+  - `backend/portforward*.go`: forwarding lifecycle and status. Port-forward
+    sessions carry the forwarded object's complete `target` `ResourceRef`;
+    `podName` names only the pod currently serving the forward and changes
+    when a workload or Service forward reconnects.
 - `DesktopService` delegates live-operation commands directly to the
   coordinator, whose collaborators stay narrow (cluster dependency/retry
   access, permissions, events, logging, app context, drain store, shell

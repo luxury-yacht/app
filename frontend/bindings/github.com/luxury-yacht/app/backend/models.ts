@@ -748,14 +748,19 @@ export interface PortForwardSession {
     "id": string;
     "clusterId": string;
     "clusterName": string;
-    "namespace": string;
+
+    /**
+     * Target is the complete identity of the object the user forwarded.
+     */
+    "target": types$0.ObjectRef;
+
+    /**
+     * PodName is the pod currently serving the forward. It changes when a
+     * workload or Service forward reconnects to a replacement pod.
+     */
     "podName": string;
     "containerPort": number;
     "localPort": number;
-    "targetKind": string;
-    "targetGroup": string;
-    "targetVersion": string;
-    "targetName": string;
     "status": PortForwardStatus;
     "statusReason"?: string;
     "startedAt": string;

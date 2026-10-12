@@ -8,10 +8,7 @@ import { openURL } from '@core/desktop-runtime';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { objectPanelId } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import {
-  getRequestedObjectPanelTab,
-  requestObjectPanelTab,
-} from '@modules/object-panel/objectPanelTabRequests';
+import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
 import {
   CloseIcon,
   OpenIcon,
@@ -158,7 +155,12 @@ const PortForwardSessionItem = ({
   onStop: (id: string) => Promise<void>;
 }) => {
   const isError = session.status === 'error';
-  const fields = sessionIdentityFields(session);
+  const fields = sessionIdentityFields({
+    clusterName: session.clusterName,
+    clusterId: session.clusterId,
+    namespace: session.target.namespace,
+    podName: session.podName,
+  });
   let actionIcon: React.ReactNode = <StopSquareIcon />;
   if (isStopping) {
     actionIcon = '…';
@@ -278,8 +280,7 @@ const SessionsStatus: React.FC = () => {
         });
         const panelId = objectPanelId(targetRef);
         openWithObject(targetRef);
-        requestObjectPanelTab(panelId, 'shell');
-        if (getRequestedObjectPanelTab(panelId) !== 'shell') {
+        if (!requestObjectPanelTab(panelId, 'shell')) {
           throw new Error('Shell session tab request was not accepted.');
         }
         setStatusPopoverCloseSignal((signal) => signal + 1);

@@ -1,3 +1,7 @@
+import {
+  clearRequestedObjectPanelTab,
+  subscribeObjectPanelTabRequests,
+} from '@modules/object-panel/objectPanelTabRequests';
 import type { ReactNode } from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -53,7 +57,6 @@ vi.mock('@shared/components/status/StatusIndicator', () => ({
 
 const openWithObjectMock = vi.hoisted(() => vi.fn());
 const requestObjectPanelTabMock = vi.hoisted(() => vi.fn());
-const getRequestedObjectPanelTabMock = vi.hoisted(() => vi.fn());
 const objectPanelIdMock = vi.hoisted(() => vi.fn(() => 'object-panel:pod:web-abc'));
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
@@ -62,10 +65,13 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   }),
 }));
 
-vi.mock('@modules/object-panel/objectPanelTabRequests', () => ({
-  getRequestedObjectPanelTab: getRequestedObjectPanelTabMock,
-  requestObjectPanelTab: requestObjectPanelTabMock,
-}));
+// The real request store, so open-panel delivery behaves as in the app.
+vi.mock('@modules/object-panel/objectPanelTabRequests', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@modules/object-panel/objectPanelTabRequests')>();
+  requestObjectPanelTabMock.mockImplementation(actual.requestObjectPanelTab);
+  return { ...actual, requestObjectPanelTab: requestObjectPanelTabMock };
+});
 
 vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
   objectPanelId: objectPanelIdMock,
@@ -159,7 +165,6 @@ describe('SessionsStatus shell session jump action', () => {
       },
     ]);
     stopPortForwardMock.mockResolvedValue(undefined);
-    getRequestedObjectPanelTabMock.mockReturnValue('shell');
     kubeconfigState.selectedClusterId = 'cluster-a';
     kubeconfigState.selectedKubeconfigs = ['selection-a', 'selection-b'];
     (
@@ -181,6 +186,7 @@ describe('SessionsStatus shell session jump action', () => {
     while (document.body.firstChild) {
       document.body.removeChild(document.body.firstChild);
     }
+    clearRequestedObjectPanelTab('object-panel:pod:web-abc');
   });
 
   const renderStatus = async () => {
@@ -205,7 +211,14 @@ describe('SessionsStatus shell session jump action', () => {
           id: 'pf-1',
           clusterId: 'cluster-a',
           clusterName: 'a',
-          namespace: 'default',
+          target: {
+            clusterId: 'cluster-a',
+            group: '',
+            version: 'v1',
+            kind: 'Pod',
+            namespace: 'default',
+            name: 'web-abc',
+          },
           podName: 'web-abc',
           containerPort: 8080,
           localPort: 18080,
@@ -308,8 +321,29 @@ describe('SessionsStatus shell session jump action', () => {
     expect(latestCloseSignal()).toBe(1);
   });
 
-  it('keeps the sessions panel open when the shell tab request is not verified', async () => {
-    getRequestedObjectPanelTabMock.mockReturnValue(undefined);
+  it('closes the sessions panel when an open object panel shows the shell tab immediately', async () => {
+    // An open panel applies the request and clears it synchronously, as ObjectPanel does.
+    const unsubscribe = subscribeObjectPanelTabRequests((panelId) =>
+      clearRequestedObjectPanelTab(panelId)
+    );
+    try {
+      await renderStatus();
+      const openButton = document.querySelector('.as-shell-session-jump') as HTMLButtonElement;
+      await act(async () => {
+        openButton.click();
+        await Promise.resolve();
+      });
+
+      expect(requestObjectPanelTabMock).toHaveBeenCalledWith('object-panel:pod:web-abc', 'shell');
+      expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+      expect(latestCloseSignal()).toBe(1);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it('keeps the sessions panel open when the shell tab request is not accepted', async () => {
+    requestObjectPanelTabMock.mockReturnValueOnce(false);
     await renderStatus();
 
     const openButton = document.querySelector('.as-shell-session-jump') as HTMLButtonElement;

@@ -66,10 +66,6 @@ func (g *ResourceGateway) GetTargetPorts(clusterID, namespace, targetKind, targe
 	return collectPodPorts(pod), nil
 }
 
-func portForwardTargetFromRequest(req PortForwardRequest) (portForwardTargetRef, error) {
-	return portForwardTargetFromParts(req.Namespace, req.TargetKind, req.TargetGroup, req.TargetVersion, req.TargetName)
-}
-
 func portForwardTargetFromParts(namespace, kind, group, version, name string) (portForwardTargetRef, error) {
 	target := portForwardTargetRef{
 		Namespace: strings.TrimSpace(namespace),
