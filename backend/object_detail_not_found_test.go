@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -18,6 +20,8 @@ import (
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	clientfake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -167,4 +171,67 @@ func TestFetchObjectByGVKKeepsTheAPINotFound(t *testing.T) {
 
 	require.True(t, apierrors.IsNotFound(err))
 	require.Equal(t, `apps/v1, Kind=Deployment "web" not found in namespace "default"`, err.Error())
+}
+
+// newMissingHelmReleaseGateway serves a cluster whose Helm storage holds no
+// release secrets, as after `helm uninstall`.
+func newMissingHelmReleaseGateway(t *testing.T, clusterID string) *ResourceGateway {
+	t.Helper()
+	client := clientfake.NewClientset()
+	allowSelfSubjectAccessReviews(client)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/version":
+			_, _ = w.Write([]byte(`{"major":"1","minor":"34","gitVersion":"v1.34.0"}`))
+		case "/api/v1/namespaces/default/secrets":
+			_ = json.NewEncoder(w).Encode(corev1.SecretList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "SecretList"}})
+		default:
+			t.Errorf("unexpected Helm API request: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	configPath := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, clientcmd.WriteToFile(clientcmdapi.Config{
+		Clusters:  map[string]*clientcmdapi.Cluster{"test": {Server: server.URL}},
+		Contexts:  map[string]*clientcmdapi.Context{"test": {Cluster: "test", AuthInfo: "test"}},
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{"test": {}}, CurrentContext: "test",
+	}, configPath))
+	return newObjectDetailResourceGateway(map[string]*clusterClients{
+		clusterID: {client: client, kubeconfigPath: configPath, kubeconfigContext: "test"},
+	})
+}
+
+// A Helm release is gone when Helm storage has no record of it. The panel
+// closes on that only if the NotFound names the release's full synthetic
+// identity; the panel sends the kind lowercased.
+func TestMissingHelmReleaseIsANotFoundNamingTheRelease(t *testing.T) {
+	const clusterID = "cluster-a"
+	provider := newMissingHelmReleaseGateway(t, clusterID).objectDetailProvider().(*objectDetailProvider)
+	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{ClusterID: clusterID})
+
+	t.Run("details", func(t *testing.T) {
+		gvk := schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "helmrelease"}
+		_, err := provider.FetchObjectDetails(ctx, gvk, "default", "demo")
+
+		status := errorstatus.Classify(err)
+		require.Equal(t, errorstatus.ReasonNotFound, status.Reason)
+		require.True(t, status.Expected)
+		require.Equal(t, &errorstatus.ObjectRef{
+			ClusterID: clusterID, Group: "helm.sh", Version: "v3",
+			Kind: "HelmRelease", Namespace: "default", Name: "demo",
+		}, status.Ref)
+	})
+
+	t.Run("manifest and values", func(t *testing.T) {
+		_, _, manifestErr := provider.FetchHelmManifest(ctx, "default", "demo")
+		_, _, valuesErr := provider.FetchHelmValues(ctx, "default", "demo")
+
+		for _, err := range []error{manifestErr, valuesErr} {
+			status := errorstatus.Classify(err)
+			require.Equal(t, errorstatus.ReasonNotFound, status.Reason, err)
+			require.True(t, status.Expected)
+		}
+	})
 }

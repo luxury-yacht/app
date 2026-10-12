@@ -65,9 +65,11 @@ no layer decides behavior from message text.
   ownership check, shell) marks a `Forbidden` `expected: false`, because the
   UI only offers actions its permission gate allowed.
 - `ref` names the object whose lookup failed, with full identity. Only the
-  producer that looked that exact object up sets it (object details confirm a
-  NotFound with an uncached read first); Kubernetes `details` are never used
-  for identity.
+  producer that looked that exact object up sets it. Object details confirm a
+  Kubernetes NotFound with an uncached read first. A Helm release missing
+  from Helm storage is a NotFound, and its details name the release's
+  synthetic `helm.sh/v3` `HelmRelease` identity. Kubernetes `details` are never
+  used for identity.
 - YAML editor conflicts are response data (`yamlConflict`), not errors; live
   object YAML never enters the error path.
 
@@ -94,7 +96,8 @@ no layer decides behavior from message text.
   denial from the failure (`isPermissionDenied`); gating reads the scope's
   separate `permissionDenied` stamp, which outlives stream resets that clear
   the failure. The object panel treats a `NotFound` as deletion only when its
-  `ref` matches the panel's object on all six identity fields.
+  `ref` has the panel's own identity (`objectPanelId`: cluster, group,
+  version, kind in any letter case, namespace, name).
 - Advisory warnings stay local. Legacy component
   boundaries do not re-capture render failures owned by the React 19 root
   handlers.

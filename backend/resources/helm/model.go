@@ -18,6 +18,19 @@ import (
 
 const syntheticAPIGroup = "helm.sh"
 
+// ReleaseRef is the synthetic object identity of the named Helm release.
+func ReleaseRef(clusterID, namespace, name string) resourcemodel.ResourceRef {
+	return resourcemodel.ResourceRef{
+		ClusterID: clusterID,
+		Group:     syntheticAPIGroup,
+		Version:   "v3",
+		Kind:      "HelmRelease",
+		Resource:  "releases",
+		Namespace: namespace,
+		Name:      name,
+	}
+}
+
 // BuildResourceModel builds the HelmRelease resource model. Facts are owned by this
 // package (helm.Facts); callers needing facts use BuildFacts.
 func BuildResourceModel(
@@ -48,15 +61,7 @@ func BuildResourceModel(
 		}
 	}
 	return resourcemodel.ResourceModel{
-		Ref: resourcemodel.ResourceRef{
-			ClusterID: clusterID,
-			Group:     syntheticAPIGroup,
-			Version:   "v3",
-			Kind:      "HelmRelease",
-			Resource:  "releases",
-			Namespace: namespace,
-			Name:      name,
-		},
+		Ref:    ReleaseRef(clusterID, namespace, name),
 		Source: resourcemodel.ResourceSourceSynthetic,
 		Scope:  resourcemodel.ResourceScopeNamespaced,
 		Metadata: resourcemodel.ResourceMetadata{

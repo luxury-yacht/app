@@ -776,11 +776,28 @@ describe('ObjectPanel tab availability', () => {
       expect(isMarkedDeleted()).toBe(true);
     });
 
+    // Links may spell the kind in any case (the Pod's Node link sends `node`);
+    // the backend names the canonical kind.
+    it('when the NotFound names this object with its canonical kind spelling', async () => {
+      const node = { clusterId: 'config:Prod', group: '', version: 'v1', name: 'worker-1' };
+      await renderObjectPanel({
+        ...node,
+        kind: 'node',
+        scopedDomain: {
+          data: null,
+          status: 'error',
+          error: notFound({ ...node, kind: 'Node' }),
+        },
+      });
+      expect(isMarkedDeleted()).toBe(true);
+    });
+
     it.each([
       ['carries no reference', undefined],
       ['names the same name in another namespace', { ...widget, namespace: 'team-b' }],
       ['names the same kind and name in another group', { ...widget, group: 'other.example.com' }],
       ['names the same object in another cluster', { ...widget, clusterId: 'config:Stage' }],
+      ['names an object too incomplete to identify', { ...widget, version: '' }],
     ])('not when the NotFound %s', async (_name, ref) => {
       await renderWithDetailsFailure(notFound(ref));
       expect(isMarkedDeleted()).toBe(false);

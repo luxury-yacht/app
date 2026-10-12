@@ -39,7 +39,7 @@ import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/Ob
 import { resolveObjectPanelOpenTarget } from '@modules/object-panel/components/ObjectPanel/objectPanelOpenTarget';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
-import { getObjectPanelScopes } from '@modules/object-panel/objectPanelRef';
+import { getObjectPanelScopes, objectPanelId } from '@modules/object-panel/objectPanelRef';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import type { DockPosition } from '@ui/dockable';
 import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
@@ -65,24 +65,20 @@ interface ObjectPanelProps {
 // MAIN COMPONENT
 // ============================================================================
 
-const sameRefField = (a: string | undefined, b: string | undefined): boolean =>
-  (a ?? '') === (b ?? '');
-
-/** True when failure is a NotFound naming exactly the panel's object. */
+/**
+ * True when failure is a NotFound naming exactly the panel's object, compared
+ * by panel identity (links may spell the kind in any case).
+ */
 const namesDeletedObject = (failure: RefreshFailure | null, object: ObjectPanelRef): boolean => {
-  if (failure?.kind !== 'backend' || failure.status.reason !== 'NotFound') {
+  if (failure?.kind !== 'backend' || failure.status.reason !== 'NotFound' || !failure.status.ref) {
     return false;
   }
-  const ref = failure.status.ref;
-  return (
-    !!ref &&
-    sameRefField(ref.clusterId, object.clusterId) &&
-    sameRefField(ref.group, object.group) &&
-    sameRefField(ref.version, object.version) &&
-    sameRefField(ref.kind, object.kind) &&
-    sameRefField(ref.namespace, object.namespace) &&
-    sameRefField(ref.name, object.name)
-  );
+  try {
+    return objectPanelId({ ...failure.status.ref }) === objectPanelId(object);
+  } catch {
+    // A reference too incomplete to identify an object names nothing.
+    return false;
+  }
 };
 
 function ObjectPanel({

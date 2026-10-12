@@ -185,6 +185,9 @@ func confirmMissingObject(
 	namespace, name string,
 	err error,
 ) error {
+	if isHelmReleaseGVK(gvk) {
+		return confirmMissingHelmRelease(resolved, namespace, name, err)
+	}
 	if !apierrors.IsNotFound(err) {
 		return err
 	}
@@ -204,6 +207,24 @@ func confirmMissingObject(
 		Kind:      canonical.Kind,
 		Namespace: namespace,
 		Name:      name,
+	}, err)
+}
+
+// confirmMissingHelmRelease names the release on a NotFound. Release details
+// return only their own uncached read of exactly that release (other lookups
+// are logged, not returned), so a NotFound there is the release itself.
+func confirmMissingHelmRelease(resolved resolvedObjectDetailContext, namespace, name string, err error) error {
+	if errorstatus.Classify(err).Reason != errorstatus.ReasonNotFound {
+		return err
+	}
+	ref := helm.ReleaseRef(resolved.selectionKey, namespace, name)
+	return errorstatus.ObjectNotFound(errorstatus.ObjectRef{
+		ClusterID: ref.ClusterID,
+		Group:     ref.Group,
+		Version:   ref.Version,
+		Kind:      ref.Kind,
+		Namespace: ref.Namespace,
+		Name:      ref.Name,
 	}, err)
 }
 

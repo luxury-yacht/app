@@ -9,10 +9,12 @@ package helm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -21,6 +23,7 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/release"
+	"helm.sh/helm/v3/pkg/storage/driver"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -132,7 +135,12 @@ func (s *Service) getRelease(namespace, name string) (*action.Configuration, *re
 	}
 	value, err := action.NewGet(actionConfig).Run(name)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get release %s: %w", name, err)
+		err = fmt.Errorf("failed to get release %s: %w", name, err)
+		if errors.Is(err, driver.ErrReleaseNotFound) {
+			// Helm storage has no record of the release: it was uninstalled.
+			err = errorstatus.NotFound(err)
+		}
+		return nil, nil, err
 	}
 	return actionConfig, value, nil
 }
