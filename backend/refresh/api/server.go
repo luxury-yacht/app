@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
@@ -23,12 +25,13 @@ const (
 	jsonContentType       = "application/json"
 )
 
+// Requests this API rejects itself are BadRequest statuses, so they keep their 400.
 var (
-	errDomainNotSpecified = errors.New("domain not specified")
-	errJobIDNotSpecified  = errors.New("job id not specified")
-	errClusterScopeNeeded = errors.New("cluster scope is required")
-	errSingleClusterScope = errors.New("single cluster scope is required")
-	errClusterIDsNeeded   = errors.New("clusterIds is required")
+	errDomainNotSpecified = errorstatus.BadRequest(errors.New("domain not specified"))
+	errJobIDNotSpecified  = errorstatus.BadRequest(errors.New("job id not specified"))
+	errClusterScopeNeeded = errorstatus.BadRequest(errors.New("cluster scope is required"))
+	errSingleClusterScope = errorstatus.BadRequest(errors.New("single cluster scope is required"))
+	errClusterIDsNeeded   = errorstatus.BadRequest(errors.New("clusterIds is required"))
 )
 
 // Server exposes HTTP endpoints for snapshot retrieval and manual refresh.
@@ -73,13 +76,13 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 
 	domainName := strings.TrimPrefix(r.URL.Path, "/snapshots/")
 	if domainName == "" {
-		writeError(w, http.StatusBadRequest, errDomainNotSpecified, correlationID)
+		writeError(w, errDomainNotSpecified, correlationID)
 		return
 	}
 
 	scope := r.URL.Query().Get("scope")
 	if err := requireClusterScope(scope); err != nil {
-		writeError(w, http.StatusBadRequest, err, correlationID)
+		writeError(w, err, correlationID)
 		return
 	}
 
@@ -110,23 +113,17 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", validator)
 	}
 	if err := json.NewEncoder(w).Encode(snapshot); err != nil {
-		writeError(w, http.StatusInternalServerError, err, correlationID)
+		writeError(w, err, correlationID)
 	}
 }
 
+// writeSnapshotBuildError names the requested domain on an API denial that
+// does not already carry the app's permission details.
 func writeSnapshotBuildError(w http.ResponseWriter, err error, domainName, correlationID string) {
-	if status, ok := refresh.PermissionDeniedStatusFromError(err); ok {
-		writePermissionDenied(w, status, correlationID)
-		return
+	if apierrors.IsForbidden(err) && !errorstatus.IsPermissionDenied(err) {
+		err = errorstatus.WrapPermissionDenied(err, domainName, "")
 	}
-	if apierrors.IsForbidden(err) {
-		wrapped := refresh.WrapPermissionDenied(err, domainName, "")
-		if status, ok := refresh.PermissionDeniedStatusFromError(wrapped); ok {
-			writePermissionDenied(w, status, correlationID)
-			return
-		}
-	}
-	writeError(w, http.StatusInternalServerError, err, correlationID)
+	writeError(w, err, correlationID)
 }
 
 func (s *Server) handleManualRefresh(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +137,7 @@ func (s *Server) handleManualRefresh(w http.ResponseWriter, r *http.Request) {
 
 	domainName := strings.TrimPrefix(r.URL.Path, "/refresh/")
 	if domainName == "" {
-		writeError(w, http.StatusBadRequest, errDomainNotSpecified, correlationID)
+		writeError(w, errDomainNotSpecified, correlationID)
 		return
 	}
 
@@ -156,14 +153,14 @@ func (s *Server) handleManualRefresh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := requireClusterScope(body.Scope); err != nil {
-		writeError(w, http.StatusBadRequest, err, correlationID)
+		writeError(w, err, correlationID)
 		return
 	}
 
 	requestContext := applog.ContextWithOperationID(r.Context(), correlationID)
 	job, err := s.queue.Enqueue(requestContext, domainName, body.Scope, body.Reason)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err, correlationID)
+		writeError(w, enqueueRejection(err), correlationID)
 		return
 	}
 
@@ -171,6 +168,15 @@ func (s *Server) handleManualRefresh(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(jsonContentTypeHeader, jsonContentType)
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(job)
+}
+
+// enqueueRejection keeps a typed enqueue failure's status; any other refusal
+// is a rejected request, as this endpoint has always answered it.
+func enqueueRejection(err error) error {
+	if errorstatus.Classify(err).Reason != errorstatus.ReasonUnknown {
+		return err
+	}
+	return errorstatus.BadRequest(err)
 }
 
 func requireClusterScope(scope string) error {
@@ -194,14 +200,13 @@ func (s *Server) handleJobStatus(w http.ResponseWriter, r *http.Request) {
 
 	jobID := strings.TrimPrefix(r.URL.Path, "/jobs/")
 	if jobID == "" {
-		writeError(w, http.StatusBadRequest, errJobIDNotSpecified, correlationID)
+		writeError(w, errJobIDNotSpecified, correlationID)
 		return
 	}
 
 	job, ok := s.queue.Status(jobID)
 	if !ok {
-		setCorrelationID(w, correlationID)
-		http.NotFound(w, r)
+		writeError(w, errorstatus.NotFound(fmt.Errorf("refresh job %s not found", jobID)), correlationID)
 		return
 	}
 	setCorrelationID(w, correlationID)
@@ -246,14 +251,14 @@ func (s *Server) handleMetricsActive(w http.ResponseWriter, r *http.Request) {
 		data, _ := io.ReadAll(r.Body)
 		if len(data) > 0 {
 			if err := json.Unmarshal(data, &body); err != nil {
-				writeError(w, http.StatusBadRequest, err, correlationID)
+				writeError(w, errorstatus.BadRequest(err), correlationID)
 				return
 			}
 		}
 	}
 
 	if body.ClusterIDs == nil {
-		writeError(w, http.StatusBadRequest, errClusterIDsNeeded, correlationID)
+		writeError(w, errClusterIDsNeeded, correlationID)
 		return
 	}
 	if s.metrics != nil {
@@ -279,26 +284,23 @@ func setCorrelationID(w http.ResponseWriter, correlationID string) {
 	}
 }
 
-func writeError(w http.ResponseWriter, status int, err error, correlationID string) {
-	w.Header().Set(jsonContentTypeHeader, jsonContentType)
-	setCorrelationID(w, correlationID)
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(struct {
-		Code          string `json:"code"`
-		Message       string `json:"message"`
-		RetryAfterSec int    `json:"retryAfterSeconds,omitempty"`
-		CorrelationID string `json:"correlationId,omitempty"`
-	}{
-		Code:          http.StatusText(status),
-		Message:       err.Error(),
-		CorrelationID: correlationID,
-	})
+// WriteError answers a refresh request with err's typed status; the status code
+// is the response code. It is exported for the transport that fronts this API.
+func WriteError(w http.ResponseWriter, r *http.Request, err error) {
+	writeError(w, err, getCorrelationID(r))
 }
 
-// writePermissionDenied emits a Status-like payload for RBAC denials.
-func writePermissionDenied(w http.ResponseWriter, status *refresh.PermissionDeniedStatus, correlationID string) {
+func writeError(w http.ResponseWriter, err error, correlationID string) {
+	status := errorstatus.Classify(err)
+	code := status.Code
+	if code == 0 {
+		code = http.StatusInternalServerError
+	}
 	w.Header().Set(jsonContentTypeHeader, jsonContentType)
 	setCorrelationID(w, correlationID)
-	w.WriteHeader(http.StatusForbidden)
-	_ = json.NewEncoder(w).Encode(status)
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(struct {
+		errorstatus.Status
+		CorrelationID string `json:"correlationId,omitempty"`
+	}{Status: status, CorrelationID: correlationID})
 }

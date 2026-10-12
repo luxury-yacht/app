@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/panelmetrics"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -93,8 +94,8 @@ type ResourceCommands interface {
 	ApplyObjectYaml(string, ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error)
 	CheckObjectYamlOwnership(string, ObjectYAMLMutationRequest) (*ObjectYAMLOwnershipCheckResponse, error)
 	DiscoverNodeLogs(string, string) NodeLogDiscoveryResponse
-	FetchContainerLogs(string, ContainerLogsFetchRequest) ContainerLogsFetchResponse
-	FetchNodeLogs(string, string, NodeLogFetchRequest) NodeLogFetchResponse
+	FetchContainerLogs(string, ContainerLogsFetchRequest) (ContainerLogsFetchResponse, error)
+	FetchNodeLogs(string, string, NodeLogFetchRequest) (NodeLogFetchResponse, error)
 	FindCatalogObjectByUID(string, string) (*objectcatalog.Summary, error)
 	FindCatalogObjectMatch(string, string, string, string, string, string) (*objectcatalog.Summary, error)
 	GetContainerLogsScopeContainers(string, string) ([]PodContainer, error)
@@ -455,11 +456,11 @@ func (s *DesktopService) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDis
 	return s.resources.DiscoverNodeLogs(clusterID, nodeName)
 }
 
-func (s *DesktopService) FetchContainerLogs(clusterID string, request ContainerLogsFetchRequest) ContainerLogsFetchResponse {
+func (s *DesktopService) FetchContainerLogs(clusterID string, request ContainerLogsFetchRequest) (ContainerLogsFetchResponse, error) {
 	return s.resources.FetchContainerLogs(clusterID, request)
 }
 
-func (s *DesktopService) FetchNodeLogs(clusterID, nodeName string, request NodeLogFetchRequest) NodeLogFetchResponse {
+func (s *DesktopService) FetchNodeLogs(clusterID, nodeName string, request NodeLogFetchRequest) (NodeLogFetchResponse, error) {
 	return s.resources.FetchNodeLogs(clusterID, nodeName, request)
 }
 
@@ -642,11 +643,11 @@ func validatePanelCommandCaller(ctx context.Context, claimedWindowName string) e
 		return nil
 	}
 	if caller.Name() != claimedWindowName {
-		return fmt.Errorf(
+		return errorstatus.BadRequest(fmt.Errorf(
 			"claimed panel command caller %q does not match Wails sender %q",
 			claimedWindowName,
 			caller.Name(),
-		)
+		))
 	}
 	return nil
 }

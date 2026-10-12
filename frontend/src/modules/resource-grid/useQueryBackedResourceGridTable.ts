@@ -25,6 +25,7 @@ import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useQueryStreamSignal } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import { isPermissionDenied, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { RefreshDomain } from '@/core/refresh/types';
 import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 import type { SortConfig } from '@/hooks/useTableSort';
@@ -97,8 +98,8 @@ export function deriveQueryBackedData<TRow>({
   queryEnabled: boolean;
   queryRows: TRow[];
   queryLoaded: boolean;
-  queryError: string | null;
-}): { data: TRow[]; loading: boolean; loaded: boolean; error: string | null } {
+  queryError: RefreshFailure | null;
+}): { data: TRow[]; loading: boolean; loaded: boolean; error: RefreshFailure | null } {
   if (!queryEnabled) {
     // Gating (awaiting cluster/persistence/live-domain readiness): hold loading so the
     // controller replays the cached page or shows a spinner — never the live snapshot.
@@ -120,12 +121,12 @@ export function deriveQueryBackedData<TRow>({
 export const isLiveDomainInitialLoadPending = (state: {
   status?: string;
   data?: unknown;
-  permissionDenied?: boolean;
+  error?: RefreshFailure | null;
   streamAcknowledgedVersion?: number;
   queryReconcileVersion?: number;
 }): boolean =>
   !state.data &&
-  !state.permissionDenied &&
+  !isPermissionDenied(state.error) &&
   state.streamAcknowledgedVersion === undefined &&
   state.queryReconcileVersion === undefined &&
   (state.status === 'loading' || state.status === 'initialising');
@@ -186,7 +187,7 @@ interface TypedQueryLifecycle<
   data: TRow[];
   loading: boolean;
   loaded: boolean;
-  error: string | null;
+  error: RefreshFailure | null;
   tableMode: ResourceGridTableMode;
   effectiveFilterOptionOverrides?: Partial<GridTableFilterOptions>;
   onTableStateChange?: (next: QueryBackedTableState) => void;
@@ -485,7 +486,7 @@ function useQueryBackedGridResult<
   data: TRow[];
   loading: boolean;
   loaded: boolean;
-  error: string | null;
+  error: RefreshFailure | null;
 }): QueryBackedNamespaceGridResult<TRow, TPayload> {
   // Fetches every matching row by walking the query's pages. Threaded onto gridTableProps so
   // the GridTable filter bar's Download button copies or saves all of them (no per-view

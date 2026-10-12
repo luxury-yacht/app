@@ -9,6 +9,7 @@ import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as YAML from 'yaml';
+import { localFailure, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import { requireValue } from '@/test-utils/requireValue';
 
 interface CapturedCodeMirrorProps {
@@ -208,7 +209,7 @@ type Snapshot = {
   data?: {
     values?: { allValues?: Record<string, unknown>; userValues?: Record<string, unknown> } | null;
   } | null;
-  error?: string | null;
+  error?: RefreshFailure | null;
 };
 
 const snapshotState: { current: Snapshot } = {
@@ -475,7 +476,7 @@ describe('ValuesTab', () => {
     snapshotState.current = {
       status: 'error',
       data: { values: { allValues: ALL_VALUES, userValues: USER_VALUES } },
-      error: 'connection refused',
+      error: localFailure('connection refused'),
     };
     const { container, unmount } = await renderValuesTab();
 

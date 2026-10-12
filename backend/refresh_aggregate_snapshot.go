@@ -9,6 +9,7 @@ import (
 
 	"k8s.io/klog/v2"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -48,7 +49,7 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 
 	service := services[target]
 	if service == nil {
-		return nil, fmt.Errorf("snapshot service unavailable for %s", target)
+		return nil, errorstatus.ClusterNotReady(fmt.Errorf("snapshot service unavailable for %s", target))
 	}
 	scoped := refresh.JoinClusterScope(target, scopeValue)
 	snapshotData, err := service.Build(ctx, domain, scoped)
@@ -59,7 +60,7 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 		// domain, so without this signal a restricted-RBAC cluster wedges in
 		// "loading" forever. The error still propagates: the client renders
 		// the permission message instead of a namespace list.
-		if domain == "namespaces" && refresh.IsPermissionDenied(err) {
+		if domain == "namespaces" && errorstatus.IsPermissionDenied(err) {
 			s.notifyNamespaceSnapshot(target, snapshot.NamespaceWorkloadReady)
 		}
 		return nil, err
@@ -98,15 +99,15 @@ func (s *aggregateSnapshotService) resolveTarget(
 	services map[string]refresh.SnapshotBuilder,
 ) (string, error) {
 	if len(clusterIDs) == 0 {
-		return "", fmt.Errorf("cluster scope is required for domain %s", domain)
+		return "", errorstatus.BadRequest(fmt.Errorf("cluster scope is required for domain %s", domain))
 	}
 	if len(clusterIDs) > 1 {
-		return "", fmt.Errorf("domain %s requires a single cluster scope (requested: %v)", domain, clusterIDs)
+		return "", errorstatus.BadRequest(fmt.Errorf("domain %s requires a single cluster scope (requested: %v)", domain, clusterIDs))
 	}
 
 	target := clusterIDs[0]
 	if _, ok := services[target]; !ok {
-		return "", fmt.Errorf("no active clusters available (requested: %v)", clusterIDs)
+		return "", errorstatus.ClusterNotReady(fmt.Errorf("no active clusters available (requested: %v)", clusterIDs))
 	}
 	return target, nil
 }

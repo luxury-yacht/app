@@ -15,6 +15,7 @@ import type {
   PermissionStatus,
 } from '@/core/capabilities/permissionTypes';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { localFailure } from '@/core/refresh/refreshFailure';
 import { requireValue } from '@/test-utils/requireValue';
 import type { ViewType } from '@/types/navigation/views';
 import type { KubernetesAPIClientDiagnostics } from '../client';
@@ -1423,7 +1424,7 @@ describe('DiagnosticsPanel component', () => {
         {
           ...createReadyState({}),
           status: 'error',
-          error: 'Unable to stream logs',
+          error: localFailure('Unable to stream logs'),
           lastUpdated: now - 3000,
         },
       ],
@@ -1433,7 +1434,7 @@ describe('DiagnosticsPanel component', () => {
         {
           ...createReadyState({}),
           status: 'error',
-          error: 'Unable to stream logs',
+          error: localFailure('Unable to stream logs'),
           lastUpdated: now - 1000,
         },
       ],

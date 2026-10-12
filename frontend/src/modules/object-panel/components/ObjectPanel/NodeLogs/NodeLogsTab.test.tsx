@@ -771,14 +771,7 @@ describe('NodeLogsTab', () => {
   });
 
   it('reports a node-log failure displayed inline', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        error: 'node log access denied',
-      },
-    });
+    mockFetchNodeLogs.mockRejectedValue(new Error('node log access denied'));
 
     await renderTab();
     await selectSource('kubelet');
@@ -1111,6 +1104,46 @@ describe('NodeLogsTab', () => {
     }
   });
 
+  // A failed incremental read may be a since-time the node rejects; a full
+  // read is the fallback, and only its failure is shown.
+  it('falls back to a full read when an incremental refresh fails', async () => {
+    vi.useFakeTimers();
+    mockFetchNodeLogs
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: { source: sources[0], sourcePath: sources[0].path, content: 'line one' },
+      })
+      .mockRejectedValueOnce(new Error('invalid sinceTime'))
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: { source: sources[0], sourcePath: sources[0].path, content: 'line one\nline two' },
+      });
+
+    try {
+      await renderTab();
+      await selectSource('kubelet');
+      await act(async () => {
+        vi.advanceTimersByTime(5000);
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockFetchNodeLogs).toHaveBeenCalledTimes(3);
+      expect(mockFetchNodeLogs.mock.calls[2][2]).not.toHaveProperty(
+        'sinceTime',
+        expect.any(String)
+      );
+      const logLines = Array.from(container.querySelectorAll('.log-viewer-line')).map(
+        (element) => element.textContent
+      );
+      expect(logLines).toEqual(['line one', 'line two']);
+      expect(container.textContent).not.toContain('invalid sinceTime');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps current node logs when a background refresh is blocked', async () => {
     vi.useFakeTimers();
     mockFetchNodeLogs.mockResolvedValueOnce({
@@ -1280,10 +1313,7 @@ describe('NodeLogsTab', () => {
       status: 'executed',
       data: { source: sources[0], sourcePath: sources[0].path, content: 'line one\nline two' },
     });
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: { source: sources[0], sourcePath: sources[0].path, error: 'kubelet unreachable' },
-    });
+    mockFetchNodeLogs.mockRejectedValue(new Error('kubelet unreachable'));
 
     try {
       await renderTab();

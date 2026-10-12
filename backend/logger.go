@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/luxury-yacht/app/backend/internal/errorcapture"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/internal/logclassify"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/internal/sentry"
@@ -254,7 +254,7 @@ func (l *Logger) report(
 	if dispatch.reporter == nil || dispatch.entry.Source == logsources.ErrorCapture {
 		return
 	}
-	if cause != nil && errorcapture.IsExpectedClusterFailure(cause) {
+	if cause != nil && errorstatus.Classify(cause).Expected {
 		return
 	}
 	if level == LogLevelError {

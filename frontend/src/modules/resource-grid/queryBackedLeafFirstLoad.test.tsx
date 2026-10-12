@@ -251,6 +251,7 @@ import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
 import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
 import NsViewStorage from '@modules/namespace/components/NsViewStorage';
 import { WorkloadsTable } from '@modules/namespace/components/NsViewWorkloads';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 
 const fixtureIdentity = (kind: string) => {
   switch (kind) {
@@ -651,9 +652,13 @@ describe('query-backed leaf first load', () => {
         status: 'executed',
         data: {
           status: 'error',
-          error:
-            'permission denied for domain namespace-autoscaling (autoscaling/horizontalpodautoscalers)',
-          permissionDenied: true,
+          error: {
+            kind: 'backend',
+            status: makeErrorStatus(
+              'Forbidden',
+              'permission denied for domain namespace-autoscaling (autoscaling/horizontalpodautoscalers)'
+            ),
+          },
           data: undefined,
         },
       });

@@ -42,12 +42,10 @@ func TestWailsBindingsUseInterfaces(t *testing.T) {
 func TestResourceBoundaryIsOwnedByResourceGateway(t *testing.T) {
 	runtimeSource := readTestFile(t, repositoryPath("backend", "app.go"))
 	gatewaySource := readTestFile(t, repositoryPath("backend", "resource_gateway.go"))
-	generatorSource := readTestFile(t, repositoryPath("backend", "internal", "genappbindings", "render.go"))
 	mainSource := readDesktopStartupSource(t)
 
 	require.Contains(t, gatewaySource, "type ResourceGateway struct {")
 	require.Contains(t, runtimeSource, "Resources             *ResourceGateway")
-	require.Contains(t, generatorSource, "func (g *ResourceGateway) Get")
 	require.Regexp(t, `Resources:\s+backendRuntime\.Resources`, mainSource)
 }
 
@@ -454,7 +452,7 @@ func TestWailsTransportEventsAndPeerHooksHaveOneCompositionOwner(t *testing.T) {
 		owners []string
 	}{
 		"api route": {
-			marker: `application.ServiceOptions{Route: "/api/v2"}`,
+			marker: `application.ServiceOptions{Route: "/api/v2", MarshalError: backend.MarshalBindingError}`,
 			owners: []string{"internal/bootstrap/composition.go"},
 		},
 		"resource named stream": {
@@ -1071,7 +1069,7 @@ func TestReleasePublishesSignedUpdaterManifestInsideTheGitHubRelease(t *testing.
 
 func TestRefreshTransportUsesOnlyWailsServiceAndNamedStreams(t *testing.T) {
 	mainSource := readDesktopStartupSource(t)
-	require.Contains(t, mainSource, `application.ServiceOptions{Route: "/api/v2"}`)
+	require.Contains(t, mainSource, `application.ServiceOptions{Route: "/api/v2", MarshalError: backend.MarshalBindingError}`)
 	require.Contains(t, mainSource, `wailsApp.HandleStream(backend.RefreshResourceStreamName`)
 	require.Contains(t, mainSource, `wailsApp.HandleStream(backend.RefreshContainerLogsStreamName`)
 

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 )
 
 const (
@@ -241,18 +243,18 @@ func validateImportedThemes(themes []Theme) error {
 	seen := make(map[string]struct{}, len(themes))
 	for _, theme := range themes {
 		if strings.TrimSpace(theme.ID) == "" {
-			return fmt.Errorf("validate settings import: theme ID is required")
+			return errorstatus.BadRequest(fmt.Errorf("validate settings import: theme ID is required"))
 		}
 		if strings.TrimSpace(theme.Name) == "" {
-			return fmt.Errorf("validate settings import: theme name is required")
+			return errorstatus.BadRequest(fmt.Errorf("validate settings import: theme name is required"))
 		}
 		if _, exists := seen[theme.ID]; exists {
-			return fmt.Errorf("validate settings import: duplicate theme ID %q", theme.ID)
+			return errorstatus.BadRequest(fmt.Errorf("validate settings import: duplicate theme ID %q", theme.ID))
 		}
 		seen[theme.ID] = struct{}{}
 		if theme.ID != defaultThemeID {
 			if err := validateThemeClusterPattern(theme.ClusterPattern); err != nil {
-				return fmt.Errorf("validate settings import: theme %q: %w", theme.Name, err)
+				return errorstatus.BadRequest(fmt.Errorf("validate settings import: theme %q: %w", theme.Name, err))
 			}
 		}
 	}

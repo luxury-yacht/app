@@ -93,8 +93,7 @@ Composition and dependency directions are owned by
 
 The generated internal `BindingModelAnchor` method on `*DesktopService` carries
 a type-level `wails:inject` directive that keeps every resource detail DTO
-reachable although the implementation-only `ResourceGateway.Get<Kind>`
-wrappers are not commands. `genappbindings.Render` emits the anchor and those
-wrappers in package `backend`, so `DesktopService`, `ResourceGateway`, and the
-generated file must stay there; moving either type first requires a tested
-target-package option in that generator.
+reachable although the object-details refresh domain returns them untyped.
+`genappbindings.Render` emits the anchor in package `backend`, so
+`DesktopService` and the generated file must stay there; moving it first
+requires a tested target-package option in that generator.

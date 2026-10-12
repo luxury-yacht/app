@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -93,12 +94,12 @@ func (m *ClusterRuntimeManager) resolveClusterDependencies(clusterID string) (co
 		if clients.meta.Name != "" {
 			clusterName = clients.meta.Name
 		}
-		return common.Dependencies{}, "", fmt.Errorf("auth failed for %s: check your kubeconfig credentials", clusterName)
+		return common.Dependencies{}, "", errorstatus.CredentialsRejected(fmt.Errorf("auth failed for %s: check your kubeconfig credentials", clusterName))
 	}
 
 	deps, ok := m.resourceDependenciesForClusterID(trimmed)
 	if !ok {
-		return common.Dependencies{}, "", fmt.Errorf("cluster %s not active", trimmed)
+		return common.Dependencies{}, "", errorstatus.ClusterNotReady(fmt.Errorf("cluster %s not active", trimmed))
 	}
 	deps.Logger = applog.OperationScoped(deps.Logger, applog.NextOperationID("wails"))
 

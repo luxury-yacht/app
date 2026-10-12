@@ -26,6 +26,9 @@ docs only name the rule and where to start.
 - Refresh HTTP/stream DTOs and snapshot envelope:
   `backend/internal/genrefreshcontracts/registry.go`, generated as
   `frontend/src/core/refresh/types.generated.ts`
+- Error status (binding `cause`, refresh HTTP body, stream `errorDetails`):
+  `backend/internal/errorstatus`, generated as `ErrorStatus*` in
+  `types.generated.ts` ([error-reporting.md](error-reporting.md#error-status-contract))
 - Resource identities: `backend/resourcecontract/builtin-resource-identities.json`
 - Wails DTOs: `frontend/bindings`
 - Reader wrappers: `frontend/src/core/data-access/readers.ts`,

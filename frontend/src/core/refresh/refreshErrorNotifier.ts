@@ -1,7 +1,13 @@
 import { errorHandler } from '@utils/errorHandler';
+import { errorStatusOf, isBrowserFetchFailure } from '@utils/errorStatus';
 import type { DomainCategory } from './domainRegistry';
 import { makeInFlightKey } from './refreshRuntime';
-import type { RefreshDomain } from './types';
+import type { ErrorStatusReason, RefreshDomain } from './types';
+
+const STARTUP_REASONS: ReadonlySet<ErrorStatusReason> = new Set([
+  'RefreshUnavailable',
+  'ClusterNotReady',
+]);
 
 type NotifyRefreshErrorOptions = {
   domain: RefreshDomain;
@@ -24,7 +30,7 @@ export class RefreshErrorNotifier {
     error,
     operationId,
   }: NotifyRefreshErrorOptions): void {
-    if (this.shouldSuppressNetworkError(message)) {
+    if (this.shouldSuppressStartupError(error)) {
       return;
     }
     const key = this.getErrorNotificationKey(domain, scope);
@@ -32,23 +38,9 @@ export class RefreshErrorNotifier {
       return;
     }
 
-    const normalizedMessage = message.toLowerCase();
-    if (
-      domain === 'object-details' &&
-      (normalizedMessage.includes('not found') || normalizedMessage.includes('could not find'))
-    ) {
-      // Suppress toasts for transient not-found errors when panels hold stale objects.
+    if (domain === 'object-details' && errorStatusOf(error)?.reason === 'NotFound') {
+      // The panel shows its object as deleted when the NotFound names it.
       this.lastNotifiedErrors.set(key, message);
-      return;
-    }
-    if (normalizedMessage.includes('catalog hydration incomplete')) {
-      this.lastNotifiedErrors.set(key, message);
-      if (process.env.NODE_ENV !== 'production') {
-        // Surface in dev tools without triggering user-facing toasts.
-        console.warn(
-          `[Refresh] hydration warning suppressed for ${domain} (${scope ?? 'global'}): ${message}`
-        );
-      }
       return;
     }
 
@@ -82,17 +74,18 @@ export class RefreshErrorNotifier {
     );
   }
 
-  shouldSuppressNetworkError(message: string): boolean {
+  /**
+   * Right after a kubeconfig change the backend republishes its refresh
+   * service and cluster handlers. Until the window closes, answers that say
+   * so, and the browser's own fetch failures, are start-up rather than
+   * failures.
+   */
+  shouldSuppressStartupError(error: unknown): boolean {
     if (Date.now() > this.suppressNetworkErrorsUntil) {
       return false;
     }
-    const normalized = message.toLowerCase();
-    return (
-      normalized.includes('load failed') ||
-      normalized.includes('failed to fetch') ||
-      normalized.includes('could not connect to the server') ||
-      normalized.includes('snapshot request failed')
-    );
+    const reason = errorStatusOf(error)?.reason;
+    return reason ? STARTUP_REASONS.has(reason) : isBrowserFetchFailure(error);
   }
 
   private getErrorNotificationKey(domain: RefreshDomain, scope?: string): string {

@@ -104,9 +104,7 @@ Dependencies point toward capabilities, never back to the composition root:
 
 - Production files are named for their owner or a dependency contract and hold
   one state owner's methods; cross-owner workflows belong to the sequencing
-  coordinator. Sole exception: `resource_details_generated.go`, where one
-  generator emits internal `ResourceGateway` wrappers and the `DesktopService`
-  model anchor from the resource-kind registry.
+  coordinator.
 - `application_runtime_contract_test.go` enforces owner-oriented filenames,
   single-owner files, no owner embedding, interface-only cross-owner fields,
   composition-only `app.go`, and no post-construction configuration. Do not

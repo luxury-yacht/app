@@ -156,11 +156,8 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		resolveClusterDependencies:       clusterRuntime.resolveClusterDependencies,
 		resourceDependenciesForClusterID: clusterRuntime.resourceDependenciesForClusterID,
 		context:                          signals.CtxOrBackground,
-		emitEvent:                        signals.emitEvent,
 		logger:                           appLogs.Logger(),
 		clusterName:                      clusterRuntime.clusterNameForID,
-		recordTransportSuccess:           clusterRuntime.recordClusterTransportSuccess,
-		recordTransportFailure:           clusterRuntime.recordClusterTransportFailure,
 		resourceResolverForCluster: func(clusterID string) common.ResourceResolver {
 			return clusterRuntimeResourceResolver{
 				runtime: clusterRuntime, clusterID: clusterID,

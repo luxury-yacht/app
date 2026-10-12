@@ -1,6 +1,5 @@
-// Command genappbindings writes the generated ResourceGateway.Get<Kind>
-// methods and the object-panel detail-fetcher dispatch map. Invoked via `go
-// generate ./backend`.
+// Command genappbindings writes the generated binding-model anchor and the
+// object-panel detail-fetcher dispatch map. Invoked via `go generate ./backend`.
 package main
 
 import (
@@ -12,7 +11,7 @@ import (
 )
 
 func main() {
-	out := flag.String("out", "", "ResourceGateway detail-method output file path (stdout if empty and no other output requested)")
+	out := flag.String("out", "", "binding-model anchor output file path (stdout if empty and no other output requested)")
 	fetchersOut := flag.String("fetchers-out", "", "objectDetailFetchers output file path")
 	flag.Parse()
 

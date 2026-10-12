@@ -12,17 +12,18 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 )
 
-func (g *ResourceGateway) FetchContainerLogs(clusterID string, req ContainerLogsFetchRequest) ContainerLogsFetchResponse {
+func (g *ResourceGateway) FetchContainerLogs(clusterID string, req ContainerLogsFetchRequest) (ContainerLogsFetchResponse, error) {
 	if err := requireMatchingContainerLogsScopeCluster(clusterID, req.Scope); err != nil {
-		return ContainerLogsFetchResponse{Error: err.Error()}
+		return ContainerLogsFetchResponse{}, err
 	}
 	deps, _, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
-		return ContainerLogsFetchResponse{Error: err.Error()}
+		return ContainerLogsFetchResponse{}, err
 	}
 	service := pods.NewService(deps)
 	// No budget for the whole call: each container's read has its own timeout,
@@ -54,16 +55,16 @@ func (g *ResourceGateway) GetContainerLogsScopeContainers(clusterID, scope strin
 
 func requireMatchingContainerLogsScopeCluster(clusterID, scope string) error {
 	if strings.TrimSpace(scope) == "" {
-		return fmt.Errorf("container logs scope is required")
+		return errorstatus.BadRequest(fmt.Errorf("container logs scope is required"))
 	}
 	clusterIDs, _ := refresh.SplitClusterScopeList(scope)
 	if len(clusterIDs) != 1 {
-		return fmt.Errorf("container logs scope requires a single cluster scope")
+		return errorstatus.BadRequest(fmt.Errorf("container logs scope requires a single cluster scope"))
 	}
 	requestedClusterID := strings.TrimSpace(clusterID)
 	scopeClusterID := strings.TrimSpace(clusterIDs[0])
 	if scopeClusterID != requestedClusterID {
-		return fmt.Errorf("container logs scope cluster %q does not match requested cluster %q", scopeClusterID, requestedClusterID)
+		return errorstatus.BadRequest(fmt.Errorf("container logs scope cluster %q does not match requested cluster %q", scopeClusterID, requestedClusterID))
 	}
 	return nil
 }

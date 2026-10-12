@@ -290,15 +290,10 @@ export interface ContainerLogsFetchResponse {
     "warnings"?: containerlogs$0.Warning[] | null;
 
     /**
-     * Issues lists each container whose logs could not be read.
+     * Issues lists each container whose logs could not be read. When none
+     * could be read because of a real failure, the request fails instead.
      */
     "issues"?: containerlogs$0.TargetIssue[] | null;
-
-    /**
-     * Error is set when the request failed as a whole, including when no
-     * container could be read.
-     */
-    "error"?: string;
 }
 
 /**
@@ -447,7 +442,6 @@ export interface NodeLogFetchRequest {
 export interface NodeLogFetchResponse {
     "content"?: string;
     "source": NodeLogSource;
-    "error"?: string;
     "sourcePath"?: string;
     "truncated"?: boolean;
 }

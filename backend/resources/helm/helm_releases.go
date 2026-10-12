@@ -139,19 +139,20 @@ func (s *Service) getRelease(namespace, name string) (*action.Configuration, *re
 
 // DeleteRelease removes a Helm release.
 func (s *Service) DeleteRelease(namespace, name string) error {
+	failure := fmt.Sprintf("Failed to delete Helm release %s/%s", namespace, name)
 	if err := s.ensureClient(); err != nil {
-		return err
+		return s.logDeleteError(err, failure, name)
 	}
 
 	settings := s.helmSettings()
 	actionConfig, err := s.initActionConfig(settings, namespace)
 	if err != nil {
-		return err
+		return s.logDeleteError(err, failure, name)
 	}
 
 	client := action.NewUninstall(actionConfig)
 	if _, err := client.Run(name); err != nil {
-		err = s.logDeleteError(err, fmt.Sprintf("Failed to delete Helm release %s/%s", namespace, name), name)
+		err = s.logDeleteError(err, failure, name)
 		return fmt.Errorf("failed to delete Helm release: %w", err)
 	}
 

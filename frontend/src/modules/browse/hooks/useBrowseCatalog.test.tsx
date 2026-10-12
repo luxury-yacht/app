@@ -9,6 +9,7 @@ import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
+import { failureMessage } from '@/core/refresh/refreshFailure';
 import type {
   CanonicalRowTestOverrides,
   CatalogItem,
@@ -777,7 +778,7 @@ describe('useBrowseCatalog', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(result?.error).toBe('catalog page expired');
+    expect(failureMessage(result?.error)).toBe('catalog page expired');
     expect(handleInlineMock).toHaveBeenCalledWith(error, {
       action: 'loadBrowseCatalogPage',
       source: 'useBrowseCatalog',

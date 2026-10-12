@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/helm"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	cgofake "k8s.io/client-go/kubernetes/fake"
 )
 
-func TestCanServeCachedResponseDeniedEvictsCaches(t *testing.T) {
+func TestCachedHelmContentIsNotServedAfterPermissionDenial(t *testing.T) {
 	gateway := newResourceGatewayFixture().gateway
 	gateway.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
@@ -18,16 +19,18 @@ func TestCanServeCachedResponseDeniedEvictsCaches(t *testing.T) {
 	client := cgofake.NewClientset()
 	denySelfSubjectAccessReviews(client, "no secrets")
 
-	// Use Helm kinds to avoid GVR discovery in the permission gate.
 	detailKey := objectDetailCacheKey("HelmManifest", "default", "demo")
 	gateway.seedResponseCache(selectionKey, detailKey, "manifest")
 
 	deps := common.Dependencies{KubernetesClient: client}
-	if allowed := gateway.canServeCachedResponse(context.Background(), deps, selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmManifest"}, "default", "demo"); allowed {
-		t.Fatalf("expected permission denial to block cached response")
+	provider := &objectDetailProvider{gateway: gateway}
+	resolved := resolvedObjectDetailContext{deps: deps, selectionKey: selectionKey, scoped: true}
+	service := helm.NewService(helm.Dependencies{Common: deps})
+	if content, _, ok := cachedHelmDetail[string](provider, context.Background(), resolved, service, "HelmManifest", "default", "demo"); ok {
+		t.Fatalf("expected permission denial to block the cached manifest, got %q", content)
 	}
 	if _, ok := gateway.responseCacheLookup(selectionKey, detailKey); ok {
-		t.Fatalf("expected detail cache entry to be evicted on permission deny")
+		t.Fatalf("expected the denied manifest cache entry to be evicted")
 	}
 }
 
@@ -44,7 +47,7 @@ func TestCanServeCachedResponseAllowedKeepsCaches(t *testing.T) {
 	gateway.seedResponseCache(selectionKey, detailKey, "values")
 
 	deps := common.Dependencies{KubernetesClient: client}
-	if allowed := gateway.canServeCachedResponse(context.Background(), deps, selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmValues"}, "default", "demo"); !allowed {
+	if allowed := gateway.canServeCachedResponse(context.Background(), deps, selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmValues"}); !allowed {
 		t.Fatalf("expected permission allow to serve cached response")
 	}
 	if _, ok := gateway.responseCacheLookup(selectionKey, detailKey); !ok {

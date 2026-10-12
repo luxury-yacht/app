@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
-	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -117,11 +116,8 @@ type resourceGatewayDependencies struct {
 	resolveClusterDependencies       func(string) (common.Dependencies, string, error)
 	resourceDependenciesForClusterID func(string) (common.Dependencies, bool)
 	context                          func() context.Context
-	emitEvent                        func(string, ...interface{})
 	logger                           *Logger
 	clusterName                      func(string) string
-	recordTransportSuccess           func(string)
-	recordTransportFailure           func(string, string, error)
 	resourceResolverForCluster       func(string) common.ResourceResolver
 	refreshProjection                *refreshResourceProjection
 	permissionFetchPolicy            *PermissionFetchPolicy
@@ -148,11 +144,8 @@ type ResourceGateway struct {
 	resolveClusterDependenciesFn       func(string) (common.Dependencies, string, error)
 	resourceDependenciesForClusterIDFn func(string) (common.Dependencies, bool)
 	contextFn                          func() context.Context
-	emitEventFn                        func(string, ...interface{})
 	logger                             *Logger
 	clusterNameFn                      func(string) string
-	recordTransportSuccessFn           func(string)
-	recordTransportFailureFn           func(string, string, error)
 	resourceResolverForClusterFn       func(string) common.ResourceResolver
 	refreshProjection                  *refreshResourceProjection
 	permissionFetchPolicy              *PermissionFetchPolicy
@@ -186,11 +179,8 @@ func newResourceGateway(dependencies resourceGatewayDependencies) *ResourceGatew
 		resolveClusterDependenciesFn:       dependencies.resolveClusterDependencies,
 		resourceDependenciesForClusterIDFn: dependencies.resourceDependenciesForClusterID,
 		contextFn:                          contextProvider,
-		emitEventFn:                        dependencies.emitEvent,
 		logger:                             dependencies.logger,
 		clusterNameFn:                      dependencies.clusterName,
-		recordTransportSuccessFn:           dependencies.recordTransportSuccess,
-		recordTransportFailureFn:           dependencies.recordTransportFailure,
 		resourceResolverForClusterFn:       dependencies.resourceResolverForCluster,
 		refreshProjection:                  refreshProjection,
 		permissionFetchPolicy:              permissionPolicy,
@@ -274,58 +264,6 @@ func (g *ResourceGateway) clusterNameForID(clusterID string) string {
 		return clusterID
 	}
 	return g.clusterNameFn(clusterID)
-}
-
-func (g *ResourceGateway) emitEvent(name string, args ...interface{}) {
-	if g != nil && g.emitEventFn != nil {
-		g.emitEventFn(name, args...)
-	}
-}
-
-func (g *ResourceGateway) recordClusterTransportSuccess(clusterID string) {
-	if g != nil && g.recordTransportSuccessFn != nil {
-		g.recordTransportSuccessFn(clusterID)
-	}
-}
-
-func (g *ResourceGateway) recordClusterTransportFailure(clusterID, reason string, err error) {
-	if g != nil && g.recordTransportFailureFn != nil {
-		g.recordTransportFailureFn(clusterID, reason, err)
-	}
-}
-
-func (g *ResourceGateway) retryTelemetry() resourceRetryTelemetry {
-	if g == nil {
-		return nil
-	}
-	recorder := g.refreshProjection.currentTelemetry()
-	if recorder == nil {
-		return nil
-	}
-	return recorder
-}
-
-func (g *ResourceGateway) resourceRetryDependencies() resourceRetryDependencies {
-	if g == nil {
-		return resourceRetryDependencies{}
-	}
-	return resourceRetryDependencies{
-		recordSuccess: g.recordClusterTransportSuccess,
-		recordFailure: g.recordClusterTransportFailure,
-		telemetry:     g.retryTelemetry,
-		logger:        g.logger,
-		clusterName:   g.clusterNameForID,
-	}
-}
-
-func (g *ResourceGateway) logResourceFetchError(err error, message, clusterID, clusterName string) {
-	if g == nil || g.logger == nil {
-		return
-	}
-	if clusterName == "" {
-		clusterName = g.clusterNameForID(clusterID)
-	}
-	g.logger.ErrorWithCause(err, message, logsources.ResourceLoader, clusterID, clusterName)
 }
 
 func (g *ResourceGateway) clearCaches() {

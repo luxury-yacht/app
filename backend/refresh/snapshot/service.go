@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
@@ -457,7 +458,7 @@ func (s *Service) ensurePermissions(ctx context.Context, domainName, scope strin
 		ctx = domainpermissions.WithAllowedResources(ctx, domainName, decision.AllowedResources)
 	}
 	if err == nil && !decision.Allowed {
-		err = refresh.NewPermissionDeniedError(domainName, decision.DeniedReason)
+		err = errorstatus.NewPermissionDenied(domainName, decision.DeniedReason)
 	}
 	if err != nil {
 		duration := time.Since(start)

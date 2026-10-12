@@ -236,7 +236,7 @@ func TestObjectDetailProviderCacheKeyIncludesGVK(t *testing.T) {
 	gateway.seedResponseCache(selectionKey, coreKey, "core")
 	gateway.seedResponseCache(selectionKey, otherKey, "other")
 
-	gateway.invalidateResponseCache(selectionKey, "ConfigMap", "default", "demo")
+	gateway.invalidateResponseCacheForGVK(selectionKey, coreConfigMap, "default", "demo")
 
 	if _, ok := gateway.responseCacheLookup(selectionKey, coreKey); ok {
 		t.Fatalf("expected built-in GVK cache key to be invalidated")

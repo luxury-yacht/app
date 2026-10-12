@@ -12,7 +12,8 @@
  *    swap, and the filter input stays mounted (and focused) on a no-match result.
  */
 import { describe, expect, it } from 'vitest';
-
+import { localFailure, type RefreshFailure } from '@/core/refresh/refreshFailure';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import {
   deriveQueryBackedData,
   isLiveDomainInitialLoadPending,
@@ -30,7 +31,7 @@ const base = {
   queryEnabled: false,
   queryRows: [] as Row[],
   queryLoaded: false,
-  queryError: null as string | null,
+  queryError: null as RefreshFailure | null,
 };
 
 describe('deriveQueryBackedData', () => {
@@ -71,10 +72,10 @@ describe('deriveQueryBackedData', () => {
       queryEnabled: true,
       queryRows: [],
       queryLoaded: true,
-      queryError: 'returned no data',
+      queryError: localFailure('returned no data'),
     });
     expect(r.data).toEqual([]);
-    expect(r.error).toBe('returned no data');
+    expect(r.error).toEqual(localFailure('returned no data'));
   });
 
   it('stays quiet during refetches with rows visible (quiet filter refresh, no overlay)', () => {
@@ -121,7 +122,7 @@ describe('isLiveDomainInitialLoadPending', () => {
       isLiveDomainInitialLoadPending({
         status: 'initialising',
         data: undefined,
-        permissionDenied: true,
+        error: { kind: 'backend', status: makeErrorStatus('Forbidden') },
       })
     ).toBe(false);
     expect(isLiveDomainInitialLoadPending({ status: 'initialising', data: undefined })).toBe(true);

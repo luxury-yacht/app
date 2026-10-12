@@ -80,5 +80,5 @@ func runtimeOperationFromDrainJob(job *nodemaintenance.DrainJob) RuntimeOperatio
 	}
 }
 func (g *ResourceGateway) clearNodeCaches(selectionKey, nodeName string) {
-	g.invalidateResponseCache(selectionKey, nodes.Identity.Kind, "", nodeName)
+	g.invalidateResponseCacheForGVK(selectionKey, nodes.Identity.GVK(), "", nodeName)
 }

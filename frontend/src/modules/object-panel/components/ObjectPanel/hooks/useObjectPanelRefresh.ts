@@ -12,7 +12,9 @@ import { refreshManager } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
-import { useRefreshScopedDomain } from '@/core/refresh/store';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
+import { type DomainSnapshotState, useRefreshScopedDomain } from '@/core/refresh/store';
+import type { DomainPayloadMap } from '@/core/refresh/types';
 import type { ObjectDeletionMetadata } from '@/core/refresh/types.generated';
 
 import { getObjectDetailsRefresherName, INACTIVE_SCOPE } from '../constants';
@@ -43,9 +45,36 @@ interface ObjectPanelRefreshResult {
   lastModified: string | null;
   deletion: ObjectDeletionMetadata | null;
   detailsLoading: boolean;
-  detailsError: string | null;
+  detailsError: RefreshFailure | null;
   fetchResourceDetails: (reason?: DataRequestReason) => Promise<void>;
 }
+
+// The panel's view of its object-details snapshot: empty while the panel has
+// no detail scope (unsupported kinds), so a stale scope never leaks through.
+const selectDetailSnapshot = (
+  detailScope: string | null,
+  snapshot: DomainSnapshotState<DomainPayloadMap['object-details']>
+) => {
+  if (!detailScope) {
+    return {
+      detailPayload: null,
+      creationTimestamp: null,
+      lastModified: null,
+      deletion: null,
+      detailStatus: 'idle' as const,
+      detailsError: null,
+    };
+  }
+  const data = snapshot.data;
+  return {
+    detailPayload: data?.details ?? null,
+    creationTimestamp: data?.creationTimestamp ?? null,
+    lastModified: data?.lastModified ?? null,
+    deletion: data?.deletion ?? null,
+    detailStatus: snapshot.status,
+    detailsError: snapshot.error ?? null,
+  };
+};
 
 export const useObjectPanelRefresh = ({
   detailScope,
@@ -59,38 +88,16 @@ export const useObjectPanelRefresh = ({
   // Refresh context sync lives in RefreshSyncProvider; this hook only manages object-detail refreshes.
   const detailSnapshot = useRefreshScopedDomain('object-details', detailScope ?? INACTIVE_SCOPE);
 
-  const detailPayload = detailScope ? (detailSnapshot.data?.details ?? null) : null;
-  const creationTimestamp = detailScope ? (detailSnapshot.data?.creationTimestamp ?? null) : null;
-  const lastModified = detailScope ? (detailSnapshot.data?.lastModified ?? null) : null;
-  const deletion = detailScope ? (detailSnapshot.data?.deletion ?? null) : null;
-  const detailStatus = detailScope ? detailSnapshot.status : 'idle';
+  const { detailPayload, creationTimestamp, lastModified, deletion, detailStatus, detailsError } =
+    selectDetailSnapshot(detailScope, detailSnapshot);
 
   const detailsLoadingState = applyPassiveLoadingPolicy({
-    loading: detailScope
-      ? !detailPayload && (detailStatus === 'loading' || detailStatus === 'updating')
-      : false,
+    loading: !detailPayload && (detailStatus === 'loading' || detailStatus === 'updating'),
     hasLoaded: Boolean(detailPayload),
     isPaused,
     isManualRefreshActive,
   });
   const detailsLoading = detailsLoadingState.loading;
-
-  const detailsError = detailScope
-    ? (() => {
-        const message = detailSnapshot.error ?? null;
-        if (!message) {
-          return null;
-        }
-        const normalized = message.toLowerCase();
-        if (
-          normalized.includes('object detail provider not implemented') ||
-          normalized.includes('object details fetcher not implemented')
-        ) {
-          return null;
-        }
-        return message;
-      })()
-    : null;
 
   const fetchResourceDetails = useCallback(
     async (reason: DataRequestReason = 'startup') => {

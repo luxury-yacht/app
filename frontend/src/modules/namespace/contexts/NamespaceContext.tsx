@@ -48,6 +48,12 @@ import {
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import {
+  errorFromFailure,
+  failureMessage,
+  isPermissionDenied,
+  type RefreshFailure,
+} from '@/core/refresh/refreshFailure';
 import type { NamespaceSignalState } from '@/core/refresh/types';
 import { setActiveNamespaceContext } from '@/core/telemetry/sentry';
 import { joinNamespaceMetrics, type NamespaceSummaryWithMetrics } from './namespaceMetrics';
@@ -79,7 +85,7 @@ interface NamespaceContextType {
   namespaces: NamespaceListItem[];
   namespaceSummaries: NamespaceSummaryWithMetrics[];
   namespaceMetricsState: NamespaceSignalState;
-  namespaceError: string | null;
+  namespaceError: RefreshFailure | null;
   selectedNamespace?: string;
   selectedNamespaceClusterId?: string;
   namespaceLoading: boolean;
@@ -238,6 +244,12 @@ const projectNamespaceListItem = (
     scopeStatus: namespace.scopeStatus,
   };
 };
+
+// A domain's failure, only while the domain is in its error state.
+const currentFailure = (state: {
+  status: string;
+  error?: RefreshFailure | null;
+}): RefreshFailure | null => (state.status === 'error' ? (state.error ?? null) : null);
 
 export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }) => {
   const { selectedKubeconfig, selectedClusterId, selectedClusterIds, managedClusterIds } =
@@ -731,42 +743,39 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     };
   }, [clearSelection, namespaceScopes, updateNamespaces]);
 
-  // Structural flag stamped by the orchestrator from the typed 403 (checked
-  // once per session; the scope is settled and background retries stop).
-  const namespacesPermissionDenied = namespaceDomain.permissionDenied === true;
+  // A Forbidden failure is settled: checked once per session, and background
+  // retries stop.
+  const namespacesPermissionDenied = isPermissionDenied(namespaceDomain.error);
+
+  const namespaceFailure = currentFailure(namespaceDomain);
 
   useEffect(() => {
     if (!namespacesScope) {
       return;
     }
-    if (namespaceDomain.status === 'error' && namespaceDomain.error) {
-      // Permission denial is a designed, rendered state (the sidebar shows the
-      // message) — not an error to toast.
-      if (namespacesPermissionDenied) {
-        lastErrorByScopeRef.current.set(namespacesScope, namespaceDomain.error);
-        return;
-      }
-      if (namespaceDomain.error !== lastErrorByScopeRef.current.get(namespacesScope)) {
-        lastErrorByScopeRef.current.set(namespacesScope, namespaceDomain.error);
-        errorHandler.handle(
-          new Error(namespaceDomain.error),
-          {
-            context: 'loadNamespaces',
-            kubeconfig: selectedKubeconfig,
-          },
-          'Failed to load namespaces'
-        );
-      }
-    } else {
+    if (!namespaceFailure) {
       lastErrorByScopeRef.current.delete(namespacesScope);
+      return;
     }
-  }, [
-    namespaceDomain.status,
-    namespaceDomain.error,
-    namespacesPermissionDenied,
-    namespacesScope,
-    selectedKubeconfig,
-  ]);
+    const message = failureMessage(namespaceFailure);
+    // Permission denial is a designed, rendered state (the sidebar shows the
+    // message) — not an error to toast.
+    if (namespacesPermissionDenied) {
+      lastErrorByScopeRef.current.set(namespacesScope, message);
+      return;
+    }
+    if (message !== lastErrorByScopeRef.current.get(namespacesScope)) {
+      lastErrorByScopeRef.current.set(namespacesScope, message);
+      errorHandler.handle(
+        errorFromFailure(namespaceFailure),
+        {
+          context: 'loadNamespaces',
+          kubeconfig: selectedKubeconfig,
+        },
+        'Failed to load namespaces'
+      );
+    }
+  }, [namespaceFailure, namespacesPermissionDenied, namespacesScope, selectedKubeconfig]);
 
   const contextValue = useMemo(
     () => ({

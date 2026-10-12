@@ -16,7 +16,9 @@ import { act, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { ClusterOverviewPayload, ClusterOverviewSnapshotPayload } from '@/core/refresh/types';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
 import ClusterOverview from './ClusterOverview';
 
@@ -715,7 +717,9 @@ describe('ClusterOverview', () => {
 
   it('shows an inline error while retaining the zero skeleton when permissions fail', async () => {
     mockLifecycleState = 'loading';
-    domainStateRef.current = createDomainState('error', { error: 'forbidden' });
+    domainStateRef.current = createDomainState('error', {
+      error: { kind: 'backend', status: makeErrorStatus('Forbidden', 'forbidden') },
+    });
 
     const { container, cleanup } = renderClusterOverview();
     cleanupRoot = cleanup;
@@ -1308,7 +1312,13 @@ describe('ClusterOverview', () => {
   it('keeps cluster-overview disabled before data services start and suppresses the transient unavailable error', async () => {
     mockLifecycleState = 'connecting';
     domainStateRef.current = createDomainState('error', {
-      error: 'no active clusters available (requested: [cluster-1])',
+      error: {
+        kind: 'backend',
+        status: makeErrorStatus(
+          'ClusterNotReady',
+          'no active clusters available (requested: [cluster-1])'
+        ),
+      },
     });
 
     const { container, cleanup } = renderClusterOverview();
@@ -1472,13 +1482,17 @@ function statValueFor(container: HTMLElement, label: string): string {
 
 function createDomainState(
   status: 'loading' | 'idle' | 'ready' | 'updating' | 'error',
-  overrides: Partial<{ clusterId: string; overview: ClusterOverviewPayload; error: string }> = {}
+  overrides: Partial<{
+    clusterId: string;
+    overview: ClusterOverviewPayload;
+    error: RefreshFailure;
+  }> = {}
 ): {
   status: 'loading' | 'idle' | 'ready' | 'updating' | 'error';
   data:
     | (Partial<ClusterOverviewSnapshotPayload> & Pick<ClusterOverviewSnapshotPayload, 'overview'>)
     | null;
-  error: string | null;
+  error: RefreshFailure | null;
 } {
   if (status === 'ready' || status === 'updating') {
     if (!overrides.overview) {
@@ -1495,7 +1509,7 @@ function createDomainState(
     return {
       status,
       data: null,
-      error: overrides.error ?? 'failed to load',
+      error: overrides.error ?? { kind: 'local', message: 'failed to load', errorName: 'Error' },
     };
   }
 

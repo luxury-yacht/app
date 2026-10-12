@@ -3,6 +3,8 @@ package backend
 import (
 	"fmt"
 	"strings"
+
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 )
 
 // kubeconfigSelection captures a parsed kubeconfig path/context selection.
@@ -61,13 +63,13 @@ func (s kubeconfigSelection) String() string {
 func parseKubeconfigSelection(selection string) (kubeconfigSelection, error) {
 	trimmed := strings.TrimSpace(selection)
 	if trimmed == "" {
-		return kubeconfigSelection{}, fmt.Errorf("kubeconfig selection is empty")
+		return kubeconfigSelection{}, errorstatus.BadRequest(fmt.Errorf("kubeconfig selection is empty"))
 	}
 
 	path, ctx := splitSelectionParts(trimmed)
 	parsed := kubeconfigSelection{Path: path, Context: ctx, Raw: selection}
 	if strings.TrimSpace(parsed.Path) == "" {
-		return kubeconfigSelection{}, fmt.Errorf("kubeconfig selection missing path")
+		return kubeconfigSelection{}, errorstatus.BadRequest(fmt.Errorf("kubeconfig selection missing path"))
 	}
 	return parsed, nil
 }

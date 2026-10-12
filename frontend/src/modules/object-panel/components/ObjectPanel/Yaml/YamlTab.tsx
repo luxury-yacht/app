@@ -33,6 +33,7 @@ import {
   YamlManagedFieldsIcon,
   YamlSaveIcon,
 } from '@shared/components/icons/YamlIcons';
+import { failureMessage } from '@/core/refresh/refreshFailure';
 import { resolveProtectedYamlRanges } from './yamlFieldPolicy';
 import { getYamlPanelBlockReason } from './yamlPanelGuard';
 import { INACTIVE_SCOPE, LARGE_MANIFEST_THRESHOLD, YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
@@ -607,7 +608,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
   });
   const yamlLoading = yamlLoadingState.loading;
   const showPausedYamlState = yamlLoadingState.showPausedEmptyState;
-  const yamlError = snapshot.error ?? null;
+  const yamlError = failureMessage(snapshot.error);
 
   const prepareVisibleDraftYaml = useCallback(
     (rawYaml: string) => prepareDraftYaml(rawYaml, showManagedFields),

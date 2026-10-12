@@ -36,6 +36,8 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+import { localFailure } from '@/core/refresh/refreshFailure';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import ResourceInventoryTable from './ResourceInventoryTable';
 import {
   type ResourceInventorySourceState,
@@ -92,7 +94,7 @@ describe('ResourceInventoryTable error surface', () => {
   it('renders the errored empty state without any in-table banner', () => {
     // Error details belong to the refresh error toasts; the table only
     // distinguishes an errored empty from a genuine empty.
-    renderTable(src({ error: 'connection reset while listing pods' }));
+    renderTable(src({ error: localFailure('connection reset while listing pods') }));
     expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(container.textContent).toContain('Unable to load data');
     expect(container.textContent).not.toContain('No data available');
@@ -101,14 +103,21 @@ describe('ResourceInventoryTable error surface', () => {
   it('renders a permission-classified error as the designed permission state', () => {
     // A typed 403 is a settled, designed state (e.g. a domain the identity
     // cannot read under a namespace scope) — never the generic failure text.
-    renderTable(src({ error: 'pods is forbidden: User cannot list resource' }));
+    renderTable(
+      src({
+        error: {
+          kind: 'backend',
+          status: makeErrorStatus('Forbidden', 'pods is forbidden: User cannot list resource'),
+        },
+      })
+    );
     expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(container.textContent).toContain('Insufficient permissions');
     expect(container.textContent).not.toContain('Unable to load data');
   });
 
   it('does not show the settled-empty message while errored', () => {
-    renderTable(src({ error: 'boom' }));
+    renderTable(src({ error: localFailure('boom') }));
     expect(container.textContent).not.toContain('No rows found');
   });
 
@@ -132,7 +141,7 @@ describe('ResourceInventoryTable error surface', () => {
   });
 
   it('keeps rows visible when an error arrives with rows present', () => {
-    renderTable(src({ rows: [{ name: 'row-1' }], error: 'refresh failed' }));
+    renderTable(src({ rows: [{ name: 'row-1' }], error: localFailure('refresh failed') }));
     expect(container.textContent).toContain('row-1');
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });

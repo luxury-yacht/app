@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
-	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
+	"github.com/luxury-yacht/app/backend/refresh/api"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/streammux"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -26,7 +26,7 @@ const refreshSubsystemUnavailableMessage = "refresh subsystem not initialised"
 func (c *RefreshCoordinator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	published := c.refreshService.Load()
 	if published == nil || published.handler == nil {
-		http.Error(w, refreshSubsystemUnavailableMessage, http.StatusServiceUnavailable)
+		api.WriteError(w, r, errorstatus.RefreshUnavailable(errors.New(refreshSubsystemUnavailableMessage)))
 		return
 	}
 	published.handler.ServeHTTP(w, r)
@@ -53,9 +53,7 @@ func (c *RefreshCoordinator) publishRefreshService(handler http.Handler, subsyst
 func (c *RefreshCoordinator) HandleResourceStream(conn *application.StreamConn) {
 	aggregates := c.refreshAggregates.Load()
 	if aggregates == nil || aggregates.resources == nil {
-		_ = conn.SendJSON(streammux.ServerMessage{
-			Type: streammux.MessageTypeError, Error: refreshSubsystemUnavailableMessage,
-		})
+		_ = conn.SendJSON(streammux.ErrorMessage("", errorstatus.RefreshUnavailable(errors.New(refreshSubsystemUnavailableMessage))))
 		return
 	}
 	aggregates.resources.Handle(conn.Context(), conn)
@@ -78,24 +76,21 @@ type containerLogsStreamConn interface {
 func (c *RefreshCoordinator) serveContainerLogsStream(conn containerLogsStreamConn) {
 	var request containerlogsstream.Request
 	if err := conn.ReceiveJSON(&request); err != nil {
-		sendContainerLogsStreamError(conn, request.Scope, fmt.Sprintf("invalid container logs stream request: %v", err), false)
+		sendContainerLogsStreamError(conn, request.Scope, errorstatus.BadRequest(fmt.Errorf("invalid container logs stream request: %w", err)))
 		return
 	}
 	// The refresh subsystem and its cluster handlers are republished during
 	// recovery and cluster rebuilds, so a stream that arrives meanwhile retries.
 	aggregates := c.refreshAggregates.Load()
 	if aggregates == nil || aggregates.containerLogs == nil {
-		sendContainerLogsStreamError(conn, request.Scope, refreshSubsystemUnavailableMessage, true)
+		sendContainerLogsStreamError(conn, request.Scope, errorstatus.RefreshUnavailable(errors.New(refreshSubsystemUnavailableMessage)))
 		return
 	}
 	if err := aggregates.containerLogs.Handle(conn.Context(), conn, request); err != nil {
-		sendContainerLogsStreamError(conn, request.Scope, err.Error(), errors.Is(err, errContainerLogsClusterNotActive))
+		sendContainerLogsStreamError(conn, request.Scope, err)
 	}
 }
 
-func sendContainerLogsStreamError(conn containerlogsstream.JSONSender, scope, message string, retryable bool) {
-	_ = conn.SendJSON(containerlogsstream.EventPayload{
-		Domain: "container-logs", Scope: strings.TrimSpace(scope), Sequence: 1,
-		GeneratedAt: time.Now().UnixMilli(), Error: message, Retryable: retryable,
-	})
+func sendContainerLogsStreamError(conn containerlogsstream.JSONSender, scope string, err error) {
+	_ = conn.SendJSON(containerlogsstream.ErrorPayload(scope, err))
 }

@@ -41,13 +41,20 @@ backend and object panel. Editor mechanics: [YAML editor](../frontend/yaml-edito
    recorded. `object_yaml_ownership.go` filters routine managers (the editor's
    own, `kubectl*`). Surviving conflicts open a save anyway / keep editing /
    cancel edit dialog before apply. If the check errors (no SSA, transient
-   failure), the save proceeds without a prompt; it must never block saving.
+   failure), the failure is reported operationally (no toast) and the save
+   proceeds without a prompt; it must never block saving. An identity change
+   found by the check comes back as `yamlConflict` and is likewise ignored;
+   Apply reports it.
 6. **Drift is discovered reactively, not enforced.** The `object-yaml` refresh
    domain is disabled while editing, freezing the snapshot; drift surfaces
    through a failed merge, ownership conflicts on untouched fields, or the
    post-apply diff. Reload & Merge is an in-process three-way merge
    (`overwrite=false`) that never writes; unresolvable overlap returns a
-   `MergeConflict` with the live YAML for manual review.
+   `MergeConflict` with the live YAML for manual review. Conflicts (UID
+   mismatch, merge conflict, failed merge precondition) are `yamlConflict`
+   results on the Apply, Merge and ownership-check responses, never errors,
+   so the live YAML cannot reach toasts, history, or telemetry; real API
+   rejections stay errors whose status carries the field causes.
 7. **Every save is verified.** The editor re-fetches the live object,
    semantic-compares it with the submission, and shows a diff when
    controllers or concurrent writers changed the stored result.

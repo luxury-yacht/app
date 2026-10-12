@@ -14,7 +14,6 @@ import (
 	"sync"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
-	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
@@ -183,7 +182,7 @@ func (r clusterSubsystemRebuild) rebuildClients(ctx context.Context) (*clusterCl
 		ctx, r.selection, r.oldClients.meta, r.oldClients.authManager,
 	)
 	if err != nil {
-		r.reportBuildError("clients", "client rebuild failed", err)
+		r.reportBuildError("clients", err)
 		return nil, false
 	}
 	if clusterClientsAuthInvalid(clients) {
@@ -201,14 +200,14 @@ func clusterClientsAuthInvalid(clients *clusterClients) bool {
 func (r clusterSubsystemRebuild) buildSubsystem(ctx context.Context, clients *clusterClients) (*system.Subsystem, bool) {
 	subsystem, err := r.refresh.buildRefreshSubsystemForSelection(ctx, r.selection, clients, clients.meta)
 	if err != nil {
-		r.reportBuildError("subsystem", "subsystem rebuild failed", err)
+		r.reportBuildError("subsystem", err)
 		return nil, false
 	}
 	r.failures.clear("subsystem")
 	return subsystem, true
 }
 
-func (r clusterSubsystemRebuild) reportBuildError(component, capturePrefix string, err error) {
+func (r clusterSubsystemRebuild) reportBuildError(component string, err error) {
 	if !r.failures.shouldReport(component, err) {
 		return
 	}
@@ -216,7 +215,6 @@ func (r clusterSubsystemRebuild) reportBuildError(component, capturePrefix strin
 		err, fmt.Sprintf("Failed to rebuild %s for cluster %s", component, r.clusterID),
 		logsources.Auth, r.clusterID, r.clusterName,
 	)
-	errorcapture.CaptureWithCluster(r.clusterID, fmt.Sprintf("%s: %v", capturePrefix, err))
 }
 
 func refreshSubsystemTopology(subsystems map[string]*system.Subsystem) (map[string]*system.Subsystem, []string) {

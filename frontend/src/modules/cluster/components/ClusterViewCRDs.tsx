@@ -10,6 +10,7 @@ import {
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { ClusterCRDEntry, ClusterCRDSnapshotPayload } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
@@ -32,7 +33,7 @@ const formatCRDVersionCell = (crd: CRDsData): string => {
 
 // Define props for CRDsViewGrid component
 interface CRDsViewProps {
-  error?: string | null;
+  error?: RefreshFailure | null;
 }
 
 const crdsSpec: AggregatedResourceGridViewSpec<CRDsData> = {

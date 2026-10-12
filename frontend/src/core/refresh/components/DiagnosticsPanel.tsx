@@ -25,6 +25,7 @@ import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
 import type { NormalizedTelemetrySummary } from '../client';
 import { refreshOrchestrator } from '../orchestrator';
 import { refreshManager } from '../RefreshManager';
+import { failureMessage, isPermissionDenied, type RefreshFailure } from '../refreshFailure';
 import { isResourceStreamDomain as isResourceTableDomain } from '../resourceStreamViews';
 import { type DomainSnapshotState, useRefreshState } from '../store';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
@@ -35,7 +36,6 @@ import type {
   RefreshDomain,
   TelemetryStreamStatus,
 } from '../types';
-
 // Import from extracted modules
 import {
   buildBrokerReadRows,
@@ -103,8 +103,6 @@ type StreamHealthSummary = {
   lastMessageAt?: number;
   lastDeliveryAt?: number;
 };
-
-const PERMISSION_ERROR_HINTS = ['forbidden', 'permission', 'unauthorized', 'access denied', 'rbac'];
 
 // diagnosticsRowClusterId resolves the single cluster owning a scope. A scope
 // naming several clusters has no single owner, so it groups at the app level
@@ -315,19 +313,11 @@ const resolveScopeRole = (
   return FIXED_SCOPE_ROLES[domain] ?? { label: 'Snapshot', tooltip: 'Snapshot refresh scope' };
 };
 
-const resolveErrorReason = (error?: string | null): string | null => {
-  if (!error) {
-    return null;
-  }
-  const trimmed = error.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const normalized = trimmed.toLowerCase();
-  if (PERMISSION_ERROR_HINTS.some((token) => normalized.includes(token))) {
+const resolveErrorReason = (failure?: RefreshFailure | null): string | null => {
+  if (isPermissionDenied(failure)) {
     return 'permissions';
   }
-  return trimmed;
+  return failureMessage(failure)?.trim() || null;
 };
 
 const resolveStreamTelemetryHealth = (
@@ -493,7 +483,7 @@ const resolveStreamHealthDetails = (
 const resolveHealthDetails = (params: {
   domain: RefreshDomain;
   status: DiagnosticsRow['status'];
-  error?: string | null;
+  error?: RefreshFailure | null;
   scope?: string;
   streamHealth?: StreamHealthSummary | null;
 }): HealthDetails => {
@@ -510,7 +500,7 @@ const resolveHealthDetails = (params: {
     const reason = resolveErrorReason(error) ?? 'error';
     return {
       label: formatHealthLabel('unhealthy', reason),
-      tooltip: error ?? reason,
+      tooltip: failureMessage(error) ?? reason,
       status: 'unhealthy',
     };
   }
@@ -847,7 +837,7 @@ const buildDomainTelemetryDetails = (params: {
     streamMode,
     lastUpdated: combinedLastUpdated > 0 ? combinedLastUpdated : undefined,
     telemetryLastUpdatedInfo: resolveTelemetryLastUpdated(streamLastEvent, telemetryInfo),
-    combinedError: resolveTelemetryError(telemetryLastError, state.error),
+    combinedError: resolveTelemetryError(telemetryLastError, failureMessage(state.error)),
     telemetryTooltip: buildTelemetryTooltip({
       telemetryLastError,
       isResourceStreamDomain,
@@ -1027,8 +1017,8 @@ const buildPodDiagnosticsRow = (
     duration: '—',
     dropped: state.droppedAutoRefreshes,
     stale: lastUpdated ? Date.now() - lastUpdated > STALE_THRESHOLD_MS : false,
-    error: state.error ?? '—',
-    telemetryTooltip: buildPodTelemetryTooltip(state.error, streamHealth),
+    error: failureMessage(state.error) ?? '—',
+    telemetryTooltip: buildPodTelemetryTooltip(failureMessage(state.error), streamHealth),
     metricsStatus: 'N/A',
     metricsTooltip: 'Pod usage is joined onto the pods rows at serve',
 
@@ -1139,9 +1129,9 @@ const buildContainerLogsDiagnosticsRow = (
     duration: '—',
     dropped: state.droppedAutoRefreshes,
     stale: false,
-    error: state.error ?? '—',
+    error: failureMessage(state.error) ?? '—',
 
-    telemetryTooltip: state.error ?? undefined,
+    telemetryTooltip: failureMessage(state.error) ?? undefined,
     metricsStatus: '—',
     metricsTooltip: 'Streaming domain',
 
@@ -1197,9 +1187,9 @@ const buildObjectPanelDiagnosticsRow = (
     duration: '—',
     dropped: state.droppedAutoRefreshes,
     stale: false,
-    error: state.error ?? '—',
+    error: failureMessage(state.error) ?? '—',
 
-    telemetryTooltip: state.error ?? undefined,
+    telemetryTooltip: failureMessage(state.error) ?? undefined,
     metricsStatus: '—',
     metricsTooltip: 'Polling domain',
 

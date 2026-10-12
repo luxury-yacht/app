@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -47,6 +48,9 @@ type ObjectYAMLReloadMergeResponse struct {
 	MergedYAML      string `json:"mergedYAML"`
 	CurrentYAML     string `json:"currentYAML"`
 	ResourceVersion string `json:"resourceVersion"`
+	// YAMLConflict is set when the merge cannot be completed automatically;
+	// it carries the live YAML for manual review.
+	YAMLConflict *ObjectYAMLConflict `json:"yamlConflict,omitempty"`
 }
 
 // MergeObjectYamlWithLatest reloads the live object from the target cluster and
@@ -54,6 +58,17 @@ type ObjectYAMLReloadMergeResponse struct {
 // edit uses: strategic merge for registered built-ins, JSON merge patch
 // fallback otherwise.
 func (g *ResourceGateway) MergeObjectYamlWithLatest(
+	clusterID string,
+	req ObjectYAMLReloadMergeRequest,
+) (*ObjectYAMLReloadMergeResponse, error) {
+	response, err := g.mergeObjectYamlWithLatest(clusterID, req)
+	if conflict, ok := yamlConflictOf(err); ok {
+		return &ObjectYAMLReloadMergeResponse{YAMLConflict: conflict}, nil
+	}
+	return response, err
+}
+
+func (g *ResourceGateway) mergeObjectYamlWithLatest(
 	clusterID string,
 	req ObjectYAMLReloadMergeRequest,
 ) (*ObjectYAMLReloadMergeResponse, error) {
@@ -83,22 +98,22 @@ func (g *ResourceGateway) MergeObjectYamlWithLatest(
 	patch, patchMeta, err := buildReloadMergePatch(gvk, baseObj, draftObj, currentObj)
 	if err != nil {
 		if mergepatch.IsConflict(err) {
-			return nil, &objectYAMLError{
+			return nil, &yamlConflictError{conflict: ObjectYAMLConflict{
 				Code:                   objectYAMLMergeConflictCode,
 				Message:                "Kubernetes-aware merge found conflicting live changes. Reload the latest object and re-apply the conflicting edits manually.",
 				CurrentYAML:            currentYAML,
 				CurrentResourceVersion: currentObj.GetResourceVersion(),
 				Causes:                 []string{err.Error()},
-			}
+			}}
 		}
 		if mergepatch.IsPreconditionFailed(err) {
-			return nil, &objectYAMLError{
+			return nil, &yamlConflictError{conflict: ObjectYAMLConflict{
 				Code:                   "MergePreconditionFailed",
 				Message:                "Reload merge rejected changes to object identity fields. Keep apiVersion, kind, name, and namespace aligned with the selected object.",
 				CurrentYAML:            currentYAML,
 				CurrentResourceVersion: currentObj.GetResourceVersion(),
 				Causes:                 []string{err.Error()},
-			}
+			}}
 		}
 		return nil, fmt.Errorf("failed to build reload merge patch: %w", err)
 	}
@@ -142,7 +157,7 @@ func prepareReloadMergeContext(
 	}
 	baseObj, draftObj, err := parseReloadMergeObjects(req)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, errorstatus.BadRequest(err)
 	}
 
 	gvk := schema.FromAPIVersionAndKind(req.APIVersion, req.Kind)
@@ -204,12 +219,12 @@ func validateReloadMergeUID(current *unstructured.Unstructured, req ObjectYAMLRe
 	if err != nil {
 		return err
 	}
-	return &objectYAMLError{
+	return &yamlConflictError{conflict: ObjectYAMLConflict{
 		Code:                   "ObjectUIDMismatch",
 		Message:                fmt.Sprintf("object identity changed since editing began: current uid is %s, editor tracked %s", current.GetUID(), req.UID),
 		CurrentYAML:            currentYAML,
 		CurrentResourceVersion: current.GetResourceVersion(),
-	}
+	}}
 }
 
 func validateReloadMergeObject(

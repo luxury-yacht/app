@@ -169,6 +169,6 @@ func (g *ResourceGateway) rollbackWorkloadAction(target ObjectActionTargetRef, t
 		fmt.Sprintf("Rolled back %s %s/%s to revision %d", workloadKind, target.Namespace, target.Name, toRevision),
 		"rollbackWorkload",
 	)
-	g.invalidateResponseCache(selectionKey, workloadKind, target.Namespace, target.Name)
+	g.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
 	return nil
 }

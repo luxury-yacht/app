@@ -133,7 +133,7 @@ func newApplicationComposition(assets fs.FS, reporter sentryreporting.Reporter, 
 	wailsApp.HandleStream(backend.RefreshContainerLogsStreamName, backendRuntime.Refresh.HandleContainerLogsStream)
 	wailsApp.RegisterService(application.NewServiceWithOptions(
 		desktopService,
-		application.ServiceOptions{Route: "/api/v2"},
+		application.ServiceOptions{Route: "/api/v2", MarshalError: backend.MarshalBindingError},
 	))
 
 	nativeMenu := backend.CreateMenu(desktopShell)

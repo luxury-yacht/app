@@ -37,6 +37,7 @@ import {
 } from '@shared/utils/objectIdentity';
 import { calculateResourceOvercommit } from '@shared/utils/resourceCalculations';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type {
   ClusterNodeRow,
   ClusterNodeSnapshotPayload,
@@ -51,7 +52,7 @@ import { getDisplayKind } from '@/utils/kindAliasMap';
 // The table is query-backed (sourced from the typed query + replay cache);
 // only `error` is consumed, for the empty-state text.
 interface NodesViewProps {
-  error?: string | null;
+  error?: RefreshFailure | null;
 }
 
 interface NodesTableProps extends NodesViewProps {

@@ -17,14 +17,13 @@ const (
 )
 
 // canServeCachedResponse guards cached detail/helm responses against RBAC changes.
-// It returns true when permissions are allowed or cannot be checked, and false on explicit deny.
+// It returns true when permissions are allowed or cannot be checked, and false on
+// explicit deny; the caller evicts its own entry on deny.
 func (g *ResourceGateway) canServeCachedResponse(
 	ctx context.Context,
 	deps common.Dependencies,
 	selectionKey string,
 	gvk schema.GroupVersionKind,
-	namespace string,
-	name string,
 ) bool {
 	if g == nil {
 		return true
@@ -43,12 +42,6 @@ func (g *ResourceGateway) canServeCachedResponse(
 	if err != nil {
 		// On permission check errors, keep cached responses to avoid blocking offline paths.
 		return true
-	}
-	if !decision.Allowed {
-		// objectYAMLCacheKey was retired with the kind-only YAML fetch — the
-		// GVK-aware fetch path does not populate the response cache,
-		// so there is nothing to evict here for YAML.
-		g.responseCacheDelete(selectionKey, objectDetailCacheKey(gvk.Kind, namespace, name))
 	}
 	return decision.Allowed
 }

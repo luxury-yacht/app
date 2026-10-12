@@ -15,6 +15,7 @@ import {
   OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
 } from '@/core/settings/appPreferences';
 import type { SnapshotStats } from '../client';
+import { localFailure, type RefreshFailure } from '../refreshFailure';
 import { resetScopedDomainState, setScopedDomainState } from '../store';
 import type {
   ContainerLogsEntry,
@@ -767,7 +768,7 @@ export class ContainerLogsStreamManager {
         status: statusFor(phase, buffer.entries.length > 0),
         data,
         stats: buildStats(buffer),
-        error,
+        error: phaseFailure(phase),
         lastUpdated: now,
         lastAutoRefresh: now,
         isManual: false,
@@ -800,6 +801,7 @@ export class ContainerLogsStreamManager {
         domain: DOMAIN_NAME,
         scope: scope || 'global',
         message: phase.reason,
+        error: Object.assign(new Error(phase.reason), { status: phase.failure }),
       });
       return;
     }
@@ -808,6 +810,14 @@ export class ContainerLogsStreamManager {
     }
   }
 }
+
+// A failed stream's failure: the backend status when the frame carried one.
+const phaseFailure = (phase: ContainerLogsStreamPhase): RefreshFailure | null => {
+  if (phase.status !== 'failed') {
+    return null;
+  }
+  return phase.failure ? { kind: 'backend', status: phase.failure } : localFailure(phase.reason);
+};
 
 const statusFor = (
   phase: ContainerLogsStreamPhase,

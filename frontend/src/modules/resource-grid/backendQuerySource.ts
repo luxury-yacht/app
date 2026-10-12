@@ -13,6 +13,8 @@
  * `loading`, never `empty`. So this source does not — and must not — reintroduce
  * `retainLocalRowsForEmptyQuery` or any per-view fallback to hide empty rows.
  */
+
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type {
   ResourceInventoryCompleteness,
   ResourceInventorySourceState,
@@ -28,7 +30,7 @@ export interface BackendQuerySourceInput<T> {
   rows: T[];
   loading: boolean;
   loaded: boolean;
-  error: string | null;
+  error: RefreshFailure | null;
   /**
    * Provider completeness from the result envelope. `partial` means degraded /
    * windowed with no pagination recourse (issues, streaming disabled), NOT a

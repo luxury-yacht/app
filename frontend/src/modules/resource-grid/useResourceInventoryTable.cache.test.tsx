@@ -13,6 +13,7 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { eventBus } from '@/core/events';
+import { localFailure } from '@/core/refresh/refreshFailure';
 import {
   type ResourceInventoryRenderState,
   type ResourceInventorySourceState,
@@ -122,7 +123,13 @@ describe('useResourceInventoryTable revisit replay cache', () => {
     expect(captured.current?.rows).toEqual([{ name: 'n1' }]);
     // Refetch errors transiently (empty + error) → still bridged, no "no data".
     render(
-      src({ cacheKey: 'view-k', rows: [], loading: false, loaded: true, error: 'returned no data' })
+      src({
+        cacheKey: 'view-k',
+        rows: [],
+        loading: false,
+        loaded: true,
+        error: localFailure('returned no data'),
+      })
     );
     expect(captured.current?.rows).toEqual([{ name: 'n1' }]);
     expect(captured.current?.isEmpty).toBe(false);
@@ -137,7 +144,15 @@ describe('useResourceInventoryTable revisit replay cache', () => {
     // The refetch fails (e.g. revoked permissions). The bridged page stays
     // usable; the failure itself is reported through the refresh error toasts,
     // so the render state carries no error while cached rows are shown.
-    render(src({ cacheKey: 'view-k', rows: [], loading: false, loaded: true, error: 'forbidden' }));
+    render(
+      src({
+        cacheKey: 'view-k',
+        rows: [],
+        loading: false,
+        loaded: true,
+        error: localFailure('forbidden'),
+      })
+    );
     expect(captured.current?.rows).toEqual([{ name: 'n1' }]);
     expect(captured.current?.error).toBeNull();
     expect(captured.current?.status).toBe('ready');
@@ -151,8 +166,16 @@ describe('useResourceInventoryTable revisit replay cache', () => {
   it('surfaces an error immediately when there are no rows to bridge', () => {
     // Cold-load failure with nothing cached: an honest error beats a false
     // "No data available".
-    render(src({ cacheKey: 'view-k', rows: [], loading: false, loaded: true, error: 'forbidden' }));
-    expect(captured.current?.error).toBe('forbidden');
+    render(
+      src({
+        cacheKey: 'view-k',
+        rows: [],
+        loading: false,
+        loaded: true,
+        error: localFailure('forbidden'),
+      })
+    );
+    expect(captured.current?.error).toEqual(localFailure('forbidden'));
     expect(captured.current?.status).toBe('error');
     expect(captured.current?.isEmpty).toBe(false);
   });

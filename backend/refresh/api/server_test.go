@@ -11,7 +11,11 @@ import (
 	"testing"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/api"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -196,7 +200,7 @@ func TestSnapshotEndpointUsesSourceVersionForETagAndNotModified(t *testing.T) {
 
 func TestSnapshotPermissionDenied(t *testing.T) {
 	svc := &errorSnapshotService{
-		err: refresh.NewPermissionDeniedError("nodes", "core/nodes"),
+		err: errorstatus.NewPermissionDenied("nodes", "core/nodes"),
 	}
 	server := api.NewServer(svc, &fakeQueue{}, nil, nil)
 
@@ -212,14 +216,11 @@ func TestSnapshotPermissionDenied(t *testing.T) {
 		t.Fatalf("expected status 403 got %d", rr.Code)
 	}
 
-	var payload refresh.PermissionDeniedStatus
-	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("failed to decode body: %v", err)
-	}
-	if payload.Reason != "Forbidden" || payload.Code != http.StatusForbidden {
+	payload := decodeErrorStatus(t, rr)
+	if payload.Reason != errorstatus.ReasonForbidden || payload.Code != http.StatusForbidden {
 		t.Fatalf("unexpected status payload: %+v", payload)
 	}
-	if payload.Details.Domain != "nodes" || payload.Details.Resource != "core/nodes" {
+	if payload.Details == nil || payload.Details.Domain != "nodes" || payload.Details.Resource != "core/nodes" {
 		t.Fatalf("unexpected details: %+v", payload.Details)
 	}
 }
@@ -536,4 +537,136 @@ func TestJobStatusEndpoint(t *testing.T) {
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404 got %d", rr.Code)
 	}
+}
+
+// decodeErrorStatus reads a refresh error response, which is always the typed
+// status the frontend acts on.
+func decodeErrorStatus(t *testing.T, rr *httptest.ResponseRecorder) errorstatus.Status {
+	t.Helper()
+	if ct := rr.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("expected json error body, got content type %q", ct)
+	}
+	var status errorstatus.Status
+	if err := json.Unmarshal(rr.Body.Bytes(), &status); err != nil {
+		t.Fatalf("failed to decode error status: %v", err)
+	}
+	if status.Kind != "Status" || status.Code != rr.Code {
+		t.Fatalf("expected a Status body matching HTTP %d, got %+v", rr.Code, status)
+	}
+	return status
+}
+
+// A failed snapshot answers with the status of the failure, so the frontend
+// can tell a deleted object, a cluster still starting, and a denial apart.
+func TestSnapshotEndpointAnswersWithFailureStatus(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		err        error
+		wantCode   int
+		wantReason errorstatus.Reason
+	}{
+		{
+			name:       "deleted object",
+			err:        apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "deployments"}, "web"),
+			wantCode:   http.StatusNotFound,
+			wantReason: errorstatus.ReasonNotFound,
+		},
+		{
+			name:       "cluster not ready",
+			err:        errorstatus.ClusterNotReady(errors.New("no active clusters available (requested: [cluster-a])")),
+			wantCode:   http.StatusServiceUnavailable,
+			wantReason: errorstatus.ReasonClusterNotReady,
+		},
+		{
+			name:       "API denial",
+			err:        apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("rbac")),
+			wantCode:   http.StatusForbidden,
+			wantReason: errorstatus.ReasonForbidden,
+		},
+		{
+			name:       "unclassified failure",
+			err:        errors.New("informer exploded"),
+			wantCode:   http.StatusInternalServerError,
+			wantReason: errorstatus.ReasonUnknown,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			server := api.NewServer(&errorSnapshotService{err: tt.err}, &fakeQueue{}, nil, nil)
+			mux := http.NewServeMux()
+			server.Register(mux)
+
+			req := httptest.NewRequest(http.MethodGet, "/snapshots/nodes?scope=cluster-a|", nil)
+			req.Header.Set(api.CorrelationIDHeader, "corr-1")
+			rr := httptest.NewRecorder()
+			mux.ServeHTTP(rr, req)
+
+			if rr.Code != tt.wantCode {
+				t.Fatalf("expected status %d got %d", tt.wantCode, rr.Code)
+			}
+			status := decodeErrorStatus(t, rr)
+			if status.Reason != tt.wantReason || status.Message != tt.err.Error() {
+				t.Fatalf("unexpected status: %+v", status)
+			}
+			if rr.Header().Get(api.CorrelationIDHeader) != "corr-1" {
+				t.Fatalf("expected the correlation id to be echoed")
+			}
+			if tt.wantReason == errorstatus.ReasonForbidden &&
+				(status.Details == nil || status.Details.Domain != "nodes") {
+				t.Fatalf("expected the denial to name its domain, got %+v", status.Details)
+			}
+		})
+	}
+}
+
+// Requests the refresh API rejects itself keep their 400, now as a BadRequest
+// status, and an unknown job is a NotFound status.
+func TestRefreshAPIRejectsRequestsWithStatus(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		queue    refresh.ManualQueue
+		method   string
+		path     string
+		body     string
+		wantCode int
+		want     errorstatus.Reason
+	}{
+		{name: "snapshot without domain", method: http.MethodGet, path: "/snapshots/", wantCode: 400, want: errorstatus.ReasonBadRequest},
+		{name: "snapshot without cluster scope", method: http.MethodGet, path: "/snapshots/nodes", wantCode: 400, want: errorstatus.ReasonBadRequest},
+		{name: "snapshot with several clusters", method: http.MethodGet, path: "/snapshots/nodes?scope=clusters=cluster-a,cluster-b|", wantCode: 400, want: errorstatus.ReasonBadRequest},
+		{name: "refresh without domain", method: http.MethodPost, path: "/refresh/", body: `{"scope":"cluster-a|"}`, wantCode: 400, want: errorstatus.ReasonBadRequest},
+		{name: "refresh without cluster scope", method: http.MethodPost, path: "/refresh/nodes", wantCode: 400, want: errorstatus.ReasonBadRequest},
+		{name: "refresh with several clusters", method: http.MethodPost, path: "/refresh/nodes", body: `{"scope":"clusters=cluster-a,cluster-b|"}`, wantCode: 400, want: errorstatus.ReasonBadRequest},
+		{name: "refresh the queue refuses", queue: errorQueue{}, method: http.MethodPost, path: "/refresh/nodes", body: `{"scope":"cluster-a|"}`, wantCode: 400, want: errorstatus.ReasonBadRequest},
+		{name: "refresh for a cluster not ready", queue: notReadyQueue{}, method: http.MethodPost, path: "/refresh/nodes", body: `{"scope":"cluster-a|"}`, wantCode: 503, want: errorstatus.ReasonClusterNotReady},
+		{name: "job without id", method: http.MethodGet, path: "/jobs/", wantCode: 400, want: errorstatus.ReasonBadRequest},
+		{name: "unknown job", method: http.MethodGet, path: "/jobs/missing", wantCode: 404, want: errorstatus.ReasonNotFound},
+		{name: "metrics demand that is not JSON", method: http.MethodPost, path: "/metrics/active", body: `{`, wantCode: 400, want: errorstatus.ReasonBadRequest},
+		{name: "metrics demand without clusterIds", method: http.MethodPost, path: "/metrics/active", body: `{"active":true}`, wantCode: 400, want: errorstatus.ReasonBadRequest},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			queue := tt.queue
+			if queue == nil {
+				queue = &fakeQueue{}
+			}
+			server := api.NewServer(snapshotService(), queue, nil, &fakeClusterMetricsController{})
+			mux := http.NewServeMux()
+			server.Register(mux)
+
+			rr := httptest.NewRecorder()
+			mux.ServeHTTP(rr, httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body)))
+
+			if rr.Code != tt.wantCode {
+				t.Fatalf("expected status %d got %d", tt.wantCode, rr.Code)
+			}
+			if status := decodeErrorStatus(t, rr); status.Reason != tt.want {
+				t.Fatalf("expected reason %s, got %+v", tt.want, status)
+			}
+		})
+	}
+}
+
+type notReadyQueue struct{ errorQueue }
+
+func (notReadyQueue) Enqueue(context.Context, string, string, string) (*refresh.ManualRefreshJob, error) {
+	return nil, errorstatus.ClusterNotReady(errors.New("cluster cluster-a not active"))
 }

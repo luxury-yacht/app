@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 )
 
 type themeClusterPatternErrorKind string
@@ -126,7 +128,7 @@ func validateThemeClusterPattern(pattern string) error {
 		return nil
 	}
 	if _, err := themeClusterPatternRegexp(pattern); err != nil {
-		return fmt.Errorf("invalid cluster pattern: %w", err)
+		return errorstatus.BadRequest(fmt.Errorf("invalid cluster pattern: %w", err))
 	}
 	return nil
 }

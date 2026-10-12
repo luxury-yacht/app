@@ -6,6 +6,7 @@ import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { localFailure } from '@/core/refresh/refreshFailure';
 import { requireValue } from '@/test-utils/requireValue';
 import type { PanelObjectData } from '../types';
 import { useObjectPanelRefresh } from './useObjectPanelRefresh';
@@ -220,22 +221,14 @@ describe('useObjectPanelRefresh', () => {
     expect(getResult().deletion).toEqual(deletion);
   });
 
-  it('surfaces detail errors while suppressing unsupported-provider errors', async () => {
+  it('surfaces detail errors', async () => {
     mockUseRefreshScopedDomain.mockReturnValue({
       data: null,
       status: 'error',
-      error: 'fetch failed',
+      error: localFailure('fetch failed'),
     });
-    const { getResult, rerender } = await renderHook();
-    expect(getResult().detailsError).toBe('fetch failed');
-
-    mockUseRefreshScopedDomain.mockReturnValue({
-      data: null,
-      status: 'error',
-      error: 'object detail provider not implemented for Widget',
-    });
-    await rerender();
-    expect(getResult().detailsError).toBeNull();
+    const { getResult } = await renderHook();
+    expect(getResult().detailsError).toEqual(localFailure('fetch failed'));
   });
 
   it('runs watcher refreshes and ignores an aborted watcher signal', async () => {

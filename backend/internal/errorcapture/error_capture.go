@@ -1,7 +1,9 @@
 /*
  * backend/internal/errorcapture/error_capture.go
  *
- * Captures and enhances error messages from Kubernetes client libraries.
+ * Routes stderr output from Kubernetes client libraries into the app log.
+ * Stderr carries no cluster identity, so it never becomes part of an error
+ * returned to a caller.
  */
 
 package errorcapture
@@ -9,12 +11,12 @@ package errorcapture
 import (
 	"bytes"
 	"flag"
-	"fmt"
 	"io"
 	"os"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/logclassify"
 	"k8s.io/klog/v2"
@@ -22,59 +24,37 @@ import (
 
 // Capture handles stderr output from the Kubernetes client library.
 type Capture struct {
-	mu          sync.RWMutex  // protects the fields below by ensuring concurrent access is safe
-	buffer      *bytes.Buffer // stores captured stderr output
-	originalErr *os.File      // original stderr file descriptor
-	pipeReader  *os.File      // read end of the pipe
-	pipeWriter  *os.File      // write end of the pipe
-	capturing   bool          // indicates if capture is active
-	lastError   string        // last captured error message
-	lastErrorMu sync.RWMutex  // protects lastError by ensuring concurrent access is safe
+	mu          sync.Mutex // protects the capture state below
+	originalErr *os.File   // original stderr file descriptor
+	pipeReader  *os.File   // read end of the pipe
+	pipeWriter  *os.File   // write end of the pipe
+	capturing   bool       // indicates if capture is active
+
+	repeatsOnce sync.Once
+	repeats     *sessionDeduper // warning/error lines already logged this session
 }
 
 var (
 	global   *Capture // global capture instance
 	initOnce sync.Once
-	// callbackMu guards package-level callbacks that are read from capture goroutines and set by tests/app init.
-	callbackMu   sync.RWMutex
-	eventEmitter func(string)                       // function to emit events
-	logSink      func(level string, message string) // function to handle log messages
-	// Word-boundary matching avoids false positives from resource names like "podidentityassociations".
-	tokenPattern           = regexp.MustCompile(`\btokens?\b`)
-	ssoPattern             = regexp.MustCompile(`\bsso\b`)
-	expiredPattern         = regexp.MustCompile(`\bexpired\b`)
-	forbiddenStatusPattern = regexp.MustCompile(`\b(?:http(?:/\d(?:\.\d)?)?\s+403|status(?:\s+(?:code|of))?(?:\s*[:=]\s*|\s+)403)\b`)
-	authPatterns           = []*regexp.Regexp{
-		tokenPattern,
-		ssoPattern,
-		expiredPattern,
-		regexp.MustCompile(`\bauthentication\b`),
-		regexp.MustCompile(`\bunauthorized\b`),
-		regexp.MustCompile(`\bforbidden\b`),
-		regexp.MustCompile(`\bpermission\s+denied\b`),
-		regexp.MustCompile(`\baccess\s+denied\b`),
-	}
+	// callbackMu guards the package-level log sink, read from the capture
+	// goroutine and set by tests/app init.
+	callbackMu sync.RWMutex
+	logSink    func(level string, message string) // function to handle log messages
+
+	forbiddenStatusPattern    = regexp.MustCompile(`\b(?:http(?:/\d(?:\.\d)?)?\s+403|status(?:\s+(?:code|of))?(?:\s*[:=]\s*|\s+)403)\b`)
 	expectedConditionPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`\bforbidden\b`),
 		regexp.MustCompile(`\bpermission\s+denied\b`),
 		regexp.MustCompile(`\baccess\s+denied\b`),
 		forbiddenStatusPattern,
 	}
-	fallbackErrorPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`\berrors?\b`),
-		regexp.MustCompile(`\bfailed\b`),
-		regexp.MustCompile(`\bunauthorized\b`),
-		regexp.MustCompile(`\bforbidden\b`),
-		expiredPattern,
-		regexp.MustCompile(`\bpermission\s+denied\b`),
-		regexp.MustCompile(`\baccess\s+denied\b`),
-	}
 )
 
 // Init installs a stderr capture for klog/k8s client noise.
 func Init() {
 	initOnce.Do(func() {
-		global = &Capture{buffer: &bytes.Buffer{}}
+		global = &Capture{}
 
 		klogFlags := flag.NewFlagSet("klog", flag.ContinueOnError)
 		klog.InitFlags(klogFlags)
@@ -122,9 +102,8 @@ var maxPendingLineBytes = 1 << 20 // 1 MiB
 
 // readPipe continuously reads from the stderr pipe, reassembling complete lines
 // across reads. A single Read returns up to 4096 bytes and can end mid-line, so
-// processing each raw chunk independently would tear lines and miss auth keywords
-// that straddle the split. The trailing partial line is held in pending until its
-// newline (or EOF, or the size valve) arrives.
+// processing each raw chunk independently would tear lines. The trailing partial
+// line is held in pending until its newline (or EOF, or the size valve) arrives.
 func (c *Capture) readPipe() {
 	buf := make([]byte, 4096)
 	var pending []byte
@@ -138,34 +117,20 @@ func (c *Capture) readPipe() {
 			break
 		}
 	}
-	c.flushCapturedLines(pending)
+	c.emitToLogSink(pending)
 }
 
 func (c *Capture) processPipeChunk(pending, chunk []byte) []byte {
-	c.mu.Lock()
-	c.buffer.Write(chunk)
-	trimBuffer(c.buffer, 100000, 50000)
-	c.mu.Unlock()
 	pending = append(pending, chunk...)
 	if index := bytes.LastIndexByte(pending, '\n'); index >= 0 {
-		c.flushCapturedLines(pending[:index+1])
+		c.emitToLogSink(pending[:index+1])
 		pending = append(pending[:0], pending[index+1:]...)
 	}
 	if len(pending) > maxPendingLineBytes {
-		c.flushCapturedLines(pending)
+		c.emitToLogSink(pending)
 		return pending[:0]
 	}
 	return pending
-}
-
-func (c *Capture) flushCapturedLines(lines []byte) {
-	if len(lines) == 0 {
-		return
-	}
-	c.captureIfInteresting(string(lines))
-	if getLogSink() != nil {
-		c.emitToLogSink(lines)
-	}
 }
 
 func logPipeReadError(err error) {
@@ -177,11 +142,6 @@ func logPipeReadError(err error) {
 	}
 }
 
-// isAuthRelated determines if a log message is related to authentication or token issues.
-func isAuthRelated(lower string) bool {
-	return matchAnyPattern(lower, authPatterns)
-}
-
 // matchAnyPattern reports whether lower matches at least one regex.
 func matchAnyPattern(lower string, patterns []*regexp.Regexp) bool {
 	for _, pattern := range patterns {
@@ -190,14 +150,6 @@ func matchAnyPattern(lower string, patterns []*regexp.Regexp) bool {
 		}
 	}
 	return false
-}
-
-// isFallbackErrorLine matches the broader error scan used in capturedError.
-func isFallbackErrorLine(line string) bool {
-	if sev, ok := logclassify.ParseKlogSeverity(line); ok {
-		return logclassify.IsErrorSeverity(sev)
-	}
-	return matchAnyPattern(strings.ToLower(line), fallbackErrorPatterns)
 }
 
 // forEachTrimmedLine iterates through non-empty, trimmed lines in input.
@@ -211,168 +163,9 @@ func forEachTrimmedLine(input string, fn func(string)) {
 	}
 }
 
-// trimBuffer reduces buffer growth by keeping only the newest bytes.
-func trimBuffer(buf *bytes.Buffer, maxLen, keep int) {
-	if buf.Len() <= maxLen {
-		return
-	}
-	data := buf.Bytes()
-	if keep > len(data) {
-		keep = len(data)
-	}
-	buf.Reset()
-	if keep > 0 {
-		buf.Write(data[len(data)-keep:])
-	}
-}
-
-// tailString returns the last limit bytes as a string.
-func tailString(data []byte, limit int) string {
-	if len(data) > limit {
-		data = data[len(data)-limit:]
-	}
-	return string(data)
-}
-
-// captureIfInteresting checks if the output contains interesting error messages.
-// "Interesting" errors are those related to authentication or token issues, as defined by `isAuthRelated`.
-func (c *Capture) captureIfInteresting(output string) {
-	forEachTrimmedLine(output, func(msg string) {
-		if sev, ok := logclassify.ParseKlogSeverity(msg); ok && !logclassify.IsErrorSeverity(sev) {
-			return
-		}
-		lower := strings.ToLower(msg)
-		if isExpectedCondition(lower) {
-			return
-		}
-		if !isAuthRelated(lower) {
-			return
-		}
-		c.setLastError(msg)
-		if emitter := getEventEmitter(); emitter != nil {
-			emitter(msg)
-		}
-	})
-}
-
-// recent returns the most recent stderr output captured.
-func (c *Capture) recent() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return tailString(c.buffer.Bytes(), 5000)
-}
-
-// last returns the most recent interesting error captured.
-func (c *Capture) last() string {
-	c.lastErrorMu.RLock()
-	defer c.lastErrorMu.RUnlock()
-	return c.lastError
-}
-
-// setLastError stores the last interesting error with locking.
-func (c *Capture) setLastError(msg string) {
-	c.lastErrorMu.Lock()
-	c.lastError = msg
-	c.lastErrorMu.Unlock()
-}
-
-// clearLast clears the most recent interesting error captured.
-func (c *Capture) clearLast() {
-	c.setLastError("")
-}
-
-// capturedError returns the most recent interesting error captured.
-func capturedError() string {
-	if global == nil {
-		return ""
-	}
-
-	if last := global.last(); last != "" {
-		global.clearLast()
-		return last
-	}
-
-	return scanRecentError(global.recent())
-}
-
-// scanRecentError returns the last interesting error-ish line from recent stderr output.
-func scanRecentError(recent string) string {
-	if recent == "" {
-		return ""
-	}
-
-	lines := strings.Split(recent, "\n")
-	for i := len(lines) - 1; i >= 0 && i >= len(lines)-10; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
-			continue
-		}
-		if isExpectedCondition(strings.ToLower(line)) {
-			continue
-		}
-
-		if isFallbackErrorLine(line) {
-			return line
-		}
-	}
-	return ""
-}
-
+// isExpectedCondition reports permission denials, which stay informational.
 func isExpectedCondition(lower string) bool {
 	return matchAnyPattern(lower, expectedConditionPatterns)
-}
-
-type enhancedError struct {
-	cause   error
-	message string
-}
-
-func (e enhancedError) Error() string { return e.message }
-
-func (e enhancedError) Unwrap() error { return e.cause }
-
-// Enhance augments an error with recent stderr output when helpful.
-func Enhance(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	extra := capturedError()
-	if extra == "" {
-		return err
-	}
-
-	orig := err.Error()
-	lower := strings.ToLower(extra)
-	if len(extra) <= len(orig) && !matchAnyPattern(lower, authPatterns) {
-		return err
-	}
-
-	if !strings.Contains(extra, orig) && !strings.Contains(orig, extra) {
-		return enhancedError{cause: err, message: fmt.Sprintf("%s. STDERR: %s", orig, extra)}
-	}
-	return enhancedError{cause: err, message: extra}
-}
-
-// CaptureWithCluster prefixes a message with the cluster ID and captures it.
-// Use this when you have cluster context and want to explicitly log an error
-// that will be associated with that cluster.
-func CaptureWithCluster(clusterID, message string) {
-	if global == nil {
-		return
-	}
-	prefixed := fmt.Sprintf("[%s] %s", clusterID, message)
-	global.setLastError(prefixed)
-	if emitter := getEventEmitter(); emitter != nil {
-		emitter(prefixed)
-	}
-}
-
-// SetEventEmitter configures a callback invoked when interesting errors are captured.
-func SetEventEmitter(emitter func(string)) {
-	callbackMu.Lock()
-	defer callbackMu.Unlock()
-	eventEmitter = emitter
 }
 
 // SetLogSink configures a callback for internal errors emitted by the capture subsystem.
@@ -382,27 +175,47 @@ func SetLogSink(fn func(level string, message string)) {
 	logSink = fn
 }
 
-func getEventEmitter() func(string) {
-	callbackMu.RLock()
-	defer callbackMu.RUnlock()
-	return eventEmitter
-}
-
 func getLogSink() func(level string, message string) {
 	callbackMu.RLock()
 	defer callbackMu.RUnlock()
 	return logSink
 }
 
-// emitToLogSink sends captured error messages to the configured log sink.
+// emitToLogSink sends captured stderr lines to the configured log sink. A
+// warning or error that repeats is logged only the first time this session:
+// client libraries repeat the same failure on every retry.
 func (c *Capture) emitToLogSink(chunk []byte) {
+	sink := getLogSink()
+	if sink == nil || len(chunk) == 0 {
+		return
+	}
 	forEachTrimmedLine(string(chunk), func(msg string) {
-		if sink := getLogSink(); sink != nil {
-			level := logclassify.Classify(msg)
-			if isExpectedCondition(strings.ToLower(msg)) {
-				level = "info"
-			}
-			sink(level, msg)
+		level := logclassify.Classify(msg)
+		if (level == logclassify.LevelError || level == logclassify.LevelWarn) && !c.firstOccurrence(level, msg) {
+			return
 		}
+		if isExpectedCondition(strings.ToLower(msg)) {
+			level = logclassify.LevelInfo
+		}
+		sink(level, msg)
 	})
+}
+
+// firstOccurrence reports whether this line is new this session. The klog
+// header (timestamp, thread, source) is excluded, so a retry's repeat matches.
+func (c *Capture) firstOccurrence(level, msg string) bool {
+	c.repeatsOnce.Do(func() { c.repeats = newSessionDeduper() })
+	return c.repeats.shouldLog(level+"|"+klogMessageBody(msg), time.Now())
+}
+
+// klogMessageBody strips a klog header ("E1011 10:00:00.000001 12345 file.go:42] ")
+// from msg; other lines are returned unchanged.
+func klogMessageBody(msg string) string {
+	if _, ok := logclassify.ParseKlogSeverity(msg); !ok {
+		return msg
+	}
+	if index := strings.Index(msg, "] "); index >= 0 {
+		return msg[index+2:]
+	}
+	return msg
 }

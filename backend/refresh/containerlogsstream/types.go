@@ -3,6 +3,7 @@ package containerlogsstream
 import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -90,19 +91,22 @@ type Entry struct {
 // the previous lists. A frame with Error is fatal and the stream then closes;
 // Retryable says whether reconnecting can help.
 type EventPayload struct {
-	Domain           string                          `json:"domain"`
-	Scope            string                          `json:"scope"`
-	Sequence         uint64                          `json:"sequence"`
-	GeneratedAt      int64                           `json:"generatedAt"`
-	Reset            bool                            `json:"reset,omitempty"`
-	Resumed          bool                            `json:"resumed,omitempty"`
-	RemovedPods      []string                        `json:"removedPods,omitempty"`
-	SnapshotComplete bool                            `json:"snapshotComplete,omitempty"`
-	Trimmed          int                             `json:"trimmed,omitempty"`
-	Entries          []Entry                         `json:"entries,omitempty"`
-	Warnings         *[]containerlogs.Warning        `json:"warnings,omitempty"`
-	Issues           *[]containerlogs.TargetIssue    `json:"issues,omitempty"`
-	Error            string                          `json:"error,omitempty"`
-	ErrorDetails     *refresh.PermissionDeniedStatus `json:"errorDetails,omitempty"`
-	Retryable        bool                            `json:"retryable,omitempty"`
+	Domain           string                       `json:"domain"`
+	Scope            string                       `json:"scope"`
+	Sequence         uint64                       `json:"sequence"`
+	GeneratedAt      int64                        `json:"generatedAt"`
+	Reset            bool                         `json:"reset,omitempty"`
+	Resumed          bool                         `json:"resumed,omitempty"`
+	RemovedPods      []string                     `json:"removedPods,omitempty"`
+	SnapshotComplete bool                         `json:"snapshotComplete,omitempty"`
+	Trimmed          int                          `json:"trimmed,omitempty"`
+	Entries          []Entry                      `json:"entries,omitempty"`
+	Warnings         *[]containerlogs.Warning     `json:"warnings,omitempty"`
+	Issues           *[]containerlogs.TargetIssue `json:"issues,omitempty"`
+	Error            string                       `json:"error,omitempty"`
+	// ErrorDetails is the failure's status; Reconnect says whether the client
+	// should reconnect, which differs from status.retryable (an unclassified
+	// failure is not retryable, but the stream reconnects).
+	ErrorDetails *errorstatus.Status `json:"errorDetails,omitempty"`
+	Reconnect    bool                `json:"reconnect,omitempty"`
 }

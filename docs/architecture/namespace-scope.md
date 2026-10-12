@@ -123,14 +123,14 @@ RoleBindings (issue #243) and doubles as a noise/perf scope on large clusters.
 
 ## Fail-fast contract for denied domains
 
-A typed 403 (`SnapshotPermissionDeniedError`) is a settled answer everywhere it
-surfaces:
+A refresh failure whose status reason is `Forbidden` is a settled answer
+everywhere it surfaces:
 
-- The orchestrator stamps the scope `permissionDenied` and stops background
-  refetches.
-- The typed query hook reads the stamp and settles without warm-up retries; the
-  shared table shows "Insufficient permissions" (`resolveEmptyStateMessage`), not
-  a spinner or generic failure.
+- The orchestrator stores the `Forbidden` failure (`isPermissionDenied`) and
+  stops background refetches.
+- The typed query hook reads the failure and settles without warm-up retries;
+  the shared table shows "Insufficient permissions" (`resolveEmptyStateMessage`),
+  not a spinner or generic failure.
 - A stream permission error frame blocks that scope's streaming
   (`refresh:resource-stream-permission-denied` → `blockStreaming`) instead of
   resync-looping.

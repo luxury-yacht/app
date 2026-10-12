@@ -1,37 +1,24 @@
 /*
  * backend/resource_bindings_test.go
  *
- * Tests for resource wrapper handlers.
- * - Covers wrapper behavior for baseline scenarios.
+ * Tests for resource gateway operations.
  * - Ensures proper error handling when clients are missing.
- * - Verifies correct handling of resource deletion.
- * - Covers extended success scenarios for wrappers.
+ * - Verifies detail-cache eviction after mutations.
  */
 
 package backend
 
 import (
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
-	admissionv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
-	discoveryv1 "k8s.io/api/discovery/v1"
-	networkingv1 "k8s.io/api/networking/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	storagev1 "k8s.io/api/storage/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	cgofake "k8s.io/client-go/kubernetes/fake"
-	cgotesting "k8s.io/client-go/testing"
-	"k8s.io/utils/ptr"
+
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 )
 
 func wrapperResourceGatewayFixture(t *testing.T) *resourceGatewayFixture {
@@ -39,7 +26,7 @@ func wrapperResourceGatewayFixture(t *testing.T) *resourceGatewayFixture {
 	return newResourceGatewayFixture()
 }
 
-func TestResourceWrappersRequireClient(t *testing.T) {
+func TestResourceActionsRequireClient(t *testing.T) {
 	app := wrapperResourceGatewayFixture(t)
 	clusterID := "config:ctx"
 	app.clusters = map[string]*clusterClients{
@@ -54,58 +41,6 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 		name string
 		call func() error
 	}{
-		{"MutatingWebhook", func() error {
-			_, err := app.gateway.GetMutatingWebhookConfiguration(clusterID, "mw")
-			return err
-		}},
-		{"ValidatingWebhook", func() error {
-			_, err := app.gateway.GetValidatingWebhookConfiguration(clusterID, "vw")
-			return err
-		}},
-		{"CRD", func() error {
-			_, err := app.gateway.GetCustomResourceDefinition(clusterID, "crd.example.com")
-			return err
-		}},
-		{"HPA", func() error {
-			_, err := app.gateway.GetHorizontalPodAutoscaler(clusterID, "ns", "hpa")
-			return err
-		}},
-		{"Service", func() error {
-			_, err := app.gateway.GetService(clusterID, "ns", "svc")
-			return err
-		}},
-		{"EndpointSlice", func() error {
-			_, err := app.gateway.GetEndpointSlice(clusterID, "ns", "ep")
-			return err
-		}},
-		{"Ingress", func() error {
-			_, err := app.gateway.GetIngress(clusterID, "ns", "ing")
-			return err
-		}},
-		{"IngressClass", func() error {
-			_, err := app.gateway.GetIngressClass(clusterID, "class")
-			return err
-		}},
-		{"NetworkPolicy", func() error {
-			_, err := app.gateway.GetNetworkPolicy(clusterID, "ns", "np")
-			return err
-		}},
-		{"ConfigMap", func() error {
-			_, err := app.gateway.GetConfigMap(clusterID, "ns", "cm")
-			return err
-		}},
-		{"Secret", func() error {
-			_, err := app.gateway.GetSecret(clusterID, "ns", "sec")
-			return err
-		}},
-		{"LimitRange", func() error {
-			_, err := app.gateway.GetLimitRange(clusterID, "ns", "lr")
-			return err
-		}},
-		{"ResourceQuota", func() error {
-			_, err := app.gateway.GetResourceQuota(clusterID, "ns", "rq")
-			return err
-		}},
 		{"deleteResourceByGVK", func() error {
 			_, err := app.gateway.RunObjectAction(ObjectActionRequest{
 				Action: ObjectActionDelete,
@@ -113,80 +48,8 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 			})
 			return err
 		}},
-		{"HelmReleaseDetails", func() error {
-			_, err := app.gateway.GetHelmReleaseDetails(clusterID, "ns", "rel")
-			return err
-		}},
-		{"HelmManifest", func() error {
-			_, err := app.gateway.GetHelmManifest(clusterID, "ns", "rel")
-			return err
-		}},
-		{"HelmValues", func() error {
-			_, err := app.gateway.GetHelmValues(clusterID, "ns", "rel")
-			return err
-		}},
 		{"HelmDelete", func() error {
 			return app.gateway.deleteHelmReleaseAction(objectActionTarget(clusterID, "helm.sh", "v3", "HelmRelease", "ns", "rel"))
-		}},
-		{"Deployment", func() error {
-			_, err := app.gateway.GetDeployment(clusterID, "ns", "deploy")
-			return err
-		}},
-		{"StatefulSet", func() error {
-			_, err := app.gateway.GetStatefulSet(clusterID, "ns", "sts")
-			return err
-		}},
-		{"DaemonSet", func() error {
-			_, err := app.gateway.GetDaemonSet(clusterID, "ns", "ds")
-			return err
-		}},
-		{"Job", func() error {
-			_, err := app.gateway.GetJob(clusterID, "ns", "job")
-			return err
-		}},
-		{"CronJob", func() error {
-			_, err := app.gateway.GetCronJob(clusterID, "ns", "cj")
-			return err
-		}},
-		{"Namespace", func() error {
-			_, err := app.gateway.GetNamespace(clusterID, "ns")
-			return err
-		}},
-		{"ClusterRole", func() error {
-			_, err := app.gateway.GetClusterRole(clusterID, "cr")
-			return err
-		}},
-		{"ClusterRoleBinding", func() error {
-			_, err := app.gateway.GetClusterRoleBinding(clusterID, "crb")
-			return err
-		}},
-		{"Role", func() error {
-			_, err := app.gateway.GetRole(clusterID, "ns", "role")
-			return err
-		}},
-		{"RoleBinding", func() error {
-			_, err := app.gateway.GetRoleBinding(clusterID, "ns", "rb")
-			return err
-		}},
-		{"ServiceAccount", func() error {
-			_, err := app.gateway.GetServiceAccount(clusterID, "ns", "sa")
-			return err
-		}},
-		{"PersistentVolume", func() error {
-			_, err := app.gateway.GetPersistentVolume(clusterID, "pv")
-			return err
-		}},
-		{"PersistentVolumeClaim", func() error {
-			_, err := app.gateway.GetPersistentVolumeClaim(clusterID, "ns", "pvc")
-			return err
-		}},
-		{"StorageClass", func() error {
-			_, err := app.gateway.GetStorageClass(clusterID, "sc")
-			return err
-		}},
-		{"Node", func() error {
-			_, err := app.gateway.GetNode(clusterID, "node")
-			return err
 		}},
 		{"Cordon", func() error {
 			return app.gateway.cordonNodeAction(objectActionTarget(clusterID, "", "v1", "Node", "", "node"))
@@ -218,9 +81,9 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 func TestFetchContainerLogsRejectsInvalidScopeCluster(t *testing.T) {
 	app := wrapperResourceGatewayFixture(t)
 
-	resp := app.gateway.FetchContainerLogs("cluster-a", ContainerLogsFetchRequest{SelectedFilters: []string{"container:app"}})
-	if !strings.Contains(resp.Error, "container logs scope is required") {
-		t.Fatalf("expected missing scope error, got %q", resp.Error)
+	_, err := app.gateway.FetchContainerLogs("cluster-a", ContainerLogsFetchRequest{SelectedFilters: []string{"container:app"}})
+	if err == nil || !strings.Contains(err.Error(), "container logs scope is required") {
+		t.Fatalf("expected missing scope error, got %v", err)
 	}
 
 	tests := []struct {
@@ -245,9 +108,12 @@ func TestFetchContainerLogsRejectsInvalidScopeCluster(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp := app.gateway.FetchContainerLogs(tt.clusterID, ContainerLogsFetchRequest{Scope: tt.scope})
-			if !strings.Contains(resp.Error, tt.want) {
-				t.Fatalf("expected error containing %q, got %q", tt.want, resp.Error)
+			_, err := app.gateway.FetchContainerLogs(tt.clusterID, ContainerLogsFetchRequest{Scope: tt.scope})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("expected error containing %q, got %v", tt.want, err)
+			}
+			if reason := errorstatus.Classify(err).Reason; reason != errorstatus.ReasonBadRequest {
+				t.Fatalf("expected a BadRequest status, got %s", reason)
 			}
 		})
 	}
@@ -282,14 +148,19 @@ func TestDeletePodEvictsDetailCache(t *testing.T) {
 		},
 	}
 
-	detailKey := objectDetailCacheKey("Pod", "ns", "pod")
+	podGVK := schema.GroupVersionKind{Version: "v1", Kind: "Pod"}
+	detailKey := objectDetailCacheKeyForGVK(podGVK, "ns", "pod")
+	headerKey := objectHeaderMetadataCacheKey(podGVK, "ns", "pod")
 	app.gateway.seedResponseCache(clusterID, detailKey, "stale")
+	app.gateway.seedResponseCache(clusterID, headerKey, "stale")
 
 	if err := app.gateway.deletePodAction(objectActionTarget(clusterID, "", "v1", "Pod", "ns", "pod")); err != nil {
 		t.Fatalf("deletePod returned error: %v", err)
 	}
-	if _, ok := app.gateway.responseCacheLookup(clusterID, detailKey); ok {
-		t.Fatalf("expected pod detail cache to be evicted")
+	for _, key := range []string{detailKey, headerKey} {
+		if _, ok := app.gateway.responseCacheLookup(clusterID, key); ok {
+			t.Fatalf("expected pod cache entry %q to be evicted", key)
+		}
 	}
 }
 
@@ -297,349 +168,22 @@ func TestClearNodeCachesEvictsDetailCache(t *testing.T) {
 	app := wrapperResourceGatewayFixture(t)
 	app.gateway.responseCache = newResponseCache(time.Minute, 10)
 	clusterID := "config:ctx"
-	detailKey := objectDetailCacheKey("Node", "", "node")
+	nodeGVK := schema.GroupVersionKind{Version: "v1", Kind: "Node"}
+	detailKey := objectDetailCacheKeyForGVK(nodeGVK, "", "node")
+	headerKey := objectHeaderMetadataCacheKey(nodeGVK, "", "node")
 	app.gateway.seedResponseCache(clusterID, detailKey, "stale")
+	app.gateway.seedResponseCache(clusterID, headerKey, "stale")
 
 	app.gateway.clearNodeCaches(clusterID, "node")
 
-	if _, ok := app.gateway.responseCacheLookup(clusterID, detailKey); ok {
-		t.Fatalf("expected node detail cache to be evicted")
+	for _, key := range []string{detailKey, headerKey} {
+		if _, ok := app.gateway.responseCacheLookup(clusterID, key); ok {
+			t.Fatalf("expected node cache entry %q to be evicted", key)
+		}
 	}
 }
 
-func TestWrapperHappyPathsWithFakeClients(t *testing.T) {
-	app := wrapperResourceGatewayFixture(t)
-	clusterID := "config:ctx"
-	client := cgofake.NewClientset(
-		&admissionv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "mw"}},
-		&admissionv1.ValidatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "vw"}},
-	)
-	apiExt := apiextensionsfake.NewClientset(
-		&apiextensionsv1.CustomResourceDefinition{ObjectMeta: metav1.ObjectMeta{Name: "crd.example.com"}},
-	)
-	app.clusters = map[string]*clusterClients{
-		clusterID: {
-			meta:                ClusterMeta{ID: clusterID, Name: "ctx"},
-			kubeconfigPath:      "/path",
-			kubeconfigContext:   "ctx",
-			client:              client,
-			apiextensionsClient: apiExt,
-		},
-	}
-
-	// CRD path
-	if _, err := app.gateway.GetCustomResourceDefinition(clusterID, "crd.example.com"); err != nil {
-		t.Fatalf("expected CRD fetch to succeed: %v", err)
-	}
-
-	// Webhooks
-	if _, err := app.gateway.GetMutatingWebhookConfiguration(clusterID, "mw"); err != nil {
-		t.Fatalf("expected mutating webhook to succeed: %v", err)
-	}
-	if _, err := app.gateway.GetValidatingWebhookConfiguration(clusterID, "vw"); err != nil {
-		t.Fatalf("expected validating webhook to succeed: %v", err)
-	}
-}
-
-func TestNetworkWrappersHappyPath(t *testing.T) {
-	app := wrapperResourceGatewayFixture(t)
-	clusterID := "config:ctx"
-
-	now := metav1.NewTime(time.Now().Add(-5 * time.Minute))
-	pathType := networkingv1.PathTypePrefix
-	endpointPort := int32(8080)
-
-	client := cgofake.NewClientset(
-		&corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default", CreationTimestamp: now},
-			Spec: corev1.ServiceSpec{
-				Type:      corev1.ServiceTypeClusterIP,
-				ClusterIP: "10.0.0.1",
-				Ports: []corev1.ServicePort{{
-					Name:       "http",
-					Port:       80,
-					TargetPort: intstr.FromInt(8080),
-				}},
-			},
-		},
-		&discoveryv1.EndpointSlice{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "web-slice",
-				Namespace: "default",
-				Labels: map[string]string{
-					discoveryv1.LabelServiceName: "web",
-				},
-			},
-			AddressType: discoveryv1.AddressTypeIPv4,
-			Ports:       []discoveryv1.EndpointPort{{Port: &endpointPort}},
-			Endpoints: []discoveryv1.Endpoint{{
-				Addresses: []string{"10.1.1.5"},
-				TargetRef: &corev1.ObjectReference{Name: "pod-1", Kind: "Pod"},
-			}},
-		},
-		&networkingv1.Ingress{
-			ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default", CreationTimestamp: now},
-			Spec: networkingv1.IngressSpec{
-				Rules: []networkingv1.IngressRule{{
-					Host: "example.com",
-					IngressRuleValue: networkingv1.IngressRuleValue{
-						HTTP: &networkingv1.HTTPIngressRuleValue{
-							Paths: []networkingv1.HTTPIngressPath{{
-								Path:     "/",
-								PathType: &pathType,
-								Backend: networkingv1.IngressBackend{
-									Service: &networkingv1.IngressServiceBackend{
-										Name: "web",
-										Port: networkingv1.ServiceBackendPort{Number: 80},
-									},
-								},
-							}},
-						},
-					},
-				}},
-			},
-			Status: networkingv1.IngressStatus{
-				LoadBalancer: networkingv1.IngressLoadBalancerStatus{
-					Ingress: []networkingv1.IngressLoadBalancerIngress{{IP: "35.1.2.3"}},
-				},
-			},
-		},
-		&networkingv1.IngressClass{
-			ObjectMeta: metav1.ObjectMeta{Name: "public", CreationTimestamp: now},
-			Spec:       networkingv1.IngressClassSpec{Controller: "example.com/ingress"},
-		},
-		&networkingv1.NetworkPolicy{
-			ObjectMeta: metav1.ObjectMeta{Name: "deny-all", Namespace: "default", CreationTimestamp: now},
-		},
-	)
-	app.clusters = map[string]*clusterClients{
-		clusterID: {
-			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-			client:            client,
-		},
-	}
-
-	if _, err := app.gateway.GetService(clusterID, "default", "web"); err != nil {
-		t.Fatalf("expected service wrapper to succeed: %v", err)
-	}
-	if _, err := app.gateway.GetEndpointSlice(clusterID, "default", "web-slice"); err != nil {
-		t.Fatalf("expected endpoint slice wrapper to succeed: %v", err)
-	}
-	if _, err := app.gateway.GetIngress(clusterID, "default", "web"); err != nil {
-		t.Fatalf("expected ingress wrapper to succeed: %v", err)
-	}
-	if _, err := app.gateway.GetIngressClass(clusterID, "public"); err != nil {
-		t.Fatalf("expected ingress class wrapper to succeed: %v", err)
-	}
-	if _, err := app.gateway.GetNetworkPolicy(clusterID, "default", "deny-all"); err != nil {
-		t.Fatalf("expected network policy wrapper to succeed: %v", err)
-	}
-}
-
-func TestConfigWrappersHappyPath(t *testing.T) {
-	app := wrapperResourceGatewayFixture(t)
-	clusterID := "config:ctx"
-
-	client := cgofake.NewClientset(
-		&corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "team-a", CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour))},
-			Data:       map[string]string{"env": "prod"},
-		},
-		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "creds", Namespace: "team-a", CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour))},
-			Data:       map[string][]byte{"token": []byte("abc123")},
-		},
-	)
-	app.clusters = map[string]*clusterClients{
-		clusterID: {
-			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-			client:            client,
-		},
-	}
-
-	if _, err := app.gateway.GetConfigMap(clusterID, "team-a", "settings"); err != nil {
-		t.Fatalf("expected configmap wrapper to succeed: %v", err)
-	}
-	if _, err := app.gateway.GetSecret(clusterID, "team-a", "creds"); err != nil {
-		t.Fatalf("expected secret wrapper to succeed: %v", err)
-	}
-}
-
-func TestGetConfigMapKeepsNotFoundFailureLocal(t *testing.T) {
-	reporter := &recordingErrorReporter{}
-	app := newResourceGatewayFixture()
-	app.logger = NewLogger(100, reporter)
-	app.gateway.logger = app.logger
-	clusterID := "config:ctx"
-	app.clusters = map[string]*clusterClients{
-		clusterID: {
-			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-			client:            cgofake.NewClientset(),
-		},
-	}
-
-	_, err := app.gateway.GetConfigMap(clusterID, "default", "missing")
-	if err == nil {
-		t.Fatal("expected missing configmap to fail")
-	}
-	if !apierrors.IsNotFound(err) {
-		t.Fatalf("expected Kubernetes not found failure, got %v", err)
-	}
-
-	reporter.mu.Lock()
-	defer reporter.mu.Unlock()
-	if len(reporter.exceptions) != 0 {
-		t.Fatalf("expected no Sentry exceptions, got %d", len(reporter.exceptions))
-	}
-}
-
-func TestGetConfigMapReportsUnexpectedKubernetesFailureOnce(t *testing.T) {
-	reporter := &recordingErrorReporter{}
-	app := newResourceGatewayFixture()
-	app.logger = NewLogger(100, reporter)
-	app.gateway.logger = app.logger
-	clusterID := "config:ctx"
-	client := cgofake.NewClientset()
-	client.Fake.PrependReactor(
-		"get",
-		"configmaps",
-		func(cgotesting.Action) (bool, runtime.Object, error) {
-			return true, nil, apierrors.NewInternalError(errors.New("synthetic API failure"))
-		},
-	)
-	app.clusters = map[string]*clusterClients{
-		clusterID: {
-			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-			client:            client,
-		},
-	}
-
-	_, err := app.gateway.GetConfigMap(clusterID, "default", "settings")
-	if err == nil {
-		t.Fatal("expected configmap request to fail")
-	}
-	if !apierrors.IsInternalError(err) {
-		t.Fatalf("expected Kubernetes internal failure, got %v", err)
-	}
-
-	reporter.mu.Lock()
-	defer reporter.mu.Unlock()
-	if len(reporter.exceptions) != 1 {
-		t.Fatalf("expected one Sentry exception, got %d", len(reporter.exceptions))
-	}
-	if _, ok := reporter.exceptions[0].err.(*apierrors.StatusError); !ok {
-		t.Fatalf("expected original Kubernetes StatusError, got %T", reporter.exceptions[0].err)
-	}
-}
-
-func TestRBACWrappersHappyPath(t *testing.T) {
-	app := wrapperResourceGatewayFixture(t)
-	clusterID := "config:ctx"
-
-	clusterRole := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "viewer"}}
-	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: "viewer-binding"},
-		RoleRef: rbacv1.RoleRef{
-			Kind: "ClusterRole",
-			Name: "viewer",
-		},
-		Subjects: []rbacv1.Subject{{Kind: "User", Name: "alice"}},
-	}
-	role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "ns-role", Namespace: "team-a"}}
-	roleBinding := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: "rb", Namespace: "team-a"},
-		RoleRef:    rbacv1.RoleRef{Kind: "Role", Name: "ns-role"},
-		Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: "builder", Namespace: "team-a"}},
-	}
-	serviceAccount := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "builder", Namespace: "team-a"}}
-
-	client := cgofake.NewClientset(clusterRole, clusterRoleBinding, role, roleBinding, serviceAccount)
-	app.clusters = map[string]*clusterClients{
-		clusterID: {
-			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-			client:            client,
-		},
-	}
-
-	if _, err := app.gateway.GetClusterRole(clusterID, "viewer"); err != nil {
-		t.Fatalf("expected ClusterRole wrapper to succeed: %v", err)
-	}
-	if _, err := app.gateway.GetClusterRoleBinding(clusterID, "viewer-binding"); err != nil {
-		t.Fatalf("expected ClusterRoleBinding wrapper to succeed: %v", err)
-	}
-	if _, err := app.gateway.GetRole(clusterID, "team-a", "ns-role"); err != nil {
-		t.Fatalf("expected Role wrapper to succeed: %v", err)
-	}
-	if _, err := app.gateway.GetRoleBinding(clusterID, "team-a", "rb"); err != nil {
-		t.Fatalf("expected RoleBinding wrapper to succeed: %v", err)
-	}
-	if _, err := app.gateway.GetServiceAccount(clusterID, "team-a", "builder"); err != nil {
-		t.Fatalf("expected ServiceAccount wrapper to succeed: %v", err)
-	}
-}
-
-func TestStorageWrappersHappyPath(t *testing.T) {
-	app := wrapperResourceGatewayFixture(t)
-	clusterID := "config:ctx"
-
-	pv := &corev1.PersistentVolume{
-		ObjectMeta: metav1.ObjectMeta{Name: "pv1"},
-		Spec: corev1.PersistentVolumeSpec{
-			Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("5Gi")},
-			AccessModes: []corev1.PersistentVolumeAccessMode{
-				corev1.ReadWriteOnce,
-			},
-			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
-			VolumeMode:                    ptr.To(corev1.PersistentVolumeFilesystem),
-		},
-	}
-	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{Name: "pvc1", Namespace: "apps"},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			Resources: corev1.VolumeResourceRequirements{
-				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
-			},
-		},
-		Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
-	}
-	sc := &storagev1.StorageClass{
-		ObjectMeta:  metav1.ObjectMeta{Name: "standard"},
-		Provisioner: "kubernetes.io/no-provisioner",
-	}
-
-	client := cgofake.NewClientset(pv, pvc, sc)
-	app.clusters = map[string]*clusterClients{
-		clusterID: {
-			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
-			kubeconfigPath:    "/path",
-			kubeconfigContext: "ctx",
-			client:            client,
-		},
-	}
-
-	if _, err := app.gateway.GetPersistentVolume(clusterID, "pv1"); err != nil {
-		t.Fatalf("expected PV wrapper to succeed: %v", err)
-	}
-	if _, err := app.gateway.GetPersistentVolumeClaim(clusterID, "apps", "pvc1"); err != nil {
-		t.Fatalf("expected PVC wrapper to succeed: %v", err)
-	}
-	if _, err := app.gateway.GetStorageClass(clusterID, "standard"); err != nil {
-		t.Fatalf("expected StorageClass wrapper to succeed: %v", err)
-	}
-}
-
-func TestWrapperGuardPathsRequireClient(t *testing.T) {
+func TestPodAndHelmOperationsRequireClient(t *testing.T) {
 	app := newResourceGatewayFixture()
 	clusterID := "config:ctx"
 	app.clusters = map[string]*clusterClients{
@@ -654,42 +198,13 @@ func TestWrapperGuardPathsRequireClient(t *testing.T) {
 		name string
 		call func() error
 	}{
-		{"GetPod", func() error { _, err := app.gateway.GetPod(clusterID, "ns", "pod", false); return err }},
 		{"deletePod", func() error {
 			return app.gateway.deletePodAction(objectActionTarget(clusterID, "", "v1", "Pod", "ns", "pod"))
 		}},
 		{"PodContainers", func() error { _, err := app.gateway.GetPodContainers(clusterID, "ns", "pod"); return err }},
-		{"PodDisruptionBudget", func() error { _, err := app.gateway.GetPodDisruptionBudget(clusterID, "ns", "pdb"); return err }},
-		{"Service", func() error { _, err := app.gateway.GetService(clusterID, "ns", "svc"); return err }},
-		{"EndpointSlice", func() error { _, err := app.gateway.GetEndpointSlice(clusterID, "ns", "ep"); return err }},
-		{"Ingress", func() error { _, err := app.gateway.GetIngress(clusterID, "ns", "ing"); return err }},
-		{"IngressClass", func() error { _, err := app.gateway.GetIngressClass(clusterID, "class"); return err }},
-		{"NetworkPolicy", func() error { _, err := app.gateway.GetNetworkPolicy(clusterID, "ns", "np"); return err }},
-		{"ConfigMap", func() error { _, err := app.gateway.GetConfigMap(clusterID, "ns", "cm"); return err }},
-		{"Secret", func() error { _, err := app.gateway.GetSecret(clusterID, "ns", "sec"); return err }},
-		{"LimitRange", func() error { _, err := app.gateway.GetLimitRange(clusterID, "ns", "lr"); return err }},
-		{"ResourceQuota", func() error { _, err := app.gateway.GetResourceQuota(clusterID, "ns", "rq"); return err }},
-		{"HelmDetails", func() error { _, err := app.gateway.GetHelmReleaseDetails(clusterID, "ns", "rel"); return err }},
-		{"HelmManifest", func() error { _, err := app.gateway.GetHelmManifest(clusterID, "ns", "rel"); return err }},
-		{"HelmValues", func() error { _, err := app.gateway.GetHelmValues(clusterID, "ns", "rel"); return err }},
 		{"HelmDelete", func() error {
 			return app.gateway.deleteHelmReleaseAction(objectActionTarget(clusterID, "helm.sh", "v3", "HelmRelease", "ns", "rel"))
 		}},
-		{"Deployment", func() error { _, err := app.gateway.GetDeployment(clusterID, "ns", "deploy"); return err }},
-		{"ReplicaSet", func() error { _, err := app.gateway.GetReplicaSet(clusterID, "ns", "rs"); return err }},
-		{"StatefulSet", func() error { _, err := app.gateway.GetStatefulSet(clusterID, "ns", "sts"); return err }},
-		{"DaemonSet", func() error { _, err := app.gateway.GetDaemonSet(clusterID, "ns", "ds"); return err }},
-		{"Job", func() error { _, err := app.gateway.GetJob(clusterID, "ns", "job"); return err }},
-		{"CronJob", func() error { _, err := app.gateway.GetCronJob(clusterID, "ns", "cj"); return err }},
-		{"Namespace", func() error { _, err := app.gateway.GetNamespace(clusterID, "ns"); return err }},
-		{"ClusterRole", func() error { _, err := app.gateway.GetClusterRole(clusterID, "cr"); return err }},
-		{"ClusterRoleBinding", func() error { _, err := app.gateway.GetClusterRoleBinding(clusterID, "crb"); return err }},
-		{"Role", func() error { _, err := app.gateway.GetRole(clusterID, "ns", "role"); return err }},
-		{"RoleBinding", func() error { _, err := app.gateway.GetRoleBinding(clusterID, "ns", "rb"); return err }},
-		{"ServiceAccount", func() error { _, err := app.gateway.GetServiceAccount(clusterID, "ns", "sa"); return err }},
-		{"PersistentVolume", func() error { _, err := app.gateway.GetPersistentVolume(clusterID, "pv"); return err }},
-		{"PersistentVolumeClaim", func() error { _, err := app.gateway.GetPersistentVolumeClaim(clusterID, "ns", "pvc"); return err }},
-		{"StorageClass", func() error { _, err := app.gateway.GetStorageClass(clusterID, "sc"); return err }},
 	}
 
 	for _, tc := range errorCases {
@@ -698,8 +213,7 @@ func TestWrapperGuardPathsRequireClient(t *testing.T) {
 		}
 	}
 
-	resp := app.gateway.FetchContainerLogs(clusterID, ContainerLogsFetchRequest{Scope: "cluster-a|ns:/v1:pod:pod"})
-	if resp.Error == "" {
+	if _, err := app.gateway.FetchContainerLogs(clusterID, ContainerLogsFetchRequest{Scope: "cluster-a|ns:/v1:pod:pod"}); err == nil {
 		t.Fatalf("expected error for FetchContainerLogs without client")
 	}
 }
@@ -772,8 +286,8 @@ func TestActionWrappersRequireTargetIdentity(t *testing.T) {
 	if resp := app.gateway.DiscoverNodeLogs("cluster-a", ""); resp.Reason != "name is required" {
 		t.Fatalf("expected DiscoverNodeLogs name error, got %+v", resp)
 	}
-	if resp := app.gateway.FetchNodeLogs("cluster-a", "", NodeLogFetchRequest{SourcePath: "/var/log"}); resp.Error != "name is required" {
-		t.Fatalf("expected FetchNodeLogs name error, got %+v", resp)
+	if _, err := app.gateway.FetchNodeLogs("cluster-a", "", NodeLogFetchRequest{SourcePath: "/var/log"}); err == nil || err.Error() != "name is required" {
+		t.Fatalf("expected FetchNodeLogs name error, got %v", err)
 	}
 }
 
@@ -796,8 +310,11 @@ func TestNodeLogsRequireNodeProxyPermission(t *testing.T) {
 		t.Fatalf("expected node proxy denial, got %+v", discovery)
 	}
 
-	fetch := app.gateway.FetchNodeLogs(clusterID, "node-a", NodeLogFetchRequest{SourcePath: "journal/kubelet"})
-	if !strings.Contains(fetch.Error, "node proxy denied") {
-		t.Fatalf("expected node proxy denial, got %+v", fetch)
+	_, err := app.gateway.FetchNodeLogs(clusterID, "node-a", NodeLogFetchRequest{SourcePath: "journal/kubelet"})
+	if err == nil || !strings.Contains(err.Error(), "node proxy denied") {
+		t.Fatalf("expected node proxy denial, got %v", err)
+	}
+	if reason := errorstatus.Classify(err).Reason; reason != errorstatus.ReasonForbidden {
+		t.Fatalf("expected a Forbidden status, got %s", reason)
 	}
 }

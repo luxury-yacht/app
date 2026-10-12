@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events/eventBus';
+import {
+  bindingRejection,
+  errorWithStatus,
+  makeErrorStatus,
+} from '@/test-utils/errorStatusFixtures';
 import { errorHandler } from '@/utils/errorHandler';
 
 const sentryMocks = vi.hoisted(() => ({
@@ -598,35 +603,14 @@ describe('Sentry error reporting', () => {
       'Wails cancellation',
       Object.assign(new Error('User canceled the call'), { name: 'CancelError' }),
     ],
-    ['backend cancellation', new Error('read resource: context canceled')],
-    ['Kubernetes denial', new Error('pods "example" is forbidden: access denied')],
-    ['HTTP denial', new Error('Snapshot request failed: 403 Forbidden')],
-    ['HTTP status', new Error('Request failed: HTTP 403')],
-    ['HTTP/1.1 status', new Error('Request failed: HTTP/1.1 401')],
-    ['HTTP/2 status', new Error('Request failed: HTTP/2 403')],
-    ['status code', new Error('Request failed with status code 401')],
-    ['status of', new Error('Request failed with status of 403')],
-    ['status colon', new Error('Request failed: status: 403')],
-    ['status equals', new Error('Request failed: status=401')],
-    ['snapshot denial', Object.assign(new Error('Read blocked'), { permissionDenied: true })],
-    ['expired credentials', new Error('The authentication token has expired')],
-    ['credential helper', new Error('getting credentials: exec: executable login-helper failed')],
-    ['rejected credentials', new Error('read resource: auth invalid: credentials rejected')],
-    ['removed resource', new Error('read resource: pods "example" not found')],
-    ['removed core resource', new Error('pods "example" not found')],
-    ['removed grouped resource', new Error('deployments.apps "example" not found')],
-    [
-      'wrapped status',
-      Object.assign(new Error('Backend request failed'), {
-        cause: { code: 403, reason: 'Forbidden' },
-      }),
-    ],
-    [
-      'missing status',
-      Object.assign(new Error('Backend request failed'), {
-        cause: { kind: 'Status', code: 404, reason: 'NotFound' },
-      }),
-    ],
+    ['backend cancellation', bindingRejection(makeErrorStatus('Canceled', 'context canceled'))],
+    ['a refresh denial', errorWithStatus(makeErrorStatus('Forbidden', 'Read blocked'))],
+    ['a read denial', bindingRejection(makeErrorStatus('Forbidden', 'pods is forbidden'))],
+    ['rejected credentials', bindingRejection(makeErrorStatus('CredentialsRejected'))],
+    ['an unauthorized request', bindingRejection(makeErrorStatus('Unauthorized'))],
+    ['a removed resource', bindingRejection(makeErrorStatus('NotFound', 'pods "x" not found'))],
+    ['an API server timeout', bindingRejection(makeErrorStatus('ServerTimeout'))],
+    ['an unreachable cluster', bindingRejection(makeErrorStatus('ClusterUnreachable'))],
   ])('keeps %s local at inline and background boundaries', (_name, error) => {
     initializeErrorReporting({ enabled: true, dsn: 'https://public@example.com/1' });
 
@@ -656,6 +640,12 @@ describe('Sentry error reporting', () => {
     new Error('request took 403 ms: internal server error'),
     new TypeError('Cannot read properties of undefined'),
     new Error('context deadline exceeded'),
+    new Error('pods "example" is forbidden: access denied'),
+    new Error('The authentication token has expired'),
+    bindingRejection(makeErrorStatus('DeadlineExceeded', 'context deadline exceeded')),
+    bindingRejection(
+      makeErrorStatus('Forbidden', 'deployments.apps "web" is forbidden', { expected: false })
+    ),
     Object.assign(new Error('Backend request failed'), {
       cause: { code: '403', reason: 'Forbidden' },
     }),
@@ -671,16 +661,6 @@ describe('Sentry error reporting', () => {
     expect(sentryMocks.captureException).toHaveBeenCalledTimes(2);
     expect(sentryMocks.captureException).toHaveBeenNthCalledWith(1, error);
     expect(sentryMocks.captureException).toHaveBeenNthCalledWith(2, error);
-  });
-
-  it('keeps string-only Wails permission denials local', () => {
-    initializeErrorReporting({ enabled: true, dsn: 'https://public@example.com/1' });
-    const error = 'permission denied for get pods/log';
-
-    const details = errorHandler.handleInline(error, { action: 'readLogs' });
-
-    expect(details.message).toBe(error);
-    expect(sentryMocks.captureException).not.toHaveBeenCalled();
   });
 
   it('reports an unknown failure even when its cause chain is cyclic', () => {
@@ -716,26 +696,18 @@ describe('Sentry error reporting', () => {
     }
   );
 
-  it.each(['NETWORK', 'NOT_FOUND', 'TIMEOUT'] as const)(
-    'does not capture an explicitly expected %s condition',
-    (category) => {
-      initializeErrorReporting({
-        enabled: true,
-        dsn: 'https://public@example.com/1',
-        environment: 'production',
-        release: 'luxury-yacht@v1.2.3',
-      });
+  // One reporting decision: the status's own verdict, whatever its category.
+  it.each([
+    ['reports a client deadline', makeErrorStatus('DeadlineExceeded'), true],
+    ['does not report an API server timeout', makeErrorStatus('ServerTimeout'), false],
+    ['does not report a missing object', makeErrorStatus('NotFound'), false],
+  ] as const)('%s shown to the user', (_name, status, reported) => {
+    initializeErrorReporting({ enabled: true, dsn: 'https://public@example.com/1' });
 
-      captureUserVisibleError(new Error('expected cluster failure'), {
-        category,
-        severity: 'error',
-        expectedCondition: true,
-      });
+    errorHandler.handle(bindingRejection(status), { source: 'object-panel' });
 
-      expect(sentryMocks.withScope).not.toHaveBeenCalled();
-      expect(sentryMocks.captureException).not.toHaveBeenCalled();
-    }
-  );
+    expect(sentryMocks.captureException).toHaveBeenCalledTimes(reported ? 1 : 0);
+  });
 
   it('captures event-handler exceptions through the centralized operational boundary', () => {
     configureErrorReporting(

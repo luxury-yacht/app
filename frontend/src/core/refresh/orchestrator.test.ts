@@ -14,6 +14,7 @@ import {
   setAppPreferencesForTesting,
   setAutoRefreshEnabled,
 } from '@/core/settings/appPreferences';
+import { errorWithStatus, makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
 import { clusterReadiness } from './clusterReadiness';
 import { buildClusterScope } from './clusterScope';
@@ -33,6 +34,7 @@ import {
   SYSTEM_REFRESHERS,
   type SystemRefresherName,
 } from './refresherTypes';
+import { failureMessage, isPermissionDenied } from './refreshFailure';
 import type { DomainRegistration } from './refreshRegistration';
 import {
   getRefreshState,
@@ -109,7 +111,12 @@ type RefreshOrchestratorInternals = {
       };
   context: RefreshContext;
   getRuntimeForScope: (domain: RefreshDomain, scope: string) => TestClusterRefreshRuntime;
-  notifyRefreshError: (domain: RefreshDomain, scope: string | undefined, message: string) => void;
+  notifyRefreshError: (
+    domain: RefreshDomain,
+    scope: string | undefined,
+    message: string,
+    error?: unknown
+  ) => void;
   isScopedDomainEnabledInternal: (domain: RefreshDomain, scope: string) => boolean;
   handleKubeconfigChanging: (...args: unknown[]) => void;
   handleKubeconfigChanged: (...args: unknown[]) => void;
@@ -818,8 +825,9 @@ describe('refreshOrchestrator', () => {
     // First (and only) permission check: the backend fails fast with a typed
     // 403. Permission is extremely unlikely to change mid-session, so this is
     // checked ONCE — recovery is an app restart.
-    const denied = new Error('permission denied for domain namespaces (core/namespaces)');
-    (denied as Error & { permissionDenied?: boolean }).permissionDenied = true;
+    const denied = errorWithStatus(
+      makeErrorStatus('Forbidden', 'permission denied for domain namespaces (core/namespaces)')
+    );
     clientMocks.fetchSnapshotMock.mockRejectedValueOnce(denied);
     await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, { isManual: false });
     expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(1);
@@ -828,7 +836,7 @@ describe('refreshOrchestrator', () => {
     await vi.waitFor(() => {
       const deniedState = getScopedDomainState('cluster-config', storedScope);
       expect(deniedState.status).toBe('error');
-      expect(deniedState.permissionDenied).toBe(true);
+      expect(isPermissionDenied(deniedState.error)).toBe(true);
     });
 
     // Background retries (the 2s fallback poll observed live as
@@ -851,12 +859,13 @@ describe('refreshOrchestrator', () => {
     const scope = buildClusterScope(clusterId, '');
     setRuntimeScopeEnabled('catalog', scope, true);
     eventBus.emit('cluster:lifecycle', { clusterId, state: 'loading' });
-    const denied = new Error('permission denied for domain catalog');
-    (denied as Error & { permissionDenied?: boolean }).permissionDenied = true;
+    const denied = errorWithStatus(
+      makeErrorStatus('Forbidden', 'permission denied for domain catalog')
+    );
     clientMocks.fetchSnapshotMock.mockRejectedValueOnce(denied);
 
     await refreshOrchestrator.fetchScopedDomain('catalog', scope, { isManual: false });
-    expect(getScopedDomainState('catalog', scope).permissionDenied).toBe(true);
+    expect(isPermissionDenied(getScopedDomainState('catalog', scope).error)).toBe(true);
 
     orchestratorInternals.handleClusterAuthFailed({ clusterId });
     clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
@@ -881,7 +890,7 @@ describe('refreshOrchestrator', () => {
         setScopedDomainState('catalog', scope, (previous) => ({
           ...previous,
           status: 'error',
-          permissionDenied: true,
+          error: { kind: 'backend', status: makeErrorStatus('Forbidden') },
         }));
       }
       const controllerB = new AbortController();
@@ -896,8 +905,8 @@ describe('refreshOrchestrator', () => {
       });
       const version = orchestratorInternals.contextVersion;
       eventBus.emit(event, { clusterId: 'cluster-a' });
-      expect(getScopedDomainState('catalog', scopeA).permissionDenied).not.toBe(true);
-      expect(getScopedDomainState('catalog', scopeB).permissionDenied).toBe(true);
+      expect(isPermissionDenied(getScopedDomainState('catalog', scopeA).error)).toBe(false);
+      expect(isPermissionDenied(getScopedDomainState('catalog', scopeB).error)).toBe(true);
       expect(controllerB.signal.aborted).toBe(false);
       expect(orchestratorInternals.contextVersion).toBe(version);
     }
@@ -1164,18 +1173,125 @@ describe('refreshOrchestrator', () => {
     }
   );
 
-  it('classifies "no active clusters available" as warm-up instead of toasting', () => {
+  // A failure without a backend status (the browser could not reach the
+  // backend after the client's retries) is still a visible error state that
+  // keeps its own message, and the next good fetch clears it.
+  it('stores a browser failure as a local failure until a fetch succeeds', async () => {
+    registerCatalogDomain();
+    const scope = buildClusterScope('cluster-a', '');
+    setRuntimeScopeEnabled('catalog', scope, true);
+    eventBus.emit('cluster:lifecycle', { clusterId: 'cluster-a', state: 'ready' });
+    clientMocks.fetchSnapshotMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    await refreshOrchestrator.fetchScopedDomain('catalog', scope, { isManual: false });
+
+    expect(getScopedDomainState('catalog', scope)).toMatchObject({
+      status: 'error',
+      error: { kind: 'local', message: 'Failed to fetch', errorName: 'TypeError' },
+    });
+
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'catalog',
+        scope,
+        version: 2,
+        checksum: 'etag-ok',
+        generatedAt: Date.now(),
+        sequence: 2,
+        payload: makeCatalogSnapshotPayload(),
+        stats: { itemCount: 0, buildDurationMs: 1 },
+      },
+      etag: 'etag-ok',
+      notModified: false,
+    });
+    await refreshOrchestrator.fetchScopedDomain('catalog', scope, { isManual: false });
+
+    expect(getScopedDomainState('catalog', scope)).toMatchObject({ status: 'ready', error: null });
+  });
+
+  describe('right after a kubeconfig change', () => {
+    // The start-up window is measured on Date; an epoch-zero clock lets it
+    // lapse as soon as these tests restore real time.
+    beforeEach(() => {
+      vi.useFakeTimers({ now: 0, toFake: ['Date'] });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const failFetch = async (error: Error) => {
+      registerCatalogDomain();
+      const scope = buildClusterScope('cluster-a', '');
+      setRuntimeScopeEnabled('catalog', scope, true);
+      eventBus.emit('cluster:lifecycle', { clusterId: 'cluster-a', state: 'loading' });
+      orchestratorInternals.handleKubeconfigChanged();
+      errorHandlerMock.handle.mockClear();
+      clientMocks.fetchSnapshotMock.mockRejectedValueOnce(error);
+      await refreshOrchestrator.fetchScopedDomain('catalog', scope, { isManual: false });
+      return getScopedDomainState('catalog', scope);
+    };
+
+    // The backend is republishing its refresh service and cluster handlers;
+    // these answers are start-up, not failures.
+    it.each([
+      ['RefreshUnavailable', 'refresh subsystem not initialised'],
+      ['ClusterNotReady', 'no active clusters available (requested: [cluster-a])'],
+    ] as const)('does not report a %s answer', async (reason, message) => {
+      const state = await failFetch(errorWithStatus(makeErrorStatus(reason, message)));
+
+      expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+      expect(state.status).not.toBe('error');
+    });
+
+    it('does not report a browser fetch failure', async () => {
+      const state = await failFetch(new TypeError('Failed to fetch'));
+
+      expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+      expect(state.status).not.toBe('error');
+    });
+
+    it('still reports a real failure', async () => {
+      const state = await failFetch(
+        errorWithStatus(makeErrorStatus('InternalError', 'catalog sync failed'))
+      );
+
+      expect(errorHandlerMock.handle).toHaveBeenCalledTimes(1);
+      expect(state.status).toBe('error');
+    });
+  });
+
+  it('treats a ClusterNotReady answer as warm-up instead of toasting', () => {
     clusterReadiness.resetForTests();
     errorHandlerMock.handle.mockClear();
+    const notReady = errorWithStatus(makeErrorStatus('ClusterNotReady', 'cluster is starting'));
 
     orchestratorInternals.notifyRefreshError(
       'cluster-config',
       buildClusterScope('cluster-init', 'cluster'),
-      'no active clusters available (requested: [cluster-init:cluster-init])'
+      notReady.message,
+      notReady
     );
 
     expect(errorHandlerMock.handle).not.toHaveBeenCalled();
     clusterReadiness.resetForTests();
+  });
+
+  // A panel's object that is gone is shown as deleted by the panel; only the
+  // backend's NotFound says so, not words in a message.
+  it.each([
+    ['does not toast a NotFound answer', errorWithStatus(makeErrorStatus('NotFound', 'gone')), 0],
+    ['toasts a failure that only mentions "not found"', new Error('helper not found'), 1],
+  ] as const)('object details: %s', (_name, error, toasts) => {
+    errorHandlerMock.handle.mockClear();
+
+    orchestratorInternals.notifyRefreshError(
+      'object-details',
+      buildClusterScope('cluster-a', 'default:apps/v1:Deployment:web'),
+      error.message,
+      error
+    );
+
+    expect(errorHandlerMock.handle).toHaveBeenCalledTimes(toasts);
   });
 
   it('refreshes namespaces domain alongside context targets during manual refresh', async () => {
@@ -1940,7 +2056,7 @@ describe('refreshOrchestrator', () => {
 
     const state = getScopedDomainState('cluster-config', scope);
     expect(state.status).toBe('error');
-    expect(state.error).toBe('offline');
+    expect(failureMessage(state.error)).toBe('offline');
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(
       fetchError,
       expect.objectContaining({
@@ -3114,31 +3230,6 @@ describe('refreshOrchestrator', () => {
     expect(streaming.start).not.toHaveBeenCalled();
   });
 
-  it('suppresses catalog hydration errors from bubbling to user error handler', async () => {
-    const scope = 'cluster-a';
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    clientMocks.fetchSnapshotMock.mockRejectedValue(
-      new Error('Catalog hydration incomplete - retry')
-    );
-
-    refreshOrchestrator.registerDomain({
-      domain: 'cluster-config',
-      refresherName: 'cluster-config',
-      category: 'cluster',
-    });
-    refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
-    errorHandlerMock.handle.mockClear();
-
-    await subscriber?.(false, new AbortController().signal);
-
-    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('hydration warning suppressed for cluster-config')
-    );
-
-    warnSpy.mockRestore();
-  });
-
   it('starts and stops streaming managers for scoped domains', async () => {
     containerLogsStreamMocks.start.mockClear();
     containerLogsStreamMocks.stop.mockClear();
@@ -3436,7 +3527,7 @@ describe('refreshOrchestrator', () => {
     ).toBe(false);
     const scopedState = getScopedDomainState('container-logs', 'team-a');
     expect(scopedState.status).toBe('error');
-    expect(scopedState.error).toContain('stream boom');
+    expect(failureMessage(scopedState.error)).toContain('stream boom');
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(
       startError,
       expect.objectContaining({
@@ -3511,7 +3602,7 @@ describe('refreshOrchestrator', () => {
         'single cluster'
       );
       expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-      expect(getScopedDomainState(domain, scope).permissionDenied).toBeFalsy();
+      expect(isPermissionDenied(getScopedDomainState(domain, scope).error)).toBe(false);
     }
   );
 

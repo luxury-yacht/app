@@ -52,9 +52,7 @@ const ClusterViewNamespaces: React.FC = () => {
           Boolean(namespaceError) ||
           (Boolean(selectedClusterId) && !namespaceLoading)
         }
-        error={
-          namespacesPermissionDenied ? 'Insufficient permission to list namespaces' : namespaceError
-        }
+        error={namespaceError}
         blocked={!selectedClusterId}
         tableMode="Local Complete"
         cacheKey={

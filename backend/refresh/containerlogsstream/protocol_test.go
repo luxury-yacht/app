@@ -12,6 +12,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -312,7 +313,9 @@ func TestDeletedWorkloadEndsTheStreamWithAPermanentError(t *testing.T) {
 	payloads := session.conn.waitForPayloads(t, 1)
 	require.Len(t, payloads, 1)
 	require.Contains(t, payloads[0].Error, "not found")
-	require.False(t, payloads[0].Retryable)
+	require.False(t, payloads[0].Reconnect)
+	require.NotNil(t, payloads[0].ErrorDetails)
+	require.Equal(t, errorstatus.ReasonNotFound, payloads[0].ErrorDetails.Reason)
 }
 
 func TestTransientResolveFailureIsRetryable(t *testing.T) {
@@ -328,7 +331,7 @@ func TestTransientResolveFailureIsRetryable(t *testing.T) {
 	session.ended(t)
 	payload := session.conn.waitForPayloads(t, 1)[0]
 	require.NotEmpty(t, payload.Error)
-	require.True(t, payload.Retryable)
+	require.True(t, payload.Reconnect)
 }
 
 func forbidPods(verb string) func(*fake.Clientset) {
@@ -342,8 +345,10 @@ func forbidPods(verb string) func(*fake.Clientset) {
 func requirePodPermissionFailure(t *testing.T, payload EventPayload, verb string) {
 	t.Helper()
 	require.Contains(t, payload.Error, verb)
-	require.False(t, payload.Retryable)
+	require.False(t, payload.Reconnect)
 	require.NotNil(t, payload.ErrorDetails)
+	require.Equal(t, errorstatus.ReasonForbidden, payload.ErrorDetails.Reason)
+	require.NotNil(t, payload.ErrorDetails.Details)
 	require.Equal(t, "core/pods", payload.ErrorDetails.Details.Resource)
 }
 

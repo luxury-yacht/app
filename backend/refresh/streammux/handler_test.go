@@ -11,7 +11,10 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type stubConn struct{}
@@ -114,9 +117,41 @@ func TestHandlerStopClosesActiveAndFutureSessions(t *testing.T) {
 	}
 }
 
+// Every error frame carries its status, so the client acts on the reason.
+func TestSessionSendErrorCarriesStatus(t *testing.T) {
+	session := newSession(stubConn{}, Config{Logger: applog.Noop, ClusterID: "cluster-1", ClusterName: "cluster-a", StreamName: "resources", SendReset: true})
+	session.sendError("cluster-1", "pods", "namespace:default", errors.New("informer exploded"))
+	session.handleSubscribe(ClientMessage{Type: MessageTypeRequest, ClusterID: "cluster-1"})
+
+	for _, want := range []errorstatus.Reason{errorstatus.ReasonUnknown, errorstatus.ReasonBadRequest} {
+		msg := <-session.outgoing
+		if msg.ErrorDetails == nil || msg.ErrorDetails.Reason != want {
+			t.Fatalf("expected a %s status, got %+v", want, msg.ErrorDetails)
+		}
+	}
+}
+
+// A Kubernetes denial from the stream names the subscribed domain, so the
+// client blocks streaming for that scope instead of resync-looping.
+func TestErrorMessageNamesTheDomainOfAKubernetesDenial(t *testing.T) {
+	denied := apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "", errors.New("rbac"))
+
+	msg := ErrorMessage("pods", denied)
+
+	if msg.ErrorDetails == nil || msg.ErrorDetails.Reason != errorstatus.ReasonForbidden {
+		t.Fatalf("expected a Forbidden status, got %+v", msg.ErrorDetails)
+	}
+	if msg.ErrorDetails.Details == nil || msg.ErrorDetails.Details.Domain != "pods" {
+		t.Fatalf("expected the denial to name domain pods, got %+v", msg.ErrorDetails.Details)
+	}
+	if msg.Error != denied.Error() {
+		t.Fatalf("expected the API message, got %q", msg.Error)
+	}
+}
+
 func TestSessionSendErrorIncludesPermissionDetails(t *testing.T) {
 	session := newSession(stubConn{}, Config{Adapter: nil, Logger: applog.Noop, Telemetry: nil, ClusterID: "cluster-1", ClusterName: "cluster-a", StreamName: "resources", SendReset: true, AllowClusterScopedRequests: false, ResolveClusterName: nil})
-	err := refresh.NewPermissionDeniedError("pods", "core/pods")
+	err := errorstatus.NewPermissionDenied("pods", "core/pods")
 	session.sendError("cluster-1", "pods", "namespace:default", err)
 
 	msg := <-session.outgoing

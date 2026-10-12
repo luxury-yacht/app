@@ -19,6 +19,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanonicalRowTestOverrides, CatalogItem } from '@/core/refresh/types';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -362,7 +363,7 @@ describe('ClusterViewCustom', () => {
     useBrowseCatalogMock.mockReturnValue({
       ...browseCatalogResult(),
       hasLoadedOnce: false,
-      error: 'catalog list forbidden',
+      error: { kind: 'backend', status: makeErrorStatus('Forbidden', 'catalog list forbidden') },
     });
 
     await act(async () => {

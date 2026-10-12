@@ -8,7 +8,7 @@
  * and only a truly settled-empty query renders the empty state.
  */
 import { describe, expect, it } from 'vitest';
-
+import { localFailure } from '@/core/refresh/refreshFailure';
 import { type BackendQuerySourceInput, backendQuerySource } from './backendQuerySource';
 import { deriveResourceInventoryRenderState } from './useResourceInventoryTable';
 
@@ -83,9 +83,9 @@ describe('backendQuerySource', () => {
 
   it('passes the query error through to the render state', () => {
     const render = deriveResourceInventoryRenderState(
-      backendQuerySource(input({ error: 'forbidden', loaded: true }))
+      backendQuerySource(input({ error: localFailure('forbidden'), loaded: true }))
     );
     expect(render.status).toBe('error');
-    expect(render.error).toBe('forbidden');
+    expect(render.error).toEqual(localFailure('forbidden'));
   });
 });

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 )
 
 // InMemoryQueue is a simple manual refresh queue implementation.
@@ -28,7 +29,7 @@ func NewInMemoryQueue() *InMemoryQueue {
 // Enqueue adds a manual refresh job with immediate queued state.
 func (q *InMemoryQueue) Enqueue(ctx context.Context, domain, scope, reason string) (*ManualRefreshJob, error) {
 	if domain == "" {
-		return nil, errors.New("domain is required")
+		return nil, errorstatus.BadRequest(errors.New("domain is required"))
 	}
 
 	job := &ManualRefreshJob{
@@ -102,5 +103,9 @@ func cloneManualRefreshJob(job *ManualRefreshJob) *ManualRefreshJob {
 		return nil
 	}
 	clone := *job
+	if job.Error != nil {
+		failure := *job.Error
+		clone.Error = &failure
+	}
 	return &clone
 }

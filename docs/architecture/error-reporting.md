@@ -33,25 +33,63 @@ data-access request wrapper create reporting context and breadcrumbs.
 - Turning reporting off stops future transmission; it does not delete events
   already in Sentry.
 
+## Error Status Contract
+
+Every backend error that crosses to the frontend carries one typed status, so
+no layer decides behavior from message text.
+
+- `backend/internal/errorstatus` owns `Status` (Kubernetes `Status`-shaped:
+  `code`, `reason`, `category`, `message`, `retryable`, `expected`, optional
+  `ref` and `details`) and its `Reason`/`Category` enums, generated to
+  TypeScript (`ErrorStatus*` in `types.generated.ts`). `Classify` decides, in
+  order: an explicit status attached at a boundary, an app permission denial,
+  a Kubernetes `APIStatus`, `authstate.AuthInvalidError`, then known transport
+  conditions (cancellation, bare client deadline, decode errors, the
+  known-only credential classifier); everything else is `Unknown`.
+  `retryable` and `expected` come from the retry and reporting rules, not from
+  the reason, so a case that differs from its reason's usual value keeps its
+  verdict.
+- Wire forms: a bound method's returned error carries the status as the Wails
+  `cause` (`ServiceOptions.MarshalError`); a refresh HTTP failure answers with
+  the status as its body and its `code` as the response status; resource and
+  container-log stream error frames carry it as `errorDetails`. Wails
+  framework failures (panic, wrong arity, unknown method) carry no status and
+  are presented as `UNKNOWN` and reported.
+- Boundaries type what only they know: caller-input checks return
+  `BadRequest`; a refresh request for a cluster without an active subsystem
+  returns `ClusterNotReady`, and one before the refresh service is published
+  `RefreshUnavailable`; a gated user action (`RunObjectAction`, YAML apply and
+  ownership check, shell) marks a `Forbidden` `expected: false`, because the
+  UI only offers actions its permission gate allowed.
+- `ref` names the object whose lookup failed, with full identity. Only the
+  producer that looked that exact object up sets it (object details confirm a
+  NotFound with an uncached read first); Kubernetes `details` are never used
+  for identity.
+- YAML editor conflicts are response data (`yamlConflict`), not errors; live
+  object YAML never enters the error path.
+
 ## Frontend Boundaries
 
-- `frontend/src/utils/errorHandler.ts` `handle` reports before publishing a
-  global notification. Auth and permission failures classified as expected UI
-  conditions (owned by the auth overlay or permission state) stay local
-  informational diagnostics with no exception or breadcrumb. Network and
-  timeout conditions may still notify but are marked expected cluster
-  conditions and stay local.
-- `handle`, `handleInline`, and `handleOperational` share
-  `core/telemetry/expectedErrors.ts` before any Sentry scope or error
-  breadcrumb. It recognizes (also in wrapped causes) browser clipboard denials,
-  browser/Wails cancellation, structured permission and Kubernetes status
-  errors, and concrete Wails denial, expired-credential, cancellation, and
-  missing-object messages. Original error and UI feedback stay local.
-- Category alone never suppresses: `handleInline` and `handleOperational` still
-  report unexpected failures whose text merely contains `permission`, `token`,
-  `missing`, `network`, or incidental status digits, and keep the original
-  `Error` for `captureException`.
-- Validation messages and advisory warnings stay local. Legacy component
+- `frontend/src/utils/errorHandler.ts` takes the category from the status
+  (`errorStatusOf`); an error without one is `NETWORK` only for the browser's
+  own fetch failure, otherwise `UNKNOWN`. `handle` reports before publishing a
+  global notification, and suppresses the toast only for an `expected`
+  `PERMISSION` or `AUTHENTICATION` status (refresh denials; credential
+  failures the auth overlay owns). `VALIDATION` shows the status's own
+  message.
+- One reporting decision: `core/telemetry/expectedErrors.ts` returns the
+  status's `expected` verdict when there is a status, otherwise only browser
+  conditions (clipboard denial, browser/Wails cancellation) are expected.
+  `handle`, `handleInline`, and `handleOperational` share it before any Sentry
+  scope or error breadcrumb. No category or message text suppresses a report.
+- A refresh domain stores its last failure as a `RefreshFailure`
+  (`core/refresh/refreshFailure.ts`): `backend` with the status, `local` with
+  the browser's message and error name, or `denied` for a read the capability
+  gate refused before any request. A `Forbidden` failure is a settled denial
+  (`isPermissionDenied`); empty states, gating, and diagnostics read it, and
+  the object panel treats a `NotFound` as deletion only when its `ref` matches
+  the panel's object on all six identity fields.
+- Advisory warnings stay local. Legacy component
   boundaries do not re-capture render failures owned by the React 19 root
   handlers.
 - `frontend/src/shared/components/errors/ErrorSurface.tsx` renders dynamic
@@ -134,10 +172,10 @@ data-access request wrapper create reporting context and breadcrumbs.
   stay string-only. Handlers on this path wrap causes with `%w`.
 - Resource reporting helpers return the original chain with an internal
   telemetry-disposition marker; a handler that reports locally must propagate
-  it. `FetchResourceWithSelection` captures unmarked errors as the fallback,
-  never re-captures marked ones, and emits `backend-error` either way. The
-  marker changes neither rendered text nor typed status. A Go AST guard rejects
-  resource code that discards a helper's result.
+  it; there is no gateway-level fallback capture, so a resource service reports
+  its own failures (Helm uninstall included). The marker changes neither
+  rendered text nor typed status. A Go AST guard rejects resource code that
+  discards a helper's result.
 - Unexpected metrics polls, beta-expiry startup failures, capability-review
   batch failures, and classified auth failures also use the structured path.
   Auth diagnostics expose only existing sanitized fields to the frontend; the
@@ -273,10 +311,12 @@ disconnect, poller shutdown) is expected and never reported.
   are unchanged.
 - The auth recovery loop separately treats an unknown probe failure as
   connectivity, because an inconclusive probe must not invalidate credentials.
-- `logsources.ErrorCapture` entries (third-party stderr such as klog, scraped by
+- `logsources.ErrorCapture` entries (third-party stderr such as klog, routed by
   `backend/internal/errorcapture`) never reach the reporter: they are not app
-  failures and their stack is the scraper. Permission-denied lines become
-  informational, emit no `backend-error`, and never attach to later failures.
+  failures and their stack is the scraper. Stderr carries no cluster identity,
+  so it is only logged: never attached to a returned error and never surfaced
+  as a UI event. Permission-denied lines become informational, and a repeated
+  warning or error line logs once per session.
 
 ## Build Configuration
 

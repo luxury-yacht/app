@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/objectaction"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/pods"
@@ -126,7 +127,7 @@ func normalizeObjectActionTarget(t ObjectActionTargetRef) ObjectActionTargetRef 
 func validateObjectActionTarget(target ObjectActionTargetRef) (ObjectActionTargetRef, error) {
 	normalized := normalizeObjectActionTarget(target)
 	if err := resourcemodel.ValidateResourceRef(normalized); err != nil {
-		return ObjectActionTargetRef{}, err
+		return ObjectActionTargetRef{}, errorstatus.BadRequest(err)
 	}
 	return normalized, nil
 }
@@ -138,12 +139,12 @@ func validateObjectActionName(action string) error {
 	if _, ok := backendOnlyObjectActions[action]; ok {
 		return nil
 	}
-	return fmt.Errorf("unsupported object action %q", action)
+	return errorstatus.BadRequest(fmt.Errorf("unsupported object action %q", action))
 }
 
 func requireActionNamespacedTarget(target ObjectActionTargetRef, action string) error {
 	if strings.TrimSpace(target.Namespace) == "" {
-		return fmt.Errorf("%s requires namespace for %s/%s", action, target.Kind, target.Name)
+		return errorstatus.BadRequest(fmt.Errorf("%s requires namespace for %s/%s", action, target.Kind, target.Name))
 	}
 	return nil
 }
@@ -151,13 +152,13 @@ func requireActionNamespacedTarget(target ObjectActionTargetRef, action string) 
 func requireObjectActionOption[T any](value *T, name, action string) (T, error) {
 	if value == nil {
 		var zero T
-		return zero, fmt.Errorf("%s action requires %s", action, name)
+		return zero, errorstatus.BadRequest(fmt.Errorf("%s action requires %s", action, name))
 	}
 	return *value, nil
 }
 
 func errUnsupportedActionTarget(action string, target ObjectActionTargetRef, apiVersion, kind string) error {
-	return fmt.Errorf("%s requires %s %s target, got %s %s", action, apiVersion, kind, objectActionTargetGVK(target).GroupVersion().String(), target.Kind)
+	return errorstatus.BadRequest(fmt.Errorf("%s requires %s %s target, got %s %s", action, apiVersion, kind, objectActionTargetGVK(target).GroupVersion().String(), target.Kind))
 }
 
 func (g *ResourceGateway) deleteObjectAction(target ObjectActionTargetRef, force bool) error {
@@ -170,7 +171,7 @@ func (g *ResourceGateway) deleteObjectAction(target ObjectActionTargetRef, force
 		return g.deleteHelmReleaseAction(target)
 	default:
 		if force {
-			return fmt.Errorf("force delete is only supported for core/v1 Node")
+			return errorstatus.BadRequest(fmt.Errorf("force delete is only supported for core/v1 Node"))
 		}
 		return g.deleteGenericResourceAction(target)
 	}
@@ -192,7 +193,16 @@ func (g *ResourceGateway) RunObjectAction(req ObjectActionRequest) (ObjectAction
 	if !ok {
 		return ObjectActionResponse{}, fmt.Errorf("object action %q has no backend handler", action)
 	}
-	return handler(objectActionInvocation{gateway: g, action: action, target: target, request: req})
+	response, err := handler(objectActionInvocation{gateway: g, action: action, target: target, request: req})
+	return response, errorstatus.UserAction(objectActionStatusRef(target), err)
+}
+
+// objectActionStatusRef is the action target as an error-status object reference.
+func objectActionStatusRef(target ObjectActionTargetRef) errorstatus.ObjectRef {
+	return errorstatus.ObjectRef{
+		ClusterID: target.ClusterID, Group: target.Group, Version: target.Version,
+		Kind: target.Kind, Namespace: target.Namespace, Name: target.Name,
+	}
 }
 
 func runDeleteObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
@@ -202,17 +212,17 @@ func runDeleteObjectAction(invocation objectActionInvocation) (ObjectActionRespo
 func runRemoveFinalizerObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
 	finalizer := strings.TrimSpace(invocation.request.Finalizer)
 	if finalizer == "" {
-		return ObjectActionResponse{}, fmt.Errorf("%s action requires finalizer", invocation.action)
+		return ObjectActionResponse{}, errorstatus.BadRequest(fmt.Errorf("%s action requires finalizer", invocation.action))
 	}
 	path := strings.TrimSpace(invocation.request.FinalizerPath)
 	if path == "" {
-		return ObjectActionResponse{}, fmt.Errorf("%s action requires finalizerPath", invocation.action)
+		return ObjectActionResponse{}, errorstatus.BadRequest(fmt.Errorf("%s action requires finalizerPath", invocation.action))
 	}
 	if path == objectFinalizerPathSpec && !isNamespaceFinalizerTarget(invocation.target) {
-		return ObjectActionResponse{}, fmt.Errorf("%s requires core/v1 Namespace target", path)
+		return ObjectActionResponse{}, errorstatus.BadRequest(fmt.Errorf("%s requires core/v1 Namespace target", path))
 	}
 	if path != objectFinalizerPathMetadata && path != objectFinalizerPathSpec {
-		return ObjectActionResponse{}, fmt.Errorf("unsupported finalizer path %q", path)
+		return ObjectActionResponse{}, errorstatus.BadRequest(fmt.Errorf("unsupported finalizer path %q", path))
 	}
 	return ObjectActionResponse{}, invocation.gateway.removeObjectFinalizerAction(invocation.target, finalizer, path)
 }

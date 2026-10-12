@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/internal/appstate"
 )
 
@@ -321,7 +322,7 @@ func normalizeFavoriteName(name string) (string, error) {
 func validateUniqueFavoriteName(favorites []Favorite, name string, excludedID string) error {
 	for _, existing := range favorites {
 		if existing.ID != excludedID && strings.TrimSpace(existing.Name) == name {
-			return fmt.Errorf("favorite name %q already exists", name)
+			return errorstatus.BadRequest(fmt.Errorf("favorite name %q already exists", name))
 		}
 	}
 	return nil

@@ -12,6 +12,7 @@ import {
 import * as cf from '@shared/components/tables/columnFactories';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import React from 'react';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { ClusterStorageEntry, ClusterStorageSnapshotPayload } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
@@ -19,7 +20,7 @@ type StorageData = ClusterStorageEntry & { kindAlias?: string };
 
 // Define props for StorageViewGrid component
 interface StorageViewProps {
-  error?: string | null;
+  error?: RefreshFailure | null;
 }
 
 const getClaimTarget = (pv: StorageData) => {

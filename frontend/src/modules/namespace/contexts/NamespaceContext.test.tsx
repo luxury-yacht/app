@@ -15,7 +15,9 @@ vi.mock('@/utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
 
 import { ALL_NAMESPACES_DISPLAY_NAME } from '@modules/namespace/constants';
 import { eventBus } from '@/core/events';
+import { localFailure } from '@/core/refresh/refreshFailure';
 import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { NamespaceProvider, useNamespace } from './NamespaceContext';
 
 let mockClusterId = 'cluster-a';
@@ -1150,8 +1152,13 @@ describe('NamespaceProvider selection behaviour', () => {
     namespaceDomainRef.current = {
       status: 'error',
       data: null,
-      error: 'permission denied for domain namespaces (core/namespaces)',
-      permissionDenied: true,
+      error: {
+        kind: 'backend',
+        status: makeErrorStatus(
+          'Forbidden',
+          'permission denied for domain namespaces (core/namespaces)'
+        ),
+      },
     } as unknown as typeof namespaceDomainRef.current;
     const { cleanup } = renderWithProvider();
     act(() => {
@@ -1167,7 +1174,10 @@ describe('NamespaceProvider selection behaviour', () => {
     namespaceDomainRef.current = {
       status: 'error',
       data: null,
-      error: 'apiserver timeout',
+      error: {
+        kind: 'backend',
+        status: makeErrorStatus('ServerTimeout', 'apiserver timeout'),
+      },
     } as unknown as typeof namespaceDomainRef.current;
     const { cleanup } = renderWithProvider();
     act(() => {
@@ -1183,7 +1193,7 @@ describe('NamespaceProvider selection behaviour', () => {
       'cluster-a|': {
         ...createNamespaceDomainWithCluster('ready', ['alpha'], 'cluster-a', 'alpha'),
         status: 'error',
-        error: 'Manual refresh timed out after 60 seconds for namespaces',
+        error: localFailure('Manual refresh timed out after 60 seconds for namespaces'),
       },
       'cluster-b|': createNamespaceDomainWithCluster('ready', ['beta'], 'cluster-b', 'beta'),
     };

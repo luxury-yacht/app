@@ -12,13 +12,14 @@ import {
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { ClusterConfigEntry, ClusterConfigSnapshotPayload } from '@/core/refresh/types';
 
 type ConfigData = ClusterConfigEntry & { kindAlias?: string };
 
 // Define props for ConfigViewGrid component
 interface ConfigViewProps {
-  error?: string | null;
+  error?: RefreshFailure | null;
 }
 
 const configSpec: AggregatedResourceGridViewSpec<ConfigData> = {

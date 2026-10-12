@@ -43,7 +43,6 @@ vi.mock('@/core/panel-windows/panelLifecycleGuards', async (importOriginal) => (
   PanelLifecycleGuardProvider: mocks.wrapper,
   usePanelLifecycleGuardRegistry: () => mocks.guards,
 }));
-vi.mock('@/hooks/useBackendErrorHandler', () => ({ useBackendErrorHandler: vi.fn() }));
 vi.mock('@/hooks/useSidebarResize', () => ({ useSidebarResize: vi.fn() }));
 vi.mock('@/hooks/useWailsRuntimeEvents', () => ({ useWailsRuntimeEvents: vi.fn() }));
 vi.mock('@/ui/layout/ApplicationMenuCommandContext', () => ({

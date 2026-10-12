@@ -12,13 +12,14 @@ import {
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { ClusterRBACEntry, ClusterRBACSnapshotPayload } from '@/core/refresh/types';
 
 type RBACData = ClusterRBACEntry & { kindAlias?: string };
 
 // Define props for RBACViewGrid component
 interface RBACViewProps {
-  error?: string | null;
+  error?: RefreshFailure | null;
 }
 
 const rbacSpec: AggregatedResourceGridViewSpec<RBACData> = {

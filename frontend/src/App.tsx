@@ -43,7 +43,6 @@ import {
 } from '@/core/settings/appPreferences';
 import { autoApplyClusterTheme } from '@/core/settings/clusterThemeAutoApply';
 // Custom hooks
-import { useBackendErrorHandler } from '@/hooks/useBackendErrorHandler';
 import { useSidebarResize } from '@/hooks/useSidebarResize';
 import { useWailsRuntimeEvents } from '@/hooks/useWailsRuntimeEvents';
 import {
@@ -98,9 +97,6 @@ function AppContent() {
       onError: (error) => errorHandler.handle(error, { action: 'autoApplyClusterTheme' }),
     });
   }, [selectedClusterName]);
-
-  // Handle backend errors from Wails runtime
-  useBackendErrorHandler();
 
   // Callbacks for UI actions
   const handleToggleAppLogsPanel = useCallback(() => {

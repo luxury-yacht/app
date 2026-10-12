@@ -84,7 +84,7 @@ const fetchPreviousLogs = async (
       })),
       warnings: contractValues(data?.warnings, isContainerLogsWarning),
       issues: contractValues(data?.issues, isContainerLogsTargetIssue),
-      error: data?.error || null,
+      error: null,
     };
   } catch (error) {
     return {

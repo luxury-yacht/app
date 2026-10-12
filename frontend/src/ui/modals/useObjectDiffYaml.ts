@@ -12,6 +12,7 @@ import {
   resetRefreshDomain,
   setRefreshDomainEnabled,
 } from '@/core/data-access';
+import { failureMessage } from '@/core/refresh/refreshFailure';
 import {
   buildIgnoredMetadataLineSet,
   maskMutedMetadataLines,
@@ -119,7 +120,7 @@ export const useObjectDiffYaml = (selection: CatalogItem | null, enabled: boolea
     mutedLines,
     masked,
     changedAt: owned?.changedAt ?? null,
-    error: state.error ?? null,
+    error: failureMessage(state.error),
     initialLoading: state.status === 'loading' || state.status === 'initialising',
   };
 };

@@ -95,10 +95,14 @@ Server frames (generated into `types.generated.ts`):
   snapshot) and per-container `issues` (`unavailable`, `forbidden`, `failed`,
   with reason). When present they replace the previous lists. A per-container
   problem never sets `error`.
-- **Fatal error**: `error`, optional permission `errorDetails`, `retryable`;
-  then the stream closes. Missing objects, permission denials, and rejected
-  requests are not retryable. A stream arriving while the refresh subsystem or
-  its cluster's handler is being republished is told to retry.
+- **Fatal error**: `error`, the failure's status as `errorDetails`, and
+  `reconnect`; then the stream closes. The stream reconnects unless the reason
+  is `NotFound`, `Forbidden`, `BadRequest` or `Invalid` (missing objects,
+  permission denials, rejected requests), so an unclassified drop still
+  reconnects. `reconnect` is the stream's own decision, separate from
+  `status.retryable`. A stream arriving while the refresh subsystem
+  (`RefreshUnavailable`) or its cluster's handler (`ClusterNotReady`) is being
+  republished reconnects.
 
 Restarts (reconnect, window shown, auto-refresh back on) resume. A selection
 change, larger buffer size, empty buffer, or unusable resume points (one voids
@@ -109,7 +113,7 @@ keeps timestamp order and evicts oldest by count and UTF-8 line bytes.
 Client phases (`containerLogsStreamProtocol.ts`): `connecting`,
 `awaiting-snapshot`, `live`, `reconnecting`, `failed`, `stopping`. Reconnect
 backoff grows until a snapshot arrives (not a socket open), capped at 30 s. A
-non-retryable failure is terminal: the tab shows the reason and turns
+failure without `reconnect` is terminal: the tab shows the reason and turns
 auto-refresh off; one toggle (or `R`) retries.
 
 ## Backend Behavior

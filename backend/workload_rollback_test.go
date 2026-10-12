@@ -523,7 +523,7 @@ func TestRollbackWorkloadDeployment(t *testing.T) {
 	client := cgofake.NewClientset(deploy, rs1, rs2)
 	app := buildRevisionHistoryGateway(client)
 	app.responseCache = newResponseCache(time.Minute, 10)
-	detailKey := objectDetailCacheKey("Deployment", "default", "webapp")
+	detailKey := liveDetailCacheKey("Deployment", "default", "webapp")
 	app.seedResponseCache("config:ctx", detailKey, "stale")
 
 	err := app.rollbackWorkloadAction(ObjectActionTargetRef{ClusterID: "config:ctx", Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "webapp"}, 1)

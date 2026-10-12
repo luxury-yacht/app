@@ -50,6 +50,7 @@ import { CLUSTER_SCOPE, getObjectEventsRefresherName, INACTIVE_SCOPE } from '../
 import { useObjectPanelScopedDomainLifecycle } from '../hooks/useObjectPanelScopedDomainLifecycle';
 import type { PanelObjectData } from '../types';
 import './EventsTab.css';
+import { failureMessage } from '@/core/refresh/refreshFailure';
 
 interface EventsTabProps {
   objectData?: PanelObjectData | null;
@@ -433,7 +434,8 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
       <div className="object-panel-tab-content">
         <div className="object-panel-placeholder error">
           <p>
-            Error loading events: <ErrorSurface kind="reported" message={eventsRender.error} />
+            Error loading events:{' '}
+            <ErrorSurface kind="reported" message={failureMessage(eventsRender.error)} />
           </p>
         </div>
       </div>

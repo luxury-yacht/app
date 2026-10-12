@@ -8,7 +8,7 @@ import (
 )
 
 func TestUnhandledErrorDeduperLogsEachErrorOnce(t *testing.T) {
-	d := newUnhandledErrorDeduper()
+	d := newSessionDeduper()
 	base := time.Now()
 	key := unhandledErrorKey(errors.New("failed to list *v1.TLSRoute: not found"), "Failed to watch", "type", "*v1.TLSRoute")
 
@@ -27,7 +27,7 @@ func TestUnhandledErrorDeduperLogsEachErrorOnce(t *testing.T) {
 }
 
 func TestUnhandledErrorDeduperDistinctErrorsLogImmediately(t *testing.T) {
-	d := newUnhandledErrorDeduper()
+	d := newSessionDeduper()
 	base := time.Now()
 
 	first := unhandledErrorKey(errors.New("failed to list *v1.TLSRoute: not found"), "Failed to watch")
@@ -53,19 +53,19 @@ func TestUnhandledErrorKeyHandlesNilError(t *testing.T) {
 }
 
 func TestUnhandledErrorDeduperEvictsOldestWhenOverThreshold(t *testing.T) {
-	d := newUnhandledErrorDeduper()
+	d := newSessionDeduper()
 	base := time.Now()
 	oldest := unhandledErrorKey(errors.New("the very first error"), "msg")
 	d.shouldLog(oldest, base)
-	for i := 0; i < unhandledErrorSeenLimit+10; i++ {
+	for i := 0; i < sessionDedupSeenLimit+10; i++ {
 		d.shouldLog(unhandledErrorKey(fmt.Errorf("err-%d", i), "msg"), base.Add(time.Duration(i+1)*time.Second))
 	}
 
 	d.mu.Lock()
 	size := len(d.seen)
 	d.mu.Unlock()
-	if size > unhandledErrorSeenLimit {
-		t.Fatalf("expected seen map to stay bounded at %d, got %d", unhandledErrorSeenLimit, size)
+	if size > sessionDedupSeenLimit {
+		t.Fatalf("expected seen map to stay bounded at %d, got %d", sessionDedupSeenLimit, size)
 	}
 	// The oldest entry must be the one evicted, so it would log again while
 	// recently seen errors stay suppressed.

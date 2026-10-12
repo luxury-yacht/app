@@ -44,6 +44,7 @@ import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import type { DockPosition } from '@ui/dockable';
 import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
 import type { GroupKey } from '@ui/dockable/tabGroupTypes';
+import { failureMessage, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import { buildObjectDetailModel } from './Details/objectDetailModel';
 import { resetObjectPanelScopedDomain } from './hooks/useObjectPanelScopedDomainLifecycle';
 
@@ -63,6 +64,27 @@ interface ObjectPanelProps {
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
+
+const sameRefField = (a: string | undefined, b: string | undefined): boolean =>
+  (a ?? '') === (b ?? '');
+
+/** True when failure is a NotFound naming exactly the panel's object. */
+const namesDeletedObject = (failure: RefreshFailure | null, object: ObjectPanelRef): boolean => {
+  if (failure?.kind !== 'backend' || failure.status.reason !== 'NotFound') {
+    return false;
+  }
+  const ref = failure.status.ref;
+  return (
+    !!ref &&
+    sameRefField(ref.clusterId, object.clusterId) &&
+    sameRefField(ref.group, object.group) &&
+    sameRefField(ref.version, object.version) &&
+    sameRefField(ref.kind, object.kind) &&
+    sameRefField(ref.namespace, object.namespace) &&
+    sameRefField(ref.name, object.name)
+  );
+};
+
 function ObjectPanel({
   panelId,
   objectRef,
@@ -189,13 +211,12 @@ function ObjectPanel({
     }
   }, [objectIdentityKey, resourceDeleted]);
 
-  const isNotFoundError = useMemo(() => {
-    if (!detailsError) {
-      return false;
-    }
-    const normalized = detailsError.toLowerCase();
-    return normalized.includes('not found') || normalized.includes('could not find');
-  }, [detailsError]);
+  // Only a NotFound that names this exact object means it was deleted; a
+  // related lookup's NotFound carries no reference.
+  const isNotFoundError = useMemo(
+    () => namesDeletedObject(detailsError, objectRef),
+    [detailsError, objectRef]
+  );
 
   useEffect(() => {
     if (!isNotFoundError || resourceDeleted) {
@@ -281,7 +302,7 @@ function ObjectPanel({
     detailModel,
     isActive: visibleActiveTab === 'details',
     detailsLoading,
-    detailsError,
+    detailsError: failureMessage(detailsError),
     deletion,
     finalizerRemovalCapabilities: {
       metadata: capabilityStates.removeFinalizer,

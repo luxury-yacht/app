@@ -118,7 +118,7 @@ func (g *ResourceGateway) restartWorkloadAction(target ObjectActionTargetRef) er
 	}
 
 	applog.Info(deps.Logger, fmt.Sprintf("Restarted %s %s/%s", workloadKind, target.Namespace, target.Name), "restartWorkload")
-	g.invalidateResponseCache(selectionKey, workloadKind, target.Namespace, target.Name)
+	g.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
 	return nil
 }
 
@@ -177,7 +177,7 @@ func (g *ResourceGateway) scaleWorkloadAction(target ObjectActionTargetRef, repl
 		fmt.Sprintf("Scaled %s %s/%s to %d replicas", workloadKind, target.Namespace, target.Name, replicas),
 		"scaleWorkload",
 	)
-	g.invalidateResponseCache(selectionKey, workloadKind, target.Namespace, target.Name)
+	g.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
 	return nil
 }
 
@@ -250,7 +250,7 @@ func (g *ResourceGateway) triggerCronJobAction(target ObjectActionTargetRef) (st
 	}
 
 	applog.Info(deps.Logger, fmt.Sprintf("Triggered CronJob %s/%s, created Job %s", target.Namespace, target.Name, jobName), "triggerCronJob")
-	g.invalidateResponseCache(selectionKey, cronjob.Identity.Kind, target.Namespace, target.Name)
+	g.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
 	return jobName, nil
 }
 
@@ -290,7 +290,7 @@ func (g *ResourceGateway) suspendCronJobAction(target ObjectActionTargetRef, sus
 		action = "Resumed"
 	}
 	applog.Info(deps.Logger, fmt.Sprintf("%s CronJob %s/%s", action, target.Namespace, target.Name), "suspendCronJob")
-	g.invalidateResponseCache(selectionKey, cronjob.Identity.Kind, target.Namespace, target.Name)
+	g.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
 	return nil
 }
 

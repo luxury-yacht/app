@@ -13,9 +13,8 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/authstate"
-	"github.com/luxury-yacht/app/backend/internal/errorcapture"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -236,7 +235,7 @@ func TestLoggerKeepsExpectedClusterFailuresLocal(t *testing.T) {
 		},
 		{
 			name: "refresh domain permission denial",
-			err:  fmt.Errorf("snapshot blocked: %w", refresh.NewPermissionDeniedError("pods", "core/pods")),
+			err:  fmt.Errorf("snapshot blocked: %w", errorstatus.NewPermissionDenied("pods", "core/pods")),
 		},
 		{
 			name: "wrapped structured not found",
@@ -456,80 +455,6 @@ func TestLoggerForwardsOperationIdentityToBreadcrumbsAndError(t *testing.T) {
 	require.Equal(t, "backend-op-3", transport.event.Breadcrumbs[0].Data["operationId"])
 	require.Equal(t, "backend-op-3", transport.event.Tags["operation.id"])
 	require.Equal(t, "backend-op-3", transport.event.Contexts["error"]["operationId"])
-}
-
-func TestFetchResourceReportsOriginalKubernetesError(t *testing.T) {
-	reporter := &recordingErrorReporter{}
-	app := newWorkspaceCoordinatorTestFixture(t, reporter)
-	cause := apierrors.NewInternalError(errors.New("unexpected API response"))
-
-	_, err := FetchResourceWithSelection(
-		app.Resources,
-		"cluster-a",
-		"deployment/default/web",
-		"Deployment",
-		"default/web",
-		func(context.Context) (string, error) { return "", cause },
-	)
-	require.Error(t, err)
-
-	reporter.mu.Lock()
-	require.Empty(t, reporter.messages)
-	require.Len(t, reporter.exceptions, 1)
-	require.Same(t, cause, reporter.exceptions[0].err)
-	require.Equal(t, sentryreporting.Operation{}, reporter.exceptions[0].context.Operation)
-	require.Equal(t, "cluster-a", reporter.exceptions[0].context.ClusterID)
-	reporter.mu.Unlock()
-}
-
-func TestFetchResourceKeepsPermissionDenialLocal(t *testing.T) {
-	reporter := &recordingErrorReporter{}
-	app := newWorkspaceCoordinatorTestFixture(t, reporter)
-	cause := apierrors.NewForbidden(
-		schema.GroupResource{Group: "apps", Resource: "deployments"},
-		"web",
-		errors.New("RBAC denied the request"),
-	)
-
-	_, err := FetchResourceWithSelection(
-		app.Resources,
-		"cluster-a",
-		"deployment/default/web",
-		"Deployment",
-		"default/web",
-		func(context.Context) (string, error) {
-			return "", fmt.Errorf("read deployment: %w", cause)
-		},
-	)
-	require.ErrorIs(t, err, cause, "the UI still receives the permission denial")
-	require.True(t, apierrors.IsForbidden(err))
-
-	reporter.mu.Lock()
-	defer reporter.mu.Unlock()
-	require.Empty(t, reporter.messages)
-	require.Empty(t, reporter.exceptions, "RBAC denial is not an application defect")
-}
-
-func TestFetchResourceDoesNotReportTelemetryHandledErrorAgain(t *testing.T) {
-	reporter := &recordingErrorReporter{}
-	app := newWorkspaceCoordinatorTestFixture(t, reporter)
-	cause := errors.New("already reported")
-
-	_, err := FetchResourceWithSelection(
-		app.Resources,
-		"cluster-a",
-		"deployment/default/web",
-		"Deployment",
-		"default/web",
-		func(context.Context) (string, error) { return "", errorcapture.MarkTelemetryHandled(cause) },
-	)
-	require.Error(t, err)
-	require.ErrorIs(t, err, cause)
-
-	reporter.mu.Lock()
-	require.Empty(t, reporter.messages)
-	require.Empty(t, reporter.exceptions)
-	reporter.mu.Unlock()
 }
 
 func TestLoggerReportsRecoveredPanicWithoutFlattening(t *testing.T) {

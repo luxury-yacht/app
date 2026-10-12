@@ -12,6 +12,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -46,24 +47,6 @@ type JSONSender interface {
 	SendJSON(v interface{}) error
 }
 
-// permissionDeniedError preserves the original message while exposing details for structured payloads.
-type permissionDeniedError struct {
-	domain   string
-	resource string
-	message  string
-}
-
-func (e permissionDeniedError) Error() string {
-	return e.message
-}
-
-func (e permissionDeniedError) PermissionDeniedDetails() refresh.PermissionDeniedDetails {
-	return refresh.PermissionDeniedDetails{
-		Domain:   e.domain,
-		Resource: e.resource,
-	}
-}
-
 // NewHandler constructs a container logs stream handler.
 func NewHandler(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder, limiters ...*GlobalTargetLimiter) (*Handler, error) {
 	return NewHandlerWithLimits(client, logger, recorder, containerlogs.DefaultPerScopeTargetLimit, limiters...)
@@ -96,10 +79,7 @@ type containerLogsStream struct {
 func (h *Handler) Handle(ctx context.Context, conn JSONSender, request Request) {
 	options, err := parseRequest(request)
 	if err != nil {
-		_ = conn.SendJSON(EventPayload{
-			Domain: containerLogsDomain, Scope: strings.TrimSpace(request.Scope),
-			Sequence: 1, GeneratedAt: time.Now().UnixMilli(), Error: err.Error(),
-		})
+		_ = conn.SendJSON(ErrorPayload(request.Scope, errorstatus.BadRequest(err)))
 		return
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -220,14 +200,39 @@ func (s *containerLogsStream) handleInitialError(err error) {
 // writeFatal sends the error that ends the session.
 func (s *containerLogsStream) writeFatal(err error) {
 	s.recordError(err)
-	_ = s.writePayload(EventPayload{Error: err.Error(), ErrorDetails: permissionDeniedStatus(err), Retryable: isRetryable(err)})
+	_ = s.writePayload(failurePayload(err))
 }
 
-// isRetryable reports whether reconnecting could fix a failure. A missing
-// object, a permission denial or a rejected request stays failed.
-func isRetryable(err error) bool {
-	return !apierrors.IsNotFound(err) && !apierrors.IsForbidden(err) &&
-		!apierrors.IsBadRequest(err) && !apierrors.IsInvalid(err)
+// ErrorPayload is the only frame of a request that fails before its session
+// starts.
+func ErrorPayload(scope string, err error) EventPayload {
+	payload := failurePayload(err)
+	payload.Domain = containerLogsDomain
+	payload.Scope = strings.TrimSpace(scope)
+	payload.Sequence = 1
+	payload.GeneratedAt = time.Now().UnixMilli()
+	return payload
+}
+
+// failurePayload carries err's status, naming the denied API resource on a
+// Kubernetes denial, and whether reconnecting can fix it.
+func failurePayload(err error) EventPayload {
+	if apierrors.IsForbidden(err) && !errorstatus.IsPermissionDenied(err) {
+		err = errorstatus.WrapPermissionDenied(err, containerLogsDomain, forbiddenResource(err))
+	}
+	status := errorstatus.Classify(err)
+	return EventPayload{Error: status.Message, ErrorDetails: &status, Reconnect: reconnects(status.Reason)}
+}
+
+// reconnects reports whether reconnecting could fix a failure. A missing
+// target, a permission denial or a rejected request stays failed.
+func reconnects(reason errorstatus.Reason) bool {
+	switch reason {
+	case errorstatus.ReasonNotFound, errorstatus.ReasonForbidden,
+		errorstatus.ReasonBadRequest, errorstatus.ReasonInvalid:
+		return false
+	}
+	return true
 }
 
 func (s *containerLogsStream) recordError(err error) {
@@ -633,25 +638,6 @@ func resumeTargets(namespace string, points []ResumePoint) []containerTarget {
 		targets = append(targets, target)
 	}
 	return targets
-}
-
-// permissionDeniedStatus translates forbidden errors into Status-like payloads
-// that name the denied API resource.
-func permissionDeniedStatus(err error) *refresh.PermissionDeniedStatus {
-	if status, ok := refresh.PermissionDeniedStatusFromError(err); ok {
-		return status
-	}
-	if apierrors.IsForbidden(err) {
-		wrapped := permissionDeniedError{
-			domain:   containerLogsDomain,
-			resource: forbiddenResource(err),
-			message:  err.Error(),
-		}
-		if status, ok := refresh.PermissionDeniedStatusFromError(wrapped); ok {
-			return status
-		}
-	}
-	return nil
 }
 
 // forbiddenResource names the API resource a Forbidden error denied, such as

@@ -20,6 +20,7 @@
 import * as React from 'react';
 
 import { eventBus } from '@/core/events';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 
 // Module-level replay cache: the last non-empty rows per view identity. It must
 // survive unmount so a revisit can render the prior rows immediately instead of a
@@ -114,7 +115,7 @@ export interface ResourceInventorySourceState<T> {
   loading: boolean;
   /** At least one settlement has occurred (even if it errored or was empty). */
   loaded: boolean;
-  error: string | null;
+  error: RefreshFailure | null;
   /** The source cannot run yet (disabled, no scope/cluster). Not an error. */
   blocked?: boolean;
   completeness: ResourceInventoryCompleteness;
@@ -143,7 +144,7 @@ export interface ResourceInventoryRenderState<T> {
   /** Whether the visible rows are a partial/degraded view. */
   isPartial: boolean;
   partialLabel: string | null;
-  error: string | null;
+  error: RefreshFailure | null;
   blocked: boolean;
 }
 

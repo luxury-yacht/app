@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,7 +36,7 @@ func TestInvalidateResponseCacheForObjectEvictsDetailAndYAML(t *testing.T) {
 		},
 	}
 
-	detailKey := objectDetailCacheKey("ConfigMap", "default", "demo")
+	detailKey := liveDetailCacheKey("ConfigMap", "default", "demo")
 	gateway.seedResponseCache(selectionKey, detailKey, "detail")
 
 	gateway.invalidateResponseCacheForObjectEvent(
@@ -180,7 +181,7 @@ func TestInvalidateResponseCacheSkipsWarmupAddsForOldObjects(t *testing.T) {
 		},
 	}
 
-	detailKey := objectDetailCacheKey("ConfigMap", "default", "demo")
+	detailKey := liveDetailCacheKey("ConfigMap", "default", "demo")
 	gateway.seedResponseCache(selectionKey, detailKey, "detail")
 
 	guard := responseCacheInvalidationGuard{
@@ -212,7 +213,7 @@ func TestInvalidateResponseCacheEvictsPodDetailsOnUpdate(t *testing.T) {
 		},
 	}
 
-	detailKey := objectDetailCacheKey("Pod", "default", "demo")
+	detailKey := liveDetailCacheKey("Pod", "default", "demo")
 	gateway.seedResponseCache(selectionKey, detailKey, "detail")
 
 	guard := responseCacheInvalidationGuard{
@@ -232,7 +233,7 @@ func TestInvalidateResponseCacheEvictsPodDetailsOnUpdate(t *testing.T) {
 	}
 }
 
-func TestInvalidateResponseCacheForGVKEvictsExactAndLegacyKindKeys(t *testing.T) {
+func TestInvalidateResponseCacheForGVKEvictsOnlyTheExactGVK(t *testing.T) {
 	gateway := newResourceGatewayFixture().gateway
 	gateway.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
@@ -240,45 +241,22 @@ func TestInvalidateResponseCacheForGVKEvictsExactAndLegacyKindKeys(t *testing.T)
 	customGVK := schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "ConfigMap"}
 	coreGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
 	customKey := objectDetailCacheKeyForGVK(customGVK, "default", "demo")
+	customHeaderKey := objectHeaderMetadataCacheKey(customGVK, "default", "demo")
 	coreGVKKey := objectDetailCacheKeyForGVK(coreGVK, "default", "demo")
-	coreKindKey := objectDetailCacheKey("ConfigMap", "default", "demo")
 
 	gateway.seedResponseCache(selectionKey, customKey, "custom")
+	gateway.seedResponseCache(selectionKey, customHeaderKey, "custom-header")
 	gateway.seedResponseCache(selectionKey, coreGVKKey, "core-gvk")
-	gateway.seedResponseCache(selectionKey, coreKindKey, "core-kind")
 
 	gateway.invalidateResponseCacheForGVK(selectionKey, customGVK, "default", "demo")
 
-	if _, ok := gateway.responseCacheLookup(selectionKey, customKey); ok {
-		t.Fatalf("expected exact custom GVK cache entry to be evicted")
+	for _, key := range []string{customKey, customHeaderKey} {
+		if _, ok := gateway.responseCacheLookup(selectionKey, key); ok {
+			t.Fatalf("expected exact custom GVK cache entry %q to be evicted", key)
+		}
 	}
 	if _, ok := gateway.responseCacheLookup(selectionKey, coreGVKKey); !ok {
 		t.Fatalf("expected built-in GVK cache entry with colliding kind to remain")
-	}
-	if _, ok := gateway.responseCacheLookup(selectionKey, coreKindKey); ok {
-		t.Fatalf("expected legacy kind cache entry with colliding kind to be evicted")
-	}
-}
-
-func TestInvalidateResponseCacheForGVKEvictsBuiltinLegacyAndGVKKeys(t *testing.T) {
-	gateway := newResourceGatewayFixture().gateway
-	gateway.responseCache = newResponseCache(time.Minute, 10)
-	selectionKey := "cluster-a"
-
-	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
-	gvkKey := objectDetailCacheKeyForGVK(gvk, "default", "demo")
-	kindKey := objectDetailCacheKey("Deployment", "default", "demo")
-
-	gateway.seedResponseCache(selectionKey, gvkKey, "gvk")
-	gateway.seedResponseCache(selectionKey, kindKey, "kind")
-
-	gateway.invalidateResponseCacheForGVK(selectionKey, gvk, "default", "demo")
-
-	if _, ok := gateway.responseCacheLookup(selectionKey, gvkKey); ok {
-		t.Fatalf("expected built-in GVK cache entry to be evicted")
-	}
-	if _, ok := gateway.responseCacheLookup(selectionKey, kindKey); ok {
-		t.Fatalf("expected built-in legacy kind cache entry to be evicted")
 	}
 }
 
@@ -294,14 +272,14 @@ func TestIngestResponseCacheSinkEvictsOnUpsertAndDelete(t *testing.T) {
 
 	sink := gateway.ingestResponseCacheSink(selectionKey)
 
-	upsertKey := objectDetailCacheKey("ResourceQuota", "default", "rq-a")
+	upsertKey := liveDetailCacheKey("ResourceQuota", "default", "rq-a")
 	gateway.seedResponseCache(selectionKey, upsertKey, "detail")
 	sink.Upsert(objectcatalog.Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "ResourceQuota", Resource: "resourcequotas", Namespace: "default", Name: "rq-a"}})
 	if _, ok := gateway.responseCacheLookup(selectionKey, upsertKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted on ingest Upsert")
 	}
 
-	deleteKey := objectDetailCacheKey("LimitRange", "default", "lr-b")
+	deleteKey := liveDetailCacheKey("LimitRange", "default", "lr-b")
 	gateway.seedResponseCache(selectionKey, deleteKey, "detail")
 	sink.Delete(objectcatalog.Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "LimitRange", Resource: "limitranges", Namespace: "default", Name: "lr-b"}})
 	if _, ok := gateway.responseCacheLookup(selectionKey, deleteKey); ok {
@@ -321,7 +299,7 @@ func TestPodChangeClearsCachedDetailsThatListPods(t *testing.T) {
 	cleared := []string{
 		objectDetailCacheKeyForGVK(deployment, "team-a", "web"),
 		objectDetailCacheKeyForGVK(schema.GroupVersionKind{Group: "batch", Version: "v1", Kind: "CronJob"}, "team-a", "backup"),
-		objectDetailCacheKey("Job", "team-a", "migrate"),
+		objectDetailCacheKeyForGVK(schema.GroupVersionKind{Group: "batch", Version: "v1", Kind: "Job"}, "team-a", "migrate"),
 	}
 	kept := []string{
 		objectDetailCacheKeyForGVK(deployment, "team-b", "web"),
@@ -348,4 +326,10 @@ func TestPodChangeClearsCachedDetailsThatListPods(t *testing.T) {
 			}
 		}
 	}
+}
+
+// liveDetailCacheKey is the detail cache key the object panel writes for a
+// built-in kind: its typed fetcher's exact GVK.
+func liveDetailCacheKey(kind, namespace, name string) string {
+	return objectDetailCacheKeyForGVK(objectDetailFetcherGVKs[strings.ToLower(kind)], namespace, name)
 }

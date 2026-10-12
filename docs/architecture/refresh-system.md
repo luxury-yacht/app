@@ -33,8 +33,14 @@ diagnostics, and tests.
   both directions. They own replay/reset, log delivery, backpressure,
   cancellation, manager replacement, and shutdown.
 - A handler is published or replaced only after its owning aggregate is ready;
-  an earlier request gets a bounded service-unavailable response. Preserve
+  an earlier request gets a `RefreshUnavailable` status (503), and a request
+  for a cluster without an active subsystem `ClusterNotReady` (503). Preserve
   cluster scoping, complete identity, RBAC, and request validation.
+- Every failure answers with the typed error status
+  ([error-reporting.md](error-reporting.md#error-status-contract)): the HTTP
+  body (plus `correlationId`) with its `code` as the response status, a failed
+  manual-refresh job's `error`, and stream frames' `errorDetails`. Requests the
+  API rejects itself are `BadRequest` (400); an unknown job is `NotFound`.
 - Rejected: an application loopback listener, runtime base-URL bridge, CORS
   layer, raw browser WebSocket, EventSource, HTTP upgrade or event-stream
   routes, and any fallback transport.
@@ -110,8 +116,9 @@ initialization, connection ownership, cancellation, and health.
   fetch.
 - Cluster auth availability lives on that cluster's `ClusterRefreshRuntime`.
   Auth recovery and namespace-scope or permission rebuilds reset only that
-  cluster runtime's permission epoch before reconciling enabled scopes. Store
-  `permissionDenied` is presentation, not the retry gate.
+  cluster runtime's permission epoch before reconciling enabled scopes. A
+  stored `Forbidden` failure (`isPermissionDenied`) is presentation, not the
+  retry gate; the epoch reset clears it.
 - `RefreshManager` reduces scheduler intent (`enabled`/`paused`/`disabled`),
   timing (`idle`/`cooldown` with owned handles), and execution (`idle` or an
   ID-owned run); `RefresherState` is derived. The orchestrator separately

@@ -59,10 +59,10 @@ var DetailBinding = appbinding.Spec{
 ```
 
 - Attach it to the descriptor and run `mise exec -- go generate ./backend`.
-  Generation owns `ResourceGateway.Get<Kind>` and `objectDetailFetchers`;
+  Generation owns `objectDetailFetchers` and the `BindingModelAnchor`;
   `objectDetailFetcherGVKs` derives from that dispatch plus
-  `resourcecontract.BuiltinResources`. Never hand-edit either map or generated
-  wrappers.
+  `resourcecontract.BuiltinResources`. Never hand-edit either map or the
+  generated files.
 - Add a `detailFetcherVersionPins` entry (`backend/object_detail_provider.go`)
   only when the built-in contract intentionally lists more than one version of
   the same kind.

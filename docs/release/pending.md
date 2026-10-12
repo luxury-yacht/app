@@ -9,7 +9,13 @@
   - The pods table has its own filters, sort, and columns. This is completely independent of the filter, sort, and column settings of the parent view.
 - Sidebar Workloads moved into the Resources group.
 - Application Logs now use the same layout and controls as container logs. Application logs buffer size increased from 1,000 to 10,000 logs.
+- Error messages are based on what the backend reports, not on words in the message text.
+  - A rejected request shows its specific reason instead of a generic "Invalid request" message.
+  - A change that conflicts with another writer says the object changed and to refresh and try again.
+  - An action the app offered but the cluster refused now shows a notification instead of failing silently.
 
 ### Fixed
 
 - Application Logs and Diagnostics no longer show a Float button that did nothing.
+- The object panel marks an object deleted only when that object is gone, not when a related lookup fails.
+- Tables show "Insufficient permissions" only for real permission denials; a timeout on an RBAC resource no longer reads as one.

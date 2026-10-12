@@ -15,6 +15,7 @@ import {
 } from '@shared/utils/objectIdentity';
 import React, { useCallback, useMemo } from 'react';
 import { useClusterNameResolver } from '@/core/cluster-workspace/useClusterWorkspace';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { NamespaceSignalState } from '@/core/refresh/types';
 import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 
@@ -35,7 +36,7 @@ interface NamespaceSummaryTableProps {
   persistenceEnabled: boolean;
   loading: boolean;
   loaded: boolean;
-  error?: string | null;
+  error?: RefreshFailure | null;
   blocked?: boolean;
   tableMode: BoundedRowsMode;
   partialLabel?: string | null;

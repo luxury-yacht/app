@@ -46,6 +46,7 @@ import {
   resetRefreshDomain,
   setRefreshDomainEnabled,
 } from '@/core/data-access';
+import { failureMessage, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import { useShortNames } from '@/hooks/useShortNames';
 import { formatAgeAgo, formatFullDate } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -343,7 +344,7 @@ const getObjectOptions = (enabled: boolean, items: CatalogItem[]) =>
 
 interface CatalogStageState {
   status: DomainStatus;
-  error?: string | null;
+  error?: RefreshFailure | null;
 }
 
 const buildCatalogSideStatus = (
@@ -357,10 +358,10 @@ const buildCatalogSideStatus = (
   namespaceLoading: baseEnabled && isSnapshotLoading(baseState.status),
   kindLoading: namespaceEnabled && isSnapshotLoading(namespaceState.status),
   objectLoading: objectEnabled && isSnapshotLoading(objectState.status),
-  namespaceError: baseState.error ?? null,
-  kindError: namespaceState.error ?? null,
-  objectError: objectState.error ?? null,
-  catalogError: objectState.error ?? namespaceState.error ?? baseState.error ?? null,
+  namespaceError: failureMessage(baseState.error),
+  kindError: failureMessage(namespaceState.error),
+  objectError: failureMessage(objectState.error),
+  catalogError: failureMessage(objectState.error ?? namespaceState.error ?? baseState.error),
 });
 
 const requestCatalogObjectMatch = async (selection: ObjectDiffSelectionSeed) => {

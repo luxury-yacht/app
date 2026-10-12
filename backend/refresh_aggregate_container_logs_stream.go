@@ -6,14 +6,11 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
-
-// errContainerLogsClusterNotActive reports a cluster whose handler is not
-// published, as while its refresh subsystem is rebuilt; a retry can succeed.
-var errContainerLogsClusterNotActive = errors.New("not active")
 
 // aggregateContainerLogsStreamHandler routes container logs stream requests to the requested cluster.
 type aggregateContainerLogsStreamHandler struct {
@@ -49,7 +46,8 @@ func (h *aggregateContainerLogsStreamHandler) Handle(
 	handler := h.handlers[targetID]
 	h.mu.RUnlock()
 	if handler == nil {
-		return fmt.Errorf("cluster %s %w", targetID, errContainerLogsClusterNotActive)
+		// Its refresh subsystem is being rebuilt; a reconnect can succeed.
+		return errorstatus.ClusterNotReady(fmt.Errorf("cluster %s not active", targetID))
 	}
 	handler.Handle(ctx, conn, request)
 	return nil
@@ -57,7 +55,7 @@ func (h *aggregateContainerLogsStreamHandler) Handle(
 
 func (h *aggregateContainerLogsStreamHandler) selectCluster(clusterIDs []string) (string, error) {
 	if len(clusterIDs) != 1 {
-		return "", fmt.Errorf("container logs stream requires a single cluster scope")
+		return "", errorstatus.BadRequest(errors.New("container logs stream requires a single cluster scope"))
 	}
 	return clusterIDs[0], nil
 }

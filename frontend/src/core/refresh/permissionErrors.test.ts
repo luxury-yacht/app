@@ -6,21 +6,14 @@
 
 import { describe, expect, test } from 'vitest';
 
-import {
-  formatPermissionDeniedStatus,
-  isPermissionDeniedStatus,
-  resolvePermissionDeniedMessage,
-} from './permissionErrors';
-import type { PermissionDeniedStatus } from './types';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
+import { formatPermissionDeniedStatus, resolvePermissionDeniedMessage } from './permissionErrors';
 
 describe('permissionErrors', () => {
   test('formats domain and resource details when message is generic', () => {
-    const status: PermissionDeniedStatus = {
-      message: 'permission denied',
-      reason: 'Forbidden',
-      code: 403,
+    const status = makeErrorStatus('Forbidden', 'permission denied', {
       details: { domain: 'nodes', resource: 'core/nodes' },
-    };
+    });
 
     expect(formatPermissionDeniedStatus(status)).toBe(
       'permission denied (domain nodes, resource core/nodes)'
@@ -28,12 +21,9 @@ describe('permissionErrors', () => {
   });
 
   test('avoids duplicating details already in the message', () => {
-    const status: PermissionDeniedStatus = {
-      message: 'permission denied for domain nodes (core/nodes)',
-      reason: 'Forbidden',
-      code: 403,
+    const status = makeErrorStatus('Forbidden', 'permission denied for domain nodes (core/nodes)', {
       details: { domain: 'nodes', resource: 'core/nodes' },
-    };
+    });
 
     expect(formatPermissionDeniedStatus(status)).toBe(
       'permission denied for domain nodes (core/nodes)'
@@ -41,49 +31,23 @@ describe('permissionErrors', () => {
   });
 
   test('falls back to kind/name when domain/resource are missing', () => {
-    const status: PermissionDeniedStatus = {
-      message: 'Forbidden',
-      reason: 'Forbidden',
-      code: 403,
-      details: { kind: 'Pod', name: 'api-server' },
-    };
+    const status = makeErrorStatus('Forbidden', 'Forbidden', {
+      details: { kind: 'pods', name: 'api-server' },
+    });
 
-    expect(formatPermissionDeniedStatus(status)).toBe('Forbidden (resource Pod/api-server)');
+    expect(formatPermissionDeniedStatus(status)).toBe('Forbidden (resource pods/api-server)');
   });
 
-  test('recognizes forbidden status payloads', () => {
-    expect(isPermissionDeniedStatus({ reason: 'Forbidden', code: 403 })).toBe(true);
-    expect(isPermissionDeniedStatus({ reason: 'Other', code: 400 })).toBe(false);
-  });
-
-  test.each([
-    null,
-    [],
-    { kind: 1, reason: 'Forbidden' },
-    { apiVersion: 1, reason: 'Forbidden' },
-    { message: 1, reason: 'Forbidden' },
-    { reason: 1, code: 403 },
-    { reason: 'Forbidden', code: '403' },
-    { reason: 'Forbidden', details: 'invalid' },
-    { reason: 'Forbidden', details: { domain: 1 } },
-    { reason: 'Forbidden', details: { resource: 1 } },
-    { reason: 'Forbidden', details: { kind: 1 } },
-    { reason: 'Forbidden', details: { name: 1 } },
-  ])('rejects malformed permission payload %#', (payload) => {
-    expect(isPermissionDeniedStatus(payload)).toBe(false);
-  });
-
-  test('resolvePermissionDeniedMessage prefers structured status', () => {
-    const status: PermissionDeniedStatus = {
-      message: 'permission denied',
-      reason: 'Forbidden',
-      code: 403,
+  test('resolvePermissionDeniedMessage formats only a denial', () => {
+    const denial = makeErrorStatus('Forbidden', 'permission denied', {
       details: { domain: 'pods' },
-    };
+    });
 
-    expect(resolvePermissionDeniedMessage('fallback', status)).toBe(
+    expect(resolvePermissionDeniedMessage('fallback', denial)).toBe(
       'permission denied (domain pods)'
     );
-    expect(resolvePermissionDeniedMessage('fallback', { code: 400 })).toBe('fallback');
+    expect(resolvePermissionDeniedMessage('fallback', makeErrorStatus('NotFound'))).toBe(
+      'fallback'
+    );
   });
 });

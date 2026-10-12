@@ -82,7 +82,6 @@ type installationMetricRegistrationScheduler interface {
 
 type lifecycleClusterRuntime interface {
 	GetKubeconfigs() (KubeconfigDiscoveryResult, error)
-	anyClusterAuthInvalid() bool
 	consumeIntents(context.Context, func(ClusterRuntimeIntent))
 	discoverKubeconfigs() error
 	initializeClusterLifecycle()
@@ -215,35 +214,17 @@ func (a *ApplicationLifecycle) WindowRuntimeReady(windowName string, restoreGeom
 	return true
 }
 
+// configureStartupErrorCapture routes client-library stderr into App Logs.
+// Stderr carries no cluster identity, so it is only logged, never surfaced as
+// an error; per-cluster auth state comes from each cluster's auth manager.
 func (a *ApplicationLifecycle) configureStartupErrorCapture() {
-	errorcapture.SetEventEmitter(func(message string) {
-		// Note: Auth state management is now per-cluster via transport wrappers.
-		// Stderr errors don't have cluster context, so we only emit to frontend
-		// for UI display. The per-cluster auth managers handle state based on
-		// 401 responses, which DO have cluster context.
-		// clusterId is empty here because stderr errors are not associated with
-		// a specific cluster.
-		a.emitEvent(backendErrorEventName, BackendErrorEvent{
-			ClusterID: "",
-			Message:   strings.TrimSpace(message),
-			Source:    "stderr",
-		})
-	})
-	errorcapture.SetLogSink(func(level, message string) {
-		// Suppress logging when ANY cluster has auth issues to prevent log spam.
-		// Auth-related errors are already being handled by the per-cluster auth managers.
-		if a.clusterRuntime.anyClusterAuthInvalid() {
-			return
-		}
-		// Also suppress auth-related messages that match known patterns.
-		// This provides belt-and-suspenders protection against timing issues
-		// where auth errors arrive before state transitions complete.
-		lower := strings.ToLower(message)
-		if containsAuthPattern(lower) {
-			return
-		}
-		a.logger.Log(classifiedLogLevel(level), message, logsources.ErrorCapture)
-	})
+	errorcapture.SetLogSink(a.logCapturedStderr)
+}
+
+// logCapturedStderr records one stderr line. The capture already logs each
+// repeated warning or error only once per session.
+func (a *ApplicationLifecycle) logCapturedStderr(level, message string) {
+	a.logger.Log(classifiedLogLevel(level), message, logsources.ErrorCapture)
 }
 
 func (a *ApplicationLifecycle) checkStartupBetaExpiry(windowName string) bool {
@@ -438,24 +419,6 @@ func (a *ApplicationLifecycle) RetainPanelCluster(referenceID, clusterID string)
 
 func (a *ApplicationLifecycle) ReleasePanelCluster(referenceID string) error {
 	return a.workspace.ReleasePanelCluster(referenceID)
-}
-
-// containsAuthPattern checks if a lowercased message contains auth-related patterns.
-// Used to suppress auth error logging even if state hasn't transitioned yet.
-func containsAuthPattern(lower string) bool {
-	authPatterns := []string{
-		"token",
-		"sso",
-		"expired",
-		"authentication",
-		"unauthorized",
-	}
-	for _, pattern := range authPatterns {
-		if strings.Contains(lower, pattern) {
-			return true
-		}
-	}
-	return false
 }
 
 func (a *ApplicationLifecycle) StageClusterViewTransfer(source, target, clusterID string) (bool, error) {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
@@ -223,7 +224,7 @@ func (s *session) readLoop() {
 		case MessageTypeCancel:
 			s.handleCancel(msg)
 		default:
-			s.sendError(msg.ClusterID, msg.Domain, msg.Scope, errors.New("unsupported request type"))
+			s.sendError(msg.ClusterID, msg.Domain, msg.Scope, errorstatus.BadRequest(errors.New("unsupported request type")))
 		}
 	}
 }
@@ -239,7 +240,7 @@ func (s *session) doneError() error {
 
 func (s *session) handleSubscribe(msg ClientMessage) {
 	if msg.Domain == "" {
-		s.sendError(msg.ClusterID, msg.Domain, msg.Scope, errors.New("domain is required"))
+		s.sendError(msg.ClusterID, msg.Domain, msg.Scope, errDomainRequired)
 		return
 	}
 	clusterID, err := s.resolveClusterID(msg)
@@ -351,7 +352,7 @@ func (s *session) enqueueResumeUpdates(updates []ServerMessage, clusterID, clust
 
 func (s *session) handleCancel(msg ClientMessage) {
 	if msg.Domain == "" {
-		s.sendError(msg.ClusterID, msg.Domain, msg.Scope, errors.New("domain is required"))
+		s.sendError(msg.ClusterID, msg.Domain, msg.Scope, errDomainRequired)
 		return
 	}
 	clusterID, err := s.resolveClusterID(msg)
@@ -617,24 +618,23 @@ func (s *session) sendError(clusterID, domain, scope string, err error) {
 	if resolvedClusterID == "" {
 		resolvedClusterID = s.config.ClusterID
 	}
-	clusterName := s.clusterNameFor(resolvedClusterID)
-	msg := ServerMessage{
-		Type:        MessageTypeError,
-		Domain:      domain,
-		Scope:       scope,
-		ClusterID:   resolvedClusterID,
-		ClusterName: clusterName,
-		Error:       err.Error(),
-	}
-	if status, ok := refresh.PermissionDeniedStatusFromError(err); ok {
-		msg.ErrorDetails = status
-	} else if apierrors.IsForbidden(err) {
-		wrapped := refresh.WrapPermissionDenied(err, domain, "")
-		if status, ok := refresh.PermissionDeniedStatusFromError(wrapped); ok {
-			msg.ErrorDetails = status
-		}
-	}
+	msg := ErrorMessage(domain, err)
+	msg.Scope = scope
+	msg.ClusterID = resolvedClusterID
+	msg.ClusterName = s.clusterNameFor(resolvedClusterID)
 	s.enqueue(msg)
+}
+
+var errDomainRequired = errorstatus.BadRequest(errors.New("domain is required"))
+
+// ErrorMessage is the ERROR frame for err, carrying its status. A Kubernetes
+// denial names domain.
+func ErrorMessage(domain string, err error) ServerMessage {
+	if apierrors.IsForbidden(err) && !errorstatus.IsPermissionDenied(err) {
+		err = errorstatus.WrapPermissionDenied(err, domain, "")
+	}
+	status := errorstatus.Classify(err)
+	return ServerMessage{Type: MessageTypeError, Domain: domain, Error: status.Message, ErrorDetails: &status}
 }
 
 func subscriptionKey(selector Selector) string {

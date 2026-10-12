@@ -8,7 +8,6 @@ import (
 const (
 	appLogsAddedEventName               = "app-logs:added"
 	appUpdateEventName                  = "app-update"
-	backendErrorEventName               = "backend-error"
 	clusterAuthFailedEventName          = "cluster:auth:failed"
 	clusterAuthProgressEventName        = "cluster:auth:progress"
 	clusterAuthRecoveredEventName       = "cluster:auth:recovered"
@@ -69,19 +68,9 @@ type ClusterScopeChangedEvent struct {
 	ClusterID string `json:"clusterId"`
 }
 
-type BackendErrorEvent struct {
-	ClusterID    string `json:"clusterId"`
-	ResourceKind string `json:"resourceKind,omitempty"`
-	Identifier   string `json:"identifier,omitempty"`
-	Message      string `json:"message"`
-	Error        string `json:"error,omitempty"`
-	Source       string `json:"source,omitempty"`
-}
-
 func init() {
 	application.RegisterEvent[AppLogsAddedEvent](appLogsAddedEventName)
 	application.RegisterEvent[*UpdateInfo](appUpdateEventName)
-	application.RegisterEvent[BackendErrorEvent](backendErrorEventName)
 	application.RegisterEvent[ClusterAuthEvent](clusterAuthFailedEventName)
 	application.RegisterEvent[ClusterAuthProgressEvent](clusterAuthProgressEventName)
 	application.RegisterEvent[ClusterAuthEvent](clusterAuthRecoveredEventName)

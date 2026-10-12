@@ -8,10 +8,12 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import {
   makeClusterConfigSnapshotPayload,
   makeNamespaceConfigSnapshotPayload,
 } from './refreshContractTestBuilders';
+import { isPermissionDenied } from './refreshFailure';
 import {
   getRefreshState,
   getScopedDomainEntries,
@@ -265,7 +267,7 @@ describe('resetPermissionDeniedScopedDomainStates', () => {
     setScopedDomainState('namespaces', 'cluster-a|', (prev) => ({
       ...prev,
       status: 'error',
-      permissionDenied: true,
+      error: { kind: 'backend', status: makeErrorStatus('Forbidden') },
     }));
     setScopedDomainState('namespace-config', 'cluster-a|namespace:prod', (prev) => ({
       ...prev,
@@ -275,12 +277,12 @@ describe('resetPermissionDeniedScopedDomainStates', () => {
     setScopedDomainState('namespaces', 'cluster-b|', (prev) => ({
       ...prev,
       status: 'error',
-      permissionDenied: true,
+      error: { kind: 'backend', status: makeErrorStatus('Forbidden') },
     }));
     resetPermissionDeniedScopedDomainStates('cluster-a');
-    expect(getScopedDomainState('namespaces', 'cluster-b|').permissionDenied).toBe(true);
+    expect(isPermissionDenied(getScopedDomainState('namespaces', 'cluster-b|').error)).toBe(true);
 
-    expect(getScopedDomainState('namespaces', 'cluster-a|').permissionDenied).not.toBe(true);
+    expect(isPermissionDenied(getScopedDomainState('namespaces', 'cluster-a|').error)).toBe(false);
     expect(getScopedDomainState('namespaces', 'cluster-a|').status).not.toBe('error');
     expect(getScopedDomainState('namespace-config', 'cluster-a|namespace:prod').status).toBe(
       'ready'

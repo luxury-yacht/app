@@ -15,6 +15,7 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FetchContainerLogs, GetContainerLogsScopeContainers } from '@/core/backend-api';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { localFailure, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import {
   getScopedDomainState,
   resetScopedDomainState,
@@ -35,6 +36,7 @@ import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
 import LogViewer from './LogViewer';
 import type { ParsedLogEntry } from './logOptionsReducer';
@@ -331,7 +333,7 @@ const seedLogSnapshot = (
   scope: string = defaultScope,
   overrides: Partial<{
     status: 'ready' | 'loading' | 'updating' | 'error' | 'initialising' | 'idle';
-    error: string | null;
+    error: RefreshFailure | null;
     phase: ContainerLogsStreamPhase;
     warnings: ContainerLogsWarning[];
     issues: ContainerLogsTargetIssue[];
@@ -351,7 +353,7 @@ const seedLogSnapshot = (
       sequence: 1,
       generatedAt,
       resetCount: snapshotDelivered ? 1 : 0,
-      error: overrides.error ?? null,
+      error: phase.status === 'failed' ? phase.reason : null,
       phase,
       warnings: overrides.warnings ?? [],
       issues: overrides.issues ?? [],
@@ -916,7 +918,10 @@ describe('LogViewer active pod synchronisation', () => {
       await renderViewer({ activePodNames: ['web-1'] });
       await stream.send({
         error: 'pods is forbidden: User "viewer" cannot list resource "pods"',
-        retryable: false,
+        errorDetails: makeErrorStatus(
+          'Forbidden',
+          'pods is forbidden: User "viewer" cannot list resource "pods"'
+        ),
       });
 
       expect(container.textContent).toContain(
@@ -943,7 +948,10 @@ describe('LogViewer active pod synchronisation', () => {
       });
       await stream.send({
         error: 'pods is forbidden: User "viewer" cannot list resource "pods"',
-        retryable: false,
+        errorDetails: makeErrorStatus(
+          'Forbidden',
+          'pods is forbidden: User "viewer" cannot list resource "pods"'
+        ),
       });
 
       expect(container.textContent).toContain('cannot list resource "pods"');
@@ -976,7 +984,10 @@ describe('LogViewer active pod synchronisation', () => {
         ],
       });
       await renderViewer({ activePodNames: ['web-1'], panelId });
-      await stream.send({ error: 'deployments.apps "api" not found', retryable: false });
+      await stream.send({
+        error: 'deployments.apps "api" not found',
+        errorDetails: makeErrorStatus('NotFound', 'deployments.apps "api" not found'),
+      });
       await flushAsync();
 
       expect(container.textContent).toContain('kept line');
@@ -3754,8 +3765,8 @@ describe('LogViewer active pod synchronisation', () => {
   it('renders a real backend error instead of an empty-log state', async () => {
     seedLogSnapshot([], defaultScope, {
       status: 'error',
-      error: 'forbidden',
-      phase: { status: 'failed', reason: 'forbidden', permissionDenied: true, retryable: false },
+      error: localFailure('forbidden'),
+      phase: { status: 'failed', reason: 'forbidden', failure: null },
     });
 
     await renderViewer({ activePodNames: ['web-1'], isActive: false });

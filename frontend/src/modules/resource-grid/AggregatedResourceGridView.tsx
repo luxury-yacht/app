@@ -36,6 +36,7 @@ import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { useCallback, useMemo } from 'react';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { CanonicalResourceRef, RefreshDomain } from '@/core/refresh/types';
 import { useShortNames } from '@/hooks/useShortNames';
 import type { NamespaceViewType } from '@/types/navigation/views';
@@ -219,7 +220,10 @@ function useAggregatedGridCore<D extends AggregatedRowBase>(
 export function ClusterAggregatedResourceGridView<
   P extends TypedQueryPayload,
   D extends AggregatedRowBase,
->({ spec, error }: Readonly<{ spec: AggregatedResourceGridViewSpec<D>; error?: string | null }>) {
+>({
+  spec,
+  error,
+}: Readonly<{ spec: AggregatedResourceGridViewSpec<D>; error?: RefreshFailure | null }>) {
   const core = useAggregatedGridCore(spec);
   const diagnosticsLabel = spec.labels.cluster ?? '';
 

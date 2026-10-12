@@ -15,11 +15,13 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/cachekeys"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcecontract"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/helm"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -140,7 +142,8 @@ func isHelmReleaseGVK(gvk schema.GroupVersionKind) bool {
 func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (interface{}, error) {
 	resolved := p.resolveDetailContext(ctx)
 	if resourcekind.FamilyForResource(gvk.Group, gvk.Kind, namespace != "") != "" && gvk.Version != "" {
-		return p.fetchDiscoveredResourceDetails(ctx, resolved, gvk, namespace, name)
+		detail, err := p.fetchDiscoveredResourceDetails(ctx, resolved, gvk, namespace, name)
+		return detail, confirmMissingObject(ctx, resolved, gvk, namespace, name, err)
 	}
 	if _, ok := objectDetailFetchers[strings.ToLower(strings.TrimSpace(gvk.Kind))]; !ok {
 		return nil, snapshot.ErrObjectDetailNotImplemented
@@ -163,10 +166,39 @@ func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schem
 	since := p.cacheGeneration()
 
 	detail, err := fetcher.withDeps(ctx, resolved.deps, namespace, name)
-	if err == nil && p != nil && p.gateway != nil {
+	if err != nil {
+		return nil, confirmMissingObject(ctx, resolved, gvk, namespace, name, err)
+	}
+	if p != nil && p.gateway != nil {
 		p.gateway.responseCacheStore(resolved.selectionKey, cacheKey, detail, since)
 	}
-	return detail, err
+	return detail, nil
+}
+
+// confirmMissingObject names the requested object on a NotFound only after an
+// uncached read of exactly that object also finds nothing, so a NotFound from
+// a related lookup never reports the object itself as deleted.
+func confirmMissingObject(
+	ctx context.Context,
+	resolved resolvedObjectDetailContext,
+	gvk schema.GroupVersionKind,
+	namespace, name string,
+	err error,
+) error {
+	if !apierrors.IsNotFound(err) {
+		return err
+	}
+	if _, probeErr := fetchObjectByGVK(ctx, resolved.deps, gvk, namespace, name); !apierrors.IsNotFound(probeErr) {
+		return err
+	}
+	return errorstatus.ObjectNotFound(errorstatus.ObjectRef{
+		ClusterID: resolved.selectionKey,
+		Group:     gvk.Group,
+		Version:   gvk.Version,
+		Kind:      gvk.Kind,
+		Namespace: namespace,
+		Name:      name,
+	}, err)
 }
 
 // FetchObjectHeaderMetadata returns the object panel's kind-agnostic header
@@ -186,7 +218,7 @@ func (p *objectDetailProvider) FetchObjectHeaderMetadata(ctx context.Context, gv
 	if p != nil && p.gateway != nil {
 		if cached, ok := p.gateway.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
 			if value, ok := cached.(snapshot.ObjectHeaderMetadata); ok &&
-				p.gateway.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk, namespace, name) {
+				p.gateway.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk) {
 				return value, nil
 			}
 			p.gateway.responseCacheDelete(resolved.selectionKey, cacheKey)
@@ -222,7 +254,8 @@ func objectHeaderMetadata(obj *unstructured.Unstructured) snapshot.ObjectHeaderM
 	return meta
 }
 
-// objectDetailCacheKey matches FetchNamespacedResource cache keys for detail payloads.
+// objectDetailCacheKey is the kind-only key for Helm content (HelmRelease,
+// HelmManifest, HelmValues), which has no GVK detail fetcher.
 func objectDetailCacheKey(kind, namespace, name string) string {
 	return cachekeys.Build(strings.ToLower(strings.TrimSpace(kind))+"-detailed", namespace, name)
 }
@@ -373,8 +406,6 @@ func cachedHelmDetail[T any](
 		resolved.deps,
 		resolved.selectionKey,
 		schema.GroupVersionKind{Group: helmReleaseAPIGroup, Version: "v3", Kind: kind},
-		namespace,
-		name,
 	)
 	if !allowed {
 		p.gateway.responseCacheDelete(resolved.selectionKey, cacheKey)
@@ -438,8 +469,6 @@ func (p *objectDetailProvider) cachedHelmReleaseRevision(
 		resolved.deps,
 		resolved.selectionKey,
 		schema.GroupVersionKind{Group: helmReleaseAPIGroup, Version: "v3", Kind: "HelmRelease"},
-		namespace,
-		name,
 	) {
 		return details.Revision, true
 	}
@@ -460,7 +489,7 @@ func (p *objectDetailProvider) cachedObjectDetails(ctx context.Context, resolved
 	if p != nil && p.gateway != nil {
 		if cached, ok := p.gateway.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
 			// Avoid serving cached details when permission checks deny access.
-			if p.gateway.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk, namespace, name) {
+			if p.gateway.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk) {
 				return cached, true
 			}
 			p.gateway.responseCacheDelete(resolved.selectionKey, cacheKey)

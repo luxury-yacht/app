@@ -18,6 +18,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	"golang.org/x/sync/errgroup"
@@ -34,9 +35,9 @@ var containerLogsStreamFunc = func(pods corev1client.PodInterface, ctx context.C
 var containerLogsFetchTimeout = config.ContainerLogsFetchTargetTimeout
 
 // FetchContainerLogs aggregates logs from pods or workloads based on the provided request.
-func (s *Service) FetchContainerLogs(ctx context.Context, req types.ContainerLogsFetchRequest) types.ContainerLogsFetchResponse {
+func (s *Service) FetchContainerLogs(ctx context.Context, req types.ContainerLogsFetchRequest) (types.ContainerLogsFetchResponse, error) {
 	if s.deps.KubernetesClient == nil {
-		return types.ContainerLogsFetchResponse{Error: "kubernetes client not initialized"}
+		return types.ContainerLogsFetchResponse{}, errors.New("kubernetes client not initialized")
 	}
 
 	if req.TailLines <= 0 {
@@ -44,15 +45,15 @@ func (s *Service) FetchContainerLogs(ctx context.Context, req types.ContainerLog
 	}
 	if req.MatchNone {
 		if _, err := containerlogs.ParseTargetScope(req.Scope); err != nil {
-			return types.ContainerLogsFetchResponse{Error: err.Error()}
+			return types.ContainerLogsFetchResponse{}, errorstatus.BadRequest(err)
 		}
-		return types.ContainerLogsFetchResponse{}
+		return types.ContainerLogsFetchResponse{}, nil
 	}
 
 	selection := containerlogs.ParseScopeSelection(req.SelectedFilters)
 	pods, err := s.resolveTargetPods(ctx, req.Scope, selection)
 	if err != nil {
-		return types.ContainerLogsFetchResponse{Error: err.Error()}
+		return types.ContainerLogsFetchResponse{}, err
 	}
 	limit := s.deps.ContainerLogsPerScopeTargetLimit
 	if limit <= 0 {
@@ -60,22 +61,33 @@ func (s *Service) FetchContainerLogs(ctx context.Context, req types.ContainerLog
 	}
 	targets, totalTargets := containerlogs.SelectTargets(pods, selection, limit)
 	warnings := containerlogs.TargetLimitWarnings(containerlogs.LimitPerTab, len(targets), totalTargets, containerlogs.ClampPerScopeTargetLimit(limit))
-	allEntries, issues := s.fetchSelectedContainerLogs(ctx, targets, req)
-	response := types.ContainerLogsFetchResponse{Warnings: warnings, Issues: issues}
-	if len(allEntries) == 0 {
+	read := s.fetchSelectedContainerLogs(ctx, targets, req)
+	response := types.ContainerLogsFetchResponse{Warnings: warnings, Issues: read.issues}
+	if len(read.entries) == 0 {
 		// Nothing could be read: a real failure fails the request, while
 		// containers that simply have no log leave an empty result.
-		response.Error = summarizeLogFetchFailures(issues)
-		return response
+		if err := logFetchFailure(read.failures); err != nil {
+			return types.ContainerLogsFetchResponse{}, err
+		}
+		return response, nil
 	}
-	containerlogs.SortByTimestamp(allEntries, func(entry types.ContainerLogsEntry) string { return entry.Timestamp })
-	response.Entries = allEntries
-	return response
+	containerlogs.SortByTimestamp(read.entries, func(entry types.ContainerLogsEntry) string { return entry.Timestamp })
+	response.Entries = read.entries
+	return response, nil
 }
 
 type targetLogs struct {
 	entries []types.ContainerLogsEntry
 	err     error
+}
+
+// containerLogsRead is what a fetch read from its targets.
+type containerLogsRead struct {
+	entries []types.ContainerLogsEntry
+	issues  []containerlogs.TargetIssue
+	// failures are the reads that failed for a reason other than the
+	// container having no log to read.
+	failures []error
 }
 
 // fetchSelectedContainerLogs reads the targets a few at a time, each within its
@@ -85,7 +97,7 @@ func (s *Service) fetchSelectedContainerLogs(
 	ctx context.Context,
 	targets []containerlogs.SelectedTarget,
 	req types.ContainerLogsFetchRequest,
-) ([]types.ContainerLogsEntry, []containerlogs.TargetIssue) {
+) containerLogsRead {
 	results := make([]targetLogs, len(targets))
 	var group errgroup.Group
 	group.SetLimit(config.ContainerLogsFetchParallelism)
@@ -97,20 +109,20 @@ func (s *Service) fetchSelectedContainerLogs(
 	}
 	_ = group.Wait()
 
-	var entries []types.ContainerLogsEntry
-	var issues []containerlogs.TargetIssue
+	var read containerLogsRead
 	for i, result := range results {
 		if result.err == nil {
-			entries = append(entries, result.entries...)
+			read.entries = append(read.entries, result.entries...)
 			continue
 		}
 		issue := containerlogs.NewTargetIssue(targets[i].PodName, targets[i].Container, result.err)
 		if issue.State != containerlogs.IssueUnavailable {
 			s.logWarn(fmt.Sprintf("Failed to fetch logs for container %s/%s: %v", issue.Pod, issue.Container, result.err))
+			read.failures = append(read.failures, fmt.Errorf("failed to fetch logs: pod %s container %s: %w", issue.Pod, issue.Container, result.err))
 		}
-		issues = append(issues, issue)
+		read.issues = append(read.issues, issue)
 	}
-	return entries, issues
+	return read
 }
 
 func (s *Service) fetchTargetLogs(ctx context.Context, target containerlogs.SelectedTarget, req types.ContainerLogsFetchRequest) targetLogs {
@@ -201,7 +213,7 @@ func (s *Service) ContainerLogsScopeContainers(ctx context.Context, scope string
 func (s *Service) resolveTargetPods(ctx context.Context, scope string, selection containerlogs.ScopeSelection) ([]*corev1.Pod, error) {
 	target, err := containerlogs.ParseTargetScope(scope)
 	if err != nil {
-		return nil, err
+		return nil, errorstatus.BadRequest(err)
 	}
 	resolution, err := containerlogs.Resolve(ctx, s.deps.KubernetesClient, target, selection)
 	if err != nil {
@@ -251,23 +263,16 @@ func (s *Service) fetchContainerLogs(ctx context.Context, target containerlogs.S
 	}
 }
 
-// summarizeLogFetchFailures describes the failed or forbidden targets, or
-// returns "" when every issue is only an unavailable log.
-func summarizeLogFetchFailures(issues []containerlogs.TargetIssue) string {
-	var failures []containerlogs.TargetIssue
-	for _, issue := range issues {
-		if issue.State != containerlogs.IssueUnavailable {
-			failures = append(failures, issue)
-		}
+// logFetchFailure is the request's failure when nothing could be read: the
+// first failed read, with its status, and how many more failed.
+func logFetchFailure(failures []error) error {
+	switch len(failures) {
+	case 0:
+		return nil
+	case 1:
+		return failures[0]
 	}
-	if len(failures) == 0 {
-		return ""
-	}
-	first := fmt.Sprintf("failed to fetch logs: pod %s container %s: %s", failures[0].Pod, failures[0].Container, failures[0].Reason)
-	if len(failures) == 1 {
-		return first
-	}
-	return fmt.Sprintf("%s (and %d more)", first, len(failures)-1)
+	return fmt.Errorf("%w (and %d more)", failures[0], len(failures)-1)
 }
 
 func (s *Service) logWarn(msg string) {

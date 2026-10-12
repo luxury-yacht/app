@@ -311,7 +311,6 @@ var podListingDetailKinds = func() []schema.GroupVersionKind {
 func (g *ResourceGateway) invalidatePodListingDetails(selectionKey, namespace string) {
 	for _, gvk := range podListingDetailKinds {
 		g.responseCacheDeletePrefix(selectionKey, objectDetailCacheKeyForGVK(gvk, namespace, ""))
-		g.responseCacheDeletePrefix(selectionKey, objectDetailCacheKey(gvk.Kind, namespace, ""))
 	}
 }
 
@@ -328,31 +327,18 @@ func (g *ResourceGateway) invalidateResponseCacheForResource(selectionKey string
 	)
 }
 
-// invalidateResponseCacheForGVK drops the exact GVK detail/header entries and
-// the legacy kind-only detail key used by typed detail fetchers.
+// invalidateResponseCacheForGVK drops the exact GVK detail entry and the
+// header-metadata entry keyed by the same GVK. The header metadata carries the
+// object's resourceVersion (the object-details source clock) and its
+// last-modified time; if it outlived the detail, the stale resourceVersion would
+// re-pin the source-version ETag and the Details panel would keep serving 304s
+// with stale content.
 func (g *ResourceGateway) invalidateResponseCacheForGVK(selectionKey string, gvk schema.GroupVersionKind, namespace, name string) {
 	if strings.TrimSpace(gvk.Kind) == "" || strings.TrimSpace(name) == "" {
 		return
 	}
 	g.responseCacheDelete(selectionKey, objectDetailCacheKeyForGVK(gvk, namespace, name))
 	g.responseCacheDelete(selectionKey, objectHeaderMetadataCacheKey(gvk, namespace, name))
-	g.responseCacheDelete(selectionKey, objectDetailCacheKey(gvk.Kind, namespace, name))
-}
-
-// invalidateResponseCache drops the cached detail entry for the resource, plus
-// the header-metadata entry keyed by the same GVK. The header metadata carries
-// the object's resourceVersion (the object-details source clock) and its
-// last-modified time; if it outlived the detail, the stale resourceVersion would
-// re-pin the source-version ETag and the Details panel would keep serving 304s
-// with stale content.
-// (The legacy YAML response-cache entry was retired with the kind-only YAML fetch —
-// the GVK-aware fetch path doesn't write to the response cache.)
-func (g *ResourceGateway) invalidateResponseCache(selectionKey, kind, namespace, name string) {
-	g.responseCacheDelete(selectionKey, objectDetailCacheKey(kind, namespace, name))
-	if gvk, ok := objectDetailFetcherGVKs[strings.ToLower(strings.TrimSpace(kind))]; ok {
-		g.responseCacheDelete(selectionKey, objectDetailCacheKeyForGVK(gvk, namespace, name))
-		g.responseCacheDelete(selectionKey, objectHeaderMetadataCacheKey(gvk, namespace, name))
-	}
 }
 
 // registerHelmCacheInvalidation wires Helm-release cache eviction onto the

@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
@@ -986,7 +987,7 @@ func TestServiceBuildBlocksPermissionDenied(t *testing.T) {
 
 	if _, err := service.Build(context.Background(), namespaceConfigDomainName, "scope-a"); err == nil {
 		t.Fatalf("expected permission error")
-	} else if !refresh.IsPermissionDenied(err) {
+	} else if !errorstatus.IsPermissionDenied(err) {
 		t.Fatalf("expected permission denied error, got %v", err)
 	}
 	if called {
@@ -1020,7 +1021,7 @@ func TestServiceBuildBlocksNamespacesWithoutListPermission(t *testing.T) {
 
 	if _, err := service.Build(context.Background(), "namespaces", "cluster-a|"); err == nil {
 		t.Fatalf("expected permission error")
-	} else if !refresh.IsPermissionDenied(err) {
+	} else if !errorstatus.IsPermissionDenied(err) {
 		t.Fatalf("expected permission denied error, got %v", err)
 	}
 	if called {
@@ -1138,7 +1139,7 @@ func TestServiceBuildSkipsEnsureForPermissionDeniedDomain(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected permission error from placeholder domain")
 	}
-	if !refresh.IsPermissionDenied(err) {
+	if !errorstatus.IsPermissionDenied(err) {
 		t.Fatalf("expected permission denied error, got %v", err)
 	}
 	// The SSAR review function should NOT have been called because ensurePermissions

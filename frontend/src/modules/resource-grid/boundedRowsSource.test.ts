@@ -6,7 +6,7 @@
  * and capped/windowed data is partial with an explaining label.
  */
 import { describe, expect, it } from 'vitest';
-
+import { localFailure } from '@/core/refresh/refreshFailure';
 import { boundedRowsSource } from './boundedRowsSource';
 import { deriveResourceInventoryRenderState } from './useResourceInventoryTable';
 
@@ -69,7 +69,9 @@ describe('boundedRowsSource', () => {
 
   it('propagates blocked and error states', () => {
     expect(boundedRowsSource({ rows: [], blocked: true }).blocked).toBe(true);
-    expect(boundedRowsSource({ rows: [], error: 'nope' }).error).toBe('nope');
+    expect(boundedRowsSource({ rows: [], error: localFailure('nope') }).error).toEqual(
+      localFailure('nope')
+    );
   });
 });
 

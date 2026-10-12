@@ -179,11 +179,9 @@ type ContainerLogsFetchRequest struct {
 type ContainerLogsFetchResponse struct {
 	Entries  []ContainerLogsEntry    `json:"entries"`
 	Warnings []containerlogs.Warning `json:"warnings,omitempty"`
-	// Issues lists each container whose logs could not be read.
+	// Issues lists each container whose logs could not be read. When none
+	// could be read because of a real failure, the request fails instead.
 	Issues []containerlogs.TargetIssue `json:"issues,omitempty"`
-	// Error is set when the request failed as a whole, including when no
-	// container could be read.
-	Error string `json:"error,omitempty"`
 }
 
 // NodeLogSource represents a discovered node log source that can be fetched directly.
@@ -212,7 +210,6 @@ type NodeLogFetchRequest struct {
 type NodeLogFetchResponse struct {
 	Content    string        `json:"content,omitempty"`
 	Source     NodeLogSource `json:"source"`
-	Error      string        `json:"error,omitempty"`
 	SourcePath string        `json:"sourcePath,omitempty"`
 	Truncated  bool          `json:"truncated,omitempty"`
 }

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access/useScopedRefreshDomainLifecycle';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import { failureMessage, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import { type DomainStatus, useRefreshScopedDomain } from '@/core/refresh/store';
 import type {
   ClusterNodeSnapshotPayload,
@@ -38,7 +39,7 @@ const disabledScope = '__resource_metrics_disabled__';
 const stateStatusToResult = (
   resolution: ResourceMetricsResolution,
   status: DomainStatus,
-  error?: string | null
+  error?: RefreshFailure | null
 ): ResourceMetricsResult['status'] => {
   if (resolution.kind === 'invalid') {
     return 'invalid';
@@ -100,7 +101,7 @@ export const useResourceMetrics = (
       status: metrics ? 'available' : stateStatusToResult(resolution, state.status, state.error),
       metrics,
       resolution,
-      error: state.error ?? null,
+      error: failureMessage(state.error),
     };
   }, [resolution, state.data, state.error, state.status]);
 };

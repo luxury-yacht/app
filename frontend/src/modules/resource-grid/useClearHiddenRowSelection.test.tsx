@@ -1,13 +1,14 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { localFailure, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import { useClearHiddenRowSelection } from './useClearHiddenRowSelection';
 
 interface Row {
   name: string;
 }
 
-type Source = { rows: Row[]; loaded: boolean; loading: boolean; error: string | null };
+type Source = { rows: Row[]; loaded: boolean; loading: boolean; error: RefreshFailure | null };
 
 const keyExtractor = (row: Row) => row.name;
 
@@ -50,10 +51,13 @@ describe('useClearHiddenRowSelection', () => {
     expect(onClear).toHaveBeenCalledOnce();
   });
 
-  it.each([
+  it.each<[string, Source]>([
     ['before the first load', { rows: [], loaded: false, loading: true, error: null }],
     ['while a refetch is in flight', { rows: [], loaded: true, loading: true, error: null }],
-    ['when the refetch failed', { rows: [], loaded: true, loading: false, error: 'denied' }],
+    [
+      'when the refetch failed',
+      { rows: [], loaded: true, loading: false, error: localFailure('denied') },
+    ],
   ])('keeps the selection %s', (_label, source) => {
     render('api', source);
     expect(onClear).not.toHaveBeenCalled();

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	podspkg "github.com/luxury-yacht/app/backend/resources/pods"
 
 	"github.com/google/uuid"
@@ -203,7 +204,9 @@ func (o *OperationsCoordinator) StartShellSession(clusterID string, req ShellSes
 	operationEpoch := o.clusterOperationEpoch(clusterID)
 	launch, err := o.prepareShellLaunch(clusterID, req)
 	if err != nil {
-		return nil, err
+		return nil, errorstatus.UserAction(errorstatus.ObjectRef{
+			ClusterID: clusterID, Version: "v1", Kind: "Pod", Namespace: req.Namespace, Name: req.PodName,
+		}, err)
 	}
 	sess, sessionCtx := newShellSession(o.operationContext(), clusterID, req, launch, operationEpoch)
 	lifecycle := o.shellSessionLifecycle()

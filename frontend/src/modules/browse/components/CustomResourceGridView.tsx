@@ -31,6 +31,7 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import { useShortNames } from '@/hooks/useShortNames';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { errorHandler } from '@/utils/errorHandler';
@@ -265,7 +266,7 @@ export function CustomResourceGridFrame({
   spinnerMessage: string;
   diagnosticsLabel: string;
   tableClassName: string;
-  emptyError?: string | null;
+  emptyError?: RefreshFailure | null;
   emptyText: string;
   extraLoading?: boolean;
   extraLoaded?: boolean;

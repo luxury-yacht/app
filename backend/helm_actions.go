@@ -1,14 +1,12 @@
 /*
- * backend/resources_helm.go
+ * backend/helm_actions.go
  *
- * App-level Helm resource wrappers.
- * - Fetches Helm release details, manifests, and values.
+ * Helm release object actions.
  */
 
 package backend
 
 import (
-	"context"
 	"strings"
 
 	configmappkg "github.com/luxury-yacht/app/backend/resources/configmap"
@@ -45,11 +43,7 @@ func (g *ResourceGateway) deleteHelmReleaseAction(target ObjectActionTargetRef) 
 	); err != nil {
 		return err
 	}
-	_, err = FetchResourceWithSelection(g, selectionKey, "", "HelmDelete", target.Namespace+"/"+target.Name, func(context.Context) (struct{}, error) {
-		service := helm.NewService(helm.Dependencies{Common: deps})
-		return struct{}{}, service.DeleteRelease(target.Namespace, target.Name)
-	})
-	if err != nil {
+	if err := helm.NewService(helm.Dependencies{Common: deps}).DeleteRelease(target.Namespace, target.Name); err != nil {
 		return err
 	}
 	g.invalidateHelmCache(selectionKey, target.Namespace, target.Name)

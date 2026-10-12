@@ -2,7 +2,6 @@ package backend
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -37,11 +36,6 @@ func TestResourceGatewayNarrowCollaboratorDefaultsAndDelegation(t *testing.T) {
 	refreshProjection := newRefreshResourceProjection()
 	refreshProjection.publishCatalogEntry("cluster-a", &objectCatalogEntry{service: catalog, meta: ClusterMeta{ID: "cluster-a"}})
 	refreshProjection.publishTelemetry(recorder)
-	var (
-		eventCalled            bool
-		transportSuccessCalled bool
-		transportFailureCalled bool
-	)
 	gateway := newResourceGateway(resourceGatewayDependencies{
 		resolveClusterDependencies: func(clusterID string) (common.Dependencies, string, error) {
 			return common.Dependencies{ClusterID: clusterID}, clusterID, nil
@@ -49,18 +43,9 @@ func TestResourceGatewayNarrowCollaboratorDefaultsAndDelegation(t *testing.T) {
 		resourceDependenciesForClusterID: func(clusterID string) (common.Dependencies, bool) {
 			return common.Dependencies{ClusterID: clusterID}, true
 		},
-		context: func() context.Context { return nil },
-		emitEvent: func(string, ...interface{}) {
-			eventCalled = true
-		},
+		context:     func() context.Context { return nil },
 		logger:      NewLogger(10),
 		clusterName: func(string) string { return "Cluster A" },
-		recordTransportSuccess: func(string) {
-			transportSuccessCalled = true
-		},
-		recordTransportFailure: func(string, string, error) {
-			transportFailureCalled = true
-		},
 		resourceResolverForCluster: func(clusterID string) common.ResourceResolver {
 			return clusterRuntimeResourceResolver{clusterID: clusterID, catalogService: func(string) *objectcatalog.Service { return catalog }}
 		},
@@ -89,32 +74,12 @@ func TestResourceGatewayNarrowCollaboratorDefaultsAndDelegation(t *testing.T) {
 	if got := gateway.clusterNameForID("cluster-a"); got != "Cluster A" {
 		t.Fatalf("cluster name = %q", got)
 	}
-	if gateway.retryTelemetry() != recorder || gateway.resourceRetryDependencies().telemetry() != recorder {
-		t.Fatal("retry telemetry collaborator was not used")
-	}
-
-	gateway.emitEvent("resource:test")
-	gateway.recordClusterTransportSuccess("cluster-a")
-	gateway.recordClusterTransportFailure("cluster-a", "failure", errors.New("boom"))
-	gateway.logResourceFetchError(errors.New("boom"), "fetch failed", "cluster-a", "")
-	if !eventCalled || !transportSuccessCalled || !transportFailureCalled {
-		t.Fatalf("collaborator calls: event=%t success=%t failure=%t", eventCalled, transportSuccessCalled, transportFailureCalled)
-	}
 	gateway.clearCaches()
 
 	resolver := clusterRuntimeResourceResolver{}
 	if _, ok, err := resolver.ResolveResourceForGVK(context.Background(), corev1.SchemeGroupVersion.WithKind("Pod")); err != nil || ok {
 		t.Fatalf("resolver without catalog = (ok=%t, err=%v)", ok, err)
 	}
-}
-
-func TestResourceGatewayRetryTelemetryIsNilUntilRefreshPublishesRecorder(t *testing.T) {
-	gateway := newResourceGateway(resourceGatewayDependencies{
-		refreshProjection: newRefreshResourceProjection(),
-	})
-
-	require.True(t, gateway.retryTelemetry() == nil)
-	require.True(t, gateway.resourceRetryDependencies().telemetry() == nil)
 }
 
 func TestRefreshCoordinatorPublishesCatalogAndTelemetryToResourceProjection(t *testing.T) {
@@ -172,8 +137,9 @@ func TestResourceGatewayUsesDefaultAndLiveRuntimePolicies(t *testing.T) {
 func TestResourceGatewayResumesRequestsAfterAuthRecovery(t *testing.T) {
 	const clusterID = "cluster-auth-recovery"
 	manager := authstate.New(authstate.Config{MaxAttempts: 0})
-	client := cgofake.NewClientset(&corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "default"},
+	client := cgofake.NewClientset(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
 	})
 	fixture := newResourceGatewayFixture()
 	fixture.setCluster(clusterID, &clusterClients{
@@ -183,16 +149,16 @@ func TestResourceGatewayResumesRequestsAfterAuthRecovery(t *testing.T) {
 	})
 
 	manager.ReportFailure("expired credentials")
-	if _, err := fixture.gateway.GetConfigMap(clusterID, "default", "settings"); err == nil || !strings.Contains(err.Error(), "auth failed for Recovered") {
+	if _, err := fixture.gateway.GetPodContainers(clusterID, "default", "web"); err == nil || !strings.Contains(err.Error(), "auth failed for Recovered") {
 		t.Fatalf("request during failed auth = %v, want cluster auth failure", err)
 	}
 
 	manager.ReportSuccess()
-	detail, err := fixture.gateway.GetConfigMap(clusterID, "default", "settings")
+	containers, err := fixture.gateway.GetPodContainers(clusterID, "default", "web")
 	if err != nil {
 		t.Fatalf("request after auth recovery: %v", err)
 	}
-	if detail == nil || detail.Name != "settings" {
-		t.Fatalf("request after auth recovery returned %#v", detail)
+	if len(containers) != 1 || containers[0].Name != "app" {
+		t.Fatalf("request after auth recovery returned %#v", containers)
 	}
 }

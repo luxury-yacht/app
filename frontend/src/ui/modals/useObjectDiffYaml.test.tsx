@@ -2,6 +2,7 @@ import type { CatalogItem } from '@core/refresh/types';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
+import { localFailure } from '@/core/refresh/refreshFailure';
 import { useObjectDiffYaml } from './useObjectDiffYaml';
 
 const mocks = vi.hoisted(() => ({
@@ -52,7 +53,7 @@ it('owns retained YAML and change tracking by complete identity in every render'
     render();
     expect(current.normalized).toContain('second');
     expect(current.changedAt).not.toBeNull();
-    mocks.state = { status: 'error', data: null, error: 'offline' };
+    mocks.state = { status: 'error', data: null, error: localFailure('offline') };
     render();
     expect(current.normalized).toContain('second');
     expect(current.error).toBe('offline');

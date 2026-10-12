@@ -1,7 +1,7 @@
 package streammux
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
@@ -77,19 +77,19 @@ type ClientMessage struct {
 // routing metadata that applies to every message type (including control
 // messages without a Ref).
 type ServerMessage struct {
-	Type            MessageType                     `json:"type"`
-	ClusterID       string                          `json:"clusterId,omitempty"`
-	ClusterName     string                          `json:"clusterName,omitempty"`
-	Domain          string                          `json:"domain,omitempty"`
-	Scope           string                          `json:"scope,omitempty"`
-	Source          Source                          `json:"source,omitempty"`
-	Version         string                          `json:"version,omitempty"`
-	Signal          Signal                          `json:"signal,omitempty"`
-	ResourceVersion string                          `json:"resourceVersion,omitempty"`
-	Sequence        string                          `json:"sequence,omitempty"`
-	Ref             *resourcemodel.ResourceRef      `json:"ref,omitempty"`
-	Error           string                          `json:"error,omitempty"`
-	ErrorDetails    *refresh.PermissionDeniedStatus `json:"errorDetails,omitempty"`
+	Type            MessageType                `json:"type"`
+	ClusterID       string                     `json:"clusterId,omitempty"`
+	ClusterName     string                     `json:"clusterName,omitempty"`
+	Domain          string                     `json:"domain,omitempty"`
+	Scope           string                     `json:"scope,omitempty"`
+	Source          Source                     `json:"source,omitempty"`
+	Version         string                     `json:"version,omitempty"`
+	Signal          Signal                     `json:"signal,omitempty"`
+	ResourceVersion string                     `json:"resourceVersion,omitempty"`
+	Sequence        string                     `json:"sequence,omitempty"`
+	Ref             *resourcemodel.ResourceRef `json:"ref,omitempty"`
+	Error           string                     `json:"error,omitempty"`
+	ErrorDetails    *errorstatus.Status        `json:"errorDetails,omitempty"`
 }
 
 // Subscription captures an active stream subscription.

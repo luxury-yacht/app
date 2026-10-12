@@ -7,6 +7,7 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { localFailure, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { PanelObjectData } from '../types';
 
 const refreshMocks = vi.hoisted(() => ({
@@ -76,7 +77,7 @@ type SnapshotStatus = 'idle' | 'loading' | 'ready' | 'updating' | 'initialising'
 type Snapshot = {
   status: SnapshotStatus;
   data?: unknown;
-  error?: string | null;
+  error?: RefreshFailure | null;
   isManual?: boolean;
 };
 
@@ -215,7 +216,7 @@ describe('MapTab', () => {
     snapshotState.current = {
       status: 'error',
       data: null,
-      error: 'unable to build object map',
+      error: localFailure('unable to build object map'),
     };
 
     const { container, unmount } = await renderMapTab();

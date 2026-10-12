@@ -5,7 +5,9 @@
  * Covers key behaviors and edge cases for client.
  */
 
+import { errorStatusOf } from '@utils/errorStatus';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { makeTelemetrySummary } from './refreshContractTestBuilders';
 
 const mockGetSelectionDiagnostics = vi.fn(async () => ({}));
@@ -275,7 +277,7 @@ describe('fetchSnapshot', () => {
         json: vi.fn().mockResolvedValue({
           jobId: 'job-1',
           state: 'cancelled',
-          error: 'cluster closed',
+          error: makeErrorStatus('Canceled', 'cluster closed'),
         }),
       });
     globalThis.fetch = fetchMock;
@@ -382,46 +384,78 @@ describe('fetchSnapshot', () => {
     expect(init?.headers).toBeUndefined();
   });
 
-  test('throws parsed message when snapshot request fails', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
+  // The orchestrator acts on the failure's reason (a denial settles the scope,
+  // a cluster still starting is held), so the thrown error carries the status.
+  test.each([
+    ['a failed build', makeErrorStatus('InternalError', 'catalog sync failed')],
+    ['a deleted object', makeErrorStatus('NotFound', 'deployments.apps "web" not found')],
+    [
+      'a cluster still starting',
+      makeErrorStatus('ClusterNotReady', 'no active clusters available'),
+    ],
+    [
+      'an unpublished refresh service',
+      makeErrorStatus('RefreshUnavailable', 'refresh subsystem not initialised'),
+    ],
+  ])('throws the status the backend answered for %s', async (_, status) => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
-      status: 500,
-      statusText: 'Internal Server Error',
-      json: vi.fn().mockResolvedValue({ message: 'catalog sync failed' }),
+      status: status.code,
+      statusText: 'error',
+      json: vi.fn().mockResolvedValue({ ...status, correlationId: 'corr-1' }),
       headers: new Headers(),
     });
-
-    globalThis.fetch = fetchMock;
     const { fetchSnapshot } = await import('./client');
 
-    await expect(fetchSnapshot('catalog')).rejects.toThrow('catalog sync failed');
+    const error = await fetchSnapshot('catalog').catch((e: unknown) => e);
+
+    expect((error as Error).message).toBe(status.message);
+    expect(errorStatusOf(error)).toMatchObject({ reason: status.reason, code: status.code });
   });
 
-  test('throws formatted permission denied message when status payload returned', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
+  test('throws a denial with its formatted message and Forbidden status', async () => {
+    const denial = makeErrorStatus('Forbidden', 'permission denied for domain nodes', {
+      details: { domain: 'nodes', resource: 'core/nodes' },
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 403,
       statusText: 'Forbidden',
-      json: vi.fn().mockResolvedValue({
-        kind: 'Status',
-        apiVersion: 'v1',
-        message: 'permission denied for domain nodes (core/nodes)',
-        reason: 'Forbidden',
-        details: { domain: 'nodes', resource: 'core/nodes' },
-        code: 403,
-      }),
+      json: vi.fn().mockResolvedValue(denial),
       headers: new Headers(),
     });
+    const { fetchSnapshot } = await import('./client');
 
-    globalThis.fetch = fetchMock;
-    const { fetchSnapshot, SnapshotPermissionDeniedError } = await import('./client');
-
-    // Typed, not just a message: the orchestrator marks the scope
-    // permissionDenied structurally so it can stop background retries
-    // (permission is checked ONCE per session — restart to recover).
     const error = await fetchSnapshot('nodes').catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(SnapshotPermissionDeniedError);
-    expect((error as Error).message).toBe('permission denied for domain nodes (core/nodes)');
+
+    expect((error as Error).message).toBe(
+      'permission denied for domain nodes (resource core/nodes)'
+    );
+    expect(errorStatusOf(error)?.reason).toBe('Forbidden');
+  });
+
+  test('a failed manual refresh job throws the job failure status', async () => {
+    const denial = makeErrorStatus('Forbidden', 'cluster-a: permission denied for domain pods');
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        json: vi.fn().mockResolvedValue({ jobId: 'job-1', state: 'queued' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ jobId: 'job-1', state: 'failed', error: denial }),
+      });
+    const { fetchSnapshot } = await import('./client');
+
+    const error = await fetchSnapshot('pods', { scope: 'cluster-a|', manual: true }).catch(
+      (e: unknown) => e
+    );
+
+    expect((error as Error).message).toBe(denial.message);
+    expect(errorStatusOf(error)?.reason).toBe('Forbidden');
   });
 
   test('falls back to status text when error body cannot be parsed', async () => {
@@ -436,9 +470,9 @@ describe('fetchSnapshot', () => {
     globalThis.fetch = fetchMock;
     const { fetchSnapshot } = await import('./client');
 
-    await expect(fetchSnapshot('catalog')).rejects.toThrow(
-      'Snapshot request failed: 502 Bad Gateway'
-    );
+    const error = await fetchSnapshot('catalog').catch((e: unknown) => e);
+    expect((error as Error).message).toBe('Snapshot request failed: 502 Bad Gateway');
+    expect(errorStatusOf(error)).toBeNull();
   });
 });
 

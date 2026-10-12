@@ -17,10 +17,11 @@ import {
 } from '@shared/events/EventsGridView';
 import { clusterEventRowIdentity } from '@shared/events/eventGridModel';
 import React, { useCallback, useMemo } from 'react';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 
 interface EventViewProps {
-  error?: string | null;
+  error?: RefreshFailure | null;
 }
 
 /**

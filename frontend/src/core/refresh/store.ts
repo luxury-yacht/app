@@ -8,6 +8,7 @@ import { useSyncExternalStore } from 'react';
 import type { SnapshotStats } from './client';
 import { parseClusterScope } from './clusterScope';
 import type { RefreshSourceClock } from './domainRegistry';
+import { isPermissionDenied, type RefreshFailure } from './refreshFailure';
 import type { DomainPayloadMap, RefreshDomain } from './types';
 
 export type DomainStatus = 'idle' | 'loading' | 'initialising' | 'updating' | 'ready' | 'error';
@@ -26,10 +27,6 @@ export interface DomainSnapshotState<TPayload> {
   // an object clock into every snapshot, so sourceVersions churn on every
   // fetch and CANNOT be a signal key — that was the echo-refetch bug).
   signalVersions?: Partial<Record<RefreshSourceClock, string>>;
-  // The backend refused this scope for lack of RBAC permission (typed 403).
-  // Background refetches skip denied scopes until manual refresh or the owning
-  // cluster's auth/scope/permission recovery starts a new permission epoch.
-  permissionDenied?: boolean;
   checksum?: string;
   etag?: string;
   // Retained for stream diagnostics/backward-compatible tests only. Query-backed
@@ -48,7 +45,11 @@ export interface DomainSnapshotState<TPayload> {
   lastUpdated?: number;
   lastManualRefresh?: number;
   lastAutoRefresh?: number;
-  error?: string | null;
+  // Why the last fetch failed. A Forbidden failure (isPermissionDenied) is a
+  // settled answer: background refetches skip the scope until manual refresh
+  // or the owning cluster's auth/scope/permission recovery starts a new
+  // permission epoch.
+  error?: RefreshFailure | null;
   isManual?: boolean;
   droppedAutoRefreshes: number;
   scope?: string;
@@ -231,7 +232,7 @@ export const resetPermissionDeniedScopedDomainStates = (clusterId: string): void
     for (const [scope, snapshot] of Object.entries(
       scopes as Record<string, DomainSnapshotState<unknown>>
     )) {
-      if (snapshot.permissionDenied && parseClusterScope(scope).clusterId === clusterId) {
+      if (isPermissionDenied(snapshot.error) && parseClusterScope(scope).clusterId === clusterId) {
         denied.push({ domain: domain as RefreshDomain, scope });
       }
     }

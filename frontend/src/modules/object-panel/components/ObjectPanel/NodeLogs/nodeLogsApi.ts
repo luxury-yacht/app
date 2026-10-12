@@ -28,7 +28,6 @@ export interface NodeLogFetchRequest {
 export interface NodeLogFetchResponse {
   content?: string;
   source: NodeLogSource;
-  error?: string;
   sourcePath?: string;
   truncated?: boolean;
 }

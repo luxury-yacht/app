@@ -121,11 +121,8 @@ func newRefreshCoordinatorTestFixture(t testing.TB, reporters ...sentryreporting
 		resolveClusterDependencies:       cluster.ClusterRuntime.resolveClusterDependencies,
 		resourceDependenciesForClusterID: cluster.ClusterRuntime.resourceDependenciesForClusterID,
 		context:                          cluster.signals.CtxOrBackground,
-		emitEvent:                        cluster.signals.emitEvent,
 		logger:                           cluster.AppLogs.Logger(),
 		clusterName:                      cluster.ClusterRuntime.clusterNameForID,
-		recordTransportSuccess:           cluster.ClusterRuntime.recordClusterTransportSuccess,
-		recordTransportFailure:           cluster.ClusterRuntime.recordClusterTransportFailure,
 		resourceResolverForCluster: func(clusterID string) common.ResourceResolver {
 			return clusterRuntimeResourceResolver{
 				runtime:        cluster.ClusterRuntime,

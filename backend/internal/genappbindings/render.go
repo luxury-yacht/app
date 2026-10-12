@@ -1,20 +1,16 @@
-// Package genappbindings renders the ResourceGateway.Get<Kind> resource-detail bindings and
-// the object-panel detail-fetcher dispatch map, both from one binding table.
+// Package genappbindings renders, from one binding table, the object-panel
+// detail-fetcher dispatch map and the BindingModelAnchor that keeps every
+// detail DTO reachable by the Wails binding generator.
 //
-// Every standard binding is the same shape: resolve cluster deps, then
-// Fetch{Namespaced,Cluster}Resource with a closure that calls the kind's typed
-// service method. The only things that vary per kind — the kind name, whether it
-// is namespaced, the fetch selection key, the service constructor, and the method
-// name — are declared once in the bindings table below. Generating the wrappers
-// from that table makes "add a kind" a single table row plus its typed service
-// method/DTO; the wrapper can no longer drift or be forgotten.
+// Every kind's detail fetch is the same shape: call the kind's typed service
+// method with (namespace, name) or (name). The only things that vary per kind —
+// the kind name, whether it is namespaced, the service constructor, and the
+// method name — are declared once in the bindings table below, so "add a kind"
+// is a single table row plus its typed service method/DTO.
 //
-// The same table also generates the runtime objectDetailFetchers map (see
-// RenderDetailFetchers): the object panel dispatches a kind to the same typed
-// service call, so it must not be a second hand-maintained copy. Three kinds whose
-// ResourceGateway.Get binding is hand-written — pods (extra args), helm (its own Dependencies
-// + non-Details return types), and apiextensions/CRD (extra client guard) — still
-// have a generated detail fetcher, declared in detailExtras.
+// Three kinds — pods (extra args), helm (its own Dependencies), and
+// apiextensions/CRD — are absent from the registry bindings but still have a
+// generated detail fetcher, declared in detailExtras.
 package genappbindings
 
 import (
@@ -34,23 +30,15 @@ import (
 
 const resourcesPkg = "github.com/luxury-yacht/app/backend/resources/"
 
-// binding describes one ResourceGateway.Get<Name> wrapper. Key and Method default to Name.
+// binding describes one kind's typed detail fetch. Method defaults to Name.
 type binding struct {
-	Name       string // K8s kind: ResourceGateway method is Get<Name>, DTO is <Name>Details
+	Name       string // K8s kind: the DTO is <Name>Details
 	Namespaced bool
-	Key        string // Fetch selection key (default Name)
 	Method     string // service method (default Name)
 	Service    string // service constructor expression, e.g. "rbac.NewService(deps)"
 	Import     string // service package import path
 	DTOImport  string // DTO package import path (default: Import — DTO shares the service's package)
 	Fetch      string // raw detail-fetch expression override (default: Service.Method(args))
-}
-
-func (b binding) key() string {
-	if b.Key != "" {
-		return b.Key
-	}
-	return b.Name
 }
 
 func (b binding) method() string {
@@ -70,7 +58,7 @@ func (b binding) dtoImport() string {
 	return b.Import
 }
 
-// dtoType is the package-qualified DTO type the ResourceGateway.Get wrapper returns, e.g.
+// dtoType is the package-qualified DTO type the anchor references, e.g.
 // "deployment.DeploymentDetails". Qualifying it here means package backend no
 // longer needs a re-export alias for every kind's DTO.
 func (b binding) dtoType() string {
@@ -104,7 +92,6 @@ func fromSpec(s appbinding.Spec) binding {
 	return binding{
 		Name:       s.Identity.Kind,
 		Namespaced: s.Identity.Namespaced,
-		Key:        s.Key,
 		Method:     s.Method,
 		Service:    s.Service,
 		Import:     s.Import,
@@ -121,9 +108,9 @@ func fromSpecs(specs []appbinding.Spec) []binding {
 	return out
 }
 
-// Bindings is the aggregated source for the generated ResourceGateway.Get wrappers, derived
-// from the kind registry. The generator sorts by Name for stable output, so
-// registry order is immaterial.
+// Bindings is the aggregated source for the generated detail fetchers and DTO
+// anchor, derived from the kind registry. The generator sorts by Name for stable
+// output, so registry order is immaterial.
 var Bindings = bindingsFromRegistry()
 
 func bindingsFromRegistry() []binding {
@@ -136,9 +123,9 @@ func bindingsFromRegistry() []binding {
 	return out
 }
 
-// detailExtras are kinds that have a runtime object-panel detail fetcher but whose
-// ResourceGateway.Get binding is hand-written, so they are absent from Bindings. They take part
-// only in detail-fetcher generation, never in ResourceGateway.Get binding generation. Their
+// detailExtras are kinds that have a runtime object-panel detail fetcher but no
+// registry binding, so they are absent from Bindings. They take part only in
+// detail-fetcher generation; the anchor lists their DTOs explicitly. Their
 // Identity is declared inline because HelmRelease is not a built-in Kubernetes kind.
 var detailExtras = fromSpecs([]appbinding.Spec{
 	{Identity: pods.Identity, Fetch: "pods.GetPod(ctx, deps, namespace, name, true)", Import: resourcesPkg + "pods"},
@@ -146,14 +133,13 @@ var detailExtras = fromSpecs([]appbinding.Spec{
 	{Identity: apiextensions.Identity, Service: "apiextensions.NewService(deps)", Import: resourcesPkg + "apiextensions"},
 })
 
-// Render returns the gofmt'd source of the generated bindings file.
+// Render returns the gofmt'd source of the generated binding-model anchor file.
 func Render() ([]byte, error) {
 	rows := append([]binding(nil), Bindings...)
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
 
-	importSet := map[string]struct{}{"context": {}}
+	importSet := map[string]struct{}{}
 	for _, r := range rows {
-		importSet[r.Import] = struct{}{}
 		importSet[r.dtoImport()] = struct{}{}
 	}
 	imports := make([]string, 0, len(importSet))
@@ -170,8 +156,8 @@ func Render() ([]byte, error) {
 		fmt.Fprintf(&b, "\t%q\n", imp)
 	}
 	b.WriteString(")\n\n")
-	b.WriteString("// BindingModelAnchor keeps object-detail DTOs reachable by the Wails generator\n")
-	b.WriteString("// without exporting the backend-only Get<Kind> wrappers to TypeScript.\n")
+	b.WriteString("// BindingModelAnchor keeps object-detail DTOs reachable by the Wails generator;\n")
+	b.WriteString("// the object-details refresh domain returns them untyped.\n")
 	b.WriteString("//wails:internal\n")
 	b.WriteString("type BindingModelAnchor struct {\n")
 	for _, r := range rows {
@@ -182,17 +168,14 @@ func Render() ([]byte, error) {
 	b.WriteString("\tPod *PodDetailInfo\n")
 	b.WriteString("}\n\n")
 	b.WriteString("//wails:internal\n")
-	b.WriteString("func (s *DesktopService) BindingModelAnchor() BindingModelAnchor { return BindingModelAnchor{} }\n\n")
-	for _, r := range rows {
-		writeBinding(&b, r)
-	}
+	b.WriteString("func (s *DesktopService) BindingModelAnchor() BindingModelAnchor { return BindingModelAnchor{} }\n")
 	return format.Source(b.Bytes())
 }
 
 // RenderDetailFetchers returns the gofmt'd source of the generated
 // objectDetailFetchers map: the object panel's GVK→typed-detail dispatch, built
-// from the same binding table as the ResourceGateway.Get wrappers plus detailExtras. This is
-// why the dispatch can no longer be a hand-maintained second copy.
+// from the binding table plus detailExtras, so the dispatch can never be a
+// hand-maintained second copy.
 func RenderDetailFetchers() ([]byte, error) {
 	rows := append([]binding(nil), Bindings...)
 	rows = append(rows, detailExtras...)
@@ -231,33 +214,4 @@ func RenderDetailFetchers() ([]byte, error) {
 	}
 	b.WriteString("}\n")
 	return format.Source(b.Bytes())
-}
-
-func writeBinding(b *bytes.Buffer, r binding) {
-	dto := r.dtoType()
-	if r.Namespaced {
-		fmt.Fprintf(b, `func (g *ResourceGateway) Get%[1]s(clusterID, namespace, name string) (*%[2]s, error) {
-	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
-	if err != nil {
-		return nil, err
-	}
-	return FetchNamespacedResource(g, deps, selectionKey, %[3]q, namespace, name, func(ctx context.Context) (*%[2]s, error) {
-		return %[4]s.%[5]s(ctx, namespace, name)
-	})
-}
-
-`, r.Name, dto, r.key(), r.Service, r.method())
-		return
-	}
-	fmt.Fprintf(b, `func (g *ResourceGateway) Get%[1]s(clusterID, name string) (*%[2]s, error) {
-	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
-	if err != nil {
-		return nil, err
-	}
-	return FetchClusterResource(g, deps, selectionKey, %[3]q, name, func(ctx context.Context) (*%[2]s, error) {
-		return %[4]s.%[5]s(ctx, name)
-	})
-}
-
-`, r.Name, dto, r.key(), r.Service, r.method())
 }

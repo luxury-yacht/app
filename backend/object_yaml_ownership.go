@@ -18,6 +18,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 )
 
 // ObjectYAMLOwnershipConflict describes one edited field whose current owner
@@ -32,6 +34,9 @@ type ObjectYAMLOwnershipConflict struct {
 // create. An empty list means the save takes no contested ownership.
 type ObjectYAMLOwnershipCheckResponse struct {
 	Conflicts []ObjectYAMLOwnershipConflict `json:"conflicts"`
+	// YAMLConflict is set when the edited object changed or was replaced since
+	// editing began; the check stays advisory and the save goes on to Apply.
+	YAMLConflict *ObjectYAMLConflict `json:"yamlConflict,omitempty"`
 }
 
 // Upstream apiserver conflict causes carry the owning manager only inside the
@@ -43,6 +48,17 @@ var objectYAMLOwnershipManagerPattern = regexp.MustCompile(`conflict with "([^"]
 // whether to proceed, and the save itself never goes through server-side
 // apply (which would make this editor co-owner of the entire document).
 func (g *ResourceGateway) CheckObjectYamlOwnership(
+	clusterID string,
+	req ObjectYAMLMutationRequest,
+) (*ObjectYAMLOwnershipCheckResponse, error) {
+	response, err := g.checkObjectYamlOwnership(clusterID, req)
+	if conflict, ok := yamlConflictOf(err); ok {
+		return &ObjectYAMLOwnershipCheckResponse{Conflicts: []ObjectYAMLOwnershipConflict{}, YAMLConflict: conflict}, nil
+	}
+	return response, errorstatus.UserAction(objectYAMLStatusRef(clusterID, req), err)
+}
+
+func (g *ResourceGateway) checkObjectYamlOwnership(
 	clusterID string,
 	req ObjectYAMLMutationRequest,
 ) (*ObjectYAMLOwnershipCheckResponse, error) {

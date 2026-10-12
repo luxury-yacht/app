@@ -13,6 +13,7 @@ import type { PermissionStatus } from '@/core/capabilities';
 import { useUserPermission } from '@/core/capabilities';
 import { eventBus } from '@/core/events';
 import { refreshOrchestrator } from '@/core/refresh';
+import { deniedFailure, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { RefreshDomain } from '@/core/refresh/types';
 
 // The managed cluster domains, reset together on kubeconfig switches so no
@@ -118,14 +119,16 @@ export function ClusterResourcesManager({ activeTab }: Readonly<ClusterResourceM
   // Only surface a permission message when the backend definitively denied
   // access (status === 'ready').  Errors (e.g. "cluster not active" during
   // initial activation) are transient and should not be shown as denials.
-  const permissionToMessage = (permission?: PermissionStatus): string | null => {
+  // A read the permission gate refused: the view shows its empty state as
+  // a permission denial.
+  const permissionToMessage = (permission?: PermissionStatus): RefreshFailure | null => {
     if (!permission || permission.pending || permission.allowed) {
       return null;
     }
     if (permission.entry?.status !== 'ready') {
       return null;
     }
-    return permission.reason || 'Insufficient permissions';
+    return deniedFailure(permission.reason || 'Insufficient permissions');
   };
 
   const configPermissionMessage =

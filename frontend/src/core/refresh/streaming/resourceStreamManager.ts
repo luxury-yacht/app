@@ -15,6 +15,7 @@ import {
   logAppLogsInfo,
 } from '@/core/logging/appLogsClient';
 import { reportOperationalError } from '@/utils/errorHandler';
+import { localFailure } from '../refreshFailure';
 import { getScopedDomainState, setScopedDomainState } from '../store';
 import type { ResourceStreamServerMessage } from '../types';
 import { ResourceStreamConnection } from './resourceStreamConnection';
@@ -53,7 +54,8 @@ export { normalizeResourceScope } from './resourceStreamDomains';
 
 const UPDATE_COALESCE_MS = 150;
 const RESYNC_COOLDOWN_MS = 1000;
-const RESYNC_MESSAGE = 'Stream resyncing';
+// Shown while a stream resynchronizes; the frontend raised it, so it is local.
+const RESYNC_FAILURE = localFailure('Stream resyncing');
 // Linger stream stops briefly to avoid rapid subscribe/unsubscribe churn.
 const STREAM_UNSUBSCRIBE_DEBOUNCE_MS = 500;
 // Cap queued updates to avoid unbounded memory growth under bursty streams.
@@ -700,12 +702,11 @@ export class ResourceStreamManager {
   }
 
   private markResyncing(subscription: StreamSubscription): void {
-    const message = RESYNC_MESSAGE;
     this.forEachReportScope(subscription, (reportScope) => {
       setScopedDomainState(subscription.domain, reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
-        error: message,
+        error: RESYNC_FAILURE,
         scope: reportScope,
       }));
     });

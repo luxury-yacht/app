@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -103,7 +104,8 @@ func fetchObjectByGVK(ctx context.Context, deps common.Dependencies, gvk schema.
 	}
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil, fmt.Errorf("%s %q not found in namespace %q", gvk.String(), name, namespace)
+			// The message names the full GVK instead of the plural resource.
+			return nil, errorstatus.WithMessage(fmt.Sprintf("%s %q not found in namespace %q", gvk.String(), name, namespace), err)
 		}
 		return nil, fmt.Errorf("failed to get %s %s: %w", gvk.String(), name, err)
 	}

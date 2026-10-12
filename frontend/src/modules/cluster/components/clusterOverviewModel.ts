@@ -2,6 +2,7 @@ import type { ResourceCalculations } from '@shared/utils/resourceCalculations';
 import { formatCpuValue, formatMemoryValue } from '@shared/utils/resourceCalculations';
 import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import { shouldSuppressClusterOverviewUnavailableError } from '@/core/refresh/clusterOverviewLifecycle';
+import { failureMessage, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { DomainStatus } from '@/core/refresh/store';
 import type { ClusterOverviewMetrics, ClusterOverviewPayload } from '@/core/refresh/types';
 import { type ClusterWorkloadUsageKey, clusterWorkloadUsageValue } from '@/core/resource-metrics';
@@ -60,7 +61,7 @@ interface OverviewDisplayStateInput {
   selectedClusterId: string | null;
   isSwitching: boolean;
   domainStatus: DomainStatus;
-  domainError: string | null | undefined;
+  domainError: RefreshFailure | null | undefined;
   suppressPassiveLoading: boolean;
   lifecycleState: ClusterLifecycleState | undefined;
 }
@@ -74,14 +75,14 @@ export interface OverviewDisplayState {
 
 const getUnavailableError = (
   domainStatus: DomainStatus,
-  domainError: string | null | undefined,
+  domainError: RefreshFailure | null | undefined,
   isHydratedForCluster: boolean,
   suppressUnavailableError: boolean
 ): string | null => {
   if (domainStatus !== 'error' || isHydratedForCluster || suppressUnavailableError) {
     return null;
   }
-  return domainError ?? null;
+  return failureMessage(domainError);
 };
 
 const shouldShowOverviewSkeleton = ({

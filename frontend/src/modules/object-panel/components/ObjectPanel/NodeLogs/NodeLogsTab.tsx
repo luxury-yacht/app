@@ -177,9 +177,7 @@ type NodeLogFetchBatch = {
   response: NodeLogFetchResponse | null;
 };
 
-type NodeLogBatchResolution =
-  | { status: 'error'; message: string }
-  | { status: 'success'; content: string; truncated: boolean };
+type NodeLogBatchResolution = { content: string; truncated: boolean };
 
 type NodeLogFetchPlan = {
   activeSourcePath: string;
@@ -238,40 +236,35 @@ const fetchNodeLogBatch = async (
   nodeName: string,
   plan: NodeLogFetchPlan
 ): Promise<NodeLogFetchBatch> => {
-  let appendMode = Boolean(plan.incrementalSinceTime);
-  let result = await executeNodeLogFetch(
-    clusterId,
-    nodeName,
-    plan.activeSourcePath,
-    plan.requestReason,
-    plan.incrementalSinceTime
-  );
-  let response = getExecutedNodeLogResponse(result);
-  if (!response) {
-    return { appendMode, response: null };
+  const fullRead = async (): Promise<NodeLogFetchBatch> => ({
+    appendMode: false,
+    response: getExecutedNodeLogResponse(
+      await executeNodeLogFetch(clusterId, nodeName, plan.activeSourcePath, plan.requestReason)
+    ),
+  });
+  if (!plan.incrementalSinceTime) {
+    return fullRead();
   }
-  if (appendMode && (response.error || response.truncated)) {
-    result = await executeNodeLogFetch(
-      clusterId,
-      nodeName,
-      plan.activeSourcePath,
-      plan.requestReason
+  // An incremental read that fails or was cut short cannot be appended; a
+  // full read replaces it, and only that read's failure is reported.
+  let response: NodeLogFetchResponse | null;
+  try {
+    response = getExecutedNodeLogResponse(
+      await executeNodeLogFetch(
+        clusterId,
+        nodeName,
+        plan.activeSourcePath,
+        plan.requestReason,
+        plan.incrementalSinceTime
+      )
     );
-    response = getExecutedNodeLogResponse(result);
-    appendMode = false;
+  } catch {
+    return fullRead();
   }
-  return { appendMode, response };
-};
-
-const nodeLogResponseError = (response: NodeLogFetchResponse, clusterId: string): string | null => {
-  if (!response.error) {
-    return null;
+  if (response?.truncated) {
+    return fullRead();
   }
-  return errorHandler.handleInline(new Error(response.error), {
-    action: 'loadNodeLogs',
-    source: 'NodeLogsTab',
-    clusterId,
-  }).message;
+  return { appendMode: true, response };
 };
 
 // `truncated` means lines of this source were dropped: by the node's size
@@ -279,15 +272,10 @@ const nodeLogResponseError = (response: NodeLogFetchResponse, clusterId: string)
 const resolveNodeLogBatch = (
   batch: NodeLogFetchBatch,
   existing: { content: string; truncated: boolean },
-  clusterId: string,
   maxLines: number
 ): NodeLogBatchResolution | null => {
   if (!batch.response) {
     return null;
-  }
-  const responseError = nodeLogResponseError(batch.response, clusterId);
-  if (responseError) {
-    return { status: 'error', message: responseError };
   }
   const incomingContent = batch.response.content ?? '';
   const appending = batch.appendMode && existing.content.length > 0;
@@ -296,7 +284,6 @@ const resolveNodeLogBatch = (
     maxLines
   );
   return {
-    status: 'success',
     content: kept.content,
     truncated:
       Boolean(batch.response.truncated) || kept.dropped || (appending && existing.truncated),
@@ -375,15 +362,9 @@ const useNodeLogRequest = ({
         const resolution = resolveNodeLogBatch(
           batch,
           { content: contentRef.current, truncated: truncatedRef.current },
-          clusterId,
           getObjPanelLogsBufferMaxSize()
         );
         if (!resolution) {
-          return;
-        }
-        if (resolution.status === 'error') {
-          setError(resolution.message);
-          setContent((current) => (plan.sourceChanged ? '' : current));
           return;
         }
         loadedSourcePathRef.current = plan.activeSourcePath;

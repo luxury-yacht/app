@@ -9,7 +9,15 @@ import { act, createContext, useSyncExternalStore } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
+import type { ErrorStatusObjectRef } from '@/core/refresh/types';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
+
+const notFound = (ref?: ErrorStatusObjectRef): RefreshFailure => ({
+  kind: 'backend',
+  status: makeErrorStatus('NotFound', 'widgets.example.com "api" not found', { ref }),
+});
 
 interface DetailsTabCapture {
   onAfterDelete: () => void;
@@ -43,7 +51,7 @@ type PanelTestOptions = {
   version?: string;
   capabilityOverrides?: Record<string, CapabilityState>;
   logPermission?: { allowed: boolean; pending: boolean };
-  scopedDomain?: { data: unknown; status: string; error: string | null };
+  scopedDomain?: { data: unknown; status: string; error: RefreshFailure | null };
 };
 
 const {
@@ -290,7 +298,7 @@ interface RenderContext {
 
 let capabilityStateMap: Record<string, CapabilityState>;
 let currentLogPermission: { allowed: boolean; pending: boolean };
-let currentScopedDomain: { data: unknown; status: string; error: string | null };
+let currentScopedDomain: { data: unknown; status: string; error: RefreshFailure | null };
 let ObjectPanel: typeof import('./ObjectPanel').default;
 
 mockUseCapabilities.mockImplementation(() => ({
@@ -724,7 +732,18 @@ describe('ObjectPanel tab availability', () => {
       clusterId: 'config:Prod',
       group: 'example.com',
       version: 'v1',
-      scopedDomain: { data: null, status: 'error', error: 'Widget api not found' },
+      scopedDomain: {
+        data: null,
+        status: 'error',
+        error: notFound({
+          clusterId: 'config:Prod',
+          group: 'example.com',
+          version: 'v1',
+          kind: 'Widget',
+          namespace: 'team-a',
+          name: 'api',
+        }),
+      },
     });
     expect(ctx.container.querySelector('.object-panel-empty-state')).not.toBeNull();
 
@@ -736,6 +755,45 @@ describe('ObjectPanel tab availability', () => {
 
     expect(ctx.container.querySelector('.object-panel-empty-state')).toBeNull();
     expect(getDetailsTabProps().detailModel.activeDetail).toEqual({ status: 'Ready' });
+  });
+
+  // The panel closes on a NotFound only when it names this exact object.
+  describe('marks its object deleted', () => {
+    const widget = {
+      clusterId: 'config:Prod',
+      group: 'example.com',
+      version: 'v1',
+      kind: 'Widget',
+      namespace: 'team-a',
+      name: 'api',
+    };
+    const renderWithDetailsFailure = (error: RefreshFailure) =>
+      renderObjectPanel({ ...widget, scopedDomain: { data: null, status: 'error', error } });
+    const isMarkedDeleted = () => ctx.container.querySelector('.object-panel-empty-state') !== null;
+
+    it('when the NotFound names this object', async () => {
+      await renderWithDetailsFailure(notFound(widget));
+      expect(isMarkedDeleted()).toBe(true);
+    });
+
+    it.each([
+      ['carries no reference', undefined],
+      ['names the same name in another namespace', { ...widget, namespace: 'team-b' }],
+      ['names the same kind and name in another group', { ...widget, group: 'other.example.com' }],
+      ['names the same object in another cluster', { ...widget, clusterId: 'config:Stage' }],
+    ])('not when the NotFound %s', async (_name, ref) => {
+      await renderWithDetailsFailure(notFound(ref));
+      expect(isMarkedDeleted()).toBe(false);
+    });
+
+    it('not when the failure only says "not found" in its text', async () => {
+      await renderWithDetailsFailure({
+        kind: 'local',
+        message: 'Widget api not found',
+        errorName: 'Error',
+      });
+      expect(isMarkedDeleted()).toBe(false);
+    });
   });
 
   it('passes the received detail payload to the Details tab', async () => {

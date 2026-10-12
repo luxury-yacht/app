@@ -10,6 +10,7 @@ import { formatTooLargeDiffMessage } from '@shared/components/diff/diffUtils';
 import type { DiffLine } from '@shared/components/diff/lineDiff';
 import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
 import { errorHandler } from '@utils/errorHandler';
+import { errorStatusOf } from '@utils/errorStatus';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   readObjectYAMLForRef,
@@ -17,7 +18,6 @@ import {
   requestRefreshDomain,
   setRefreshDomainEnabled,
 } from '@/core/data-access';
-import { parseObjectYamlError } from './yamlErrors';
 import { LINT_DEBOUNCE_MS } from './yamlTabConfig';
 import {
   applyResourceVersionToYaml,
@@ -25,6 +25,7 @@ import {
   checkYamlOwnershipOnServer,
   mergeYamlWithLatestOnServer,
   normalizeYamlString,
+  type ObjectYamlConflict,
   type ObjectYamlOwnershipConflict,
   sanitizeYamlForSemanticCompare,
 } from './yamlTabUtils';
@@ -317,7 +318,7 @@ const requestPreparedYamlMerge = async ({
   draftYaml: string;
   effectiveIdentity: ObjectIdentity;
   prepareVisibleDraftYaml: (rawYaml: string) => string;
-}): Promise<PreparedYamlMerge> => {
+}): Promise<PreparedYamlMergeResult> => {
   const mergeBaseYaml =
     baselineMergeYaml || prepareVisibleDraftYaml(normalizeYamlString(sourceYaml));
   const mergeResult = await mergeYamlWithLatestOnServer(
@@ -326,21 +327,31 @@ const requestPreparedYamlMerge = async ({
     draftYaml,
     effectiveIdentity
   );
-  return prepareYamlMerge(mergeResult, effectiveIdentity, prepareVisibleDraftYaml);
-};
-
-type ReloadMergeError =
-  | { kind: 'object-yaml'; parsed: NonNullable<ReturnType<typeof parseObjectYamlError>> }
-  | { kind: 'generic'; message: string };
-
-const classifyReloadMergeError = (error: unknown): ReloadMergeError => {
-  const parsed = parseObjectYamlError(error);
-  if (parsed) {
-    return { kind: 'object-yaml', parsed };
+  if (mergeResult.yamlConflict) {
+    return { kind: 'conflict', conflict: mergeResult.yamlConflict };
   }
   return {
-    kind: 'generic',
-    message: error instanceof Error ? error.message : 'Failed to reload latest YAML.',
+    kind: 'merged',
+    merge: prepareYamlMerge(mergeResult, effectiveIdentity, prepareVisibleDraftYaml),
+  };
+};
+
+// A YAML conflict (the object changed or was replaced) is an outcome the user
+// resolves in the editor, so it arrives as data, never as an error.
+type PreparedYamlMergeResult =
+  | { kind: 'conflict'; conflict: ObjectYamlConflict }
+  | { kind: 'merged'; merge: PreparedYamlMerge };
+
+// The message and field causes of a failed request, read from the backend
+// status when there is one.
+const describeRequestFailure = (error: unknown, fallback: string) => {
+  const status = errorStatusOf(error);
+  return {
+    message: status?.message ?? (error instanceof Error ? error.message : fallback),
+    causes: status?.details?.causes ?? [],
+    // The YAML itself, or the version it was edited from, must change before
+    // saving again.
+    rejectsYaml: status?.category === 'VALIDATION' || status?.category === 'CONFLICT',
   };
 };
 
@@ -443,9 +454,12 @@ const checkYamlOwnershipFailOpen = async ({
       identity,
       resourceVersion
     );
+    // A yamlConflict here is left to Apply, which returns the same outcome.
     return ownership?.conflicts ?? [];
   } catch (error) {
-    errorHandler.handle(error, { action: 'checkYamlOwnership' });
+    // Advisory and fail-open: report without a toast; Apply's outcome is the
+    // one result the user sees for this save.
+    errorHandler.handleOperational(error, { action: 'checkYamlOwnership' });
     return [];
   }
 };
@@ -809,28 +823,28 @@ export const useYamlTransaction = ({
     exitEditMode();
   }, [exitEditMode, isSaving]);
 
-  const handleReloadMergeError = useCallback(
-    (caughtError: unknown) => {
-      const error = classifyReloadMergeError(caughtError);
-      if (error.kind === 'object-yaml') {
-        setActionError(error.parsed.message);
-        setActionDetails(error.parsed.causes ?? []);
-        setHasRemoteDrift(true);
-        setDriftForced(true);
-        setHasServerYamlError(false);
-        if (error.parsed.currentYaml) {
-          setBackendDriftCurrentYaml(
-            prepareVisibleDraftYaml(normalizeYamlString(error.parsed.currentYaml))
-          );
-        }
-      } else {
-        setActionError(error.message);
-        setActionDetails([]);
+  const handleReloadMergeConflict = useCallback(
+    (conflict: ObjectYamlConflict) => {
+      setActionError(conflict.message);
+      setActionDetails(conflict.causes ?? []);
+      setHasRemoteDrift(true);
+      setDriftForced(true);
+      setHasServerYamlError(false);
+      if (conflict.currentYaml) {
+        setBackendDriftCurrentYaml(
+          prepareVisibleDraftYaml(normalizeYamlString(conflict.currentYaml))
+        );
       }
-      errorHandler.handle(caughtError, { action: 'reloadAndMerge' });
     },
     [prepareVisibleDraftYaml]
   );
+
+  const handleReloadMergeError = useCallback((caughtError: unknown) => {
+    const failure = describeRequestFailure(caughtError, 'Failed to reload latest YAML.');
+    setActionError(failure.message);
+    setActionDetails(failure.causes);
+    errorHandler.handle(caughtError, { action: 'reloadAndMerge' });
+  }, []);
 
   const handleReloadAndMerge = useCallback(async () => {
     if (isSaving || !effectiveIdentity) {
@@ -838,15 +852,20 @@ export const useYamlTransaction = ({
     }
 
     try {
+      const result = await requestPreparedYamlMerge({
+        clusterId: resolvedClusterId,
+        baselineMergeYaml,
+        sourceYaml: manualYamlOverride?.yaml ?? yamlContent,
+        draftYaml,
+        effectiveIdentity,
+        prepareVisibleDraftYaml,
+      });
+      if (result.kind === 'conflict') {
+        handleReloadMergeConflict(result.conflict);
+        return;
+      }
       const { normalizedLatestYaml, preparedLatestYaml, mergedDraftYaml, latestIdentity } =
-        await requestPreparedYamlMerge({
-          clusterId: resolvedClusterId,
-          baselineMergeYaml,
-          sourceYaml: manualYamlOverride?.yaml ?? yamlContent,
-          draftYaml,
-          effectiveIdentity,
-          prepareVisibleDraftYaml,
-        });
+        result.merge;
 
       setEditBaseline({ identity: latestIdentity, yaml: preparedLatestYaml });
       setDraftYaml(mergedDraftYaml);
@@ -880,6 +899,7 @@ export const useYamlTransaction = ({
     baselineMergeYaml,
     draftYaml,
     effectiveIdentity,
+    handleReloadMergeConflict,
     handleReloadMergeError,
     isSaving,
     manualYamlOverride,
@@ -918,24 +938,23 @@ export const useYamlTransaction = ({
     [hydrateLatestObject, verifiedPostApply]
   );
 
+  // The object changed or was replaced since editing began: keep the draft and
+  // editing state so the user can reload and merge.
+  const handleSaveConflict = useCallback((conflict: ObjectYamlConflict) => {
+    setActionError(conflict.message);
+    setActionDetails(conflict.causes ?? []);
+    setHasServerYamlError(true);
+    setPendingSnapshotAdoptionYaml(null);
+  }, []);
+
   const handleSaveError = useCallback((caughtError: unknown) => {
-    const parsed = parseObjectYamlError(caughtError);
-    if (parsed) {
-      setActionError(parsed.message);
-      setActionDetails(parsed.causes ?? []);
-      setHasServerYamlError(true);
-      setPendingSnapshotAdoptionYaml(null);
-      setIsSaving(false);
-    } else {
-      const message =
-        caughtError instanceof Error ? caughtError.message : 'Failed to save YAML changes.';
-      setActionError(message);
-      setActionDetails([]);
-      setPostApplyNotice(null);
-      setVerifiedPostApply(null);
-      setPendingSnapshotAdoptionYaml(null);
-      setHasServerYamlError(false);
-    }
+    const failure = describeRequestFailure(caughtError, 'Failed to save YAML changes.');
+    setActionError(failure.message);
+    setActionDetails(failure.causes);
+    setPostApplyNotice(null);
+    setVerifiedPostApply(null);
+    setPendingSnapshotAdoptionYaml(null);
+    setHasServerYamlError(failure.rejectsYaml);
     errorHandler.handle(caughtError, { action: 'saveObjectYAML' });
   }, []);
 
@@ -955,6 +974,10 @@ export const useYamlTransaction = ({
           identity,
           baselineResourceVersion ?? identity.resourceVersion ?? ''
         );
+        if (applyResponse.yamlConflict) {
+          handleSaveConflict(applyResponse.yamlConflict);
+          return;
+        }
         const appliedResourceVersion =
           applyResponse?.resourceVersion ??
           validation.resourceVersion ??
@@ -993,6 +1016,7 @@ export const useYamlTransaction = ({
     [
       baselineResourceVersion,
       exitEditMode,
+      handleSaveConflict,
       handleSaveError,
       resolvedClusterId,
       scope,

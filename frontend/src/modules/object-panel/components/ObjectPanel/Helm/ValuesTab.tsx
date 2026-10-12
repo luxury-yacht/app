@@ -17,6 +17,7 @@ import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { type HelmValuesData, type HelmValuesMode, selectHelmValues } from './helmValues';
 import './ValuesTab.css';
 import '../Yaml/YamlTab.css';
+import { failureMessage } from '@/core/refresh/refreshFailure';
 
 interface ValuesTabProps {
   scope: string | null;
@@ -47,7 +48,7 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
   });
   const valuesLoading = valuesLoadingState.loading;
   const showPausedValuesState = valuesLoadingState.showPausedEmptyState;
-  const valuesError = snapshot.error ?? null;
+  const valuesError = failureMessage(snapshot.error);
 
   const displayContent = useMemo(() => {
     if (!valuesData) {

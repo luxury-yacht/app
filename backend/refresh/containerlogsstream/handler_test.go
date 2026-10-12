@@ -13,6 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -134,6 +135,10 @@ func TestHandleSendsStructuredErrorForInvalidFirstFrame(t *testing.T) {
 	require.Equal(t, containerLogsDomain, payload.Domain)
 	require.Equal(t, uint64(1), payload.Sequence)
 	require.Contains(t, payload.Error, "scope is required")
+	// A request the stream cannot serve stops: reconnecting resends it.
+	require.NotNil(t, payload.ErrorDetails)
+	require.Equal(t, errorstatus.ReasonBadRequest, payload.ErrorDetails.Reason)
+	require.False(t, payload.Reconnect)
 }
 
 func TestHandleStreamsInitialResetAndStopsWithHandlerGeneration(t *testing.T) {

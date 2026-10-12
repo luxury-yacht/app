@@ -139,7 +139,7 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 
 			gateway := newWorkloadResourceGateway(tc.object)
 			gateway.responseCache = newResponseCache(time.Minute, 10)
-			detailKey := objectDetailCacheKey(tc.kind, "default", "demo")
+			detailKey := liveDetailCacheKey(tc.kind, "default", "demo")
 			gateway.seedResponseCache(workloadClusterID, detailKey, "stale")
 
 			err := gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: tc.kind, Name: "demo"})
@@ -252,7 +252,7 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 
 			gateway := newWorkloadResourceGateway(client)
 			gateway.responseCache = newResponseCache(time.Minute, 10)
-			detailKey := objectDetailCacheKey(tc.kind, "default", "demo")
+			detailKey := liveDetailCacheKey(tc.kind, "default", "demo")
 			gateway.seedResponseCache(workloadClusterID, detailKey, "stale")
 
 			err := gateway.scaleWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: tc.kind, Name: "demo"}, 3)
@@ -405,7 +405,7 @@ func TestTriggerCronJobCreatesJob(t *testing.T) {
 	allowSelfSubjectAccessReviews(client)
 	gateway := newWorkloadResourceGateway(client)
 	gateway.responseCache = newResponseCache(time.Minute, 10)
-	detailKey := objectDetailCacheKey("CronJob", "default", "backup")
+	detailKey := liveDetailCacheKey("CronJob", "default", "backup")
 	gateway.seedResponseCache(workloadClusterID, detailKey, "stale")
 
 	jobName, err := gateway.triggerCronJobAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "backup"})
@@ -525,7 +525,7 @@ func TestSuspendCronJobTogglesSuspendField(t *testing.T) {
 			allowSelfSubjectAccessReviews(client)
 			gateway := newWorkloadResourceGateway(client)
 			gateway.responseCache = newResponseCache(time.Minute, 10)
-			detailKey := objectDetailCacheKey("CronJob", "default", "backup")
+			detailKey := liveDetailCacheKey("CronJob", "default", "backup")
 			gateway.seedResponseCache(workloadClusterID, detailKey, "stale")
 
 			err := gateway.suspendCronJobAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "backup"}, tc.setSuspend)

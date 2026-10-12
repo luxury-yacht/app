@@ -5,6 +5,7 @@
  * Implements orchestrator logic for the core layer.
  */
 
+import { errorStatusOf } from '@utils/errorStatus';
 import { type AppEvents, eventBus } from '@/core/events';
 import {
   APP_LOG_SOURCES,
@@ -30,6 +31,7 @@ import { type RefreshContext, refreshManager } from './RefreshManager';
 import { RefreshErrorNotifier } from './refreshErrorNotifier';
 import { type RefresherTiming, refresherConfig } from './refresherConfig';
 import type { RefresherName, StaticRefresherName } from './refresherTypes';
+import { refreshFailureOf } from './refreshFailure';
 import type { DomainRegistration, StreamingRegistration } from './refreshRegistration';
 import {
   ClusterRefreshRuntime,
@@ -254,7 +256,7 @@ class RefreshOrchestrator {
     error?: unknown,
     operationId?: string
   ): void {
-    if (message.includes('no active clusters available')) {
+    if (errorStatusOf(error)?.reason === 'ClusterNotReady') {
       // The cluster's backend subsystem is still initializing (its lifecycle
       // state was unknown when the fetch dispatched). Warm-up, not failure:
       // hold the scope for re-dispatch on readiness and skip the toast.
@@ -397,7 +399,7 @@ class RefreshOrchestrator {
         setScopedDomainState(domain, normalizedScope, (previous) => ({
           ...previous,
           status: 'error',
-          error: message,
+          error: refreshFailureOf(error instanceof Error ? error : new Error(message)),
           scope: normalizedScope,
         }));
         const notificationScope = normalizedScope?.trim() || undefined;
@@ -975,7 +977,7 @@ class RefreshOrchestrator {
     setScopedDomainState(domain, scope, (previous) => ({
       ...previous,
       status: 'error',
-      error: message,
+      error: refreshFailureOf(error),
       scope,
     }));
     const notificationScope = scope.trim() || undefined;
@@ -1168,9 +1170,10 @@ class RefreshOrchestrator {
 
   private resetRuntimePermissionEpoch(runtime: ClusterRefreshRuntime): void {
     runtime.resetPermissionEpoch().forEach(({ domain, scope }) => {
+      // A new permission epoch: the denial is no longer settled.
       setScopedDomainState(domain, scope, (previous) => ({
         ...previous,
-        permissionDenied: false,
+        error: null,
       }));
     });
   }
@@ -1371,7 +1374,7 @@ class RefreshOrchestrator {
     }
 
     // A cluster whose backend subsystem is still initializing cannot serve any
-    // request yet ("no active clusters available"). Hold the work and
+    // request yet (the backend answers ClusterNotReady). Hold the work and
     // re-dispatch on the lifecycle's became-serviceable edge — warm-up is
     // loading, not failure.
     if (!this.isScopeClusterServiceable(normalizedScope)) {
@@ -1580,15 +1583,14 @@ class RefreshOrchestrator {
       setScopedDomainState(domain, execution.scope, (previous) => ({
         ...previous,
         status: 'error',
-        error: message,
-        permissionDenied: true,
+        error: refreshFailureOf(error),
         isManual: options.isManual,
       }));
       this.notifyRefreshError(domain, execution.scope, message, error, options.correlationId);
       return;
     }
     execution.runtime.markReconciliationFailed(domain, execution.scope);
-    if (this.errorNotifier.shouldSuppressNetworkError(message)) {
+    if (this.errorNotifier.shouldSuppressStartupError(error)) {
       setScopedDomainState(domain, execution.scope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : previous.status,
@@ -1601,7 +1603,7 @@ class RefreshOrchestrator {
     setScopedDomainState(domain, execution.scope, (previous) => ({
       ...previous,
       status: 'error',
-      error: message,
+      error: refreshFailureOf(error),
       isManual: options.isManual,
     }));
     this.notifyRefreshError(domain, execution.scope, message, error, options.correlationId);
@@ -1739,7 +1741,6 @@ class RefreshOrchestrator {
         lastManualRefresh: isManual ? Date.now() : prev.lastManualRefresh,
         lastAutoRefresh: !isManual ? Date.now() : prev.lastAutoRefresh,
         error: null,
-        permissionDenied: false,
         isManual,
         scope: resolvedScope,
       }));
@@ -1883,7 +1884,7 @@ class RefreshOrchestrator {
       { clusterId: parseClusterScope(scope).clusterId }
     );
     // Settle the scope's snapshot state NOW: the fetch gets the same typed
-    // 403 instantly and stamps permissionDenied, so anything gated on this
+    // 403 instantly and stores the denial, so anything gated on this
     // scope's initial load (the typed-query tables) resolves immediately
     // instead of waiting out stream teardown timing.
     void this.performFetch(domain, scope, { isManual: true }).catch(() => {

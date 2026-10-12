@@ -10,6 +10,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 )
 
 // Manager coordinates the refresh subsystem once initialized.
@@ -124,17 +125,18 @@ type ManualQueue interface {
 
 // ManualRefreshJob captures state for a manual refresh request.
 type ManualRefreshJob struct {
-	ID            string   `json:"jobId"`
-	Domain        string   `json:"domain"`
-	Scope         string   `json:"scope,omitempty"`
-	Reason        string   `json:"reason,omitempty"`
-	OperationID   string   `json:"-"`
-	State         JobState `json:"state"`
-	QueuedAt      int64    `json:"queuedAt"`
-	StartedAt     int64    `json:"startedAt,omitempty"`
-	FinishedAt    int64    `json:"finishedAt,omitempty"`
-	Error         string   `json:"error,omitempty"`
-	LatestVersion uint64   `json:"latestVersion,omitempty"`
+	ID          string   `json:"jobId"`
+	Domain      string   `json:"domain"`
+	Scope       string   `json:"scope,omitempty"`
+	Reason      string   `json:"reason,omitempty"`
+	OperationID string   `json:"-"`
+	State       JobState `json:"state"`
+	QueuedAt    int64    `json:"queuedAt"`
+	StartedAt   int64    `json:"startedAt,omitempty"`
+	FinishedAt  int64    `json:"finishedAt,omitempty"`
+	// Error is the failure's status; set only on a failed job.
+	Error         *errorstatus.Status `json:"error,omitempty"`
+	LatestVersion uint64              `json:"latestVersion,omitempty"`
 }
 
 // ManualRefreshResult summarises a manual refresh execution.
@@ -330,7 +332,7 @@ func (m *Manager) processManualJob(parent context.Context, job *ManualRefreshJob
 
 	job.State = JobStateRunning
 	job.StartedAt = time.Now().UnixMilli()
-	job.Error = ""
+	job.Error = nil
 	m.manualQueue.Update(job)
 
 	operationContext := applog.ContextWithOperationID(parent, job.OperationID)
@@ -340,7 +342,7 @@ func (m *Manager) processManualJob(parent context.Context, job *ManualRefreshJob
 	version, err := m.executeManualRefresh(ctx, job)
 	if err != nil {
 		job.State = JobStateFailed
-		job.Error = err.Error()
+		job.Error = statusOf(err)
 	} else {
 		job.State = JobStateSucceeded
 		job.LatestVersion = version
@@ -348,13 +350,18 @@ func (m *Manager) processManualJob(parent context.Context, job *ManualRefreshJob
 
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) && job.State != JobStateSucceeded {
 		job.State = JobStateFailed
-		if job.Error == "" {
-			job.Error = ctx.Err().Error()
+		if job.Error == nil {
+			job.Error = statusOf(ctx.Err())
 		}
 	}
 
 	job.FinishedAt = time.Now().UnixMilli()
 	m.manualQueue.Update(job)
+}
+
+func statusOf(err error) *errorstatus.Status {
+	status := errorstatus.Classify(err)
+	return &status
 }
 
 // Run the domain action before rebuilding its snapshot. Publishing job state stays

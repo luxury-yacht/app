@@ -8,8 +8,8 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { deniedFailure } from '@/core/refresh/refreshFailure';
 import { requireValue } from '@/test-utils/requireValue';
-
 import { ClusterResourcesManager } from './ClusterResourcesManager';
 
 type ClusterKey = 'nodes' | 'rbac' | 'storage' | 'config' | 'crds' | 'custom' | 'events';
@@ -121,7 +121,7 @@ describe('ClusterResourcesManager', () => {
     const props = requireValue(viewPropsRef.current, 'expected captured cluster view props');
     expect(props).toBeTruthy();
     expect(props.activeTab).toBe('nodes');
-    expect(props.nodesError).toBe('nodes denied');
+    expect(props.nodesError).toEqual(deniedFailure('nodes denied'));
   });
   it('respects permission denials and avoids loading', async () => {
     permissionState.set('Event:list', {
@@ -133,6 +133,6 @@ describe('ClusterResourcesManager', () => {
     await renderManager('events');
 
     const props = requireValue(viewPropsRef.current, 'expected captured cluster view props');
-    expect(props.eventsError).toBe('forbidden');
+    expect(props.eventsError).toEqual(deniedFailure('forbidden'));
   });
 });

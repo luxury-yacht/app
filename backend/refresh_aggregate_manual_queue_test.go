@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
@@ -95,6 +96,7 @@ func TestAggregateManualQueueRejectsMultiClusterScope(t *testing.T) {
 	job, err := aggregate.Enqueue(context.Background(), "namespaces", "clusters=cluster-a,cluster-b|", "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "single cluster scope")
+	require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason)
 	require.Nil(t, job)
 	require.Empty(t, queueA.scopes)
 	require.Empty(t, queueB.scopes)
@@ -114,14 +116,28 @@ func TestAggregateManualQueueStatusReflectsChildFailure(t *testing.T) {
 	require.Len(t, queueA.jobs, 1)
 	for _, child := range queueA.jobs {
 		child.State = refresh.JobStateFailed
-		child.Error = "boom"
+		failure := errorstatus.Classify(errorstatus.NewPermissionDenied("namespaces", "core/namespaces"))
+		child.Error = &failure
 		queueA.Update(child)
 	}
 
 	aggStatus, ok := aggregate.Status(job.ID)
 	require.True(t, ok)
 	require.Equal(t, refresh.JobStateFailed, aggStatus.State)
-	require.Contains(t, aggStatus.Error, "cluster-a")
+	require.NotNil(t, aggStatus.Error)
+	require.Contains(t, aggStatus.Error.Message, "cluster-a")
+	require.Equal(t, errorstatus.ReasonForbidden, aggStatus.Error.Reason)
+	for _, child := range queueA.jobs {
+		require.NotContains(t, child.Error.Message, "cluster-a", "the child's status stays unprefixed")
+	}
+}
+
+func TestAggregateManualQueueRejectsInactiveClusterAsNotReady(t *testing.T) {
+	aggregate := newAggregateManualQueue(map[string]*system.Subsystem{})
+
+	_, err := aggregate.Enqueue(context.Background(), "namespaces", "cluster-a|", "")
+
+	require.Equal(t, errorstatus.ReasonClusterNotReady, errorstatus.Classify(err).Reason)
 }
 
 func TestAggregateManualQueueStatusKeepsChildProgressAndAggregateIdentity(t *testing.T) {
@@ -153,7 +169,8 @@ func TestAggregateManualQueueStatusKeepsChildProgressAndAggregateIdentity(t *tes
 			missing, ok := aggregate.Status(job.ID)
 			require.True(t, ok)
 			require.Equal(t, refresh.JobStateFailed, missing.State)
-			require.Equal(t, "cluster cluster-a job missing", missing.Error)
+			require.NotNil(t, missing.Error)
+			require.Equal(t, "cluster cluster-a job missing", missing.Error.Message)
 			require.Zero(t, missing.LatestVersion)
 			require.Zero(t, missing.StartedAt)
 			require.Zero(t, missing.FinishedAt)

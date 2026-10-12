@@ -20,6 +20,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useRefreshDomainHandle } from '@/core/data-access';
+import { failureMessage } from '@/core/refresh/refreshFailure';
 import type { ObjectMapSnapshotPayload } from '@/core/refresh/types';
 import { errorHandler } from '@/utils/errorHandler';
 import type { PanelObjectData } from '../types';
@@ -65,7 +66,7 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
       <div className="map-tab__body">
         {snapshot.error && !payload && (
           <div className="map-tab__message map-tab__message--error">
-            <ErrorSurface kind="reported" message={snapshot.error} />
+            <ErrorSurface kind="reported" message={failureMessage(snapshot.error)} />
           </div>
         )}
         {!!loading && <div className="map-tab__message">Loading object map…</div>}

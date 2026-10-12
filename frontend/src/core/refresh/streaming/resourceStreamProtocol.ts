@@ -1,5 +1,6 @@
+import { isErrorStatus } from '@utils/errorStatus';
 import { parseClusterScope } from '../clusterScope';
-import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
+import { resolvePermissionDeniedMessage } from '../permissionErrors';
 import {
   RESOURCE_STREAM_MESSAGE_TYPES,
   RESOURCE_STREAM_SIGNALS,
@@ -125,8 +126,8 @@ const canonicalMessage = (
   const version = wire.version?.trim() || undefined;
   const sequence = parsePositiveInteger(wire.sequence);
   const resourceVersion = parsePositiveInteger(wire.resourceVersion);
-  const errorReason =
-    resolvePermissionDeniedMessage(wire.error, wire.errorDetails) || 'stream error';
+  const errorStatus = isErrorStatus(wire.errorDetails) ? wire.errorDetails : null;
+  const errorReason = resolvePermissionDeniedMessage(wire.error, errorStatus) || 'stream error';
 
   const signal = modernSignal ?? legacySignal(wire.type);
   if (signal === 'changed') {
@@ -144,7 +145,7 @@ const canonicalMessage = (
     return {
       kind: 'error',
       reason: errorReason,
-      permissionDenied: isPermissionDeniedStatus(wire.errorDetails),
+      permissionDenied: errorStatus?.reason === 'Forbidden',
     };
   }
 

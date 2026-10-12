@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import type { ContainerLogsStreamEventPayload } from '../types';
 import {
   type ContainerLogsProtocolState,
@@ -53,6 +54,15 @@ describe('parseContainerLogsFrame', () => {
     expect(parseContainerLogsFrame(payload)).toEqual(payload);
   });
 
+  // Every fatal frame carries its status; none may be dropped as malformed.
+  it('accepts a fatal frame whatever its status', () => {
+    const payload = frame({
+      error: 'pods "web-0" not found',
+      errorDetails: makeErrorStatus('NotFound', 'pods "web-0" not found'),
+    });
+    expect(parseContainerLogsFrame(payload)).toEqual(payload);
+  });
+
   it.each([
     ['an entry without a line', { entries: [{ ...entry('x'), line: 7 }] }],
     ['an unknown warning kind', { warnings: [{ kind: 'mystery' }] }],
@@ -60,7 +70,8 @@ describe('parseContainerLogsFrame', () => {
       'an unknown issue state',
       { issues: [{ pod: 'p', container: 'c', state: 'odd', reason: '' }] },
     ],
-    ['a non-boolean retryable flag', { retryable: 'yes' }],
+    ['a non-boolean reconnect flag', { reconnect: 'yes' }],
+    ['error details that are not a status', { errorDetails: { reason: 'Forbidden' } }],
     ['a non-numeric trimmed count', { trimmed: '3' }],
     ['a non-boolean resumed flag', { resumed: 'yes' }],
     ['a removed pod that is not a name', { removedPods: [7] }],
@@ -182,8 +193,12 @@ describe('transitionContainerLogsProtocol', () => {
     expect(transition.effects).toContainEqual({ type: 'schedule-reconnect', attempt: 0 });
   });
 
-  it('reconnects after a retryable failure', () => {
-    const transition = receive(live(), { error: 'apiserver is restarting', retryable: true });
+  it('reconnects when the backend says to, even after an unclassified failure', () => {
+    const transition = receive(live(), {
+      error: 'apiserver is restarting',
+      errorDetails: makeErrorStatus('Unknown', 'apiserver is restarting'),
+      reconnect: true,
+    });
     expect(transition.state.phase).toEqual({
       status: 'reconnecting',
       attempt: 1,
@@ -196,22 +211,13 @@ describe('transitionContainerLogsProtocol', () => {
   });
 
   it('stops for good after a failure that cannot be retried', () => {
-    const failed = receive(live(), {
-      error: 'pods is forbidden: User "viewer" cannot list resource "pods"',
-      errorDetails: {
-        kind: 'Status',
-        apiVersion: 'v1',
-        message: 'pods is forbidden: User "viewer" cannot list resource "pods"',
-        reason: 'Forbidden',
-        code: 403,
-        details: { domain: 'container-logs', resource: 'core/pods' },
-      },
-    });
-    expect(failed.state.phase).toMatchObject({
-      status: 'failed',
-      permissionDenied: true,
-      retryable: false,
-    });
+    const denial = makeErrorStatus(
+      'Forbidden',
+      'pods is forbidden: User "viewer" cannot list resource "pods"',
+      { details: { domain: 'container-logs', resource: 'core/pods' } }
+    );
+    const failed = receive(live(), { error: denial.message, errorDetails: denial });
+    expect(failed.state.phase).toMatchObject({ status: 'failed', failure: denial });
     expect(failed.effects).toEqual([{ type: 'close-connection' }]);
 
     const afterLoss = transitionContainerLogsProtocol(failed.state, {

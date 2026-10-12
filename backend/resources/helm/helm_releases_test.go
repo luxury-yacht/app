@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	sentryreporting "github.com/luxury-yacht/app/internal/sentry"
 )
@@ -562,6 +563,50 @@ func TestDeleteReleaseEnsureClientError(t *testing.T) {
 	err := service.DeleteRelease("default", "demo")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ensure")
+}
+
+// A failure before the uninstall runs must be reported by DeleteRelease itself:
+// the gateway no longer wraps Helm uninstall in a fallback capture.
+func TestDeleteReleaseReportsSetupFailures(t *testing.T) {
+	setupErr := errors.New("setup failed")
+	tests := []struct {
+		name string
+		deps func(*recordingHelmLogger) Dependencies
+	}{
+		{
+			name: "client unavailable",
+			deps: func(logger *recordingHelmLogger) Dependencies {
+				return Dependencies{Common: common.Dependencies{
+					EnsureClient: func(string) error { return setupErr },
+					Logger:       logger,
+				}}
+			},
+		},
+		{
+			name: "action configuration fails",
+			deps: func(logger *recordingHelmLogger) Dependencies {
+				return Dependencies{
+					Common: common.Dependencies{
+						EnsureClient: func(string) error { return nil },
+						Logger:       logger,
+					},
+					ActionConfigFactory: func(*cli.EnvSettings, string) (*action.Configuration, error) {
+						return nil, setupErr
+					},
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := &recordingHelmLogger{}
+			err := NewService(tt.deps(logger)).DeleteRelease("default", "demo")
+
+			require.ErrorIs(t, err, setupErr)
+			require.ErrorIs(t, logger.cause, setupErr, "the setup failure is reported")
+			require.True(t, errorcapture.IsTelemetryHandled(err), "the returned error is marked reported")
+		})
+	}
 }
 
 func TestDeleteReleaseRemovesRelease(t *testing.T) {

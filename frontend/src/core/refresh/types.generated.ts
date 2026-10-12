@@ -91,6 +91,48 @@ export type ContainerLogsLimitScope = 'perTab' | 'global';
 
 export type ContainerLogsIssueState = 'unavailable' | 'forbidden' | 'failed';
 
+export type RefreshJobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+export const ERROR_STATUS_REASONS = [
+  'Unauthorized',
+  'Forbidden',
+  'NotFound',
+  'AlreadyExists',
+  'Conflict',
+  'Gone',
+  'Invalid',
+  'BadRequest',
+  'Timeout',
+  'ServerTimeout',
+  'TooManyRequests',
+  'InternalError',
+  'ServiceUnavailable',
+  'CredentialsRejected',
+  'ClusterUnreachable',
+  'ClusterNotReady',
+  'RefreshUnavailable',
+  'DeadlineExceeded',
+  'Canceled',
+  'Unknown',
+] as const;
+
+export type ErrorStatusReason = (typeof ERROR_STATUS_REASONS)[number];
+
+export const ERROR_STATUS_CATEGORIES = [
+  'NETWORK',
+  'AUTHENTICATION',
+  'PERMISSION',
+  'NOT_FOUND',
+  'VALIDATION',
+  'CONFLICT',
+  'TIMEOUT',
+  'RATE_LIMIT',
+  'SERVER_ERROR',
+  'UNKNOWN',
+] as const;
+
+export type ErrorStatusCategory = (typeof ERROR_STATUS_CATEGORIES)[number];
+
 export interface ArgoCDApplicationFacts {
   spec: ArgoCDApplicationSpec;
   sync?: string;
@@ -837,8 +879,8 @@ export interface ContainerLogsStreamEventPayload {
   warnings?: Array<ContainerLogsWarning> | null;
   issues?: Array<ContainerLogsTargetIssue> | null;
   error?: string;
-  errorDetails?: RefreshPermissionDeniedStatus;
-  retryable?: boolean;
+  errorDetails?: ErrorStatus;
+  reconnect?: boolean;
 }
 
 export interface ContainerLogsStreamRequest {
@@ -947,6 +989,37 @@ export interface DrainNodeOptionsPayload {
   force: boolean;
   disableEviction: boolean;
   skipWaitForPodsToTerminate: boolean;
+}
+
+export interface ErrorStatus {
+  kind: string;
+  apiVersion: string;
+  code: number;
+  reason: ErrorStatusReason;
+  category: ErrorStatusCategory;
+  message: string;
+  retryable: boolean;
+  expected: boolean;
+  ref?: ErrorStatusObjectRef;
+  details?: ErrorStatusDetails;
+}
+
+export interface ErrorStatusDetails {
+  domain?: string;
+  resource?: string;
+  group?: string;
+  kind?: string;
+  name?: string;
+  causes?: Array<string>;
+}
+
+export interface ErrorStatusObjectRef {
+  clusterId: string;
+  group: string;
+  version: string;
+  kind: string;
+  namespace?: string;
+  name: string;
 }
 
 export interface ExternalSecretFacts {
@@ -1861,18 +1934,17 @@ export interface RecentEventEntry {
   objectUid: string;
 }
 
-export interface RefreshPermissionDeniedDetails {
-  domain?: string;
-  resource?: string;
-}
-
-export interface RefreshPermissionDeniedStatus {
-  kind: string;
-  apiVersion: string;
-  message: string;
-  reason: string;
-  details: RefreshPermissionDeniedDetails;
-  code: number;
+export interface RefreshManualJob {
+  jobId: string;
+  domain: string;
+  scope?: string;
+  reason?: string;
+  state: RefreshJobState;
+  queuedAt: number;
+  startedAt?: number;
+  finishedAt?: number;
+  error?: ErrorStatus;
+  latestVersion?: number;
 }
 
 export interface ResourceFamilies {
@@ -2018,7 +2090,7 @@ export interface ResourceStreamServerMessage {
   sequence?: string;
   ref?: ResourceRef;
   error?: string;
-  errorDetails?: RefreshPermissionDeniedStatus;
+  errorDetails?: ErrorStatus;
 }
 
 export interface ResourceTableMetadata {

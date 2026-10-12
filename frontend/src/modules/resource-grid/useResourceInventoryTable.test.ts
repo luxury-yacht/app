@@ -7,7 +7,7 @@
  * transient "No X found" false-empty — is locked down without React.
  */
 import { describe, expect, it } from 'vitest';
-
+import { localFailure } from '@/core/refresh/refreshFailure';
 import {
   deriveResourceInventoryRenderState,
   type ResourceInventorySourceState,
@@ -118,10 +118,10 @@ describe('deriveResourceInventoryRenderState', () => {
 
   it('error takes precedence over rows and loading', () => {
     const render = deriveResourceInventoryRenderState(
-      source({ rows: [row('a')], loaded: true, loading: true, error: 'forbidden' })
+      source({ rows: [row('a')], loaded: true, loading: true, error: localFailure('forbidden') })
     );
     expect(render.status).toBe('error');
-    expect(render.error).toBe('forbidden');
+    expect(render.error).toEqual(localFailure('forbidden'));
     expect(render.isEmpty).toBe(false);
     expect(render.showRefreshOverlay).toBe(false);
   });
@@ -130,7 +130,7 @@ describe('deriveResourceInventoryRenderState', () => {
     // A cold-load failure can report loaded=false; the error surface must not
     // hide behind the boundary spinner.
     const render = deriveResourceInventoryRenderState(
-      source({ rows: [], loaded: false, loading: false, error: 'forbidden' })
+      source({ rows: [], loaded: false, loading: false, error: localFailure('forbidden') })
     );
     expect(render.status).toBe('error');
     expect(render.hasLoaded).toBe(true);
@@ -143,7 +143,8 @@ describe('deriveResourceInventoryRenderState', () => {
       deriveResourceInventoryRenderState(source({ loading: true, blocked: true })).status
     ).toBe('blocked');
     expect(
-      deriveResourceInventoryRenderState(source({ blocked: true, error: 'boom' })).status
+      deriveResourceInventoryRenderState(source({ blocked: true, error: localFailure('boom') }))
+        .status
     ).toBe('error');
   });
 

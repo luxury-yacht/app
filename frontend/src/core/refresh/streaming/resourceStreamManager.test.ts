@@ -5,8 +5,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
-
 import { eventBus } from '@/core/events';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 
 const fetchSnapshotMock = vi.hoisted(() => vi.fn());
 const logAppLogsDebugMock = vi.hoisted(() => vi.fn());
@@ -443,14 +443,11 @@ describe('ResourceStreamManager', () => {
           source: 'object',
           signal: 'error',
           version: 'object:2',
-          errorDetails: {
-            kind: 'Status',
-            apiVersion: 'v1',
-            message: 'permission denied for domain namespaces (core/namespaces)',
-            reason: 'Forbidden',
-            details: { domain: 'namespaces', resource: 'core/namespaces' },
-            code: 403,
-          },
+          errorDetails: makeErrorStatus(
+            'Forbidden',
+            'permission denied for domain namespaces (core/namespaces)',
+            { details: { domain: 'namespaces', resource: 'core/namespaces' } }
+          ),
         })
       );
 

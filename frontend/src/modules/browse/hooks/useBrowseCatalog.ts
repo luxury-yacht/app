@@ -34,6 +34,7 @@ import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiag
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useQueryStreamSignal } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
+import { type RefreshFailure, refreshFailureOf } from '@/core/refresh/refreshFailure';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 import {
@@ -190,7 +191,7 @@ export interface UseBrowseCatalogResult {
   /** Whether the catalog has loaded at least once */
   hasLoadedOnce: boolean;
   /** Catalog failure: the scoped domain's error, or a failed page navigation. */
-  error: string | null;
+  error: RefreshFailure | null;
   /** The continue token for pagination (null if no more pages) */
   continueToken: string | null;
   /** The previous token for pagination (null on the first page) */
@@ -273,7 +274,7 @@ export function useBrowseCatalog({
   const [unfilteredTotal, setUnfilteredTotal] = useState(0);
   const [totalIsExact, setTotalIsExact] = useState(true);
   // Page-navigation failures; the scoped domain carries baseline/stream errors.
-  const [pageError, setPageError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<RefreshFailure | null>(null);
   // Last derived filter options, held across transient no-payload gaps so the
   // filter dropdowns never blank mid-interaction (see the filterOptions memo).
   const lastFilterOptionsRef = useRef<{
@@ -591,12 +592,12 @@ export function useBrowseCatalog({
             markCatalogLoaded(payload, hasLoadedOnceRef, setHasLoadedOnce);
           },
           onError: (error) => {
-            const details = errorHandler.handleInline(error, {
+            errorHandler.handleInline(error, {
               action: 'loadBrowseCatalogPage',
               source: 'useBrowseCatalog',
               clusterId,
             });
-            setPageError(details.message);
+            setPageError(refreshFailureOf(error));
           },
           onSettled: () => {
             // A superseded request must not clear its successor's gates.
