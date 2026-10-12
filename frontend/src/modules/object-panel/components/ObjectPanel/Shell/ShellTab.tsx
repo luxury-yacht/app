@@ -30,6 +30,7 @@ import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { useVirtualScrollbar } from '@shared/scrollbars/useVirtualScrollbar';
 import { resolveTerminalTheme, toXtermThemeDefinition } from '@shared/terminal/terminalTheme';
+import { buildCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
 import {
@@ -39,6 +40,7 @@ import {
   StartShellSession,
 } from '@/core/backend-api';
 import ShellConnectionControls from './ShellConnectionControls';
+import ShellSessionBar from './ShellSessionBar';
 import './ShellTab.css';
 
 interface ShellTabProps {
@@ -56,6 +58,16 @@ interface ShellTarget {
   namespace: string;
   resourceName: string;
 }
+
+// The Shell tab always targets one Pod; this is that Pod's complete identity.
+const shellTargetIdentity = (target: ShellTarget) => ({
+  clusterId: target.clusterId,
+  group: '',
+  version: 'v1',
+  kind: 'Pod',
+  namespace: target.namespace,
+  name: target.resourceName,
+});
 
 type ShellStatus = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
 
@@ -136,17 +148,7 @@ async function createDebugShellContainer(
   options: Parameters<typeof runCreateDebugContainer>[1]
 ): Promise<types.DebugContainerResponse> {
   const response = await runCreateDebugContainer(
-    buildObjectActionTarget(
-      {
-        clusterId: target.clusterId,
-        group: '',
-        version: 'v1',
-        kind: 'Pod',
-        namespace: target.namespace,
-        name: target.resourceName,
-      },
-      'create debug container for'
-    ),
+    buildObjectActionTarget(shellTargetIdentity(target), 'create debug container for'),
     options
   );
   const debugContainer = response.debugContainer as types.DebugContainerResponse | undefined;
@@ -161,8 +163,7 @@ type TrackedShellSession = Awaited<ReturnType<typeof readShellSessions>>[number]
 function attachedShellSession(session: TrackedShellSession): types.ShellSession {
   return {
     sessionId: session.sessionId,
-    namespace: session.namespace,
-    podName: session.podName,
+    target: session.target,
     container: session.container,
     command: session.command ?? [],
     containers: [],
@@ -171,6 +172,13 @@ function attachedShellSession(session: TrackedShellSession): types.ShellSession 
 
 const resolveCustomOption = (selected: string, custom: string): string =>
   selected === '__custom__' ? custom.trim() : selected;
+
+const isSameSession = (a: string | null, b: string | null): boolean => a !== null && a === b;
+
+// A close while connecting or right after opening usually means the shell never started.
+const isPrematureClose = (status: ShellStatus, openedAt: number | null): boolean =>
+  status === 'connecting' ||
+  (status === 'open' && openedAt !== null && Date.now() - openedAt < 1500);
 
 function handleShellClipboardKey(
   event: KeyboardEvent,
@@ -220,7 +228,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const [reconnectToken, setReconnectToken] = useState(0);
   const [statusReason, setStatusReason] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ShellContextMenuState | null>(null);
+  const [endingSession, setEndingSession] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
+  // Session the user asked to end; its close is expected, not a failed connection.
+  const userEndedSessionIdRef = useRef<string | null>(null);
   const statusRef = useRef<ShellStatus>('idle');
   const terminalRef = useRef<Xterm.Terminal | null>(null);
   const fitAddonRef = useRef<XtermFit.FitAddon | null>(null);
@@ -682,12 +693,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const handleSessionClosed = useCallback(
     (reason?: string) => {
       pendingReplayRef.current = null;
-      const previousStatus = statusRef.current;
+      const endedByUser = isSameSession(userEndedSessionIdRef.current, sessionIdRef.current);
+      userEndedSessionIdRef.current = null;
       const closedTooSoon =
-        previousStatus === 'connecting' ||
-        (previousStatus === 'open' &&
-          sessionOpenedAtRef.current !== null &&
-          Date.now() - sessionOpenedAtRef.current < 1500);
+        !endedByUser && isPrematureClose(statusRef.current, sessionOpenedAtRef.current);
       clearSession();
       disposeTerminal();
       if (statusRef.current === 'error') {
@@ -787,6 +796,24 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const handleReconnect = useCallback(() => {
     initiateConnection();
   }, [initiateConnection]);
+
+  // The backend publishes the closed status; a failed request leaves the session attached.
+  const handleEndSession = useCallback(async () => {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId) {
+      return;
+    }
+    userEndedSessionIdRef.current = sessionId;
+    setEndingSession(true);
+    try {
+      await CloseShellSession(sessionId);
+    } catch (error) {
+      userEndedSessionIdRef.current = null;
+      errorHandler.handle(error, { action: 'closeShellSession', sessionId, source: 'ShellTab' });
+    } finally {
+      setEndingSession(false);
+    }
+  }, []);
 
   const refreshContainers = useCallback(async () => {
     const target = lastTargetRef.current;
@@ -899,11 +926,9 @@ const ShellTab: React.FC<ShellTabProps> = ({
       if (lastTargetRef.current !== target) {
         return;
       }
+      const targetKey = buildCanonicalObjectRowKey(shellTargetIdentity(target));
       const matching = sessions.filter(
-        (tracked) =>
-          tracked.clusterId === resolvedClusterId &&
-          tracked.namespace === namespace &&
-          tracked.podName === resourceName
+        (tracked) => buildCanonicalObjectRowKey(tracked.target) === targetKey
       );
       if (matching.length === 0) {
         return;
@@ -1118,7 +1143,15 @@ const ShellTab: React.FC<ShellTabProps> = ({
 
   return (
     <div className="object-panel-shell-tab">
-      {!hasActiveSession && (
+      {hasActiveSession ? (
+        <ShellSessionBar
+          session={session}
+          container={activeContainer}
+          fallbackShell={resolvedShell}
+          ending={endingSession}
+          onEnd={handleEndSession}
+        />
+      ) : (
         <ShellConnectionControls
           startDebugContainer={startDebugContainer}
           setStartDebugContainer={setStartDebugContainer}

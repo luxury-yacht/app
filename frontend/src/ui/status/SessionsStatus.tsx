@@ -23,7 +23,7 @@ import StatusIndicator, { type StatusState } from '@shared/components/status/Sta
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { errorHandler } from '@utils/errorHandler';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { StopPortForward } from '@/core/backend-api';
+import { CloseShellSession, StopPortForward } from '@/core/backend-api';
 import { type ShellSessionInfo, useRuntimeOperationStatus } from './runtimeOperationStatus';
 import type { PortForwardSession } from './runtimeOperationStatusAdapter';
 import './SessionsStatus.css';
@@ -62,9 +62,14 @@ interface SessionField {
   value: string;
 }
 
-const sessionIdentityFields = (
-  session: Pick<ShellSessionInfo, 'clusterName' | 'clusterId' | 'namespace' | 'podName'>
-): SessionField[] => [
+interface SessionIdentity {
+  clusterName?: string;
+  clusterId?: string;
+  namespace?: string;
+  podName?: string;
+}
+
+const sessionIdentityFields = (session: SessionIdentity): SessionField[] => [
   { label: 'cluster', value: session.clusterName || session.clusterId || '-' },
   { label: 'namespace', value: session.namespace || '-' },
   { label: 'pod', value: session.podName || '-' },
@@ -87,36 +92,59 @@ const SessionFields = ({ fields, status }: { fields: SessionField[]; status: str
 const ShellSessionItem = ({
   session,
   jumpingShellSessionId,
+  isEnding,
   onOpen,
+  onEnd,
 }: {
   session: ShellSessionInfo;
   jumpingShellSessionId: string | null;
+  isEnding: boolean;
   onOpen: (session: ShellSessionInfo) => void;
+  onEnd: (sessionId: string) => Promise<void>;
 }) => {
   const sessionStatus = session.status || 'active';
   const fields = [
-    ...sessionIdentityFields(session),
+    ...sessionIdentityFields({
+      clusterName: session.clusterName,
+      clusterId: session.clusterId,
+      namespace: session.target.namespace,
+      podName: session.target.name,
+    }),
     { label: 'container', value: session.container || '-' },
     { label: 'shell', value: session.command?.[0] || '/bin/sh' },
   ];
   return (
-    <button
-      type="button"
-      className="ss-session-item as-shell-session as-shell-session-jump"
-      onClick={() => onOpen(session)}
-      disabled={Boolean(jumpingShellSessionId)}
-      title="Click to open this shell session"
-      aria-label={`Open shell session tab for ${session.podName || 'pod'}`}
-    >
-      <div className="ss-session-main">
-        <div className="ss-session-fields as-pf-fields">
-          <SessionFields fields={fields} status={sessionStatus} />
+    <div className="ss-session-item as-shell-session">
+      <button
+        type="button"
+        className="as-shell-session-jump"
+        onClick={() => onOpen(session)}
+        disabled={Boolean(jumpingShellSessionId)}
+        title="Click to open this shell session"
+        aria-label={`Open shell session tab for ${session.target.name || 'pod'}`}
+      >
+        <div className="ss-session-main">
+          <div className="ss-session-fields as-pf-fields">
+            <SessionFields fields={fields} status={sessionStatus} />
+          </div>
         </div>
+        <span className="as-shell-open-affordance" aria-hidden="true">
+          {jumpingShellSessionId === session.sessionId ? '…' : <OpenIcon width={14} height={14} />}
+        </span>
+      </button>
+      <div className="ss-session-actions as-pf-actions">
+        <button
+          type="button"
+          className="as-compact-icon-action as-warning"
+          onClick={() => void onEnd(session.sessionId)}
+          disabled={isEnding}
+          title="End shell session"
+          aria-label="End shell session"
+        >
+          {isEnding ? '…' : <StopSquareIcon />}
+        </button>
       </div>
-      <span className="as-shell-open-affordance" aria-hidden="true">
-        {jumpingShellSessionId === session.sessionId ? '…' : <OpenIcon width={14} height={14} />}
-      </span>
-    </button>
+    </div>
   );
 };
 
@@ -182,6 +210,28 @@ const PortForwardSessionItem = ({
   );
 };
 
+// Marks a session's action control pending while the backend call runs. Row
+// removal arrives through backend list events, not from this call's result.
+const runPendingSessionAction = async (
+  setPending: React.Dispatch<React.SetStateAction<Set<string>>>,
+  sessionId: string,
+  action: string,
+  run: (sessionId: string) => Promise<void>
+) => {
+  setPending((prev) => new Set(prev).add(sessionId));
+  try {
+    await run(sessionId);
+  } catch (err) {
+    errorHandler.handle(err, { action, sessionId, source: 'SessionsStatus' });
+  } finally {
+    setPending((prev) => {
+      const next = new Set(prev);
+      next.delete(sessionId);
+      return next;
+    });
+  }
+};
+
 const SessionsStatus: React.FC = () => {
   const { openWithObject } = useObjectPanel();
   const { selectedClusterId, selectedKubeconfigs, getClusterMeta, setActiveKubeconfig } =
@@ -189,6 +239,7 @@ const SessionsStatus: React.FC = () => {
   const { shellSessions: filteredShellSessions, portForwardSessions: filteredPortForwards } =
     useRuntimeOperationStatus(selectedClusterId);
   const [stoppingPortForwardIds, setStoppingPortForwardIds] = useState<Set<string>>(new Set());
+  const [endingShellSessionIds, setEndingShellSessionIds] = useState<Set<string>>(new Set());
   const [pendingShellJump, setPendingShellJump] = useState<{
     session: ShellSessionInfo;
     targetClusterId: string;
@@ -196,36 +247,33 @@ const SessionsStatus: React.FC = () => {
   const jumpingShellSessionId = pendingShellJump?.session.sessionId ?? null;
   const [statusPopoverCloseSignal, setStatusPopoverCloseSignal] = useState(0);
 
-  const handleStopPortForward = useCallback(async (sessionId: string) => {
-    setStoppingPortForwardIds((prev) => new Set(prev).add(sessionId));
-    try {
-      await StopPortForward(sessionId);
-      // Session list/status updates arrive from backend events.
-    } catch (err) {
-      errorHandler.handle(err, {
-        action: 'stopPortForward',
+  const handleStopPortForward = useCallback(
+    (sessionId: string) =>
+      runPendingSessionAction(
+        setStoppingPortForwardIds,
         sessionId,
-        source: 'SessionsStatus',
-      });
-    } finally {
-      setStoppingPortForwardIds((prev) => {
-        const next = new Set(prev);
-        next.delete(sessionId);
-        return next;
-      });
-    }
-  }, []);
+        'stopPortForward',
+        StopPortForward
+      ),
+    []
+  );
+
+  const handleEndShellSession = useCallback(
+    (sessionId: string) =>
+      runPendingSessionAction(
+        setEndingShellSessionIds,
+        sessionId,
+        'closeShellSession',
+        CloseShellSession
+      ),
+    []
+  );
 
   const openShellSessionTab = useCallback(
     (session: ShellSessionInfo) => {
       try {
         const targetRef = buildRequiredObjectReference({
-          group: '',
-          version: 'v1',
-          kind: 'Pod',
-          name: session.podName,
-          namespace: session.namespace,
-          clusterId: session.clusterId,
+          ...session.target,
           clusterName: session.clusterName?.trim() || undefined,
         });
         const panelId = objectPanelId(targetRef);
@@ -370,7 +418,9 @@ const SessionsStatus: React.FC = () => {
                         key={JSON.stringify([session.clusterId, session.sessionId])}
                         session={session}
                         jumpingShellSessionId={jumpingShellSessionId}
+                        isEnding={endingShellSessionIds.has(session.sessionId)}
                         onOpen={handleJumpToShellSession}
+                        onEnd={handleEndShellSession}
                       />
                     ))
                   )}
@@ -403,8 +453,10 @@ const SessionsStatus: React.FC = () => {
       </div>
     ),
     [
+      endingShellSessionIds,
       filteredPortForwards,
       filteredShellSessions,
+      handleEndShellSession,
       handleJumpToShellSession,
       handleStopPortForward,
       jumpingShellSessionId,

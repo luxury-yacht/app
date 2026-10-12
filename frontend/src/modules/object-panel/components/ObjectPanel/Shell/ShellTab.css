@@ -65,7 +65,8 @@
   align-self: flex-start;
 }
 
-.shell-tab__button {
+.shell-tab__button,
+.shell-tab__end-session {
   border: 1px solid var(--color-border);
   background: var(--color-bg-secondary);
   padding: 0.25rem 0.6rem;
@@ -73,6 +74,30 @@
   font-size: 0.8rem;
   cursor: pointer;
   align-self: flex-start;
+}
+
+/* Shown only while a session is connected. */
+.shell-tab__session-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.shell-tab__session-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.shell-tab__end-session {
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .shell-tab__debug-button {

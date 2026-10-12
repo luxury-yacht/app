@@ -755,8 +755,11 @@ export interface ShellOutputEvent {
  */
 export interface ShellSession {
     "sessionId": string;
-    "namespace": string;
-    "podName": string;
+
+    /**
+     * Target is the complete identity of the object the shell was opened for.
+     */
+    "target": ObjectRef;
     "container": string;
     "command": string[] | null;
     "containers": string[] | null;
@@ -769,8 +772,11 @@ export interface ShellSessionInfo {
     "sessionId": string;
     "clusterId": string;
     "clusterName": string;
-    "namespace": string;
-    "podName": string;
+
+    /**
+     * Target is the complete identity of the object the shell was opened for.
+     */
+    "target": ObjectRef;
     "container": string;
     "command": string[] | null;
     "startedAt": v1$0.Time;

@@ -37,8 +37,7 @@ type shellSession struct {
 	id          string
 	clusterID   string
 	clusterName string
-	namespace   string
-	podName     string
+	target      RuntimeOperationTargetRef
 	container   string
 	command     []string
 	stdin       *io.PipeWriter
@@ -372,8 +371,7 @@ func newShellSession(parent context.Context, clusterID string, req ShellSessionR
 		id:             sessionID,
 		clusterID:      clusterID,
 		clusterName:    launch.deps.ClusterName,
-		namespace:      req.Namespace,
-		podName:        req.PodName,
+		target:         *runtimeOperationTarget(clusterID, podspkg.Identity.Group, podspkg.Identity.Version, podspkg.Identity.Kind, req.Namespace, req.PodName),
 		container:      launch.container,
 		command:        append([]string(nil), launch.command...),
 		stdin:          stdinWriter,
@@ -424,8 +422,7 @@ func shellSessionResponse(sess *shellSession, pod *corev1.Pod) *ShellSession {
 
 	return &ShellSession{
 		SessionID:  sess.id,
-		Namespace:  sess.namespace,
-		PodName:    sess.podName,
+		Target:     sess.target,
 		Container:  sess.container,
 		Command:    append([]string(nil), sess.command...),
 		Containers: containers,
@@ -483,15 +480,16 @@ func runtimeOperationFromShellSession(sess *shellSession) RuntimeOperation {
 	if sess == nil {
 		return RuntimeOperation{}
 	}
+	target := sess.target
 	return RuntimeOperation{
 		ID:          sess.id,
 		Type:        RuntimeOperationShell,
 		ClusterID:   sess.clusterID,
 		ClusterName: sess.clusterName,
-		Target:      runtimeOperationTarget(sess.clusterID, podspkg.Identity.Group, podspkg.Identity.Version, podspkg.Identity.Kind, sess.namespace, sess.podName),
+		Target:      &target,
 		Status:      "open",
 		StartedAt:   sess.startedAt.Format(time.RFC3339),
-		DisplayName: fmt.Sprintf("Shell %s/%s", sess.namespace, sess.podName),
+		DisplayName: fmt.Sprintf("Shell %s/%s", target.Namespace, target.Name),
 		Summary: map[string]string{
 			"container": sess.container,
 			"command":   strings.Join(sess.command, " "),

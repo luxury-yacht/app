@@ -8,6 +8,7 @@ const listShellSessionsMock = vi.hoisted(() => vi.fn());
 const listPortForwardsMock = vi.hoisted(() => vi.fn());
 const listRuntimeOperationsMock = vi.hoisted(() => vi.fn());
 const stopPortForwardMock = vi.hoisted(() => vi.fn());
+const closeShellSessionMock = vi.hoisted(() => vi.fn());
 const browserOpenURLMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@core/backend-api', () => ({
@@ -15,6 +16,7 @@ vi.mock('@core/backend-api', () => ({
   ListPortForwards: listPortForwardsMock,
   ListRuntimeOperations: listRuntimeOperationsMock,
   StopPortForward: stopPortForwardMock,
+  CloseShellSession: closeShellSessionMock,
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
@@ -124,8 +126,14 @@ describe('SessionsStatus shell session jump action', () => {
     sessionId: 'shell-1',
     clusterId: 'cluster-a',
     clusterName: 'cluster-a',
-    namespace: 'default',
-    podName: 'web-abc',
+    target: {
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      namespace: 'default',
+      name: 'web-abc',
+    },
     container: 'app',
     command: ['/bin/sh'],
     startedAt: '2026-02-20T00:00:00Z',
@@ -145,13 +153,7 @@ describe('SessionsStatus shell session jump action', () => {
         type: 'shell',
         clusterId: baseShellSession.clusterId,
         clusterName: baseShellSession.clusterName,
-        target: {
-          group: '',
-          version: 'v1',
-          kind: 'Pod',
-          namespace: baseShellSession.namespace,
-          name: baseShellSession.podName,
-        },
+        target: baseShellSession.target,
         status: 'open',
         startedAt: baseShellSession.startedAt,
       },
@@ -242,6 +244,37 @@ describe('SessionsStatus shell session jump action', () => {
     }
   );
 
+  it.each([false, true])(
+    'ends the selected shell session without opening it and restores its control after rejection=%s',
+    async (reject) => {
+      let finish: () => void = () => undefined;
+      const failure = new Error('end failed');
+      closeShellSessionMock.mockImplementation(
+        () =>
+          new Promise<void>((resolve, rejectPromise) => {
+            finish = () => (reject ? rejectPromise(failure) : resolve());
+          })
+      );
+      await renderStatus();
+      const button = container.querySelector<HTMLButtonElement>('[aria-label="End shell session"]');
+      expect(button).not.toBeNull();
+      await act(async () => button?.click());
+      expect(closeShellSessionMock).toHaveBeenCalledExactlyOnceWith('shell-1');
+      expect(openWithObjectMock).not.toHaveBeenCalled();
+      expect(button?.disabled).toBe(true);
+      await act(async () => finish());
+      expect(button?.disabled).toBe(false);
+      if (reject) {
+        expect(errorHandlerMock.handle).toHaveBeenCalledWith(
+          failure,
+          expect.objectContaining({ action: 'closeShellSession', sessionId: 'shell-1' })
+        );
+      } else {
+        expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+      }
+    }
+  );
+
   it('opens and focuses the shell tab immediately for sessions on the active cluster', async () => {
     await renderStatus();
 
@@ -309,6 +342,7 @@ describe('SessionsStatus shell session jump action', () => {
         sessionId: 'shell-2',
         clusterId: 'cluster-b',
         clusterName: 'cluster-b',
+        target: { ...baseShellSession.target, clusterId: 'cluster-b' },
       },
     ]);
     listRuntimeOperationsMock.mockResolvedValue([
@@ -317,13 +351,7 @@ describe('SessionsStatus shell session jump action', () => {
         type: 'shell',
         clusterId: 'cluster-b',
         clusterName: 'cluster-b',
-        target: {
-          group: '',
-          version: 'v1',
-          kind: 'Pod',
-          namespace: baseShellSession.namespace,
-          name: baseShellSession.podName,
-        },
+        target: { ...baseShellSession.target, clusterId: 'cluster-b' },
         status: 'open',
         startedAt: baseShellSession.startedAt,
       },

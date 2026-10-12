@@ -12,8 +12,14 @@ const shellSession = {
   sessionId: 'shell-1',
   clusterId: 'cluster-a',
   clusterName: 'Cluster A',
-  namespace: 'default',
-  podName: 'web',
+  target: {
+    clusterId: 'cluster-a',
+    group: '',
+    version: 'v1',
+    kind: 'Pod',
+    namespace: 'default',
+    name: 'web',
+  },
   container: 'app',
   startedAt: '2026-05-18T00:00:00Z',
 };

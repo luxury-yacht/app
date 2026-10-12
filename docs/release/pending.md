@@ -1,6 +1,9 @@
 ### Added
 
 - Restored the dedicated Pods view.
+- Shell sessions can be ended from the app.
+  - A connected Shell tab shows the container and shell with an End Session button above the terminal.
+  - Shell rows in the Sessions list have a Stop button, like port forwards.
 
 ### Changed
 

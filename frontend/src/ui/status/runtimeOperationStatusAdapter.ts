@@ -4,6 +4,7 @@
  * Reducer and selectors for shared runtime-operation status rows.
  */
 
+import type { ResourceRef } from '@core/refresh/types';
 import { assertNever } from '@shared/utils/assertNever';
 
 /**
@@ -52,8 +53,8 @@ export interface ShellSessionInfo {
   sessionId: string;
   clusterId: string;
   clusterName: string;
-  namespace: string;
-  podName: string;
+  /** Complete identity of the object the shell was opened for. */
+  target: ResourceRef;
   container: string;
   command?: string[] | null;
   status?: string;

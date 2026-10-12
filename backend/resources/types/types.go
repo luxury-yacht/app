@@ -224,24 +224,24 @@ type ShellSessionRequest struct {
 
 // ShellSession contains details about an active exec session.
 type ShellSession struct {
-	SessionID  string   `json:"sessionId"`
-	Namespace  string   `json:"namespace"`
-	PodName    string   `json:"podName"`
-	Container  string   `json:"container"`
-	Command    []string `json:"command"`
-	Containers []string `json:"containers"`
+	SessionID string `json:"sessionId"`
+	// Target is the complete identity of the object the shell was opened for.
+	Target     ObjectRef `json:"target"`
+	Container  string    `json:"container"`
+	Command    []string  `json:"command"`
+	Containers []string  `json:"containers"`
 }
 
 // ShellSessionInfo describes a tracked shell exec session.
 type ShellSessionInfo struct {
-	SessionID   string      `json:"sessionId"`
-	ClusterID   string      `json:"clusterId"`
-	ClusterName string      `json:"clusterName"`
-	Namespace   string      `json:"namespace"`
-	PodName     string      `json:"podName"`
-	Container   string      `json:"container"`
-	Command     []string    `json:"command"`
-	StartedAt   metav1.Time `json:"startedAt"`
+	SessionID   string `json:"sessionId"`
+	ClusterID   string `json:"clusterId"`
+	ClusterName string `json:"clusterName"`
+	// Target is the complete identity of the object the shell was opened for.
+	Target    ObjectRef   `json:"target"`
+	Container string      `json:"container"`
+	Command   []string    `json:"command"`
+	StartedAt metav1.Time `json:"startedAt"`
 }
 
 // DebugContainerRequest describes the parameters for creating an ephemeral debug container.
