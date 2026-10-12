@@ -79,7 +79,9 @@ no layer decides behavior from message text.
   global notification, and suppresses the toast only for an `expected`
   `PERMISSION` or `AUTHENTICATION` status (refresh denials; credential
   failures the auth overlay owns). `VALIDATION` shows the status's own
-  message.
+  message. A 409 (`Conflict`, `AlreadyExists`) is `CONFLICT`, not
+  `VALIDATION`: another writer won a race, so "check your input" would
+  mislead. It is still reported.
 - One reporting decision: `core/telemetry/expectedErrors.ts` returns the
   status's `expected` verdict when there is a status, otherwise only browser
   conditions (clipboard denial, browser/Wails cancellation) are expected.
