@@ -136,13 +136,18 @@ func (s *Service) getRelease(namespace, name string) (*action.Configuration, *re
 	value, err := action.NewGet(actionConfig).Run(name)
 	if err != nil {
 		err = fmt.Errorf("failed to get release %s: %w", name, err)
-		if errors.Is(err, driver.ErrReleaseNotFound) {
-			// Helm storage has no record of the release: it was uninstalled.
+		if IsReleaseNotFound(err) {
 			err = errorstatus.NotFound(err)
 		}
 		return nil, nil, err
 	}
 	return actionConfig, value, nil
+}
+
+// IsReleaseNotFound reports that Helm storage has no record of the release:
+// it was uninstalled. Failures reaching the cluster, even API 404s, are not.
+func IsReleaseNotFound(err error) bool {
+	return errors.Is(err, driver.ErrReleaseNotFound)
 }
 
 // DeleteRelease removes a Helm release.

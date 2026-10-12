@@ -210,11 +210,11 @@ func confirmMissingObject(
 	}, err)
 }
 
-// confirmMissingHelmRelease names the release on a NotFound. Release details
-// return only their own uncached read of exactly that release (other lookups
-// are logged, not returned), so a NotFound there is the release itself.
+// confirmMissingHelmRelease names the release only when Helm storage has no
+// record of it. Other failures, including API 404s while reaching the cluster,
+// say nothing about the release and carry no reference.
 func confirmMissingHelmRelease(resolved resolvedObjectDetailContext, namespace, name string, err error) error {
-	if errorstatus.Classify(err).Reason != errorstatus.ReasonNotFound {
+	if !helm.IsReleaseNotFound(err) {
 		return err
 	}
 	ref := helm.ReleaseRef(resolved.selectionKey, namespace, name)

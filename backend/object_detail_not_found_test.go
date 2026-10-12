@@ -174,8 +174,9 @@ func TestFetchObjectByGVKKeepsTheAPINotFound(t *testing.T) {
 }
 
 // newMissingHelmReleaseGateway serves a cluster whose Helm storage holds no
-// release secrets, as after `helm uninstall`.
-func newMissingHelmReleaseGateway(t *testing.T, clusterID string) *ResourceGateway {
+// release secrets, as after `helm uninstall`. With versionNotFound, the API
+// server answers its /version probe with a 404, so Helm cannot reach it.
+func newMissingHelmReleaseGateway(t *testing.T, clusterID string, versionNotFound bool) *ResourceGateway {
 	t.Helper()
 	client := clientfake.NewClientset()
 	allowSelfSubjectAccessReviews(client)
@@ -183,6 +184,10 @@ func newMissingHelmReleaseGateway(t *testing.T, clusterID string) *ResourceGatew
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/version":
+			if versionNotFound {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
 			_, _ = w.Write([]byte(`{"major":"1","minor":"34","gitVersion":"v1.34.0"}`))
 		case "/api/v1/namespaces/default/secrets":
 			_ = json.NewEncoder(w).Encode(corev1.SecretList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "SecretList"}})
@@ -208,7 +213,7 @@ func newMissingHelmReleaseGateway(t *testing.T, clusterID string) *ResourceGatew
 // identity; the panel sends the kind lowercased.
 func TestMissingHelmReleaseIsANotFoundNamingTheRelease(t *testing.T) {
 	const clusterID = "cluster-a"
-	provider := newMissingHelmReleaseGateway(t, clusterID).objectDetailProvider().(*objectDetailProvider)
+	provider := newMissingHelmReleaseGateway(t, clusterID, false).objectDetailProvider().(*objectDetailProvider)
 	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{ClusterID: clusterID})
 
 	t.Run("details", func(t *testing.T) {
@@ -234,4 +239,17 @@ func TestMissingHelmReleaseIsANotFoundNamingTheRelease(t *testing.T) {
 			require.True(t, status.Expected)
 		}
 	})
+}
+
+// Only Helm storage saying it has no such release means the release is gone.
+// A 404 from the API server while reaching it must not close the panel.
+func TestUnreachableHelmClusterDoesNotNameTheRelease(t *testing.T) {
+	const clusterID = "cluster-a"
+	provider := newMissingHelmReleaseGateway(t, clusterID, true).objectDetailProvider().(*objectDetailProvider)
+	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{ClusterID: clusterID})
+
+	_, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmRelease"}, "default", "demo")
+
+	require.Error(t, err)
+	require.Nil(t, errorstatus.Classify(err).Ref, err)
 }
