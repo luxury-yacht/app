@@ -13,7 +13,6 @@
  */
 import { describe, expect, it } from 'vitest';
 import { localFailure, type RefreshFailure } from '@/core/refresh/refreshFailure';
-import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import {
   deriveQueryBackedData,
   isLiveDomainInitialLoadPending,
@@ -122,7 +121,7 @@ describe('isLiveDomainInitialLoadPending', () => {
       isLiveDomainInitialLoadPending({
         status: 'initialising',
         data: undefined,
-        error: { kind: 'backend', status: makeErrorStatus('Forbidden') },
+        permissionDenied: true,
       })
     ).toBe(false);
     expect(isLiveDomainInitialLoadPending({ status: 'initialising', data: undefined })).toBe(true);

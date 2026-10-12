@@ -13,7 +13,6 @@ import {
   makeClusterConfigSnapshotPayload,
   makeNamespaceConfigSnapshotPayload,
 } from './refreshContractTestBuilders';
-import { isPermissionDenied } from './refreshFailure';
 import {
   getRefreshState,
   getScopedDomainEntries,
@@ -268,6 +267,7 @@ describe('resetPermissionDeniedScopedDomainStates', () => {
       ...prev,
       status: 'error',
       error: { kind: 'backend', status: makeErrorStatus('Forbidden') },
+      permissionDenied: true,
     }));
     setScopedDomainState('namespace-config', 'cluster-a|namespace:prod', (prev) => ({
       ...prev,
@@ -278,11 +278,12 @@ describe('resetPermissionDeniedScopedDomainStates', () => {
       ...prev,
       status: 'error',
       error: { kind: 'backend', status: makeErrorStatus('Forbidden') },
+      permissionDenied: true,
     }));
     resetPermissionDeniedScopedDomainStates('cluster-a');
-    expect(isPermissionDenied(getScopedDomainState('namespaces', 'cluster-b|').error)).toBe(true);
+    expect(getScopedDomainState('namespaces', 'cluster-b|').permissionDenied).toBe(true);
 
-    expect(isPermissionDenied(getScopedDomainState('namespaces', 'cluster-a|').error)).toBe(false);
+    expect(getScopedDomainState('namespaces', 'cluster-a|').permissionDenied).not.toBe(true);
     expect(getScopedDomainState('namespaces', 'cluster-a|').status).not.toBe('error');
     expect(getScopedDomainState('namespace-config', 'cluster-a|namespace:prod').status).toBe(
       'ready'

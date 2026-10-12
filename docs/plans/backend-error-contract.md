@@ -984,5 +984,24 @@ None. All six were decided on 2026-10-11; see Decisions.
   panel's exact match missed. `confirmMissingObject` now names the resolver's
   canonical group/version/kind; the backend test sends the panel's scope form
   (red then green).
-- Not done: the rendered UI checks above. They need a restricted kind cluster
-  (`test/kind/clusters.sh`); this plan stays until they run.
+- Manual checks in `wails3 dev` against a kind cluster, all passed after the
+  fixes they prompted (2026-10-11): deleted object marks the panel; a rejected
+  YAML save shows the API's reason; a replaced object gives an inline
+  conflict; connecting a cluster is quiet; Node Logs, previous logs and live
+  logs work. Fixes found along the way: the NotFound `ref` uses the canonical
+  kind; YAML editor failures report through `handleInline` (no duplicate
+  toast); node log requests send options as query parameters (`RequestURI`).
+- Restricted-identity checks on the kind cluster from
+  `test/kind/restricted.sh` (2026-10-11). Check 1 failed at first: the
+  namespaces sidebar loaded forever. A probe of the real refresh subsystem,
+  run as the restricted login, got a typed `Forbidden` at once for namespaces
+  and nodes, so the fault was in the frontend. This branch had folded the
+  store's `permissionDenied` stamp into `error`. Stream start and resync
+  writers clear `error` while the runtime keeps blocking refetches, so the
+  denial vanished. The stamp is restored as on `main`; the typed query hook
+  settles on it even after a reset. Red then green: orchestrator "keeps a
+  permission-denied scope denied when its stream starts", useTypedResourceQuery
+  "settles a denied scope whose stored failure a stream reset cleared",
+  NamespaceContext "…after its stream reset the state". `qc:prerelease` pass
+  (5362 frontend tests). Checks 1–3 are awaiting re-verification; this plan
+  stays until they pass.

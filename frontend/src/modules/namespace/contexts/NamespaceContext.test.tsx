@@ -1148,27 +1148,37 @@ describe('NamespaceProvider selection behaviour', () => {
     cleanup();
   });
 
-  it('exposes namespacesPermissionDenied for a permission-denied namespaces domain — and does not toast', () => {
-    namespaceDomainRef.current = {
-      status: 'error',
-      data: null,
-      error: {
-        kind: 'backend',
-        status: makeErrorStatus(
-          'Forbidden',
-          'permission denied for domain namespaces (core/namespaces)'
-        ),
-      },
-    } as unknown as typeof namespaceDomainRef.current;
-    const { cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(namespaceRef.current?.namespacesPermissionDenied).toBe(true);
-    // A designed, rendered state — not a toast (the sidebar shows the message).
-    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
-    cleanup();
-  });
+  const deniedFailure = {
+    kind: 'backend',
+    status: makeErrorStatus(
+      'Forbidden',
+      'permission denied for domain namespaces (core/namespaces)'
+    ),
+  } as const;
+
+  // The second state is what the namespaces stream leaves when it starts after
+  // the denial: the sidebar must still show the permission message.
+  it.each([
+    ['as answered', { status: 'error', error: deniedFailure }],
+    ['after its stream reset the state', { status: 'initialising', error: null }],
+  ])(
+    'exposes namespacesPermissionDenied for a permission-denied namespaces domain %s — and does not toast',
+    (_name, state) => {
+      namespaceDomainRef.current = {
+        ...state,
+        data: null,
+        permissionDenied: true,
+      } as unknown as typeof namespaceDomainRef.current;
+      const { cleanup } = renderWithProvider();
+      act(() => {
+        vi.runAllTimers();
+      });
+      expect(namespaceRef.current?.namespacesPermissionDenied).toBe(true);
+      // A designed, rendered state — not a toast (the sidebar shows the message).
+      expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+      cleanup();
+    }
+  );
 
   it('keeps namespacesPermissionDenied false for transient errors (which still toast)', () => {
     namespaceDomainRef.current = {

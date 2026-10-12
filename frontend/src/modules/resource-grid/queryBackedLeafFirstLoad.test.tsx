@@ -659,6 +659,7 @@ describe('query-backed leaf first load', () => {
               'permission denied for domain namespace-autoscaling (autoscaling/horizontalpodautoscalers)'
             ),
           },
+          permissionDenied: true,
           data: undefined,
         },
       });

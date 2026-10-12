@@ -13,6 +13,7 @@ import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestRefreshDomainState } from '@/core/data-access';
 import {
+  deniedFailure,
   isPermissionDenied,
   localFailure,
   type RefreshFailure,
@@ -187,6 +188,19 @@ interface TypedQueryRequestCallbacks<TPayload> {
 
 // A failed domain state that carries no failure of its own.
 const SNAPSHOT_REQUEST_FAILED = localFailure('Snapshot request failed');
+// A denied scope whose stored failure a stream reset has since cleared.
+const PERMISSION_DENIED = deniedFailure('Insufficient permissions');
+
+// A denial is settled like any other failure: no warm-up retries.
+const failureOfState = (
+  state: { status?: string; error?: RefreshFailure | null; permissionDenied?: boolean } | undefined
+): RefreshFailure | null => {
+  const error = state?.error ?? null;
+  if (state?.permissionDenied) {
+    return error && isPermissionDenied(error) ? error : PERMISSION_DENIED;
+  }
+  return state?.status === 'error' ? (error ?? SNAPSHOT_REQUEST_FAILED) : null;
+};
 
 const dispatchTypedQueryResult = <TPayload extends TypedQueryPayload>(
   result: QueryPageRequestResult,
@@ -196,9 +210,9 @@ const dispatchTypedQueryResult = <TPayload extends TypedQueryPayload>(
     callbacks.onWarmup();
     return;
   }
-  if (result.data?.status === 'error' || isPermissionDenied(result.data?.error)) {
-    // A denial is settled like any other failure: no warm-up retries.
-    callbacks.onFailure(result.data?.error ?? SNAPSHOT_REQUEST_FAILED);
+  const failure = failureOfState(result.data);
+  if (failure) {
+    callbacks.onFailure(failure);
     return;
   }
   const payload = result.data?.data as TPayload | null | undefined;

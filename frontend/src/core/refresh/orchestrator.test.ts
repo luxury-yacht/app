@@ -836,6 +836,7 @@ describe('refreshOrchestrator', () => {
     await vi.waitFor(() => {
       const deniedState = getScopedDomainState('cluster-config', storedScope);
       expect(deniedState.status).toBe('error');
+      expect(deniedState.permissionDenied).toBe(true);
       expect(isPermissionDenied(deniedState.error)).toBe(true);
     });
 
@@ -851,6 +852,29 @@ describe('refreshOrchestrator', () => {
     clientMocks.fetchSnapshotMock.mockRejectedValueOnce(denied);
     await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, { isManual: true });
     expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(2);
+  });
+
+  // Starting the scope's stream resets it to initialising without an error.
+  // The denial must outlive that: refetches stay blocked, so a lost denial
+  // leaves the view loading forever (the restricted namespaces sidebar).
+  it('keeps a permission-denied scope denied when its stream starts', async () => {
+    clusterReadiness.resetForTests();
+    registerStreamingClusterConfigDomain();
+    const scope = buildClusterScope('cluster-a', '');
+    resetAllScopedDomainStates('cluster-config');
+    setRuntimeScopeEnabled('cluster-config', scope, true);
+    eventBus.emit('cluster:lifecycle', { clusterId: 'cluster-a', state: 'loading' });
+    clientMocks.fetchSnapshotMock.mockRejectedValueOnce(
+      errorWithStatus(makeErrorStatus('Forbidden', 'permission denied for domain cluster-config'))
+    );
+    await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, { isManual: false });
+
+    orchestratorInternals.scheduleStreamingStart('cluster-config', scope, {
+      start: vi.fn(),
+      stop: vi.fn(),
+    });
+
+    expect(getScopedDomainState('cluster-config', scope).permissionDenied).toBe(true);
   });
 
   it('re-asks a permission-denied scope after that cluster recovers from auth failure', async () => {
@@ -891,6 +915,7 @@ describe('refreshOrchestrator', () => {
           ...previous,
           status: 'error',
           error: { kind: 'backend', status: makeErrorStatus('Forbidden') },
+          permissionDenied: true,
         }));
       }
       const controllerB = new AbortController();
@@ -905,8 +930,8 @@ describe('refreshOrchestrator', () => {
       });
       const version = orchestratorInternals.contextVersion;
       eventBus.emit(event, { clusterId: 'cluster-a' });
-      expect(isPermissionDenied(getScopedDomainState('catalog', scopeA).error)).toBe(false);
-      expect(isPermissionDenied(getScopedDomainState('catalog', scopeB).error)).toBe(true);
+      expect(getScopedDomainState('catalog', scopeA).permissionDenied).not.toBe(true);
+      expect(getScopedDomainState('catalog', scopeB).permissionDenied).toBe(true);
       expect(controllerB.signal.aborted).toBe(false);
       expect(orchestratorInternals.contextVersion).toBe(version);
     }

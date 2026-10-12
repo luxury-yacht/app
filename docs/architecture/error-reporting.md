@@ -88,10 +88,11 @@ no layer decides behavior from message text.
 - A refresh domain stores its last failure as a `RefreshFailure`
   (`core/refresh/refreshFailure.ts`): `backend` with the status, `local` with
   the browser's message and error name, or `denied` for a read the capability
-  gate refused before any request. A `Forbidden` failure is a settled denial
-  (`isPermissionDenied`); empty states, gating, and diagnostics read it, and
-  the object panel treats a `NotFound` as deletion only when its `ref` matches
-  the panel's object on all six identity fields.
+  gate refused before any request. Empty states and diagnostics recognize a
+  denial from the failure (`isPermissionDenied`); gating reads the scope's
+  separate `permissionDenied` stamp, which outlives stream resets that clear
+  the failure. The object panel treats a `NotFound` as deletion only when its
+  `ref` matches the panel's object on all six identity fields.
 - Advisory warnings stay local. Legacy component
   boundaries do not re-capture render failures owned by the React 19 root
   handlers.

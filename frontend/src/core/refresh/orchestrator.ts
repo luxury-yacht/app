@@ -1170,10 +1170,9 @@ class RefreshOrchestrator {
 
   private resetRuntimePermissionEpoch(runtime: ClusterRefreshRuntime): void {
     runtime.resetPermissionEpoch().forEach(({ domain, scope }) => {
-      // A new permission epoch: the denial is no longer settled.
       setScopedDomainState(domain, scope, (previous) => ({
         ...previous,
-        error: null,
+        permissionDenied: false,
       }));
     });
   }
@@ -1584,6 +1583,7 @@ class RefreshOrchestrator {
         ...previous,
         status: 'error',
         error: refreshFailureOf(error),
+        permissionDenied: true,
         isManual: options.isManual,
       }));
       this.notifyRefreshError(domain, execution.scope, message, error, options.correlationId);
@@ -1741,6 +1741,7 @@ class RefreshOrchestrator {
         lastManualRefresh: isManual ? Date.now() : prev.lastManualRefresh,
         lastAutoRefresh: !isManual ? Date.now() : prev.lastAutoRefresh,
         error: null,
+        permissionDenied: false,
         isManual,
         scope: resolvedScope,
       }));
@@ -1884,7 +1885,7 @@ class RefreshOrchestrator {
       { clusterId: parseClusterScope(scope).clusterId }
     );
     // Settle the scope's snapshot state NOW: the fetch gets the same typed
-    // 403 instantly and stores the denial, so anything gated on this
+    // 403 instantly and stamps permissionDenied, so anything gated on this
     // scope's initial load (the typed-query tables) resolves immediately
     // instead of waiting out stream teardown timing.
     void this.performFetch(domain, scope, { isManual: true }).catch(() => {

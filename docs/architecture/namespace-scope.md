@@ -126,9 +126,10 @@ RoleBindings (issue #243) and doubles as a noise/perf scope on large clusters.
 A refresh failure whose status reason is `Forbidden` is a settled answer
 everywhere it surfaces:
 
-- The orchestrator stores the `Forbidden` failure (`isPermissionDenied`) and
-  stops background refetches.
-- The typed query hook reads the failure and settles without warm-up retries;
+- The orchestrator stamps the scope `permissionDenied` and stops background
+  refetches. The stamp is separate from the stored failure, which a stream
+  start or resync clears.
+- The typed query hook reads the stamp and settles without warm-up retries;
   the shared table shows "Insufficient permissions" (`resolveEmptyStateMessage`),
   not a spinner or generic failure.
 - A stream permission error frame blocks that scope's streaming

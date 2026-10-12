@@ -51,7 +51,6 @@ import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefe
 import {
   errorFromFailure,
   failureMessage,
-  isPermissionDenied,
   type RefreshFailure,
 } from '@/core/refresh/refreshFailure';
 import type { NamespaceSignalState } from '@/core/refresh/types';
@@ -743,9 +742,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     };
   }, [clearSelection, namespaceScopes, updateNamespaces]);
 
-  // A Forbidden failure is settled: checked once per session, and background
-  // retries stop.
-  const namespacesPermissionDenied = isPermissionDenied(namespaceDomain.error);
+  // Structural flag stamped by the orchestrator from the typed 403 (checked
+  // once per session; the scope is settled and background retries stop).
+  const namespacesPermissionDenied = namespaceDomain.permissionDenied === true;
 
   const namespaceFailure = currentFailure(namespaceDomain);
 

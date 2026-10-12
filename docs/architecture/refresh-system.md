@@ -116,9 +116,10 @@ initialization, connection ownership, cancellation, and health.
   fetch.
 - Cluster auth availability lives on that cluster's `ClusterRefreshRuntime`.
   Auth recovery and namespace-scope or permission rebuilds reset only that
-  cluster runtime's permission epoch before reconciling enabled scopes. A
-  stored `Forbidden` failure (`isPermissionDenied`) is presentation, not the
-  retry gate; the epoch reset clears it.
+  cluster runtime's permission epoch before reconciling enabled scopes. Store
+  `permissionDenied` is presentation, not the retry gate; the epoch reset
+  clears it. It is kept apart from the stored failure, which stream starts and
+  resyncs clear.
 - `RefreshManager` reduces scheduler intent (`enabled`/`paused`/`disabled`),
   timing (`idle`/`cooldown` with owned handles), and execution (`idle` or an
   ID-owned run); `RefresherState` is derived. The orchestrator separately

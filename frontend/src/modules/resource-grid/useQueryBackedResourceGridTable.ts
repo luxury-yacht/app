@@ -25,7 +25,7 @@ import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useQueryStreamSignal } from '@/core/refresh/hooks/useStreamSignalRefetch';
-import { isPermissionDenied, type RefreshFailure } from '@/core/refresh/refreshFailure';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { RefreshDomain } from '@/core/refresh/types';
 import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 import type { SortConfig } from '@/hooks/useTableSort';
@@ -121,12 +121,12 @@ export function deriveQueryBackedData<TRow>({
 export const isLiveDomainInitialLoadPending = (state: {
   status?: string;
   data?: unknown;
-  error?: RefreshFailure | null;
+  permissionDenied?: boolean;
   streamAcknowledgedVersion?: number;
   queryReconcileVersion?: number;
 }): boolean =>
   !state.data &&
-  !isPermissionDenied(state.error) &&
+  !state.permissionDenied &&
   state.streamAcknowledgedVersion === undefined &&
   state.queryReconcileVersion === undefined &&
   (state.status === 'loading' || state.status === 'initialising');
