@@ -13,9 +13,8 @@ import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestRefreshDomainState } from '@/core/data-access';
 import {
-  deniedFailure,
-  isPermissionDenied,
   localFailure,
+  permissionDeniedFailure,
   type RefreshFailure,
   refreshFailureOf,
 } from '@/core/refresh/refreshFailure';
@@ -188,8 +187,6 @@ interface TypedQueryRequestCallbacks<TPayload> {
 
 // A failed domain state that carries no failure of its own.
 const SNAPSHOT_REQUEST_FAILED = localFailure('Snapshot request failed');
-// A denied scope whose stored failure a stream reset has since cleared.
-const PERMISSION_DENIED = deniedFailure('Insufficient permissions');
 
 // A denial is settled like any other failure: no warm-up retries.
 const failureOfState = (
@@ -197,7 +194,7 @@ const failureOfState = (
 ): RefreshFailure | null => {
   const error = state?.error ?? null;
   if (state?.permissionDenied) {
-    return error && isPermissionDenied(error) ? error : PERMISSION_DENIED;
+    return permissionDeniedFailure(error);
   }
   return state?.status === 'error' ? (error ?? SNAPSHOT_REQUEST_FAILED) : null;
 };

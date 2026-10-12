@@ -51,12 +51,24 @@ export function failureMessage(failure: RefreshFailure | null | undefined): stri
 }
 
 /**
- * The backend refused the scope for lack of RBAC permission. A denied scope
- * is settled: background refetches skip it until a new permission epoch.
+ * The failure is a permission denial: the backend's `Forbidden`, or a read
+ * the permission gate refused. Whether a scope is settled as denied is the
+ * store's `permissionDenied` stamp, not this.
  */
 export const isPermissionDenied = (failure: RefreshFailure | null | undefined): boolean =>
   failure?.kind === 'denied' ||
   (failure?.kind === 'backend' && failure.status.reason === 'Forbidden');
+
+const PERMISSION_DENIED = deniedFailure('Insufficient permissions');
+
+/**
+ * The failure a scope stamped `permissionDenied` presents. A stream reset can
+ * clear the stored failure while the stamp stays, so the stamp alone still
+ * reads as a denial.
+ */
+export const permissionDeniedFailure = (
+  stored: RefreshFailure | null | undefined
+): RefreshFailure => (stored && isPermissionDenied(stored) ? stored : PERMISSION_DENIED);
 
 /** An Error for the error handler, carrying the backend status when there is one. */
 export const errorFromFailure = (failure: RefreshFailure): Error => {

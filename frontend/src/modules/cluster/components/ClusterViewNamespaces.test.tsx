@@ -1,6 +1,11 @@
 import { act, isValidElement, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  deriveResourceInventoryRenderState,
+  type ResourceInventorySourceState,
+} from '@/modules/resource-grid/useResourceInventoryTable';
+import { resolveEmptyStateMessage } from '@/utils/emptyState';
 
 const mocks = vi.hoisted(() => ({
   onNamespaceSelect: vi.fn(),
@@ -11,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   persistenceParams: null as null | Record<string, unknown>,
   namespaceLoading: false,
   namespaceRefreshing: false,
+  namespacesPermissionDenied: false,
+  hasNamespaces: true,
   openWithObject: vi.fn(),
 }));
 
@@ -63,12 +70,12 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   useNamespace: () => ({
-    namespaceSummaries: namespacePayload.namespaces,
+    namespaceSummaries: mocks.hasNamespaces ? namespacePayload.namespaces : [],
     namespaceMetricsState: namespacePayload.metricsState,
     namespaceError: null,
     namespaceLoading: mocks.namespaceLoading,
     namespaceRefreshing: mocks.namespaceRefreshing,
-    namespacesPermissionDenied: false,
+    namespacesPermissionDenied: mocks.namespacesPermissionDenied,
     setSelectedNamespace: mocks.setSelectedNamespace,
   }),
 }));
@@ -177,6 +184,8 @@ beforeEach(() => {
   mocks.persistenceParams = null;
   mocks.namespaceLoading = false;
   mocks.namespaceRefreshing = false;
+  mocks.namespacesPermissionDenied = false;
+  mocks.hasNamespaces = true;
 });
 
 afterEach(() => {
@@ -395,6 +404,29 @@ describe('ClusterViewNamespaces', () => {
       throw new Error('expected namespace table props');
     }
     expect((mocks.tableProps.source as { loading: boolean }).loading).toBe(false);
+
+    await unmount();
+  });
+
+  // A stream reset after the denial clears the stored failure (no error, still
+  // loading) but not the denial: the view must settle on the permission
+  // message instead of loading forever.
+  it('shows insufficient permissions for a denied scope whose stored failure was cleared', async () => {
+    mocks.hasNamespaces = false;
+    mocks.namespaceLoading = true;
+    mocks.namespacesPermissionDenied = true;
+    const { unmount } = await renderView();
+
+    if (!mocks.tableProps) {
+      throw new Error('expected namespace table props');
+    }
+    const render = deriveResourceInventoryRenderState(
+      mocks.tableProps.source as ResourceInventorySourceState<unknown>
+    );
+    expect(render.showLoadingBoundary).toBe(false);
+    expect(resolveEmptyStateMessage(render.error, 'Unable to load data')).toBe(
+      'Insufficient permissions'
+    );
 
     await unmount();
   });
