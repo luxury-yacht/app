@@ -191,11 +191,17 @@ func confirmMissingObject(
 	if _, probeErr := fetchObjectByGVK(ctx, resolved.deps, gvk, namespace, name); !apierrors.IsNotFound(probeErr) {
 		return err
 	}
+	// Requests may spell the kind in any case (the object panel lowercases it);
+	// the reference names the canonical identity the panel compares against.
+	canonical, ok, resolveErr := resolved.deps.ResourceResolver.ResolveResourceForGVK(ctx, gvk)
+	if resolveErr != nil || !ok {
+		return err
+	}
 	return errorstatus.ObjectNotFound(errorstatus.ObjectRef{
 		ClusterID: resolved.selectionKey,
-		Group:     gvk.Group,
-		Version:   gvk.Version,
-		Kind:      gvk.Kind,
+		Group:     canonical.Group,
+		Version:   canonical.Version,
+		Kind:      canonical.Kind,
 		Namespace: namespace,
 		Name:      name,
 	}, err)

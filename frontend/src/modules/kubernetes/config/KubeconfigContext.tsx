@@ -30,6 +30,7 @@ import { eventBus } from '@/core/events';
 import { refreshOrchestrator, useBackgroundRefresh } from '@/core/refresh';
 import { clusterReadiness } from '@/core/refresh/clusterReadiness';
 import { getWindowIdentity } from '@/core/window-identity';
+import { statusError } from '@/utils/errorStatus';
 import {
   buildSelectionTransitionPlan,
   normalizeSelections,
@@ -326,7 +327,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     const pending = (visibilityQueueRef.current?.then(activate) ?? activate())
       .then((result) => {
         if (result?.error) {
-          throw new Error(result.error);
+          throw statusError(result.error);
         }
       })
       .catch((error) => {
@@ -544,7 +545,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           return;
         }
         if (result.error) {
-          throw new Error(result.error);
+          throw statusError(result.error);
         }
         completeSelectionTransition(
           plan,

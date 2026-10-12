@@ -52,7 +52,10 @@ no layer decides behavior from message text.
 - Wire forms: a bound method's returned error carries the status as the Wails
   `cause` (`ServiceOptions.MarshalError`); a refresh HTTP failure answers with
   the status as its body and its `code` as the response status; resource and
-  container-log stream error frames carry it as `errorDetails`. Wails
+  container-log stream error frames carry it as `errorDetails`. A result that
+  returns state alongside a failure (`ClusterWorkspaceResult`, a failed
+  manual-refresh job) carries the status as its `error`; the frontend turns it
+  into an error with `statusError`, which validates it at the boundary. Wails
   framework failures (panic, wrong arity, unknown method) carry no status and
   are presented as `UNKNOWN` and reported.
 - Boundaries type what only they know: caller-input checks return
@@ -176,6 +179,9 @@ no layer decides behavior from message text.
   its own failures (Helm uninstall included). The marker changes neither
   rendered text nor typed status. A Go AST guard rejects resource code that
   discards a helper's result.
+- A panicking snapshot build is reported through the panic path (the snapshot
+  service's `WithLogger`), and the request fails with `snapshot build panic:
+  <value>`; the stack never enters the error message the UI shows.
 - Unexpected metrics polls, beta-expiry startup failures, capability-review
   batch failures, and classified auth failures also use the structured path.
   Auth diagnostics expose only existing sanitized fields to the frontend; the

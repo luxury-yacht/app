@@ -22,8 +22,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
@@ -104,6 +106,17 @@ func newService(
 		runtimeAccess:       access,
 		generationRequests:  make(map[uint64]context.CancelFunc),
 	}
+}
+
+// WithLogger reports recovered build panics, with their stacks, through logger.
+func (s *Service) WithLogger(logger applog.Logger) *Service {
+	if s == nil || logger == nil {
+		return s
+	}
+	s.flights.reportPanic = func(recovered any) {
+		applog.ReportPanic(logger, recovered, "snapshot build panic", logsources.Refresh)
+	}
+	return s
 }
 
 // WithInformerHub makes snapshot builds wait until the refresh informer caches

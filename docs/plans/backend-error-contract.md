@@ -971,5 +971,18 @@ None. All six were decided on 2026-10-11; see Decisions.
   HEAD: `monitorShellTimeout` 17, `waitForInformerSync` 14,
   `retryManualOperation` 14, `initializeStartupClusters` 14, and the anchor
   effect in `useQueryBackedResourceGridTable.ts` 14.
+- Follow-ups done the same day, gate re-run green (5358 frontend tests):
+  `ClusterWorkspaceResult.error` is a status (red then green:
+  `TestApplyClusterWorkspaceReportsARejectedSelectionWithItsStatus`, and
+  KubeconfigContext "reports a rejected selection with the status the backend
+  returned"); a panicking snapshot build is reported through the panic path
+  with a short message (`TestServiceBuildPanicIsReportedNotShown`); the
+  test-only `ValidateObjectYaml` is removed (its protected-field test now runs
+  through `ApplyObjectYaml`).
+- Manual check 1 (deleted ConfigMap) failed: the panel sends object-details
+  scopes with a lowercased kind, and the NotFound `ref` echoed it, so the
+  panel's exact match missed. `confirmMissingObject` now names the resolver's
+  canonical group/version/kind; the backend test sends the panel's scope form
+  (red then green).
 - Not done: the rendered UI checks above. They need a restricted kind cluster
   (`test/kind/clusters.sh`); this plan stays until they run.

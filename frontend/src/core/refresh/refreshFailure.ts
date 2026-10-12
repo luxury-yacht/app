@@ -7,7 +7,7 @@
  * the permission gate refused before any request is `denied`.
  */
 
-import { errorStatusOf } from '@utils/errorStatus';
+import { errorStatusOf, statusError } from '@utils/errorStatus';
 import { resolvePermissionDeniedMessage } from './permissionErrors';
 import type { ErrorStatus } from './types';
 
@@ -60,10 +60,10 @@ export const isPermissionDenied = (failure: RefreshFailure | null | undefined): 
 
 /** An Error for the error handler, carrying the backend status when there is one. */
 export const errorFromFailure = (failure: RefreshFailure): Error => {
-  const error = new Error(failureMessage(failure));
   if (failure.kind === 'backend') {
-    return Object.assign(error, { status: failure.status });
+    return statusError(failure.status, failureMessage(failure));
   }
+  const error = new Error(failure.message);
   if (failure.kind === 'local') {
     error.name = failure.errorName;
   }

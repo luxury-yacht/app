@@ -42,7 +42,6 @@ vi.mock('@/core/refresh', () => ({
 }));
 
 vi.mock('@core/backend-api', () => ({
-  ValidateObjectYaml: vi.fn(),
   ApplyObjectYaml: vi.fn(),
   GetObjectYAMLByGVK: vi.fn().mockResolvedValue({
     yaml: 'apiVersion: v1\nkind: Pod\nmetadata:\n  name: demo',

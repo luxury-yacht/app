@@ -21,10 +21,13 @@ import { eventBus } from '@/core/events';
 import { PanelLifecycleGuardProvider } from '@/core/panel-windows/panelLifecycleGuards';
 import { WorkspacePanelLifecycle } from '@/core/panel-windows/WorkspacePanelLifecycle';
 import { clusterReadiness } from '@/core/refresh/clusterReadiness';
+import type { ErrorStatus } from '@/core/refresh/types';
 import { TabDragProvider } from '@/shared/components/tabs/dragCoordinator';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
 import { DockablePanelProvider } from '@/ui/dockable/DockablePanelProvider';
 import ClusterTabs from '@/ui/layout/ClusterTabs';
+import { errorStatusOf } from '@/utils/errorStatus';
 import {
   type ClusterClosePreparation,
   KubeconfigProvider,
@@ -47,6 +50,8 @@ const {
     selections: [] as string[],
     visibleClusterId: '',
     clusters: {} as Record<string, { clusterId: string; lifecycle: string }>,
+    // The status the next selection-changing apply is rejected with.
+    rejectSelection: null as ErrorStatus | null,
   },
   mocks: {
     nativeClose: vi.fn(),
@@ -94,19 +99,22 @@ vi.mock('@core/backend-api', () => ({
     updateSelectedKubeconfigs: boolean;
     visibleClusterId: string;
   }) => {
-    if (command.updateSelectedKubeconfigs) {
+    const rejection = command.updateSelectedKubeconfigs ? workspaceState.rejectSelection : null;
+    if (command.updateSelectedKubeconfigs && !rejection) {
       await setSelectedKubeconfigsMock(command.selectedKubeconfigs);
       workspaceState.selections = [...command.selectedKubeconfigs];
     }
-    await setVisibleClusterMock(command.visibleClusterId);
-    workspaceState.visibleClusterId = command.visibleClusterId;
+    if (!rejection) {
+      await setVisibleClusterMock(command.visibleClusterId);
+      workspaceState.visibleClusterId = command.visibleClusterId;
+    }
     return {
       state: {
         selectedKubeconfigs: workspaceState.selections,
         visibleClusterId: workspaceState.visibleClusterId,
         clusters: workspaceState.clusters,
       },
-      error: '',
+      ...(rejection ? { error: rejection } : {}),
     };
   },
 }));
@@ -1069,6 +1077,28 @@ describe('KubeconfigContext', () => {
     }
   );
 
+  // The backend's verdict on a rejected selection reaches the error handler, so
+  // a rejected request shows its reason instead of an unclassified failure.
+  it('reports a rejected selection with the status the backend returned', async () => {
+    const { getContext, unmount } = await prepareRapidTabs(['alpha']);
+    workspaceState.rejectSelection = makeErrorStatus(
+      'BadRequest',
+      'kubeconfig selection missing path'
+    );
+    try {
+      await act(async () => {
+        await expect(getContext().openKubeconfig('/kube/gamma:dev')).rejects.toThrow(
+          'kubeconfig selection missing path'
+        );
+      });
+      expect(errorHandlerHandleMock).toHaveBeenCalledOnce();
+      expect(errorStatusOf(errorHandlerHandleMock.mock.calls[0][0])?.reason).toBe('BadRequest');
+      expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev']);
+    } finally {
+      unmount();
+    }
+  });
+
   it('releases the close guard only after removing workspace membership and refresh demand', async () => {
     const { getContext, unmount } = await prepareRapidTabs(
       ['alpha', 'beta'],
@@ -1162,6 +1192,7 @@ describe('KubeconfigContext', () => {
     workspaceState.selections = [];
     workspaceState.visibleClusterId = '';
     workspaceState.clusters = {};
+    workspaceState.rejectSelection = null;
     mocks.backgroundRefreshState.enabled = true;
     clusterReadiness.resetForTests();
     resetClusterTabOrderCacheForTesting();

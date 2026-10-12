@@ -96,39 +96,6 @@ func (g *ResourceGateway) mutationContext() (context.Context, context.CancelFunc
 	return common.WithDefaultTimeout(g.CtxOrBackground(), config.ObjectYAMLMutationRequestTimeout)
 }
 
-// ValidateObjectYaml performs a dry-run kubectl-edit-style patch to ensure the YAML is valid and safe to apply.
-func (g *ResourceGateway) ValidateObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
-	deps, _, err := g.resolveClusterDependencies(clusterID)
-	if err != nil {
-		return nil, err
-	}
-
-	ctx, cancel := g.mutationContext()
-	defer cancel()
-
-	mc, err := g.prepareAuthorizedYAMLMutation(ctx, deps, req)
-	if err != nil {
-		return nil, err
-	}
-	result, err := mc.resource.Patch(
-		ctx,
-		req.Name,
-		mc.patchType,
-		mc.patch,
-		metav1.PatchOptions{
-			DryRun:       []string{metav1.DryRunAll},
-			FieldManager: objectYAMLFieldManager,
-		},
-	)
-	if err != nil {
-		return nil, wrapKubernetesError(err, "validation failed")
-	}
-
-	return &ObjectYAMLMutationResponse{
-		ResourceVersion: result.GetResourceVersion(),
-	}, nil
-}
-
 // ApplyObjectYaml performs a kubectl-edit-style patch using the original editor
 // baseline plus the user's edited YAML.
 func (g *ResourceGateway) ApplyObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {

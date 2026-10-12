@@ -6,6 +6,9 @@
 import * as appupdates$0 from "./internal/appupdates/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as errorstatus$0 from "./internal/errorstatus/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as resourcemodel$0 from "./resourcemodel/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -324,9 +327,13 @@ export interface ClusterWorkspaceCommand {
     "visibleClusterId": string;
 }
 
+/**
+ * ClusterWorkspaceResult returns the latest coherent workspace state even when
+ * the command failed; Error is the failure's status.
+ */
 export interface ClusterWorkspaceResult {
     "state": ClusterWorkspaceState;
-    "error"?: string;
+    "error"?: errorstatus$0.Status | null;
 }
 
 export interface ClusterWorkspaceState {

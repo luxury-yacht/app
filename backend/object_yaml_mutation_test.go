@@ -203,95 +203,6 @@ func TestObjectMutationContextUsesAvailableContext(t *testing.T) {
 	}
 }
 
-func TestValidateObjectYamlSuccess(t *testing.T) {
-	app, _, clusterID := setupYAMLTestApp(t)
-
-	request := ObjectYAMLMutationRequest{
-		BaseYAML: baseYAML(),
-		YAML: `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo
-  namespace: default
-  uid: demo-uid
-  resourceVersion: "42"
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: demo
-  template:
-    metadata:
-      labels:
-        app: demo
-    spec:
-      containers:
-        - name: app
-          image: nginx:1.26
-`,
-		Kind:            "Deployment",
-		APIVersion:      "apps/v1",
-		Namespace:       "default",
-		Name:            "demo",
-		UID:             "demo-uid",
-		ResourceVersion: "42",
-	}
-
-	response, err := app.ValidateObjectYaml(clusterID, request)
-	if err != nil {
-		t.Fatalf("ValidateObjectYaml returned error: %v", err)
-	}
-	if response == nil {
-		t.Fatalf("expected validation response, got nil")
-	}
-	if response.ResourceVersion == "" {
-		t.Fatalf("expected resourceVersion in response")
-	}
-}
-
-func TestValidateObjectYamlAllowsLiveResourceVersionDrift(t *testing.T) {
-	app, dynamicClient, clusterID := setupYAMLTestApp(t)
-
-	// Bump live resourceVersion to simulate drift.
-	resource := dynamicClient.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace("default")
-	live, err := resource.Get(context.Background(), "demo", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("failed to get live object: %v", err)
-	}
-	live.SetResourceVersion("99")
-	if err := dynamicClient.Tracker().Update(appsv1.SchemeGroupVersion.WithResource("deployments"), live, "default"); err != nil {
-		t.Fatalf("failed to update live object: %v", err)
-	}
-
-	request := ObjectYAMLMutationRequest{
-		BaseYAML: baseYAML(),
-		YAML: `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo
-  namespace: default
-  uid: demo-uid
-  resourceVersion: "42"
-spec:
-  replicas: 3
-`,
-		Kind:            "Deployment",
-		APIVersion:      "apps/v1",
-		Namespace:       "default",
-		Name:            "demo",
-		UID:             "demo-uid",
-		ResourceVersion: "42",
-	}
-
-	response, err := app.ValidateObjectYaml(clusterID, request)
-	if err != nil {
-		t.Fatalf("expected validation to succeed despite live resourceVersion drift: %v", err)
-	}
-	if response == nil || response.ResourceVersion != "99" {
-		t.Fatalf("expected dry-run validation to reflect live resourceVersion 99, got %#v", response)
-	}
-}
-
 func TestApplyObjectYamlSuccess(t *testing.T) {
 	app, _, clusterID := setupYAMLTestApp(t)
 	app.responseCache = newResponseCache(time.Minute, 10)
@@ -449,7 +360,7 @@ func TestBuildKubectlEditPatchRejectsMetadataManagedFieldsChanges(t *testing.T) 
 	}
 }
 
-func TestValidateObjectYamlRejectsProtectedFieldBypassAttempts(t *testing.T) {
+func TestApplyObjectYamlRejectsProtectedFieldBypassAttempts(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		editedYAML  string
@@ -496,7 +407,7 @@ func TestValidateObjectYamlRejectsProtectedFieldBypassAttempts(t *testing.T) {
 				ResourceVersion: "42",
 			}
 
-			_, err := app.ValidateObjectYaml(clusterID, request)
+			_, err := app.ApplyObjectYaml(clusterID, request)
 			if err == nil {
 				t.Fatalf("expected protected field validation error")
 			}
@@ -674,104 +585,12 @@ func TestMergeObjectYamlWithLatestDetectsUIDMismatch(t *testing.T) {
 	}
 }
 
-func TestValidateObjectYamlForbiddenError(t *testing.T) {
-	app, dynamicClient, clusterID := setupYAMLTestApp(t)
-
-	dynamicClient.Fake.PrependReactor("patch", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
-		patchAction := action.(cgotesting.PatchActionImpl)
-		return true, nil, apierrors.NewForbidden(
-			schema.GroupResource{Group: "apps", Resource: "deployments"},
-			patchAction.GetResource().Resource,
-			fmt.Errorf("update forbidden"),
-		)
-	})
-
-	request := ObjectYAMLMutationRequest{
-		BaseYAML:        baseYAML(),
-		YAML:            baseYAML(),
-		Kind:            "Deployment",
-		APIVersion:      "apps/v1",
-		Namespace:       "default",
-		Name:            "demo",
-		UID:             "demo-uid",
-		ResourceVersion: "42",
-	}
-
-	_, err := app.ValidateObjectYaml(clusterID, request)
-	if err == nil {
-		t.Fatalf("expected validation to return error")
-	}
-
-	if !apierrors.IsForbidden(err) {
-		t.Fatalf("expected the Kubernetes Forbidden error, got %T: %v", err, err)
-	}
-}
-
 func TestNamespaceLabel(t *testing.T) {
 	if got := namespaceLabel(""); got != "<cluster-scoped>" {
 		t.Fatalf("expected cluster scoped label, got %q", got)
 	}
 	if got := namespaceLabel("ns"); got != "ns" {
 		t.Fatalf("expected namespace passthrough, got %q", got)
-	}
-}
-
-func TestValidateObjectYamlDetectsUIDDrift(t *testing.T) {
-	app, dynamicClient, clusterID := setupYAMLTestApp(t)
-
-	resource := dynamicClient.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace("default")
-	live, err := resource.Get(context.Background(), "demo", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("failed to get live object: %v", err)
-	}
-	live.SetUID(types.UID("replacement-uid"))
-	live.SetResourceVersion("99")
-	if err := dynamicClient.Tracker().Update(appsv1.SchemeGroupVersion.WithResource("deployments"), live, "default"); err != nil {
-		t.Fatalf("failed to update live object: %v", err)
-	}
-
-	request := ObjectYAMLMutationRequest{
-		BaseYAML: `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo
-  namespace: default
-  uid: demo-uid
-  resourceVersion: "42"
-spec:
-  replicas: 3
-`,
-		YAML: `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo
-  namespace: default
-  uid: demo-uid
-  resourceVersion: "42"
-spec:
-  replicas: 3
-`,
-		Kind:            "Deployment",
-		APIVersion:      "apps/v1",
-		Namespace:       "default",
-		Name:            "demo",
-		UID:             "demo-uid",
-		ResourceVersion: "42",
-	}
-
-	_, err = app.ValidateObjectYaml(clusterID, request)
-	if err == nil {
-		t.Fatalf("expected validation to fail due to uid drift")
-	}
-	objErr, ok := yamlConflictOf(err)
-	if !ok {
-		t.Fatalf("expected a YAML conflict, got %T", err)
-	}
-	if objErr.Code != "ObjectUIDMismatch" {
-		t.Fatalf("expected ObjectUIDMismatch code, got %s", objErr.Code)
-	}
-	if !strings.Contains(objErr.Message, "current uid is replacement-uid") {
-		t.Fatalf("unexpected uid mismatch message: %q", objErr.Message)
 	}
 }
 

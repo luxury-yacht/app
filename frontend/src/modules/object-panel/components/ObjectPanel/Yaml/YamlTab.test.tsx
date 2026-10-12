@@ -111,7 +111,6 @@ const CodeMirrorMock = ({ ref, ...props }: CapturedCodeMirrorProps) => {
 CodeMirrorMock.displayName = 'CodeMirrorMock';
 
 const wailsMocks = vi.hoisted(() => ({
-  ValidateObjectYaml: vi.fn(),
   ApplyObjectYaml: vi.fn(),
   CheckObjectYamlOwnership: vi.fn(),
   GetObjectYAMLByGVK: vi.fn(),
@@ -120,6 +119,7 @@ const wailsMocks = vi.hoisted(() => ({
 
 const errorHandlerMock = vi.hoisted(() => ({
   handle: vi.fn(),
+  handleInline: vi.fn(),
   handleOperational: vi.fn(),
 }));
 
@@ -257,12 +257,12 @@ vi.mock('@/core/codemirror/search', () => ({
 vi.mock('@utils/errorHandler', () => ({
   errorHandler: {
     handle: errorHandlerMock.handle,
+    handleInline: errorHandlerMock.handleInline,
     handleOperational: errorHandlerMock.handleOperational,
   },
 }));
 
 vi.mock('@core/backend-api', () => ({
-  ValidateObjectYaml: wailsMocks.ValidateObjectYaml,
   ApplyObjectYaml: wailsMocks.ApplyObjectYaml,
   CheckObjectYamlOwnership: wailsMocks.CheckObjectYamlOwnership,
   GetObjectYAMLByGVK: wailsMocks.GetObjectYAMLByGVK,
@@ -532,13 +532,13 @@ describe('YamlTab', () => {
     searchShortcutMocks.useSearchShortcutTarget.mockClear();
     searchModuleMocks.createSearchExtensions.mockClear();
     searchModuleMocks.closeSearchPanel.mockClear();
-    wailsMocks.ValidateObjectYaml.mockReset();
     wailsMocks.ApplyObjectYaml.mockReset();
     wailsMocks.CheckObjectYamlOwnership.mockReset();
     wailsMocks.CheckObjectYamlOwnership.mockResolvedValue({ conflicts: [] });
     wailsMocks.GetObjectYAMLByGVK.mockReset();
     wailsMocks.MergeObjectYamlWithLatest.mockReset();
     errorHandlerMock.handle.mockClear();
+    errorHandlerMock.handleInline.mockClear();
     errorHandlerMock.handleOperational.mockClear();
   });
 
@@ -833,7 +833,6 @@ describe('YamlTab', () => {
     expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).not.toContain('managedFields');
     expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).toContain('image: demo:v2');
     expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).not.toContain('managedFields');
-    expect(wailsMocks.ValidateObjectYaml).not.toHaveBeenCalled();
     expect(wailsMocks.CheckObjectYamlOwnership).toHaveBeenCalledTimes(1);
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',
@@ -1236,9 +1235,11 @@ describe('YamlTab', () => {
       'could not reload the final live object'
     );
     expect(codeMirrorState.value).toContain('resourceVersion: "789"');
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
+    // The notice explains it in place; a toast would only repeat it.
+    expect(errorHandlerMock.handleInline).toHaveBeenCalledWith(expect.any(Error), {
       action: 'loadLatestObjectYAML',
     });
+    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
 
     await unmount();
   });
@@ -1987,6 +1988,34 @@ describe('YamlTab', () => {
     await unmount();
   });
 
+  it('shows a failed reload-merge in the editor and reports it without a toast', async () => {
+    wailsMocks.MergeObjectYamlWithLatest.mockRejectedValue(new Error('merge backend unavailable'));
+
+    const { container, rerender, unmount } = await renderYamlTab();
+    await act(async () => {
+      getIconButton(container, 'Edit YAML')?.click();
+    });
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+    snapshotState.current = { status: 'ready', data: { yaml: LATER_MUTATED_YAML }, error: null };
+    await rerender();
+    const reloadButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Reload & merge')
+    );
+    await act(async () => {
+      reloadButton?.click();
+    });
+    await waitForUpdates();
+
+    expect(container.textContent).toContain('merge backend unavailable');
+    expect(errorHandlerMock.handleInline).toHaveBeenCalledWith(expect.any(Error), {
+      action: 'reloadAndMerge',
+    });
+    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+    await unmount();
+  });
+
   it('reports a rejected ownership check without a toast and leaves the save result to Apply', async () => {
     const forbidden = () =>
       rejectedWithStatus({
@@ -2018,10 +2047,11 @@ describe('YamlTab', () => {
       expect.any(Error),
       expect.objectContaining({ action: 'checkYamlOwnership' })
     );
-    expect(errorHandlerMock.handle).toHaveBeenCalledTimes(1);
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
+    expect(errorHandlerMock.handleInline).toHaveBeenCalledTimes(1);
+    expect(errorHandlerMock.handleInline).toHaveBeenCalledWith(expect.any(Error), {
       action: 'saveObjectYAML',
     });
+    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
     await unmount();
   });
 
@@ -2047,9 +2077,11 @@ describe('YamlTab', () => {
     await waitForUpdates();
 
     expect(container.textContent).toContain('network down');
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
+    // The editor shows the failure; it is reported without a toast.
+    expect(errorHandlerMock.handleInline).toHaveBeenCalledWith(expect.any(Error), {
       action: 'saveObjectYAML',
     });
+    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
 
     await unmount();
   });

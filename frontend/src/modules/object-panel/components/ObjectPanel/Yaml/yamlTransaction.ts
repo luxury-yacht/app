@@ -843,7 +843,7 @@ export const useYamlTransaction = ({
     const failure = describeRequestFailure(caughtError, 'Failed to reload latest YAML.');
     setActionError(failure.message);
     setActionDetails(failure.causes);
-    errorHandler.handle(caughtError, { action: 'reloadAndMerge' });
+    errorHandler.handleInline(caughtError, { action: 'reloadAndMerge' });
   }, []);
 
   const handleReloadAndMerge = useCallback(async () => {
@@ -932,7 +932,7 @@ export const useYamlTransaction = ({
             'YAML applied, but the editor could not reload the final live object. The manifest shown here is the submitted YAML with the returned resourceVersion, not a verified live read.',
           diff: null,
         });
-        errorHandler.handle(error, { action: 'loadLatestObjectYAML' });
+        errorHandler.handleInline(error, { action: 'loadLatestObjectYAML' });
       }
     },
     [hydrateLatestObject, verifiedPostApply]
@@ -955,7 +955,7 @@ export const useYamlTransaction = ({
     setVerifiedPostApply(null);
     setPendingSnapshotAdoptionYaml(null);
     setHasServerYamlError(failure.rejectsYaml);
-    errorHandler.handle(caughtError, { action: 'saveObjectYAML' });
+    errorHandler.handleInline(caughtError, { action: 'saveObjectYAML' });
   }, []);
 
   const performSave = useCallback(

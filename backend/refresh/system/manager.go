@@ -459,7 +459,8 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 		telemetryRecorder,
 		clusterMeta,
 		runtimePerms,
-	).WithInformerHub(informerHub).
+	).WithLogger(applog.ClusterScoped(cfg.Logger, cfg.ClusterID, cfg.ClusterName)).
+		WithInformerHub(informerHub).
 		WithDomainReadiness(domainReadinessResources(registrations))
 	queue := refresh.NewInMemoryQueue()
 

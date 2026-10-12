@@ -1,6 +1,6 @@
 import type { ErrorStatus } from '@core/refresh/types';
 import { describe, expect, it } from 'vitest';
-import { errorStatusOf } from './errorStatus';
+import { errorStatusOf, statusError } from './errorStatus';
 
 const notFound: ErrorStatus = {
   kind: 'Status',
@@ -56,5 +56,19 @@ describe('errorStatusOf', () => {
   it('rejects a status-like object with an unknown reason or category', () => {
     expect(errorStatusOf(wailsRejection({ ...notFound, reason: 'Teapot' }))).toBeNull();
     expect(errorStatusOf(wailsRejection({ ...notFound, category: 'MAYBE' }))).toBeNull();
+  });
+});
+
+describe('statusError', () => {
+  it('carries a valid in-band status for the error handler', () => {
+    const error = statusError(notFound);
+    expect(error.message).toBe(notFound.message);
+    expect(errorStatusOf(error)).toEqual(notFound);
+  });
+
+  it('carries no status for a value that is not one', () => {
+    const error = statusError({ ...notFound, reason: '' });
+    expect(error.message).toBe(notFound.message);
+    expect(errorStatusOf(error)).toBeNull();
   });
 });

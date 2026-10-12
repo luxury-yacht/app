@@ -51,6 +51,19 @@ export const errorStatusOf = (error: unknown): ErrorStatus | null => {
   return null;
 };
 
+/**
+ * An Error for a status a backend result returned in-band (rather than as a
+ * rejection), so the error handler reads the backend's verdict. Binding models
+ * type the status with Wails enums, so it is validated here like any other
+ * boundary value.
+ */
+export const statusError = (status: unknown, message?: string): Error => {
+  const statusMessage =
+    isRecord(status) && typeof status.message === 'string' ? status.message : 'Request failed';
+  const error = new Error(message ?? statusMessage);
+  return isErrorStatus(status) ? Object.assign(error, { status }) : error;
+};
+
 const BROWSER_FETCH_FAILURES = /failed to fetch|load failed|could not connect to the server/i;
 
 /**

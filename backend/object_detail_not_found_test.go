@@ -94,7 +94,9 @@ func fetchDeploymentDetailsOverRefresh(t *testing.T, gateway *ResourceGateway) (
 	mux := http.NewServeMux()
 	api.NewServer(service, refresh.NewInMemoryQueue(), nil, nil).Register(mux)
 
-	scope := refresh.JoinClusterScope(notFoundDetailClusterID, "default:apps/v1:Deployment:web")
+	// The object panel sends the kind lowercased (objectPanelRef.ts); the
+	// reference must still name the canonical kind the panel compares against.
+	scope := refresh.JoinClusterScope(notFoundDetailClusterID, "default:apps/v1:deployment:web")
 	recorder := httptest.NewRecorder()
 	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/snapshots/object-details?scope="+url.QueryEscape(scope), nil))
 	var status errorstatus.Status

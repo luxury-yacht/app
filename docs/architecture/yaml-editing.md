@@ -58,6 +58,9 @@ backend and object panel. Editor mechanics: [YAML editor](../frontend/yaml-edito
 7. **Every save is verified.** The editor re-fetches the live object,
    semantic-compares it with the submission, and shows a diff when
    controllers or concurrent writers changed the stored result.
+   Save, Reload & Merge, and post-save re-read failures are shown in the
+   editor and reported through `errorHandler.handleInline`, never as a toast
+   that would repeat them.
 
 ## Known Gaps (accepted)
 
