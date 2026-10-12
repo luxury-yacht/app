@@ -60,8 +60,11 @@ var (
 	wellKnownNodeLogServices = []string{"kubelet", "containerd", "crio", "cri-o", "docker"}
 )
 
-func nodeLogRequest(client rest.Interface, absPath string) *rest.Request {
-	return client.Get().AbsPath(absPath).SetHeader("Accept", nodeLogAcceptHeader)
+// nodeLogRequest sends a server-relative node log URI. RequestURI keeps its
+// query (sinceTime, query, tailLines) as parameters; AbsPath would fold them
+// into the path, and the kubelet would answer 404.
+func nodeLogRequest(client rest.Interface, uri string) *rest.Request {
+	return client.Get().RequestURI(uri).SetHeader("Accept", nodeLogAcceptHeader)
 }
 
 type nodeLogListingEntry struct {

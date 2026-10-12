@@ -58,6 +58,41 @@ func stubNodeFetchLogs(t *testing.T, responses map[string][]byte) {
 // (backend protobufRestConfig). Node log pages are plain text and HTML, and the
 // node answers 406 Not Acceptable when a request accepts neither, so node log
 // requests must accept text whatever the clientset prefers.
+// Node log requests carry options as a query string. The kubelet must receive
+// them as query parameters: sent as part of the path, an incremental read asks
+// for a file that does not exist and fails with NotFound.
+func TestNodeLogRequestsSendOptionsAsQueryParameters(t *testing.T) {
+	nodeName := "node-a"
+	since := "2026-10-12T03:00:00Z"
+	var seen []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Path+" "+r.URL.RawQuery)
+		switch {
+		case r.URL.Path == "/api/v1/nodes/node-a/proxy/logs/alternatives.log" && r.URL.Query().Get("sinceTime") == since:
+			_, _ = w.Write([]byte("new line"))
+		case r.URL.Path == "/api/v1/nodes/node-a/proxy/logs/" && r.URL.Query().Get("query") == "kubelet":
+			_, _ = w.Write([]byte("kubelet line"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client, err := kubernetes.NewForConfig(&rest.Config{Host: server.URL})
+	require.NoError(t, err)
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(client)))
+
+	incremental, err := service.FetchLogs(context.Background(), nodeName, restypes.NodeLogFetchRequest{
+		SourcePath: "alternatives.log",
+		SinceTime:  since,
+	})
+	require.NoError(t, err, "requests seen: %v", seen)
+	require.Equal(t, "new line", incremental.Content)
+
+	serviceLogs, err := service.FetchLogs(context.Background(), nodeName, restypes.NodeLogFetchRequest{SourcePath: "service:kubelet"})
+	require.NoError(t, err, "requests seen: %v", seen)
+	require.Equal(t, "kubelet line", serviceLogs.Content)
+}
+
 func TestNodeLogRequestsAcceptTextThroughAProtobufClientset(t *testing.T) {
 	nodeName := "node-a"
 	pages := map[string]string{
