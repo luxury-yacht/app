@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -136,7 +138,7 @@ func TestGetTargetPorts_ServiceUsesServicePortsAndFiltersNonTCP(t *testing.T) {
 		}),
 	})
 
-	ports, err := fixture.gateway.GetTargetPorts(portForwardClusterID, "default", "Service", "", "v1", "api")
+	ports, err := fixture.gateway.GetTargetPorts(resourcemodel.ResourceRef{ClusterID: portForwardClusterID, Version: "v1", Kind: "Service", Namespace: "default", Name: "api"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -180,7 +182,9 @@ func TestGetTargetPortsValidatesTargetBeforeClusterClients(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := gateway.GetTargetPorts("missing-cluster", tc.args[0], tc.args[1], tc.args[2], tc.args[3], tc.args[4])
+			_, err := gateway.GetTargetPorts(resourcemodel.ResourceRef{
+				ClusterID: "missing-cluster", Namespace: tc.args[0], Kind: tc.args[1], Group: tc.args[2], Version: tc.args[3], Name: tc.args[4],
+			})
 			if err == nil || err.Error() != tc.wantErr {
 				t.Fatalf("expected %q, got %v", tc.wantErr, err)
 			}
@@ -196,7 +200,7 @@ func TestGetTargetPortsRequiresKubernetesClient(t *testing.T) {
 		kubeconfigContext: "ctx",
 	})
 
-	_, err := fixture.gateway.GetTargetPorts(portForwardClusterID, "default", "Service", "", "v1", "api")
+	_, err := fixture.gateway.GetTargetPorts(resourcemodel.ResourceRef{ClusterID: portForwardClusterID, Version: "v1", Kind: "Service", Namespace: "default", Name: "api"})
 	if err == nil || err.Error() != "kubernetes client not initialized" {
 		t.Fatalf("expected client error, got %v", err)
 	}

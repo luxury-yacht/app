@@ -293,8 +293,8 @@ export function GetShellSessionBacklog(sessionID: string): $CancellablePromise<s
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetShellSessionBacklog", sessionID);
 }
 
-export function GetTargetPorts(clusterID: string, $namespace: string, targetKind: string, targetGroup: string, targetVersion: string, targetName: string): $CancellablePromise<$models.ContainerPortInfo[] | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetTargetPorts", clusterID, $namespace, targetKind, targetGroup, targetVersion, targetName);
+export function GetTargetPorts(target: resourcemodel$0.ResourceRef): $CancellablePromise<$models.ContainerPortInfo[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetTargetPorts", target);
 }
 
 export function GetThemes(): $CancellablePromise<$models.Theme[] | null> {

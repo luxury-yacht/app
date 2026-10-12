@@ -474,14 +474,14 @@ describe('PortForwardModal', () => {
       await vi.advanceTimersByTimeAsync(100);
     });
 
-    expect(getTargetPortsMock).toHaveBeenCalledWith(
-      'cluster-1',
-      'default',
-      'Deployment',
-      'apps',
-      'v1',
-      'nginx'
-    );
+    expect(getTargetPortsMock).toHaveBeenCalledWith({
+      clusterId: 'cluster-1',
+      group: 'apps',
+      version: 'v1',
+      kind: 'Deployment',
+      namespace: 'default',
+      name: 'nginx',
+    });
 
     vi.useRealTimers();
   });

@@ -62,14 +62,14 @@ const apiVersionForTarget = (target: ObjectYAMLReadTarget): string => {
 };
 
 export const readTargetPortsForRef = (target: ObjectReadTarget) =>
-  GetTargetPorts(
-    target.clusterId,
-    namespaceOrEmpty(target.namespace),
-    target.kind,
-    target.group,
-    target.version,
-    target.name
-  );
+  GetTargetPorts({
+    clusterId: target.clusterId,
+    group: target.group,
+    version: target.version,
+    kind: target.kind,
+    namespace: namespaceOrEmpty(target.namespace),
+    name: target.name,
+  });
 
 /** An object panel's metric samples newer than afterT (unix ms), from the backend panel buffer. */
 export const readPanelMetricSeries = (clusterId: string, panelId: string, afterT: number) =>

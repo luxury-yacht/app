@@ -102,7 +102,7 @@ type ResourceCommands interface {
 	GetObjectYAMLByGVK(string, string, string, string, string) (string, error)
 	GetPodContainers(string, string, string) ([]PodContainer, error)
 	GetRevisionHistory(string, string, string, string, string, string) ([]RevisionEntry, error)
-	GetTargetPorts(string, string, string, string, string, string) ([]ContainerPortInfo, error)
+	GetTargetPorts(resourcemodel.ResourceRef) ([]ContainerPortInfo, error)
 	HydrateCatalogCustomRows(string, []snapshot.ResourceQueryRow) ([]snapshot.CustomResourceSummary, error)
 	IsWorkloadHPAManaged(string, string, string, string, string, string) (bool, error)
 	MergeObjectYamlWithLatest(string, ObjectYAMLReloadMergeRequest) (*ObjectYAMLReloadMergeResponse, error)
@@ -488,8 +488,8 @@ func (s *DesktopService) GetRevisionHistory(clusterID, namespace, group, version
 	return s.resources.GetRevisionHistory(clusterID, namespace, group, version, workloadKind, name)
 }
 
-func (s *DesktopService) GetTargetPorts(clusterID, namespace, targetKind, targetGroup, targetVersion, targetName string) ([]ContainerPortInfo, error) {
-	return s.resources.GetTargetPorts(clusterID, namespace, targetKind, targetGroup, targetVersion, targetName)
+func (s *DesktopService) GetTargetPorts(target resourcemodel.ResourceRef) ([]ContainerPortInfo, error) {
+	return s.resources.GetTargetPorts(target)
 }
 
 func (s *DesktopService) HydrateCatalogCustomRows(clusterID string, rows []snapshot.ResourceQueryRow) ([]snapshot.CustomResourceSummary, error) {

@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -27,13 +28,13 @@ type ContainerPortInfo struct {
 }
 
 // GetTargetPorts returns the TCP ports a target can be forwarded on.
-func (g *ResourceGateway) GetTargetPorts(clusterID, namespace, targetKind, targetGroup, targetVersion, targetName string) ([]ContainerPortInfo, error) {
-	target, err := portForwardTargetFromParts(namespace, targetKind, targetGroup, targetVersion, targetName)
+func (g *ResourceGateway) GetTargetPorts(ref resourcemodel.ResourceRef) ([]ContainerPortInfo, error) {
+	target, err := portForwardTargetFromParts(ref.Namespace, ref.Kind, ref.Group, ref.Version, ref.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	deps, _, err := g.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(ref.ClusterID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve cluster: %w", err)
 	}
