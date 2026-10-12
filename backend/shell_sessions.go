@@ -200,15 +200,17 @@ func (w *shellEventWriter) Write(p []byte) (int, error) {
 }
 
 // StartShellSession launches a kubectl exec session and begins streaming data back to the frontend.
-func (o *OperationsCoordinator) StartShellSession(clusterID string, req ShellSessionRequest) (*ShellSession, error) {
+func (o *OperationsCoordinator) StartShellSession(req ShellSessionRequest) (*ShellSession, error) {
+	clusterID := req.Target.ClusterID
 	operationEpoch := o.clusterOperationEpoch(clusterID)
-	launch, err := o.prepareShellLaunch(clusterID, req)
+	launch, err := o.prepareShellLaunch(req)
 	if err != nil {
 		return nil, errorstatus.UserAction(errorstatus.ObjectRef{
-			ClusterID: clusterID, Version: "v1", Kind: "Pod", Namespace: req.Namespace, Name: req.PodName,
+			ClusterID: clusterID, Group: req.Target.Group, Version: req.Target.Version, Kind: req.Target.Kind,
+			Namespace: req.Target.Namespace, Name: req.Target.Name,
 		}, err)
 	}
-	sess, sessionCtx := newShellSession(o.operationContext(), clusterID, req, launch, operationEpoch)
+	sess, sessionCtx := newShellSession(o.operationContext(), req, launch, operationEpoch)
 	lifecycle := o.shellSessionLifecycle()
 	if !lifecycle.register(sess) {
 		sess.Close()
@@ -220,10 +222,14 @@ func (o *OperationsCoordinator) StartShellSession(clusterID string, req ShellSes
 	return shellSessionResponse(sess, launch.pod), nil
 }
 
-func (o *OperationsCoordinator) prepareShellLaunch(clusterID string, req ShellSessionRequest) (shellLaunch, error) {
-	if err := requirePodObject(req.Namespace, req.PodName); err != nil {
+func (o *OperationsCoordinator) prepareShellLaunch(req ShellSessionRequest) (shellLaunch, error) {
+	if err := requireTargetIdentity(req.Target, podspkg.Identity); err != nil {
 		return shellLaunch{}, err
 	}
+	if err := requirePodObject(req.Target.Namespace, req.Target.Name); err != nil {
+		return shellLaunch{}, err
+	}
+	clusterID := req.Target.ClusterID
 
 	if o == nil || o.clusterAccess == nil {
 		return shellLaunch{}, fmt.Errorf("cluster access not initialized")
@@ -239,9 +245,9 @@ func (o *OperationsCoordinator) prepareShellLaunch(clusterID string, req ShellSe
 	ctx, cancel := context.WithTimeout(o.operationContext(), config.ShellSessionShutdownTimeout)
 	defer cancel()
 
-	podIdentifier := fmt.Sprintf("%s/%s", req.Namespace, req.PodName)
+	podIdentifier := fmt.Sprintf("%s/%s", req.Target.Namespace, req.Target.Name)
 	pod, err := o.clusterAccess.FetchPodWithRetry(ctx, clusterID, podIdentifier, func(fetchCtx context.Context) (*corev1.Pod, error) {
-		return deps.KubernetesClient.CoreV1().Pods(req.Namespace).Get(fetchCtx, req.PodName, metav1.GetOptions{})
+		return deps.KubernetesClient.CoreV1().Pods(req.Target.Namespace).Get(fetchCtx, req.Target.Name, metav1.GetOptions{})
 	})
 	if err != nil {
 		return shellLaunch{}, fmt.Errorf("failed to load pod: %w", err)
@@ -293,16 +299,16 @@ func (o *OperationsCoordinator) requireShellExecPermission(ctx context.Context, 
 		OperationsPermissionCheck{
 			Version:     "v1",
 			Kind:        podspkg.Identity.Kind,
-			Namespace:   req.Namespace,
-			Name:        req.PodName,
+			Namespace:   req.Target.Namespace,
+			Name:        req.Target.Name,
 			Verb:        "get",
 			Subresource: "exec",
 		},
 		OperationsPermissionCheck{
 			Version:     "v1",
 			Kind:        podspkg.Identity.Kind,
-			Namespace:   req.Namespace,
-			Name:        req.PodName,
+			Namespace:   req.Target.Namespace,
+			Name:        req.Target.Name,
 			Verb:        "create",
 			Subresource: "exec",
 		},
@@ -327,8 +333,8 @@ func (o *OperationsCoordinator) buildShellExecutor(
 		RESTClient().
 		Post().
 		Resource("pods").
-		Namespace(req.Namespace).
-		Name(req.PodName).
+		Namespace(req.Target.Namespace).
+		Name(req.Target.Name).
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: container,
@@ -358,7 +364,8 @@ func (o *OperationsCoordinator) buildShellExecutor(
 	return executor, nil
 }
 
-func newShellSession(parent context.Context, clusterID string, req ShellSessionRequest, launch shellLaunch, operationEpoch uint64) (*shellSession, context.Context) {
+func newShellSession(parent context.Context, req ShellSessionRequest, launch shellLaunch, operationEpoch uint64) (*shellSession, context.Context) {
+	clusterID := req.Target.ClusterID
 	sessionID := uuid.NewString()
 	stdinReader, stdinWriter := io.Pipe()
 	sizeQueue := newTerminalSizeQueue()
@@ -372,7 +379,7 @@ func newShellSession(parent context.Context, clusterID string, req ShellSessionR
 		id:             sessionID,
 		clusterID:      clusterID,
 		clusterName:    launch.deps.ClusterName,
-		target:         *runtimeOperationTarget(clusterID, podspkg.Identity.Group, podspkg.Identity.Version, podspkg.Identity.Kind, req.Namespace, req.PodName),
+		target:         *runtimeOperationTarget(clusterID, podspkg.Identity.Group, podspkg.Identity.Version, podspkg.Identity.Kind, req.Target.Namespace, req.Target.Name),
 		container:      launch.container,
 		command:        append([]string(nil), launch.command...),
 		stdin:          stdinWriter,

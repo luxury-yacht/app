@@ -6,10 +6,12 @@ runtime operations ([operation-lifecycle.md](operation-lifecycle.md)).
 
 ## Agent Contract
 
-- Targets carry the pod's identity plus the container selection. Session DTOs
-  (`ShellSession`, `ShellSessionInfo`) carry the complete target `ResourceRef`;
-  Shell tab reattach and Sessions navigation match and open that reference
-  instead of rebuilding one from namespace and pod name.
+- Targets carry the pod's identity plus the container selection. The start
+  request and session DTOs (`ShellSessionRequest`, `ShellSession`,
+  `ShellSessionInfo`) carry the complete target `ResourceRef`, cluster included;
+  the backend rejects any target that is not a core/v1 Pod. Shell tab reattach
+  and Sessions navigation match and open that reference instead of rebuilding
+  one from namespace and pod name.
 - Debug container creation and shell attachment are separate steps; failure in
   either must not leave ambiguous session state.
 - Capability gating distinguishes regular exec, debug container creation,

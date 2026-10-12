@@ -146,13 +146,13 @@ describe('resourceLinkIdentity', () => {
         name: 'api',
       })
     );
-    expect(findCatalogObjectMatchMock).toHaveBeenCalledWith(
-      'cluster-a',
-      'prod',
-      'apps',
-      'v1',
-      'Deployment',
-      'api'
-    );
+    expect(findCatalogObjectMatchMock).toHaveBeenCalledWith({
+      clusterId: 'cluster-a',
+      group: 'apps',
+      version: 'v1',
+      kind: 'Deployment',
+      namespace: 'prod',
+      name: 'api',
+    });
   });
 });

@@ -14,6 +14,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 )
 
@@ -30,16 +31,19 @@ func (g *ResourceGateway) FetchContainerLogs(clusterID string, req ContainerLogs
 	// and a shared one would fail the containers read last.
 	return service.FetchContainerLogs(g.CtxOrBackground(), req)
 }
-func (g *ResourceGateway) GetPodContainers(clusterID, namespace, podName string) ([]PodContainer, error) {
-	if err := requirePodObject(namespace, podName); err != nil {
+func (g *ResourceGateway) GetPodContainers(target resourcemodel.ResourceRef) ([]PodContainer, error) {
+	if err := requireTargetIdentity(target, pods.Identity); err != nil {
 		return nil, err
 	}
-	deps, _, err := g.resolveClusterDependencies(clusterID)
+	if err := requirePodObject(target.Namespace, target.Name); err != nil {
+		return nil, err
+	}
+	deps, _, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return nil, err
 	}
 	service := pods.NewService(deps)
-	return service.PodContainers(g.CtxOrBackground(), namespace, podName)
+	return service.PodContainers(g.CtxOrBackground(), target.Namespace, target.Name)
 }
 func (g *ResourceGateway) GetContainerLogsScopeContainers(clusterID, scope string) ([]PodContainer, error) {
 	if err := requireMatchingContainerLogsScopeCluster(clusterID, scope); err != nil {

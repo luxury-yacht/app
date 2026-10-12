@@ -128,11 +128,10 @@ function trimBacklogOverlap(backlog: string, bufferedOutput: string): string {
 }
 
 async function startTrackedShellSession(
-  clusterId: string,
-  request: Parameters<typeof StartShellSession>[1],
+  request: Parameters<typeof StartShellSession>[0],
   isCancelled: () => boolean
 ): Promise<types.ShellSession | null> {
-  const session = await StartShellSession(clusterId, request);
+  const session = await StartShellSession(request);
   if (!session) {
     throw new Error('Shell session was not created');
   }
@@ -633,18 +632,13 @@ const ShellTab: React.FC<ShellTabProps> = ({
 
     let cancelled = false;
     const request = {
-      namespace,
-      podName: resourceName,
+      target: shellTargetIdentity({ clusterId: resolvedClusterId, namespace, resourceName }),
       container: containerOverride ?? undefined,
       command: resolvedShell ? [resolvedShell] : undefined,
     };
     const start = async () => {
       try {
-        const shellSession = await startTrackedShellSession(
-          resolvedClusterId,
-          request,
-          () => cancelled
-        );
+        const shellSession = await startTrackedShellSession(request, () => cancelled);
         if (!shellSession) {
           return;
         }
@@ -821,7 +815,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
       const result = await requestData({
         resource: 'pod-containers',
         reason: 'user',
-        read: () => readPodContainers(resolvedClusterId, namespace, resourceName),
+        read: () =>
+          readPodContainers(
+            shellTargetIdentity({ clusterId: resolvedClusterId, namespace, resourceName })
+          ),
       });
       if (lastTargetRef.current !== target) {
         return;

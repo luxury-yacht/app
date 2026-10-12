@@ -3,6 +3,7 @@ package backend
 import (
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	cgofake "k8s.io/client-go/kubernetes/fake"
@@ -29,7 +30,7 @@ func TestIsWorkloadHPAManagedMatchesFullGVK(t *testing.T) {
 	})
 	gateway := newAutoscalingResourceGateway(client)
 
-	managed, err := gateway.IsWorkloadHPAManaged("cluster-a", "default", "apps", "v1", "Deployment", "web")
+	managed, err := gateway.IsWorkloadHPAManaged(resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "default", Name: "web"})
 	if err != nil {
 		t.Fatalf("IsWorkloadHPAManaged returned error: %v", err)
 	}
@@ -51,7 +52,7 @@ func TestIsWorkloadHPAManagedDoesNotMatchKindOnlyCollision(t *testing.T) {
 	})
 	gateway := newAutoscalingResourceGateway(client)
 
-	managed, err := gateway.IsWorkloadHPAManaged("cluster-a", "default", "apps", "v1", "Deployment", "web")
+	managed, err := gateway.IsWorkloadHPAManaged(resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "default", Name: "web"})
 	if err != nil {
 		t.Fatalf("IsWorkloadHPAManaged returned error: %v", err)
 	}
@@ -63,7 +64,7 @@ func TestIsWorkloadHPAManagedDoesNotMatchKindOnlyCollision(t *testing.T) {
 func TestIsWorkloadHPAManagedRejectsUnsupportedGVK(t *testing.T) {
 	gateway := newResourceGatewayFixture().gateway
 
-	_, err := gateway.IsWorkloadHPAManaged("cluster-a", "default", "example.com", "v1", "Deployment", "web")
+	_, err := gateway.IsWorkloadHPAManaged(resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "example.com", Version: "v1", Kind: "Deployment", Namespace: "default", Name: "web"})
 	if err == nil {
 		t.Fatalf("expected unsupported GVK error")
 	}
@@ -72,12 +73,12 @@ func TestIsWorkloadHPAManagedRejectsUnsupportedGVK(t *testing.T) {
 func TestIsWorkloadHPAManagedRequiresNamespacedObjectIdentity(t *testing.T) {
 	gateway := newResourceGatewayFixture().gateway
 
-	_, err := gateway.IsWorkloadHPAManaged("cluster-a", "", "apps", "v1", "Deployment", "web")
+	_, err := gateway.IsWorkloadHPAManaged(resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "", Name: "web"})
 	if err == nil || err.Error() != "namespace is required" {
 		t.Fatalf("expected namespace error, got %v", err)
 	}
 
-	_, err = gateway.IsWorkloadHPAManaged("cluster-a", "default", "apps", "v1", "Deployment", "")
+	_, err = gateway.IsWorkloadHPAManaged(resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "default", Name: ""})
 	if err == nil || err.Error() != "name is required" {
 		t.Fatalf("expected name error, got %v", err)
 	}

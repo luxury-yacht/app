@@ -5,13 +5,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	cgofake "k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 // buildRevisionHistoryGateway creates a focused resource gateway with a fake
@@ -162,7 +165,7 @@ func TestGetRevisionHistoryDeployment(t *testing.T) {
 	client := cgofake.NewClientset(deploy, rs1, rs2, rs3, rsOther)
 	app := buildRevisionHistoryGateway(client)
 
-	entries, err := app.GetRevisionHistory("config:ctx", "default", "apps", "v1", "Deployment", "myapp")
+	entries, err := app.GetRevisionHistory(resourcemodel.ResourceRef{ClusterID: "config:ctx", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "default", Name: "myapp"})
 	require.NoError(t, err)
 
 	// Expect exactly 3 revisions (the unrelated ReplicaSet must be filtered out).
@@ -193,7 +196,7 @@ func TestGetRevisionHistoryUnsupportedKind(t *testing.T) {
 	client := cgofake.NewClientset()
 	app := buildRevisionHistoryGateway(client)
 
-	_, err := app.GetRevisionHistory("config:ctx", "default", "apps", "v1", "ReplicaSet", "myapp")
+	_, err := app.GetRevisionHistory(resourcemodel.ResourceRef{ClusterID: "config:ctx", Group: "apps", Version: "v1", Kind: "ReplicaSet", Namespace: "default", Name: "myapp"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ReplicaSet")
 }
@@ -210,7 +213,7 @@ func TestGetRevisionHistoryNilClient(t *testing.T) {
 		// client intentionally omitted (nil)
 	})
 
-	_, err := fixture.gateway.GetRevisionHistory("config:ctx", "default", "apps", "v1", "Deployment", "myapp")
+	_, err := fixture.gateway.GetRevisionHistory(resourcemodel.ResourceRef{ClusterID: "config:ctx", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "default", Name: "myapp"})
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }
 
@@ -317,7 +320,7 @@ func TestGetRevisionHistoryStatefulSet(t *testing.T) {
 	client := cgofake.NewClientset(sts, cr1, cr2, cr3)
 	app := buildRevisionHistoryGateway(client)
 
-	entries, err := app.GetRevisionHistory("config:ctx", "default", "apps", "v1", "StatefulSet", "db")
+	entries, err := app.GetRevisionHistory(resourcemodel.ResourceRef{ClusterID: "config:ctx", Group: "apps", Version: "v1", Kind: "StatefulSet", Namespace: "default", Name: "db"})
 	require.NoError(t, err)
 
 	// Expect exactly 3 revisions.
@@ -412,7 +415,7 @@ func TestGetRevisionHistoryDaemonSet(t *testing.T) {
 	client := cgofake.NewClientset(ds, cr1, cr2)
 	app := buildRevisionHistoryGateway(client)
 
-	entries, err := app.GetRevisionHistory("config:ctx", "kube-system", "apps", "v1", "DaemonSet", "logging-agent")
+	entries, err := app.GetRevisionHistory(resourcemodel.ResourceRef{ClusterID: "config:ctx", Group: "apps", Version: "v1", Kind: "DaemonSet", Namespace: "kube-system", Name: "logging-agent"})
 	require.NoError(t, err)
 
 	// Expect exactly 2 revisions.
@@ -443,9 +446,9 @@ func mustMarshalControllerRevisionData(t *testing.T, obj interface{}) runtime.Ra
 
 // TestRollbackWorkloadDeployment verifies that rolling back a Deployment to a previous
 // revision replaces its pod template with the one from the target ReplicaSet.
-func TestRollbackWorkloadDeployment(t *testing.T) {
-	t.Helper()
-
+// rollbackDeploymentObjects is a Deployment at revision 2 (nginx:1.25) with the
+// ReplicaSets for revision 1 (nginx:1.23, the rollback target) and revision 2.
+func rollbackDeploymentObjects() []runtime.Object {
 	deployUID := types.UID("rollback-deploy-uid")
 	isController := true
 
@@ -520,7 +523,13 @@ func TestRollbackWorkloadDeployment(t *testing.T) {
 		},
 	}
 
-	client := cgofake.NewClientset(deploy, rs1, rs2)
+	return []runtime.Object{deploy, rs1, rs2}
+}
+
+func TestRollbackWorkloadDeployment(t *testing.T) {
+	t.Helper()
+
+	client := cgofake.NewClientset(rollbackDeploymentObjects()...)
 	app := buildRevisionHistoryGateway(client)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	detailKey := liveDetailCacheKey("Deployment", "default", "webapp")
@@ -541,6 +550,38 @@ func TestRollbackWorkloadDeployment(t *testing.T) {
 
 // TestRollbackWorkloadStatefulSet verifies that rolling back a StatefulSet to a previous
 // revision replaces its pod template using the stored ControllerRevision data.
+// A user who may not update the workload must not be able to roll it back, and
+// the refusal must come before anything is written.
+func TestRollbackWorkloadRequiresWorkloadUpdatePermission(t *testing.T) {
+	client := cgofake.NewClientset(rollbackDeploymentObjects()...)
+	app := buildRevisionHistoryGateway(client)
+	// Deny only update on this Deployment; every other access review stays allowed.
+	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		review := action.(cgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		attrs := review.Spec.ResourceAttributes
+		denied := attrs != nil && attrs.Verb == "update" && attrs.Group == "apps" && attrs.Resource == "deployments" &&
+			attrs.Namespace == "default" && attrs.Name == "webapp"
+		review.Status = authorizationv1.SubjectAccessReviewStatus{Allowed: !denied}
+		if denied {
+			review.Status.Reason = "deployment update denied"
+		}
+		return true, review, nil
+	})
+	client.ClearActions()
+
+	err := app.rollbackWorkloadAction(ObjectActionTargetRef{ClusterID: "config:ctx", Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "webapp"}, 1)
+	require.ErrorContains(t, err, "deployment update denied")
+
+	for _, action := range client.Actions() {
+		if action.GetResource().Resource == "deployments" {
+			require.NotContains(t, []string{"update", "patch"}, action.GetVerb(), "denied rollback wrote to the deployment")
+		}
+	}
+	current, err := client.AppsV1().Deployments("default").Get(t.Context(), "webapp", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, "nginx:1.25", current.Spec.Template.Spec.Containers[0].Image)
+}
+
 func TestRollbackWorkloadStatefulSet(t *testing.T) {
 	t.Helper()
 

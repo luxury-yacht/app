@@ -41,6 +41,15 @@ export interface NodeLogFetchResult {
 const nodeLogDiscoveryCache = new Map<string, NodeLogDiscoveryResponse>();
 const nodeLogDiscoveryInflight = new Map<string, Promise<NodeLogDiscoveryResponse>>();
 
+// Node log reads always target a core/v1 Node.
+const nodeReadTarget = (clusterId: string, nodeName: string) => ({
+  clusterId,
+  group: '',
+  version: 'v1',
+  kind: 'Node',
+  name: nodeName,
+});
+
 const getNodeLogDiscoveryKey = (clusterId: string, nodeName: string): string =>
   `${clusterId}::${nodeName}`;
 
@@ -94,7 +103,7 @@ export const discoverNodeLogs = async (
     adapter: 'rpc-read',
     label: 'Node Log Discovery',
     scope: `${clusterId}:Node:${nodeName}`,
-    read: () => readNodeLogDiscovery(clusterId, nodeName),
+    read: () => readNodeLogDiscovery(nodeReadTarget(clusterId, nodeName)),
   })
     .then((result) => {
       if (result.status === 'blocked') {
@@ -132,7 +141,8 @@ export const fetchNodeLogs = async (
     adapter: 'rpc-read',
     label: 'Node Logs',
     scope: `${clusterId}:Node:${nodeName}:${request.sourcePath}`,
-    read: () => readNodeLogs(clusterId, nodeName, request as types.NodeLogFetchRequest),
+    read: () =>
+      readNodeLogs(nodeReadTarget(clusterId, nodeName), request as types.NodeLogFetchRequest),
   });
 
   if (result.status === 'blocked') {

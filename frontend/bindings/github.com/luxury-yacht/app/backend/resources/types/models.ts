@@ -783,11 +783,13 @@ export interface ShellSessionInfo {
 }
 
 /**
- * ShellSessionRequest describes the namespace/pod/container to exec into.
+ * ShellSessionRequest describes the pod and container to exec into.
  */
 export interface ShellSessionRequest {
-    "namespace": string;
-    "podName": string;
+    /**
+     * Target is the complete identity of the Pod, including its cluster.
+     */
+    "target": ObjectRef;
     "container"?: string;
     "command"?: string[] | null;
 }

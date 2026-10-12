@@ -182,7 +182,7 @@ func (g *ResourceGateway) scaleWorkloadAction(target ObjectActionTargetRef, repl
 }
 
 func ensureHPAManagedScaleAllowed(ctx context.Context, deps common.Dependencies, target ObjectActionTargetRef, replicas int) error {
-	managed, err := isWorkloadHPAManaged(ctx, deps, target.Namespace, target.Group, target.Version, target.Kind, target.Name)
+	managed, err := isWorkloadHPAManaged(ctx, deps, target)
 	if err != nil {
 		return fmt.Errorf("failed to determine HPA ownership for %s %s/%s: %w", target.Kind, target.Namespace, target.Name, err)
 	}

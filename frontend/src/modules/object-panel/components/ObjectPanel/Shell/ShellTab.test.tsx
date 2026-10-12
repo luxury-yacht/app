@@ -362,9 +362,8 @@ describe('ShellTab', () => {
 
     clickConnectButton();
 
-    expect(wailsMocks.StartShellSession).toHaveBeenCalledWith('alpha:ctx', {
-      namespace: 'team-a',
-      podName: 'pod-1',
+    expect(wailsMocks.StartShellSession).toHaveBeenCalledWith({
+      target: podTarget('alpha:ctx'),
       container: undefined,
       command: ['/bin/sh'],
     });
@@ -844,8 +843,7 @@ describe('ShellTab', () => {
     clickConnectButton();
     await flushAsync();
     expect(wailsMocks.StartShellSession).toHaveBeenLastCalledWith(
-      'beta:ctx',
-      expect.objectContaining({ container: 'beta-container' })
+      expect.objectContaining({ target: podTarget('beta:ctx'), container: 'beta-container' })
     );
   });
 
@@ -891,8 +889,7 @@ describe('ShellTab', () => {
         })
       );
       expect(wailsMocks.StartShellSession).toHaveBeenLastCalledWith(
-        'beta:ctx',
-        expect.objectContaining({ container: 'debug-abc12345' })
+        expect.objectContaining({ target: podTarget('beta:ctx'), container: 'debug-abc12345' })
       );
     }
   );

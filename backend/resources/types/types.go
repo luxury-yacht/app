@@ -214,12 +214,12 @@ type NodeLogFetchResponse struct {
 	Truncated  bool          `json:"truncated,omitempty"`
 }
 
-// ShellSessionRequest describes the namespace/pod/container to exec into.
+// ShellSessionRequest describes the pod and container to exec into.
 type ShellSessionRequest struct {
-	Namespace string   `json:"namespace"`
-	PodName   string   `json:"podName"`
-	Container string   `json:"container,omitempty"`
-	Command   []string `json:"command,omitempty"`
+	// Target is the complete identity of the Pod, including its cluster.
+	Target    ObjectRef `json:"target"`
+	Container string    `json:"container,omitempty"`
+	Command   []string  `json:"command,omitempty"`
 }
 
 // ShellSession contains details about an active exec session.

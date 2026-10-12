@@ -540,7 +540,7 @@ func TestStartShellSessionValidation(t *testing.T) {
 	}
 
 	// missing client should fail fast
-	if _, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{}); err == nil {
+	if _, err := operations.StartShellSession(ShellSessionRequest{}); err == nil {
 		t.Fatal("expected error when client is nil")
 	}
 
@@ -557,10 +557,10 @@ func TestStartShellSessionValidation(t *testing.T) {
 		},
 	}
 
-	if _, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{}); err == nil {
+	if _, err := operations.StartShellSession(ShellSessionRequest{}); err == nil {
 		t.Fatal("expected namespace validation error")
 	}
-	if _, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "ns"}); err == nil {
+	if _, err := operations.StartShellSession(ShellSessionRequest{Target: shellPodTarget("ns", "")}); err == nil {
 		t.Fatal("expected pod name validation error")
 	}
 }
@@ -589,7 +589,7 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 		},
 	}
 
-	_, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "pod-1"})
+	_, err := operations.StartShellSession(ShellSessionRequest{Target: shellPodTarget("default", "pod-1")})
 	if err == nil {
 		t.Fatal("expected error when pod has no containers")
 	}
@@ -606,7 +606,7 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 		},
 	}
 
-	if _, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "pod-1", Container: "missing"}); err == nil {
+	if _, err := operations.StartShellSession(ShellSessionRequest{Target: shellPodTarget("default", "pod-1"), Container: "missing"}); err == nil {
 		t.Fatal("expected error for missing container")
 	}
 }
@@ -636,9 +636,8 @@ func TestStartShellSessionRequiresExecPermission(t *testing.T) {
 		},
 	}
 
-	_, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{
-		Namespace: "default",
-		PodName:   "pod-1",
+	_, err := operations.StartShellSession(ShellSessionRequest{
+		Target:    shellPodTarget("default", "pod-1"),
 		Container: "main",
 	})
 	if err == nil || !strings.Contains(err.Error(), "exec denied") {
@@ -708,7 +707,7 @@ func TestStartShellSessionPublishesCompletePodTarget(t *testing.T) {
 		return blockingShellExecutor{}, nil
 	}
 
-	session, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "pod-1"})
+	session, err := operations.StartShellSession(ShellSessionRequest{Target: shellPodTarget("default", "pod-1")})
 	if err != nil {
 		t.Fatalf("start shell session: %v", err)
 	}

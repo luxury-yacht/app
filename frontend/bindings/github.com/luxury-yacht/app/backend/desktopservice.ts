@@ -157,8 +157,8 @@ export function DeleteTheme(id: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DeleteTheme", id);
 }
 
-export function DiscoverNodeLogs(clusterID: string, nodeName: string): $CancellablePromise<$models.NodeLogDiscoveryResponse> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DiscoverNodeLogs", clusterID, nodeName);
+export function DiscoverNodeLogs(target: resourcemodel$0.ResourceRef): $CancellablePromise<$models.NodeLogDiscoveryResponse> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DiscoverNodeLogs", target);
 }
 
 export function DownloadApplicationUpdate(version: string): $CancellablePromise<$models.UpdateInfo | null> {
@@ -193,16 +193,16 @@ export function FetchContainerLogs(clusterID: string, request: $models.Container
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.FetchContainerLogs", clusterID, request);
 }
 
-export function FetchNodeLogs(clusterID: string, nodeName: string, request: $models.NodeLogFetchRequest): $CancellablePromise<$models.NodeLogFetchResponse> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.FetchNodeLogs", clusterID, nodeName, request);
+export function FetchNodeLogs(target: resourcemodel$0.ResourceRef, request: $models.NodeLogFetchRequest): $CancellablePromise<$models.NodeLogFetchResponse> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.FetchNodeLogs", target, request);
 }
 
 export function FindCatalogObjectByUID(clusterID: string, uid: string): $CancellablePromise<objectcatalog$0.Summary | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.FindCatalogObjectByUID", clusterID, uid);
 }
 
-export function FindCatalogObjectMatch(clusterID: string, $namespace: string, group: string, version: string, kind: string, name: string): $CancellablePromise<objectcatalog$0.Summary | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.FindCatalogObjectMatch", clusterID, $namespace, group, version, kind, name);
+export function FindCatalogObjectMatch(target: resourcemodel$0.ResourceRef): $CancellablePromise<objectcatalog$0.Summary | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.FindCatalogObjectMatch", target);
 }
 
 export function GetAppInfo(): $CancellablePromise<$models.AppInfo | null> {
@@ -265,8 +265,8 @@ export function GetNativeWindowDescriptor(windowName: string): $CancellablePromi
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetNativeWindowDescriptor", windowName);
 }
 
-export function GetObjectYAMLByGVK(clusterID: string, apiVersion: string, kind: string, $namespace: string, name: string): $CancellablePromise<string> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetObjectYAMLByGVK", clusterID, apiVersion, kind, $namespace, name);
+export function GetObjectYAMLByGVK(target: resourcemodel$0.ResourceRef): $CancellablePromise<string> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetObjectYAMLByGVK", target);
 }
 
 export function GetPanelMetricSeries(clusterID: string, panelID: string, afterT: number): $CancellablePromise<panelmetrics$0.Series | null> {
@@ -277,12 +277,12 @@ export function GetPanelWorkspace(windowName: string, clusterID: string): $Cance
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetPanelWorkspace", windowName, clusterID);
 }
 
-export function GetPodContainers(clusterID: string, $namespace: string, podName: string): $CancellablePromise<$models.PodContainer[] | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetPodContainers", clusterID, $namespace, podName);
+export function GetPodContainers(target: resourcemodel$0.ResourceRef): $CancellablePromise<$models.PodContainer[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetPodContainers", target);
 }
 
-export function GetRevisionHistory(clusterID: string, $namespace: string, group: string, version: string, workloadKind: string, name: string): $CancellablePromise<$models.RevisionEntry[] | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetRevisionHistory", clusterID, $namespace, group, version, workloadKind, name);
+export function GetRevisionHistory(target: resourcemodel$0.ResourceRef): $CancellablePromise<$models.RevisionEntry[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetRevisionHistory", target);
 }
 
 export function GetSelectionDiagnostics(): $CancellablePromise<$models.SelectionDiagnostics | null> {
@@ -329,8 +329,8 @@ export function ImportSettings(): $CancellablePromise<$models.DataManagementResu
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ImportSettings");
 }
 
-export function IsWorkloadHPAManaged(clusterID: string, $namespace: string, group: string, version: string, kind: string, name: string): $CancellablePromise<boolean> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.IsWorkloadHPAManaged", clusterID, $namespace, group, version, kind, name);
+export function IsWorkloadHPAManaged(target: resourcemodel$0.ResourceRef): $CancellablePromise<boolean> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.IsWorkloadHPAManaged", target);
 }
 
 export function ListPortForwards(): $CancellablePromise<$models.PortForwardSession[] | null> {
@@ -481,8 +481,8 @@ export function SkipApplicationUpdate(version: string): $CancellablePromise<$mod
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SkipApplicationUpdate", version);
 }
 
-export function StartShellSession(clusterID: string, request: $models.ShellSessionRequest): $CancellablePromise<$models.ShellSession | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.StartShellSession", clusterID, request);
+export function StartShellSession(request: $models.ShellSessionRequest): $CancellablePromise<$models.ShellSession | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.StartShellSession", request);
 }
 
 export function StopPortForward(sessionID: string): $CancellablePromise<void> {

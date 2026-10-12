@@ -7,6 +7,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -29,33 +30,30 @@ func (g *ResourceGateway) GetCatalogDiagnostics() (*CatalogDiagnostics, error) {
 
 // FindCatalogObjectMatch resolves a single catalog object in the requested
 // cluster by canonical identity.
-func (g *ResourceGateway) FindCatalogObjectMatch(
-	clusterID, namespace, group, version, kind, name string,
-) (*objectcatalog.Summary, error) {
+func (g *ResourceGateway) FindCatalogObjectMatch(target resourcemodel.ResourceRef) (*objectcatalog.Summary, error) {
 	if g == nil {
 		return nil, fmt.Errorf("resource gateway is not initialised")
 	}
 
-	trimmedClusterID := clusterID
-	if trimmedClusterID == "" {
+	if target.ClusterID == "" {
 		return nil, fmt.Errorf("cluster ID is required")
 	}
-	if version == "" {
+	if target.Version == "" {
 		return nil, fmt.Errorf("version is required")
 	}
-	if kind == "" {
+	if target.Kind == "" {
 		return nil, fmt.Errorf("kind is required")
 	}
-	if name == "" {
+	if target.Name == "" {
 		return nil, fmt.Errorf("name is required")
 	}
 
-	svc := g.objectCatalogServiceForCluster(trimmedClusterID)
+	svc := g.objectCatalogServiceForCluster(target.ClusterID)
 	if svc == nil {
-		return nil, fmt.Errorf("object catalog service unavailable for cluster %q", trimmedClusterID)
+		return nil, fmt.Errorf("object catalog service unavailable for cluster %q", target.ClusterID)
 	}
 
-	match, ok := svc.FindExactMatch(namespace, group, version, kind, name)
+	match, ok := svc.FindExactMatch(target.Namespace, target.Group, target.Version, target.Kind, target.Name)
 	if !ok {
 		return nil, nil
 	}

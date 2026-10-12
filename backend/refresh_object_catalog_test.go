@@ -627,6 +627,33 @@ func TestGetCatalogDiagnosticsFromTelemetryRecorder(t *testing.T) {
 	require.Equal(t, "pods", diag.Domains[0].Domain)
 }
 
+// A catalog lookup needs the object's complete identity; an incomplete
+// reference is rejected before any cluster's catalog is consulted.
+func TestFindCatalogObjectMatchRequiresCompleteIdentity(t *testing.T) {
+	app := newWorkspaceCoordinatorTestFixture(t)
+	complete := resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "apps", Name: "alpha"}
+	for _, tc := range []struct {
+		name    string
+		edit    func(*resourcemodel.ResourceRef)
+		wantErr string
+	}{
+		{"cluster", func(r *resourcemodel.ResourceRef) { r.ClusterID = "" }, "cluster ID is required"},
+		{"version", func(r *resourcemodel.ResourceRef) { r.Version = "" }, "version is required"},
+		{"kind", func(r *resourcemodel.ResourceRef) { r.Kind = "" }, "kind is required"},
+		{"name", func(r *resourcemodel.ResourceRef) { r.Name = "" }, "name is required"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ref := complete
+			tc.edit(&ref)
+			_, err := app.Resources.FindCatalogObjectMatch(ref)
+			require.EqualError(t, err, tc.wantErr)
+		})
+	}
+	// A complete reference for a cluster with no catalog reports that, not a match.
+	_, err := app.Resources.FindCatalogObjectMatch(complete)
+	require.EqualError(t, err, `object catalog service unavailable for cluster "cluster-b"`)
+}
+
 func TestFindCatalogObjectMatchUsesExactCatalogIdentity(t *testing.T) {
 	app := newWorkspaceCoordinatorTestFixture(t)
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
@@ -636,12 +663,12 @@ func TestFindCatalogObjectMatchUsesExactCatalogIdentity(t *testing.T) {
 	})
 	app.Refresh.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
 
-	match, err := app.Resources.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alpha")
+	match, err := app.Resources.FindCatalogObjectMatch(resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "apps", Name: "alpha"})
 	require.NoError(t, err)
 	require.NotNil(t, match)
 	require.Equal(t, "alpha-uid", match.Ref.UID)
 
-	noMatch, err := app.Resources.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alp")
+	noMatch, err := app.Resources.FindCatalogObjectMatch(resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "apps", Name: "alp"})
 	require.NoError(t, err)
 	require.Nil(t, noMatch)
 }

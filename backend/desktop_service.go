@@ -93,18 +93,18 @@ type ClusterRuntimeCommands interface {
 type ResourceCommands interface {
 	ApplyObjectYaml(string, ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error)
 	CheckObjectYamlOwnership(string, ObjectYAMLMutationRequest) (*ObjectYAMLOwnershipCheckResponse, error)
-	DiscoverNodeLogs(string, string) NodeLogDiscoveryResponse
+	DiscoverNodeLogs(resourcemodel.ResourceRef) NodeLogDiscoveryResponse
 	FetchContainerLogs(string, ContainerLogsFetchRequest) (ContainerLogsFetchResponse, error)
-	FetchNodeLogs(string, string, NodeLogFetchRequest) (NodeLogFetchResponse, error)
+	FetchNodeLogs(resourcemodel.ResourceRef, NodeLogFetchRequest) (NodeLogFetchResponse, error)
 	FindCatalogObjectByUID(string, string) (*objectcatalog.Summary, error)
-	FindCatalogObjectMatch(string, string, string, string, string, string) (*objectcatalog.Summary, error)
+	FindCatalogObjectMatch(resourcemodel.ResourceRef) (*objectcatalog.Summary, error)
 	GetContainerLogsScopeContainers(string, string) ([]PodContainer, error)
-	GetObjectYAMLByGVK(string, string, string, string, string) (string, error)
-	GetPodContainers(string, string, string) ([]PodContainer, error)
-	GetRevisionHistory(string, string, string, string, string, string) ([]RevisionEntry, error)
+	GetObjectYAMLByGVK(resourcemodel.ResourceRef) (string, error)
+	GetPodContainers(resourcemodel.ResourceRef) ([]PodContainer, error)
+	GetRevisionHistory(resourcemodel.ResourceRef) ([]RevisionEntry, error)
 	GetTargetPorts(resourcemodel.ResourceRef) ([]ContainerPortInfo, error)
 	HydrateCatalogCustomRows(string, []snapshot.ResourceQueryRow) ([]snapshot.CustomResourceSummary, error)
-	IsWorkloadHPAManaged(string, string, string, string, string, string) (bool, error)
+	IsWorkloadHPAManaged(resourcemodel.ResourceRef) (bool, error)
 	MergeObjectYamlWithLatest(string, ObjectYAMLReloadMergeRequest) (*ObjectYAMLReloadMergeResponse, error)
 	QueryPermissions([]capabilities.PermissionQuery) (*capabilities.QueryPermissionsResponse, error)
 	RunObjectAction(ObjectActionRequest) (ObjectActionResponse, error)
@@ -120,7 +120,7 @@ type OperationsCommands interface {
 	ListShellSessions() []ShellSessionInfo
 	ResizeShellSession(string, int, int) error
 	SendShellInput(string, string) error
-	StartShellSession(string, ShellSessionRequest) (*ShellSession, error)
+	StartShellSession(ShellSessionRequest) (*ShellSession, error)
 	StopPortForward(string) error
 }
 
@@ -452,40 +452,40 @@ func (s *DesktopService) CheckObjectYamlOwnership(clusterID string, request Obje
 	return s.resources.CheckObjectYamlOwnership(clusterID, request)
 }
 
-func (s *DesktopService) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryResponse {
-	return s.resources.DiscoverNodeLogs(clusterID, nodeName)
+func (s *DesktopService) DiscoverNodeLogs(target resourcemodel.ResourceRef) NodeLogDiscoveryResponse {
+	return s.resources.DiscoverNodeLogs(target)
 }
 
 func (s *DesktopService) FetchContainerLogs(clusterID string, request ContainerLogsFetchRequest) (ContainerLogsFetchResponse, error) {
 	return s.resources.FetchContainerLogs(clusterID, request)
 }
 
-func (s *DesktopService) FetchNodeLogs(clusterID, nodeName string, request NodeLogFetchRequest) (NodeLogFetchResponse, error) {
-	return s.resources.FetchNodeLogs(clusterID, nodeName, request)
+func (s *DesktopService) FetchNodeLogs(target resourcemodel.ResourceRef, request NodeLogFetchRequest) (NodeLogFetchResponse, error) {
+	return s.resources.FetchNodeLogs(target, request)
 }
 
 func (s *DesktopService) FindCatalogObjectByUID(clusterID, uid string) (*objectcatalog.Summary, error) {
 	return s.resources.FindCatalogObjectByUID(clusterID, uid)
 }
 
-func (s *DesktopService) FindCatalogObjectMatch(clusterID, namespace, group, version, kind, name string) (*objectcatalog.Summary, error) {
-	return s.resources.FindCatalogObjectMatch(clusterID, namespace, group, version, kind, name)
+func (s *DesktopService) FindCatalogObjectMatch(target resourcemodel.ResourceRef) (*objectcatalog.Summary, error) {
+	return s.resources.FindCatalogObjectMatch(target)
 }
 
 func (s *DesktopService) GetContainerLogsScopeContainers(clusterID, scope string) ([]PodContainer, error) {
 	return s.resources.GetContainerLogsScopeContainers(clusterID, scope)
 }
 
-func (s *DesktopService) GetObjectYAMLByGVK(clusterID, apiVersion, kind, namespace, name string) (string, error) {
-	return s.resources.GetObjectYAMLByGVK(clusterID, apiVersion, kind, namespace, name)
+func (s *DesktopService) GetObjectYAMLByGVK(target resourcemodel.ResourceRef) (string, error) {
+	return s.resources.GetObjectYAMLByGVK(target)
 }
 
-func (s *DesktopService) GetPodContainers(clusterID, namespace, podName string) ([]PodContainer, error) {
-	return s.resources.GetPodContainers(clusterID, namespace, podName)
+func (s *DesktopService) GetPodContainers(target resourcemodel.ResourceRef) ([]PodContainer, error) {
+	return s.resources.GetPodContainers(target)
 }
 
-func (s *DesktopService) GetRevisionHistory(clusterID, namespace, group, version, workloadKind, name string) ([]RevisionEntry, error) {
-	return s.resources.GetRevisionHistory(clusterID, namespace, group, version, workloadKind, name)
+func (s *DesktopService) GetRevisionHistory(target resourcemodel.ResourceRef) ([]RevisionEntry, error) {
+	return s.resources.GetRevisionHistory(target)
 }
 
 func (s *DesktopService) GetTargetPorts(target resourcemodel.ResourceRef) ([]ContainerPortInfo, error) {
@@ -496,8 +496,8 @@ func (s *DesktopService) HydrateCatalogCustomRows(clusterID string, rows []snaps
 	return s.resources.HydrateCatalogCustomRows(clusterID, rows)
 }
 
-func (s *DesktopService) IsWorkloadHPAManaged(clusterID, namespace, group, version, kind, name string) (bool, error) {
-	return s.resources.IsWorkloadHPAManaged(clusterID, namespace, group, version, kind, name)
+func (s *DesktopService) IsWorkloadHPAManaged(target resourcemodel.ResourceRef) (bool, error) {
+	return s.resources.IsWorkloadHPAManaged(target)
 }
 
 func (s *DesktopService) MergeObjectYamlWithLatest(clusterID string, request ObjectYAMLReloadMergeRequest) (*ObjectYAMLReloadMergeResponse, error) {
@@ -544,8 +544,8 @@ func (s *DesktopService) SendShellInput(sessionID, data string) error {
 	return s.operations.SendShellInput(sessionID, data)
 }
 
-func (s *DesktopService) StartShellSession(clusterID string, request ShellSessionRequest) (*ShellSession, error) {
-	return s.operations.StartShellSession(clusterID, request)
+func (s *DesktopService) StartShellSession(request ShellSessionRequest) (*ShellSession, error) {
+	return s.operations.StartShellSession(request)
 }
 
 func (s *DesktopService) StopPortForward(sessionID string) error {

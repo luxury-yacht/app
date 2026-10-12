@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,33 +31,32 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// GetObjectYAMLByGVK fetches a Kubernetes object by its fully-qualified
-// apiVersion + kind and returns its YAML representation. apiVersion must
-// be in the standard Kubernetes "group/version" form (or just "version"
-// for core resources like "v1").
+// GetObjectYAMLByGVK fetches a Kubernetes object by its complete identity
+// (cluster, group, version, kind, namespace, name) and returns its YAML
+// representation. Core resources use an empty group.
 //
 // Unlike GetObjectYAML, this function resolves the GVR strictly from the
 // supplied group/version/kind and does not fall back to first-match-wins
 // on bare kind. That's the whole point of the fix — callers that know
 // which CRD they want can get exactly that one, even when another CRD
 // registers the same Kind under a different group.
-func (g *ResourceGateway) GetObjectYAMLByGVK(clusterID, apiVersion, kind, namespace, name string) (string, error) {
-	gvk := schema.FromAPIVersionAndKind(strings.TrimSpace(apiVersion), strings.TrimSpace(kind))
+func (g *ResourceGateway) GetObjectYAMLByGVK(target resourcemodel.ResourceRef) (string, error) {
+	gvk := objectActionTargetGVK(target)
 	if gvk.Kind == "" {
 		return "", fmt.Errorf("kind is required")
 	}
 	if gvk.Version == "" {
-		return "", fmt.Errorf("apiVersion is required")
+		return "", fmt.Errorf("version is required")
 	}
-	if err := requireObjectName(name); err != nil {
+	if err := requireObjectName(target.Name); err != nil {
 		return "", err
 	}
 
-	deps, _, err := g.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return "", err
 	}
-	return fetchObjectYAMLByGVK(g.CtxOrBackground(), deps, gvk, namespace, name)
+	return fetchObjectYAMLByGVK(g.CtxOrBackground(), deps, gvk, target.Namespace, target.Name)
 }
 
 // fetchObjectYAMLByGVK is the shared core: given already-resolved

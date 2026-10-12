@@ -8,6 +8,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -149,12 +150,12 @@ func TestResourceGatewayResumesRequestsAfterAuthRecovery(t *testing.T) {
 	})
 
 	manager.ReportFailure("expired credentials")
-	if _, err := fixture.gateway.GetPodContainers(clusterID, "default", "web"); err == nil || !strings.Contains(err.Error(), "auth failed for Recovered") {
+	if _, err := fixture.gateway.GetPodContainers(resourcemodel.ResourceRef{ClusterID: clusterID, Version: "v1", Kind: "Pod", Namespace: "default", Name: "web"}); err == nil || !strings.Contains(err.Error(), "auth failed for Recovered") {
 		t.Fatalf("request during failed auth = %v, want cluster auth failure", err)
 	}
 
 	manager.ReportSuccess()
-	containers, err := fixture.gateway.GetPodContainers(clusterID, "default", "web")
+	containers, err := fixture.gateway.GetPodContainers(resourcemodel.ResourceRef{ClusterID: clusterID, Version: "v1", Kind: "Pod", Namespace: "default", Name: "web"})
 	if err != nil {
 		t.Fatalf("request after auth recovery: %v", err)
 	}

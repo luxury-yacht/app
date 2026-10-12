@@ -648,14 +648,14 @@ describe('ObjectDiffModal', () => {
       await Promise.resolve();
     });
 
-    expect(appMocks.FindCatalogObjectMatch).toHaveBeenCalledWith(
-      'cluster-b',
-      'apps',
-      'apps',
-      'v1',
-      'Deployment',
-      'alpha'
-    );
+    expect(appMocks.FindCatalogObjectMatch).toHaveBeenCalledWith({
+      clusterId: 'cluster-b',
+      group: 'apps',
+      version: 'v1',
+      kind: 'Deployment',
+      namespace: 'apps',
+      name: 'alpha',
+    });
 
     const rightObjectSelect = document.querySelector(
       'select[aria-label="Right object"]'
@@ -699,14 +699,14 @@ describe('ObjectDiffModal', () => {
       await Promise.resolve();
     });
 
-    expect(appMocks.FindCatalogObjectMatch).toHaveBeenCalledWith(
-      'cluster-a',
-      'apps',
-      'apps',
-      'v1',
-      'Deployment',
-      'alpha'
-    );
+    expect(appMocks.FindCatalogObjectMatch).toHaveBeenCalledWith({
+      clusterId: 'cluster-a',
+      group: 'apps',
+      version: 'v1',
+      kind: 'Deployment',
+      namespace: 'apps',
+      name: 'alpha',
+    });
 
     const leftClusterSelect = document.querySelector(
       'select[aria-label="Left cluster"]'

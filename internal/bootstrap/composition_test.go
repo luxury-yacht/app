@@ -105,8 +105,7 @@ func TestDesktopServiceBindingErrorsCarryStatus(t *testing.T) {
 	require.NotNil(t, bound)
 
 	args := []json.RawMessage{
-		json.RawMessage(`"missing-cluster"`), json.RawMessage(`"v1"`), json.RawMessage(`"Pod"`),
-		json.RawMessage(`"default"`), json.RawMessage(`"web"`),
+		json.RawMessage(`{"clusterId":"missing-cluster","group":"","version":"v1","kind":"Pod","namespace":"default","name":"web"}`),
 	}
 	_, err := bound.Call(context.Background(), args)
 	var callErr *application.CallError

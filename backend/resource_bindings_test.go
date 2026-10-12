@@ -19,6 +19,7 @@ import (
 	cgofake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 func wrapperResourceGatewayFixture(t *testing.T) *resourceGatewayFixture {
@@ -201,7 +202,10 @@ func TestPodAndHelmOperationsRequireClient(t *testing.T) {
 		{"deletePod", func() error {
 			return app.gateway.deletePodAction(objectActionTarget(clusterID, "", "v1", "Pod", "ns", "pod"))
 		}},
-		{"PodContainers", func() error { _, err := app.gateway.GetPodContainers(clusterID, "ns", "pod"); return err }},
+		{"PodContainers", func() error {
+			_, err := app.gateway.GetPodContainers(resourcemodel.ResourceRef{ClusterID: clusterID, Version: "v1", Kind: "Pod", Namespace: "ns", Name: "pod"})
+			return err
+		}},
 		{"HelmDelete", func() error {
 			return app.gateway.deleteHelmReleaseAction(objectActionTarget(clusterID, "helm.sh", "v3", "HelmRelease", "ns", "rel"))
 		}},
@@ -232,8 +236,18 @@ func TestActionWrappersRequireTargetIdentity(t *testing.T) {
 		{"deletePod name", func() error {
 			return app.gateway.deletePodAction(objectActionTarget("cluster-a", "", "v1", "Pod", "ns", ""))
 		}, "pod name is required"},
-		{"PodContainers namespace", func() error { _, err := app.gateway.GetPodContainers("cluster-a", "", "pod"); return err }, "namespace is required"},
-		{"PodContainers name", func() error { _, err := app.gateway.GetPodContainers("cluster-a", "ns", ""); return err }, "pod name is required"},
+		{"PodContainers namespace", func() error {
+			_, err := app.gateway.GetPodContainers(resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Namespace: "", Name: "pod"})
+			return err
+		}, "namespace is required"},
+		{"PodContainers name", func() error {
+			_, err := app.gateway.GetPodContainers(resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Namespace: "ns", Name: ""})
+			return err
+		}, "pod name is required"},
+		{"PodContainers kind", func() error {
+			_, err := app.gateway.GetPodContainers(resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "ns", Name: "pod"})
+			return err
+		}, "v1 Pod target required, got apps/v1 Deployment"},
 		{"Debug namespace", func() error {
 			_, err := app.gateway.createDebugContainerAction(
 				objectActionTarget("cluster-a", "", "v1", "Pod", "", "pod"),
@@ -283,11 +297,19 @@ func TestActionWrappersRequireTargetIdentity(t *testing.T) {
 		})
 	}
 
-	if resp := app.gateway.DiscoverNodeLogs("cluster-a", ""); resp.Reason != "name is required" {
+	if resp := app.gateway.DiscoverNodeLogs(resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Node", Name: ""}); resp.Reason != "name is required" {
 		t.Fatalf("expected DiscoverNodeLogs name error, got %+v", resp)
 	}
-	if _, err := app.gateway.FetchNodeLogs("cluster-a", "", NodeLogFetchRequest{SourcePath: "/var/log"}); err == nil || err.Error() != "name is required" {
+	if _, err := app.gateway.FetchNodeLogs(resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Node", Name: ""}, NodeLogFetchRequest{SourcePath: "/var/log"}); err == nil || err.Error() != "name is required" {
 		t.Fatalf("expected FetchNodeLogs name error, got %v", err)
+	}
+	// Node log reads must refuse a reference to anything other than a Node.
+	podRef := resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Namespace: "ns", Name: "node-a"}
+	if resp := app.gateway.DiscoverNodeLogs(podRef); resp.Reason != "v1 Node target required, got v1 Pod" {
+		t.Fatalf("expected DiscoverNodeLogs kind error, got %+v", resp)
+	}
+	if _, err := app.gateway.FetchNodeLogs(podRef, NodeLogFetchRequest{SourcePath: "/var/log"}); err == nil || err.Error() != "v1 Node target required, got v1 Pod" {
+		t.Fatalf("expected FetchNodeLogs kind error, got %v", err)
 	}
 }
 
@@ -305,12 +327,12 @@ func TestNodeLogsRequireNodeProxyPermission(t *testing.T) {
 		},
 	}
 
-	discovery := app.gateway.DiscoverNodeLogs(clusterID, "node-a")
+	discovery := app.gateway.DiscoverNodeLogs(resourcemodel.ResourceRef{ClusterID: clusterID, Version: "v1", Kind: "Node", Name: "node-a"})
 	if !strings.Contains(discovery.Reason, "node proxy denied") {
 		t.Fatalf("expected node proxy denial, got %+v", discovery)
 	}
 
-	_, err := app.gateway.FetchNodeLogs(clusterID, "node-a", NodeLogFetchRequest{SourcePath: "journal/kubelet"})
+	_, err := app.gateway.FetchNodeLogs(resourcemodel.ResourceRef{ClusterID: clusterID, Version: "v1", Kind: "Node", Name: "node-a"}, NodeLogFetchRequest{SourcePath: "journal/kubelet"})
 	if err == nil || !strings.Contains(err.Error(), "node proxy denied") {
 		t.Fatalf("expected node proxy denial, got %v", err)
 	}
