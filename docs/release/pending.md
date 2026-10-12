@@ -23,3 +23,4 @@
 - The object panel marks an object deleted only when that object is gone, not when a related lookup fails.
 - Tables show "Insufficient permissions" only for real permission denials; a timeout on an RBAC resource no longer reads as one.
 - Node Logs auto-refresh no longer fails on every refresh and reloads the whole log.
+- Opening a shell session from the Sessions list no longer shows an error when that pod's panel is already open.

@@ -15,7 +15,7 @@ export default function ShellSessionBar({
   fallbackShell,
   ending,
   onEnd,
-}: ShellSessionBarProps) {
+}: Readonly<ShellSessionBarProps>) {
   const shell = session?.command?.[0] ?? fallbackShell;
   return (
     <div className="shell-tab__session-bar">
