@@ -11,6 +11,7 @@ import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { getTextContent } from '@shared/components/tables/GridTable.utils';
+import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -376,6 +377,7 @@ describe('ClusterViewNodes', () => {
     expect(rowDetail().openRowKeys).toEqual([rowKey]);
     expect(gridTablePropsRef.current.isRowSelected?.(baseNode, 0)).toBe(true);
     expect(rowDetail().getLabel(baseNode)).toBe('Pods for node-1');
+    expect(rowDetail().getGroupClassName?.(baseNode)).toBe(getKindColorClass('Node'));
     expect(attachedPods(baseNode)).toMatchObject({
       namespace: ALL_NAMESPACES_SCOPE,
       clusterId: 'path:context',

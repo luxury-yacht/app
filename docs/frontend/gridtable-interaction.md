@@ -43,17 +43,24 @@ virtualization, and native table accessibility. Apply the
 
 ## Row detail
 
-- `rowDetail` (`openRowKeys`, `render`, `getLabel`) shows each open row's
+- `rowDetail` (`openRowKeys`, `render`, `getLabel`, optional
+  `getGroupClassName`) shows each open row's
   content in a native detail row directly under it: a full-width cell holding a
   labelled region whose id is `getGridTableRowDetailId(rowKey)`.
   `withRowDetailToggle` turns a count column into the opener ("2/3 ›") with
   `aria-expanded` and `aria-controls`; the view owns which rows are open. A
   nested table can also close its own detail with a Close in
   `filters.options.trailingActions`, which sits at the end of its filter bar.
-- Each detail and its open row share the accent rail. Its content stays pinned
-  to the visible width and is capped at a share of the table viewport; a nested
-  table renders `embedded`, sizes to its rows up to the cap, then scrolls inside.
-  Opening scrolls that detail into view once.
+- Open rows and their details never use the accent rail; it stays reserved
+  for selected, focused, and hovered rows, which keep it when open, so a
+  selected row beside an open detail never reads as part of it. An open row
+  and its detail are tinted as one block: `getGroupClassName` adds a kind
+  color slot (`getKindColorClass`, the kind badge's color via `--kind-color`)
+  to both, and the detail's padding shows the tint as a band around the nested
+  table; without it the tint is neutral. Its content
+  stays pinned to the visible width and is capped at a share of the table
+  viewport; a nested table renders `embedded`, sizes to its rows up to the cap,
+  then scrolls inside. Opening scrolls that detail into view once.
 - The virtualizer adds each detail's measured height to its open row's span, and
   open rows stay mounted outside the virtual window so nested tables keep their
   state. Each detail is keyed by row identity, so it follows its row through

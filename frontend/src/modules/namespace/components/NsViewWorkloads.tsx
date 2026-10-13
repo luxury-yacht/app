@@ -32,6 +32,7 @@ import type {
 import type { RowDetailToggleOptions } from '@shared/components/tables/rowDetailToggle';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -157,6 +158,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
               openRowKeys: openWorkloadKeys,
               render: renderWorkloadPods,
               getLabel: (row) => `Pods for ${row.ref.name}`,
+              getGroupClassName: (row) => getKindColorClass(row.ref.kind),
             }
           : undefined,
       [openWorkloadKeys, renderWorkloadPods]

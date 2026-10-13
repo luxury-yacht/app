@@ -177,6 +177,20 @@ describe('GridTable row detail', () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(2);
   });
 
+  // The group class (a kind color slot in the views) tints an open row and its
+  // detail as one block, so a selected row beside them is not read as part of it.
+  it('gives an open row and its own detail the row group class, and closed rows none', async () => {
+    await renderTable({
+      ...detailFor(['cluster-a|a', 'cluster-a|c']),
+      getGroupClassName: (row) => `group-${row.name}`,
+    });
+
+    expect(parentRow('a').classList.contains('group-a')).toBe(true);
+    expect(parentRow('a').nextElementSibling?.classList.contains('group-a')).toBe(true);
+    expect(parentRow('c').nextElementSibling?.classList.contains('group-c')).toBe(true);
+    expect(parentRow('b').className).not.toMatch(/group-/);
+  });
+
   // The same pod can be listed under two open rows (a CronJob and its Job); the
   // page must still carry each DOM id once, so id references stay unambiguous.
   it('keeps DOM ids unique when open details list the same rows', async () => {

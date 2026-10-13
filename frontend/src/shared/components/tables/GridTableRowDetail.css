@@ -1,16 +1,35 @@
 /* Row detail: an open row's full-width content (for example a nested table),
-   joined to its row by the accent rail. */
-.gridtable-row.gridtable-row--detail-open {
-  border-left-color: var(--color-accent);
+   joined to its row by a neutral rail. The accent rail stays reserved for
+   selected, focused, and hovered rows, so a selected row next to an open
+   detail never reads as part of it; the :not() keeps a selected or focused
+   open row on the accent rail whatever order the stylesheets load in. */
+.gridtable-row.gridtable-row--detail-open:not(.gridtable-row--selected):not(
+  .gridtable-row--focused
+) {
+  border-left-color: var(--color-bg-tertiary);
 }
 
 .gridtable-row-detail {
   display: block;
   width: 100%;
-  border-bottom: 1px solid var(--grid-border-color);
-  border-left: 3px solid var(--color-accent);
-  background-color: var(--color-bg-secondary);
+  /* border-bottom: 1px solid var(--grid-border-color); */
+  border-left: 10px solid var(--color-bg);
+  background-color: var(--grid-bg-primary);
   z-index: 1;
+}
+
+/* An open row and its detail are tinted as one block with the row's kind
+   color (--kind-color, set by the hash-color-N group class; neutral without
+   one), mixed like the kind badge's own background but lighter. The tint
+   layers over each surface's background, so selection still shows through. */
+.gridtable-row.gridtable-row--detail-open,
+.gridtable-row-detail {
+  --row-detail-tint: color-mix(
+    in srgb,
+    var(--kind-color, var(--color-text-tertiary)) 14%,
+    transparent
+  );
+  background-image: linear-gradient(var(--row-detail-tint), var(--row-detail-tint));
 }
 
 .gridtable-row-detail__cell {
@@ -27,7 +46,9 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 0 0 10px 0;
+  /* The tinted band shows around the nested table. */
+  padding: 0 8px 10px;
+  margin: 0;
   overflow: hidden;
 }
 

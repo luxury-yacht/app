@@ -106,6 +106,8 @@ const isEditableTarget = (target: EventTarget | null) =>
 interface RowDetailRowProps {
   rowKey: string;
   label: string;
+  /** Classes shared with the open row (GridTableRowDetail.getGroupClassName). */
+  groupClassName?: string;
   /** Virtual-mode offset; undefined in normal flow. */
   top?: number;
   width?: number;
@@ -120,6 +122,7 @@ interface RowDetailRowProps {
 function GridTableRowDetailRow({
   rowKey,
   label,
+  groupClassName,
   top,
   width,
   maxHeight,
@@ -183,7 +186,7 @@ function GridTableRowDetailRow({
   return (
     <AriaGridRow
       ref={rowRef}
-      className="gridtable-row-detail"
+      className={groupClassName ? `gridtable-row-detail ${groupClassName}` : 'gridtable-row-detail'}
       data-gridtable-row-detail="true"
       style={
         top === undefined ? undefined : { position: 'absolute', transform: `translateY(${top}px)` }
@@ -272,6 +275,7 @@ export function useGridTableRowDetailRenderer<T>({
           key={`row-detail:${rowKey}`}
           rowKey={rowKey}
           label={rowDetail.getLabel(item)}
+          groupClassName={rowDetail.getGroupClassName?.(item)}
           top={virtualized ? getRowTop(index + 1) - height : undefined}
           width={viewportWidth > 0 ? viewportWidth : undefined}
           maxHeight={Math.max(

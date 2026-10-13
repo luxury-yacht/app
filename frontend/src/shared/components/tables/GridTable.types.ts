@@ -205,6 +205,11 @@ export interface GridTableRowDetail<T> {
   render: (item: T) => React.ReactNode;
   /** Accessible name of the detail region. */
   getLabel: (item: T) => string;
+  /**
+   * Classes shared by an open row and its detail; a kind color slot
+   * (getKindColorClass) tints them as one group.
+   */
+  getGroupClassName?: (item: T) => string;
 }
 
 export interface GridTableProps<T> {

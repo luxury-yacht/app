@@ -31,6 +31,7 @@ import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -332,6 +333,7 @@ export const NodesTable: React.FC<NodesTableProps> = React.memo(
               openRowKeys: openNodeKeys,
               render: renderNodePods,
               getLabel: (row) => `Pods for ${row.ref.name}`,
+              getGroupClassName: (row) => getKindColorClass(row.ref.kind),
             }
           : undefined,
       [openNodeKeys, renderNodePods]

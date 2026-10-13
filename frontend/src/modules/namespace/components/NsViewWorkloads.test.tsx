@@ -9,6 +9,7 @@ import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { getGridTableRowDetailId } from '@shared/components/tables/GridTable.utils';
+import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -398,6 +399,8 @@ describe('NsViewWorkloads', () => {
       controls: getGridTableRowDetailId(rowKey),
     });
     expect(rowDetail().getLabel(workload)).toBe('Pods for api');
+    // The open row and its pods are tinted with the row's kind badge color.
+    expect(rowDetail().getGroupClassName?.(workload)).toBe(getKindColorClass('Deployment'));
     expect(attachedPods(workload)).toMatchObject({
       namespace: 'team-a',
       clusterId: 'path:context',

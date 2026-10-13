@@ -532,16 +532,20 @@ export function useGridTableController<T>({
     focusByIndex,
     lastNavigationMethodRef,
   });
-  // Each open row and its detail share the accent rail.
+  // An open row also carries its detail's group class, so the two read as one block.
   const openDetailRows = rowDetailState.openRows;
+  const getGroupClassName = rowDetail?.getGroupClassName;
   const getRowClassNameWithDetail = useCallback(
     (item: T, index: number) => {
       const base = getRowClassNameWithFocus(item, index);
-      return openDetailRows.get(index) === keyExtractor(item, index)
-        ? `${base} gridtable-row--detail-open`.trim()
-        : base;
+      if (openDetailRows.get(index) !== keyExtractor(item, index)) {
+        return base;
+      }
+      return [base, 'gridtable-row--detail-open', getGroupClassName?.(item)]
+        .filter(Boolean)
+        .join(' ');
     },
-    [getRowClassNameWithFocus, keyExtractor, openDetailRows]
+    [getGroupClassName, getRowClassNameWithFocus, keyExtractor, openDetailRows]
   );
   const rowDetailIndexes = useMemo(() => Array.from(openDetailRows.keys()), [openDetailRows]);
 
