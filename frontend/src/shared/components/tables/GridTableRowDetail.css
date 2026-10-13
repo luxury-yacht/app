@@ -1,19 +1,11 @@
-/* Row detail: an open row's full-width content (for example a nested table),
-   joined to its row by a neutral rail. The accent rail stays reserved for
-   selected, focused, and hovered rows, so a selected row next to an open
-   detail never reads as part of it; the :not() keeps a selected or focused
-   open row on the accent rail whatever order the stylesheets load in. */
-.gridtable-row.gridtable-row--detail-open:not(.gridtable-row--selected):not(
-  .gridtable-row--focused
-) {
-  border-left-color: var(--color-bg-tertiary);
-}
-
+/* Row detail: an open row's full-width content (for example a nested table).
+   Neither the open row nor its detail draws a rail of its own; the accent
+   rail stays reserved for selected, focused, and hovered rows, so a selected
+   row next to an open detail never reads as part of it. */
 .gridtable-row-detail {
   display: block;
   width: 100%;
   /* border-bottom: 1px solid var(--grid-border-color); */
-  border-left: 10px solid var(--color-bg);
   background-color: var(--grid-bg-primary);
   z-index: 1;
 }
@@ -47,8 +39,8 @@
   flex-direction: column;
   min-height: 0;
   /* The tinted band shows around the nested table. */
-  padding: 0 8px 10px;
-  margin: 0;
+  padding: 0 0 1rem 1rem;
+  margin-bottom: 0;
   overflow: hidden;
 }
 
