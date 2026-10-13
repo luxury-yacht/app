@@ -127,6 +127,11 @@
   color: var(--color-text);
 }
 
+/* Rendered as <output>, which is inline by default. */
+.shell-tab__cleanup-failure {
+  display: block;
+}
+
 .shell-tab__custom-image-input {
   height: 26px;
   padding: 0 8px;

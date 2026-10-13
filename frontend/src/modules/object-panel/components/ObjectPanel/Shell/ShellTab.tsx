@@ -252,9 +252,9 @@ function ShellCleanupNotice({ failure }: Readonly<{ failure: CleanupFailure | nu
     return null;
   }
   return (
-    <div className="shell-tab__notice shell-tab__cleanup-failure" role="status">
+    <output className="shell-tab__notice shell-tab__cleanup-failure">
       Cleanup failed: <span>{failure.reason}</span>. End the session in the Sessions list to retry.
-    </div>
+    </output>
   );
 }
 
@@ -742,12 +742,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
   useEffect(() => {
     void reconnectToken;
     const shellTarget = lastTargetRef.current;
-    if (
-      !isActive ||
-      statusRef.current !== 'connecting' ||
-      !shellTarget ||
-      shellTarget.key !== targetKey
-    ) {
+    if (!isActive || statusRef.current !== 'connecting' || shellTarget?.key !== targetKey) {
       return;
     }
 
@@ -875,11 +870,9 @@ const ShellTab: React.FC<ShellTabProps> = ({
           return;
         }
         case types.ShellSessionStatus.ShellSessionStatusEnded:
-          // A user ended it, from this tab or any other window; never a failed connection.
-          handleSessionClosed(evt.reason, true);
-          return;
         case types.ShellSessionStatus.ShellSessionStatusCleanupFailed:
-          // The shell ended; the backend keeps its debug pod listed until a delete succeeds.
+          // A user ended it, from this tab or any other window, or the shell ended and
+          // only its debug pod's delete failed; never a failed connection.
           handleSessionClosed(evt.reason, true);
           return;
         case types.ShellSessionStatus.ShellSessionStatusClosed:
@@ -947,7 +940,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
 
   const refreshContainers = useCallback(async () => {
     const shellTarget = lastTargetRef.current;
-    if (!shellTarget || shellTarget.key !== targetKey || !shellTarget.kind.listsContainers) {
+    if (shellTarget?.key !== targetKey || !shellTarget.kind.listsContainers) {
       setDiscoveredContainers([]);
       return;
     }
@@ -1036,12 +1029,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
 
   const attachLatestTrackedSession = useCallback(async () => {
     const target = lastTargetRef.current;
-    if (
-      !target ||
-      target.key !== targetKey ||
-      sessionIdRef.current ||
-      attachInFlightRef.current === target
-    ) {
+    if (target?.key !== targetKey || sessionIdRef.current || attachInFlightRef.current === target) {
       return;
     }
     attachInFlightRef.current = target;
