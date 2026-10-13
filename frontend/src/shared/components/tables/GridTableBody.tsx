@@ -46,6 +46,8 @@ interface GridTableBodyProps<T> {
   /** Indexes of the rows whose detail is open, in table order. */
   rowDetailIndexes?: readonly number[];
   renderRowDetail?: RenderRowDetailFn<T>;
+  /** False while a table nested in a row detail holds the keyboard. */
+  bodyInTabOrder?: boolean;
   onWrapperFocus: (event: React.FocusEvent<HTMLElement>) => void;
   onWrapperBlur: (event: React.FocusEvent<HTMLElement>) => void;
   onWrapperBackgroundClick: () => void;
@@ -184,6 +186,7 @@ function GridTableBody<T>({
   renderRowContent,
   rowDetailIndexes = NO_ROW_DETAIL_INDEXES,
   renderRowDetail = noRowDetail,
+  bodyInTabOrder = true,
   onWrapperFocus,
   onWrapperBlur,
   onWrapperBackgroundClick,
@@ -295,7 +298,7 @@ function GridTableBody<T>({
         className={`gridtable gridtable--body ${tableClassName} ${useShortNames ? 'short-names' : ''}`}
         onFocus={onWrapperFocus}
         onBlur={onWrapperBlur}
-        tabIndex={0}
+        tabIndex={bodyInTabOrder ? 0 : -1}
         aria-busy={loading || undefined}
         aria-label="Data table"
       >

@@ -47,10 +47,15 @@ type UseGridTableShortcutsOptions = {
   /** Space's only action; without it the shortcut is off and Space does nothing. */
   onToggleFocusedRow?: () => boolean;
   onOpenContextMenu: () => boolean;
+  /** One row up or down in screen order (into and out of expanded row details). */
+  moveRow: (delta: 1 | -1) => boolean;
+  /** Up or down a page of this table's rows. */
   moveSelectionByDelta: (delta: number) => boolean;
-  jumpToIndex: (index: number) => boolean;
+  jumpToStart: () => boolean;
+  jumpToEnd: () => boolean;
+  /** The next or previous row of the top table, skipping expanded tables. */
+  moveParentRow?: (delta: 1 | -1) => boolean;
   getPageSizeRef: React.RefObject<number>;
-  tableDataLength: number;
   isContextMenuVisible: boolean;
   // Page navigation for paginated tables. Ctrl+Arrow is used off macOS and
   // Command+Arrow on macOS, leaving plain arrows to horizontal scrolling.
@@ -69,10 +74,12 @@ export function useGridTableShortcuts({
   onOpenFocusedRow,
   onToggleFocusedRow,
   onOpenContextMenu,
+  moveRow,
   moveSelectionByDelta,
-  jumpToIndex,
+  jumpToStart,
+  jumpToEnd,
+  moveParentRow,
   getPageSizeRef,
-  tableDataLength,
   isContextMenuVisible,
   onPagePrevious,
   onPageNext,
@@ -106,15 +113,31 @@ export function useGridTableShortcuts({
     [
       {
         key: 'ArrowDown',
-        handler: () => moveSelectionByDelta(1),
+        handler: () => moveRow(1),
         description: 'Select next row',
         helpOrder: 10,
       },
       {
         key: 'ArrowUp',
-        handler: () => moveSelectionByDelta(-1),
+        handler: () => moveRow(-1),
         description: 'Select previous row',
         helpOrder: 11,
+      },
+      {
+        key: 'ArrowDown',
+        modifiers: { alt: true },
+        handler: () => moveParentRow?.(1) ?? false,
+        description: 'Next row, skipping expanded tables',
+        helpOrder: 12,
+        enabled: Boolean(moveParentRow),
+      },
+      {
+        key: 'ArrowUp',
+        modifiers: { alt: true },
+        handler: () => moveParentRow?.(-1) ?? false,
+        description: 'Previous row, skipping expanded tables',
+        helpOrder: 13,
+        enabled: Boolean(moveParentRow),
       },
       {
         key: 'PageDown',
@@ -130,13 +153,13 @@ export function useGridTableShortcuts({
       },
       {
         key: 'Home',
-        handler: () => jumpToIndex(0),
+        handler: jumpToStart,
         description: 'Jump to first row',
         helpOrder: 20,
       },
       {
         key: 'End',
-        handler: () => jumpToIndex(tableDataLength - 1),
+        handler: jumpToEnd,
         description: 'Jump to last row',
         helpOrder: 21,
       },

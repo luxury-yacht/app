@@ -27,6 +27,12 @@ type FocusNavigationOptions<T> = {
   updateHoverForElement: (element: HTMLDivElement | null) => void;
   getRowClassName?: (item: T, index: number) => string | null | undefined;
   shouldIgnoreRowClick: (event: React.MouseEvent) => boolean;
+  /**
+   * False while a table nested in one of this table's row details (or another
+   * row of the table this one is nested in) holds the keyboard; the focused
+   * row then shows no highlight, so one row is lit at a time.
+   */
+  holdsKeyboard?: boolean;
 };
 
 type FocusNavigationResult<T> = {
@@ -61,6 +67,7 @@ export function useGridTableFocusNavigation<T>({
   updateHoverForElement,
   getRowClassName,
   shouldIgnoreRowClick,
+  holdsKeyboard = true,
 }: FocusNavigationOptions<T>): FocusNavigationResult<T> {
   const [isWrapperFocused, setIsWrapperFocused] = useState(false);
   const [isShortcutsSuppressed, setIsShortcutsSuppressed] = useState(false);
@@ -173,7 +180,7 @@ export function useGridTableFocusNavigation<T>({
   const getRowClassNameWithFocus = useCallback(
     (item: T, index: number) => {
       const base = getRowClassName?.(item, index) ?? '';
-      if (!focusedRowKey || isFocusedRowHighlightSuppressed) {
+      if (!focusedRowKey || isFocusedRowHighlightSuppressed || !holdsKeyboard) {
         return base;
       }
       const rowKey = keyExtractor(item, index);
@@ -182,7 +189,7 @@ export function useGridTableFocusNavigation<T>({
       }
       return [base, 'gridtable-row--focused'].filter(Boolean).join(' ');
     },
-    [focusedRowKey, isFocusedRowHighlightSuppressed, keyExtractor, getRowClassName]
+    [focusedRowKey, holdsKeyboard, isFocusedRowHighlightSuppressed, keyExtractor, getRowClassName]
   );
 
   useEffect(() => {

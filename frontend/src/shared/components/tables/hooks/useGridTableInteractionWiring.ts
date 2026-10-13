@@ -38,6 +38,10 @@ interface UseGridTableInteractionWiringOptions<T> {
   headerInnerRef: RefObject<HTMLDivElement | null>;
   hideHeader: boolean;
   contextMenuActiveRef: RefObject<boolean>;
+  /** The row detail whose nested table holds the keyboard; null when this table's rows do. */
+  keyboardDetailKey: string | null;
+  /** Whether this table's rows hold the keyboard (and so the one row highlight). */
+  holdsKeyboard: boolean;
 }
 
 interface GridTableInteractionWiring<T> {
@@ -87,6 +91,8 @@ export function useGridTableInteractionWiring<T>({
   headerInnerRef,
   hideHeader,
   contextMenuActiveRef,
+  keyboardDetailKey,
+  holdsKeyboard,
 }: UseGridTableInteractionWiringOptions<T>): GridTableInteractionWiring<T> {
   const isShortcutOptOutTarget = useCallback((target: EventTarget | null) => {
     if (!(target instanceof HTMLElement)) {
@@ -156,9 +162,16 @@ export function useGridTableInteractionWiring<T>({
     updateHoverForElement,
     getRowClassName,
     shouldIgnoreRowClick,
+    holdsKeyboard,
   });
 
-  useGridTableRowControls(wrapperRef, gridRef, focusedRowKey, Boolean(onRowClick));
+  useGridTableRowControls(
+    wrapperRef,
+    gridRef,
+    focusedRowKey,
+    Boolean(onRowClick),
+    keyboardDetailKey
+  );
 
   useGridTableExternalFocus<T>({
     tableData,

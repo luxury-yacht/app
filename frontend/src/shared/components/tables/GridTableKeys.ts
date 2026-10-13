@@ -22,6 +22,17 @@ interface GridTableKeyboardOptions {
   suppressFocusedRowHighlight: () => void;
 }
 
+// Esc in a filter bar returns to the table's rows and keeps the filter, instead
+// of the search box clearing itself. A control with an open menu keeps its Esc.
+const returnToRowsOnEscape = (event: KeyboardEvent, grid: HTMLTableElement | null): boolean => {
+  const target = event.target instanceof HTMLElement ? event.target : null;
+  if (!grid || !target || target.getAttribute('aria-expanded') === 'true') {
+    return false;
+  }
+  grid.focus({ preventScroll: true });
+  return true;
+};
+
 export const useGridTableKeyboardScopes = ({
   filteringEnabled,
   filtersContainerRef,
@@ -95,6 +106,9 @@ export const useGridTableKeyboardScopes = ({
 
   const handleFilterKeyDown = useCallback(
     (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        return returnToRowsOnEscape(event, gridRef.current);
+      }
       if (event.key !== 'Tab') {
         return false;
       }
@@ -105,7 +119,7 @@ export const useGridTableKeyboardScopes = ({
       }
       return false;
     },
-    [filterTabNavigationHandler]
+    [filterTabNavigationHandler, gridRef]
   );
 
   useKeyboardSurface({

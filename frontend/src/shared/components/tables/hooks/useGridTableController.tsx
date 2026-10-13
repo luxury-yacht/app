@@ -42,8 +42,10 @@ import {
   useGridTableRowDetailRenderer,
   useGridTableRowDetailState,
 } from '@shared/components/tables/hooks/useGridTableRowDetail';
+import { useGridTableRowDetailNavigation } from '@shared/components/tables/hooks/useGridTableRowDetailNavigation';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import { useGridTableRowRenderer } from '@shared/components/tables/hooks/useGridTableRowRenderer';
+import { useGridTableScreenOrderNavigation } from '@shared/components/tables/hooks/useGridTableScreenOrderNavigation';
 import { useGridTableShortcuts } from '@shared/components/tables/hooks/useGridTableShortcuts';
 import { useGridTableVirtualization } from '@shared/components/tables/hooks/useGridTableVirtualization';
 import {
@@ -167,6 +169,8 @@ export interface GridTableControllerResult<T> {
   // Rendering
   renderRowContent: RenderRowContentFn<T>;
   rowDetailIndexes: readonly number[];
+  /** False while a table nested in a row detail holds the keyboard. */
+  bodyInTabOrder: boolean;
   renderRowDetail: RenderRowDetailFn<T>;
   headerRow: ReactNode;
 
@@ -370,6 +374,15 @@ export function useGridTableController<T>({
     loadingOverlay
   );
 
+  const rowDetailState = useGridTableRowDetailState(rowDetail, tableData, keyExtractor);
+  // The keyboard (and the one row highlight) is either in this table's rows or
+  // in a table nested in one of its row details.
+  const rowDetailNavigation = useGridTableRowDetailNavigation({
+    wrapperRef,
+    openRows: rowDetailState.openRows,
+  });
+  const { holdsKeyboard } = rowDetailNavigation;
+
   const {
     hoverState,
     hoverRowRef,
@@ -410,6 +423,8 @@ export function useGridTableController<T>({
     headerInnerRef,
     hideHeader,
     contextMenuActiveRef,
+    keyboardDetailKey: rowDetailNavigation.keyboardDetailKey,
+    holdsKeyboard,
   });
 
   const {
@@ -469,6 +484,8 @@ export function useGridTableController<T>({
     getTextContent,
     fetchAllRows,
     exportFilename,
+    // The filter shortcut finds the filter of the table holding the keyboard.
+    holdsKeyboard,
   });
   const filtersNode = (
     <>
@@ -490,8 +507,6 @@ export function useGridTableController<T>({
     getTextContent,
     data: tableData,
   });
-
-  const rowDetailState = useGridTableRowDetailState(rowDetail, tableData, keyExtractor);
 
   const {
     shouldVirtualize,
@@ -531,6 +546,7 @@ export function useGridTableController<T>({
     gridRef,
     focusByIndex,
     lastNavigationMethodRef,
+    getNavigation: rowDetailNavigation.getNavigation,
   });
   // An open row also carries its detail's group class, so the two read as one block.
   const openDetailRows = rowDetailState.openRows;
@@ -582,6 +598,22 @@ export function useGridTableController<T>({
     getRowTop,
   });
 
+  const { moveRow, jumpToStart, jumpToEnd, moveParentRow } = useGridTableScreenOrderNavigation({
+    tableData,
+    keyExtractor,
+    focusedRowIndex,
+    openRows: rowDetailState.openRows,
+    rowDetailNavigation,
+    hasRowDetail: Boolean(rowDetail),
+    focusByIndex,
+    focusByKeyboard,
+    moveSelectionByDelta,
+    jumpToIndex,
+    gridRef,
+    lastNavigationMethodRef,
+    onRowSelectionClear,
+  });
+
   // Space only ever expands or collapses a row; a table whose rows do not
   // expand claims it with no action.
   useGridTableKeyboardScopes({
@@ -608,14 +640,16 @@ export function useGridTableController<T>({
     onOpenFocusedRow: activateFocusedRow,
     onToggleFocusedRow: onRowExpandToggle ? toggleFocusedRow : undefined,
     onOpenContextMenu: openFocusedRowContextMenu,
+    moveRow,
     moveSelectionByDelta,
-    jumpToIndex,
+    jumpToStart,
+    jumpToEnd,
+    moveParentRow,
     getPageSizeRef,
     onPagePrevious: resolvedPagePrevious,
     onPageNext: resolvedPageNext,
     canPagePrevious: resolvedCanPagePrevious,
     canPageNext: resolvedCanPageNext,
-    tableDataLength: tableData.length,
     isContextMenuVisible,
   });
 
@@ -692,6 +726,7 @@ export function useGridTableController<T>({
     tableViewportWidth,
     renderRowContent,
     rowDetailIndexes,
+    bodyInTabOrder: rowDetailNavigation.keyboardDetailKey === null,
     renderRowDetail,
     headerRow,
     showLoadingOverlay,

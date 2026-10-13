@@ -61,13 +61,16 @@ virtualization, and native table accessibility. Apply the
   hovered rows, so a selected row beside an open detail never reads as part of
   it. When an open row is selected or focused, its detail (always rendered
   right after it) takes the same highlight and rail, so the group changes as
-  one block. An open row and its detail are tinted together: `getGroupClassName`
+  one block. A detail never has a side border: its content is sized to the
+  visible width, so a border pushes it past the right edge. Its rail is an
+  inset shadow instead. An open row and its detail are tinted together: `getGroupClassName`
   adds a kind color slot (`getKindColorClass`, the kind badge's color via
   `--kind-color`) to both, and the detail's padding shows the tint as a band
   around the nested table; without it the tint is neutral. Its content stays
   pinned to the visible width and is capped at a share of the table viewport;
   a nested table renders `embedded`, sizes to its rows up to the cap, then
-  scrolls inside. Opening scrolls that detail into view once.
+  scrolls inside. Opening scrolls that detail into view once, vertically only
+  (see the row-reveal rule in `keyboard.md`).
 - The virtualizer adds each detail's measured height to its open row's span, and
   open rows stay mounted outside the virtual window so nested tables keep their
   state. Each detail is keyed by row identity, so it follows its row through
@@ -76,6 +79,22 @@ virtualization, and native table accessibility. Apply the
   input inside its detail as not its own, so only the nested table's shortcuts
   run; `Escape` from a detail (outside text inputs) returns to that detail's
   row, and so does closing the detail while focus is inside it.
+- Keyboard navigation follows the screen (`RowDetailNavigationContext`,
+  `useGridTableRowDetailNavigation`, `useGridTableScreenOrderNavigation`).
+  One table holds the keyboard at a time, either the parent's rows or one
+  detail's nested table, and only that table shows a row highlight.
+  - Up/Down walk the rows in screen order: from an expanded row into its nested
+    table's first row, from its last row on to the next parent row, and back.
+  - Alt+Up/Alt+Down move between parent rows, skipping expanded tables (from a
+    nested table, to its own row or the next one).
+  - Home/End reach the first or last row on screen. Page Up/Down stay within
+    the table holding the keyboard.
+  - Tab order is the filter bars above the keyboard, its table's rows, the
+    highlighted row's controls, then out. The parent's rows leave Tab order
+    while a nested table holds the keyboard. Other details are marked
+    `data-focus-trap-ignore`, so Shift+Tab retraces Tab exactly.
+  - Cmd/Ctrl+F focuses the filter of the table holding the keyboard. Escape in
+    any table's filter bar returns to its rows and keeps the filter.
   Shared DOM queries that search a wrapper or table use
   `queryOwnGridTableElements`/`isInNestedRowDetail` so they never reach a nested
   table's rows, cells, or controls. The parent already takes the dock offsets,

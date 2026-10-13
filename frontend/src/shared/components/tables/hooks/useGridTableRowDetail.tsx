@@ -9,7 +9,14 @@
 import '@shared/components/tables/GridTableRowDetail.css';
 import { AriaGridCell, AriaGridRow } from '@shared/components/tables/AriaGridPrimitives';
 import type { GridTableRowDetail } from '@shared/components/tables/GridTable.types';
-import { getGridTableRowDetailId } from '@shared/components/tables/GridTable.utils';
+import {
+  getGridTableRowDetailId,
+  revealVertically,
+} from '@shared/components/tables/GridTable.utils';
+import {
+  type RowDetailNavigation,
+  RowDetailNavigationContext,
+} from '@shared/components/tables/rowDetailNavigation';
 import type React from 'react';
 import {
   type RefObject,
@@ -150,7 +157,7 @@ function GridTableRowDetailRow({
     };
     report();
     if (consumeScroll(rowKey)) {
-      node.scrollIntoView?.({ block: 'nearest' });
+      revealVertically(node);
     }
     // Keys pressed in the nested content bubble here after the content handled
     // them; an unhandled Escape returns to this detail's row.
@@ -188,6 +195,7 @@ function GridTableRowDetailRow({
       ref={rowRef}
       className={groupClassName ? `gridtable-row-detail ${groupClassName}` : 'gridtable-row-detail'}
       data-gridtable-row-detail="true"
+      data-row-detail-key={rowKey}
       style={
         top === undefined ? undefined : { position: 'absolute', transform: `translateY(${top}px)` }
       }
@@ -221,6 +229,8 @@ interface RowDetailRendererOptions<T> {
   gridRef: RefObject<HTMLTableElement | null>;
   focusByIndex: (index: number) => void;
   lastNavigationMethodRef: RefObject<'pointer' | 'keyboard'>;
+  /** The keyboard-navigation context each detail gives the table nested in it. */
+  getNavigation: (rowKey: string) => RowDetailNavigation;
 }
 
 export function useGridTableRowDetailRenderer<T>({
@@ -232,6 +242,7 @@ export function useGridTableRowDetailRenderer<T>({
   gridRef,
   focusByIndex,
   lastNavigationMethodRef,
+  getNavigation,
 }: RowDetailRendererOptions<T>): RenderRowDetailFn<T> {
   const { openRows, heights, reportHeight } = state;
   // Each detail scrolls into view once when it opens; refreshes and remounts
@@ -258,7 +269,9 @@ export function useGridTableRowDetailRenderer<T>({
     (index: number) => {
       lastNavigationMethodRef.current = 'keyboard';
       focusByIndex(index);
-      gridRef.current?.focus();
+      // The keyboard navigation scrolls the row into view; a reveal scroll of
+      // the whole table could slide it sideways (see useGridTableScreenOrderNavigation).
+      gridRef.current?.focus({ preventScroll: true });
     },
     [focusByIndex, gridRef, lastNavigationMethodRef]
   );
@@ -286,12 +299,15 @@ export function useGridTableRowDetailRenderer<T>({
           consumeScroll={consumeScroll}
           onReturnFocus={() => returnFocus(index)}
         >
-          {rowDetail.render(item)}
+          <RowDetailNavigationContext.Provider value={getNavigation(rowKey)}>
+            {rowDetail.render(item)}
+          </RowDetailNavigationContext.Provider>
         </GridTableRowDetailRow>
       );
     },
     [
       consumeScroll,
+      getNavigation,
       getRowTop,
       heights,
       openRows,

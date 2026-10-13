@@ -12,7 +12,7 @@
  * mounts — the module-level buffer ensures the request isn't lost.
  */
 
-import { findGridTableRowByKey } from '@shared/components/tables/GridTable.utils';
+import { findGridTableRowByKey, revealVertically } from '@shared/components/tables/GridTable.utils';
 import type { RefObject } from 'react';
 import { useEffect, useRef } from 'react';
 import { eventBus } from '@/core/events';
@@ -95,7 +95,7 @@ function scrollToFocusedRow(
     // that happen to be within the current virtual viewport.
     const rowElement = findGridTableRowByKey(wrapper, key);
     if (rowElement) {
-      rowElement.scrollIntoView({ block: 'nearest' });
+      revealVertically(rowElement);
       return;
     }
 
@@ -116,7 +116,7 @@ function scrollToFocusedRow(
     const retryScroll = () => {
       const el = findGridTableRowByKey(wrapperRef.current, key);
       if (el) {
-        el.scrollIntoView({ block: 'nearest' });
+        revealVertically(el);
         return;
       }
       if (--retries > 0) {

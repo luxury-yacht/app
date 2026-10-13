@@ -1,6 +1,7 @@
 import {
   isInNestedRowDetail,
   queryOwnGridTableElements,
+  queryOwnRowDetails,
 } from '@shared/components/tables/GridTable.utils';
 import type { RefObject } from 'react';
 import { useLayoutEffect, useRef } from 'react';
@@ -13,7 +14,10 @@ const updateRowTabStops = (wrapper: HTMLElement, rowKey: string | null, hasRowAc
     for (const control of row.querySelectorAll<HTMLElement>(GRIDTABLE_INTERACTIVE_STOP_SELECTOR)) {
       const repeatsRowAction =
         hasRowAction && Boolean(control.closest('[data-gridtable-row-action="true"]'));
-      const excludedFromTabOrder = control.closest('[data-focus-trap-ignore="true"]');
+      // Only markers inside the row count: a row detail's own Tab exclusion
+      // (below) must not strand a nested table's row controls at -1.
+      const excluded = control.closest<HTMLElement>('[data-focus-trap-ignore="true"]');
+      const excludedFromTabOrder = excluded !== null && row.contains(excluded);
       control.tabIndex =
         row.dataset.rowKey === rowKey &&
         !control.matches(':disabled') &&
@@ -21,6 +25,20 @@ const updateRowTabStops = (wrapper: HTMLElement, rowKey: string | null, hasRowAc
         !excludedFromTabOrder
           ? 0
           : -1;
+    }
+  }
+};
+
+// Only the detail whose table holds the keyboard is in Tab order, so Tab never
+// wanders into another row's nested table.
+const updateDetailTabStops = (wrapper: HTMLElement, keyboardDetailKey: string | null) => {
+  for (const detail of queryOwnRowDetails(wrapper)) {
+    const reachable = detail.dataset.rowDetailKey === keyboardDetailKey;
+    // The observer watches this attribute, so write only on change.
+    if (reachable && detail.hasAttribute('data-focus-trap-ignore')) {
+      detail.removeAttribute('data-focus-trap-ignore');
+    } else if (!reachable && detail.dataset.focusTrapIgnore !== 'true') {
+      detail.dataset.focusTrapIgnore = 'true';
     }
   }
 };
@@ -34,14 +52,18 @@ const recoverRowControlFocus = (child: HTMLElement | null, table: HTMLElement | 
   }
 };
 
-// Only the current row contributes controls to Tab order. DOM focus stays on
-// the table for arrow navigation, so virtual rows remain replaceable.
+// Only the current row contributes controls to Tab order, and only while this
+// table's rows hold the keyboard (not a table nested in one of its details).
+// DOM focus stays on the table for arrow navigation, so virtual rows remain
+// replaceable.
 export function useGridTableRowControls(
   wrapperRef: RefObject<HTMLDivElement | null>,
   tableRef: RefObject<HTMLTableElement | null>,
-  rowKey: string | null,
-  hasRowAction: boolean
+  focusedRowKey: string | null,
+  hasRowAction: boolean,
+  keyboardDetailKey: string | null
 ) {
+  const rowKey = keyboardDetailKey === null ? focusedRowKey : null;
   const focusedChild = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
     const wrapper = wrapperRef.current;
@@ -50,6 +72,7 @@ export function useGridTableRowControls(
     }
     const sync = () => {
       updateRowTabStops(wrapper, rowKey, hasRowAction);
+      updateDetailTabStops(wrapper, keyboardDetailKey);
       recoverRowControlFocus(focusedChild.current, tableRef.current);
     };
     const remember = () => {
@@ -90,5 +113,5 @@ export function useGridTableRowControls(
       document.removeEventListener('focusin', remember);
       wrapper.removeEventListener('keydown', returnToTable);
     };
-  }, [hasRowAction, rowKey, tableRef, wrapperRef]);
+  }, [hasRowAction, keyboardDetailKey, rowKey, tableRef, wrapperRef]);
 }

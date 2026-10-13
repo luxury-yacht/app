@@ -41,11 +41,6 @@ type ColumnsDropdownConfig = {
   onRemoveCustomMetadataColumn?: (key: string) => void;
 };
 
-type SearchShortcutConfig = {
-  active: boolean;
-  priority?: number;
-};
-
 const isActionOption = (option: DropdownOption): boolean => {
   const metadata = option.metadata;
   return (
@@ -68,7 +63,8 @@ type UseGridTableFiltersPresentationOptions<T> = {
   totalDataCount?: number;
   filters: GridTableFilterConfig<T> | undefined;
   columnsDropdown?: ColumnsDropdownConfig;
-  searchShortcut?: SearchShortcutConfig;
+  /** Whether this table holds the keyboard; the filter shortcut targets only that table. */
+  holdsKeyboard?: boolean;
   exportColumns?: GridColumnDefinition<T>[];
   getTextContent?: (node: ReactNode) => string;
   /** When provided, the Download button copies or saves every matching row it returns. */
@@ -103,13 +99,16 @@ export function useGridTableFilterModel<T>({
   return { ...model, filtersContainerRef, filterFocusIndexRef };
 }
 
+// Tables share one priority; whichever holds the keyboard is the active target.
+const SEARCH_SHORTCUT_PRIORITY = 5;
+
 export function useGridTableFiltersPresentation<T>({
   filterModel,
   data,
   totalDataCount,
   filters,
   columnsDropdown,
-  searchShortcut,
+  holdsKeyboard = true,
   exportColumns,
   getTextContent,
   fetchAllRows,
@@ -180,8 +179,7 @@ export function useGridTableFiltersPresentation<T>({
     []
   );
 
-  const searchShortcutActive = searchShortcut?.active ?? filteringEnabled;
-  const searchShortcutPriority = searchShortcut?.priority ?? 5;
+  const searchShortcutActive = filteringEnabled && holdsKeyboard;
   const showColumnsDropdown = Boolean(columnsDropdown);
   const resolvedPreActions = resolvedFilterOptions.preActions;
 
@@ -277,7 +275,7 @@ export function useGridTableFiltersPresentation<T>({
       onRemoveCustomMetadataColumn: columnsDropdown?.onRemoveCustomMetadataColumn,
       showColumnsDropdown,
       searchShortcutActive,
-      searchShortcutPriority,
+      searchShortcutPriority: SEARCH_SHORTCUT_PRIORITY,
       preActions: resolvedPreActions,
       postActions: resolvedPostActions,
       trailingActions: resolvedFilterOptions.trailingActions,
@@ -306,7 +304,6 @@ export function useGridTableFiltersPresentation<T>({
       columnsDropdown,
       showColumnsDropdown,
       searchShortcutActive,
-      searchShortcutPriority,
       resolvedPreActions,
       resolvedPostActions,
       resultCount,

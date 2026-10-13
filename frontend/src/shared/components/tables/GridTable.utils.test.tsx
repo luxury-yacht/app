@@ -17,6 +17,7 @@ import {
   getGridTableRowDetailId,
   getTextContent,
   parseWidthInputToNumber,
+  revealVertically,
 } from '@shared/components/tables/GridTable.utils';
 import { describe, expect, it } from 'vitest';
 
@@ -108,5 +109,69 @@ describe('GridTable utils', () => {
       const id = getGridTableRowDetailId('cluster-1|pod:default/nginx');
       expect(id).toMatch(/^[a-zA-Z][a-zA-Z0-9_-]*$/);
     });
+  });
+
+  // Keyboard moves reveal the highlighted row. WebKit's scrollIntoView also
+  // scrolls ancestors sideways to line up a row nested in an expanded table
+  // (wider than the parent and starting inside it), shifting the parent table on
+  // every key press, so the reveal moves only scrollTop.
+  describe('revealVertically', () => {
+    const viewport = { top: 100, height: 200 };
+    const setRect = (element: HTMLElement, top: number, height: number, left = 0, width = 400) => {
+      element.getBoundingClientRect = () =>
+        DOMRect.fromRect({ x: left, y: top, width, height }) as DOMRect;
+    };
+    const setScroll = (element: HTMLElement, scrollHeight: number, clientHeight: number) => {
+      Object.defineProperty(element, 'scrollHeight', { value: scrollHeight });
+      Object.defineProperty(element, 'clientHeight', { value: clientHeight });
+      Object.defineProperty(element, 'scrollTop', { value: 50, writable: true });
+      Object.defineProperty(element, 'scrollLeft', { value: 30, writable: true });
+    };
+    const layout = (rowTop: number, rowHeight: number) => {
+      const parent = document.createElement('div');
+      const nested = document.createElement('div');
+      const row = document.createElement('div');
+      parent.appendChild(nested).appendChild(row);
+      setRect(parent, viewport.top, viewport.height);
+      setScroll(parent, 2000, viewport.height);
+      // The nested table scrolls only sideways, so it is left alone.
+      setRect(nested, viewport.top, 600);
+      setScroll(nested, 600, 600);
+      // A nested row starts inside the parent and is wider than it.
+      setRect(row, rowTop, rowHeight, 17, 900);
+      return { parent, nested, row };
+    };
+
+    it.each([
+      { position: 'below the viewport', rowTop: 320, rowHeight: 40, scrollTop: 50 + 60 },
+      { position: 'above the viewport', rowTop: 80, rowHeight: 40, scrollTop: 50 - 20 },
+      { position: 'inside the viewport', rowTop: 150, rowHeight: 40, scrollTop: 50 },
+      // A detail taller than the viewport shows its start.
+      {
+        position: 'taller than the viewport, starting inside it',
+        rowTop: 200,
+        rowHeight: 500,
+        scrollTop: 50 + 100,
+      },
+      {
+        position: 'taller than the viewport, ending inside it',
+        rowTop: -300,
+        rowHeight: 500,
+        scrollTop: 50 - 100,
+      },
+      { position: 'spanning the whole viewport', rowTop: 50, rowHeight: 400, scrollTop: 50 },
+    ])(
+      'scrolls just far enough to show a row $position, never sideways',
+      ({ rowTop, rowHeight, scrollTop }) => {
+        const { parent, nested, row } = layout(rowTop, rowHeight);
+
+        revealVertically(row);
+
+        expect(parent.scrollTop).toBe(scrollTop);
+        expect(parent.scrollLeft).toBe(30);
+        expect(nested.scrollTop).toBe(50);
+        expect(nested.scrollLeft).toBe(30);
+      }
+    );
   });
 });

@@ -142,6 +142,12 @@ export const isInNestedRowDetail = (root: Element, element: EventTarget | null):
   return detail !== null && root.contains(detail);
 };
 
+/** Root's own row details (not the details of a table nested in one of them). */
+export const queryOwnRowDetails = (root: Element): HTMLElement[] =>
+  Array.from(root.querySelectorAll<HTMLElement>(GRIDTABLE_ROW_DETAIL_SELECTOR)).filter(
+    (detail) => !isInNestedRowDetail(root, detail.parentElement)
+  );
+
 /** Elements under `root` that match `selector` and belong to root's own table. */
 export const queryOwnGridTableElements = <E extends Element = HTMLElement>(
   root: Element,
@@ -165,6 +171,36 @@ export const findGridTableRowByKey = (
     }
   }
   return null;
+};
+
+// How far `container` must scroll down (negative: up) to show `rect`, by the
+// nearest edge: none when it is fully visible or already spans the viewport,
+// and its start when it is taller than the viewport.
+const nearestScrollDelta = (container: HTMLElement, rect: DOMRect): number => {
+  const top = container.getBoundingClientRect().top + container.clientTop;
+  const aboveBy = top - rect.top;
+  const belowBy = rect.bottom - (top + container.clientHeight);
+  if (aboveBy > 0 === belowBy > 0) {
+    return 0;
+  }
+  const taller = rect.height > container.clientHeight;
+  return aboveBy > 0 === taller ? belowBy : -aboveBy;
+};
+
+/**
+ * Scrolls `element` into view vertically, like scrollIntoView({ block:
+ * 'nearest' }), without ever scrolling sideways. WebKit's scrollIntoView also
+ * lines up a row nested in an expanded table (wider than the parent and starting
+ * inside it) with the parent's left edge, shifting the parent table on every
+ * keyboard move; rows start at the table's left, so the horizontal position stays
+ * the user's.
+ */
+export const revealVertically = (element: HTMLElement): void => {
+  for (let container = element.parentElement; container; container = container.parentElement) {
+    if (container.scrollHeight > container.clientHeight) {
+      container.scrollTop += nearestScrollDelta(container, element.getBoundingClientRect());
+    }
+  }
 };
 
 export const findGridTableCellByColumnKey = (

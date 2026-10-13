@@ -13,8 +13,13 @@
 
 - Workloads and Nodes now embed a Pods table, containing the pods that are child objects of that workload or node. This replaces the pods pane that was fixed to the bottom of the window.
   - Click the row's Pods count or press Space to show or hide its pods. Several rows can show their pods at the same time.
+  - The keyboard moves through rows as they appear on screen: ↓ walks from a workload into its pods and on to the next workload. ⌥↑/⌥↓ (Alt on Windows and Linux) skip past expanded pods, and Esc returns from a pod to its workload.
   - The pods table has its own filters, sort, and columns. This is completely independent of the filter, sort, and column settings of the parent view.
 - Sidebar Workloads moved into the Resources group.
+- Table keyboard shortcuts:
+  - Space only expands or collapses rows. In tables whose rows don't expand, it no longer opens the highlighted object; Enter still does.
+  - Esc in a table's filter returns to the table's rows and keeps the filter text, instead of clearing it.
+  - ⌘F (Ctrl+F) focuses the filter of the table you're working in.
 - Application Logs now use the same layout and controls as container logs. Application logs buffer size increased from 1,000 to 10,000 logs.
 - Error messages are based on what the backend reports, not on words in the message text.
   - A rejected request shows its specific reason instead of a generic "Invalid request" message.

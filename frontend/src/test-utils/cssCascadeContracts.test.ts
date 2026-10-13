@@ -289,16 +289,22 @@ describe('strict CSS cascade contracts', () => {
       const computed = (id: string) =>
         window.getComputedStyle(document.querySelector(`#${id}`) as HTMLElement);
       const background = (id: string) => computed(id).backgroundColor;
-      const rail = (id: string) => computed(id).borderLeftColor;
+      const rowRail = (id: string) => computed(id).borderLeftColor;
+      const detailRail = (id: string) => computed(id).boxShadow;
 
       // A highlighted row's detail takes the same highlight and rail, so the
       // group stays one block; an unselected group shows neither.
       expect(background('selected-detail')).toBe(background('selected'));
       expect(background('focused-detail')).toBe(background('focused'));
       expect(background('open-detail')).not.toBe(background('selected'));
-      expect(rail('selected-detail')).toBe(rail('selected'));
-      expect(rail('focused-detail')).toBe(rail('focused'));
-      expect(rail('open-detail')).not.toBe(rail('selected'));
+      expect(detailRail('selected-detail')).toContain(rowRail('selected'));
+      expect(detailRail('focused-detail')).toContain(rowRail('focused'));
+      expect(detailRail('open-detail')).not.toContain(rowRail('selected'));
+      // The detail's content is sized to the table's visible width, so a side
+      // border would push it past the right edge, and keyboard scrolling to a
+      // nested row would then slide the whole table sideways.
+      expect(Number.parseFloat(computed('open-detail').borderLeftWidth || '0')).toBe(0);
+      expect(Number.parseFloat(computed('selected-detail').borderLeftWidth || '0')).toBe(0);
     }
   );
 

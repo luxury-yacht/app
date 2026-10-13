@@ -98,11 +98,21 @@ Implementation: `ui/layout/{appFocusRegions.ts,AppRegionNavigation.tsx,AppLayout
   focused tab's action buttons); consumers keep one roving tab stop and no
   competing walkers. From a pointer-focused read-only body, resume at the
   nearest preceding/following control in DOM order.
+- Programmatic focus of a large element (a table, a nested table) passes
+  `{ preventScroll: true }`, and GridTable reveals the target row with
+  `revealVertically` (nearest edge, scrollTop only), never `scrollIntoView`.
+  WebKit centers a newly focused element that is not fully visible, and its
+  `scrollIntoView` lines up a row wider than an ancestor scroller with that
+  ancestor's left edge, so a nested table's row shifts the parent sideways on
+  every key press. Chromium does neither, so Chromium-only checks miss both.
 - Virtualized tables keep DOM focus on the native table element while shared
   state marks the active row, so recycling never unmounts focus. Tab enters
   only the current keyed row's links/buttons; Escape, or the focused control
   disappearing or becoming unavailable, restores the table; embedded controls
-  keep Enter/Space independent of row activation.
+  keep Enter/Space independent of row activation. With row details, one row
+  highlight moves in screen order through the parent's rows and the expanded
+  tables' rows; Tab, Shift+Tab, and Cmd/Ctrl+F follow the table holding it
+  ([row detail](gridtable-interaction.md#row-detail)).
 - Panels and table regions own focused keys without blocking the whole app.
 - Manually added namespace removal shows on row focus; removal restores the
   stable namespace selector; the inline Add editor restores its button on
