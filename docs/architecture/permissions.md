@@ -86,6 +86,14 @@ failure behavior, and diagnostics.
   permission store, specs, hooks, and feature labels:
   `frontend/src/core/capabilities`. Specs and diagnostics filters use stable
   `PERMISSION_FEATURES` keys, never display labels.
+- `useCapabilities` sends only descriptors with a `name` to `QueryPermissions`.
+  A descriptor without one resolves from the namespace permission store, so its
+  kind/verb/subresource must appear in a static spec list and its consumer must
+  query that namespace with that list (`queryNamespacesPermissions(...,
+  { specLists })`); otherwise it stays unresolved and its control stays hidden.
+  The panel queries only the object's own namespace; checks in any other
+  namespace (node-scoped pods, the node shell's debug pod namespace) query it
+  themselves.
 - Permission caches and diagnostics stay cluster-scoped. A cached permission
   may serve several features. Diagnostics matches static permission-spec
   membership at the same scope as well as the last query's feature, so one

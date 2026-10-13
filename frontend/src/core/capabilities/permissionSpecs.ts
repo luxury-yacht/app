@@ -54,6 +54,23 @@ export const POD_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
+/**
+ * Node shell debug pods, checked only in the debug pod namespace (backend
+ * `nodes.DebugPodNamespace`) by Node panels: the pod is created, polled, and
+ * deleted, and attached to over a websocket (get) or SPDY (create). Kept out of
+ * ALL_NAMESPACE_PERMISSIONS so ordinary namespace queries do not grow.
+ */
+export const NODE_SHELL_PERMISSIONS: PermissionSpecList = {
+  feature: PERMISSION_FEATURES.nodeShell,
+  specs: [
+    { kind: 'Pod', verb: 'create' },
+    { kind: 'Pod', verb: 'get' },
+    { kind: 'Pod', verb: 'delete' },
+    { kind: 'Pod', verb: 'get', subresource: 'attach' },
+    { kind: 'Pod', verb: 'create', subresource: 'attach' },
+  ],
+};
+
 export const CONFIG_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceConfig,
   specs: [

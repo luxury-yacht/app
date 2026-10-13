@@ -266,13 +266,18 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
           loadingName="shell"
         >
           <ShellTab
-            namespace={objectData?.namespace || ''}
-            resourceName={objectData?.name || ''}
+            target={{
+              clusterId: objectData.clusterId ?? '',
+              group: objectData.group ?? '',
+              version: objectData.version ?? '',
+              kind: objectData.kind ?? '',
+              namespace: objectData.namespace ?? undefined,
+              name: objectData.name ?? '',
+            }}
             isActive={isPanelOpen}
             disabledReason={capabilityReasons.shell}
             debugDisabledReason={capabilityReasons.debug}
             availableContainers={availableContainers}
-            clusterId={objectData?.clusterId ?? null}
           />
         </PanelTabBoundary>
       );

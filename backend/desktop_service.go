@@ -120,6 +120,7 @@ type OperationsCommands interface {
 	ListShellSessions() []ShellSessionInfo
 	ResizeShellSession(string, int, int) error
 	SendShellInput(string, string) error
+	StartNodeShellSession(NodeShellSessionRequest) (*ShellSession, error)
 	StartShellSession(ShellSessionRequest) (*ShellSession, error)
 	StopPortForward(string) error
 }
@@ -546,6 +547,10 @@ func (s *DesktopService) SendShellInput(sessionID, data string) error {
 
 func (s *DesktopService) StartShellSession(request ShellSessionRequest) (*ShellSession, error) {
 	return s.operations.StartShellSession(request)
+}
+
+func (s *DesktopService) StartNodeShellSession(request NodeShellSessionRequest) (*ShellSession, error) {
+	return s.operations.StartNodeShellSession(request)
 }
 
 func (s *DesktopService) StopPortForward(sessionID string) error {

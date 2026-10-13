@@ -483,6 +483,17 @@ const (
 
 	// DebugContainerPollTimeout controls how long to wait for a debug container to start.
 	DebugContainerPollTimeout = 30 * time.Second
+
+	// NodeDebugPodPollInterval controls how often a node shell's debug pod status is polled.
+	NodeDebugPodPollInterval = 500 * time.Millisecond
+
+	// NodeDebugPodStartTimeout bounds how long a node shell waits for its debug
+	// pod to run, including the image pull on that node.
+	NodeDebugPodStartTimeout = 2 * time.Minute
+
+	// NodeDebugPodDeleteTimeout bounds deleting a node shell's debug pod when
+	// the session ends, including during app shutdown.
+	NodeDebugPodDeleteTimeout = 10 * time.Second
 )
 
 // Application update settings.

@@ -13,6 +13,7 @@ import ShellTab from './ShellTab';
 
 const wailsMocks = vi.hoisted(() => ({
   StartShellSession: vi.fn(),
+  StartNodeShellSession: vi.fn(),
   RunObjectAction: vi.fn(),
   GetPodContainers: vi.fn(),
   GetShellSessionBacklog: vi.fn(),
@@ -333,13 +334,11 @@ describe('ShellTab', () => {
 
   const renderShellTab = async (props?: Partial<React.ComponentProps<typeof ShellTab>>) => {
     const finalProps: React.ComponentProps<typeof ShellTab> = {
-      namespace: 'team-a',
-      resourceName: 'pod-1',
+      target: podTarget('alpha:ctx'),
       availableContainers: [],
       isActive: true,
       disabledReason: undefined,
       debugDisabledReason: undefined,
-      clusterId: 'alpha:ctx',
       ...props,
     };
     await act(async () => {
@@ -750,7 +749,7 @@ describe('ShellTab', () => {
     ]);
     await renderShellTab();
     const oldTerminal = getLatestTerminal();
-    await renderShellTab({ clusterId: 'beta:ctx' });
+    await renderShellTab({ target: podTarget('beta:ctx') });
     expect(oldTerminal?.dispose).toHaveBeenCalled();
     expect(wailsMocks.GetShellSessionBacklog).toHaveBeenCalledWith('beta-session');
     getLatestTerminal()?.triggerData('pwd\n');
@@ -774,7 +773,7 @@ describe('ShellTab', () => {
       },
     ]);
     await renderShellTab();
-    await renderShellTab({ clusterId: 'beta:ctx' });
+    await renderShellTab({ target: podTarget('beta:ctx') });
     await act(async () => {
       finishLookup([
         {
@@ -811,7 +810,7 @@ describe('ShellTab', () => {
       })
     ).mockResolvedValue('beta output');
     await renderShellTab();
-    await renderShellTab({ clusterId: 'beta:ctx' });
+    await renderShellTab({ target: podTarget('beta:ctx') });
     await act(async () => {
       finishBacklog('alpha output');
     });
@@ -828,7 +827,7 @@ describe('ShellTab', () => {
       })
     ).mockResolvedValue([podContainer('beta-container')]);
     await renderShellTab();
-    await renderShellTab({ clusterId: 'beta:ctx' });
+    await renderShellTab({ target: podTarget('beta:ctx') });
     await act(async () => finishDiscovery([podContainer('alpha-container')]));
     const selector = container.querySelector('select') as HTMLSelectElement;
     expect(Array.from(selector.options, (option) => option.value)).toEqual(['beta-container']);
@@ -839,7 +838,10 @@ describe('ShellTab', () => {
       podContainer('alpha-container'),
     ]).mockResolvedValue([]);
     await renderShellTab();
-    await renderShellTab({ clusterId: 'beta:ctx', availableContainers: ['beta-container'] });
+    await renderShellTab({
+      target: podTarget('beta:ctx'),
+      availableContainers: ['beta-container'],
+    });
     clickConnectButton();
     await flushAsync();
     expect(wailsMocks.StartShellSession).toHaveBeenLastCalledWith(
@@ -866,7 +868,10 @@ describe('ShellTab', () => {
           'expected debug action'
         ).click();
       });
-      await renderShellTab({ clusterId: 'beta:ctx', availableContainers: ['beta-container'] });
+      await renderShellTab({
+        target: podTarget('beta:ctx'),
+        availableContainers: ['beta-container'],
+      });
       await act(async () => {
         if (outcome === 'success') {
           finishDebug({ debugContainer: { containerName: 'alpha-debug' } });
@@ -1313,5 +1318,153 @@ describe('ShellTab', () => {
     expect(values).toContain('app');
     expect(values).toContain('debug-abc');
     expect(values).not.toContain('init-a');
+  });
+
+  describe('on a node', () => {
+    // Complete identity of the Node a node shell targets.
+    const nodeTarget = (clusterId: string) => ({
+      clusterId,
+      group: '',
+      version: 'v1',
+      kind: 'Node',
+      name: 'worker-1',
+    });
+    const debugPod = {
+      clusterId: 'alpha:ctx',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      namespace: 'default',
+      name: 'node-debugger-worker-1-abcde',
+    };
+    const nodeSession = {
+      sessionId: 'node-sess',
+      target: nodeTarget('alpha:ctx'),
+      debugPod,
+      container: 'debugger',
+      command: ['/bin/bash'],
+      containers: ['debugger'],
+    };
+
+    const choose = (ariaLabel: string, value: string) => {
+      const select = requireValue(
+        container.querySelector<HTMLSelectElement>(`select[aria-label="${ariaLabel}"]`),
+        `expected ${ariaLabel}`
+      );
+      act(() => {
+        select.value = value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    };
+    const clickStart = () => {
+      const start = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+        (button) => button.textContent === 'Start'
+      );
+      act(() => {
+        requireValue(start, 'expected node shell Start button').click();
+      });
+    };
+
+    it('starts a node shell with the chosen image and shell', async () => {
+      wailsMocks.StartNodeShellSession.mockResolvedValue(nodeSession);
+      await renderShellTab({ target: nodeTarget('alpha:ctx') });
+
+      // A node has no containers to pick or ephemeral container to add.
+      expect(container.querySelector('select[aria-label="Shell container selector"]')).toBeNull();
+      expect(container.querySelector('[id$="-shell-tab-debug-toggle"]')).toBeNull();
+      expect(wailsMocks.GetPodContainers).not.toHaveBeenCalled();
+
+      choose('Debug container image', 'alpine:latest');
+      choose('Shell command selector', '/bin/bash');
+      clickStart();
+      await flushAsync();
+
+      expect(wailsMocks.StartNodeShellSession).toHaveBeenCalledExactlyOnceWith({
+        target: nodeTarget('alpha:ctx'),
+        image: 'alpine:latest',
+        command: ['/bin/bash'],
+      });
+      expect(wailsMocks.StartShellSession).not.toHaveBeenCalled();
+      // The session bar names the debug pod the shell runs in.
+      expect(container.querySelector('.shell-tab__session-summary')?.textContent).toContain(
+        'node-debugger-worker-1-abcde'
+      );
+      getLatestTerminal()?.triggerData('ls /host\n');
+      await flushAsync();
+      expect(wailsMocks.SendShellInput).toHaveBeenCalledWith('node-sess', 'ls /host\n');
+    });
+
+    it('starts a node shell from a custom image and shell path', async () => {
+      // Air-gapped or locked-down clusters pull debug images from their own registry.
+      wailsMocks.StartNodeShellSession.mockResolvedValue(nodeSession);
+      await renderShellTab({ target: nodeTarget('alpha:ctx') });
+      const type = async (ariaLabel: string, value: string) => {
+        const input = requireValue(
+          container.querySelector<HTMLInputElement>(`input[aria-label="${ariaLabel}"]`),
+          `expected ${ariaLabel}`
+        );
+        await act(async () => {
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+            input,
+            value
+          );
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+      };
+
+      choose('Debug container image', '__custom__');
+      await type('Custom debug image', ' registry.internal/tools:1.4 ');
+      choose('Shell command selector', '__custom__');
+      await type('Custom shell path', '/usr/bin/zsh');
+      clickStart();
+      await flushAsync();
+
+      expect(wailsMocks.StartNodeShellSession).toHaveBeenCalledExactlyOnceWith({
+        target: nodeTarget('alpha:ctx'),
+        image: 'registry.internal/tools:1.4',
+        command: ['/usr/bin/zsh'],
+      });
+    });
+
+    it('shows why the debug pod could not start, such as an admission rejection', async () => {
+      const rejection = new Error(
+        'pods "node-debugger-worker-1-abcde" is forbidden: violates PodSecurity "baseline:latest": privileged'
+      );
+      wailsMocks.StartNodeShellSession.mockRejectedValue(rejection);
+      await renderShellTab({ target: nodeTarget('alpha:ctx') });
+
+      clickStart();
+      await flushAsync();
+      await flushAsync();
+
+      expect(container.textContent).toContain('Connection failed');
+      expect(container.textContent).toContain('violates PodSecurity');
+      expect(handleInlineMock).toHaveBeenCalledWith(rejection, {
+        action: 'startNodeShellSession',
+        source: 'ShellTab',
+        clusterId: 'alpha:ctx',
+      });
+    });
+
+    it('reattaches to the node shell tracked for this node only', async () => {
+      wailsMocks.ListShellSessions.mockResolvedValue([
+        {
+          ...nodeSession,
+          sessionId: 'other-node',
+          target: { ...nodeTarget('alpha:ctx'), name: 'worker-2' },
+        },
+        { ...nodeSession, clusterId: 'alpha:ctx' },
+      ]);
+
+      await renderShellTab({ target: nodeTarget('alpha:ctx') });
+      await flushAsync();
+
+      expect(wailsMocks.GetShellSessionBacklog).toHaveBeenCalledWith('node-sess');
+      expect(wailsMocks.GetShellSessionBacklog).not.toHaveBeenCalledWith('other-node');
+      expect(wailsMocks.StartNodeShellSession).not.toHaveBeenCalled();
+      expect(container.querySelector('.shell-tab__session-summary')?.textContent).toContain(
+        'node-debugger-worker-1-abcde'
+      );
+    });
   });
 });

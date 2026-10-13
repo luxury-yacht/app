@@ -55,7 +55,7 @@ export const RESOURCE_CAPABILITIES: Record<string, ResourceCapability> = {
   limitrange: { delete: true },
 
   // Cluster Resources
-  node: { nodeLogs: true },
+  node: { nodeLogs: true, shell: true },
   namespace: { delete: true },
   ingressclass: { delete: true },
   customresourcedefinition: { delete: true },
@@ -119,6 +119,6 @@ export const TABS = {
     id: 'shell',
     label: 'Shell',
     requiresCapability: 'hasShell',
-    onlyForKinds: ['pod'],
+    onlyForKinds: ['pod', 'node'],
   },
 } as const;

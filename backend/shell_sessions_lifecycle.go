@@ -117,6 +117,7 @@ func (l shellSessionLifecycle) list() []ShellSessionInfo {
 			ClusterID:   sess.clusterID,
 			ClusterName: sess.clusterName,
 			Target:      sess.target,
+			DebugPod:    cloneRuntimeOperationTargetRef(sess.debugPod),
 			Container:   sess.container,
 			Command:     append([]string(nil), sess.command...),
 			StartedAt:   metav1.NewTime(sess.startedAt),

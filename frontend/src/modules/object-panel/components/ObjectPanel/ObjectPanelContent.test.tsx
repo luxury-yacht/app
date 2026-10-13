@@ -346,14 +346,23 @@ describe('ObjectPanelContent', () => {
   });
 
   it('renders shell tab when active and capability present', async () => {
+    const pod = {
+      clusterId: 'alpha:ctx',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      namespace: 'team-a',
+      name: 'api',
+    };
     await renderContent({
       activeTab: 'shell',
+      objectData: { ...pod, clusterName: 'alpha' },
       capabilities: { ...baseProps.capabilities, hasShell: true },
       capabilityReasons: { shell: 'reason', debug: 'debug-reason' },
     });
+    // The tab receives the object's complete identity, never a rebuilt Pod reference.
     expect(hoistedRefs.shellTabProps.current).toMatchObject({
-      namespace: 'team-a',
-      resourceName: 'api',
+      target: pod,
       isActive: true,
       disabledReason: 'reason',
       debugDisabledReason: 'debug-reason',

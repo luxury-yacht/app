@@ -100,13 +100,18 @@ const ShellSessionItem = ({
   onEnd: (sessionId: string) => Promise<void>;
 }) => {
   const sessionStatus = session.status || 'active';
+  // A node shell runs in a debug pod the app created on that node.
+  const pod = session.debugPod ?? session.target;
+  const [clusterField, ...podFields] = sessionIdentityFields({
+    clusterName: session.clusterName,
+    clusterId: session.clusterId,
+    namespace: pod.namespace,
+    podName: pod.name,
+  });
   const fields = [
-    ...sessionIdentityFields({
-      clusterName: session.clusterName,
-      clusterId: session.clusterId,
-      namespace: session.target.namespace,
-      podName: session.target.name,
-    }),
+    clusterField,
+    ...(session.debugPod ? [{ label: 'node', value: session.target.name || '-' }] : []),
+    ...podFields,
     { label: 'container', value: session.container || '-' },
     { label: 'shell', value: session.command?.[0] || '/bin/sh' },
   ];

@@ -183,6 +183,28 @@ describe('useObjectPanelTabs', () => {
     ]);
   });
 
+  it('includes the Shell tab for nodes when the node shell is available', async () => {
+    const { availableTabs } = await renderHook({
+      objectData: {
+        kind: 'Node',
+        name: 'node-1',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
+      capabilities: { ...baseCapabilities, hasObjPanelLogs: false, hasShell: true },
+    });
+    expect(availableTabs.map((tab) => tab.label)).toEqual([
+      'Details',
+      'Map',
+      'Pods',
+      'Metrics',
+      'Events',
+      'YAML',
+      'Shell',
+    ]);
+  });
+
   it('includes manifest/values and omits events/yaml for Helm releases', async () => {
     const { availableTabs } = await renderHook({
       isHelmRelease: true,

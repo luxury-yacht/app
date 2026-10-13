@@ -70,8 +70,10 @@ export type CapabilityIdMap = {
   trigger?: string;
   suspend?: string;
   shell?: string;
-  shellExecGet?: string;
-  shellExecCreate?: string;
+  /** Shell permission ids that must all be allowed. */
+  shellAllOf: string[];
+  /** Shell permission ids of which one must be allowed (alternative stream verbs). */
+  shellAnyOf: string[];
   debug?: string;
   removeFinalizer?: string;
   removeNamespaceFinalizer?: string;
@@ -121,8 +123,8 @@ export const createEmptyCapabilityIdMap = (): CapabilityIdMap => ({
   restart: undefined,
   scale: undefined,
   shell: undefined,
-  shellExecGet: undefined,
-  shellExecCreate: undefined,
+  shellAllOf: [],
+  shellAnyOf: [],
   debug: undefined,
   removeFinalizer: undefined,
   removeNamespaceFinalizer: undefined,

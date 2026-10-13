@@ -52,6 +52,7 @@ export type {
     NodeLogDiscoveryResponse,
     NodeLogFetchRequest,
     NodeLogFetchResponse,
+    NodeShellSessionRequest,
     ObjectActionDebugContainerOptions,
     ObjectActionPortForwardOptions,
     ObjectActionRequest,

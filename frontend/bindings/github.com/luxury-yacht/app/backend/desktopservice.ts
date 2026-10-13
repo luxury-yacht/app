@@ -481,6 +481,10 @@ export function SkipApplicationUpdate(version: string): $CancellablePromise<$mod
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SkipApplicationUpdate", version);
 }
 
+export function StartNodeShellSession(request: $models.NodeShellSessionRequest): $CancellablePromise<$models.ShellSession | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.StartNodeShellSession", request);
+}
+
 export function StartShellSession(request: $models.ShellSessionRequest): $CancellablePromise<$models.ShellSession | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.StartShellSession", request);
 }

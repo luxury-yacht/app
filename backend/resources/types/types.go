@@ -222,14 +222,27 @@ type ShellSessionRequest struct {
 	Command   []string  `json:"command,omitempty"`
 }
 
+// NodeShellSessionRequest describes a node shell: the equivalent of
+// `kubectl debug node/<name> --profile=sysadmin -it --image=<image> -- <command>`.
+type NodeShellSessionRequest struct {
+	// Target is the complete identity of the Node, including its cluster.
+	Target ObjectRef `json:"target"`
+	Image  string    `json:"image"`
+	// Command replaces the image entrypoint; empty runs the image default.
+	Command []string `json:"command,omitempty"`
+}
+
 // ShellSession contains details about an active exec session.
 type ShellSession struct {
 	SessionID string `json:"sessionId"`
 	// Target is the complete identity of the object the shell was opened for.
-	Target     ObjectRef `json:"target"`
-	Container  string    `json:"container"`
-	Command    []string  `json:"command"`
-	Containers []string  `json:"containers"`
+	Target ObjectRef `json:"target"`
+	// DebugPod is the pod a node shell created and attached to; the app deletes
+	// it when the session ends. Pod shells leave it unset.
+	DebugPod   *ObjectRef `json:"debugPod,omitempty"`
+	Container  string     `json:"container"`
+	Command    []string   `json:"command"`
+	Containers []string   `json:"containers"`
 }
 
 // ShellSessionInfo describes a tracked shell exec session.
@@ -238,7 +251,9 @@ type ShellSessionInfo struct {
 	ClusterID   string `json:"clusterId"`
 	ClusterName string `json:"clusterName"`
 	// Target is the complete identity of the object the shell was opened for.
-	Target    ObjectRef   `json:"target"`
+	Target ObjectRef `json:"target"`
+	// DebugPod is the pod a node shell created and attached to.
+	DebugPod  *ObjectRef  `json:"debugPod,omitempty"`
 	Container string      `json:"container"`
 	Command   []string    `json:"command"`
 	StartedAt metav1.Time `json:"startedAt"`

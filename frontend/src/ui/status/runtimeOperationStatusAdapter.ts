@@ -55,6 +55,8 @@ export interface ShellSessionInfo {
   clusterName: string;
   /** Complete identity of the object the shell was opened for. */
   target: ResourceRef;
+  /** The debug pod a node shell runs in; absent for pod shells. */
+  debugPod?: ResourceRef | null;
   container: string;
   command?: string[] | null;
   status?: string;

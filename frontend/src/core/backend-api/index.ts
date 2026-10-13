@@ -114,6 +114,7 @@ export {
   SetSidebarVisible,
   SetZoomLevel,
   SkipApplicationUpdate,
+  StartNodeShellSession,
   StartShellSession,
   StopPortForward,
   UpdateAppPreferences,

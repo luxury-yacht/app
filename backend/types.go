@@ -36,6 +36,7 @@ type (
 	NodeLogFetchRequest                 = types.NodeLogFetchRequest
 	NodeLogFetchResponse                = types.NodeLogFetchResponse
 	ShellSessionRequest                 = types.ShellSessionRequest
+	NodeShellSessionRequest             = types.NodeShellSessionRequest
 	ShellSession                        = types.ShellSession
 	ShellSessionInfo                    = types.ShellSessionInfo
 	DebugContainerRequest               = types.DebugContainerRequest

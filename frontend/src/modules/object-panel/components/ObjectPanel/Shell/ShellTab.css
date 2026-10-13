@@ -30,6 +30,16 @@
   cursor: pointer;
 }
 
+/* A node shell has one mode, so its heading is a plain label, not a toggle. */
+.shell-tab__intro {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
 .shell-tab__debug-toggle input {
   width: 14px;
   height: 14px;

@@ -4,6 +4,10 @@
 - Shell sessions can be ended from the app.
   - A connected Shell tab shows the container and shell with an End Session button above the terminal.
   - Shell rows in the Sessions list have a Stop button, like port forwards.
+- Node Shell: nodes have a Shell tab equivalent to `kubectl debug node/<name> --profile=sysadmin`.
+  - Starts a privileged debug pod on the node in the `default` namespace, using your kubeconfig's credentials; RBAC and admission policies apply as they do for kubectl.
+  - The node's filesystem is mounted at `/host`, and the pod uses the node's network, process, and IPC namespaces.
+  - The debug pod is deleted when the session ends.
 
 ### Changed
 

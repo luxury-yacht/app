@@ -17,10 +17,12 @@ export default function ShellSessionBar({
   onEnd,
 }: Readonly<ShellSessionBarProps>) {
   const shell = session?.command?.[0] ?? fallbackShell;
+  // A node shell runs in the debug pod the backend created for it.
+  const subject = session?.debugPod?.name ?? container;
   return (
     <div className="shell-tab__session-bar">
       <span className="shell-tab__session-summary">
-        {[container, shell].filter(Boolean).join(' · ')}
+        {[subject, shell].filter(Boolean).join(' · ')}
       </span>
       <button
         type="button"

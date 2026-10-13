@@ -1,6 +1,7 @@
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import Tooltip from '@shared/components/Tooltip';
-import { useId, useMemo } from 'react';
+import { useId } from 'react';
+import { DebugImageField, ShellCommandField } from './ShellControlFields';
 
 type DropdownChange = (value: string | string[]) => void;
 interface ShellConnectionControlsProps {
@@ -51,47 +52,13 @@ export default function ShellConnectionControls({
   disabledReason,
 }: Readonly<ShellConnectionControlsProps>) {
   const elementIdPrefix = useId();
-  const shellOptions = useMemo<DropdownOption[]>(
-    () => [
-      { value: '/bin/sh', label: '/bin/sh' },
-      { value: '/bin/bash', label: '/bin/bash' },
-      { value: '__custom__', label: 'Custom...' },
-    ],
-    []
-  );
-  const debugImageOptions = useMemo<DropdownOption[]>(
-    () => [
-      { value: 'busybox:latest', label: 'busybox:latest' },
-      { value: 'alpine:latest', label: 'alpine:latest' },
-      { value: 'nicolaka/netshoot:latest', label: 'netshoot:latest' },
-      { value: '__custom__', label: 'Custom...' },
-    ],
-    []
-  );
-
   const shellCommandFields = (
-    <>
-      <div className="shell-tab__control-label">Shell</div>
-      <div className="shell-tab__control-input">
-        <Dropdown
-          options={shellOptions}
-          value={commandOverride}
-          onChange={handleShellChange}
-          placeholder="Select shell"
-          ariaLabel="Shell command selector"
-        />
-        {commandOverride === '__custom__' && (
-          <input
-            className="shell-tab__custom-image-input"
-            type="text"
-            value={customShell}
-            onChange={(event) => setCustomShell(event.target.value)}
-            placeholder="/path/to/shell"
-            aria-label="Custom shell path"
-          />
-        )}
-      </div>
-    </>
+    <ShellCommandField
+      commandOverride={commandOverride}
+      onShellChange={handleShellChange}
+      customShell={customShell}
+      setCustomShell={setCustomShell}
+    />
   );
   let connectionButtonLabel = 'Connect';
   if (startDebugContainer) {
@@ -129,26 +96,12 @@ export default function ShellConnectionControls({
         <div className="shell-tab__controls-grid">
           {startDebugContainer ? (
             <>
-              <div className="shell-tab__control-label">Debug Image</div>
-              <div className="shell-tab__control-input">
-                <Dropdown
-                  options={debugImageOptions}
-                  value={debugImage}
-                  onChange={handleDebugImageChange}
-                  placeholder="Select image"
-                  ariaLabel="Debug container image"
-                />
-                {debugImage === '__custom__' && (
-                  <input
-                    className="shell-tab__custom-image-input"
-                    type="text"
-                    value={customImage}
-                    onChange={(event) => setCustomImage(event.target.value)}
-                    placeholder="image:tag"
-                    aria-label="Custom debug image"
-                  />
-                )}
-              </div>
+              <DebugImageField
+                debugImage={debugImage}
+                onDebugImageChange={handleDebugImageChange}
+                customImage={customImage}
+                setCustomImage={setCustomImage}
+              />
               <div className="shell-tab__control-label">Target Container</div>
               <div className="shell-tab__control-input">
                 <Dropdown

@@ -342,6 +342,63 @@ describe('SessionsStatus shell session jump action', () => {
     }
   });
 
+  it('identifies a node shell by its node and debug pod and opens the node', async () => {
+    const node = {
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      kind: 'Node',
+      name: 'worker-1',
+    };
+    listShellSessionsMock.mockResolvedValue([
+      {
+        ...baseShellSession,
+        target: node,
+        debugPod: {
+          clusterId: 'cluster-a',
+          group: '',
+          version: 'v1',
+          kind: 'Pod',
+          namespace: 'default',
+          name: 'node-debugger-worker-1-abcde',
+        },
+        container: 'debugger',
+      },
+    ]);
+    listRuntimeOperationsMock.mockResolvedValue([
+      {
+        id: baseShellSession.sessionId,
+        type: 'shell',
+        clusterId: 'cluster-a',
+        clusterName: 'cluster-a',
+        target: node,
+        status: 'open',
+        startedAt: baseShellSession.startedAt,
+      },
+    ]);
+    await renderStatus();
+
+    const fields = Object.fromEntries(
+      Array.from(document.querySelectorAll('.as-shell-session .ss-field-row')).map((row) => [
+        row.querySelector('.ss-field-label')?.textContent?.replace(':', ''),
+        row.querySelector('.ss-field-value')?.textContent,
+      ])
+    );
+    expect(fields).toMatchObject({
+      node: 'worker-1',
+      namespace: 'default',
+      pod: 'node-debugger-worker-1-abcde',
+    });
+
+    const openButton = document.querySelector('.as-shell-session-jump') as HTMLButtonElement;
+    await act(async () => {
+      openButton.click();
+      await Promise.resolve();
+    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(expect.objectContaining(node));
+    expect(requestObjectPanelTabMock).toHaveBeenCalledWith('object-panel:pod:web-abc', 'shell');
+  });
+
   it('keeps the sessions panel open when the shell tab request is not accepted', async () => {
     requestObjectPanelTabMock.mockReturnValueOnce(false);
     await renderStatus();

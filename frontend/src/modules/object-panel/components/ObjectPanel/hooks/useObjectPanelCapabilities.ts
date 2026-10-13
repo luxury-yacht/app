@@ -13,12 +13,18 @@ import {
   OBJECT_ACTION_IDS,
 } from '@shared/actions/objectActionContract';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { type CapabilityDescriptor, useCapabilities } from '@/core/capabilities';
+import {
+  type CapabilityDescriptor,
+  NODE_SHELL_PERMISSIONS,
+  queryNamespacesPermissions,
+  useCapabilities,
+} from '@/core/capabilities';
 import {
   discoverNodeLogs,
   getCachedNodeLogDiscovery,
   type NodeLogSource,
 } from '../NodeLogs/nodeLogsApi';
+import { isNodeShellTarget, NODE_SHELL_POD_NAMESPACE } from '../Shell/nodeShell';
 
 import {
   type CapabilityReasons,
@@ -53,6 +59,8 @@ const createCapabilityState = (override?: Partial<CapabilityState>): CapabilityS
 });
 
 type CapabilityIdMap = ReturnType<typeof createEmptyCapabilityIdMap>;
+// Slots that hold one capability id; the shell requirement lists hold several.
+type CapabilityIdSlot = Exclude<keyof CapabilityIdMap, 'shellAllOf' | 'shellAnyOf'>;
 
 type CapabilityDescriptorContext = {
   clusterId: string;
@@ -103,7 +111,7 @@ const buildCapabilityDescriptorContext = (
 const addCapabilityDescriptor = (
   accumulator: CapabilityDescriptorAccumulator,
   descriptor: Pick<CapabilityDescriptor, 'id' | 'verb'> & Partial<CapabilityDescriptor>,
-  key?: keyof CapabilityIdMap
+  key?: CapabilityIdSlot
 ): void => {
   accumulator.descriptors.push({ ...accumulator.context, ...descriptor });
   if (key) {
@@ -114,7 +122,7 @@ const addCapabilityDescriptor = (
 const addObjectActionCapability = (
   accumulator: CapabilityDescriptorAccumulator,
   actionId: MutatingObjectActionId,
-  key: keyof CapabilityIdMap
+  key: CapabilityIdSlot
 ): void => {
   const descriptor = buildObjectActionCapabilityDescriptor(actionId, {
     ...accumulator.context,
@@ -191,6 +199,75 @@ const addLogsCapabilityDescriptor = (
   );
 };
 
+const addShellPermission = (
+  accumulator: CapabilityDescriptorAccumulator,
+  descriptor: Pick<CapabilityDescriptor, 'id' | 'verb'> & Partial<CapabilityDescriptor>,
+  requirement: 'shellAllOf' | 'shellAnyOf'
+): void => {
+  addCapabilityDescriptor(accumulator, descriptor);
+  accumulator.idMap[requirement].push(descriptor.id);
+};
+
+// A pod shell execs into the pod. Websocket exec upgrades a GET and SPDY a
+// POST, so either verb on pods/exec suffices.
+const addPodShellCapabilityDescriptors = (accumulator: CapabilityDescriptorAccumulator): void => {
+  (['get', 'create'] as const).forEach((verb) => {
+    addShellPermission(
+      accumulator,
+      { id: `shell-exec-${verb}`, verb, subresource: 'exec' },
+      'shellAnyOf'
+    );
+  });
+};
+
+// A node shell creates, polls, attaches to, and finally deletes a debug pod in
+// NODE_SHELL_POD_NAMESPACE — the backend's checks before it creates anything.
+// The pod has no name yet, so these resolve from the namespace permission store
+// (see useNodeShellPermissionQuery); the attach verbs are alternatives.
+const addNodeShellCapabilityDescriptors = (accumulator: CapabilityDescriptorAccumulator): void => {
+  NODE_SHELL_PERMISSIONS.specs.forEach(({ kind, verb, subresource }) => {
+    addShellPermission(
+      accumulator,
+      {
+        id: `node-shell-${subresource ?? 'pod'}-${verb}`,
+        verb,
+        group: '',
+        version: 'v1',
+        resourceKind: kind,
+        namespace: NODE_SHELL_POD_NAMESPACE,
+        name: undefined,
+        subresource,
+      },
+      subresource ? 'shellAnyOf' : 'shellAllOf'
+    );
+  });
+};
+
+const nodeShellPermissionClusterId = (
+  objectData: PanelObjectData | null,
+  objectKind: string | null,
+  featureSupport: FeatureSupport
+): string | null => {
+  const context = buildCapabilityDescriptorContext(objectData, objectKind);
+  const { group = '', version = '', resourceKind: kind = '' } = context ?? {};
+  return featureSupport.shell && context && isNodeShellTarget({ group, version, kind })
+    ? context.clusterId
+    : null;
+};
+
+// Node panels never query the debug pod namespace for their own data, so the
+// node shell checks are queried here, as the Pods tab does for node-scoped pods.
+const useNodeShellPermissionQuery = (clusterId: string | null): void => {
+  useEffect(() => {
+    if (!clusterId) {
+      return;
+    }
+    void queryNamespacesPermissions([{ namespace: NODE_SHELL_POD_NAMESPACE, clusterId }], {
+      specLists: [NODE_SHELL_PERMISSIONS],
+    });
+  }, [clusterId]);
+};
+
 const addShellCapabilityDescriptors = (
   accumulator: CapabilityDescriptorAccumulator,
   featureSupport: FeatureSupport
@@ -198,17 +275,12 @@ const addShellCapabilityDescriptors = (
   if (!featureSupport.shell) {
     return;
   }
-  (['get', 'create'] as const).forEach((verb) => {
-    addCapabilityDescriptor(
-      accumulator,
-      {
-        id: `shell-exec-${verb}`,
-        verb,
-        subresource: 'exec',
-      },
-      verb === 'get' ? 'shellExecGet' : 'shellExecCreate'
-    );
-  });
+  const { group, version, resourceKind } = accumulator.context;
+  if (isNodeShellTarget({ group, version, kind: resourceKind })) {
+    addNodeShellCapabilityDescriptors(accumulator);
+  } else {
+    addPodShellCapabilityDescriptors(accumulator);
+  }
 };
 
 const addDebugCapabilityDescriptor = (
@@ -236,7 +308,7 @@ const addHelmCapabilityDescriptors = (
   accumulator: CapabilityDescriptorAccumulator,
   featureSupport: FeatureSupport
 ): void => {
-  const addRead = (id: string, key: keyof CapabilityIdMap): void => {
+  const addRead = (id: string, key: CapabilityIdSlot): void => {
     addCapabilityDescriptor(
       accumulator,
       {
@@ -325,6 +397,25 @@ const nodeLogCapabilityFailure = (error: unknown): NodeLogCapabilityResult => ({
   }),
 });
 
+// The shell is allowed when every required permission and at least one
+// alternative is allowed; the reason names the first denial.
+const combineShellCapabilityStates = (
+  allOf: CapabilityState[],
+  anyOf: CapabilityState[]
+): CapabilityState => {
+  const states = [...allOf, ...anyOf];
+  const deniedRequirement = allOf.find((state) => !state.allowed);
+  const anyAllowed = anyOf.length === 0 || anyOf.some((state) => state.allowed);
+  const allowed = states.length > 0 && !deniedRequirement && anyAllowed;
+  return createCapabilityState({
+    allowed,
+    pending: states.some((state) => state.pending),
+    reason: allowed
+      ? undefined
+      : (deniedRequirement?.reason ?? anyOf.find((state) => state.reason)?.reason),
+  });
+};
+
 const capabilityReason = (state: CapabilityState): string | undefined =>
   state.allowed ? undefined : state.reason;
 
@@ -357,6 +448,7 @@ export const useObjectPanelCapabilities = ({
     () => computeCapabilityDescriptors(objectData, objectKind, featureSupport),
     [featureSupport, objectData, objectKind]
   );
+  useNodeShellPermissionQuery(nodeShellPermissionClusterId(objectData, objectKind, featureSupport));
 
   const capabilityRefreshKey = useMemo(() => {
     if (detailScope) {
@@ -394,13 +486,7 @@ export const useObjectPanelCapabilities = ({
   );
 
   const capabilityStates = useMemo<CapabilityStates>(() => {
-    const shellExecGet = getCapabilityState(capabilityDescriptorInfo.idMap.shellExecGet);
-    const shellExecCreate = getCapabilityState(capabilityDescriptorInfo.idMap.shellExecCreate);
-    const shellAllowed = shellExecGet.allowed || shellExecCreate.allowed;
-    const shellPending = shellExecGet.pending || shellExecCreate.pending;
-    const shellReason = shellAllowed
-      ? undefined
-      : (shellExecGet.reason ?? shellExecCreate.reason ?? undefined);
+    const { shellAllOf, shellAnyOf } = capabilityDescriptorInfo.idMap;
     return {
       viewYaml: getCapabilityState(capabilityDescriptorInfo.idMap.viewYaml),
       editYaml: getCapabilityState(capabilityDescriptorInfo.idMap.editYaml),
@@ -411,11 +497,10 @@ export const useObjectPanelCapabilities = ({
       scale: getCapabilityState(capabilityDescriptorInfo.idMap.scale),
       trigger: getCapabilityState(capabilityDescriptorInfo.idMap.trigger),
       suspend: getCapabilityState(capabilityDescriptorInfo.idMap.suspend),
-      shell: createCapabilityState({
-        allowed: shellAllowed,
-        pending: shellPending,
-        reason: shellReason,
-      }),
+      shell: combineShellCapabilityStates(
+        shellAllOf.map((id) => getCapabilityState(id)),
+        shellAnyOf.map((id) => getCapabilityState(id))
+      ),
       debug: getCapabilityState(capabilityDescriptorInfo.idMap.debug),
       removeFinalizer: getCapabilityState(capabilityDescriptorInfo.idMap.removeFinalizer),
       removeNamespaceFinalizer: getCapabilityState(

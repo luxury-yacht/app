@@ -29,6 +29,7 @@ export type {
     NodeLogFetchRequest,
     NodeLogFetchResponse,
     NodeLogSource,
+    NodeShellSessionRequest,
     ObjectRef,
     PodContainer,
     PodDetailInfo,
