@@ -2,7 +2,7 @@ import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import { formatShortcut } from '@ui/shortcuts/utils';
 import type React from 'react';
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
 import { isMacPlatform } from '@/utils/platform';
 import './TablePaginationControls.css';
 
@@ -108,6 +108,9 @@ const TablePaginationControls: React.FC<TablePaginationControlsProps> = ({
   onPageSizeChange,
   onPageJump,
 }) => {
+  // Tables of one view can be mounted together (attached tables share their
+  // view's idPrefix), so the control's id also carries this instance.
+  const instanceId = useId().replace(/:/g, '');
   const pageOptions = useMemo<DropdownOption[]>(
     () =>
       pageSizeOptions.map((value) => ({
@@ -155,7 +158,7 @@ const TablePaginationControls: React.FC<TablePaginationControlsProps> = ({
       <div className="table-pagination-page-size">
         <span className="table-pagination-page-size-label">Rows per page</span>
         <Dropdown
-          id={`${idPrefix}-page-size`}
+          id={`${idPrefix}-${instanceId}-page-size`}
           name={`${idPrefix}-page-size`}
           ariaLabel="Rows per page"
           value={String(pageSize)}

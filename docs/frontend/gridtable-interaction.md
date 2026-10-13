@@ -30,9 +30,10 @@ virtualization, and native table accessibility. Apply the
 - Workloads and Nodes open a row's Pods under it ([row detail](#row-detail))
   from the row's Pods count or `Space`, which also highlight the row; a pointer
   click only highlights; `Enter` and the Kind/Name links still open the object.
-  Highlight and open row live only while the view is mounted and clear when
-  their row leaves the settled rows (`useClearHiddenRowSelection`) or the scope
-  changes. Pod jumps land in the Pods view, never an attached table.
+  Any number of rows can be open; `useOpenRowDetails` owns them. Highlight and
+  open rows live only while the view is mounted, and each clears when its row
+  leaves the settled rows (`useClearHiddenRowSelection`) or the scope changes.
+  Pod jumps land in the Pods view, never an attached table.
 - Shared filter and Columns dropdown menus measure both viewport axes on open:
   right-edge menus end-align when start alignment would overflow, and width stays
   capped to the visible viewport. The menus are portaled, so under CSS app zoom
@@ -42,25 +43,25 @@ virtualization, and native table accessibility. Apply the
 
 ## Row detail
 
-- `rowDetail` (`openRowKey`, `render`, `getLabel`) shows one open row's content
-  in a native detail row directly under it: a full-width cell holding a
+- `rowDetail` (`openRowKeys`, `render`, `getLabel`) shows each open row's
+  content in a native detail row directly under it: a full-width cell holding a
   labelled region whose id is `getGridTableRowDetailId(rowKey)`.
   `withRowDetailToggle` turns a count column into the opener ("2/3 ›") with
-  `aria-expanded` and `aria-controls`; the view owns which row is open. A
-  nested table can also close it with a Close in
+  `aria-expanded` and `aria-controls`; the view owns which rows are open. A
+  nested table can also close its own detail with a Close in
   `filters.options.trailingActions`, which sits at the end of its filter bar.
-- The detail and the open row share the accent rail. Its content stays pinned to
-  the visible width and is capped at a share of the table viewport; a nested
+- Each detail and its open row share the accent rail. Its content stays pinned
+  to the visible width and is capped at a share of the table viewport; a nested
   table renders `embedded`, sizes to its rows up to the cap, then scrolls inside.
-  Opening scrolls the detail into view once.
-- The virtualizer adds the detail's measured height to the open row's span, and
-  the open row stays mounted outside the virtual window so a nested table keeps
-  its state. The detail is keyed by row identity, so it follows its row through
-  sorting and refreshes.
+  Opening scrolls that detail into view once.
+- The virtualizer adds each detail's measured height to its open row's span, and
+  open rows stay mounted outside the virtual window so nested tables keep their
+  state. Each detail is keyed by row identity, so it follows its row through
+  sorting and refreshes, and opening or closing another row leaves it intact.
 - A nested table owns its focus and keys. The parent treats focus and pointer
   input inside its detail as not its own, so only the nested table's shortcuts
-  run; `Escape` from the detail (outside text inputs) returns to the open row,
-  and so does closing the detail while focus is inside it.
+  run; `Escape` from a detail (outside text inputs) returns to that detail's
+  row, and so does closing the detail while focus is inside it.
   Shared DOM queries that search a wrapper or table use
   `queryOwnGridTableElements`/`isInNestedRowDetail` so they never reach a nested
   table's rows, cells, or controls. The parent already takes the dock offsets,
@@ -71,8 +72,10 @@ virtualization, and native table accessibility. Apply the
 - Rows render `data-row-key` and cells `data-column`; treat them as data. Look
   rows up with shared helpers or `dataset` comparisons; never build CSS
   selectors from raw row or column keys, which may not be selector-safe.
-- DOM ids use stable helper functions that cannot collapse distinct
-  cluster-scoped row keys.
+- Rows carry no DOM id, so tables showing the same rows (open details listing
+  one pod) never repeat an id. A detail region's id comes from
+  `getGridTableRowDetailId`, which cannot collapse distinct cluster-scoped row
+  keys.
 
 ### Accessibility model
 

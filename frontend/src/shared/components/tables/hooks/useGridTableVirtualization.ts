@@ -39,9 +39,8 @@ export interface UseGridTableVirtualizationParams<T> {
   stopFrameSampler: (reason: 'timeout' | 'manual' | 'unmount') => void;
   updateColumnWindowRange: () => void;
   hideHeader: boolean;
-  /** The row whose detail is open; its span grows by detailHeight. */
-  detailRowKey?: string | null;
-  detailHeight?: number;
+  /** Open rows' detail heights by row key; each such row's span grows by its height. */
+  detailHeights?: ReadonlyMap<string, number>;
 }
 
 /**
@@ -86,6 +85,8 @@ function findRowAtOffset(positions: Float64Array, target: number): number {
   return Math.max(0, lo - 1);
 }
 
+const NO_DETAIL_HEIGHTS: ReadonlyMap<string, number> = new Map();
+
 export function useGridTableVirtualization<T>({
   data,
   virtualization,
@@ -101,8 +102,7 @@ export function useGridTableVirtualization<T>({
   stopFrameSampler,
   updateColumnWindowRange,
   hideHeader,
-  detailRowKey = null,
-  detailHeight = 0,
+  detailHeights = NO_DETAIL_HEIGHTS,
 }: UseGridTableVirtualizationParams<T>): UseGridTableVirtualizationResult<T> {
   const virtualizationConfig = useMemo(
     () => ({
@@ -222,7 +222,7 @@ export function useGridTableVirtualization<T>({
     const fallback = virtualizationConfig.estimateRowHeight;
     for (let i = 0; i < n; i++) {
       const key = keyExtractor(data[i], i);
-      const h = (cache.get(key) ?? fallback) + (key === detailRowKey ? detailHeight : 0);
+      const h = (cache.get(key) ?? fallback) + (detailHeights.get(key) ?? 0);
       pos[i + 1] = pos[i] + h;
     }
     return pos;
@@ -232,8 +232,7 @@ export function useGridTableVirtualization<T>({
     keyExtractor,
     virtualizationConfig.estimateRowHeight,
     heightCacheVersion,
-    detailRowKey,
-    detailHeight,
+    detailHeights,
   ]);
 
   // Reset scroll position when filters change

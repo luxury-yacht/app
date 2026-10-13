@@ -1,8 +1,9 @@
 /**
  * frontend/src/shared/components/tables/hooks/useGridTableRowDetail.tsx
  *
- * One open row's full-width detail (GridTableProps.rowDetail): which row is
- * open, the detail's measured height for the virtualizer, and the detail row.
+ * Open rows' full-width details (GridTableProps.rowDetail): which displayed
+ * rows are open, each detail's measured height for the virtualizer, and the
+ * detail rows.
  */
 
 import '@shared/components/tables/GridTableRowDetail.css';
@@ -25,42 +26,77 @@ const DETAIL_MAX_VIEWPORT_SHARE = 0.6;
 // A short (or not yet measured) viewport still leaves room for a few rows.
 const DETAIL_MIN_MAX_HEIGHT = 240;
 
+const NO_OPEN_ROWS: ReadonlyMap<number, string> = new Map();
+const NO_HEIGHTS: ReadonlyMap<string, number> = new Map();
+
 export interface GridTableRowDetailState {
-  /** The open row's key, or null when it is not among the displayed rows. */
-  rowKey: string | null;
-  index: number | null;
-  height: number;
-  reportHeight: (rowKey: string, height: number) => void;
+  /** Open rows among the displayed rows: index to row key, in table order. */
+  openRows: ReadonlyMap<number, string>;
+  /** Measured detail heights of those rows by row key; unmeasured ones are absent. */
+  heights: ReadonlyMap<string, number>;
+  /** Records a detail's height; null forgets it once the detail unmounts. */
+  reportHeight: (rowKey: string, height: number | null) => void;
 }
+
+// `heights` with rowKey's height set, or removed for null; the same map when nothing changes.
+const withDetailHeight = (
+  heights: ReadonlyMap<string, number>,
+  rowKey: string,
+  height: number | null
+): ReadonlyMap<string, number> => {
+  const previous = heights.get(rowKey);
+  if (height === null) {
+    if (previous === undefined) {
+      return heights;
+    }
+    const next = new Map(heights);
+    next.delete(rowKey);
+    return next;
+  }
+  if (previous !== undefined && Math.abs(previous - height) <= 0.5) {
+    return heights;
+  }
+  return new Map(heights).set(rowKey, height);
+};
 
 export function useGridTableRowDetailState<T>(
   rowDetail: GridTableRowDetail<T> | undefined,
   tableData: T[],
   keyExtractor: (item: T, index: number) => string
 ): GridTableRowDetailState {
-  const openRowKey = rowDetail?.openRowKey ?? null;
-  const index = useMemo(() => {
-    if (openRowKey === null) {
-      return null;
+  const openRowKeys = rowDetail?.openRowKeys;
+  const openRows = useMemo(() => {
+    if (!openRowKeys?.length) {
+      return NO_OPEN_ROWS;
     }
-    const found = tableData.findIndex((item, i) => keyExtractor(item, i) === openRowKey);
-    return found === -1 ? null : found;
-  }, [keyExtractor, openRowKey, tableData]);
-  const [measured, setMeasured] = useState<{ rowKey: string; height: number } | null>(null);
-  const reportHeight = useCallback((measuredKey: string, measuredHeight: number) => {
-    setMeasured((current) =>
-      current?.rowKey === measuredKey && Math.abs(current.height - measuredHeight) <= 0.5
-        ? current
-        : { rowKey: measuredKey, height: measuredHeight }
-    );
+    const open = new Set(openRowKeys);
+    const rows = new Map<number, string>();
+    tableData.forEach((item, index) => {
+      const rowKey = keyExtractor(item, index);
+      if (open.has(rowKey)) {
+        rows.set(index, rowKey);
+      }
+    });
+    return rows;
+  }, [keyExtractor, openRowKeys, tableData]);
+  const [measured, setMeasured] = useState<ReadonlyMap<string, number>>(NO_HEIGHTS);
+  const reportHeight = useCallback((rowKey: string, height: number | null) => {
+    setMeasured((current) => withDetailHeight(current, rowKey, height));
   }, []);
-  const rowKey = index === null ? null : openRowKey;
-  return {
-    rowKey,
-    index,
-    height: measured !== null && measured.rowKey === rowKey ? measured.height : 0,
-    reportHeight,
-  };
+  const heights = useMemo(() => {
+    if (openRows.size === 0) {
+      return NO_HEIGHTS;
+    }
+    const shown = new Map<string, number>();
+    for (const rowKey of openRows.values()) {
+      const height = measured.get(rowKey);
+      if (height !== undefined) {
+        shown.set(rowKey, height);
+      }
+    }
+    return shown;
+  }, [measured, openRows]);
+  return { openRows, heights, reportHeight };
 }
 
 const isEditableTarget = (target: EventTarget | null) =>
@@ -74,9 +110,9 @@ interface RowDetailRowProps {
   top?: number;
   width?: number;
   maxHeight: number;
-  onHeight: (rowKey: string, height: number) => void;
+  onHeight: (rowKey: string, height: number | null) => void;
   consumeScroll: (rowKey: string) => boolean;
-  /** Moves the keyboard back to the open row. */
+  /** Moves the keyboard back to this detail's row. */
   onReturnFocus: () => void;
   children: React.ReactNode;
 }
@@ -114,7 +150,7 @@ function GridTableRowDetailRow({
       node.scrollIntoView?.({ block: 'nearest' });
     }
     // Keys pressed in the nested content bubble here after the content handled
-    // them; an unhandled Escape returns to the open row.
+    // them; an unhandled Escape returns to this detail's row.
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || isEditableTarget(event.target)) {
         return;
@@ -129,11 +165,12 @@ function GridTableRowDetailRow({
     return () => {
       node.removeEventListener('keydown', handleKeyDown);
       observer?.disconnect();
+      onHeightRef.current(rowKey, null);
     };
   }, [consumeScroll, rowKey]);
 
   // Closing with focus inside (its own Close, or the row leaving the table)
-  // would drop the keyboard to the page, so it returns to the open row.
+  // would drop the keyboard to the page, so it returns to its open row.
   useLayoutEffect(() => {
     const node = rowRef.current;
     return () => {
@@ -193,43 +230,49 @@ export function useGridTableRowDetailRenderer<T>({
   focusByIndex,
   lastNavigationMethodRef,
 }: RowDetailRendererOptions<T>): RenderRowDetailFn<T> {
-  // A newly opened detail scrolls into view once; refreshes and remounts don't scroll again.
-  const scrolledKeyRef = useRef<string | null>(null);
+  const { openRows, heights, reportHeight } = state;
+  // Each detail scrolls into view once when it opens; refreshes and remounts
+  // don't scroll again. One that closes or leaves the displayed rows scrolls
+  // again when it reopens.
+  const scrolledKeysRef = useRef(new Set<string>());
   useEffect(() => {
-    if (state.rowKey === null) {
-      scrolledKeyRef.current = null;
+    const open = new Set(openRows.values());
+    for (const rowKey of scrolledKeysRef.current) {
+      if (!open.has(rowKey)) {
+        scrolledKeysRef.current.delete(rowKey);
+      }
     }
-  }, [state.rowKey]);
+  }, [openRows]);
   const consumeScroll = useCallback((rowKey: string) => {
-    if (scrolledKeyRef.current === rowKey) {
+    if (scrolledKeysRef.current.has(rowKey)) {
       return false;
     }
-    scrolledKeyRef.current = rowKey;
+    scrolledKeysRef.current.add(rowKey);
     return true;
   }, []);
 
-  const openIndex = state.index;
-  const returnFocus = useCallback(() => {
-    if (openIndex === null) {
-      return;
-    }
-    lastNavigationMethodRef.current = 'keyboard';
-    focusByIndex(openIndex);
-    gridRef.current?.focus();
-  }, [focusByIndex, gridRef, lastNavigationMethodRef, openIndex]);
+  const returnFocus = useCallback(
+    (index: number) => {
+      lastNavigationMethodRef.current = 'keyboard';
+      focusByIndex(index);
+      gridRef.current?.focus();
+    },
+    [focusByIndex, gridRef, lastNavigationMethodRef]
+  );
 
-  const { rowKey: openRowKey, height: detailHeight, reportHeight } = state;
   return useCallback(
     (item: T, index: number, virtualized: boolean) => {
-      if (!rowDetail || openRowKey === null || index !== openIndex) {
+      const rowKey = openRows.get(index);
+      if (!rowDetail || rowKey === undefined) {
         return null;
       }
+      const height = heights.get(rowKey) ?? 0;
       return (
         <GridTableRowDetailRow
-          key={`row-detail:${openRowKey}`}
-          rowKey={openRowKey}
+          key={`row-detail:${rowKey}`}
+          rowKey={rowKey}
           label={rowDetail.getLabel(item)}
-          top={virtualized ? getRowTop(index + 1) - detailHeight : undefined}
+          top={virtualized ? getRowTop(index + 1) - height : undefined}
           width={viewportWidth > 0 ? viewportWidth : undefined}
           maxHeight={Math.max(
             DETAIL_MIN_MAX_HEIGHT,
@@ -237,7 +280,7 @@ export function useGridTableRowDetailRenderer<T>({
           )}
           onHeight={reportHeight}
           consumeScroll={consumeScroll}
-          onReturnFocus={returnFocus}
+          onReturnFocus={() => returnFocus(index)}
         >
           {rowDetail.render(item)}
         </GridTableRowDetailRow>
@@ -245,12 +288,11 @@ export function useGridTableRowDetailRenderer<T>({
     },
     [
       consumeScroll,
-      detailHeight,
       getRowTop,
-      returnFocus,
-      openIndex,
-      openRowKey,
+      heights,
+      openRows,
       reportHeight,
+      returnFocus,
       rowDetail,
       viewportHeight,
       viewportWidth,

@@ -1,4 +1,4 @@
-/* Row detail: one open row's full-width content (for example a nested table),
+/* Row detail: an open row's full-width content (for example a nested table),
    joined to its row by the accent rail. */
 .gridtable-row.gridtable-row--detail-open {
   border-left-color: var(--color-accent);

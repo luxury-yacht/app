@@ -85,6 +85,16 @@ const attachedPods = (workload: WorkloadData) =>
     'expected the attached Pods table'
   ).props;
 
+// Clicks the attached table's own Close, which reports the object it lists.
+const closeAttachedPods = (workload: WorkloadData) => {
+  const props = attachedPods(workload);
+  const close = requireValue(
+    props.onClose as ((attachedTo: unknown) => void) | undefined,
+    'expected the attached table Close'
+  );
+  act(() => close(props.attachedTo));
+};
+
 // Renders the Pods cell on its own to read or click its pods toggle.
 const withPodsCount = <R,>(workload: WorkloadData, use: (button: HTMLButtonElement) => R): R => {
   const column = requireValue(
@@ -375,13 +385,13 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
     const rowKey = gridTablePropsRef.current.keyExtractor(workload, 0);
-    expect(rowDetail().openRowKey).toBeNull();
+    expect(rowDetail().openRowKeys).toEqual([]);
     expect(podsCount(workload)).toMatchObject({ expanded: 'false', text: '2/3' });
 
     clickPodsCount(workload);
 
     expect(openWithObjectMock).not.toHaveBeenCalled();
-    expect(rowDetail().openRowKey).toBe(rowKey);
+    expect(rowDetail().openRowKeys).toEqual([rowKey]);
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
     expect(podsCount(workload)).toMatchObject({
       expanded: 'true',
@@ -403,18 +413,58 @@ describe('NsViewWorkloads', () => {
     });
 
     clickPodsCount(workload);
-    expect(rowDetail().openRowKey).toBeNull();
+    expect(rowDetail().openRowKeys).toEqual([]);
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
 
     // The attached table's own Close closes it too; the workload stays highlighted.
     clickPodsCount(workload);
-    const close = requireValue(
-      attachedPods(workload).onClose as (() => void) | undefined,
-      'expected the attached table Close'
-    );
-    act(() => close());
-    expect(rowDetail().openRowKey).toBeNull();
+    closeAttachedPods(workload);
+    expect(rowDetail().openRowKeys).toEqual([]);
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
+  });
+
+  it("keeps each workload's pods open while another opens, and closes only the one asked", async () => {
+    const api = makeWorkload('Deployment', 'api', 'team-a', 'path:context', { ready: '2/3' });
+    const db = makeWorkload('StatefulSet', 'db', 'team-a', 'path:context', { ready: '1/1' });
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [api, db],
+          total: 2,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment', 'StatefulSet'],
+          facetsExact: true,
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const apiKey = gridTablePropsRef.current.keyExtractor(api, 0);
+    const dbKey = gridTablePropsRef.current.keyExtractor(db, 1);
+
+    clickPodsCount(api);
+    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(db));
+
+    expect(rowDetail().openRowKeys).toEqual([apiKey, dbKey]);
+    expect(podsCount(api).expanded).toBe('true');
+    expect(podsCount(db).expanded).toBe('true');
+    // Each row's attached table lists that row's pods.
+    expect(attachedPods(api).attachedTo).toMatchObject({ kind: 'Deployment', name: 'api' });
+    expect(attachedPods(db).attachedTo).toMatchObject({ kind: 'StatefulSet', name: 'db' });
+
+    closeAttachedPods(api);
+    expect(rowDetail().openRowKeys).toEqual([dbKey]);
+    expect(podsCount(api).expanded).toBe('false');
+
+    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(db));
+    expect(rowDetail().openRowKeys).toEqual([]);
   });
 
   it('highlights a workload on a row click and opens or closes its pods with Space', async () => {
@@ -443,12 +493,12 @@ describe('NsViewWorkloads', () => {
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
-    expect(rowDetail().openRowKey).toBeNull();
+    expect(rowDetail().openRowKeys).toEqual([]);
 
     act(() => gridTablePropsRef.current.onRowSelectionToggle?.(workload));
-    expect(rowDetail().openRowKey).toBe(rowKey);
+    expect(rowDetail().openRowKeys).toEqual([rowKey]);
     act(() => gridTablePropsRef.current.onRowSelectionToggle?.(workload));
-    expect(rowDetail().openRowKey).toBeNull();
+    expect(rowDetail().openRowKeys).toEqual([]);
     expect(openWithObjectMock).not.toHaveBeenCalled();
   });
 
@@ -507,10 +557,11 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(workload));
     act(() => gridTablePropsRef.current.onRowSelectionToggle?.(hidden));
 
-    // No highlighted row may have pods open under it.
-    expect(rowDetail().openRowKey).toBeNull();
+    // Only the row the table does not show closes; the shown row stays open.
+    expect(rowDetail().openRowKeys).toEqual([gridTablePropsRef.current.keyExtractor(workload, 0)]);
     expect(gridTablePropsRef.current.isRowSelected?.(hidden, 0)).toBe(false);
   });
 
@@ -537,19 +588,19 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
     act(() => gridTablePropsRef.current.onRowSelectionToggle?.(workload));
-    expect(rowDetail().openRowKey).not.toBeNull();
+    expect(rowDetail().openRowKeys).toHaveLength(1);
 
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-b" metrics={null} />);
       await Promise.resolve();
     });
-    expect(rowDetail().openRowKey).toBeNull();
+    expect(rowDetail().openRowKeys).toEqual([]);
 
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
-    expect(rowDetail().openRowKey).toBeNull();
+    expect(rowDetail().openRowKeys).toEqual([]);
   });
 
   it('issues a namespace-scoped typed query for a single namespace and renders the query rows', async () => {

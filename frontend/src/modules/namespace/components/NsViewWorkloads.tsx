@@ -22,6 +22,7 @@ import {
   selectPayloadRows,
 } from '@modules/resource-grid/typedResourceQueryScope';
 import { useClearHiddenRowSelection } from '@modules/resource-grid/useClearHiddenRowSelection';
+import { useOpenRowDetails } from '@modules/resource-grid/useOpenRowDetails';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type {
@@ -52,14 +53,17 @@ interface WorkloadsTableProps extends WorkloadsViewProps {
   clusterId?: string | null;
   /** The highlighted row. */
   selectedWorkloadKey?: string | null;
-  /** The row whose pods are open under it. */
-  openWorkloadKey?: string | null;
+  /** The rows whose pods are open under them. */
+  openWorkloadKeys?: readonly string[];
   onWorkloadSelect?: (workload: WorkloadData) => void;
   onWorkloadSelectionClear?: () => void;
   onWorkloadPodsToggle?: (workload: WorkloadData) => void;
-  onWorkloadPodsClose?: () => void;
+  /** Closes these rows' pods. */
+  onWorkloadPodsClose?: (rowKeys: readonly string[]) => void;
   renderWorkloadPods?: (workload: WorkloadData) => React.ReactNode;
 }
+
+const NO_ROW_KEYS: readonly string[] = [];
 
 /**
  * GridTable of namespace workloads; a workload's pods open under its row.
@@ -71,7 +75,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
     showNamespaceColumn = false,
     metrics = null,
     selectedWorkloadKey = null,
-    openWorkloadKey = null,
+    openWorkloadKeys = NO_ROW_KEYS,
     onWorkloadSelect,
     onWorkloadSelectionClear,
     onWorkloadPodsToggle,
@@ -127,14 +131,14 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
         onWorkloadPodsToggle
           ? {
               getRowKey: keyExtractor,
-              isOpen: (row) => keyExtractor(row) === openWorkloadKey,
+              isOpen: (row) => openWorkloadKeys.includes(keyExtractor(row)),
               onToggle: onWorkloadPodsToggle,
               getLabel: (row, open) =>
                 `${open ? 'Hide' : 'Show'} pods for ${row.ref.name} (${row.ready ?? 'no'} ready)`,
               getText: (row) => row.ready ?? '—',
             }
           : undefined,
-      [keyExtractor, onWorkloadPodsToggle, openWorkloadKey]
+      [keyExtractor, onWorkloadPodsToggle, openWorkloadKeys]
     );
 
     const tableColumns = useWorkloadTableColumns({
@@ -150,12 +154,12 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       () =>
         renderWorkloadPods
           ? {
-              openRowKey: openWorkloadKey,
+              openRowKeys: openWorkloadKeys,
               render: renderWorkloadPods,
               getLabel: (row) => `Pods for ${row.ref.name}`,
             }
           : undefined,
-      [openWorkloadKey, renderWorkloadPods]
+      [openWorkloadKeys, renderWorkloadPods]
     );
 
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
@@ -203,14 +207,18 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       setTableMetricsInfo(queryPayload?.metrics ?? null);
     }, [queryPayload?.metrics]);
 
+    const selectedWorkloadKeys = useMemo(
+      () => (selectedWorkloadKey ? [selectedWorkloadKey] : NO_ROW_KEYS),
+      [selectedWorkloadKey]
+    );
     useClearHiddenRowSelection({
-      selectedKey: selectedWorkloadKey,
+      selectedKeys: selectedWorkloadKeys,
       source,
       keyExtractor,
       onClear: onWorkloadSelectionClear,
     });
     useClearHiddenRowSelection({
-      selectedKey: openWorkloadKey,
+      selectedKeys: openWorkloadKeys,
       source,
       keyExtractor,
       onClear: onWorkloadPodsClose,
@@ -305,20 +313,14 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
 }) => {
   const { selectedClusterName } = useKubeconfig();
   const [selectedWorkload, setSelectedWorkload] = useState<ClusterObjectReference | null>(null);
-  const [openWorkload, setOpenWorkload] = useState<ClusterObjectReference | null>(null);
   const selectionInScope = refInScope(selectedWorkload, selectedClusterId, namespace);
-  const openInScope = refInScope(openWorkload, selectedClusterId, namespace);
   const scopedSelectedWorkload = selectionInScope ? selectedWorkload : null;
-  const scopedOpenWorkload = openInScope ? openWorkload : null;
 
   useEffect(() => {
     if (!selectionInScope) {
       setSelectedWorkload(null);
     }
-    if (!openInScope) {
-      setOpenWorkload(null);
-    }
-  }, [openInScope, selectionInScope]);
+  }, [selectionInScope]);
 
   const toReference = useCallback(
     (workload: WorkloadData) =>
@@ -328,13 +330,22 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
       ),
     [selectedClusterId, selectedClusterName]
   );
-  const keyOf = useCallback(
-    (ref: ClusterObjectReference | null) =>
-      ref
-        ? buildRequiredCanonicalObjectRowKey(ref, { fallbackClusterId: selectedClusterId })
-        : null,
+  const rowKeyOf = useCallback(
+    (ref: ClusterObjectReference) =>
+      buildRequiredCanonicalObjectRowKey(ref, { fallbackClusterId: selectedClusterId }),
     [selectedClusterId]
   );
+  const openInScope = useCallback(
+    (ref: ClusterObjectReference) => refInScope(ref, selectedClusterId, namespace),
+    [namespace, selectedClusterId]
+  );
+  const {
+    openRefs: openWorkloads,
+    openKeys: openWorkloadKeys,
+    toggle: toggleWorkloadPods,
+    close: closeWorkloadPods,
+    closeKeys: closeWorkloadPodsByKey,
+  } = useOpenRowDetails({ keyOf: rowKeyOf, inScope: openInScope });
 
   const handleWorkloadSelect = useCallback(
     (workload: WorkloadData) => setSelectedWorkload(toReference(workload)),
@@ -346,16 +357,16 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
     (workload: WorkloadData) => {
       const ref = toReference(workload);
       setSelectedWorkload(ref);
-      setOpenWorkload((current) => (keyOf(current) === keyOf(ref) ? null : ref));
+      toggleWorkloadPods(ref);
     },
-    [keyOf, toReference]
+    [toReference, toggleWorkloadPods]
   );
-  const handleWorkloadPodsClose = useCallback(() => setOpenWorkload(null), []);
-  // The attached table follows the open reference, not the row object, so a
+  // Each attached table follows its open reference, not the row object, so a
   // workload refresh never rebuilds its query.
   const renderWorkloadPods = useCallback(
-    () =>
-      scopedOpenWorkload ? (
+    (workload: WorkloadData) => {
+      const attachedTo = openWorkloads.get(rowKeyOf(toReference(workload)));
+      return attachedTo ? (
         <PodsTable
           namespace={namespace}
           clusterId={selectedClusterId}
@@ -363,17 +374,20 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
           namespaceLinkView="workloads"
           showNamespaceColumn={showNamespaceColumn}
           metrics={metrics}
-          attachedTo={scopedOpenWorkload}
-          onClose={handleWorkloadPodsClose}
+          attachedTo={attachedTo}
+          onClose={closeWorkloadPods}
         />
-      ) : null,
+      ) : null;
+    },
     [
-      handleWorkloadPodsClose,
+      closeWorkloadPods,
       metrics,
       namespace,
-      scopedOpenWorkload,
+      openWorkloads,
+      rowKeyOf,
       selectedClusterId,
       showNamespaceColumn,
+      toReference,
     ]
   );
 
@@ -383,12 +397,12 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
       clusterId={selectedClusterId}
       showNamespaceColumn={showNamespaceColumn}
       metrics={metrics}
-      selectedWorkloadKey={keyOf(scopedSelectedWorkload)}
-      openWorkloadKey={keyOf(scopedOpenWorkload)}
+      selectedWorkloadKey={scopedSelectedWorkload ? rowKeyOf(scopedSelectedWorkload) : null}
+      openWorkloadKeys={openWorkloadKeys}
       onWorkloadSelect={handleWorkloadSelect}
       onWorkloadSelectionClear={handleWorkloadSelectionClear}
       onWorkloadPodsToggle={handleWorkloadPodsToggle}
-      onWorkloadPodsClose={handleWorkloadPodsClose}
+      onWorkloadPodsClose={closeWorkloadPodsByKey}
       renderWorkloadPods={renderWorkloadPods}
     />
   );

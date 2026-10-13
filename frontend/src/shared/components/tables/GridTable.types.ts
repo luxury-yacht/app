@@ -195,13 +195,13 @@ export interface GridTableFilteredEmptyState {
 }
 
 /**
- * One open row shows `render(row)` in a full-width detail directly under it,
+ * Each open row shows `render(row)` in a full-width detail directly under it,
  * for example a nested table. The detail is a labelled region whose id is
- * getGridTableRowDetailId(openRowKey), for the opening control's aria-controls.
+ * getGridTableRowDetailId(rowKey), for the opening control's aria-controls.
  */
 export interface GridTableRowDetail<T> {
-  /** keyExtractor key of the open row; null when no row is open. */
-  openRowKey: string | null;
+  /** keyExtractor keys of the open rows; empty when no row is open. */
+  openRowKeys: readonly string[];
   render: (item: T) => React.ReactNode;
   /** Accessible name of the detail region. */
   getLabel: (item: T) => string;

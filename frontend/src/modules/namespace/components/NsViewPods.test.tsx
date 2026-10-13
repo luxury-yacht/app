@@ -828,7 +828,8 @@ describe('NsViewPods', () => {
     if (close.type === 'action') {
       close.onClick();
     }
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // It names the object it lists, so the parent closes only this table.
+    expect(onClose).toHaveBeenCalledExactlyOnceWith(selectedDeployment);
 
     // The Pods view has nothing to close.
     await renderPods({ namespace: ALL_NAMESPACES_SCOPE });

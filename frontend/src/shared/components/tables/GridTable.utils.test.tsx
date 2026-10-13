@@ -14,7 +14,7 @@ import {
   defaultGetNamespace,
   defaultGetSearchText,
   detectWidthUnit,
-  getStableRowId,
+  getGridTableRowDetailId,
   getTextContent,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
@@ -92,23 +92,20 @@ describe('GridTable utils', () => {
     expect(keyB).toBe('cluster-b|app');
   });
 
-  describe('getStableRowId', () => {
-    it('returns a prefixed id for simple keys', () => {
-      expect(getStableRowId('row-a')).toBe('gridtable-row-row-a');
-    });
-
+  // A detail's id is its opening control's aria-controls target, so distinct
+  // row keys must never share one.
+  describe('getGridTableRowDetailId', () => {
     it('hex-encodes special characters to preserve uniqueness', () => {
-      const idSlash = getStableRowId('a/b');
-      const idColon = getStableRowId('a:b');
-      const idPipe = getStableRowId('a|b');
+      const idSlash = getGridTableRowDetailId('a/b');
+      const idColon = getGridTableRowDetailId('a:b');
+      const idPipe = getGridTableRowDetailId('a|b');
       expect(idSlash).not.toBe(idColon);
       expect(idSlash).not.toBe(idPipe);
       expect(idColon).not.toBe(idPipe);
     });
 
-    it('handles cluster-scoped keys with pipe separator', () => {
-      const id = getStableRowId('cluster-1|pod:default/nginx');
-      expect(id).toMatch(/^gridtable-row-/);
+    it('builds a valid id from a cluster-scoped key', () => {
+      const id = getGridTableRowDetailId('cluster-1|pod:default/nginx');
       expect(id).toMatch(/^[a-zA-Z][a-zA-Z0-9_-]*$/);
     });
   });

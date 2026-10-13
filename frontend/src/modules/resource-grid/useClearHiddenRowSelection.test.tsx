@@ -17,14 +17,14 @@ describe('useClearHiddenRowSelection', () => {
   let root: ReactDOM.Root;
   const onClear = vi.fn();
 
-  const Probe = ({ selectedKey, source }: { selectedKey: string | null; source: Source }) => {
-    useClearHiddenRowSelection({ selectedKey, source, keyExtractor, onClear });
+  const Probe = ({ selectedKeys, source }: { selectedKeys: string[]; source: Source }) => {
+    useClearHiddenRowSelection({ selectedKeys, source, keyExtractor, onClear });
     return null;
   };
 
-  const render = (selectedKey: string | null, source: Source) => {
+  const render = (selectedKeys: string[], source: Source) => {
     act(() => {
-      root.render(<Probe selectedKey={selectedKey} source={source} />);
+      root.render(<Probe selectedKeys={selectedKeys} source={source} />);
     });
   };
 
@@ -41,14 +41,21 @@ describe('useClearHiddenRowSelection', () => {
   });
 
   it('keeps a selection while its row is in the settled rows', () => {
-    render('api', settled([{ name: 'api' }, { name: 'web' }]));
+    render(['api'], settled([{ name: 'api' }, { name: 'web' }]));
     expect(onClear).not.toHaveBeenCalled();
   });
 
   it('clears a selection once the settled rows no longer include it', () => {
-    render('api', settled([{ name: 'api' }]));
-    render('api', settled([{ name: 'web' }]));
-    expect(onClear).toHaveBeenCalledOnce();
+    render(['api'], settled([{ name: 'api' }]));
+    render(['api'], settled([{ name: 'web' }]));
+    expect(onClear).toHaveBeenCalledExactlyOnceWith(['api']);
+  });
+
+  it('clears only the selected rows the settled rows no longer include', () => {
+    const keys = ['api', 'web', 'db'];
+    render(keys, settled([{ name: 'api' }, { name: 'web' }, { name: 'db' }]));
+    render(keys, settled([{ name: 'web' }]));
+    expect(onClear).toHaveBeenCalledExactlyOnceWith(['api', 'db']);
   });
 
   it.each<[string, Source]>([
@@ -59,7 +66,7 @@ describe('useClearHiddenRowSelection', () => {
       { rows: [], loaded: true, loading: false, error: localFailure('denied') },
     ],
   ])('keeps the selection %s', (_label, source) => {
-    render('api', source);
+    render(['api'], source);
     expect(onClear).not.toHaveBeenCalled();
   });
 });

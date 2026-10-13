@@ -1,7 +1,7 @@
 /**
  * frontend/src/shared/components/tables/GridTable.rowDetail.test.tsx
  *
- * Row detail: one open row shows a full-width detail (for example a nested
+ * Row detail: each open row shows a full-width detail (for example a nested
  * table) directly under it. The nested content owns its own focus and keys.
  */
 
@@ -59,8 +59,11 @@ const NestedTable = ({ onClose }: { onClose?: () => void }) => (
   />
 );
 
-const detailFor = (openRowKey: string | null, onClose?: () => void): GridTableRowDetail<Row> => ({
-  openRowKey,
+const detailFor = (
+  openRowKeys: readonly string[],
+  onClose?: () => void
+): GridTableRowDetail<Row> => ({
+  openRowKeys,
   render: () => <NestedTable onClose={onClose} />,
   getLabel: (row) => `Pods for ${row.name}`,
 });
@@ -125,7 +128,7 @@ describe('GridTable row detail', () => {
     });
 
   it('shows the open row detail directly under its row as a labelled region and scrolls it into view once', async () => {
-    await renderTable(detailFor('cluster-a|b'));
+    await renderTable(detailFor(['cluster-a|b']));
 
     const detailRow = parentRow('b').nextElementSibling;
     expect(detailRow?.matches('[data-gridtable-row-detail]')).toBe(true);
@@ -142,13 +145,63 @@ describe('GridTable row detail', () => {
 
     // A parent refresh keeps the open detail where it is without scrolling again.
     await renderTable(
-      detailFor('cluster-a|b'),
+      detailFor(['cluster-a|b']),
       parentRows.map((row) => ({ ...row }))
     );
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
 
-    await renderTable(detailFor(null));
+    await renderTable(detailFor([]));
     expect(container.querySelector('[data-gridtable-row-detail]')).toBeNull();
+  });
+
+  it('shows a detail under every open row and keeps each nested table when another opens or closes', async () => {
+    const detailUnder = (name: string) => parentRow(name).nextElementSibling;
+    await renderTable(detailFor(['cluster-a|b']));
+    const nestedUnderB = detailUnder('b')?.querySelector('.nested');
+    expect(nestedUnderB).not.toBeNull();
+
+    await renderTable(detailFor(['cluster-a|b', 'cluster-a|a']));
+
+    expect(detailUnder('a')?.matches('[data-gridtable-row-detail]')).toBe(true);
+    expect(detailUnder('a')?.querySelector('section')?.id).toBe(
+      getGridTableRowDetailId('cluster-a|a')
+    );
+    // Opening another row does not rebuild the nested table already open.
+    expect(detailUnder('b')?.querySelector('.nested')).toBe(nestedUnderB);
+    // Each detail scrolls into view once, when it opens.
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+
+    await renderTable(detailFor(['cluster-a|a']));
+    expect(detailUnder('b')?.matches('[data-gridtable-row-detail]')).toBe(false);
+    expect(detailUnder('a')?.matches('[data-gridtable-row-detail]')).toBe(true);
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+
+  // The same pod can be listed under two open rows (a CronJob and its Job); the
+  // page must still carry each DOM id once, so id references stay unambiguous.
+  it('keeps DOM ids unique when open details list the same rows', async () => {
+    await renderTable(detailFor(['cluster-a|a', 'cluster-a|b']));
+
+    const ids = Array.from(container.querySelectorAll('[id]'), (element) => element.id);
+    expect(container.querySelectorAll('[data-gridtable-row-detail]')).toHaveLength(2);
+    expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);
+  });
+
+  it('returns Escape from one of several open details to the row it belongs to', async () => {
+    await renderTable(detailFor(['cluster-a|a', 'cluster-a|c']));
+    const nestedUnderC = requireValue(
+      parentRow('c').nextElementSibling?.querySelector<HTMLElement>('table[tabindex="0"]'),
+      'nested table under c'
+    );
+
+    await act(async () => nestedUnderC.focus());
+    await press('Escape');
+
+    expect(document.activeElement).toBe(
+      container.querySelector<HTMLElement>('.parent.gridtable--body')
+    );
+    expect(parentRow('c').classList.contains('gridtable-row--focused')).toBe(true);
+    expect(parentRow('a').classList.contains('gridtable-row--focused')).toBe(false);
   });
 
   it('treats a click on the count chevron as the toggle, not as a row click', async () => {
@@ -167,7 +220,7 @@ describe('GridTable row detail', () => {
       ),
     ];
     await renderTable(
-      detailFor(null),
+      detailFor([]),
       parentRows,
       { enabled: false },
       toggleColumns,
@@ -192,7 +245,7 @@ describe('GridTable row detail', () => {
   });
 
   it('keeps arrow keys inside the nested table and returns to the open row on Escape', async () => {
-    await renderTable(detailFor('cluster-a|b'));
+    await renderTable(detailFor(['cluster-a|b']));
     const nestedTable = requireValue(
       container.querySelector<HTMLElement>('[data-gridtable-row-detail] table[tabindex="0"]'),
       'nested table'
@@ -222,7 +275,7 @@ describe('GridTable row detail', () => {
 
   it("closes from the nested table's own Close and returns the keyboard to the open row", async () => {
     const onClose = vi.fn();
-    await renderTable(detailFor('cluster-a|b', onClose));
+    await renderTable(detailFor(['cluster-a|b'], onClose));
     const close = requireValue(
       container.querySelector<HTMLButtonElement>(
         '[data-gridtable-row-detail] .gridtable-filter-bar button[aria-label="Close pods"]'
@@ -235,7 +288,7 @@ describe('GridTable row detail', () => {
       close.click();
     });
     expect(onClose).toHaveBeenCalledTimes(1);
-    await renderTable(detailFor(null, onClose));
+    await renderTable(detailFor([], onClose));
 
     expect(container.querySelector('[data-gridtable-row-detail]')).toBeNull();
     expect(document.activeElement).toBe(
@@ -245,7 +298,7 @@ describe('GridTable row detail', () => {
   });
 
   it('still starts keyboard row focus in the parent after a click inside the nested table', async () => {
-    await renderTable(detailFor('cluster-a|b'));
+    await renderTable(detailFor(['cluster-a|b']));
     const nestedCell = requireValue(
       container.querySelector<HTMLElement>('[data-gridtable-row-detail] .grid-cell'),
       'nested cell'
@@ -307,9 +360,9 @@ describe('GridTable row detail', () => {
       Number(/translateY\((\d+(?:\.\d+)?)px\)/.exec((element as HTMLElement).style.transform)?.[1]);
 
     it('places the following rows below the open detail and keeps the open row mounted when scrolled away', async () => {
-      await renderTable(detailFor('cluster-a|row-1'), manyRows, virtual);
+      await renderTable(detailFor(['cluster-a|row-1']), manyRows, virtual);
       // Re-render once so measured heights reach the virtualizer.
-      await renderTable(detailFor('cluster-a|row-1'), manyRows, virtual);
+      await renderTable(detailFor(['cluster-a|row-1']), manyRows, virtual);
 
       const detail = container.querySelector('[data-gridtable-row-detail]');
       expect(topOf(detail)).toBe(60);
@@ -328,6 +381,36 @@ describe('GridTable row detail', () => {
       // The open row and its nested table stay mounted, so the nested table keeps its state.
       expect(container.querySelector('.parent [data-row-key="cluster-a|row-1"]')).not.toBeNull();
       expect(container.querySelector('[data-gridtable-row-detail] .nested')).not.toBeNull();
+      expect(container.querySelector('.parent [data-row-key="cluster-a|row-5"]')).toBeNull();
+    });
+
+    it('adds every open detail to the row positions and keeps each open row mounted when scrolled away', async () => {
+      const open = detailFor(['cluster-a|row-1', 'cluster-a|row-3']);
+      await renderTable(open, manyRows, virtual);
+      // Re-render once so measured heights reach the virtualizer.
+      await renderTable(open, manyRows, virtual);
+
+      const detailUnder = (name: string) => parentRow(name).nextElementSibling;
+      expect(topOf(detailUnder('row-1'))).toBe(60);
+      expect(topOf(parentRow('row-2'))).toBe(260);
+      expect(topOf(parentRow('row-3'))).toBe(290);
+      expect(topOf(detailUnder('row-3'))).toBe(320);
+      expect(topOf(parentRow('row-4'))).toBe(520);
+
+      const wrapper = requireValue(
+        container.querySelector<HTMLElement>('.gridtable-wrapper'),
+        'parent wrapper'
+      );
+      await act(async () => {
+        wrapper.scrollTop = 1400;
+        wrapper.dispatchEvent(new Event('scroll'));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      });
+
+      // Both open rows and their nested tables stay mounted, so each keeps its state.
+      expect(container.querySelector('.parent [data-row-key="cluster-a|row-1"]')).not.toBeNull();
+      expect(container.querySelector('.parent [data-row-key="cluster-a|row-3"]')).not.toBeNull();
+      expect(container.querySelectorAll('[data-gridtable-row-detail]')).toHaveLength(2);
       expect(container.querySelector('.parent [data-row-key="cluster-a|row-5"]')).toBeNull();
     });
   });

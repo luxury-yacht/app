@@ -166,7 +166,7 @@ export interface GridTableControllerResult<T> {
 
   // Rendering
   renderRowContent: RenderRowContentFn<T>;
-  rowDetailIndex: number | null;
+  rowDetailIndexes: readonly number[];
   renderRowDetail: RenderRowDetailFn<T>;
   headerRow: ReactNode;
 
@@ -519,8 +519,7 @@ export function useGridTableController<T>({
     stopFrameSampler,
     updateColumnWindowRange,
     hideHeader,
-    detailRowKey: rowDetailState.rowKey,
-    detailHeight: rowDetailState.height,
+    detailHeights: rowDetailState.heights,
   });
 
   const renderRowDetail = useGridTableRowDetailRenderer({
@@ -533,17 +532,18 @@ export function useGridTableController<T>({
     focusByIndex,
     lastNavigationMethodRef,
   });
-  // The open row and its detail share the accent rail.
-  const openDetailRowKey = rowDetailState.rowKey;
+  // Each open row and its detail share the accent rail.
+  const openDetailRows = rowDetailState.openRows;
   const getRowClassNameWithDetail = useCallback(
     (item: T, index: number) => {
       const base = getRowClassNameWithFocus(item, index);
-      return openDetailRowKey !== null && keyExtractor(item, index) === openDetailRowKey
+      return openDetailRows.get(index) === keyExtractor(item, index)
         ? `${base} gridtable-row--detail-open`.trim()
         : base;
     },
-    [getRowClassNameWithFocus, keyExtractor, openDetailRowKey]
+    [getRowClassNameWithFocus, keyExtractor, openDetailRows]
   );
+  const rowDetailIndexes = useMemo(() => Array.from(openDetailRows.keys()), [openDetailRows]);
 
   // The dirty queue hashes rendered cells before measuring. Row virtualization changes that
   // visible signature without changing the callback identity, so both range bounds must invalidate
@@ -679,7 +679,7 @@ export function useGridTableController<T>({
     tableContentWidth,
     tableViewportWidth,
     renderRowContent,
-    rowDetailIndex: rowDetailState.index,
+    rowDetailIndexes,
     renderRowDetail,
     headerRow,
     showLoadingOverlay,

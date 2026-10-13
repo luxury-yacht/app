@@ -7,7 +7,6 @@
 
 import { AriaGridCell, AriaGridRow } from '@shared/components/tables/AriaGridPrimitives';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { getStableRowId } from '@shared/components/tables/GridTable.utils';
 import type { ColumnRenderModel } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
 import type { MeasureRowRefFn } from '@shared/components/tables/hooks/useGridTableVirtualization';
 import type React from 'react';
@@ -172,13 +171,9 @@ export function useGridTableRowRenderer<T>({
         ? (node: HTMLDivElement | null) => measureRowRef(rowKey, node)
         : undefined;
 
-      // Build a DOM-safe id for aria-activedescendant references.
-      const rowId = getStableRowId(rowKey);
-
       return (
         <AriaGridRow
           key={elementKey}
-          id={rowId}
           className={rowClassName}
           style={rowInlineStyle}
           aria-selected={isFocused || isSelected || undefined}

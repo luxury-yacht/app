@@ -43,8 +43,8 @@ interface GridTableBodyProps<T> {
   totalVirtualHeight: number;
   getRowTop: (index: number) => number;
   renderRowContent: RenderRowContentFn<T>;
-  /** Index of the row whose detail is open, or null. */
-  rowDetailIndex?: number | null;
+  /** Indexes of the rows whose detail is open, in table order. */
+  rowDetailIndexes?: readonly number[];
   renderRowDetail?: RenderRowDetailFn<T>;
   onWrapperFocus: (event: React.FocusEvent<HTMLElement>) => void;
   onWrapperBlur: (event: React.FocusEvent<HTMLElement>) => void;
@@ -60,6 +60,7 @@ interface GridTableBodyProps<T> {
 }
 
 const noRowDetail = () => null;
+const NO_ROW_DETAIL_INDEXES: readonly number[] = [];
 
 function GridTableEmptyRow({
   emptyMessage,
@@ -133,7 +134,7 @@ interface VirtualRowsInput<T> {
   keyExtractor: (item: T, index: number) => string;
   getRowTop: (index: number) => number;
   renderRowContent: RenderRowContentFn<T>;
-  rowDetailIndex: number | null;
+  rowDetailIndexes: readonly number[];
   renderRowDetail: RenderRowDetailFn<T>;
 }
 
@@ -144,7 +145,7 @@ function renderVirtualRows<T>({
   keyExtractor,
   getRowTop,
   renderRowContent,
-  rowDetailIndex,
+  rowDetailIndexes,
   renderRowDetail,
 }: VirtualRowsInput<T>): React.ReactNode[] {
   const renderRow = (item: T, index: number, slotId: string) => [
@@ -154,13 +155,12 @@ function renderVirtualRows<T>({
   const rows = virtualRows.flatMap((item, idx) =>
     renderRow(item, virtualRangeStart + idx, `slot-${idx}`)
   );
-  // The open row stays mounted outside the virtual window so its detail keeps its state.
-  const openRowOutsideWindow =
-    rowDetailIndex !== null &&
-    (rowDetailIndex < virtualRangeStart ||
-      rowDetailIndex >= virtualRangeStart + virtualRows.length);
-  if (openRowOutsideWindow) {
-    rows.push(...renderRow(tableData[rowDetailIndex], rowDetailIndex, 'open-row'));
+  // Open rows stay mounted outside the virtual window so their details keep their state.
+  const virtualRangeEnd = virtualRangeStart + virtualRows.length;
+  for (const index of rowDetailIndexes) {
+    if (index < virtualRangeStart || index >= virtualRangeEnd) {
+      rows.push(...renderRow(tableData[index], index, 'open-row'));
+    }
   }
   return rows;
 }
@@ -182,7 +182,7 @@ function GridTableBody<T>({
   totalVirtualHeight,
   getRowTop,
   renderRowContent,
-  rowDetailIndex = null,
+  rowDetailIndexes = NO_ROW_DETAIL_INDEXES,
   renderRowDetail = noRowDetail,
   onWrapperFocus,
   onWrapperBlur,
@@ -277,7 +277,7 @@ function GridTableBody<T>({
         keyExtractor,
         getRowTop,
         renderRowContent,
-        rowDetailIndex,
+        rowDetailIndexes,
         renderRowDetail,
       });
     }

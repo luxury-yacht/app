@@ -65,8 +65,8 @@ interface PodsTableProps {
    * filters start fresh each time and are never saved or in favorites.
    */
   attachedTo?: ClusterObjectReference;
-  /** Closes an attached table from the end of its filter bar. */
-  onClose?: () => void;
+  /** Closes an attached table from the end of its filter bar; gets attachedTo. */
+  onClose?: (attachedTo: ClusterObjectReference) => void;
 }
 
 // The Pods view offers every filter except Status, like every user-facing
@@ -343,18 +343,20 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
 
     const filterOptionOverrides = useMemo<Partial<GridTableFilterOptions> | undefined>(
       () =>
-        onClose && {
-          trailingActions: [
-            {
-              type: 'action',
-              id: 'attached-pods-close',
-              icon: <CloseIcon width={16} height={16} />,
-              title: 'Close pods',
-              onClick: onClose,
-            },
-          ],
-        },
-      [onClose]
+        onClose && attachedTo
+          ? {
+              trailingActions: [
+                {
+                  type: 'action',
+                  id: 'attached-pods-close',
+                  icon: <CloseIcon width={16} height={16} />,
+                  title: 'Close pods',
+                  onClick: () => onClose(attachedTo),
+                },
+              ],
+            }
+          : undefined,
+      [attachedTo, onClose]
     );
 
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;

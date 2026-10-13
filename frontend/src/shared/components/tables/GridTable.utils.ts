@@ -114,10 +114,10 @@ export const buildClusterScopedKey = (row: unknown, baseKey: string): string => 
   );
 };
 
-// Deterministic, collision-free DOM id from a row key.
+// Deterministic, collision-free DOM id base from a row key.
 // Hex-encodes characters outside [a-zA-Z0-9_-] so distinct keys always
 // produce distinct IDs — unlike the old lossy replace-with-underscore approach.
-export const getStableRowId = (rowKey: string): string => {
+const rowKeyDomId = (rowKey: string): string => {
   // The pattern has no `u` flag, so each match is a single UTF-16 code unit and
   // codePointAt(0) yields the same number charCodeAt(0) did — lone surrogates
   // included — keeping previously generated ids stable.
@@ -129,8 +129,7 @@ export const getStableRowId = (rowKey: string): string => {
 };
 
 /** Id of an open row's detail region, for the opening control's aria-controls. */
-export const getGridTableRowDetailId = (rowKey: string): string =>
-  `${getStableRowId(rowKey)}-detail`;
+export const getGridTableRowDetailId = (rowKey: string): string => `${rowKeyDomId(rowKey)}-detail`;
 
 const GRIDTABLE_ROW_DETAIL_SELECTOR = '[data-gridtable-row-detail]';
 

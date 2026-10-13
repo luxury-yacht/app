@@ -331,6 +331,15 @@ describe('ClusterViewNodes', () => {
       rowDetail().render(node),
       'expected the attached Pods table'
     ).props;
+  // Clicks the attached table's own Close, which reports the object it lists.
+  const closeAttachedPods = (node: ClusterNodeRow) => {
+    const props = attachedPods(node);
+    const close = requireValue(
+      props.onClose as ((attachedTo: unknown) => void) | undefined,
+      'expected the attached table Close'
+    );
+    act(() => close(props.attachedTo));
+  };
   // Renders the Pods cell on its own to read or click its toggle.
   const withPodsCount = <R,>(node: ClusterNodeRow, use: (button: HTMLButtonElement) => R): R => {
     const column = requireValue(
@@ -352,7 +361,7 @@ describe('ClusterViewNodes', () => {
   it('shows only the Nodes table until a node opens its pods', async () => {
     await renderNodes([baseNode]);
 
-    expect(rowDetail().openRowKey).toBeNull();
+    expect(rowDetail().openRowKeys).toEqual([]);
     expect(podsPanePropsRef.current).toBeNull();
   });
 
@@ -364,7 +373,7 @@ describe('ClusterViewNodes', () => {
     withPodsCount(baseNode, (button) => act(() => button.click()));
 
     expect(openWithObjectMock).not.toHaveBeenCalled();
-    expect(rowDetail().openRowKey).toBe(rowKey);
+    expect(rowDetail().openRowKeys).toEqual([rowKey]);
     expect(gridTablePropsRef.current.isRowSelected?.(baseNode, 0)).toBe(true);
     expect(rowDetail().getLabel(baseNode)).toBe('Pods for node-1');
     expect(attachedPods(baseNode)).toMatchObject({
@@ -389,17 +398,30 @@ describe('ClusterViewNodes', () => {
     );
 
     withPodsCount(baseNode, (button) => act(() => button.click()));
-    expect(rowDetail().openRowKey).toBeNull();
+    expect(rowDetail().openRowKeys).toEqual([]);
 
     // The attached table's own Close closes it too; the node stays highlighted.
     withPodsCount(baseNode, (button) => act(() => button.click()));
-    const close = requireValue(
-      attachedPods(baseNode).onClose as (() => void) | undefined,
-      'expected the attached table Close'
-    );
-    act(() => close());
-    expect(rowDetail().openRowKey).toBeNull();
+    closeAttachedPods(baseNode);
+    expect(rowDetail().openRowKeys).toEqual([]);
     expect(gridTablePropsRef.current.isRowSelected?.(baseNode, 0)).toBe(true);
+  });
+
+  it("keeps each node's pods open while another opens, and closes only the one asked", async () => {
+    const otherNode = { ...baseNode, ref: { ...baseNode.ref, name: 'node-2' } };
+    await renderNodes([baseNode, otherNode]);
+    const firstKey = gridTablePropsRef.current.keyExtractor(baseNode, 0);
+    const otherKey = gridTablePropsRef.current.keyExtractor(otherNode, 1);
+
+    withPodsCount(baseNode, (button) => act(() => button.click()));
+    withPodsCount(otherNode, (button) => act(() => button.click()));
+
+    expect(rowDetail().openRowKeys).toEqual([firstKey, otherKey]);
+    expect(attachedPods(baseNode).attachedTo).toMatchObject({ kind: 'Node', name: 'node-1' });
+    expect(attachedPods(otherNode).attachedTo).toMatchObject({ kind: 'Node', name: 'node-2' });
+
+    closeAttachedPods(baseNode);
+    expect(rowDetail().openRowKeys).toEqual([otherKey]);
   });
 
   it('highlights a node on a row click, opens its pods with Space, and clears the highlight on an unused-body click', async () => {
@@ -408,10 +430,10 @@ describe('ClusterViewNodes', () => {
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(baseNode));
     expect(gridTablePropsRef.current.isRowSelected?.(baseNode, 0)).toBe(true);
-    expect(rowDetail().openRowKey).toBeNull();
+    expect(rowDetail().openRowKeys).toEqual([]);
 
     act(() => gridTablePropsRef.current.onRowSelectionToggle?.(baseNode));
-    expect(rowDetail().openRowKey).toBe(rowKey);
+    expect(rowDetail().openRowKeys).toEqual([rowKey]);
 
     act(() => requireValue(gridTablePropsRef.current.onRowSelectionClear, 'clear')());
     expect(gridTablePropsRef.current.isRowSelected?.(baseNode, 0)).toBe(false);
@@ -423,7 +445,7 @@ describe('ClusterViewNodes', () => {
 
     act(() => gridTablePropsRef.current.onRowSelectionToggle?.(gone));
 
-    expect(rowDetail().openRowKey).toBeNull();
+    expect(rowDetail().openRowKeys).toEqual([]);
     expect(gridTablePropsRef.current.isRowSelected?.(gone, 0)).toBe(false);
   });
 

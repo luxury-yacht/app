@@ -162,6 +162,44 @@ describe('TablePaginationControls', () => {
     expect(onPageSizeChange).toHaveBeenCalledWith(250);
   });
 
+  // Several attached tables of one view share an idPrefix; each control's id
+  // (and the menu ids built from it) must still name that control alone.
+  it('gives each mounted rows-per-page control its own id when tables share an idPrefix', () => {
+    const controls = (key: string) => (
+      <TablePaginationControls
+        key={key}
+        idPrefix="attached-pods"
+        pageIndex={1}
+        pageSize={50}
+        visibleItemCount={50}
+        pageSizeOptions={[25, 50, 100, 250, 500, 1000]}
+        totalCount={1000}
+        totalIsExact={true}
+        hasPrevious={false}
+        hasNext={true}
+        loading={false}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+        onPageSizeChange={vi.fn()}
+      />
+    );
+    act(() => {
+      root.render(
+        <>
+          {controls('first')}
+          {controls('second')}
+        </>
+      );
+    });
+
+    const triggers = Array.from(container.querySelectorAll<HTMLElement>('[role="combobox"]'));
+    expect(triggers).toHaveLength(2);
+    for (const trigger of triggers) {
+      expect(trigger.id).not.toBe('');
+      expect(document.getElementById(trigger.id)).toBe(trigger);
+    }
+  });
+
   it('keeps pagination loading out of button text while disabling page navigation', () => {
     const onNext = vi.fn();
 

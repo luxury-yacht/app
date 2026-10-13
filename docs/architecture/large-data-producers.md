@@ -36,9 +36,10 @@ workload GVRs' reflectors; pod aggregates, HPA, and metrics join at serve.
 The namespace Workloads and cluster Nodes destinations are one query-backed
 table each. A row's Pods count or `Space` opens that row's pods in a Pods table
 attached under it ([row detail](../frontend/gridtable-interaction.md#row-detail));
-a row click only highlights. The attached table is its own query-backed table
-with its own filter, sort, cursor, page size, and diagnostics, but its table
-state lives in memory only and is never in favorites:
+a row click only highlights. Several rows can be open at once. Each attached
+table is its own query-backed table with its own filter, sort, cursor, page
+size, and diagnostics, but its table state lives in memory only and is never in
+favorites:
 
 - Opening a row narrows the attached Pods table through a request-only
   selection facet: the provider-owned Owner facet for a workload, whose values
