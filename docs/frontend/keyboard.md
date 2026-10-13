@@ -98,11 +98,14 @@ Implementation: `ui/layout/{appFocusRegions.ts,AppRegionNavigation.tsx,AppLayout
   focused tab's action buttons); consumers keep one roving tab stop and no
   competing walkers. From a pointer-focused read-only body, resume at the
   nearest preceding/following control in DOM order.
-- GridTable reveals a row with `revealVertically` (nearest edge, scrollTop
-  only), never `scrollIntoView`: WebKit's `scrollIntoView` lines up a row wider
-  than an ancestor scroller with that ancestor's left edge, so a nested table's
-  row shifts the parent sideways on every key press. Chromium does not, so
-  Chromium-only checks miss it.
+- GridTable's own focus moves pass `{ preventScroll: true }`, and it reveals
+  only the highlighted row with `revealVertically` (nearest edge, scrollTop
+  only), never `scrollIntoView`. WebKit reveals a focused table's whole box,
+  including rows clipped by its own scroller, so entering an expanded table
+  jumps the parent vertically; and its `scrollIntoView` lines up a row wider
+  than an ancestor scroller with that ancestor's left edge, so a nested row
+  shifts the parent sideways on every key press. Chromium does neither, so
+  Chromium-only checks miss both.
 - Virtualized tables keep DOM focus on the native table element while shared
   state marks the active row, so recycling never unmounts focus. Tab enters
   only the current keyed row's links/buttons; Escape, or the focused control

@@ -269,7 +269,8 @@ export function useGridTableRowDetailRenderer<T>({
     (index: number) => {
       lastNavigationMethodRef.current = 'keyboard';
       focusByIndex(index);
-      gridRef.current?.focus();
+      // The keyboard navigation reveals the row; see useGridTableScreenOrderNavigation.
+      gridRef.current?.focus({ preventScroll: true });
     },
     [focusByIndex, gridRef, lastNavigationMethodRef]
   );
