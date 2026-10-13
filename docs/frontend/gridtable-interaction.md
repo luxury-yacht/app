@@ -51,16 +51,17 @@ virtualization, and native table accessibility. Apply the
   `aria-expanded` and `aria-controls`; the view owns which rows are open. A
   nested table can also close its own detail with a Close in
   `filters.options.trailingActions`, which sits at the end of its filter bar.
-- Open rows and their details never use the accent rail; it stays reserved
-  for selected, focused, and hovered rows, which keep it when open, so a
-  selected row beside an open detail never reads as part of it. An open row
-  and its detail are tinted as one block: `getGroupClassName` adds a kind
-  color slot (`getKindColorClass`, the kind badge's color via `--kind-color`)
-  to both, and the detail's padding shows the tint as a band around the nested
-  table; without it the tint is neutral. Its content
-  stays pinned to the visible width and is capped at a share of the table
-  viewport; a nested table renders `embedded`, sizes to its rows up to the cap,
-  then scrolls inside. Opening scrolls that detail into view once.
+- The accent rail and highlight background mark only selected, focused, and
+  hovered rows, so a selected row beside an open detail never reads as part of
+  it. When an open row is selected or focused, its detail (always rendered
+  right after it) takes the same highlight and rail, so the group changes as
+  one block. An open row and its detail are tinted together: `getGroupClassName`
+  adds a kind color slot (`getKindColorClass`, the kind badge's color via
+  `--kind-color`) to both, and the detail's padding shows the tint as a band
+  around the nested table; without it the tint is neutral. Its content stays
+  pinned to the visible width and is capped at a share of the table viewport;
+  a nested table renders `embedded`, sizes to its rows up to the cap, then
+  scrolls inside. Opening scrolls that detail into view once.
 - The virtualizer adds each detail's measured height to its open row's span, and
   open rows stay mounted outside the virtual window so nested tables keep their
   state. Each detail is keyed by row identity, so it follows its row through

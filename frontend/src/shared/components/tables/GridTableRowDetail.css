@@ -1,13 +1,19 @@
 /* Row detail: an open row's full-width content (for example a nested table).
    Neither the open row nor its detail draws a rail of its own; the accent
    rail stays reserved for selected, focused, and hovered rows, so a selected
-   row next to an open detail never reads as part of it. */
+   row next to an open detail never reads as part of it. Like a row, the
+   detail keeps a transparent 3px rail so the highlight below never shifts
+   its content. */
 .gridtable-row-detail {
   display: block;
   width: 100%;
   /* border-bottom: 1px solid var(--grid-border-color); */
+  border-left: 3px solid transparent;
   background-color: var(--grid-bg-primary);
   z-index: 1;
+  transition:
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    border-left-color var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
 /* An open row and its detail are tinted as one block with the row's kind
@@ -22,6 +28,14 @@
     transparent
   );
   background-image: linear-gradient(var(--row-detail-tint), var(--row-detail-tint));
+}
+
+/* A detail always renders right after its own row, so it follows that row's
+   selected or focused highlight and accent rail, and the group stays one block. */
+.gridtable-row.gridtable-row--focused + .gridtable-row-detail,
+.gridtable-row.gridtable-row--selected + .gridtable-row-detail {
+  background-color: var(--color-bg-secondary);
+  border-left-color: var(--color-accent);
 }
 
 .gridtable-row-detail__cell {
