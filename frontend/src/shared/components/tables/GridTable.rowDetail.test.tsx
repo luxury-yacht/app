@@ -581,38 +581,6 @@ describe('GridTable row detail', () => {
       expect(highlighted()).toEqual(['b/x']);
     });
 
-    // WebKit reveals a newly focused element by centering it when it is not
-    // fully visible, and a nested table rarely is; the table scrolls only the
-    // highlighted row into view itself (nearest edge), so its own focus moves
-    // must never ask the browser to scroll.
-    it('moves the keyboard between tables without letting the browser scroll to reveal a table', async () => {
-      await renderKeyboard(['cluster-a|b']);
-      await focusParent();
-      const focusCalls: Array<FocusOptions | undefined> = [];
-      const originalFocus = HTMLElement.prototype.focus;
-      HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions) {
-        if (this.matches('.gridtable--body')) {
-          focusCalls.push(options);
-        }
-        originalFocus.call(this, options);
-      };
-      try {
-        await key('ArrowDown');
-        await key('ArrowDown'); // into b's table
-        await key('ArrowUp'); // back out to b
-        await key('ArrowDown');
-        await key('Escape'); // from b's table to its row
-        await key('ArrowDown');
-        await key('f', mod);
-        await key('Escape'); // from b's table filter to its rows
-      } finally {
-        HTMLElement.prototype.focus = originalFocus;
-      }
-
-      expect(focusCalls.length).toBeGreaterThanOrEqual(4);
-      expect(focusCalls.filter((options) => options?.preventScroll !== true)).toEqual([]);
-    });
-
     it('keeps one highlight when the mouse moves it between tables', async () => {
       await renderKeyboard(['cluster-a|b']);
       await focusParent();

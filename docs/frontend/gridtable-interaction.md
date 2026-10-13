@@ -61,9 +61,7 @@ virtualization, and native table accessibility. Apply the
   hovered rows, so a selected row beside an open detail never reads as part of
   it. When an open row is selected or focused, its detail (always rendered
   right after it) takes the same highlight and rail, so the group changes as
-  one block. A detail never has a side border: its content is sized to the
-  visible width, so a border pushes it past the right edge. Its rail is an
-  inset shadow instead. An open row and its detail are tinted together: `getGroupClassName`
+  one block. An open row and its detail are tinted together: `getGroupClassName`
   adds a kind color slot (`getKindColorClass`, the kind badge's color via
   `--kind-color`) to both, and the detail's padding shows the tint as a band
   around the nested table; without it the tint is neutral. Its content stays

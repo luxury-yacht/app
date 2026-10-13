@@ -269,9 +269,7 @@ export function useGridTableRowDetailRenderer<T>({
     (index: number) => {
       lastNavigationMethodRef.current = 'keyboard';
       focusByIndex(index);
-      // The keyboard navigation scrolls the row into view; a reveal scroll of
-      // the whole table could slide it sideways (see useGridTableScreenOrderNavigation).
-      gridRef.current?.focus({ preventScroll: true });
+      gridRef.current?.focus();
     },
     [focusByIndex, gridRef, lastNavigationMethodRef]
   );

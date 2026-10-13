@@ -5,11 +5,6 @@
  * nested in one: Up and Down walk from a parent row into its expanded table's
  * rows and back out, Alt+Up and Alt+Down skip expanded tables, and Home and End
  * reach the first and last row on screen.
- *
- * Focus moves here never let the browser scroll to reveal the table (WebKit
- * centers a focused element that is not fully visible, and a nested table
- * rarely is); the keyboard navigation scrolls only the highlighted row into
- * view.
  */
 
 import type { GridTableRowDetailNavigation } from '@shared/components/tables/hooks/useGridTableRowDetailNavigation';
@@ -63,7 +58,7 @@ export function useGridTableScreenOrderNavigation<T>({
     (index: number) => {
       lastNavigationMethodRef.current = 'keyboard';
       focusByKeyboard(index);
-      gridRef.current?.focus({ preventScroll: true });
+      gridRef.current?.focus();
     },
     [focusByKeyboard, gridRef, lastNavigationMethodRef]
   );
@@ -119,7 +114,7 @@ export function useGridTableScreenOrderNavigation<T>({
       }
       lastNavigationMethodRef.current = 'keyboard';
       focusByIndex(position === 'first' ? 0 : lastIndex);
-      gridRef.current?.focus({ preventScroll: true });
+      gridRef.current?.focus();
       return true;
     },
     [focusByIndex, gridRef, lastIndex, lastNavigationMethodRef]

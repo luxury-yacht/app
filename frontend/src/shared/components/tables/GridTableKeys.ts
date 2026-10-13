@@ -29,7 +29,7 @@ const returnToRowsOnEscape = (event: KeyboardEvent, grid: HTMLTableElement | nul
   if (!grid || !target || target.getAttribute('aria-expanded') === 'true') {
     return false;
   }
-  grid.focus({ preventScroll: true });
+  grid.focus();
   return true;
 };
 
