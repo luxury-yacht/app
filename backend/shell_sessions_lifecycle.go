@@ -46,29 +46,62 @@ func (l shellSessionLifecycle) registerRuntimeOperation(sess *shellSession) bool
 	}, sess.operationEpoch)
 }
 
+// closeByUser ends a session for the user. A session whose debug pod could not
+// be deleted stays listed and the error is returned; ending it again retries.
 func (l shellSessionLifecycle) closeByUser(sessionID string) error {
-	if !l.finishStream(sessionID, types.ShellSessionStatusEnded, "") {
+	found, err := l.finishStream(sessionID, types.ShellSessionStatusEnded, "")
+	if !found {
 		return fmt.Errorf("shell session %q not found", sessionID)
 	}
-	return nil
+	return err
 }
 
+// closeForRuntime ends a session whose cluster is being removed or whose app is
+// quitting: it makes a final attempt to delete the session's debug pod and
+// returns that failure for the caller to log, since nothing can retry it.
 func (l shellSessionLifecycle) closeForRuntime(sessionID, reason string) error {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		reason = "cluster disconnected"
 	}
+	sess := l.get(sessionID)
+	if sess == nil {
+		return nil
+	}
+	sess.Close()
+	err := sess.releaseOwned()
 	l.close(sessionID, types.ShellSessionStatusClosed, reason)
-	return nil
+	return err
 }
 
-func (l shellSessionLifecycle) finishStream(sessionID string, status types.ShellSessionStatus, reason string) bool {
-	if !l.close(sessionID, status, reason) {
-		return false
+// finishStream stops a session's stream and releases what the session created.
+// When the release fails the session stays registered in the cleanup-failed
+// state and the error is returned. It reports whether the session existed.
+func (l shellSessionLifecycle) finishStream(sessionID string, status types.ShellSessionStatus, reason string) (bool, error) {
+	sess := l.get(sessionID)
+	if sess == nil {
+		return false, nil
 	}
+	sess.Close()
+	if err := sess.releaseOwned(); err != nil {
+		l.retainForCleanup(sess, err)
+		return true, err
+	}
+	if l.close(sessionID, status, reason) {
+		l.emitList()
+		l.coordinator.unregisterRuntimeOperation(sessionID)
+	}
+	return true, nil
+}
+
+// retainForCleanup keeps a session whose debug pod could not be deleted
+// listed in an error state, so the user sees the pod and can retry.
+func (l shellSessionLifecycle) retainForCleanup(sess *shellSession, err error) {
+	reason := err.Error()
+	sess.setCleanupFailure(reason)
+	l.coordinator.setRuntimeOperationStatus(sess.id, "error", reason)
+	l.emitStatus(sess.id, sess.clusterID, types.ShellSessionStatusCleanupFailed, reason)
 	l.emitList()
-	l.coordinator.unregisterRuntimeOperation(sessionID)
-	return true
 }
 
 func (l shellSessionLifecycle) close(sessionID string, status types.ShellSessionStatus, reason string) bool {
@@ -112,7 +145,7 @@ func (l shellSessionLifecycle) list() []ShellSessionInfo {
 
 	sessions := make([]ShellSessionInfo, 0, len(l.coordinator.shellSessions))
 	for _, sess := range l.coordinator.shellSessions {
-		sessions = append(sessions, ShellSessionInfo{
+		info := ShellSessionInfo{
 			SessionID:   sess.id,
 			ClusterID:   sess.clusterID,
 			ClusterName: sess.clusterName,
@@ -121,7 +154,12 @@ func (l shellSessionLifecycle) list() []ShellSessionInfo {
 			Container:   sess.container,
 			Command:     append([]string(nil), sess.command...),
 			StartedAt:   metav1.NewTime(sess.startedAt),
-		})
+		}
+		if reason := sess.cleanupFailureReason(); reason != "" {
+			info.Status = types.ShellSessionStatusCleanupFailed
+			info.StatusReason = reason
+		}
+		sessions = append(sessions, info)
 	}
 
 	sort.Slice(sessions, func(i, j int) bool {

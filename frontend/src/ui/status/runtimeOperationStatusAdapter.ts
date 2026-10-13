@@ -60,6 +60,8 @@ export interface ShellSessionInfo {
   container: string;
   command?: string[] | null;
   status?: string;
+  /** Why a node shell is kept after its stream ended: its debug pod was not deleted. */
+  statusReason?: string;
   startedAt?: string | { time?: string };
 }
 

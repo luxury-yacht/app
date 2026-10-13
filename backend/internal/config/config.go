@@ -494,6 +494,10 @@ const (
 	// NodeDebugPodDeleteTimeout bounds deleting a node shell's debug pod when
 	// the session ends, including during app shutdown.
 	NodeDebugPodDeleteTimeout = 10 * time.Second
+
+	// ShellStartDrainTimeout bounds how long cluster removal and app shutdown
+	// wait for cancelled node shell starts to delete their debug pods.
+	ShellStartDrainTimeout = NodeDebugPodDeleteTimeout + 5*time.Second
 )
 
 // Application update settings.

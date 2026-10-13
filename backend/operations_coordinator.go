@@ -2,10 +2,14 @@ package backend
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	corev1 "k8s.io/api/core/v1"
@@ -104,6 +108,9 @@ type OperationsCoordinator struct {
 	operationEpochs     map[string]uint64
 	operationEpochsMu   sync.Mutex
 	shuttingDown        bool
+	// shellStarts are node shell starts that may own a debug pod before their
+	// session registers; guarded by operationEpochsMu.
+	shellStarts map[*shellStart]struct{}
 }
 
 // NewOperationsCoordinator constructs the single owner for live-operation state.
@@ -140,6 +147,7 @@ func NewOperationsCoordinator(dependencies OperationsCoordinatorDependencies) *O
 		portForwardSessions: make(map[string]*portForwardSessionInternal),
 		runtimeOperations:   newRuntimeOperationRegistry(),
 		operationEpochs:     make(map[string]uint64),
+		shellStarts:         make(map[*shellStart]struct{}),
 	}
 }
 
@@ -177,6 +185,67 @@ func (o *OperationsCoordinator) registerRuntimeOperationAtEpoch(
 	o.operationEpochsMu.Unlock()
 	o.emitRuntimeOperationsList()
 	return true
+}
+
+// shellStart is a start that may create cluster resources before its session
+// registers. Cluster removal and shutdown cancel its context and wait on done,
+// which closes once the start has released anything it created.
+type shellStart struct {
+	clusterID string
+	cancel    context.CancelFunc
+	done      chan struct{}
+}
+
+// beginShellStart admits a start for the cluster at operationEpoch, unless the
+// cluster was stopped since or the app is quitting. The returned context is
+// cancelled when the cluster is removed or the app quits.
+func (o *OperationsCoordinator) beginShellStart(clusterID string, epoch uint64) (context.Context, *shellStart, bool) {
+	o.operationEpochsMu.Lock()
+	defer o.operationEpochsMu.Unlock()
+	if o.shuttingDown || o.operationEpochs[clusterID] != epoch {
+		return nil, nil, false
+	}
+	ctx, cancel := context.WithCancel(o.operationContext())
+	start := &shellStart{clusterID: clusterID, cancel: cancel, done: make(chan struct{})}
+	o.shellStarts[start] = struct{}{}
+	return ctx, start, true
+}
+
+func (o *OperationsCoordinator) finishShellStart(start *shellStart) {
+	o.operationEpochsMu.Lock()
+	delete(o.shellStarts, start)
+	o.operationEpochsMu.Unlock()
+	start.cancel()
+	close(start.done)
+}
+
+// stopShellStarts cancels the cluster's in-flight starts (every cluster's when
+// clusterID is empty) and waits, bounded, until each has released what it
+// created. Callers must hold no coordinator locks.
+func (o *OperationsCoordinator) stopShellStarts(clusterID string) {
+	o.operationEpochsMu.Lock()
+	starts := make([]*shellStart, 0, len(o.shellStarts))
+	for start := range o.shellStarts {
+		if clusterID == "" || start.clusterID == clusterID {
+			starts = append(starts, start)
+		}
+	}
+	o.operationEpochsMu.Unlock()
+	for _, start := range starts {
+		start.cancel()
+	}
+	deadline := time.NewTimer(config.ShellStartDrainTimeout)
+	defer deadline.Stop()
+	for _, start := range starts {
+		select {
+		case <-start.done:
+		case <-deadline.C:
+			if o.logger != nil {
+				o.logger.Warn(fmt.Sprintf("Shell starts for cluster %q did not finish cleanup within %s", clusterID, config.ShellStartDrainTimeout), logsources.ShellSession)
+			}
+			return
+		}
+	}
 }
 
 func (o *OperationsCoordinator) removeClusterRuntimeOperations(clusterID string) []runtimeOperationEntry {

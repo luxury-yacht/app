@@ -123,6 +123,7 @@ const completeShellTargetKey = (target: ShellTargetRef): string | null => {
 type ShellStatus = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
 
 type ShellOutputEvent = DesktopEventPayload<'object-shell:output'>;
+type ShellStatusEvent = DesktopEventPayload<'object-shell:status'>;
 
 interface PendingReplayState {
   sessionId: string;
@@ -210,6 +211,29 @@ async function createDebugShellContainer(
 
 type TrackedShellSession = Awaited<ReturnType<typeof readShellSessions>>[number];
 
+// A node shell whose stream ended but whose debug pod could not be deleted.
+interface CleanupFailure {
+  sessionId: string;
+  reason: string;
+}
+
+const isKeptForCleanup = (session: TrackedShellSession): boolean =>
+  session.status === types.ShellSessionStatus.ShellSessionStatusCleanupFailed;
+
+// The newest open session for the target, and any session kept only because
+// its debug pod still needs deleting; a kept session has no stream to attach.
+function findTrackedSessions(sessions: TrackedShellSession[], targetKey: string) {
+  const matching = sessions.filter(
+    (tracked) => buildCanonicalObjectRowKey(tracked.target) === targetKey
+  );
+  const open = matching.filter((tracked) => !isKeptForCleanup(tracked));
+  return { latestOpen: open[open.length - 1], kept: matching.find(isKeptForCleanup) };
+}
+
+const isSessionEnd = (status: types.ShellSessionStatus): boolean =>
+  status === types.ShellSessionStatus.ShellSessionStatusEnded ||
+  status === types.ShellSessionStatus.ShellSessionStatusClosed;
+
 function attachedShellSession(session: TrackedShellSession): types.ShellSession {
   return {
     sessionId: session.sessionId,
@@ -219,6 +243,19 @@ function attachedShellSession(session: TrackedShellSession): types.ShellSession 
     command: session.command ?? [],
     containers: [],
   } as types.ShellSession;
+}
+
+// Names the debug pod a node shell could not delete; retrying happens from the
+// Sessions list, which keeps the session until the pod is gone.
+function ShellCleanupNotice({ failure }: Readonly<{ failure: CleanupFailure | null }>) {
+  if (!failure) {
+    return null;
+  }
+  return (
+    <div className="shell-tab__notice shell-tab__cleanup-failure" role="status">
+      Cleanup failed: <span>{failure.reason}</span>. End the session in the Sessions list to retry.
+    </div>
+  );
 }
 
 const resolveCustomOption = (selected: string, custom: string): string =>
@@ -277,6 +314,25 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const [statusReason, setStatusReason] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ShellContextMenuState | null>(null);
   const [endingSession, setEndingSession] = useState(false);
+  const [cleanupFailure, setCleanupFailure] = useState<CleanupFailure | null>(null);
+  // Shows the kept-debug-pod notice for this tab's session, and clears it when
+  // a retry from any window deletes the pod and ends that session.
+  const trackCleanupFailure = useCallback((evt: ShellStatusEvent | undefined) => {
+    if (!evt) {
+      return;
+    }
+    if (
+      evt.status === types.ShellSessionStatus.ShellSessionStatusCleanupFailed &&
+      evt.sessionId === sessionIdRef.current
+    ) {
+      setCleanupFailure({ sessionId: evt.sessionId, reason: evt.reason ?? '' });
+    } else if (isSessionEnd(evt.status)) {
+      setCleanupFailure((current) => (current?.sessionId === evt.sessionId ? null : current));
+    }
+  }, []);
+  const showKeptSession = useCallback((kept: TrackedShellSession | undefined) => {
+    setCleanupFailure(kept ? { sessionId: kept.sessionId, reason: kept.statusReason ?? '' } : null);
+  }, []);
   const sessionIdRef = useRef<string | null>(null);
   const statusRef = useRef<ShellStatus>('idle');
   const terminalRef = useRef<Xterm.Terminal | null>(null);
@@ -628,6 +684,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
     sessionOpenedAtRef.current = null;
     sessionOutputBufferRef.current = '';
     setStatusReason(null);
+    setCleanupFailure(null);
     ensureTerminal();
     terminalRef.current?.reset();
     setConnectionStatus('connecting');
@@ -656,6 +713,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
     setDebugCreating(false);
     setConnectionStatus('idle');
     setStatusReason(null);
+    setCleanupFailure(null);
     disposeTerminal();
   }, [disposeTerminal, setConnectionStatus]);
 
@@ -793,6 +851,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
     });
 
     const offStatus = onEvent('object-shell:status', (evt) => {
+      trackCleanupFailure(evt);
       if (!evt || !sessionIdRef.current || evt.sessionId !== sessionIdRef.current) {
         return;
       }
@@ -819,6 +878,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
           // A user ended it, from this tab or any other window; never a failed connection.
           handleSessionClosed(evt.reason, true);
           return;
+        case types.ShellSessionStatus.ShellSessionStatusCleanupFailed:
+          // The shell ended; the backend keeps its debug pod listed until a delete succeeds.
+          handleSessionClosed(evt.reason, true);
+          return;
         case types.ShellSessionStatus.ShellSessionStatusClosed:
         case types.ShellSessionStatus.ShellSessionStatusTimeout:
           handleSessionClosed(evt.reason);
@@ -843,6 +906,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
     disposeTerminal,
     ensureTerminal,
     resolvedClusterId,
+    trackCleanupFailure,
     writeLine,
   ]);
 
@@ -990,15 +1054,13 @@ const ShellTab: React.FC<ShellTabProps> = ({
       if (lastTargetRef.current !== target) {
         return;
       }
-      const matching = sessions.filter(
-        (tracked) => buildCanonicalObjectRowKey(tracked.target) === target.key
-      );
-      if (matching.length === 0) {
+      const { latestOpen, kept } = findTrackedSessions(sessions, target.key);
+      if (!latestOpen) {
+        showKeptSession(kept);
         return;
       }
-      const latest = matching[matching.length - 1];
-      installTrackedSession(latest);
-      await replaySessionOutput(latest.sessionId);
+      installTrackedSession(latestOpen);
+      await replaySessionOutput(latestOpen.sessionId);
     } catch {
       // Ignore attach failures; user can still start a new session.
     } finally {
@@ -1006,7 +1068,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
         attachInFlightRef.current = null;
       }
     }
-  }, [installTrackedSession, replaySessionOutput, targetKey]);
+  }, [installTrackedSession, replaySessionOutput, showKeptSession, targetKey]);
 
   useEffect(() => {
     if (!isActive) {
@@ -1274,6 +1336,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
           Shell access blocked: <span>{disabledReason}</span>
         </div>
       )}
+      <ShellCleanupNotice failure={cleanupFailure} />
 
       <div
         ref={terminalWrapperRef}

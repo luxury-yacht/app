@@ -196,10 +196,10 @@ func TestShellSessionLifecycleFinishStreamIsIdempotent(t *testing.T) {
 	listEvents = 0
 
 	lifecycle := operations.shellSessionLifecycle()
-	if finished := lifecycle.finishStream(sess.id, "closed", ""); !finished {
+	if finished, _ := lifecycle.finishStream(sess.id, "closed", ""); !finished {
 		t.Fatal("expected first stream finish to remove session")
 	}
-	if finished := lifecycle.finishStream(sess.id, "closed", ""); finished {
+	if finished, _ := lifecycle.finishStream(sess.id, "closed", ""); finished {
 		t.Fatal("expected repeated stream finish to be ignored")
 	}
 

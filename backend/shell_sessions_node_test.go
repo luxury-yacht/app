@@ -2,14 +2,18 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"net/url"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
@@ -214,22 +218,218 @@ func TestStartNodeShellSessionDeletesDebugPodWhenShellCannotStart(t *testing.T) 
 	require.Empty(t, fixture.operations.ListShellSessions())
 }
 
-// A cluster removed while its debug pod starts must not get a session, and the
-// pod it left behind is deleted.
-func TestStartNodeShellSessionRejectsStartAfterClusterStopped(t *testing.T) {
-	fixture := newNodeShellFixture(t, runningDebugger())
-	var stopOnce sync.Once
-	fixture.client.PrependReactor("get", "pods", func(cgotesting.Action) (bool, runtime.Object, error) {
-		stopOnce.Do(func() { fixture.operations.StopCluster(shellClusterID) })
+func startingDebugger() corev1.ContainerState {
+	return corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ContainerCreating"}}
+}
+
+func nodeShellRequest() NodeShellSessionRequest {
+	return NodeShellSessionRequest{Target: nodeShellTarget(nodeShellNodeName), Image: "busybox:latest"}
+}
+
+// startInBackground starts a node shell that is still waiting for its pod and
+// returns once the pod exists, with the start's eventual error.
+func (f *nodeShellFixture) startInBackground(t *testing.T) <-chan error {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() {
+		_, err := f.operations.StartNodeShellSession(nodeShellRequest())
+		done <- err
+	}()
+	require.Eventually(t, func() bool { return len(f.debugPods(t)) == 1 }, 5*time.Second, 5*time.Millisecond)
+	return done
+}
+
+// failDeletes makes pod deletes fail while the returned flag is set.
+func (f *nodeShellFixture) failDeletes() *atomic.Bool {
+	failing := &atomic.Bool{}
+	failing.Store(true)
+	f.client.PrependReactor("delete", "pods", func(cgotesting.Action) (bool, runtime.Object, error) {
+		if failing.Load() {
+			return true, nil, errors.New("dial tcp: connection refused")
+		}
 		return false, nil, nil
 	})
+	return failing
+}
 
-	_, err := fixture.operations.StartNodeShellSession(NodeShellSessionRequest{
-		Target: nodeShellTarget(nodeShellNodeName), Image: "busybox:latest",
+func requireStartEnded(t *testing.T, done <-chan error) {
+	t.Helper()
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("node shell start did not end")
+	}
+}
+
+// Closing the cluster while a node shell's pod is still starting cancels the
+// start and deletes the pod before StopCluster returns.
+func TestStopClusterDeletesStartingNodeShellDebugPod(t *testing.T) {
+	fixture := newNodeShellFixture(t, startingDebugger())
+	done := fixture.startInBackground(t)
+
+	fixture.operations.StopCluster(shellClusterID)
+
+	require.Empty(t, fixture.debugPods(t), "cluster removal must delete a starting node shell's pod")
+	requireStartEnded(t, done)
+	require.Empty(t, fixture.operations.ListShellSessions())
+}
+
+// Quitting the app while a node shell starts must not return before its
+// debug pod's delete has finished.
+func TestShutdownWaitsForStartingNodeShellDelete(t *testing.T) {
+	fixture := newNodeShellFixture(t, startingDebugger())
+	fixture.client.PrependReactor("delete", "pods", func(cgotesting.Action) (bool, runtime.Object, error) {
+		time.Sleep(100 * time.Millisecond)
+		return false, nil, nil
 	})
+	done := fixture.startInBackground(t)
 
-	require.Error(t, err)
-	require.True(t, strings.Contains(err.Error(), "cluster disconnected"), "unexpected error: %v", err)
+	fixture.operations.Shutdown()
+
+	require.Empty(t, fixture.debugPods(t), "shutdown returned before the debug pod was deleted")
+	requireStartEnded(t, done)
+}
+
+// A delete that fails keeps the session in Sessions in an error state naming
+// the pod, so ending it again retries until the pod is gone.
+func TestFailedDebugPodDeleteKeepsNodeShellForRetry(t *testing.T) {
+	fixture := newNodeShellFixture(t, runningDebugger())
+	session := fixture.start(t)
+	failing := fixture.failDeletes()
+
+	err := fixture.operations.CloseShellSession(session.SessionID)
+
+	require.ErrorContains(t, err, session.DebugPod.Name)
+	require.ErrorContains(t, err, "connection refused")
+	require.Len(t, fixture.debugPods(t), 1)
+	listed := fixture.operations.ListShellSessions()
+	require.Len(t, listed, 1)
+	require.Equal(t, types.ShellSessionStatusCleanupFailed, listed[0].Status)
+	require.Contains(t, listed[0].StatusReason, session.DebugPod.Name)
+	operations := fixture.operations.ListRuntimeOperations()
+	require.Len(t, operations, 1)
+	require.Equal(t, "error", operations[0].Status)
+
+	failing.Store(false)
+	require.NoError(t, fixture.operations.CloseShellSession(session.SessionID))
+
 	require.Empty(t, fixture.debugPods(t))
 	require.Empty(t, fixture.operations.ListShellSessions())
+	require.Empty(t, fixture.operations.ListRuntimeOperations())
+}
+
+// exitedShellExecutor ends its stream at once, as when the user types exit.
+type exitedShellExecutor struct{}
+
+func (exitedShellExecutor) Stream(remotecommand.StreamOptions) error { return nil }
+
+func (exitedShellExecutor) StreamWithContext(context.Context, remotecommand.StreamOptions) error {
+	return nil
+}
+
+// A shell that exits on its own also keeps its pod's ownership when the
+// delete fails.
+func TestShellExitWithFailedDebugPodDeleteKeepsNodeShell(t *testing.T) {
+	fixture := newNodeShellFixture(t, runningDebugger())
+	fixture.operations.websocketExec = func(*rest.Config, string, string) (remotecommand.Executor, error) {
+		return exitedShellExecutor{}, nil
+	}
+	fixture.failDeletes()
+
+	fixture.start(t)
+
+	require.Eventually(t, func() bool {
+		listed := fixture.operations.ListShellSessions()
+		return len(listed) == 1 && listed[0].Status == types.ShellSessionStatusCleanupFailed
+	}, 5*time.Second, 5*time.Millisecond)
+	require.Len(t, fixture.debugPods(t), 1)
+}
+
+// A start that fails after creating its pod keeps the pod in Sessions when it
+// cannot delete it, instead of abandoning it.
+func TestFailedStartKeepsDebugPodItCouldNotDelete(t *testing.T) {
+	fixture := newNodeShellFixture(t, corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+		Reason: "StartError", Message: "exec: no such file", ExitCode: 128,
+	}})
+	failing := fixture.failDeletes()
+
+	_, err := fixture.operations.StartNodeShellSession(nodeShellRequest())
+
+	require.ErrorContains(t, err, "StartError")
+	listed := fixture.operations.ListShellSessions()
+	require.Len(t, listed, 1)
+	require.Equal(t, types.ShellSessionStatusCleanupFailed, listed[0].Status)
+	require.Equal(t, nodeShellTarget(nodeShellNodeName), listed[0].Target)
+
+	failing.Store(false)
+	require.NoError(t, fixture.operations.CloseShellSession(listed[0].SessionID))
+	require.Empty(t, fixture.debugPods(t))
+	require.Empty(t, fixture.operations.ListShellSessions())
+}
+
+// A create whose response is lost may still have committed the pod; the start
+// deletes it by the name it generated.
+func TestStartDeletesDebugPodWhoseCreateResponseWasLost(t *testing.T) {
+	fixture := newNodeShellFixture(t, runningDebugger())
+	fixture.client.PrependReactor("create", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		pod := action.(cgotesting.CreateAction).GetObject().(*corev1.Pod)
+		require.NoError(t, fixture.client.Tracker().Create(corev1.SchemeGroupVersion.WithResource("pods"), pod, pod.Namespace))
+		return true, nil, errors.New("http2: client connection lost")
+	})
+
+	_, err := fixture.operations.StartNodeShellSession(nodeShellRequest())
+
+	require.ErrorContains(t, err, "connection lost")
+	require.Empty(t, fixture.debugPods(t), "a committed pod must not be orphaned")
+	require.Empty(t, fixture.operations.ListShellSessions())
+}
+
+// AlreadyExists means the generated name belongs to a pod the app did not
+// create; it is never deleted.
+func TestStartLeavesSameNamedPodItDidNotCreate(t *testing.T) {
+	fixture := newNodeShellFixture(t, runningDebugger())
+	fixture.client.PrependReactor("create", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		pod := action.(cgotesting.CreateAction).GetObject().(*corev1.Pod)
+		existing := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: pod.Namespace, Name: pod.Name}}
+		require.NoError(t, fixture.client.Tracker().Create(corev1.SchemeGroupVersion.WithResource("pods"), existing, pod.Namespace))
+		return true, nil, apierrors.NewAlreadyExists(corev1.Resource("pods"), pod.Name)
+	})
+
+	_, err := fixture.operations.StartNodeShellSession(nodeShellRequest())
+
+	require.ErrorContains(t, err, "already exists")
+	require.Len(t, fixture.debugPods(t), 1, "another owner's pod must be left alone")
+	require.Empty(t, fixture.operations.ListShellSessions())
+}
+
+// Removing the cluster makes a final attempt to delete a pod kept after a
+// failed delete.
+func TestStopClusterRetriesKeptDebugPodDelete(t *testing.T) {
+	fixture := newNodeShellFixture(t, runningDebugger())
+	session := fixture.start(t)
+	failing := fixture.failDeletes()
+	require.Error(t, fixture.operations.CloseShellSession(session.SessionID))
+	failing.Store(false)
+
+	fixture.operations.StopCluster(shellClusterID)
+
+	require.Empty(t, fixture.debugPods(t))
+	require.Empty(t, fixture.operations.ListShellSessions())
+}
+
+// A pod kept after a failed start has no stream; terminal input and resizes
+// for it fail cleanly instead of crashing the backend.
+func TestKeptDebugPodWithoutStreamRejectsTerminalInput(t *testing.T) {
+	fixture := newNodeShellFixture(t, corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+		Reason: "StartError", ExitCode: 128,
+	}})
+	fixture.failDeletes()
+	_, err := fixture.operations.StartNodeShellSession(nodeShellRequest())
+	require.Error(t, err)
+	listed := fixture.operations.ListShellSessions()
+	require.Len(t, listed, 1)
+
+	require.Error(t, fixture.operations.SendShellInput(listed[0].SessionID, "ls\n"))
+	require.Error(t, fixture.operations.ResizeShellSession(listed[0].SessionID, 80, 24))
 }

@@ -38,10 +38,22 @@ runtime operations ([operation-lifecycle.md](operation-lifecycle.md)).
   the pod as `debugPod`.
 - Before creating the pod, node shell checks pods create, get, and delete plus
   pods/attach get or create in `default`; the Node panel's Shell tab uses the
-  same set. The delete check exists because the app owns the pod: every path
-  that ends the session (End Session, Sessions Stop, shell exit, timeout,
-  cluster removal, app shutdown) and every failed start deletes it, with its own
-  bounded context so shutdown still sends the delete.
+  same set (`NODE_SHELL_PERMISSIONS`, queried for `default` by the panel).
+- The app owns a debug pod from before the create call until a delete
+  succeeds (`nodeDebugPodOwner`):
+  - A start registers with the coordinator before creating anything. Cluster
+    removal and shutdown cancel it and wait, bounded, until it has deleted its
+    pod.
+  - A create that fails without a 4xx answer (lost response, timeout, 5xx) may
+    have committed, so the start deletes the pod by its generated name.
+    `AlreadyExists` names another owner's pod and is never deleted.
+  - Every path that ends the session (End Session, Sessions Stop, shell exit,
+    timeout) and every failed start deletes the pod with its own bounded
+    context. A failed delete keeps the session registered as `cleanup-failed`
+    (Sessions row in an error state with the reason; the Shell tab shows a
+    notice instead of reattaching); ending it again retries, and End Session
+    reports the failure. Cluster removal and shutdown make one final attempt
+    and log a pod they could not delete.
 - Start order: `DesktopService` routes shell commands directly to
   `OperationsCoordinator`, which resolves the caller's explicit `clusterId`
   through its narrow cluster-access collaborator, checks exec permission,

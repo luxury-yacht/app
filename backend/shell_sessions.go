@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,10 +43,10 @@ type shellSession struct {
 	target      RuntimeOperationTargetRef
 	container   string
 	command     []string
-	// debugPod is the pod a node shell created; cleanup deletes it. Both stay
+	// debugPod is the pod a node shell created; release deletes it. Both stay
 	// nil for pod shells.
 	debugPod  *RuntimeOperationTargetRef
-	cleanup   func()
+	release   func() error
 	stdin     *io.PipeWriter
 	stdinR    *io.PipeReader
 	sizeQueue *terminalSizeQueue
@@ -60,6 +61,31 @@ type shellSession struct {
 	backlog        []string
 	backlogBytes   int
 	operationEpoch uint64
+
+	// cleanupFailure is set while the stream has ended but the debug pod
+	// could not be deleted; the session stays registered until it is.
+	cleanupMu      sync.Mutex
+	cleanupFailure string
+}
+
+// releaseOwned deletes what the session created on the cluster, if anything.
+func (s *shellSession) releaseOwned() error {
+	if s.release == nil {
+		return nil
+	}
+	return s.release()
+}
+
+func (s *shellSession) setCleanupFailure(reason string) {
+	s.cleanupMu.Lock()
+	s.cleanupFailure = reason
+	s.cleanupMu.Unlock()
+}
+
+func (s *shellSession) cleanupFailureReason() string {
+	s.cleanupMu.Lock()
+	defer s.cleanupMu.Unlock()
+	return s.cleanupFailure
 }
 
 // touchActivity updates the last activity timestamp.
@@ -128,9 +154,6 @@ func (s *shellSession) Close() {
 		if s.cancel != nil {
 			s.cancel()
 		}
-		if s.cleanup != nil {
-			s.cleanup()
-		}
 	})
 }
 
@@ -193,9 +216,9 @@ type shellLaunch struct {
 	container string
 	command   []string
 	executor  remotecommand.Executor
-	// debugPod and cleanup carry a node shell's debug pod and its deletion.
+	// debugPod and release carry a node shell's debug pod and its deletion.
 	debugPod *RuntimeOperationTargetRef
-	cleanup  func()
+	release  func() error
 }
 
 func (w *shellEventWriter) Write(p []byte) (int, error) {
@@ -230,15 +253,18 @@ func shellStartError(target ObjectRef, err error) error {
 	}, err)
 }
 
+var errShellClusterDisconnected = errors.New("cluster disconnected before shell session started")
+
 // openShellSession registers a prepared launch and starts its stream. A launch
-// whose cluster was stopped since operationEpoch is closed, which also runs its
-// cleanup, instead of publishing a stale session.
+// whose cluster was stopped since operationEpoch is closed and releases what it
+// created instead of publishing a stale session.
 func (o *OperationsCoordinator) openShellSession(launch shellLaunch, operationEpoch uint64) (*ShellSession, error) {
 	sess, sessionCtx := newShellSession(o.operationContext(), launch, operationEpoch)
 	lifecycle := o.shellSessionLifecycle()
 	if !lifecycle.register(sess) {
 		sess.Close()
-		return nil, fmt.Errorf("cluster disconnected before shell session started")
+		o.logShellReleaseFailure(sess, sess.releaseOwned())
+		return nil, errShellClusterDisconnected
 	}
 	go o.monitorShellTimeout(sessionCtx, sess)
 	o.startShellSessionStream(lifecycle, sessionCtx, sess, launch.executor)
@@ -423,7 +449,7 @@ func newShellSession(parent context.Context, launch shellLaunch, operationEpoch 
 		clusterName:    launch.deps.ClusterName,
 		target:         launch.target,
 		debugPod:       launch.debugPod,
-		cleanup:        launch.cleanup,
+		release:        launch.release,
 		container:      launch.container,
 		command:        append([]string(nil), launch.command...),
 		stdin:          stdinWriter,
@@ -487,9 +513,9 @@ func (o *OperationsCoordinator) SendShellInput(sessionID, data string) error {
 	if data == "" {
 		return nil
 	}
-	sess := o.shellSessionLifecycle().get(sessionID)
-	if sess == nil {
-		return fmt.Errorf("shell session %q not found", sessionID)
+	sess, err := o.streamingShellSession(sessionID)
+	if err != nil {
+		return err
 	}
 	sess.touchActivity()
 	if _, err := sess.stdin.Write([]byte(data)); err != nil {
@@ -506,12 +532,25 @@ func (o *OperationsCoordinator) ResizeShellSession(sessionID string, columns, ro
 	if columns > maxTerminalDimension || rows > maxTerminalDimension {
 		return fmt.Errorf("columns and rows must be less than or equal to %d", maxTerminalDimension)
 	}
-	sess := o.shellSessionLifecycle().get(sessionID)
-	if sess == nil {
-		return fmt.Errorf("shell session %q not found", sessionID)
+	sess, err := o.streamingShellSession(sessionID)
+	if err != nil {
+		return err
 	}
 	sess.sizeQueue.Set(uint16(columns), uint16(rows))
 	return nil
+}
+
+// streamingShellSession returns a session whose stream can take terminal
+// input. A session kept only because its debug pod was not deleted has none.
+func (o *OperationsCoordinator) streamingShellSession(sessionID string) (*shellSession, error) {
+	sess := o.shellSessionLifecycle().get(sessionID)
+	if sess == nil {
+		return nil, fmt.Errorf("shell session %q not found", sessionID)
+	}
+	if sess.stdin == nil || sess.sizeQueue == nil || sess.cleanupFailureReason() != "" {
+		return nil, fmt.Errorf("shell session %q has ended", sessionID)
+	}
+	return sess, nil
 }
 
 // CloseShellSession terminates an active shell session.
@@ -553,6 +592,14 @@ func runtimeOperationFromShellSession(sess *shellSession) RuntimeOperation {
 		operation.Summary["debugPod"] = sess.debugPod.Namespace + "/" + sess.debugPod.Name
 	}
 	return operation
+}
+
+// logShellReleaseFailure records a debug pod the app could no longer track:
+// its cluster was removed or the app is quitting.
+func (o *OperationsCoordinator) logShellReleaseFailure(sess *shellSession, err error) {
+	if err != nil && o.logger != nil {
+		o.logger.Warn(fmt.Sprintf("Shell session %s on cluster %s: %v", sess.id, sess.clusterID, err), logsources.ShellSession)
+	}
 }
 
 func cloneRuntimeOperationTargetRef(ref *RuntimeOperationTargetRef) *RuntimeOperationTargetRef {

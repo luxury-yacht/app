@@ -10,7 +10,9 @@ package nodes
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -93,18 +95,32 @@ var debugPodStartFailures = map[string]bool{
 	"CreateContainerError":       true,
 }
 
-// CreateDebugPod creates the node's debug pod with the caller's credentials,
-// so RBAC and admission (Pod Security, policy webhooks) apply as for kubectl.
-func (s *Service) CreateDebugPod(ctx context.Context, nodeName, image string, command []string) (*corev1.Pod, error) {
+// CreateDebugPod creates a debug pod built by NewDebugPod with the caller's
+// credentials, so RBAC and admission (Pod Security, policy webhooks) apply as
+// for kubectl. The caller keeps the pod's identity: a failed create may still
+// have created it (see DebugPodCreateMayHaveCommitted).
+func (s *Service) CreateDebugPod(ctx context.Context, pod *corev1.Pod) (*corev1.Pod, error) {
 	if err := s.ensureClient("Pods"); err != nil {
 		return nil, err
 	}
-	pod := NewDebugPod(nodeName, image, command)
 	created, err := s.deps.KubernetesClient.CoreV1().Pods(pod.Namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create debug pod: %w", err)
 	}
 	return created, nil
+}
+
+// DebugPodCreateMayHaveCommitted reports whether a failed create may still have
+// created the pod: no API response arrived (transport error, timeout,
+// cancellation) or the server failed after possibly committing (5xx). A 4xx
+// rejection created nothing; AlreadyExists means the name is another pod's.
+func DebugPodCreateMayHaveCommitted(err error) bool {
+	var status apierrors.APIStatus
+	if !errors.As(err, &status) {
+		return true
+	}
+	code := status.Status().Code
+	return code == 0 || code >= http.StatusInternalServerError
 }
 
 // WaitForDebugPod polls the debug pod until its debugger container runs. It
@@ -131,10 +147,19 @@ func (s *Service) WaitForDebugPod(ctx context.Context, namespace, name string) e
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("timed out waiting for debug pod %s/%s to start: %s", namespace, name, lastState)
+			return debugPodWaitStopped(ctx, namespace, name, lastState)
 		case <-ticker.C:
 		}
 	}
+}
+
+// debugPodWaitStopped explains why a wait ended early: the caller cancelled it
+// (cluster removal, app shutdown) or the start window elapsed.
+func debugPodWaitStopped(ctx context.Context, namespace, name, lastState string) error {
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return fmt.Errorf("stopped waiting for debug pod %s/%s: %w", namespace, name, ctx.Err())
+	}
+	return fmt.Errorf("timed out waiting for debug pod %s/%s to start: %s", namespace, name, lastState)
 }
 
 // pollDebugPod reads the debug pod once. done reports a final outcome: the

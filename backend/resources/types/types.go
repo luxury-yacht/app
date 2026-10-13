@@ -257,6 +257,10 @@ type ShellSessionInfo struct {
 	Container string      `json:"container"`
 	Command   []string    `json:"command"`
 	StartedAt metav1.Time `json:"startedAt"`
+	// Status is cleanup-failed while the session's stream has ended but its
+	// debug pod could not be deleted; empty while the session is open.
+	Status       ShellSessionStatus `json:"status,omitempty"`
+	StatusReason string             `json:"statusReason,omitempty"`
 }
 
 // DebugContainerRequest describes the parameters for creating an ephemeral debug container.
@@ -302,6 +306,10 @@ const (
 	ShellSessionStatusEnded   ShellSessionStatus = "ended"
 	ShellSessionStatusTimeout ShellSessionStatus = "timeout"
 	ShellSessionStatusError   ShellSessionStatus = "error"
+	// ShellSessionStatusCleanupFailed means the stream ended but the debug pod
+	// a node shell created could not be deleted; the session stays listed so
+	// ending it again retries the delete.
+	ShellSessionStatusCleanupFailed ShellSessionStatus = "cleanup-failed"
 )
 
 // PodSimpleInfo represents basic pod information for list views

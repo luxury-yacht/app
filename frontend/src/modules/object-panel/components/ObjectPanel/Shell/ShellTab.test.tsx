@@ -1466,5 +1466,51 @@ describe('ShellTab', () => {
         'node-debugger-worker-1-abcde'
       );
     });
+
+    const cleanupFailure =
+      'debug pod default/node-debugger-worker-1-abcde was not deleted: dial tcp: connection refused';
+    const cleanupNotice = () => container.querySelector('.shell-tab__cleanup-failure');
+
+    it('ends the session normally but names the debug pod it could not delete', async () => {
+      wailsMocks.StartNodeShellSession.mockResolvedValue(nodeSession);
+      await renderShellTab({ target: nodeTarget('alpha:ctx') });
+      clickStart();
+      await flushAsync();
+
+      emitEvent('object-shell:status', {
+        sessionId: 'node-sess',
+        status: 'cleanup-failed',
+        reason: cleanupFailure,
+      });
+      await flushAsync();
+
+      // The shell ended; only the cleanup failed, so this is not a connection failure.
+      expect(container.querySelector('.shell-tab__connection-error')).toBeNull();
+      expect(cleanupNotice()?.textContent).toContain(cleanupFailure);
+      expect(findEndSessionButton()).toBeUndefined();
+
+      // A retry from the Sessions list that deletes the pod clears the notice.
+      emitEvent('object-shell:status', { sessionId: 'node-sess', status: 'ended' });
+      await flushAsync();
+      expect(cleanupNotice()).toBeNull();
+    });
+
+    it('shows a kept debug pod instead of reattaching to its ended shell', async () => {
+      wailsMocks.ListShellSessions.mockResolvedValue([
+        {
+          ...nodeSession,
+          clusterId: 'alpha:ctx',
+          status: 'cleanup-failed',
+          statusReason: cleanupFailure,
+        },
+      ]);
+
+      await renderShellTab({ target: nodeTarget('alpha:ctx') });
+      await flushAsync();
+
+      expect(wailsMocks.GetShellSessionBacklog).not.toHaveBeenCalled();
+      expect(findEndSessionButton()).toBeUndefined();
+      expect(cleanupNotice()?.textContent).toContain(cleanupFailure);
+    });
   });
 });

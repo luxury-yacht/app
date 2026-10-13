@@ -808,6 +808,13 @@ export interface ShellSessionInfo {
     "container": string;
     "command": string[] | null;
     "startedAt": v1$0.Time;
+
+    /**
+     * Status is cleanup-failed while the session's stream has ended but its
+     * debug pod could not be deleted; empty while the session is open.
+     */
+    "status"?: ShellSessionStatus;
+    "statusReason"?: string;
 }
 
 /**
@@ -845,6 +852,13 @@ export enum ShellSessionStatus {
     ShellSessionStatusEnded = "ended",
     ShellSessionStatusTimeout = "timeout",
     ShellSessionStatusError = "error",
+
+    /**
+     * ShellSessionStatusCleanupFailed means the stream ended but the debug pod
+     * a node shell created could not be deleted; the session stays listed so
+     * ending it again retries the delete.
+     */
+    ShellSessionStatusCleanupFailed = "cleanup-failed",
 };
 
 /**

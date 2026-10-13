@@ -7,7 +7,7 @@
 - Node Shell: nodes have a Shell tab equivalent to `kubectl debug node/<name> --profile=sysadmin`.
   - Starts a privileged debug pod on the node in the `default` namespace, using your kubeconfig's credentials; RBAC and admission policies apply as they do for kubectl.
   - The node's filesystem is mounted at `/host`, and the pod uses the node's network, process, and IPC namespaces.
-  - The debug pod is deleted when the session ends.
+  - The debug pod is deleted when the session ends. If it can't be deleted, the session stays in the Sessions list with the error until ending it again succeeds.
 
 ### Changed
 
