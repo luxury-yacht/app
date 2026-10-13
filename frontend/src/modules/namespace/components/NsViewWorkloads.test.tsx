@@ -453,7 +453,7 @@ describe('NsViewWorkloads', () => {
     const dbKey = gridTablePropsRef.current.keyExtractor(db, 1);
 
     clickPodsCount(api);
-    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(db));
+    act(() => gridTablePropsRef.current.onRowExpandToggle?.(db));
 
     expect(rowDetail().openRowKeys).toEqual([apiKey, dbKey]);
     expect(podsCount(api).expanded).toBe('true');
@@ -466,7 +466,7 @@ describe('NsViewWorkloads', () => {
     expect(rowDetail().openRowKeys).toEqual([dbKey]);
     expect(podsCount(api).expanded).toBe('false');
 
-    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(db));
+    act(() => gridTablePropsRef.current.onRowExpandToggle?.(db));
     expect(rowDetail().openRowKeys).toEqual([]);
   });
 
@@ -498,9 +498,9 @@ describe('NsViewWorkloads', () => {
     expect(gridTablePropsRef.current.isRowSelected?.(workload, 0)).toBe(true);
     expect(rowDetail().openRowKeys).toEqual([]);
 
-    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(workload));
+    act(() => gridTablePropsRef.current.onRowExpandToggle?.(workload));
     expect(rowDetail().openRowKeys).toEqual([rowKey]);
-    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(workload));
+    act(() => gridTablePropsRef.current.onRowExpandToggle?.(workload));
     expect(rowDetail().openRowKeys).toEqual([]);
     expect(openWithObjectMock).not.toHaveBeenCalled();
   });
@@ -560,8 +560,8 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(workload));
-    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(hidden));
+    act(() => gridTablePropsRef.current.onRowExpandToggle?.(workload));
+    act(() => gridTablePropsRef.current.onRowExpandToggle?.(hidden));
 
     // Only the row the table does not show closes; the shown row stays open.
     expect(rowDetail().openRowKeys).toEqual([gridTablePropsRef.current.keyExtractor(workload, 0)]);
@@ -590,7 +590,7 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(workload));
+    act(() => gridTablePropsRef.current.onRowExpandToggle?.(workload));
     expect(rowDetail().openRowKeys).toHaveLength(1);
 
     await act(async () => {

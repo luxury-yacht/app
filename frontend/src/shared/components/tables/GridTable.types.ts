@@ -233,8 +233,11 @@ export interface GridTableProps<T> {
   onRowClick?: (item: T) => void;
   /** Called for pointer row activation after interactive descendants are excluded. */
   onRowPointerClick?: (item: T) => void;
-  /** When supplied, Space applies this selection action to the focused row. */
-  onRowSelectionToggle?: (item: T) => void;
+  /**
+   * Expands or collapses a row (its row detail, or the row in place). Space
+   * runs it for the focused row; in a table without it, Space does nothing.
+   */
+  onRowExpandToggle?: (item: T) => void;
   /** Called when unused space in the scrollable table body is clicked. */
   onRowSelectionClear?: () => void;
   onSort?: (key: string, targetDirection?: 'asc' | 'desc' | null) => void;

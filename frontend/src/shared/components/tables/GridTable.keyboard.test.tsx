@@ -2,7 +2,7 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
 import { KeyboardProvider } from '@ui/shortcuts';
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
@@ -19,6 +19,38 @@ vi.mock('@core/desktop-runtime', () => ({
 
 const rows = [{ id: 'cluster-a|one', name: 'One' }];
 const columns = [{ key: 'name', header: 'Name', render: (row: (typeof rows)[number]) => row.name }];
+
+// A view's controlled row selection, owned the way Workloads and Nodes own it:
+// a pointer click selects, Space opens or closes the row's detail and selects
+// it, and the clear callback is offered only while a row is selected.
+const selectionRows = ['a', 'b', 'c'].map((id) => ({ id: `cluster-a|${id}`, name: id }));
+function SelectableTable() {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [open, setOpen] = useState<string[]>([]);
+  return (
+    <GridTable
+      data={selectionRows}
+      columns={columns}
+      keyExtractor={(item) => item.id}
+      onRowPointerClick={(item) => setSelected(item.id)}
+      onRowSelectionClear={selected ? () => setSelected(null) : undefined}
+      isRowSelected={(item) => item.id === selected}
+      onRowExpandToggle={(item) => {
+        setSelected(item.id);
+        setOpen((current) =>
+          current.includes(item.id)
+            ? current.filter((key) => key !== item.id)
+            : [...current, item.id]
+        );
+      }}
+      rowDetail={{
+        openRowKeys: open,
+        render: () => <span>detail</span>,
+        getLabel: (item) => `Detail for ${item.name}`,
+      }}
+    />
+  );
+}
 
 describe('GridTable keyboard integration', () => {
   let container: HTMLDivElement;
@@ -128,7 +160,7 @@ describe('GridTable keyboard integration', () => {
       await press('Enter');
       expect(openObject).toHaveBeenLastCalledWith(data[0]);
       await press('ArrowDown');
-      await press(' ');
+      await press('Enter');
       expect(openObject).toHaveBeenLastCalledWith(data[1]);
       expect(openObject).toHaveBeenCalledTimes(2);
       await press('Tab');
@@ -589,5 +621,91 @@ describe('GridTable keyboard integration', () => {
     expect(nextPage).toHaveBeenCalledTimes(2);
     await press(table, { key: 'F10', shiftKey: true });
     expect(document.querySelector('[role="menu"]')?.textContent).toContain('Inspect row');
+  });
+
+  it('moves the only row highlight with the keyboard focus, clearing a selection left behind', async () => {
+    await act(async () => {
+      root.render(
+        <PanelLayoutTestProvider>
+          <KeyboardProvider>
+            <ZoomProvider>
+              <SelectableTable />
+            </ZoomProvider>
+          </KeyboardProvider>
+        </PanelLayoutTestProvider>
+      );
+    });
+    const table = requireValue(
+      container.querySelector<HTMLTableElement>('table[tabindex="0"]'),
+      'table'
+    );
+    const row = (name: string) =>
+      requireValue(
+        container.querySelector<HTMLElement>(`[data-row-key="cluster-a|${name}"]`),
+        `row ${name}`
+      );
+    const highlighted = () =>
+      ['a', 'b', 'c'].filter(
+        (name) =>
+          row(name).classList.contains('gridtable-row--focused') ||
+          row(name).classList.contains('gridtable-row--selected')
+      );
+    const press = async (key: string) =>
+      act(async () =>
+        table.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+      );
+
+    // Focusing the table focuses the first row; Space opens its detail and selects it.
+    await act(async () => table.focus());
+    await press(' ');
+    expect(row('a').classList.contains('gridtable-row--selected')).toBe(true);
+
+    await press('ArrowDown');
+    expect(highlighted()).toEqual(['b']);
+    await press('End');
+    expect(highlighted()).toEqual(['c']);
+
+    // Space still acts where the keyboard now is.
+    await press(' ');
+    expect(row('c').classList.contains('gridtable-row--selected')).toBe(true);
+    expect(highlighted()).toEqual(['c']);
+  });
+
+  it('does nothing on Space in a table without expandable rows, while Enter still opens the row', async () => {
+    const onRowClick = vi.fn();
+    await act(async () => {
+      root.render(
+        <PanelLayoutTestProvider>
+          <KeyboardProvider>
+            <ZoomProvider>
+              <GridTable
+                data={rows}
+                columns={columns}
+                keyExtractor={(item) => item.id}
+                onRowClick={onRowClick}
+              />
+            </ZoomProvider>
+          </KeyboardProvider>
+        </PanelLayoutTestProvider>
+      );
+    });
+    const table = requireValue(
+      container.querySelector<HTMLTableElement>('table[tabindex="0"]'),
+      'table'
+    );
+    const press = async (key: string) => {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      await act(async () => table.dispatchEvent(event));
+      return event;
+    };
+    await act(async () => table.focus());
+
+    // Space has no meaning here: it opens nothing, and the table claims it so
+    // the browser does not scroll the table a page either.
+    expect((await press(' ')).defaultPrevented).toBe(true);
+    expect(onRowClick).not.toHaveBeenCalled();
+
+    await press('Enter');
+    expect(onRowClick).toHaveBeenCalledExactlyOnceWith(rows[0]);
   });
 });

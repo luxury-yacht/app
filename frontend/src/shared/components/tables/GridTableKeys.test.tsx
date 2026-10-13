@@ -191,6 +191,8 @@ describe('GridTableKeys filter target selectors', () => {
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
+        gridRef: focusRef,
+        hasRowExpandToggle: false,
         suppressFocusedRowHighlight: vi.fn(),
       });
 
@@ -303,6 +305,8 @@ describe('GridTableKeys filter target selectors', () => {
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
+        gridRef: focusRef,
+        hasRowExpandToggle: false,
         suppressFocusedRowHighlight: vi.fn(),
       });
 
@@ -432,6 +436,8 @@ describe('GridTableKeys filter target selectors', () => {
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
+        gridRef: focusRef,
+        hasRowExpandToggle: false,
         suppressFocusedRowHighlight: vi.fn(),
       });
 
@@ -480,6 +486,8 @@ describe('GridTableKeys filter target selectors', () => {
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
+        gridRef: focusRef,
+        hasRowExpandToggle: false,
         suppressFocusedRowHighlight,
       });
 

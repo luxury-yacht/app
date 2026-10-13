@@ -196,7 +196,7 @@ export function useGridTableController<T>({
   getRowStyle,
   onRowClick,
   onRowPointerClick,
-  onRowSelectionToggle,
+  onRowExpandToggle,
   onRowSelectionClear,
   onSort,
   sortConfig,
@@ -558,12 +558,21 @@ export function useGridTableController<T>({
     markVisibleAutoColumnsDirty();
   }, [markVisibleAutoColumnsDirty, virtualRange.end, virtualRange.start]);
 
+  // A keyboard move carries the only row highlight: it clears the view's row
+  // selection, which would otherwise stay lit on the row it was made on.
+  const focusByKeyboard = useCallback(
+    (index: number) => {
+      onRowSelectionClear?.();
+      focusByIndex(index);
+    },
+    [focusByIndex, onRowSelectionClear]
+  );
   const { getPageSizeRef, moveSelectionByDelta, jumpToIndex } = useGridTableKeyboardNavigation({
     tableDataLength: tableData.length,
     focusedRowIndex,
     focusedRowKey,
     shortcutsActive,
-    focusByIndex,
+    focusByIndex: focusByKeyboard,
     lastNavigationMethodRef,
     wrapperRef,
     updateHoverForElement,
@@ -573,32 +582,31 @@ export function useGridTableController<T>({
     getRowTop,
   });
 
+  // Space only ever expands or collapses a row; a table whose rows do not
+  // expand claims it with no action.
   useGridTableKeyboardScopes({
     filteringEnabled,
     filtersContainerRef,
     filterFocusIndexRef,
     wrapperRef,
+    gridRef,
+    hasRowExpandToggle: Boolean(onRowExpandToggle),
     suppressFocusedRowHighlight,
   });
 
-  const selectFocusedRow = useCallback(() => {
-    if (
-      !onRowSelectionToggle ||
-      focusedRowIndex === null ||
-      focusedRowIndex < 0 ||
-      focusedRowIndex >= tableData.length
-    ) {
-      return false;
+  const toggleFocusedRow = useCallback(() => {
+    const item = focusedRowIndex === null ? undefined : tableData[focusedRowIndex];
+    if (onRowExpandToggle && item !== undefined) {
+      onRowExpandToggle(item);
     }
-    onRowSelectionToggle(tableData[focusedRowIndex]);
     return true;
-  }, [focusedRowIndex, onRowSelectionToggle, tableData]);
+  }, [focusedRowIndex, onRowExpandToggle, tableData]);
 
   useGridTableShortcuts({
     shortcutsActive,
     enableContextMenu,
     onOpenFocusedRow: activateFocusedRow,
-    onSelectFocusedRow: onRowSelectionToggle ? selectFocusedRow : undefined,
+    onToggleFocusedRow: onRowExpandToggle ? toggleFocusedRow : undefined,
     onOpenContextMenu: openFocusedRowContextMenu,
     moveSelectionByDelta,
     jumpToIndex,

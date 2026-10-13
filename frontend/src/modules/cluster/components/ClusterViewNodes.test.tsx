@@ -434,7 +434,7 @@ describe('ClusterViewNodes', () => {
     expect(gridTablePropsRef.current.isRowSelected?.(baseNode, 0)).toBe(true);
     expect(rowDetail().openRowKeys).toEqual([]);
 
-    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(baseNode));
+    act(() => gridTablePropsRef.current.onRowExpandToggle?.(baseNode));
     expect(rowDetail().openRowKeys).toEqual([rowKey]);
 
     act(() => requireValue(gridTablePropsRef.current.onRowSelectionClear, 'clear')());
@@ -445,7 +445,7 @@ describe('ClusterViewNodes', () => {
     await renderNodes([baseNode]);
     const gone = { ...baseNode, ref: { ...baseNode.ref, name: 'gone' } };
 
-    act(() => gridTablePropsRef.current.onRowSelectionToggle?.(gone));
+    act(() => gridTablePropsRef.current.onRowExpandToggle?.(gone));
 
     expect(rowDetail().openRowKeys).toEqual([]);
     expect(gridTablePropsRef.current.isRowSelected?.(gone, 0)).toBe(false);

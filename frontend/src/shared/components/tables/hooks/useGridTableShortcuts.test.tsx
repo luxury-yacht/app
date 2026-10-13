@@ -122,42 +122,49 @@ describe('useGridTableShortcuts', () => {
     );
   });
 
-  it('uses the optional row-selection action for Space while Enter still opens', async () => {
-    const onOpenFocusedRow = vi.fn(() => true);
-    const onSelectFocusedRow = vi.fn(() => true);
-    const Harness: React.FC = () => {
-      useGridTableShortcuts({
-        shortcutsActive: true,
-        enableContextMenu: false,
-        onOpenFocusedRow,
-        onSelectFocusedRow,
-        onOpenContextMenu: () => false,
-        moveSelectionByDelta: () => false,
-        jumpToIndex: () => false,
-        getPageSizeRef: { current: 10 },
-        tableDataLength: 1,
-        isContextMenuVisible: false,
+  it.each([true, false])(
+    'gives Space only the row expand toggle while Enter still opens (rows expand: %s)',
+    async (rowsExpand) => {
+      const onOpenFocusedRow = vi.fn(() => true);
+      const onToggleFocusedRow = vi.fn(() => true);
+      const Harness: React.FC = () => {
+        useGridTableShortcuts({
+          shortcutsActive: true,
+          enableContextMenu: false,
+          onOpenFocusedRow,
+          onToggleFocusedRow: rowsExpand ? onToggleFocusedRow : undefined,
+          onOpenContextMenu: () => false,
+          moveSelectionByDelta: () => false,
+          jumpToIndex: () => false,
+          getPageSizeRef: { current: 10 },
+          tableDataLength: 1,
+          isContextMenuVisible: false,
+        });
+        return null;
+      };
+
+      await act(async () => {
+        root.render(<Harness />);
+        await Promise.resolve();
       });
-      return null;
-    };
 
-    await act(async () => {
-      root.render(<Harness />);
-      await Promise.resolve();
-    });
+      requireValue(
+        capturedShortcuts.shortcuts.find((s) => s.key === 'Enter'),
+        'Enter shortcut'
+      ).handler();
+      const space = requireValue(
+        capturedShortcuts.shortcuts.find((s) => s.key === ' '),
+        'Space shortcut'
+      );
+      space.handler();
 
-    requireValue(
-      capturedShortcuts.shortcuts.find((s) => s.key === 'Enter'),
-      'Enter shortcut'
-    ).handler();
-    requireValue(
-      capturedShortcuts.shortcuts.find((s) => s.key === ' '),
-      'Space shortcut'
-    ).handler();
-
-    expect(onOpenFocusedRow).toHaveBeenCalledTimes(1);
-    expect(onSelectFocusedRow).toHaveBeenCalledTimes(1);
-  });
+      expect(onOpenFocusedRow).toHaveBeenCalledTimes(1);
+      // Without an expand toggle Space is switched off (and so absent from help),
+      // never borrowing Enter's open action.
+      expect(space.enabled).toBe(rowsExpand);
+      expect(onToggleFocusedRow).toHaveBeenCalledTimes(rowsExpand ? 1 : 0);
+    }
+  );
 
   it('wires moveSelectionByDelta and jumpToIndex to navigation shortcuts', async () => {
     const moveSelectionByDelta = vi.fn(() => true);

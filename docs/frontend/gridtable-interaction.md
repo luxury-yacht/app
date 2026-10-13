@@ -19,13 +19,19 @@ virtualization, and native table accessibility. Apply the
   restores table focus when the focused control is removed, disabled, or
   hidden.
 - Row focus and row selection are separate contracts. `Enter` runs
-  `onRowClick`; when `onRowSelectionToggle` is supplied, `Space` runs it
-  instead. Pointer-only selection uses `onRowPointerClick`, which excludes
+  `onRowClick`. `Space` only ever expands or collapses rows: it runs
+  `onRowExpandToggle` for the focused row, which only tables whose rows expand
+  supply (Workloads and Nodes row details, log rows that expand in place). In
+  any other table Space does nothing; the table claims it so the body does not
+  scroll, while a focused row control keeps its native Space.
+  Pointer-only selection uses `onRowPointerClick`, which excludes
   interactive descendants. A view that enables selection supplies
   `isRowSelected` so the shared row renderer owns the selected class,
   `data-row-selected`, and `aria-selected`. A primary click on unused space in
   the scrollable body clears the focused-row highlight; controlled-selection
   views supply `onRowSelectionClear` to clear selection at the same boundary.
+  Keyboard row moves (arrows, Page Up/Down, Home/End) also clear it, so the
+  highlight follows the keyboard instead of staying on the row it was made on.
   Descendant rows, cells, and controls are excluded.
 - Workloads and Nodes open a row's Pods under it ([row detail](#row-detail))
   from the row's Pods count or `Space`, which also highlight the row; a pointer

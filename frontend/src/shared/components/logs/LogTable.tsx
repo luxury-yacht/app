@@ -53,6 +53,7 @@ const LogTable = <T,>({
       keyExtractor={rowKey}
       onRowClick={handleRowActivation}
       onRowPointerClick={handleRowActivation}
+      onRowExpandToggle={handleRowActivation}
       getRowClassName={getRowClassName}
       className={className}
       tableClassName="gridtable-parsed-logs"

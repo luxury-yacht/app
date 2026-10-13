@@ -91,7 +91,8 @@ describe('GridTable row detail', () => {
     data: Row[] = parentRows,
     virtualization = { enabled: false },
     parentColumns = columns,
-    onRowPointerClick?: (row: Row) => void
+    onRowPointerClick?: (row: Row) => void,
+    onRowExpandToggle?: (row: Row) => void
   ) =>
     act(async () => {
       root.render(
@@ -107,6 +108,7 @@ describe('GridTable row detail', () => {
                   rowDetail={detail}
                   virtualization={virtualization}
                   onRowPointerClick={onRowPointerClick}
+                  onRowExpandToggle={onRowExpandToggle}
                 />
               </main>
             </ZoomProvider>
@@ -285,6 +287,29 @@ describe('GridTable row detail', () => {
 
     await press('ArrowDown');
     expect(parentRow('c').classList.contains('gridtable-row--focused')).toBe(true);
+  });
+
+  it('keeps Space inside a nested table without expandable rows', async () => {
+    const onToggle = vi.fn();
+    await renderTable(
+      detailFor(['cluster-a|b']),
+      parentRows,
+      { enabled: false },
+      columns,
+      undefined,
+      onToggle
+    );
+    const nestedTable = requireValue(
+      container.querySelector<HTMLElement>('[data-gridtable-row-detail] table[tabindex="0"]'),
+      'nested table'
+    );
+    await act(async () => nestedTable.focus());
+
+    await press(' ');
+
+    // The nested table has nothing to expand, and the parent row stays open.
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(container.querySelectorAll('[data-gridtable-row-detail]')).toHaveLength(1);
   });
 
   it("closes from the nested table's own Close and returns the keyboard to the open row", async () => {
