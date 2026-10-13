@@ -35,8 +35,8 @@ const updateDetailTabStops = (wrapper: HTMLElement, keyboardDetailKey: string | 
   for (const detail of queryOwnRowDetails(wrapper)) {
     const reachable = detail.dataset.rowDetailKey === keyboardDetailKey;
     // The observer watches this attribute, so write only on change.
-    if (reachable && detail.hasAttribute('data-focus-trap-ignore')) {
-      detail.removeAttribute('data-focus-trap-ignore');
+    if (reachable && detail.dataset.focusTrapIgnore !== undefined) {
+      delete detail.dataset.focusTrapIgnore;
     } else if (!reachable && detail.dataset.focusTrapIgnore !== 'true') {
       detail.dataset.focusTrapIgnore = 'true';
     }

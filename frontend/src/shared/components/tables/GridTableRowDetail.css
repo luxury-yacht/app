@@ -7,7 +7,6 @@
 .gridtable-row-detail {
   display: block;
   width: 100%;
-  /* border-bottom: 1px solid var(--grid-border-color); */
   border-left: 3px solid transparent;
   background-color: var(--grid-bg-primary);
   z-index: 1;
