@@ -30,7 +30,6 @@ interface ScreenOrderNavigationOptions<T> {
   jumpToIndex: (index: number) => boolean;
   gridRef: RefObject<HTMLTableElement | null>;
   lastNavigationMethodRef: RefObject<'pointer' | 'keyboard'>;
-  onRowSelectionClear?: () => void;
 }
 
 export interface ScreenOrderNavigation {
@@ -54,7 +53,6 @@ export function useGridTableScreenOrderNavigation<T>({
   jumpToIndex,
   gridRef,
   lastNavigationMethodRef,
-  onRowSelectionClear,
 }: ScreenOrderNavigationOptions<T>): ScreenOrderNavigation {
   const { enterDetail, exitRef, parentNavigation } = rowDetailNavigation;
   const lastIndex = tableData.length - 1;
@@ -72,13 +70,9 @@ export function useGridTableScreenOrderNavigation<T>({
   const enterRowDetail = useCallback(
     (index: number, position: 'first' | 'last') => {
       const rowKey = openRows.get(index);
-      if (rowKey === undefined || !enterDetail(rowKey, position)) {
-        return false;
-      }
-      onRowSelectionClear?.();
-      return true;
+      return rowKey !== undefined && enterDetail(rowKey, position);
     },
-    [enterDetail, onRowSelectionClear, openRows]
+    [enterDetail, openRows]
   );
 
   // A nested table hands the keyboard back to this table's row at `index`.

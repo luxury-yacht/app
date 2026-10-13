@@ -19,6 +19,8 @@ interface RowDetailNavigationOptions {
   wrapperRef: RefObject<HTMLDivElement | null>;
   /** Open rows among the displayed rows: index to row key. */
   openRows: ReadonlyMap<number, string>;
+  /** Clears the view's selection on this table's rows. */
+  onRowSelectionClear?: () => void;
 }
 
 const noExit = () => undefined;
@@ -45,14 +47,19 @@ export interface GridTableRowDetailNavigation {
 export function useGridTableRowDetailNavigation({
   wrapperRef,
   openRows,
+  onRowSelectionClear,
 }: RowDetailNavigationOptions): GridTableRowDetailNavigation {
   const [focusedDetailKey, setFocusedDetailKey] = useState<string | null>(null);
   const tablesRef = useRef(new Map<string, RowDetailNestedTable>());
   const exitRef = useRef<(rowKey: string, direction: RowDetailExit) => void>(noExit);
   const parentNavigation = useContext(RowDetailNavigationContext);
+  const onRowSelectionClearRef = useRef(onRowSelectionClear);
+  onRowSelectionClearRef.current = onRowSelectionClear;
 
   // Focus decides where the keyboard is: in a detail's table once focus enters
-  // that detail, back on the parent's rows once focus returns to them.
+  // that detail, back on the parent's rows once focus returns to them. Entering
+  // a detail, by click or keyboard, takes the one row highlight, so the view's
+  // selection on the parent's rows clears.
   useEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) {
@@ -64,6 +71,9 @@ export function useGridTableRowDetailNavigation({
         return;
       }
       const detail = queryOwnRowDetails(wrapper).find((candidate) => candidate.contains(target));
+      if (detail) {
+        onRowSelectionClearRef.current?.();
+      }
       setFocusedDetailKey(detail?.dataset.rowDetailKey ?? null);
     };
     wrapper.addEventListener('focusin', track);

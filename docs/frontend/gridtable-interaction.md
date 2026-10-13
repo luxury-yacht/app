@@ -31,7 +31,8 @@ virtualization, and native table accessibility. Apply the
   the scrollable body clears the focused-row highlight; controlled-selection
   views supply `onRowSelectionClear` to clear selection at the same boundary.
   Keyboard row moves (arrows, Page Up/Down, Home/End) also clear it, so the
-  highlight follows the keyboard instead of staying on the row it was made on.
+  highlight follows the keyboard instead of staying on the row it was made on,
+  and so does focus entering an expanded row's nested table by click or key.
   Descendant rows, cells, and controls are excluded.
 - Workloads and Nodes open a row's Pods under it ([row detail](#row-detail))
   from the row's Pods count or `Space`, which also highlight the row; a pointer

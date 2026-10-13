@@ -8,7 +8,7 @@
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
 import { KeyboardProvider } from '@ui/shortcuts';
-import { act } from 'react';
+import { act, type ReactNode, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
@@ -35,6 +35,11 @@ const columns: GridColumnDefinition<Row>[] = [
   { key: 'name', header: 'Name', render: (row: Row) => row.name },
 ];
 const keyOf = (row: Row) => row.id;
+type SelectionProps = {
+  isRowSelected: (row: Row) => boolean;
+  onRowPointerClick: (row: Row) => void;
+  onRowSelectionClear?: () => void;
+};
 
 const NestedTable = ({ onClose }: { onClose?: () => void }) => (
   <GridTable
@@ -389,7 +394,17 @@ describe('GridTable row detail', () => {
   // One highlight moves through what is on screen: parent rows and, under an
   // expanded row, its table's rows. Tab and the filter shortcut follow it.
   describe('keyboard with expanded rows', () => {
-    const renderKeyboard = (openRowKeys: readonly string[]) => {
+    // Like the Workloads and Nodes views: a click selects a row, and clearing is
+    // offered only while a row is selected.
+    const Selectable = ({ children }: { children: (props: SelectionProps) => ReactNode }) => {
+      const [selected, setSelected] = useState<string | null>(null);
+      return children({
+        isRowSelected: (row) => row.id === selected,
+        onRowPointerClick: (row) => setSelected(row.id),
+        onRowSelectionClear: selected ? () => setSelected(null) : undefined,
+      });
+    };
+    const renderKeyboard = (openRowKeys: readonly string[], { selectable = false } = {}) => {
       const toggleColumn = withRowDetailToggle<Row>(
         { key: 'pods', header: 'Pods', render: () => '2/2' },
         {
@@ -407,15 +422,20 @@ describe('GridTable row detail', () => {
               <ZoomProvider>
                 <AppRegionNavigation />
                 <main data-app-region="content">
-                  <GridTable
-                    data={parentRows}
-                    columns={[...columns, toggleColumn]}
-                    keyExtractor={keyOf}
-                    tableClassName="parent"
-                    onRowClick={() => undefined}
-                    filters={{ enabled: true }}
-                    rowDetail={detailFor(openRowKeys, () => undefined)}
-                  />
+                  <Selectable>
+                    {(selection) => (
+                      <GridTable
+                        data={parentRows}
+                        columns={[...columns, toggleColumn]}
+                        keyExtractor={keyOf}
+                        tableClassName="parent"
+                        onRowClick={() => undefined}
+                        filters={{ enabled: true }}
+                        rowDetail={detailFor(openRowKeys, () => undefined)}
+                        {...(selectable ? selection : {})}
+                      />
+                    )}
+                  </Selectable>
                   <button type="button">After table</button>
                 </main>
               </ZoomProvider>
@@ -611,6 +631,27 @@ describe('GridTable row detail', () => {
 
       expect(focusCalls.length).toBeGreaterThanOrEqual(4);
       expect(focusCalls.filter((options) => options?.preventScroll !== true)).toEqual([]);
+    });
+
+    // The view's selection is a highlight too: entering an expanded table, by
+    // click or keyboard, takes the one highlight from it.
+    it('clears the parent selection when a click or the keyboard enters an expanded table', async () => {
+      await renderKeyboard(['cluster-a|b'], { selectable: true });
+      await click(parentRow('a').querySelector('.grid-cell'));
+      expect(highlighted()).toEqual(['a']);
+
+      await click(
+        parentRow('b').nextElementSibling?.querySelector(
+          '[data-row-key="cluster-a|pod-y"] .grid-cell'
+        )
+      );
+      expect(highlighted()).toEqual(['b/y']);
+      expect(container.querySelectorAll('[aria-selected="true"]')).toHaveLength(1);
+
+      await click(parentRow('b').querySelector('.grid-cell'));
+      expect(highlighted()).toEqual(['b']);
+      await key('ArrowDown'); // into b's table
+      expect(highlighted()).toEqual(['b/x']);
     });
 
     it('keeps one highlight when the mouse moves it between tables', async () => {

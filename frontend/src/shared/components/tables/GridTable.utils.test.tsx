@@ -19,7 +19,7 @@ import {
   parseWidthInputToNumber,
   revealVertically,
 } from '@shared/components/tables/GridTable.utils';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 describe('GridTable utils', () => {
   it('extracts kind, namespace, and search text defaults', () => {
@@ -127,20 +127,25 @@ describe('GridTable utils', () => {
       Object.defineProperty(element, 'scrollTop', { value: 50, writable: true });
       Object.defineProperty(element, 'scrollLeft', { value: 30, writable: true });
     };
-    const layout = (rowTop: number, rowHeight: number) => {
+    // Positions are given in CSS pixels; at a page zoom, bounding rects report
+    // them in zoomed pixels while scroll and client sizes stay in CSS pixels.
+    const layout = (rowTop: number, rowHeight: number, zoom = 1) => {
       const parent = document.createElement('div');
       const nested = document.createElement('div');
       const row = document.createElement('div');
       parent.appendChild(nested).appendChild(row);
-      setRect(parent, viewport.top, viewport.height);
+      setRect(parent, viewport.top * zoom, viewport.height * zoom);
       setScroll(parent, 2000, viewport.height);
       // The nested table scrolls only sideways, so it is left alone.
-      setRect(nested, viewport.top, 600);
+      setRect(nested, viewport.top * zoom, 600 * zoom);
       setScroll(nested, 600, 600);
       // A nested row starts inside the parent and is wider than it.
-      setRect(row, rowTop, rowHeight, 17, 900);
+      setRect(row, rowTop * zoom, rowHeight * zoom, 17 * zoom, 900 * zoom);
       return { parent, nested, row };
     };
+    afterEach(() => {
+      document.documentElement.style.removeProperty('--app-zoom-factor');
+    });
 
     it.each([
       { position: 'below the viewport', rowTop: 320, rowHeight: 40, scrollTop: 50 + 60 },
@@ -171,6 +176,41 @@ describe('GridTable utils', () => {
         expect(parent.scrollLeft).toBe(30);
         expect(nested.scrollTop).toBe(50);
         expect(nested.scrollLeft).toBe(30);
+      }
+    );
+
+    it.each([
+      { zoom: 0.5, position: 'below', rowTop: 320, scrollTop: 50 + 60 },
+      { zoom: 0.5, position: 'above', rowTop: 80, scrollTop: 50 - 20 },
+      { zoom: 2, position: 'below', rowTop: 320, scrollTop: 50 + 60 },
+      { zoom: 2, position: 'above', rowTop: 80, scrollTop: 50 - 20 },
+    ])(
+      'scrolls just far enough at $zoom page zoom to show a row $position the viewport',
+      ({ zoom, rowTop, scrollTop }) => {
+        document.documentElement.style.setProperty('--app-zoom-factor', `${zoom}`);
+        const { parent, row } = layout(rowTop, 40, zoom);
+
+        revealVertically(row);
+
+        expect(parent.scrollTop).toBe(scrollTop);
+        expect(parent.scrollLeft).toBe(30);
+      }
+    );
+
+    // Browsers keep scroll positions in whole pixels while rows at a page zoom
+    // sit at fractional positions, so the reveal rounds outward: a short scroll
+    // would leave the row's edge clipped.
+    it.each([
+      { position: 'below', rowTop: 320.4, scrollTop: 50 + 61 },
+      { position: 'above', rowTop: 79.6, scrollTop: 50 - 21 },
+    ])(
+      'rounds the scroll outward to fully show a row $position the viewport at a fractional position',
+      ({ rowTop, scrollTop }) => {
+        const { parent, row } = layout(rowTop, 40);
+
+        revealVertically(row);
+
+        expect(parent.scrollTop).toBe(scrollTop);
       }
     );
   });

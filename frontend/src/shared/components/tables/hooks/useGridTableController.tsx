@@ -380,6 +380,7 @@ export function useGridTableController<T>({
   const rowDetailNavigation = useGridTableRowDetailNavigation({
     wrapperRef,
     openRows: rowDetailState.openRows,
+    onRowSelectionClear,
   });
   const { holdsKeyboard } = rowDetailNavigation;
 
@@ -611,7 +612,6 @@ export function useGridTableController<T>({
     jumpToIndex,
     gridRef,
     lastNavigationMethodRef,
-    onRowSelectionClear,
   });
 
   // Space only ever expands or collapses a row; a table whose rows do not

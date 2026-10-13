@@ -11,6 +11,7 @@ import type {
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
 import { isTableNoValueText } from '@shared/components/tables/tableNoValue';
+import { getAppZoomFactor } from '@shared/utils/appZoom';
 import React from 'react';
 
 export const DEFAULT_COLUMN_WIDTH = 150;
@@ -175,15 +176,17 @@ export const findGridTableRowByKey = (
 
 // How far `container` must scroll down (negative: up) to show `rect`, by the
 // nearest edge: none when it is fully visible or already spans the viewport,
-// and its start when it is taller than the viewport.
-const nearestScrollDelta = (container: HTMLElement, rect: DOMRect): number => {
-  const top = container.getBoundingClientRect().top + container.clientTop;
-  const aboveBy = top - rect.top;
-  const belowBy = rect.bottom - (top + container.clientHeight);
+// and its start when it is taller than the viewport. Under the app's page zoom,
+// bounding rects are in zoomed pixels while clientHeight and scrollTop are CSS
+// pixels, so rect values are divided by `zoom`.
+const nearestScrollDelta = (container: HTMLElement, rect: DOMRect, zoom: number): number => {
+  const top = container.getBoundingClientRect().top / zoom + container.clientTop;
+  const aboveBy = top - rect.top / zoom;
+  const belowBy = rect.bottom / zoom - (top + container.clientHeight);
   if (aboveBy > 0 === belowBy > 0) {
     return 0;
   }
-  const taller = rect.height > container.clientHeight;
+  const taller = rect.height / zoom > container.clientHeight;
   return aboveBy > 0 === taller ? belowBy : -aboveBy;
 };
 
@@ -196,9 +199,13 @@ const nearestScrollDelta = (container: HTMLElement, rect: DOMRect): number => {
  * the user's.
  */
 export const revealVertically = (element: HTMLElement): void => {
+  const zoom = getAppZoomFactor();
   for (let container = element.parentElement; container; container = container.parentElement) {
     if (container.scrollHeight > container.clientHeight) {
-      container.scrollTop += nearestScrollDelta(container, element.getBoundingClientRect());
+      const delta = nearestScrollDelta(container, element.getBoundingClientRect(), zoom);
+      // Scroll positions are whole pixels while zoomed rows sit at fractional
+      // ones, so round outward (ignoring float noise) to show the edge fully.
+      container.scrollTop += delta > 0 ? Math.ceil(delta - 0.01) : Math.floor(delta + 0.01);
     }
   }
 };
