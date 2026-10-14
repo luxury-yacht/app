@@ -77,6 +77,7 @@ interface ObjectActionControllerOptions {
   onOpenObjectMap?: (object: ObjectActionReference) => void;
   onNavigateView?: (object: ObjectActionReference) => void;
   onViewInvolvedObject?: (object: ObjectActionReference) => void;
+  onGoToNamespace?: (object: ObjectActionReference) => void;
   handlerOverrides?: ObjectActionHandlers;
   /**
    * Per-row handlers that receive the resolved object when the menu item
@@ -250,6 +251,7 @@ interface NavigationHandlerOptions {
   onOpenObjectMap: ObjectActionControllerOptions['onOpenObjectMap'];
   onNavigateView: ObjectActionControllerOptions['onNavigateView'];
   onViewInvolvedObject: ObjectActionControllerOptions['onViewInvolvedObject'];
+  onGoToNamespace: ObjectActionControllerOptions['onGoToNamespace'];
   openWithObject: ReturnType<typeof useObjectPanel>['openWithObject'];
   navigateToView: ReturnType<typeof useNavigateToView>['navigateToView'];
   navigateToViewAvailable: boolean;
@@ -261,6 +263,7 @@ const buildNavigationHandlers = ({
   onOpenObjectMap,
   onNavigateView,
   onViewInvolvedObject,
+  onGoToNamespace,
   openWithObject,
   navigateToView,
   navigateToViewAvailable,
@@ -285,6 +288,7 @@ const buildNavigationHandlers = ({
     onViewInvolvedObject: onViewInvolvedObject
       ? () => onViewInvolvedObject(actionObject)
       : undefined,
+    onGoToNamespace: onGoToNamespace ? () => onGoToNamespace(actionObject) : undefined,
   };
 };
 
@@ -433,6 +437,7 @@ export const useObjectActionController = ({
   onOpenObjectMap,
   onNavigateView,
   onViewInvolvedObject,
+  onGoToNamespace,
   handlerOverrides,
   perObjectHandlers,
   onAfterAction,
@@ -497,6 +502,7 @@ export const useObjectActionController = ({
           onOpenObjectMap,
           onNavigateView,
           onViewInvolvedObject,
+          onGoToNamespace,
           openWithObject,
           navigateToView,
           navigateToViewAvailable: navigateFallbackAvailable,
@@ -525,6 +531,7 @@ export const useObjectActionController = ({
       onOpenObjectMap,
       onNavigateView,
       onViewInvolvedObject,
+      onGoToNamespace,
       openWithObject,
       permissionMap,
       queryMissingPermissions,

@@ -64,7 +64,7 @@ const CLUSTER_SCOPED_MAP: Record<string, ViewDestination> = {
   persistentvolume: { viewType: 'cluster', tab: 'storage' },
   pv: { viewType: 'cluster', tab: 'storage' },
   storageclass: { viewType: 'cluster', tab: 'storage' },
-  namespace: { viewType: 'cluster', tab: 'config' },
+  namespace: { viewType: 'cluster', tab: 'namespaces' },
   gatewayclass: { viewType: 'cluster', tab: 'config' },
   customresourcedefinition: { viewType: 'cluster', tab: 'crds' },
   crd: { viewType: 'cluster', tab: 'crds' },

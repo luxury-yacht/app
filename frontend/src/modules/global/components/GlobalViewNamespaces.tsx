@@ -16,6 +16,7 @@ import {
 import { joinNamespaceMetrics } from '@modules/namespace/contexts/namespaceMetrics';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import { requestGridTableFilters } from '@shared/components/tables/hooks/useGridTableExternalFilters';
+import type { ClusterObjectReference } from '@shared/utils/objectIdentity';
 import React, { useCallback, useMemo } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
@@ -117,25 +118,22 @@ const GlobalViewNamespaces: React.FC = () => {
     () => new Map(targets.map((target) => [target.clusterId, target])),
     [targets]
   );
-  const navigate = useCallback(
-    (row: NamespaceTableRow) => {
-      if (row.scopeStatus) {
-        return;
-      }
-      const target = targetByClusterId.get(row.ref.clusterId);
+  const goToNamespace = useCallback(
+    (namespace: ClusterObjectReference) => {
+      const target = targetByClusterId.get(namespace.clusterId);
       if (!target) {
         return;
       }
-      setSelectedNamespace(row.ref.name, row.ref.clusterId);
-      setClusterNavigationTarget(row.ref.clusterId, {
+      setSelectedNamespace(namespace.name, namespace.clusterId);
+      setClusterNavigationTarget(namespace.clusterId, {
         viewType: 'namespace',
         activeNamespaceView: 'workloads',
       });
-      setSidebarSelectionForCluster(row.ref.clusterId, {
+      setSidebarSelectionForCluster(namespace.clusterId, {
         type: 'namespace',
-        value: row.ref.name,
+        value: namespace.name,
       });
-      activateClusterWorkspace(row.ref.clusterId);
+      activateClusterWorkspace(namespace.clusterId);
       setActiveKubeconfig(target.selection);
     },
     [
@@ -236,10 +234,9 @@ const GlobalViewNamespaces: React.FC = () => {
       ))}
       <NamespaceSummaryTable
         rows={rows}
-        navigate={navigate}
+        goToNamespace={goToNamespace}
         navigateAttention={navigateAttention}
         navigateCluster={navigateCluster}
-        enableRowNavigation={false}
         showClusterColumn
         clusterOptions={targets.map(({ clusterId, clusterName }) => ({
           value: clusterId,

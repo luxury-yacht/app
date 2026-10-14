@@ -96,6 +96,32 @@ describe('resource view navigation', () => {
       value: 'apps',
     });
   });
+  // The Namespaces table keys rows by the same canonical key (see
+  // ClusterViewNamespaces.test), so this request focuses the namespace's row.
+  it('routes a Namespace to the cluster Namespaces table and focuses its row', () => {
+    navigate({
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      kind: 'Namespace',
+      name: 'payments',
+    });
+    expect(mocks.view.setViewType).toHaveBeenCalledWith('cluster');
+    expect(mocks.view.setActiveClusterView).toHaveBeenCalledWith('namespaces');
+    expect(mocks.sidebar.setSidebarSelection).toHaveBeenCalledWith({
+      type: 'cluster',
+      value: 'cluster',
+    });
+    expect(mocks.emit).toHaveBeenCalledWith(
+      'gridtable:focus-request',
+      expect.objectContaining({
+        clusterId: 'cluster-a',
+        rowKey: 'cluster-a|/v1/Namespace//payments',
+        destinationViewId: 'cluster-namespaces',
+      })
+    );
+    expect(mocks.setNamespace).not.toHaveBeenCalled();
+  });
   it('rejects custom resource navigation without an API version', () => {
     navigate({ clusterId: 'a', group: 'karpenter.sh', kind: 'NodePool', name: 'pool' });
     expect(mocks.view.setViewType).not.toHaveBeenCalled();

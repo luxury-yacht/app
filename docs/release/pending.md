@@ -25,6 +25,10 @@
   - A rejected request shows its specific reason instead of a generic "Invalid request" message.
   - A change that conflicts with another writer says the object changed and to refresh and try again.
   - An action the app offered but the cluster refused now shows a notification instead of failing silently.
+- The Cluster and Global Namespaces tables work like other tables.
+  - Clicking a row highlights it instead of going to the namespace.
+  - Clicking the Kind badge or the namespace name, or pressing Enter, opens the namespace in the object panel.
+  - Rows have the right-click menu (Open Details, Diff, and Delete when permitted), plus Go to Namespace, which opens the namespace's views.
 
 ### Fixed
 
@@ -33,3 +37,4 @@
 - Tables show "Insufficient permissions" only for real permission denials; a timeout on an RBAC resource no longer reads as one.
 - Node Logs auto-refresh no longer fails on every refresh and reloads the whole log.
 - Opening a shell session from the Sessions list no longer shows an error when that pod's panel is already open.
+- Alt-clicking a namespace link, or choosing Go to Table View for a namespace, opens the Namespaces view instead of the Config view.

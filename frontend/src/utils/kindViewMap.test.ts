@@ -40,7 +40,7 @@ describe('getViewForKind', () => {
     ['Node', 'cluster', 'nodes'],
     ['ClusterRole', 'cluster', 'rbac'],
     ['PersistentVolume', 'cluster', 'storage'],
-    ['Namespace', 'cluster', 'config'],
+    ['Namespace', 'cluster', 'namespaces'],
     ['CustomResourceDefinition', 'cluster', 'crds'],
   ])('maps %s to %s/%s', (kind, expectedViewType, expectedTab) => {
     const result = getViewForKind(kind);

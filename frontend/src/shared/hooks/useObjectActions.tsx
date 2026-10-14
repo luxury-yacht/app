@@ -53,6 +53,8 @@ export interface ObjectActionHandlers {
   onSuspendToggle?: () => void;
   // Event actions - view the involved object
   onViewInvolvedObject?: () => void;
+  // Namespace actions - open the namespace's own views
+  onGoToNamespace?: () => void;
   // Object map - kind-agnostic so any view can opt in. v1 only wires
   // this from NsViewWorkloads; the menu item is hidden when no handler
   // is provided so other views are unaffected until they pass it.
@@ -168,6 +170,21 @@ const buildInvolvedObjectItem = (
   };
 };
 
+const buildGoToNamespaceItem = (
+  object: ObjectActionData,
+  handlers: ObjectActionHandlers
+): ContextMenuItem | null => {
+  if (object.kind !== 'Namespace' || !handlers.onGoToNamespace) {
+    return null;
+  }
+  return {
+    actionId: OBJECT_ACTION_IDS.goToNamespace,
+    label: objectActionLabel(OBJECT_ACTION_IDS.goToNamespace),
+    icon: <OpenIcon />,
+    onClick: handlers.onGoToNamespace,
+  };
+};
+
 const buildNavigationItems = ({
   object,
   context,
@@ -177,6 +194,7 @@ const buildNavigationItems = ({
     buildOpenItem({ context, handlers }),
     buildObjectMapItem(handlers),
     buildTableNavigationItem({ context, handlers }),
+    buildGoToNamespaceItem(object, handlers),
     buildDiffItem(object),
     buildInvolvedObjectItem(object, handlers),
   ]);

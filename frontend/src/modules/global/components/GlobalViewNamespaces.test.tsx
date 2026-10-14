@@ -1,3 +1,5 @@
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type * as React from 'react';
 import { act, isValidElement, type ReactNode, StrictMode } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -13,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   resourceGridParams: null as null | Record<string, unknown>,
   persistenceParams: null as null | Record<string, unknown>,
   openWithObject: vi.fn(),
+  queryKindPermissions: vi.fn(),
   requestRefreshDomain: vi.fn(() => Promise.resolve()),
   setRefreshDomainEnabled: vi.fn(),
   enabledScopes: new Set<string>(),
@@ -205,6 +208,16 @@ vi.mock('@core/contexts/SidebarStateContext', () => ({
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({ openWithObject: mocks.openWithObject }),
+}));
+
+vi.mock('@shared/hooks/useNavigateToView', () => ({
+  useNavigateToView: () => ({ available: false, navigateToView: vi.fn() }),
+}));
+
+vi.mock('@/core/capabilities', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/core/capabilities')>()),
+  useUserPermissions: () => new Map(),
+  queryKindPermissions: mocks.queryKindPermissions,
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
@@ -510,7 +523,6 @@ describe('GlobalViewNamespaces', () => {
       pageSize: 50,
       pageSizeOptions: [25, 50, 100, 250, 500, 1000],
     });
-    expect(mocks.tableProps).not.toHaveProperty('onRowClick');
     expect(mocks.tableProps).not.toHaveProperty('onRowPointerClick');
     const namespaceLink = container.querySelector<HTMLButtonElement>(
       '[data-testid="namespace-link-cluster-b-payments"] button'
@@ -534,15 +546,23 @@ describe('GlobalViewNamespaces', () => {
     });
   });
 
-  it('stages the target namespace navigation before activating its cluster', async () => {
-    const { container, unmount } = await renderView();
+  it('stages Go to Namespace navigation before activating the target cluster', async () => {
+    const { unmount } = await renderView();
+    const tableProps = getTableProps();
+    const getItems = tableProps.getCustomContextMenuItems as
+      | ((row: Record<string, unknown>, columnKey: string) => ContextMenuItem[])
+      | undefined;
+    const betaRow = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows.find(
+      (row) => (row.ref as { clusterId: string }).clusterId === 'cluster-b'
+    );
+    if (!getItems || !betaRow) {
+      throw new Error('expected a cluster-b namespace row with context menu items');
+    }
 
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          '[data-testid="namespace-link-cluster-b-payments"] button'
-        )
-        ?.click();
+    act(() => {
+      getItems(betaRow, 'name')
+        .find((item) => item.actionId === OBJECT_ACTION_IDS.goToNamespace)
+        ?.onClick?.();
     });
 
     expect(mocks.setSelectedNamespace).toHaveBeenCalledWith('payments', 'cluster-b');
@@ -614,28 +634,59 @@ describe('GlobalViewNamespaces', () => {
     await unmount();
   });
 
-  it('opens the namespace Object Panel from Kind without staging navigation', async () => {
-    const { container, unmount } = await renderView();
+  it.each([
+    ['Kind badge', 'kind-cluster-b-payments'],
+    ['Name link', 'namespace-link-cluster-b-payments'],
+  ])(
+    'opens the namespace Object Panel from its %s without staging navigation',
+    async (_label, testId) => {
+      const { container, unmount } = await renderView();
 
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('[data-testid="kind-cluster-b-payments"] button')
-        ?.click();
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(`[data-testid="${testId}"] button`)?.click();
+      });
+
+      expect(mocks.openWithObject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clusterId: 'cluster-b',
+          group: '',
+          version: 'v1',
+          kind: 'Namespace',
+          resource: 'namespaces',
+          name: 'payments',
+        })
+      );
+      expect(mocks.setSelectedNamespace).not.toHaveBeenCalled();
+      expect(mocks.setClusterNavigationTarget).not.toHaveBeenCalled();
+      expect(mocks.setSidebarSelectionForCluster).not.toHaveBeenCalled();
+      expect(mocks.setActiveKubeconfig).not.toHaveBeenCalled();
+
+      await unmount();
+    }
+  );
+
+  it('opens the namespace Object Panel on Enter without switching clusters', async () => {
+    const { unmount } = await renderView();
+    const tableProps = getTableProps();
+    const onRowClick = tableProps.onRowClick as
+      | ((row: Record<string, unknown>) => void)
+      | undefined;
+    const betaRow = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows.find(
+      (row) => (row.ref as { clusterId: string }).clusterId === 'cluster-b'
+    );
+    if (!onRowClick || !betaRow) {
+      throw new Error('expected a cluster-b namespace row Enter handler');
+    }
+
+    act(() => {
+      onRowClick(betaRow);
     });
 
     expect(mocks.openWithObject).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clusterId: 'cluster-b',
-        group: '',
-        version: 'v1',
-        kind: 'Namespace',
-        resource: 'namespaces',
-        name: 'payments',
-      })
+      expect.objectContaining({ clusterId: 'cluster-b', kind: 'Namespace', name: 'payments' })
     );
     expect(mocks.setSelectedNamespace).not.toHaveBeenCalled();
     expect(mocks.setClusterNavigationTarget).not.toHaveBeenCalled();
-    expect(mocks.setSidebarSelectionForCluster).not.toHaveBeenCalled();
     expect(mocks.setActiveKubeconfig).not.toHaveBeenCalled();
 
     await unmount();
@@ -670,6 +721,42 @@ describe('GlobalViewNamespaces', () => {
     expect(mocks.activateClusterWorkspace.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
     );
+
+    await unmount();
+  });
+
+  // Cluster-scoped permissions are batch-queried only for the active cluster,
+  // so a row from another open cluster must resolve its own on right-click.
+  it('targets the row cluster from the namespace context menu', async () => {
+    const { unmount } = await renderView();
+    const tableProps = getTableProps();
+    expect(tableProps.enableContextMenu).toBe(true);
+    const getItems = tableProps.getCustomContextMenuItems as
+      | ((row: Record<string, unknown>, columnKey: string) => ContextMenuItem[])
+      | undefined;
+    const rows = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows;
+    const betaRow = rows.find(
+      (row) => (row.ref as { clusterId: string }).clusterId === 'cluster-b'
+    );
+    if (!getItems || !betaRow) {
+      throw new Error('expected a cluster-b namespace row with context menu items');
+    }
+
+    const items = getItems(betaRow, 'name');
+    expect(mocks.queryKindPermissions).toHaveBeenCalledWith(
+      'Namespace',
+      null,
+      'cluster-b',
+      '',
+      'v1'
+    );
+    act(() => {
+      items.find((item) => item.actionId === OBJECT_ACTION_IDS.viewDetails)?.onClick?.();
+    });
+    expect(mocks.openWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({ clusterId: 'cluster-b', kind: 'Namespace', name: 'payments' })
+    );
+    expect(mocks.setActiveKubeconfig).not.toHaveBeenCalled();
 
     await unmount();
   });

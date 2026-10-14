@@ -3,15 +3,18 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { type BoundedRowsMode, boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
+  type ClusterObjectReference,
 } from '@shared/utils/objectIdentity';
 import React, { useCallback, useMemo } from 'react';
 import { useClusterNameResolver } from '@/core/cluster-workspace/useClusterWorkspace';
@@ -26,10 +29,9 @@ export interface NamespaceTableRow extends NamespaceSummaryWithMetrics {
 
 interface NamespaceSummaryTableProps {
   rows: NamespaceTableRow[];
-  navigate: (row: NamespaceTableRow) => void;
+  goToNamespace: (namespace: ClusterObjectReference) => void;
   navigateAttention?: (row: NamespaceTableRow, signal: 'unhealthy' | 'warnings') => void;
   navigateCluster?: (row: NamespaceTableRow) => void;
-  enableRowNavigation?: boolean;
   showClusterColumn?: boolean;
   clusterOptions?: DropdownOption[];
   clusterIdentity: string;
@@ -128,10 +130,9 @@ const createNamespaceResourceColumn = (
 
 const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   rows,
-  navigate,
+  goToNamespace,
   navigateAttention,
   navigateCluster,
-  enableRowNavigation = true,
   showClusterColumn = false,
   clusterOptions = [],
   clusterIdentity,
@@ -148,9 +149,27 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   const defaultPageSize = useDefaultTablePageSize();
   const resolveClusterName = useClusterNameResolver();
   const { openWithObject } = useObjectPanel();
+  // A configured namespace that is missing or inaccessible has no object to open.
   const openNamespaceObject = useCallback(
-    (row: NamespaceTableRow) => openWithObject(buildRequiredObjectReference(row.ref)),
+    (row: NamespaceTableRow) => {
+      if (!row.scopeStatus) {
+        openWithObject(buildRequiredObjectReference(row.ref));
+      }
+    },
     [openWithObject]
+  );
+  // Global rows span clusters whose cluster-scoped permissions were not
+  // batch-queried, so missing delete permissions resolve lazily per row.
+  const objectActions = useObjectActionController({
+    context: 'gridtable',
+    queryMissingPermissions: true,
+    onOpen: (object) => openWithObject(object),
+    onGoToNamespace: (object) => goToNamespace(buildRequiredObjectReference(object)),
+  });
+  const getContextMenuItems = useCallback(
+    (row: NamespaceTableRow): ContextMenuItem[] =>
+      row.scopeStatus ? [] : objectActions.getMenuItems(buildRequiredObjectReference(row.ref)),
+    [objectActions]
   );
   const columns = useMemo<GridColumnDefinition<NamespaceTableRow>[]>(() => {
     const result: GridColumnDefinition<NamespaceTableRow>[] = [
@@ -158,14 +177,13 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
         getKind: (row) => row.ref.kind,
         onClick: openNamespaceObject,
         isInteractive: (row) => !row.scopeStatus,
-        allowRowClick: false,
-        rowAction: false,
       }),
       cf.createTextColumn<NamespaceTableRow>('name', 'Namespace', (row) => row.ref.name, {
         hideable: false,
-        onClick: navigate,
+        onClick: openNamespaceObject,
         getClassName: () => 'object-panel-link',
         isInteractive: (row) => !row.scopeStatus,
+        rowAction: true,
       }),
     ];
     if (showClusterColumn) {
@@ -264,7 +282,6 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
       age: { autoWidth: true },
     });
   }, [
-    navigate,
     navigateAttention,
     navigateCluster,
     openNamespaceObject,
@@ -334,25 +351,30 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   });
 
   return (
-    <ResourceInventoryTable
-      source={source}
-      gridTableProps={gridTableProps}
-      columns={columns}
-      spinnerMessage="Loading namespaces..."
-      updatingMessage="Updating namespaces…"
-      emptyMessage={emptyMessage}
-      diagnosticsLabel="Namespaces"
-      diagnosticsMode="local"
-      localPagination={{
-        idPrefix: `${resolvedViewId}-${clusterIdentity}`,
-        pageSize: persistence.pageSize ?? defaultPageSize,
-        pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
-        onPageSizeChange: persistence.setPageSize,
-      }}
-      enableColumnVisibilityMenu
-      {...(enableRowNavigation ? { onRowClick: navigate, onRowPointerClick: navigate } : {})}
-      favModal={favModal}
-    />
+    <>
+      <ResourceInventoryTable
+        source={source}
+        gridTableProps={gridTableProps}
+        columns={columns}
+        spinnerMessage="Loading namespaces..."
+        updatingMessage="Updating namespaces…"
+        emptyMessage={emptyMessage}
+        diagnosticsLabel="Namespaces"
+        diagnosticsMode="local"
+        localPagination={{
+          idPrefix: `${resolvedViewId}-${clusterIdentity}`,
+          pageSize: persistence.pageSize ?? defaultPageSize,
+          pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+          onPageSizeChange: persistence.setPageSize,
+        }}
+        enableColumnVisibilityMenu
+        enableContextMenu
+        getCustomContextMenuItems={getContextMenuItems}
+        onRowClick={openNamespaceObject}
+        favModal={favModal}
+      />
+      {objectActions.modals}
+    </>
   );
 };
 

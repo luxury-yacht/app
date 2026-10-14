@@ -10,6 +10,7 @@ const (
 	ViewDetails              ID            = "view-details"
 	ViewMap                  ID            = "view-map"
 	GoToTable                ID            = "go-to-table"
+	GoToNamespace            ID            = "go-to-namespace"
 	Diff                     ID            = "diff"
 	ViewInvolved             ID            = "view-involved-object"
 	TriggerNow               ID            = "trigger-now"
@@ -103,6 +104,7 @@ var Definitions = []Definition{
 	{Key: "viewDetails", ID: ViewDetails, Label: "Open Details"},
 	{Key: "viewMap", ID: ViewMap, Label: "Open Map"},
 	{Key: "goToTable", ID: GoToTable, Label: "Go to Table View"},
+	{Key: "goToNamespace", ID: GoToNamespace, Label: "Go to Namespace"},
 	{Key: "diff", ID: Diff, Label: "Diff"},
 	{Key: "viewInvolvedObject", ID: ViewInvolved, Label: "View Object"},
 	{Key: "triggerNow", ID: TriggerNow, Label: "Trigger Now", BackendAction: BackendTrigger, Permission: fixedPermission("trigger", "trigger", "create", fixedPermissionTarget{group: "batch", version: "v1", kind: "Job", subresource: "", namespace: true, name: false}), FrontendPermission: "batch/v1 Job create", BackendPermission: "resourcePermissionCheck(job, create)", DeniedReason: "trigger permission state"},
