@@ -1,4 +1,5 @@
 import { findGridTableRowByKey, revealVertically } from '@shared/components/tables/GridTable.utils';
+import { getAppZoomFactor } from '@shared/utils/appZoom';
 
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
@@ -117,7 +118,8 @@ export function useGridTableKeyboardNavigation({
       }
 
       const firstRow = wrapper.querySelector<HTMLElement>('.gridtable-row');
-      const rowHeight = firstRow?.getBoundingClientRect().height || 44;
+      // The viewport height is in CSS pixels; rects are zoomed under page zoom.
+      const rowHeight = (firstRow?.getBoundingClientRect().height ?? 0) / getAppZoomFactor() || 44;
       getPageSizeRef.current = Math.max(1, Math.round(height / Math.max(rowHeight, 1)));
     };
 

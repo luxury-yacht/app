@@ -23,6 +23,12 @@ vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: () => () => undefined,
 }));
+// The zoom the app saved, which ZoomProvider loads and applies on mount.
+const savedZoom = vi.hoisted(() => ({ level: 100 }));
+vi.mock('@/core/app-state-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/core/app-state-access')>()),
+  readZoomLevel: () => Promise.resolve(savedZoom.level),
+}));
 
 interface Row {
   id: string;
@@ -737,6 +743,33 @@ describe('GridTable row detail', () => {
       expect(container.querySelector('.parent [data-row-key="cluster-a|row-1"]')).not.toBeNull();
       expect(container.querySelector('[data-gridtable-row-detail] .nested')).not.toBeNull();
       expect(container.querySelector('.parent [data-row-key="cluster-a|row-5"]')).toBeNull();
+    });
+
+    // The app zooms the page: bounding rects come back in zoomed pixels while
+    // the virtualizer positions rows in CSS pixels.
+    it('positions rows and an open detail by their CSS heights at a page zoom', async () => {
+      const open = detailFor(['cluster-a|row-1']);
+      savedZoom.level = 200;
+      document.documentElement.style.setProperty('--app-zoom-factor', '2');
+      heights.set('gridtable-row', 60);
+      heights.set('gridtable-row-detail', 400);
+      try {
+        await renderTable(open, manyRows, virtual);
+        // Re-render once so measured heights reach the virtualizer.
+        await renderTable(open, manyRows, virtual);
+
+        expect(
+          getComputedStyle(document.documentElement).getPropertyValue('--app-zoom-factor')
+        ).toBe('2');
+        expect(topOf(container.querySelector('[data-gridtable-row-detail]'))).toBe(60);
+        expect(topOf(parentRow('row-2'))).toBe(260);
+      } finally {
+        savedZoom.level = 100;
+        heights.set('gridtable-row', 30);
+        heights.set('gridtable-row-detail', 200);
+        document.documentElement.style.removeProperty('--app-zoom-factor');
+        document.body.style.removeProperty('zoom');
+      }
     });
 
     it('adds every open detail to the row positions and keeps each open row mounted when scrolled away', async () => {

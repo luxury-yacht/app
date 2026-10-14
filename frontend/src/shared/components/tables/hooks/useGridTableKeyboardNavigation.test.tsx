@@ -179,6 +179,33 @@ describe('useGridTableKeyboardNavigation', () => {
     expect(requireCapture(capture).getPageSizeRef.current).toBe(4);
   });
 
+  // The app zooms the page: a row's bounding rect is in zoomed pixels while the
+  // viewport height is in CSS pixels.
+  it('sizes a page by CSS row heights at a page zoom', async () => {
+    document.documentElement.style.setProperty('--app-zoom-factor', '2');
+    let capture: HarnessCapture | null = null;
+    try {
+      await act(async () => {
+        root.render(
+          <KeyboardNavigationHarness
+            tableDataLength={5}
+            focusedRowIndex={null}
+            focusedRowKey={null}
+            wrapperHeight={120}
+            rowHeight={30 * 2}
+            onCapture={(next) => {
+              capture = next;
+            }}
+          />
+        );
+      });
+
+      expect(requireCapture(capture).getPageSizeRef.current).toBe(4);
+    } finally {
+      document.documentElement.style.removeProperty('--app-zoom-factor');
+    }
+  });
+
   it('scrolls a focused row below the viewport into view and updates hover for it', async () => {
     const updateHoverForElement = vi.fn();
     let capture: HarnessCapture | null = null;

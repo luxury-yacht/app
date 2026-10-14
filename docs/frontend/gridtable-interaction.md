@@ -47,6 +47,11 @@ virtualization, and native table accessibility. Apply the
   convert the visually scaled trigger `getBoundingClientRect()` into unscaled CSS
   coordinates before combining it with fixed `left`/`top`,
   `offsetWidth`/`offsetHeight`, or the zoom-adjusted viewport dimensions.
+- The same holds inside the table: virtual row and detail heights, the hover
+  overlay, page size, and row reveal divide `getBoundingClientRect()` values by
+  `getAppZoomFactor()` before mixing them with `scrollTop`, `clientHeight`, or
+  virtual positions. At 100% the conversion is a no-op, so check measurement
+  changes at 50% and 200% zoom.
 
 ## Row detail
 

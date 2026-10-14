@@ -17,6 +17,7 @@ import {
   type RowDetailNavigation,
   RowDetailNavigationContext,
 } from '@shared/components/tables/rowDetailNavigation';
+import { getAppZoomFactor } from '@shared/utils/appZoom';
 import type React from 'react';
 import {
   type RefObject,
@@ -150,7 +151,8 @@ function GridTableRowDetailRow({
       return;
     }
     const report = () => {
-      const height = node.getBoundingClientRect().height;
+      // The virtualizer works in CSS pixels; rects are zoomed under page zoom.
+      const height = node.getBoundingClientRect().height / getAppZoomFactor();
       if (height > 0) {
         onHeightRef.current(rowKey, height);
       }

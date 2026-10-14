@@ -12,6 +12,7 @@
 
 import type { GridTableVirtualizationOptions } from '@shared/components/tables/GridTable.types';
 import { useGridTableViewport } from '@shared/components/tables/hooks/useGridTableViewport';
+import { getAppZoomFactor } from '@shared/utils/appZoom';
 import {
   type RefObject,
   useCallback,
@@ -151,19 +152,20 @@ export function useGridTableVirtualization<T>({
   const [heightCacheVersion, setHeightCacheVersion] = useState(0);
 
   // Ref callback invoked by every rendered row. Measures height via
-  // getBoundingClientRect and updates the cache if it changed.
+  // getBoundingClientRect and updates the cache if it changed. Rects are in
+  // zoomed pixels under the app's page zoom; row positions are CSS pixels.
   const measureRowRef: MeasureRowRefFn = useCallback(
     (rowKey: string, node: HTMLDivElement | null) => {
       if (!node) {
         return;
       }
-      const rect = node.getBoundingClientRect();
-      if (rect.height <= 0) {
+      const height = node.getBoundingClientRect().height / getAppZoomFactor();
+      if (height <= 0) {
         return;
       }
       const cached = rowHeightCacheRef.current.get(rowKey);
-      if (cached === undefined || Math.abs(cached - rect.height) > 0.5) {
-        rowHeightCacheRef.current.set(rowKey, rect.height);
+      if (cached === undefined || Math.abs(cached - height) > 0.5) {
+        rowHeightCacheRef.current.set(rowKey, height);
         setHeightCacheVersion((v) => v + 1);
       }
     },
