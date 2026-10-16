@@ -687,7 +687,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       payload: {
         nodes: payload.nodes.length,
         edges: payload.edges.length,
-        maxDepth: payload.maxDepth,
         maxNodes: payload.maxNodes,
         truncated: payload.truncated,
         warnings: payload.warnings?.length ?? 0,

@@ -3,8 +3,9 @@
 ### Changed
 
 - Object maps:
-  - A workload's map now shows the Services, EndpointSlices, PodDisruptionBudgets, NetworkPolicies, and Ingresses around its Pods.
-  - Maps build much faster on large clusters: about 70 ms instead of about 760 ms at 10,000 Pods.
+  - Maps follow one predictable rule: an object appears if links that all point the same way connect it to the object you opened the map for. There are no depth limits or special cases, and every link between objects on the map is drawn. Use the namespace map to see everything in a namespace.
+  - Maps show only the relationships Kubernetes keeps. A Service reaches its Pods through its EndpointSlices, and PodDisruptionBudgets and NetworkPolicies link to the Pods they select. Open a Pod's map to see the Services, PDBs, and NetworkPolicies that act on it.
+  - Maps build much faster on large clusters: about 60 ms instead of about 760 ms at 10,000 Pods.
   - Nodes you drag stay where you drop them through kind filters, focus mode, and live updates. Reset layout puts them back.
   - When a large namespace map is cut to its object limit, it keeps connected objects and their cluster-scoped neighbors, such as the Node a Pod runs on.
 - Windows executables and installers are now signed! Thank you to the [SignPath Foundation](https://signpath.org/) for providing free code signing and certificates for open-source projects like Luxury Yacht.

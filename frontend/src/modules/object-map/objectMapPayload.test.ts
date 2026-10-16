@@ -16,7 +16,6 @@ describe('normalizeObjectMapPayload', () => {
       },
       nodes: null,
       edges: null,
-      maxDepth: 3,
       maxNodes: 100,
       truncated: false,
     } satisfies ObjectMapSnapshotPayload;

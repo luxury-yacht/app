@@ -1,9 +1,12 @@
 /**
- * Directional graph traversal for selection highlight and focus mode: the
- * active object's lineage, reached by following links purely forward or purely
- * backward. Each direction has its own visited set, so paths never switch
- * direction. Map membership is the backend's job and does not use this.
+ * The object map's one rule, on the frontend: an object belongs to another
+ * object's lineage if links that all point the same way connect them. The
+ * backend builds each map by this rule from the seed; selection highlight, focus
+ * mode, and the prune after ReplicaSet collapse apply it to what is shown. Each
+ * direction has its own visited set, so paths never switch direction.
  */
+
+import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
 
 type DirectionalNeighbor = { edgeId: string; neighbor: string };
 
@@ -63,4 +66,41 @@ export const collectDirectionalConnections = (seedId: string, adjacency: Directi
   collectDirectionalReachability(seedId, adjacency.outgoing, connectedIds, connectedEdgeIds);
   collectDirectionalReachability(seedId, adjacency.incoming, connectedIds, connectedEdgeIds);
   return { connectedIds, connectedEdgeIds };
+};
+
+const buildDirectionalAdjacency = (
+  nodeIds: Set<string>,
+  edges: ObjectMapEdge[]
+): DirectionalAdjacency => {
+  const adjacency: DirectionalAdjacency = { outgoing: new Map(), incoming: new Map() };
+  edges.forEach((edge) => {
+    if (nodeIds.has(edge.source) && nodeIds.has(edge.target) && edge.source !== edge.target) {
+      appendDirectionalEdge(adjacency, edge.id, edge.source, edge.target);
+    }
+  });
+  return adjacency;
+};
+
+/**
+ * Keeps the seed, the objects in its lineage, and every link between the kept
+ * objects. Namespace maps have no seed object, so they are returned unchanged.
+ */
+export const filterByLineage = (
+  nodes: ObjectMapNode[],
+  edges: ObjectMapEdge[],
+  seedId: string
+): { nodes: ObjectMapNode[]; edges: ObjectMapEdge[] } => {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  if (!nodeIds.has(seedId)) {
+    return { nodes, edges };
+  }
+  const { connectedIds } = collectDirectionalConnections(
+    seedId,
+    buildDirectionalAdjacency(nodeIds, edges)
+  );
+  connectedIds.add(seedId);
+  return {
+    nodes: nodes.filter((node) => connectedIds.has(node.id)),
+    edges: edges.filter((edge) => connectedIds.has(edge.source) && connectedIds.has(edge.target)),
+  };
 };

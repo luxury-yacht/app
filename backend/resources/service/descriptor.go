@@ -21,6 +21,5 @@ var Descriptor = kindspec.Descriptor{
 	Collector:   &ObjectMapNode,
 	Edges:       ObjectMapEdges,
 	Binding:     &DetailBinding,
-	Graph:       kindspec.ObjectMapGraph{DirectionalTraversal: true},
 	PortForward: &kindspec.PortForwardTarget{ResolvePod: ForwardPodName, Reconnect: true, UsesServicePortSpec: true},
 }

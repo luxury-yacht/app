@@ -353,7 +353,6 @@ const payload: ObjectMapSnapshotPayload = {
     },
   ],
   edges: [{ id: 'edge-1', source: 'deploy', target: 'pod', type: 'owner', label: 'owns' }],
-  maxDepth: 4,
   maxNodes: 250,
   truncated: false,
 };
@@ -363,10 +362,20 @@ const shortNamesPayload: ObjectMapSnapshotPayload = {
   seed: ref('service', 'Service', 'frontend', ''),
   nodes: [
     { id: 'service', depth: 0, ref: ref('service', 'Service', 'frontend', '') },
-    { id: 'pod', depth: 1, ref: ref('pod', 'Pod', 'frontend-abc', '') },
+    {
+      id: 'slice',
+      depth: 1,
+      ref: ref('slice', 'EndpointSlice', 'frontend-abc', 'discovery.k8s.io'),
+    },
   ],
   edges: [
-    { id: 'edge-service', source: 'service', target: 'pod', type: 'selector', label: 'selects' },
+    {
+      id: 'edge-service',
+      source: 'service',
+      target: 'slice',
+      type: 'endpoint',
+      label: 'has endpoints',
+    },
   ],
 };
 
@@ -517,45 +526,44 @@ const rolloutReplicaSetPayload: ObjectMapSnapshotPayload = {
   ],
 };
 
-// The backend graph for a Deployment seed: the objects that select, route to,
-// or scale its Pods are reached through mixed-direction paths.
-const deploymentNeighborhoodPayload: ObjectMapSnapshotPayload = {
+// The backend graph for a Pod seed: its owner chain and the HPA scaling it,
+// the EndpointSlice listing the Pod with its Service and Ingress in front, the
+// PDB and NetworkPolicy selecting the Pod, and the Node it runs on.
+const podNeighborhoodPayload: ObjectMapSnapshotPayload = {
   ...payload,
+  seed: ref('pod', 'Pod', 'web-pod', ''),
   nodes: [
-    { id: 'deploy', depth: 0, ref: ref('deploy', 'Deployment', 'web', 'apps') },
+    { id: 'pod', depth: 0, ref: ref('pod', 'Pod', 'web-pod', '') },
     { id: 'rs', depth: 1, ref: ref('rs', 'ReplicaSet', 'web-rs', 'apps') },
-    { id: 'pod', depth: 2, ref: ref('pod', 'Pod', 'web-pod', '') },
-    { id: 'node', depth: 3, ref: ref('node', 'Node', 'worker-a', '') },
-    { id: 'svc', depth: 3, ref: ref('svc', 'Service', 'web', '') },
-    {
-      id: 'slice',
-      depth: 3,
-      ref: ref('slice', 'EndpointSlice', 'web-slice', 'discovery.k8s.io'),
-    },
-    { id: 'pdb', depth: 3, ref: ref('pdb', 'PodDisruptionBudget', 'web', 'policy') },
-    { id: 'netpol', depth: 3, ref: ref('netpol', 'NetworkPolicy', 'web', 'networking.k8s.io') },
-    { id: 'ing', depth: 4, ref: ref('ing', 'Ingress', 'web', 'networking.k8s.io') },
+    { id: 'deploy', depth: 2, ref: ref('deploy', 'Deployment', 'web', 'apps') },
     {
       id: 'hpa',
-      depth: 1,
+      depth: 3,
       ref: ref('hpa', 'HorizontalPodAutoscaler', 'web', 'autoscaling', 'v2'),
     },
+    { id: 'node', depth: 1, ref: ref('node', 'Node', 'worker-a', '') },
+    { id: 'slice', depth: 1, ref: ref('slice', 'EndpointSlice', 'web-abc', 'discovery.k8s.io') },
+    { id: 'svc', depth: 2, ref: ref('svc', 'Service', 'web', '') },
+    { id: 'ing', depth: 3, ref: ref('ing', 'Ingress', 'web', 'networking.k8s.io') },
+    { id: 'pdb', depth: 1, ref: ref('pdb', 'PodDisruptionBudget', 'web', 'policy') },
+    { id: 'netpol', depth: 1, ref: ref('netpol', 'NetworkPolicy', 'web', 'networking.k8s.io') },
   ],
   edges: [
     { id: 'deploy-rs', source: 'deploy', target: 'rs', type: 'owner', label: 'owns' },
     { id: 'rs-pod', source: 'rs', target: 'pod', type: 'owner', label: 'owns' },
+    { id: 'hpa-deploy', source: 'hpa', target: 'deploy', type: 'scales', label: 'scales' },
     { id: 'pod-node', source: 'pod', target: 'node', type: 'schedules', label: 'scheduled on' },
     { id: 'svc-slice', source: 'svc', target: 'slice', type: 'endpoint', label: 'has endpoints' },
     { id: 'slice-pod', source: 'slice', target: 'pod', type: 'endpoint', label: 'has endpoints' },
+    { id: 'ing-svc', source: 'ing', target: 'svc', type: 'routes', label: 'routes to' },
     { id: 'pdb-pod', source: 'pdb', target: 'pod', type: 'selector', label: 'selects' },
     { id: 'netpol-pod', source: 'netpol', target: 'pod', type: 'selector', label: 'selects' },
-    { id: 'ing-svc', source: 'ing', target: 'svc', type: 'routes', label: 'routes to' },
-    { id: 'hpa-deploy', source: 'hpa', target: 'deploy', type: 'scales', label: 'scales' },
   ],
 };
 
 // An old ReplicaSet with no Pods still references the ConfigMap from its pod
-// template; that ConfigMap is reachable only through the collapsible RS.
+// template; that ConfigMap is reachable only through the collapsible RS. The
+// new Pod's ConfigMap and the HPA scaling the Deployment are reached without it.
 const collapseRemnantPayload: ObjectMapSnapshotPayload = {
   ...payload,
   nodes: [
@@ -564,14 +572,20 @@ const collapseRemnantPayload: ObjectMapSnapshotPayload = {
     { id: 'rs-old', depth: 1, ref: ref('rs-old', 'ReplicaSet', 'web-old', 'apps') },
     { id: 'pod-new', depth: 2, ref: ref('pod-new', 'Pod', 'web-new-abc', '') },
     { id: 'config-old', depth: 2, ref: ref('config-old', 'ConfigMap', 'web-config-v1', '') },
-    { id: 'svc', depth: 3, ref: ref('svc', 'Service', 'web', '') },
+    { id: 'config-new', depth: 3, ref: ref('config-new', 'ConfigMap', 'web-config-v2', '') },
+    {
+      id: 'hpa',
+      depth: 1,
+      ref: ref('hpa', 'HorizontalPodAutoscaler', 'web', 'autoscaling', 'v2'),
+    },
   ],
   edges: [
     { id: 'edge-new', source: 'deploy', target: 'rs-new', type: 'owner', label: 'owns' },
     { id: 'edge-old', source: 'deploy', target: 'rs-old', type: 'owner', label: 'owns' },
     { id: 'edge-pod', source: 'rs-new', target: 'pod-new', type: 'owner', label: 'owns' },
     { id: 'edge-config', source: 'rs-old', target: 'config-old', type: 'uses', label: 'uses' },
-    { id: 'edge-svc', source: 'svc', target: 'pod-new', type: 'selector', label: 'selects' },
+    { id: 'edge-config-new', source: 'pod-new', target: 'config-new', type: 'uses', label: 'uses' },
+    { id: 'edge-hpa', source: 'hpa', target: 'deploy', type: 'scales', label: 'scales' },
   ],
 };
 
@@ -1744,22 +1758,22 @@ describe('ObjectMap', () => {
     cleanup();
   });
 
-  it("shows every object the backend graph puts around a Deployment's Pods", async () => {
+  it('shows every object the backend graph sends for a Pod', async () => {
     const { container, cleanup } = await renderObjectMap({
-      testPayload: deploymentNeighborhoodPayload,
+      testPayload: podNeighborhoodPayload,
     });
 
     for (const label of [
-      'Deployment: web',
-      'ReplicaSet: web-rs',
       'Pod: web-pod',
+      'ReplicaSet: web-rs',
+      'Deployment: web',
+      'HorizontalPodAutoscaler: web',
       'Node: worker-a',
+      'EndpointSlice: web-abc',
       'Service: web',
-      'EndpointSlice: web-slice',
+      'Ingress: web',
       'PodDisruptionBudget: web',
       'NetworkPolicy: web',
-      'Ingress: web',
-      'HorizontalPodAutoscaler: web',
     ]) {
       expect(container.querySelector(`[aria-label="${label}"]`), label).toBeTruthy();
     }
@@ -1767,12 +1781,15 @@ describe('ObjectMap', () => {
     cleanup();
   });
 
-  it('hides objects reachable only through collapsed ReplicaSets but keeps the Service of visible Pods', async () => {
+  it('hides objects reachable only through collapsed ReplicaSets but keeps the rest of the lineage', async () => {
     const { container, cleanup } = await renderObjectMap({ testPayload: collapseRemnantPayload });
+    const kept = ['ConfigMap: web-config-v2', 'HorizontalPodAutoscaler: web'];
 
     expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeNull();
     expect(container.querySelector('[aria-label="ConfigMap: web-config-v1"]')).toBeNull();
-    expect(container.querySelector('[aria-label="Service: web"]')).toBeTruthy();
+    for (const label of kept) {
+      expect(container.querySelector(`[aria-label="${label}"]`), label).toBeTruthy();
+    }
 
     const badge = container.querySelector<HTMLButtonElement>(
       '[aria-label="Show 1 hidden ReplicaSet"]'
@@ -1784,7 +1801,9 @@ describe('ObjectMap', () => {
 
     expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="ConfigMap: web-config-v1"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Service: web"]')).toBeTruthy();
+    for (const label of kept) {
+      expect(container.querySelector(`[aria-label="${label}"]`), label).toBeTruthy();
+    }
 
     cleanup();
   });

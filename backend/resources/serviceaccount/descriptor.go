@@ -14,5 +14,4 @@ var Descriptor = kindspec.Descriptor{
 	Stream:          &StreamDescriptor,
 	Collector:       &ObjectMapNode,
 	Binding:         &DetailBinding,
-	Graph:           kindspec.ObjectMapGraph{DirectionalTraversal: true},
 }

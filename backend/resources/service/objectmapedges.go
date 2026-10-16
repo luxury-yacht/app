@@ -7,16 +7,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ObjectMapEdges returns this Service's edges: it has its endpoint slices and (when
-// it has a selector) selects the pods behind it.
+// ObjectMapEdges returns this Service's edge: it has its endpoint slices. A
+// Service reaches Pods only through them, as traffic does; its selector is the
+// EndpointSlice controller's input, not a link of its own.
 func ObjectMapEdges(clusterID string, obj metav1.Object) []objectmapspec.Edge {
-	svc, ok := obj.(*corev1.Service)
-	if !ok {
+	if _, ok := obj.(*corev1.Service); !ok {
 		return nil
 	}
-	edges := []objectmapspec.Edge{{Type: objectmapspec.EdgeEndpoint, TracedBy: discoveryv1.LabelServiceName, ServiceSlices: true}}
-	if len(svc.Spec.Selector) > 0 {
-		edges = append(edges, objectmapspec.Edge{Type: objectmapspec.EdgeSelector, PodsSelector: svc.Spec.Selector})
-	}
-	return edges
+	return []objectmapspec.Edge{{Type: objectmapspec.EdgeEndpoint, TracedBy: discoveryv1.LabelServiceName, ServiceSlices: true}}
 }

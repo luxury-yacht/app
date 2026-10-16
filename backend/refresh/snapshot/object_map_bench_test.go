@@ -127,9 +127,10 @@ func (f *objectMapBenchFixture) addNamespace(b testing.TB, ns string) {
 	f.add(b, serviceaccountpkg.Identity, &corev1.ServiceAccount{ObjectMeta: benchMeta("ServiceAccount", ns, "default")})
 	for workload := 0; workload < objectMapBenchWorkloadsPerNS; workload++ {
 		app := fmt.Sprintf("app-%d", workload)
-		deploy := &appsv1.Deployment{ObjectMeta: benchMeta("Deployment", ns, app)}
+		template := corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": app}}}
+		deploy := &appsv1.Deployment{ObjectMeta: benchMeta("Deployment", ns, app), Spec: appsv1.DeploymentSpec{Template: template}}
 		f.add(b, deploymentpkg.Identity, deploy)
-		rs := &appsv1.ReplicaSet{ObjectMeta: benchMeta("ReplicaSet", ns, app+"-rs")}
+		rs := &appsv1.ReplicaSet{ObjectMeta: benchMeta("ReplicaSet", ns, app+"-rs"), Spec: appsv1.ReplicaSetSpec{Template: template}}
 		rs.OwnerReferences = []metav1.OwnerReference{ownerRef("apps/v1", "Deployment", app, string(deploy.UID))}
 		f.add(b, replicasetpkg.Identity, rs)
 		f.add(b, configmappkg.Identity, &corev1.ConfigMap{ObjectMeta: benchMeta("ConfigMap", ns, app+"-config")})
@@ -217,7 +218,7 @@ func (f *objectMapBenchFixture) addCatalogRow(identity resourcekind.Identity, ob
 }
 
 // assertBuild proves the fixture feeds the builder before any timing: every
-// source holds its rows, and one build returns the seed's Service.
+// source holds its rows, and one build returns the seed's ReplicaSet.
 func (f *objectMapBenchFixture) assertBuild(b *testing.B, ctx context.Context, scope string) {
 	b.Helper()
 	if got := len(f.ingest.rows[PodGVR]); got != f.pods {
@@ -232,11 +233,11 @@ func (f *objectMapBenchFixture) assertBuild(b *testing.B, ctx context.Context, s
 	}
 	payload := snap.Payload.(ObjectMapSnapshotPayload)
 	for _, node := range payload.Nodes {
-		if node.Ref.Kind == "Service" && node.Ref.Namespace == "ns-0" && node.Ref.Name == "app-0" {
+		if node.Ref.Kind == "ReplicaSet" && node.Ref.Namespace == "ns-0" && node.Ref.Name == "app-0-rs" {
 			return
 		}
 	}
-	b.Fatalf("build of %q has no Service ns-0/app-0 among %d nodes", scope, len(payload.Nodes))
+	b.Fatalf("build of %q has no ReplicaSet ns-0/app-0-rs among %d nodes", scope, len(payload.Nodes))
 }
 
 // benchMeta gives each object a UID unique across kinds, since object-map node

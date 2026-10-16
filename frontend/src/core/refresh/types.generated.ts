@@ -1729,7 +1729,6 @@ export interface ObjectMapSnapshotPayload {
   seed: ObjectMapReference;
   nodes: Array<ObjectMapNode> | null;
   edges: Array<ObjectMapEdge> | null;
-  maxDepth: number;
   maxNodes: number;
   truncated: boolean;
   warnings?: Array<string>;

@@ -601,8 +601,6 @@ const ObjectMapDebugEntry = ({ map }: { map: ObjectMapDebugSnapshot }) => (
     <div className="debug-overlay__section">
       <div className="debug-overlay__label">Limits</div>
       <dl className="map-debug-grid">
-        <dt>max depth</dt>
-        <dd>{map.payload.maxDepth}</dd>
         <dt>max objects</dt>
         <dd>{map.payload.maxNodes}</dd>
         <dt>truncated</dt>

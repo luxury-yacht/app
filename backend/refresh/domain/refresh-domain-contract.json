@@ -489,7 +489,7 @@
         "clusterPrefix": "required",
         "parser": "backend/refresh/snapshot/object_map.go:parseObjectMapScope",
         "frontendBuilder": "frontend/src/modules/object-panel/objectPanelRef.ts:getObjectPanelScopes",
-        "acceptedEncodings": ["<namespace>:<group>/<version>:<kind>:<name>[?maxDepth=<n>&maxNodes=<n>]", "__cluster__:<group>/<version>:<kind>:<name>[?maxDepth=<n>&maxNodes=<n>]", "namespace:<namespace>[?maxNodes=<n>]"]
+        "acceptedEncodings": ["<namespace>:<group>/<version>:<kind>:<name>[?maxNodes=<n>]", "__cluster__:<group>/<version>:<kind>:<name>[?maxNodes=<n>]", "namespace:<namespace>[?maxNodes=<n>]"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.objectMapBuilder",

@@ -20,7 +20,6 @@ var Descriptor = kindspec.Descriptor{
 	IngestOwned: true,
 	Collector:   &ObjectMapNode,
 	Edges:       ObjectMapEdges,
-	Graph:       kindspec.ObjectMapGraph{DirectionalTraversal: true},
 	PortForward: &kindspec.PortForwardTarget{ResolvePod: ForwardPodName},
 	Actions:     kindspec.ObjectActions{Aliases: []string{"pod"}},
 }

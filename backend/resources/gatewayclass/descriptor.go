@@ -14,5 +14,4 @@ var Descriptor = kindspec.Descriptor{
 	GatewayCollector: &ObjectMapNode,
 	Edges:            ObjectMapEdges,
 	Binding:          &DetailBinding,
-	Graph:            kindspec.ObjectMapGraph{StopsReverseExpansion: true},
 }

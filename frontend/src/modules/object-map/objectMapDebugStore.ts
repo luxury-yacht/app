@@ -48,7 +48,6 @@ export interface ObjectMapDebugSnapshot {
   payload: {
     nodes: number;
     edges: number;
-    maxDepth: number;
     maxNodes: number;
     truncated: boolean;
     warnings: number;

@@ -39,7 +39,7 @@ func (a *objectMapAssembler) buildObjectSnapshot(scope string, opts objectMapOpt
 		return nil, fmt.Errorf("object-map seed not found: %s/%s %s/%s", opts.identity.GVK.Group, opts.identity.GVK.Version, opts.identity.GVK.Kind, opts.identity.Name)
 	}
 
-	graph := a.index.buildGraph(seed, opts.maxDepth, opts.maxNodes)
+	graph := a.index.buildGraph(seed, opts.maxNodes)
 	return a.snapshot(scope, seed.ref, graph, opts), nil
 }
 
@@ -64,13 +64,12 @@ func (a *objectMapAssembler) snapshot(
 	opts objectMapOptions,
 ) *refresh.Snapshot {
 	nodes := sortedObjectMapNodes(graph.nodes)
-	edges := sortedObjectMapEdges(canonicalObjectMapEdges(graph.edges))
+	edges := sortedObjectMapEdges(graph.edges)
 	payload := ObjectMapSnapshotPayload{
 		ClusterMeta: a.meta,
 		Seed:        seed,
 		Nodes:       nodes,
 		Edges:       edges,
-		MaxDepth:    opts.maxDepth,
 		MaxNodes:    opts.maxNodes,
 		Truncated:   graph.truncated,
 		Warnings:    a.index.warnings,

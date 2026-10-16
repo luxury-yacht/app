@@ -58,13 +58,9 @@ func ScaleObject(namespace, name string, replicas int32) *autoscalingv1.Scale {
 
 // ObjectMapGraph holds how a kind behaves in the object-map graph traversal — its
 // graph ROLE, not its edges. The object-map walker reads these instead of
-// hard-coding kind names: ScalableWorkload kinds carry HPA-managed action facts;
-// DirectionalTraversal kinds are graph leaves walked one-way; StopsReverseExpansion
-// kinds (cluster-scoped "class" resources) halt reverse namespace-map expansion.
+// hard-coding kind names: ScalableWorkload kinds carry HPA-managed action facts.
 type ObjectMapGraph struct {
-	ScalableWorkload      bool
-	DirectionalTraversal  bool
-	StopsReverseExpansion bool
+	ScalableWorkload bool
 }
 
 // ObjectActions declares non-workload mutation families whose handlers are

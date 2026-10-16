@@ -51,7 +51,8 @@ frontend code owns visibility, layout, rendering, and interaction state.
   version, so a catalog row whose UID matches a collected record resolves to
   that record.
 - Selector targets (Pods, EndpointSlices, ClusterRoles) are indexed once per
-  build. Traversal sorts each object's links only when it visits the object.
+  build. Traversal sorts each object's links
+  only when it visits the object.
   Measure build changes with `BenchmarkObjectMapBuild` (`wails3 task
   qc:benchmark`); the budget is under 100 ms per build at 10k Pods.
 
@@ -69,33 +70,48 @@ frontend code owns visibility, layout, rendering, and interaction state.
 
 ## Membership
 
-- The backend snapshot decides which objects and links a map contains. The
-  payload is what the map shows before the view controls: the Kind filter, the
-  legend's link toggles, focus mode, ReplicaSet collapse, and search. The
-  frontend applies no relationship rules of its own. After collapse, it only
-  drops objects no longer connected to the seed.
-- Seeds whose kind has the `DirectionalTraversal` graph role (hubs such as
-  Node, PersistentVolume, and ServiceAccount) expand only purely forward or
-  purely backward.
-- Other seeds use mixed traversal, bounded by each link type's reverse
-  policy. A workload's map therefore includes the Services, EndpointSlices,
-  PodDisruptionBudgets, NetworkPolicies, Ingresses, and HPAs around it. It also
-  includes other workloads' Pods behind a shared Service, up to the depth
-  limit.
-- Links are canonical, and canonicalization never changes which objects are
-  in the map:
-  - an `owner` link is dropped when an `endpoint` link joins the same pair;
-  - a `selector` link is dropped when an endpoint chain reaches the same
-    target. A selected Pod that the endpoints leave out keeps its `selector`
-    link.
-- Namespace maps rank every eligible object before applying the node cap:
-  - eligible means the namespace's objects plus the cluster-scoped neighbors
-    the expansion rules admit;
-  - objects with a link to another candidate come first, then isolated ones,
-    each ordered by kind, namespace, and name.
-- Selection highlight and focus mode show the active object's lineage: the
-  objects reached by following links purely forward or purely backward. They
-  do not use the membership rules.
+One rule decides what a map contains, and nothing else changes it.
+
+- **The rule:** an object is on a map if and only if links that all point the
+  same way connect it to the seed. They point either away from the seed (what
+  it uses or contains) or toward it (what uses or contains it). Paths never
+  turn around.
+- The same rule drives click highlight, focus mode, and the frontend's prune
+  after ReplicaSet collapse (`objectMapTraversal.ts`).
+- The backend walks breadth-first in both directions at once, so nearer
+  objects come first. The node cap is the only bound, and the banner says
+  when it was reached. There is no depth limit and there are no per-kind or
+  per-link exceptions.
+- Every link between two objects on a map is drawn. Links are facts; none is
+  hidden because another path implies it. For example, a Service shows its
+  `owner` and `endpoint` links to its EndpointSlice side by side.
+- Links are only relationships Kubernetes itself keeps; none is inferred. A
+  Service has its EndpointSlices and reaches Pods only through them, as
+  traffic does: each slice links to the Pods it lists as endpoints. A Pod the
+  Service's selector matches but that isn't an endpoint has no link from it.
+  PodDisruptionBudgets and NetworkPolicies select Pods. Nothing links any of
+  them to a workload.
+- So a Deployment's map is its owner chain, what its Pods use, and the HPA
+  that scales it. A Pod's map adds what acts on the Pod: the EndpointSlice
+  that lists it, with the Service and Ingress in front, and the PDB and
+  NetworkPolicy that select it.
+- A map leaves out what is only reached by turning around:
+  - Services, EndpointSlices, Ingresses, PDBs, and NetworkPolicies on a
+    Deployment's map (they act on its Pods);
+  - an EndpointSlice's other endpoints, and their workloads, on a Pod's map;
+  - RBAC that binds a dependency;
+  - a binding's subjects on a Role's map;
+  - a route's backends on a Gateway's map.
+
+  Open that object's own map instead.
+- A namespace map holds every object in the namespace, plus the cluster-scoped
+  objects the same rule reaches from them through cluster-scoped objects.
+- When a namespace map exceeds the cap, objects with a link to another
+  candidate rank before isolated ones, each ordered by kind, namespace, and
+  name.
+- The payload is what the map shows before the view controls: the Kind
+  filter, the legend's link toggles, focus mode, ReplicaSet collapse (with its
+  +N badge), and search. The frontend applies no relationship rules of its own.
 
 ## Map Interactions
 

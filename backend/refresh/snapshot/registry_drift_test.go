@@ -98,16 +98,6 @@ func TestObjectMapGraphRolesDoNotDrift(t *testing.T) {
 	assertKindSet(t, "object-map scalable-workload role",
 		[]string{"Deployment", "ReplicaSet", "StatefulSet"},
 		registryKinds(func(d kindspec.Descriptor) bool { return d.Graph.ScalableWorkload }))
-
-	assertKindSet(t, "object-map directional-traversal role", []string{
-		"ConfigMap", "EndpointSlice", "IngressClass", "NetworkPolicy", "Node",
-		"PersistentVolume", "PersistentVolumeClaim", "Pod", "PodDisruptionBudget",
-		"Secret", "Service", "ServiceAccount", "StorageClass",
-	}, registryKinds(func(d kindspec.Descriptor) bool { return d.Graph.DirectionalTraversal }))
-
-	assertKindSet(t, "object-map stops-reverse-expansion role",
-		[]string{"GatewayClass", "IngressClass", "StorageClass"},
-		registryKinds(func(d kindspec.Descriptor) bool { return d.Graph.StopsReverseExpansion }))
 }
 
 func TestStreamSummaryDomainKindsDoNotDrift(t *testing.T) {

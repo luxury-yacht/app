@@ -114,7 +114,6 @@ const mapPayload = {
   },
   nodes: [],
   edges: [],
-  maxDepth: 4,
   maxNodes: 250,
   truncated: false,
 };

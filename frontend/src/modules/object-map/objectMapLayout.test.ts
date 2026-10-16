@@ -146,31 +146,32 @@ describe('computeObjectMapLayout', () => {
   });
 
   it('eliminates same-column edges in acyclic graphs by extending edges to the longest path', () => {
-    // Service and EndpointSlice are both reachable in 1 hop from a
-    // Pod seed (Service via selector, ES via TargetRef), but the
-    // Service → ES endpoint edge keeps them in different columns
-    // under longest-path layering. Without that constraint the two
-    // would collide in the same column and the edge would loop back.
+    // ReplicaSet and ConfigMap are both reachable in 1 hop from a
+    // Deployment seed (it owns the ReplicaSet and its template uses the
+    // ConfigMap), but the ReplicaSet → ConfigMap uses edge keeps them in
+    // different columns under longest-path layering. Without that
+    // constraint the two would collide in the same column and the edge
+    // would loop back.
     const nodes: ObjectMapNode[] = [
-      node('seed', 0, 'Pod', 'web-pod'),
-      node('svc', 1, 'Service', 'web'),
-      node('es', 1, 'EndpointSlice', 'web-xyz'),
+      node('seed', 0, 'Deployment', 'web'),
+      node('rs', 1, 'ReplicaSet', 'web-xyz'),
+      node('cm', 1, 'ConfigMap', 'web-config'),
     ];
     const edges: ObjectMapEdge[] = [
-      edge('e1', 'svc', 'seed', 'selector'),
-      edge('e2', 'es', 'seed', 'endpoint'),
-      edge('e3', 'svc', 'es', 'endpoint'),
+      edge('e1', 'seed', 'rs', 'owner'),
+      edge('e2', 'seed', 'cm', 'uses'),
+      edge('e3', 'rs', 'cm', 'uses'),
     ];
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    const svc = requireValue(
-      layout.nodes.find((n) => n.id === 'svc'),
+    const rs = requireValue(
+      layout.nodes.find((n) => n.id === 'rs'),
       'expected test value in objectMapLayout.test.ts'
     );
-    const es = requireValue(
-      layout.nodes.find((n) => n.id === 'es'),
+    const cm = requireValue(
+      layout.nodes.find((n) => n.id === 'cm'),
       'expected test value in objectMapLayout.test.ts'
     );
-    expect(svc.column).not.toBe(es.column);
+    expect(rs.column).not.toBe(cm.column);
     layout.edges.forEach((e) => {
       expect(e.sameColumn).toBe(false);
     });

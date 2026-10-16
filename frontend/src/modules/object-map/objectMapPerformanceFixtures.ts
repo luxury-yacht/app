@@ -100,7 +100,6 @@ export const createObjectMapPerformanceFixture = ({
     seed: nodes[0].ref,
     nodes,
     edges,
-    maxDepth: 8,
     maxNodes: nodeCount,
     truncated: false,
   };

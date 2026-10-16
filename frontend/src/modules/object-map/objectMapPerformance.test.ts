@@ -11,8 +11,8 @@ import { toObjectMapG6Data } from './objectMapG6Data';
 import { computeObjectMapLayout, routeObjectMapEdges } from './objectMapLayout';
 import { createObjectMapPerformanceFixture } from './objectMapPerformanceFixtures';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
-import { filterBySeedConnectivity } from './objectMapSeedConnectivity';
 import { computeObjectMapSelectionState } from './objectMapSelection';
+import { filterByLineage } from './objectMapTraversal';
 
 const EMPTY_SELECTION: ObjectMapSelectionState = {
   activeId: null,
@@ -91,7 +91,7 @@ const prepareFixture = (nodeCount: number, edgeCount: number) => {
   const seedId = payload.nodes[0].id;
   const collapseInfo = computeCollapseInfo(payload.nodes, payload.edges, seedId, new Set());
   const collapsed = filterByCollapseInfo(payload.nodes, payload.edges, collapseInfo.visibleNodeIds);
-  const visible = filterBySeedConnectivity(collapsed.nodes, collapsed.edges, seedId);
+  const visible = filterByLineage(collapsed.nodes, collapsed.edges, seedId);
   const layout = computeObjectMapLayout(visible.nodes, visible.edges, seedId);
   const graphData = toObjectMapG6Data(layout, EMPTY_SELECTION, () => null, PALETTE);
   return { payload, visible, layout, graphData };

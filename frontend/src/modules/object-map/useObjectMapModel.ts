@@ -23,7 +23,7 @@ import type {
   ObjectMapNodeBadge,
   ObjectMapPointer,
 } from './objectMapRendererTypes';
-import { filterBySeedConnectivity } from './objectMapSeedConnectivity';
+import { filterByLineage } from './objectMapTraversal';
 
 type NodePositionOverrides = Map<string, { x: number; y: number }>;
 
@@ -108,9 +108,9 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
 
   const filtered = useMemo(
     // Hiding a collapsed ReplicaSet can strand an object reachable only
-    // through it (for example a ConfigMap its old pod template used). Drop
-    // what is no longer connected to the seed.
-    () => filterBySeedConnectivity(collapsed.nodes, collapsed.edges, seedId),
+    // through it (for example a ConfigMap its old pod template used). Apply the
+    // map's one rule again to what is still shown.
+    () => filterByLineage(collapsed.nodes, collapsed.edges, seedId),
     [collapsed.nodes, collapsed.edges, seedId]
   );
 
