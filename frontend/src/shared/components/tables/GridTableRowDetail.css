@@ -29,6 +29,15 @@
   background-image: linear-gradient(var(--row-detail-tint), var(--row-detail-tint));
 }
 
+/* No rule divides an open row from its detail; the rule closes the detail instead. */
+.gridtable-row.gridtable-row--detail-open {
+  border-bottom: none;
+}
+
+.gridtable-row-detail {
+  border-bottom: 1px solid var(--grid-border-color);
+}
+
 /* A detail always renders right after its own row, so it follows that row's
    selected or focused highlight and accent rail, and the group stays one block. */
 .gridtable-row.gridtable-row--focused + .gridtable-row-detail,
@@ -52,7 +61,7 @@
   flex-direction: column;
   min-height: 0;
   /* The tinted band shows around the nested table. */
-  padding: 0 0 1rem 1rem;
+  padding: 0 0 0.7rem 1rem;
   margin-bottom: 0;
   overflow: hidden;
 }
