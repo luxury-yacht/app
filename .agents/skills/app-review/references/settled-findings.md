@@ -51,3 +51,11 @@ with current repository evidence that overturns its verdict.
   paths before reviving it (its temporary plan was removed).
 - Persistent SQLite catalog store: only after a 100k-plus-object cluster shows
   Browse or custom-resource degradation.
+- Object-map build reuse (resolving edges only for reached objects, or one
+  index per cluster reused across scopes and polls): only if
+  `BenchmarkObjectMapBuild` exceeds 100 ms at 10k Pods. It measured about
+  57 ms on 2026-10-16.
+- Re-keying object-map's kind-keyed tables (`objectMapGraphByKind`,
+  `objectMapEdgeBuilders`) by full identity: the frontend map gate already
+  checks the full GVK, so no failure remains. Do it only when other work
+  touches those lines.

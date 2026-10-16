@@ -26,8 +26,9 @@ frontend code owns visibility, layout, rendering, and interaction state.
   changing the backend graph or its identities.
 - Debug snapshots describe the raw backend graph, frontend-visible graph, and
   renderer state separately.
-- Graph truncation and permission warnings stay visible below the canvas; a
-  truncated graph never presents its object or link counts as the whole scope.
+- Graph truncation and permission warnings stay visible below the canvas, also
+  on an empty map; a truncated graph never presents its object or link counts
+  as the whole scope.
 - Large graphs keep bounded layout and render work.
 - Legend and copy use user-facing terms such as "Objects" and "Links".
 
@@ -37,6 +38,11 @@ frontend code owns visibility, layout, rendering, and interaction state.
   links and facts: `backend/resourcemodel`.
 - Frontend: `frontend/src/modules/object-map`; object-panel Map tab integration
   in `frontend/src/modules/object-panel`.
+- Map support is per group, version, and kind, declared once by the kind
+  registry's collectors (`kindregistry.ObjectMapIdentities`). The identity
+  contract's `objectMap` facet carries it to the frontend gate
+  (`isObjectMapSupportedRef`), and the `object-map` permission list derives
+  from it. A custom resource that shares a built-in kind name gets no map.
 - Declare map collectors and relationship builders in the owning kind's
   registry descriptor. Shared edge projections belong in
   `backend/kind/objectmapspec`, avoiding imports between kind packages or back
@@ -118,6 +124,9 @@ One rule decides what a map contains, and nothing else changes it.
 - Every wheel gesture zooms around the pointer: a mouse wheel, a trackpad
   scroll, and a pinch. Dragging the background pans. Both turn off auto-fit.
   The map registers no G6 wheel behavior, so a wheel never pans as well.
+- Dragging an object pins it. A pin applies under every Kind filter and in
+  focus mode, and survives refreshes while its object stays on the map.
+  **Reset layout** clears all pins. Pins last only while the map is open.
 - Tab reaches the search field and toolbar controls. Enter in the search field
   centers a matching visible object; repeated presses cycle through matches.
 - Right-clicking an object opens its canvas menu, which uses the shared
