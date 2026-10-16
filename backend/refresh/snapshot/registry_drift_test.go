@@ -69,7 +69,7 @@ func registryKinds(pred func(kindspec.Descriptor) bool) []string {
 func TestObjectMapCollectorKindsDoNotDrift(t *testing.T) {
 	assertKindSet(t, "object-map collectors", []string{
 		"ClusterRole", "ClusterRoleBinding", "ConfigMap", "CronJob", "DaemonSet",
-		"Deployment", "EndpointSlice", "Ingress", "IngressClass", "Job",
+		"Deployment", "EndpointSlice", "HorizontalPodAutoscaler", "Ingress", "IngressClass", "Job",
 		"NetworkPolicy", "Node", "PersistentVolume", "PersistentVolumeClaim", "Pod",
 		"PodDisruptionBudget", "ReplicaSet", "Role", "RoleBinding", "Secret", "Service", "ServiceAccount",
 		"StatefulSet", "StorageClass",
@@ -84,9 +84,6 @@ func TestObjectMapGatewayCollectorKindsDoNotDrift(t *testing.T) {
 }
 
 func TestObjectMapEdgeKindsDoNotDrift(t *testing.T) {
-	// HorizontalPodAutoscaler contributes edges but has no Collector (its v2 node
-	// is projected bespoke from the autoscaling/v2 informer), so it appears here
-	// but not in the collector guard.
 	assertKindSet(t, "object-map edges", []string{
 		"BackendTLSPolicy", "ClusterRole", "ClusterRoleBinding", "CronJob", "DaemonSet",
 		"Deployment", "EndpointSlice", "GRPCRoute", "Gateway", "GatewayClass",

@@ -12,7 +12,7 @@ import {
   getObjectPanelScopeEvictions,
   getObjectPanelScopes,
   hasCompleteObjectMapReference,
-  isObjectMapSupportedKind,
+  isObjectMapSupportedRef,
 } from './objectPanelRef';
 
 // The PodsTab leases a `pods` window per panel object (metrics arrive joined on
@@ -396,8 +396,38 @@ describe('getObjectPanelScopes', () => {
     expect(hasCompleteObjectMapReference({ ...ref, version: undefined })).toBe(false);
   });
 
+  it('does not treat custom resources that share a built-in kind name as map seeds', () => {
+    for (const ref of [
+      { group: 'networking.istio.io', version: 'v1beta1', kind: 'Gateway' },
+      { group: 'crd.projectcalico.org', version: 'v3', kind: 'NetworkPolicy' },
+      { group: 'serving.knative.dev', version: 'v1', kind: 'Service' },
+    ]) {
+      const object = { clusterId: 'cluster-a', namespace: 'default', name: 'web', ...ref };
+      expect(hasCompleteObjectMapReference(object), ref.group).toBe(false);
+      expect(getObjectPanelScopes(object).mapScope, ref.group).toBeNull();
+    }
+  });
+
+  it('supports both served HorizontalPodAutoscaler versions as map seeds', () => {
+    for (const version of ['v1', 'v2']) {
+      expect(
+        hasCompleteObjectMapReference({
+          clusterId: 'cluster-a',
+          group: 'autoscaling',
+          version,
+          kind: 'HorizontalPodAutoscaler',
+          namespace: 'default',
+          name: 'web',
+        }),
+        version
+      ).toBe(true);
+    }
+  });
+
   it('supports policy resources as object-map seeds', () => {
-    expect(isObjectMapSupportedKind('PodDisruptionBudget')).toBe(true);
+    expect(
+      isObjectMapSupportedRef({ group: 'policy', version: 'v1', kind: 'PodDisruptionBudget' })
+    ).toBe(true);
     expect(
       hasCompleteObjectMapReference({
         clusterId: 'cluster-a',
@@ -411,7 +441,9 @@ describe('getObjectPanelScopes', () => {
   });
 
   it('supports network policies as object-map seeds', () => {
-    expect(isObjectMapSupportedKind('NetworkPolicy')).toBe(true);
+    expect(
+      isObjectMapSupportedRef({ group: 'networking.k8s.io', version: 'v1', kind: 'NetworkPolicy' })
+    ).toBe(true);
     expect(
       hasCompleteObjectMapReference({
         clusterId: 'cluster-a',
@@ -435,7 +467,9 @@ describe('getObjectPanelScopes', () => {
       'ReferenceGrant',
       'BackendTLSPolicy',
     ]) {
-      expect(isObjectMapSupportedKind(kind)).toBe(true);
+      expect(
+        isObjectMapSupportedRef({ group: 'gateway.networking.k8s.io', version: 'v1', kind })
+      ).toBe(true);
     }
 
     expect(

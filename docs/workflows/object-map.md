@@ -43,8 +43,17 @@ frontend code owns visibility, layout, rendering, and interaction state.
   into the snapshot package.
 - Ingest-owned kinds register node projectors before reflectors start so the
   initial intake includes map data.
-- Snapshot assembly seeds catalog records before merging projected nodes;
-  preserve their presentation and relationship fields through that merge.
+- Collected records (shared informers and ingest projections) are the only
+  source of their fields. The object catalog supplies objects the map doesn't
+  collect, such as a custom resource that owns a ReplicaSet. Those are looked
+  up by UID or complete identity when a relationship needs them; a build
+  never copies the whole catalog. A UID names one object whatever its served
+  version, so a catalog row whose UID matches a collected record resolves to
+  that record.
+- Selector targets (Pods, EndpointSlices, ClusterRoles) are indexed once per
+  build. Traversal sorts each object's links only when it visits the object.
+  Measure build changes with `BenchmarkObjectMapBuild` (`wails3 task
+  qc:benchmark`); the budget is under 100 ms per build at 10k Pods.
 
 ## Relationship Rules
 
@@ -57,6 +66,36 @@ frontend code owns visibility, layout, rendering, and interaction state.
 - Owners, selectors, Gateway API references, service endpoints, routes, PVC/PV,
   HPA targets, Helm-managed objects, and event involved objects use shared
   resource identity where available.
+
+## Membership
+
+- The backend snapshot decides which objects and links a map contains. The
+  payload is what the map shows before the view controls: the Kind filter, the
+  legend's link toggles, focus mode, ReplicaSet collapse, and search. The
+  frontend applies no relationship rules of its own. After collapse, it only
+  drops objects no longer connected to the seed.
+- Seeds whose kind has the `DirectionalTraversal` graph role (hubs such as
+  Node, PersistentVolume, and ServiceAccount) expand only purely forward or
+  purely backward.
+- Other seeds use mixed traversal, bounded by each link type's reverse
+  policy. A workload's map therefore includes the Services, EndpointSlices,
+  PodDisruptionBudgets, NetworkPolicies, Ingresses, and HPAs around it. It also
+  includes other workloads' Pods behind a shared Service, up to the depth
+  limit.
+- Links are canonical, and canonicalization never changes which objects are
+  in the map:
+  - an `owner` link is dropped when an `endpoint` link joins the same pair;
+  - a `selector` link is dropped when an endpoint chain reaches the same
+    target. A selected Pod that the endpoints leave out keeps its `selector`
+    link.
+- Namespace maps rank every eligible object before applying the node cap:
+  - eligible means the namespace's objects plus the cluster-scoped neighbors
+    the expansion rules admit;
+  - objects with a link to another candidate come first, then isolated ones,
+    each ordered by kind, namespace, and name.
+- Selection highlight and focus mode show the active object's lineage: the
+  objects reached by following links purely forward or purely backward. They
+  do not use the membership rules.
 
 ## Map Interactions
 

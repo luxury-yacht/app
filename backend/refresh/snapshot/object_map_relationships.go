@@ -37,6 +37,55 @@ type objectMapRelationship struct {
 	defaultTracedBy string
 }
 
+// canonicalObjectMapEdges drops edges that restate a relationship another edge
+// in the same graph already shows, so each one is drawn once:
+//   - an owner edge beside an endpoint edge for the same pair (an EndpointSlice
+//     is owned by the Service whose endpoints it holds);
+//   - a selector edge whose target the source also reaches through an endpoint
+//     chain (source → slice → target). A selected target the endpoints leave
+//     out keeps its selector edge, which shows that discrepancy.
+//
+// It runs after traversal, so it never changes which objects the map contains.
+func canonicalObjectMapEdges(edges map[string]ObjectMapEdge) map[string]ObjectMapEdge {
+	endpointTargets := objectMapEndpointTargets(edges)
+	result := make(map[string]ObjectMapEdge, len(edges))
+	for id, edge := range edges {
+		if !isRedundantObjectMapEdge(edge, endpointTargets) {
+			result[id] = edge
+		}
+	}
+	return result
+}
+
+func objectMapEndpointTargets(edges map[string]ObjectMapEdge) map[string]map[string]struct{} {
+	targets := make(map[string]map[string]struct{})
+	for _, edge := range edges {
+		if edge.Type != objectMapEdgeEndpoint {
+			continue
+		}
+		if targets[edge.Source] == nil {
+			targets[edge.Source] = make(map[string]struct{})
+		}
+		targets[edge.Source][edge.Target] = struct{}{}
+	}
+	return targets
+}
+
+func isRedundantObjectMapEdge(edge ObjectMapEdge, endpointTargets map[string]map[string]struct{}) bool {
+	switch edge.Type {
+	case objectMapEdgeOwner:
+		_, parallel := endpointTargets[edge.Source][edge.Target]
+		return parallel
+	case objectMapEdgeSelector:
+		for intermediate := range endpointTargets[edge.Source] {
+			if _, chained := endpointTargets[intermediate][edge.Target]; chained {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 var objectMapRelationships = map[string]objectMapRelationship{
 	objectMapEdgeOwner: {
 		label:         "owns",

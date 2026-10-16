@@ -35,6 +35,9 @@ export interface ObjectMapVisibleStateInput {
   enabledEdgeTypes: Set<string> | null;
   searchQuery: string;
   useShortResourceNames: boolean;
+  // Where the user dropped dragged objects, keyed by node id. Pins apply in
+  // every view, after filtering and focus have laid the map out.
+  pinnedPositions: ReadonlyMap<string, { x: number; y: number }>;
 }
 
 export interface ObjectMapVisibleState {
@@ -150,6 +153,32 @@ const applyKindFilter = ({
   );
 };
 
+const applyPinnedPositions = (
+  layout: ObjectMapLayout,
+  pinnedPositions: ReadonlyMap<string, { x: number; y: number }>
+): ObjectMapLayout => {
+  if (pinnedPositions.size === 0) {
+    return layout;
+  }
+  let moved = false;
+  const nodes = layout.nodes.map((node) => {
+    const pin = pinnedPositions.get(node.id);
+    if (!pin || (pin.x === node.x && pin.y === node.y)) {
+      return node;
+    }
+    moved = true;
+    return { ...node, x: pin.x, y: pin.y };
+  });
+  if (!moved) {
+    return layout;
+  }
+  return {
+    nodes,
+    edges: routeObjectMapEdges(nodes, layout.edges.map(toLayoutEdgeInput)),
+    bounds: computeObjectMapBounds(nodes),
+  };
+};
+
 const applyFocusMode = (
   layout: ObjectMapLayout,
   focusMode: boolean,
@@ -224,6 +253,7 @@ export const deriveObjectMapVisibleState = ({
   enabledEdgeTypes,
   searchQuery,
   useShortResourceNames,
+  pinnedPositions,
 }: ObjectMapVisibleStateInput): ObjectMapVisibleState => {
   const hasSelectedKinds = selectedKinds.mode === 'some';
   const realEdgeTypes = computeRealEdgeTypes(layout.edges);
@@ -241,7 +271,16 @@ export const deriveObjectMapVisibleState = ({
           enabledEdgeTypes,
           seedNodeId,
         });
-  const visibleLayout = applyFocusMode(kindFilteredLayout, focusMode, activeNodeId);
+  // Pins apply before focus so focus mode anchors on where the active object
+  // is shown, and again after, because focus lays its objects out afresh.
+  const visibleLayout = applyPinnedPositions(
+    applyFocusMode(
+      applyPinnedPositions(kindFilteredLayout, pinnedPositions),
+      focusMode,
+      activeNodeId
+    ),
+    pinnedPositions
+  );
   const visibleSelectionState = computeObjectMapSelectionState(visibleLayout.edges, activeNodeId);
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const searchMatches = computeSearchMatches(

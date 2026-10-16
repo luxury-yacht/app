@@ -92,11 +92,11 @@ RoleBindings (issue #243) and doubles as a noise/perf scope on large clusters.
 - **Metrics**: the pod-metrics poll runs per scope namespace and merges successes
   (`backend/refresh/metrics/poller.go`); node metrics stay cluster-scoped and
   permission-degrade.
-- **Object map**: Gateway API and HPA collectors read synchronized cluster-wide
-  informer caches and filter namespaced objects to the scope. A scoped identity
-  without cluster-wide list+watch gets an insufficient-permissions warning for
-  those kinds. Rejected: per-namespace live-LIST fallback — graph builds issue
-  no LIST calls.
+- **Object map**: ReplicaSet, Gateway API, and HPA collectors read
+  synchronized cluster-wide informer caches and filter namespaced objects to
+  the scope. A scoped identity without cluster-wide list+watch gets an
+  insufficient-permissions warning for those kinds. Rejected: per-namespace
+  live-LIST fallback — graph builds issue no LIST calls.
 - **UI** (`frontend/src/ui/layout/NamespaceScopeEditor.tsx`): the sidebar
   namespaces section is the editor (add affordance, per-row hover delete), and
   its affordances are deliberately the only "scope active" indicator. Validation

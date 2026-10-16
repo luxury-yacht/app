@@ -16,7 +16,7 @@ type objectMapAssembler struct {
 func (b *objectMapBuilder) newObjectMapAssembler(ctx context.Context) (*objectMapAssembler, error) {
 	meta := ClusterMetaFromContext(ctx)
 	index := newObjectMapIndex(meta, b.allowedNamespaces)
-	index.addCatalog(b.catalog())
+	index.catalog = b.catalog()
 	index.collectTyped(objectMapTypedSource{
 		shared:      b.shared,
 		permissions: b.permissions,
@@ -64,7 +64,7 @@ func (a *objectMapAssembler) snapshot(
 	opts objectMapOptions,
 ) *refresh.Snapshot {
 	nodes := sortedObjectMapNodes(graph.nodes)
-	edges := sortedObjectMapEdges(graph.edges)
+	edges := sortedObjectMapEdges(canonicalObjectMapEdges(graph.edges))
 	payload := ObjectMapSnapshotPayload{
 		ClusterMeta: a.meta,
 		Seed:        seed,

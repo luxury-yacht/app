@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
 
@@ -25,6 +26,25 @@ func TestClusterOverviewRuntimePolicyAllowsAnyPrimaryResource(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{"core/nodes", "core/pods", "core/namespaces"}, keys)
 	require.NotEmpty(t, policy.Reason, "ModeAny denial needs an explicit human-readable reason")
+}
+
+// The object map collects every kind its registry collectors declare, so the
+// domain must be served when any of them is readable, including for an
+// identity that can read only RBAC objects.
+func TestObjectMapRuntimePolicyCoversEveryMapCollector(t *testing.T) {
+	policy, ok := RuntimePoliciesByDomain()["object-map"]
+	require.True(t, ok)
+	require.Equal(t, ModeAny, policy.Mode)
+
+	got := make(map[string]bool)
+	for _, req := range policy.Runtime {
+		got[permissions.ResourceKey(req.Group, req.Resource)] = true
+	}
+	want := make(map[string]bool)
+	for _, id := range kindregistry.ObjectMapIdentities() {
+		want[permissions.ResourceKey(id.Group, id.Resource)] = true
+	}
+	require.Equal(t, want, got)
 }
 
 func TestClusterAttentionOperationalSourcesAreOptional(t *testing.T) {

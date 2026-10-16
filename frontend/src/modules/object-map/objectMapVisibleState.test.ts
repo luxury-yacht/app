@@ -65,6 +65,7 @@ const derive = ({
   selectedKinds = ALL_MULTISELECT_FILTER,
   enabledEdgeTypes = null,
   searchQuery = '',
+  pinnedPositions = new Map(),
 }: {
   nodes: ObjectMapNode[];
   edges: ObjectMapEdge[];
@@ -74,6 +75,7 @@ const derive = ({
   selectedKinds?: MultiSelectFilterSelection;
   enabledEdgeTypes?: Set<string> | null;
   searchQuery?: string;
+  pinnedPositions?: ReadonlyMap<string, { x: number; y: number }>;
 }) =>
   deriveObjectMapVisibleState({
     layout: computeObjectMapLayout(nodes, edges, seedId),
@@ -84,6 +86,7 @@ const derive = ({
     enabledEdgeTypes,
     searchQuery,
     useShortResourceNames: false,
+    pinnedPositions,
   });
 
 describe('deriveObjectMapVisibleState', () => {
@@ -231,6 +234,62 @@ describe('deriveObjectMapVisibleState', () => {
     expect(focusedActiveNode).toBeTruthy();
     expect(focusedActiveNode?.x).toBe(unselectedActiveNode?.x);
     expect(focusedActiveNode?.y).toBe(unselectedActiveNode?.y);
+  });
+
+  it('keeps pinned objects where the user dropped them in every view', () => {
+    const nodes = [
+      node('deploy', 'Deployment', 'web', 0),
+      node('rs', 'ReplicaSet', 'web-rs', 1),
+      node('pod', 'Pod', 'web-pod', 2),
+    ];
+    const edges = [
+      edge('deploy-rs', 'deploy', 'rs', 'owner'),
+      edge('rs-pod', 'rs', 'pod', 'owner'),
+    ];
+    const base = computeObjectMapLayout(nodes, edges, 'deploy');
+    const at = (layout: typeof base, id: string) =>
+      requireValue(
+        layout.nodes.find((n) => n.id === id),
+        `node ${id}`
+      );
+    const pin = { x: at(base, 'pod').x + 500, y: at(base, 'pod').y + 300 };
+    const pinnedPositions = new Map([['pod', pin]]);
+    const views = {
+      unfiltered: {},
+      kindFilter: {
+        selectedKinds: {
+          mode: 'some',
+          values: ['Deployment', 'ReplicaSet', 'Pod'],
+        } as MultiSelectFilterSelection,
+      },
+      focus: { focusMode: true, activeNodeId: 'deploy' },
+    };
+
+    for (const [view, options] of Object.entries(views)) {
+      const visible = derive({ nodes, edges, pinnedPositions, ...options }).visibleLayout;
+      expect({ view, x: at(visible, 'pod').x, y: at(visible, 'pod').y }).toEqual({ view, ...pin });
+      const podEdge = requireValue(
+        visible.edges.find((e) => e.id === 'rs-pod'),
+        'rs-pod edge'
+      );
+      expect(podEdge.d.endsWith(`${pin.x} ${pin.y + at(visible, 'pod').height / 2}`), view).toBe(
+        true
+      );
+    }
+
+    // A pinned focus anchor keeps the focused layout lined up around it.
+    const deployPin = { x: at(base, 'deploy').x - 200, y: at(base, 'deploy').y + 100 };
+    const focused = derive({
+      nodes,
+      edges,
+      focusMode: true,
+      activeNodeId: 'deploy',
+      pinnedPositions: new Map([['deploy', deployPin]]),
+    }).visibleLayout;
+    expect(at(focused, 'deploy')).toMatchObject(deployPin);
+    expect(at(focused, 'rs').x - at(focused, 'deploy').x).toBe(
+      at(base, 'rs').x - at(base, 'deploy').x
+    );
   });
 
   it('searches only visible nodes', () => {

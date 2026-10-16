@@ -3,6 +3,7 @@
 package domainpermissions
 
 import (
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	admissionpkg "github.com/luxury-yacht/app/backend/resources/admission"
@@ -232,12 +233,15 @@ func listWatchRequirements(resources []Resource) []permissions.ResourceRequireme
 	return result
 }
 
-func resources(groups ...[]Resource) []Resource {
-	var result []Resource
-	for _, group := range groups {
-		result = append(result, group...)
+// objectMapResources is every kind the object map collects, from the kind
+// registry, so the domain's permission policy cannot drift from its collectors.
+func objectMapResources() []Resource {
+	identities := kindregistry.ObjectMapIdentities()
+	out := make([]Resource, 0, len(identities))
+	for _, id := range identities {
+		out = append(out, fromIdentity(id))
 	}
-	return result
+	return out
 }
 
 // fromIdentity builds a domain Resource from a kind package's canonical Identity,
@@ -478,43 +482,9 @@ var policySpecs = []policySpec{
 		Runtime: []Resource{fromIdentity(events.Identity)},
 	},
 	{
-		Domain: "object-map",
-		Mode:   ModeAny,
-		Reason: "object map resources",
-		Runtime: resources(
-			[]Resource{
-				fromIdentity(pods.Identity),
-				fromIdentity(service.Identity),
-				fromIdentity(endpointslice.Identity),
-				fromIdentity(persistentvolumeclaim.Identity),
-				fromIdentity(persistentvolume.Identity),
-				fromIdentity(storageclass.Identity),
-				fromIdentity(configmap.Identity),
-				fromIdentity(secretpkg.Identity),
-				fromIdentity(serviceaccount.Identity),
-				fromIdentity(nodes.Identity),
-			},
-			[]Resource{
-				fromIdentity(deployment.Identity),
-				fromIdentity(replicaset.Identity),
-				fromIdentity(statefulset.Identity),
-				fromIdentity(daemonset.Identity),
-				fromIdentity(job.Identity),
-				fromIdentity(cronjob.Identity),
-				fromIdentity(hpa.IdentityV1),
-				fromIdentity(ingress.Identity),
-				fromIdentity(ingressclass.Identity),
-			},
-			[]Resource{
-				fromIdentity(gatewayclass.Identity),
-				fromIdentity(gatewaypkg.Identity),
-				fromIdentity(httproute.Identity),
-				fromIdentity(grpcroute.Identity),
-				fromIdentity(tlsroute.Identity),
-				fromIdentity(listenerset.Identity),
-				fromIdentity(referencegrant.Identity),
-				fromIdentity(backendtlspolicy.Identity),
-			},
-		),
+		Domain:  "object-map",
+		Mode:    ModeAny,
+		Reason:  "object map resources",
+		Runtime: objectMapResources(),
 	},
 }

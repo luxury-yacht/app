@@ -6,6 +6,7 @@
  * checks from one shared object reference contract.
  */
 
+import builtinResourceIdentityContract from '@builtin-resource-identities';
 import { buildObjectPanelPodsScope } from '@modules/object-panel/components/ObjectPanel/Pods/objectPanelPodsScope';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import {
@@ -59,41 +60,18 @@ export interface ObjectPanelScopeEviction {
 const DEFAULT_CLUSTER_SCOPE = '__cluster__';
 const HELM_RELEASE_GVK = { group: 'helm.sh', version: 'v3' };
 
-const MAP_SUPPORTED_KINDS = new Set([
-  'pod',
-  'service',
-  'endpointslice',
-  'persistentvolumeclaim',
-  'persistentvolume',
-  'storageclass',
-  'configmap',
-  'secret',
-  'serviceaccount',
-  'node',
-  'clusterrole',
-  'clusterrolebinding',
-  'role',
-  'rolebinding',
-  'deployment',
-  'replicaset',
-  'statefulset',
-  'daemonset',
-  'job',
-  'cronjob',
-  'horizontalpodautoscaler',
-  'poddisruptionbudget',
-  'networkpolicy',
-  'ingress',
-  'ingressclass',
-  'gatewayclass',
-  'gateway',
-  'httproute',
-  'grpcroute',
-  'tlsroute',
-  'listenerset',
-  'referencegrant',
-  'backendtlspolicy',
-]);
+const objectMapGvkKey = (group: string, version: string, kind: string): string =>
+  `${group.trim()}/${version.trim()}/${kind.trim().toLowerCase()}`;
+
+// Built-in identities an object map can be opened for, from the backend kind
+// registry via the identity contract. Matching uses the complete identity, so
+// a custom resource that shares a built-in kind name (an Istio Gateway, a
+// Calico NetworkPolicy) is not mistaken for the built-in.
+const MAP_SUPPORTED_GVKS = new Set(
+  builtinResourceIdentityContract.resources
+    .filter((resource) => 'objectMap' in resource && resource.objectMap)
+    .map((resource) => objectMapGvkKey(resource.group, resource.version, resource.kind))
+);
 
 const normalizeOptional = (value: string | null | undefined): string | undefined => {
   const trimmed = value?.trim() ?? '';
@@ -151,8 +129,23 @@ export const objectPanelId = (ref: KubernetesObjectReference): string => {
   return `obj:${panelRef.clusterId}:${panelRef.group}/${panelRef.version}/${panelRef.kind.toLowerCase()}:${ns}:${panelRef.name}`;
 };
 
-export const isObjectMapSupportedKind = (kind: string | null | undefined): boolean =>
-  Boolean(kind && MAP_SUPPORTED_KINDS.has(kind.trim().toLowerCase()));
+export const isObjectMapSupportedRef = (
+  ref:
+    | {
+        group?: string | null;
+        version?: string | null;
+        kind?: string | null;
+      }
+    | null
+    | undefined
+): boolean =>
+  Boolean(
+    ref?.kind &&
+      ref.version &&
+      ref.group !== null &&
+      ref.group !== undefined &&
+      MAP_SUPPORTED_GVKS.has(objectMapGvkKey(ref.group, ref.version, ref.kind))
+  );
 
 export const hasCompleteObjectMapReference = (
   objectData: KubernetesObjectReference | null | undefined
@@ -163,7 +156,7 @@ export const hasCompleteObjectMapReference = (
   name: string;
   version: string;
 } => {
-  if (!objectData || !isObjectMapSupportedKind(objectData.kind)) {
+  if (!objectData || !isObjectMapSupportedRef(objectData)) {
     return false;
   }
 

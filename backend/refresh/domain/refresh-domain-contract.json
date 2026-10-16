@@ -488,11 +488,11 @@
         "kind": "object-map",
         "clusterPrefix": "required",
         "parser": "backend/refresh/snapshot/object_map.go:parseObjectMapScope",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildObjectScope",
-        "acceptedEncodings": ["<namespace>:<group>/<version>:<kind>:<name>", "__cluster__:<group>/<version>:<kind>:<name>", "<object-scope>?debug=1"]
+        "frontendBuilder": "frontend/src/modules/object-panel/objectPanelRef.ts:getObjectPanelScopes",
+        "acceptedEncodings": ["<namespace>:<group>/<version>:<kind>:<name>[?maxDepth=<n>&maxNodes=<n>]", "__cluster__:<group>/<version>:<kind>:<name>[?maxDepth=<n>&maxNodes=<n>]", "namespace:<namespace>[?maxNodes=<n>]"]
       },
       "singleCluster": true,
-      "payloadOwner": "backend/refresh/snapshot.ObjectMapBuilder",
+      "payloadOwner": "backend/refresh/snapshot.objectMapBuilder",
       "refreshPayloadType": "ObjectMapSnapshotPayload",
       "cachePolicy": "snapshot-cache",
       "streamSemantics": ["snapshot-replace"],

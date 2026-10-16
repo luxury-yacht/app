@@ -593,7 +593,7 @@ describe('refresh domain contract', () => {
           if (inventory.behaviorClass === 'graph-payload') {
             expect(entry.domain).toBe('object-map');
             expect(inventory.scopeContract.kind).toBe('object-map');
-            expect(inventory.payloadOwner).toBe('backend/refresh/snapshot.ObjectMapBuilder');
+            expect(inventory.payloadOwner).toBe('backend/refresh/snapshot.objectMapBuilder');
             expect(inventory.cachePolicy).toBe('snapshot-cache');
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
             expect(inventory.coverageContract).toBe('graph-payload-identity');

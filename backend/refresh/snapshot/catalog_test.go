@@ -658,7 +658,7 @@ func TestCatalogBuildAddsNamespaceGroups(t *testing.T) {
 	}
 }
 
-func seedCatalogService(t *testing.T, summaries []objectcatalog.Summary) *objectcatalog.Service {
+func seedCatalogService(t testing.TB, summaries []objectcatalog.Summary) *objectcatalog.Service {
 	t.Helper()
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
 	value := reflect.ValueOf(svc).Elem()

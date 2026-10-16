@@ -202,19 +202,23 @@ type objectMapIndex struct {
 	byIdent    map[string]*objectMapRecord
 	warnings   []string
 	listErrors []string
-	hpaListed  bool
+	// listedGVRs records the shared-informer kinds this build listed without
+	// error, so joins that need a kind's complete set can tell a missing kind
+	// from an empty one.
+	listedGVRs map[schema.GroupVersionResource]struct{}
+	// selectorTargets is built by buildAllEdges once collection is complete.
+	selectorTargets *objectMapSelectorTargets
+	// catalog supplies objects the map does not collect itself (for example a
+	// custom resource that owns a ReplicaSet), looked up on demand. nil when
+	// no catalog is available.
+	catalog *objectcatalog.Service
 }
 
 type objectMapGraph struct {
 	nodes     map[string]ObjectMapNode
 	edges     map[string]ObjectMapEdge
-	adjacency map[string][]objectMapTraversalEdge
+	adjacency *objectMapAdjacency
 	truncated bool
-}
-
-type objectMapTraversalEdge struct {
-	edgeID  string
-	reverse bool
 }
 
 type objectMapTraversalDirection int
@@ -344,23 +348,12 @@ func parseBoundedInt(raw string, fallback, minValue, maxValue int) int {
 
 func newObjectMapIndex(meta ClusterMeta, allowedNamespaces []string) *objectMapIndex {
 	return &objectMapIndex{
-		meta:    meta,
-		scope:   append([]string(nil), allowedNamespaces...),
-		records: make(map[string]*objectMapRecord),
-		byUID:   make(map[string]*objectMapRecord),
-		byIdent: make(map[string]*objectMapRecord),
-	}
-}
-
-func (idx *objectMapIndex) addCatalog(svc *objectcatalog.Service) {
-	if idx == nil || svc == nil {
-		return
-	}
-	for _, item := range svc.Snapshot() {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromCatalog(idx.meta, item),
-			creationTimestamp: item.CreationTimestamp,
-		})
+		meta:       meta,
+		scope:      append([]string(nil), allowedNamespaces...),
+		records:    make(map[string]*objectMapRecord),
+		byUID:      make(map[string]*objectMapRecord),
+		byIdent:    make(map[string]*objectMapRecord),
+		listedGVRs: make(map[schema.GroupVersionResource]struct{}),
 	}
 }
 
@@ -377,11 +370,6 @@ func (idx *objectMapIndex) collectTyped(src objectMapTypedSource) {
 		if !idx.collectTypedCollector(src, collector) {
 			return
 		}
-	}
-	if src.allowed("autoscaling", "horizontalpodautoscalers") {
-		idx.collectHPAs(src.shared)
-	} else {
-		idx.warnSkippedPermission("horizontalpodautoscalers")
 	}
 }
 
@@ -401,6 +389,7 @@ func (idx *objectMapIndex) collectTypedCollector(src objectMapTypedSource, colle
 	if idx.skipListError(identity.Resource, err) {
 		return !idx.hasListError()
 	}
+	idx.listedGVRs[identity.GVR()] = struct{}{}
 	idx.addTypedCollectorItems(collector, items)
 	return true
 }
@@ -417,6 +406,10 @@ func objectMapRecordFromObject(identity resourcekind.Identity, obj metav1.Object
 
 func (idx *objectMapIndex) addTypedCollectorItems(collector objectmapnode.Collector, items []metav1.Object) {
 	for _, obj := range items {
+		// Shared informers are cluster-wide; keep namespaced objects in scope.
+		if collector.Identity.Namespaced && !idx.namespaceAllowed(obj.GetNamespace()) {
+			continue
+		}
 		record := objectMapRecordFromObject(collector.Identity, obj)
 		record.status = collector.Status(idx.meta.ClusterID, obj)
 		if collector.ActionFacts != nil {
@@ -556,24 +549,6 @@ func gatewayKindPresent(presence objectMapGatewayPresenceChecker, kind string) b
 	return presence == nil || presence.Has(kind)
 }
 
-func (idx *objectMapIndex) collectHPAs(shared informers.SharedInformerFactory) {
-	if shared == nil {
-		return
-	}
-	items, err := shared.Autoscaling().V2().HorizontalPodAutoscalers().Lister().List(labels.Everything())
-	if idx.skipListError("horizontalpodautoscalers", err) {
-		return
-	}
-	idx.hpaListed = true
-	for _, hpa := range items {
-		if !idx.namespaceAllowed(hpa.Namespace) {
-			continue
-		}
-		record := objectMapRecordFromObject(hpapkg.Identity, hpa)
-		record.status = hpapkg.ObjectMapStatus(idx.meta.ClusterID, hpa)
-		idx.addRecord(record)
-	}
-}
 func (idx *objectMapIndex) skipListError(resource string, err error) bool {
 	if err == nil {
 		return false
@@ -597,9 +572,28 @@ func (idx *objectMapIndex) listError() error {
 	return fmt.Errorf("object-map typed resource list failed: %s", strings.Join(idx.listErrors, "; "))
 }
 
+// addRecord indexes a collected record. Each collected kind lists an object
+// once, so a repeated node id keeps the first record.
 func (idx *objectMapIndex) addRecord(record *objectMapRecord) {
-	if idx == nil || record == nil || record.ref.Kind == "" || record.ref.Name == "" || record.ref.Version == "" {
+	if !idx.stampRecord(record) {
 		return
+	}
+	id := objectMapNodeID(record.ref)
+	if idx.records[id] != nil {
+		return
+	}
+	idx.records[id] = record
+	idx.byIdent[objectMapRecordIdentityKey(record.ref)] = record
+	if record.ref.UID != "" {
+		idx.byUID[record.ref.UID] = record
+	}
+}
+
+// stampRecord fills the build's cluster identity and reports whether the
+// record has the identity a graph node needs.
+func (idx *objectMapIndex) stampRecord(record *objectMapRecord) bool {
+	if idx == nil || record == nil || record.ref.Kind == "" || record.ref.Name == "" || record.ref.Version == "" {
+		return false
 	}
 	if record.ref.ClusterID == "" {
 		record.ref.ClusterID = idx.meta.ClusterID
@@ -607,60 +601,77 @@ func (idx *objectMapIndex) addRecord(record *objectMapRecord) {
 	if record.ref.ClusterName == "" {
 		record.ref.ClusterName = idx.meta.ClusterName
 	}
-	id := objectMapNodeID(record.ref)
-	existing := idx.records[id]
-	if existing != nil {
-		idx.mergeRecord(existing, record)
-		record = existing
-	} else {
-		idx.records[id] = record
+	return true
+}
+
+// recordByUID resolves an object UID: a collected record first, else one
+// materialized from the object catalog.
+func (idx *objectMapIndex) recordByUID(uid string) *objectMapRecord {
+	if record := idx.byUID[uid]; record != nil {
+		return record
 	}
-	idx.byIdent[objectMapIdentityKey(record.ref.Namespace, record.ref.Group, record.ref.Version, record.ref.Kind, record.ref.Name)] = record
+	if idx.catalog == nil {
+		return nil
+	}
+	summary, ok := idx.catalog.FindByUID(uid)
+	if !ok {
+		return nil
+	}
+	return idx.addCatalogRecord(summary)
+}
+
+// recordByIdentity resolves a complete identity: a collected record first,
+// else one materialized from the object catalog.
+func (idx *objectMapIndex) recordByIdentity(namespace, group, version, kind, name string) *objectMapRecord {
+	if record := idx.byIdent[objectMapIdentityKey(namespace, group, version, kind, name)]; record != nil {
+		return record
+	}
+	if idx.catalog == nil {
+		return nil
+	}
+	summary, ok := idx.catalog.FindExactMatch(namespace, group, version, kind, name)
+	if !ok {
+		return nil
+	}
+	return idx.addCatalogRecord(summary)
+}
+
+// addCatalogRecord materializes a catalog row that no collected record covers.
+// A UID names one object whatever its served version, so a row whose UID
+// already has a record resolves to that record. A materialized row never takes
+// over an identity a collected record holds.
+func (idx *objectMapIndex) addCatalogRecord(summary objectcatalog.Summary) *objectMapRecord {
+	record := &objectMapRecord{ref: refFromCatalog(idx.meta, summary), creationTimestamp: summary.CreationTimestamp}
+	if !idx.stampRecord(record) {
+		return nil
+	}
+	if existing := idx.byUID[record.ref.UID]; record.ref.UID != "" && existing != nil {
+		return existing
+	}
+	id := objectMapNodeID(record.ref)
+	if existing := idx.records[id]; existing != nil {
+		return existing
+	}
+	idx.records[id] = record
+	if key := objectMapRecordIdentityKey(record.ref); idx.byIdent[key] == nil {
+		idx.byIdent[key] = record
+	}
 	if record.ref.UID != "" {
 		idx.byUID[record.ref.UID] = record
 	}
+	return record
 }
 
-func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
-	if dst.ref.Resource == "" {
-		dst.ref.Resource = src.ref.Resource
-	}
-	if dst.ref.UID == "" {
-		dst.ref.UID = src.ref.UID
-	}
-	if dst.creationTimestamp == "" {
-		dst.creationTimestamp = src.creationTimestamp
-	}
-	if dst.status == nil {
-		dst.status = src.status
-	}
-	if dst.actionFacts == nil {
-		dst.actionFacts = cloneObjectMapActionFacts(src.actionFacts)
-	}
-	if len(dst.owners) == 0 {
-		dst.owners = src.owners
-	}
-	if len(dst.labels) == 0 {
-		dst.labels = src.labels
-	}
-	if src.obj != nil {
-		dst.obj = src.obj
-	}
-	// An ingest-owned (cut) record carries no source object; its presence and edges
-	// live in these two fields instead of obj. The catalog seeds an obj-less,
-	// edge-less record first, so the ingest record almost always merges INTO it —
-	// propagate both, or the cut kind drops out of the namespace filter (which gates
-	// on presented) and loses its relationships (recordEdges reads ingestEdges).
-	if src.presented {
-		dst.presented = true
-	}
-	if len(dst.ingestEdges) == 0 {
-		dst.ingestEdges = src.ingestEdges
-	}
+func objectMapRecordIdentityKey(ref ObjectMapReference) string {
+	return objectMapIdentityKey(ref.Namespace, ref.Group, ref.Version, ref.Kind, ref.Name)
 }
 
 func (idx *objectMapIndex) enrichActionFacts() {
-	if idx == nil || !idx.hpaListed {
+	if idx == nil {
+		return
+	}
+	// Without the complete HPA set, "no HPA targets this workload" is unknown.
+	if _, listed := idx.listedGVRs[hpapkg.Identity.GVR()]; !listed {
 		return
 	}
 	idx.applyHPAManagedActionFacts(idx.hpaManagedActionTargets())
@@ -783,58 +794,27 @@ func (idx *objectMapIndex) findIdentity(namespace string, gvk schema.GroupVersio
 	if idx == nil {
 		return nil, false
 	}
-	record, ok := idx.byIdent[objectMapIdentityKey(namespace, gvk.Group, gvk.Version, gvk.Kind, name)]
-	return record, ok
+	record := idx.recordByIdentity(namespace, gvk.Group, gvk.Version, gvk.Kind, name)
+	return record, record != nil
 }
 
 func (idx *objectMapIndex) buildGraph(seed *objectMapRecord, maxDepth, maxNodes int) objectMapGraph {
-	allEdges := sortedObjectMapTraversalEdges(idx.buildAllEdges())
-	graph := idx.newSeedObjectMapGraph(seed, allEdges)
 	seedID := objectMapNodeID(seed.ref)
+	graph := objectMapGraph{
+		nodes: map[string]ObjectMapNode{seedID: objectMapNodeFromRecord(seedID, 0, seed)},
+		adjacency: newObjectMapAdjacency(idx.buildAllEdges(), func(edge ObjectMapEdge) bool {
+			return idx.canUseObjectMapEdgeForSeed(seed, edge)
+		}),
+	}
 	if !usesDirectionalObjectMapTraversal(seed.ref) {
 		idx.traverseObjectMapMixed(&graph, seedID, maxDepth, maxNodes)
-		graph.edges = objectMapEdgesBetweenNodes(graph.edges, graph.nodes)
+		graph.edges = graph.adjacency.edgesBetween(graph.nodes)
 		return graph
 	}
 	includedEdges := make(map[string]ObjectMapEdge)
 	idx.traverseObjectMapDirection(&graph, seedID, maxDepth, maxNodes, objectMapTraversalForward, includedEdges)
 	idx.traverseObjectMapDirection(&graph, seedID, maxDepth, maxNodes, objectMapTraversalBackward, includedEdges)
 	graph.edges = objectMapEdgesBetweenNodes(includedEdges, graph.nodes)
-	return graph
-}
-
-func sortedObjectMapTraversalEdges(edges []ObjectMapEdge) []ObjectMapEdge {
-	sort.Slice(edges, func(i, j int) bool {
-		if edges[i].Type != edges[j].Type {
-			return edges[i].Type < edges[j].Type
-		}
-		if edges[i].Source != edges[j].Source {
-			return edges[i].Source < edges[j].Source
-		}
-		if edges[i].Target != edges[j].Target {
-			return edges[i].Target < edges[j].Target
-		}
-		return edges[i].ID < edges[j].ID
-	})
-	return edges
-}
-
-func (idx *objectMapIndex) newSeedObjectMapGraph(seed *objectMapRecord, edges []ObjectMapEdge) objectMapGraph {
-	graph := objectMapGraph{
-		nodes:     make(map[string]ObjectMapNode),
-		edges:     make(map[string]ObjectMapEdge),
-		adjacency: make(map[string][]objectMapTraversalEdge),
-	}
-	for _, edge := range edges {
-		if !idx.canUseObjectMapEdgeForSeed(seed, edge) {
-			continue
-		}
-		graph.adjacency[edge.Source] = append(graph.adjacency[edge.Source], objectMapTraversalEdge{edgeID: edge.ID})
-		graph.adjacency[edge.Target] = append(graph.adjacency[edge.Target], objectMapTraversalEdge{edgeID: edge.ID, reverse: true})
-		graph.edges[edge.ID] = edge
-	}
-	seedID := objectMapNodeID(seed.ref)
-	graph.nodes[seedID] = objectMapNodeFromRecord(seedID, 0, seed)
 	return graph
 }
 
@@ -853,17 +833,62 @@ func objectMapEdgesBetweenNodes(edges map[string]ObjectMapEdge, nodes map[string
 }
 
 func (idx *objectMapIndex) buildNamespaceGraph(namespace string, maxNodes int) objectMapGraph {
-	allEdges := sortedObjectMapTraversalEdges(idx.buildAllEdges())
-	graph := objectMapGraph{
-		nodes: make(map[string]ObjectMapNode),
-		edges: make(map[string]ObjectMapEdge),
-	}
+	adjacency := newObjectMapAdjacency(idx.buildAllEdges(), nil)
+	// Collect every eligible object before applying the cap, so cluster-scoped
+	// neighbors compete for slots with the namespace's own objects.
+	candidates := objectMapGraph{nodes: make(map[string]ObjectMapNode)}
+	queue := make([]string, 0)
 	for _, record := range idx.namespaceObjectMapRecords(namespace) {
-		graph.addNamespaceRecord(record, 0, maxNodes)
+		if id := candidates.addNamespaceRecord(record, 0); id != "" {
+			queue = append(queue, id)
+		}
 	}
-	idx.expandNamespaceObjectMapGraph(&graph, allEdges, maxNodes)
-	graph.edges = objectMapEdgesBetweenNodes(objectMapEdgeMap(allEdges), graph.nodes)
+	idx.expandNamespaceObjectMapCandidates(&candidates, adjacency, queue)
+	return capNamespaceObjectMapGraph(candidates.nodes, adjacency.edgesBetween(candidates.nodes), maxNodes)
+}
+
+// capNamespaceObjectMapGraph keeps at most maxNodes candidates. Objects with a
+// relationship to another candidate rank before isolated ones, so a cap keeps
+// workload chains instead of an alphabetical prefix of kinds.
+func capNamespaceObjectMapGraph(
+	candidates map[string]ObjectMapNode,
+	candidateEdges map[string]ObjectMapEdge,
+	maxNodes int,
+) objectMapGraph {
+	connected := make(map[string]struct{}, len(candidates))
+	for _, edge := range candidateEdges {
+		connected[edge.Source] = struct{}{}
+		connected[edge.Target] = struct{}{}
+	}
+	ranked := make([]ObjectMapNode, 0, len(candidates))
+	for _, node := range candidates {
+		ranked = append(ranked, node)
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		return lessNamespaceObjectMapCandidate(ranked[i], ranked[j], connected)
+	})
+	kept := ranked[:min(len(ranked), maxNodes)]
+	graph := objectMapGraph{
+		nodes:     make(map[string]ObjectMapNode, len(kept)),
+		truncated: len(ranked) > len(kept),
+	}
+	for _, node := range kept {
+		graph.nodes[node.ID] = node
+	}
+	graph.edges = objectMapEdgesBetweenNodes(candidateEdges, graph.nodes)
 	return graph
+}
+
+func lessNamespaceObjectMapCandidate(a, b ObjectMapNode, connected map[string]struct{}) bool {
+	_, aConnected := connected[a.ID]
+	_, bConnected := connected[b.ID]
+	if aConnected != bConnected {
+		return aConnected
+	}
+	if order := compareObjectMapRefs(a.Ref, b.Ref); order != 0 {
+		return order < 0
+	}
+	return a.ID < b.ID
 }
 
 func (idx *objectMapIndex) namespaceObjectMapRecords(namespace string) []*objectMapRecord {
@@ -873,99 +898,60 @@ func (idx *objectMapIndex) namespaceObjectMapRecords(namespace string) []*object
 			records = append(records, record)
 		}
 	}
-	sort.Slice(records, func(i, j int) bool {
-		return compareObjectMapRefs(records[i].ref, records[j].ref) < 0
-	})
 	return records
 }
 
-func (graph *objectMapGraph) addNamespaceRecord(record *objectMapRecord, depth, maxNodes int) bool {
+// addNamespaceRecord adds a presented record and returns its node id, or ""
+// when the record is not presented or is already in the graph.
+func (graph *objectMapGraph) addNamespaceRecord(record *objectMapRecord, depth int) string {
 	if !isNamespaceMapSupportedRecord(record) {
-		return false
+		return ""
 	}
 	id := objectMapNodeID(record.ref)
 	if id == "" {
-		return false
+		return ""
 	}
 	if _, exists := graph.nodes[id]; exists {
-		return false
-	}
-	if len(graph.nodes) >= maxNodes {
-		graph.truncated = true
-		return false
+		return ""
 	}
 	graph.nodes[id] = objectMapNodeFromRecord(id, depth, record)
-	return true
+	return id
 }
 
-func (idx *objectMapIndex) expandNamespaceObjectMapGraph(
+// expandNamespaceObjectMapCandidates adds the cluster-scoped objects a
+// namespace map admits, breadth-first from the queued candidates: targets of a
+// candidate's edges, and sources of edges into a candidate unless that
+// candidate stops reverse expansion. Added objects expand the same way.
+func (idx *objectMapIndex) expandNamespaceObjectMapCandidates(
 	graph *objectMapGraph,
-	edges []ObjectMapEdge,
-	maxNodes int,
+	adjacency *objectMapAdjacency,
+	queue []string,
 ) {
-	changed := true
-	for changed && !graph.truncated {
-		changed = idx.expandNamespaceObjectMapPass(graph, edges, maxNodes)
-	}
-}
-
-func (idx *objectMapIndex) expandNamespaceObjectMapPass(
-	graph *objectMapGraph,
-	edges []ObjectMapEdge,
-	maxNodes int,
-) bool {
-	changed := false
-	for _, edge := range edges {
-		if idx.addNamespaceObjectMapTarget(graph, edge, maxNodes) {
-			changed = true
-		}
-		if idx.addNamespaceObjectMapSource(graph, edge, maxNodes) {
-			changed = true
+	for head := 0; head < len(queue); head++ {
+		for _, entry := range adjacency.byNode[queue[head]] {
+			if id := idx.addNamespaceObjectMapNeighbor(graph, adjacency.edge(entry), entry.reverse); id != "" {
+				queue = append(queue, id)
+			}
 		}
 	}
-	return changed
 }
 
-func (idx *objectMapIndex) addNamespaceObjectMapTarget(
-	graph *objectMapGraph,
-	edge ObjectMapEdge,
-	maxNodes int,
-) bool {
-	if _, included := graph.nodes[edge.Source]; !included {
-		return false
-	}
-	target := idx.records[edge.Target]
-	if target == nil || target.ref.Namespace != "" {
-		return false
-	}
-	return graph.addNamespaceRecord(target, 1, maxNodes)
-}
-
-func (idx *objectMapIndex) addNamespaceObjectMapSource(
-	graph *objectMapGraph,
-	edge ObjectMapEdge,
-	maxNodes int,
-) bool {
-	if _, included := graph.nodes[edge.Target]; !included {
-		return false
+func (idx *objectMapIndex) addNamespaceObjectMapNeighbor(graph *objectMapGraph, edge ObjectMapEdge, reverse bool) string {
+	if !reverse {
+		return graph.addClusterScopedNamespaceNeighbor(idx.records[edge.Target])
 	}
 	target := idx.records[edge.Target]
 	if target == nil || stopsNamespaceMapReverseExpansion(target.ref) {
-		return false
+		return ""
 	}
-	source := idx.records[edge.Source]
-	if source == nil || source.ref.Namespace != "" {
-		return false
-	}
-	return graph.addNamespaceRecord(source, 1, maxNodes)
+	return graph.addClusterScopedNamespaceNeighbor(idx.records[edge.Source])
 }
 
-func objectMapEdgeMap(edges []ObjectMapEdge) map[string]ObjectMapEdge {
-	result := make(map[string]ObjectMapEdge, len(edges))
-	for _, edge := range edges {
-		result[edge.ID] = edge
+func (graph *objectMapGraph) addClusterScopedNamespaceNeighbor(record *objectMapRecord) string {
+	if record == nil || record.ref.Namespace != "" {
+		return ""
 	}
-	return result
+	return graph.addNamespaceRecord(record, 1)
 }
 
 func (idx *objectMapIndex) traverseObjectMapMixed(
@@ -986,8 +972,8 @@ func (idx *objectMapIndex) expandMixedObjectMapNode(graph *objectMapGraph, curre
 		return nil
 	}
 	var added []string
-	for _, traversal := range graph.adjacency[currentID] {
-		edge := graph.edges[traversal.edgeID]
+	for _, traversal := range graph.adjacency.neighbors(currentID) {
+		edge := graph.adjacency.edge(traversal)
 		if traversal.reverse && !canTraverseObjectMapReverse(edge.Type, currentDepth) {
 			continue
 		}
@@ -1030,7 +1016,7 @@ func (idx *objectMapIndex) traverseObjectMapDirection(
 		if current.depth >= maxDepth {
 			continue
 		}
-		for _, traversal := range graph.adjacency[current.id] {
+		for _, traversal := range graph.adjacency.neighbors(current.id) {
 			idx.traverseObjectMapDirectionEdge(graph, current, traversal, maxNodes, state)
 		}
 	}
@@ -1071,7 +1057,7 @@ func (idx *objectMapIndex) traverseObjectMapDirectionEdge(
 	if !objectMapTraversalMatchesDirection(traversal, state.direction) {
 		return
 	}
-	edge := graph.edges[traversal.edgeID]
+	edge := graph.adjacency.edge(traversal)
 	if traversal.reverse && !canTraverseObjectMapReverse(edge.Type, current.depth) {
 		return
 	}
@@ -1185,6 +1171,7 @@ func compareObjectMapRefs(a, b ObjectMapReference) int {
 }
 
 func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
+	idx.indexSelectorTargets()
 	edges := objectMapEdgeSet{}
 	for _, record := range idx.records {
 		idx.addObjectMapOwnerEdges(edges, record)
@@ -1259,7 +1246,7 @@ func (idx *objectMapIndex) recordEdges(record *objectMapRecord) []objectmapspec.
 
 func (idx *objectMapIndex) resolveOwner(child *objectMapRecord, owner metav1.OwnerReference) *objectMapRecord {
 	if owner.UID != "" {
-		if record := idx.byUID[string(owner.UID)]; record != nil {
+		if record := idx.recordByUID(string(owner.UID)); record != nil {
 			return record
 		}
 	}
@@ -1267,7 +1254,7 @@ func (idx *objectMapIndex) resolveOwner(child *objectMapRecord, owner metav1.Own
 	if err != nil {
 		return nil
 	}
-	return idx.byIdent[objectMapIdentityKey(child.ref.Namespace, gv.Group, gv.Version, owner.Kind, owner.Name)]
+	return idx.recordByIdentity(child.ref.Namespace, gv.Group, gv.Version, owner.Kind, owner.Name)
 }
 
 func (idx *objectMapIndex) resolveCoreObjectRef(defaultNamespace string, ref *corev1.ObjectReference) *objectMapRecord {
@@ -1275,7 +1262,7 @@ func (idx *objectMapIndex) resolveCoreObjectRef(defaultNamespace string, ref *co
 		return nil
 	}
 	if ref.UID != "" {
-		if record := idx.byUID[string(ref.UID)]; record != nil {
+		if record := idx.recordByUID(string(ref.UID)); record != nil {
 			return record
 		}
 	}
@@ -1293,17 +1280,52 @@ func (idx *objectMapIndex) resolveCoreObjectRef(defaultNamespace string, ref *co
 		group = gv.Group
 		version = gv.Version
 	}
-	return idx.byIdent[objectMapIdentityKey(namespace, group, version, ref.Kind, ref.Name)]
+	return idx.recordByIdentity(namespace, group, version, ref.Kind, ref.Name)
 }
 
 func (idx *objectMapIndex) recordForResourceLink(link resourcemodel.ResourceLink) *objectMapRecord {
 	if link.Ref != nil {
-		return idx.byIdent[objectMapIdentityKey(link.Ref.Namespace, link.Ref.Group, link.Ref.Version, link.Ref.Kind, link.Ref.Name)]
+		return idx.recordByIdentity(link.Ref.Namespace, link.Ref.Group, link.Ref.Version, link.Ref.Kind, link.Ref.Name)
 	}
 	if link.Display != nil {
-		return idx.byIdent[objectMapIdentityKey(link.Display.Namespace, link.Display.Group, link.Display.Version, link.Display.Kind, link.Display.Name)]
+		return idx.recordByIdentity(link.Display.Namespace, link.Display.Group, link.Display.Version, link.Display.Kind, link.Display.Name)
 	}
 	return nil
+}
+
+// objectMapSelectorTargets indexes the records that selector-style edges
+// resolve against, so each selector scans only its candidates instead of every
+// record in the cluster.
+type objectMapSelectorTargets struct {
+	podsByNamespace map[string][]*objectMapRecord
+	// slicesByService is keyed by namespace and the slice's service-name label.
+	slicesByService map[string][]*objectMapRecord
+	clusterRoles    []*objectMapRecord
+}
+
+// indexSelectorTargets builds the selector index from the final record set.
+// Call it after collection, before edges resolve.
+func (idx *objectMapIndex) indexSelectorTargets() {
+	targets := &objectMapSelectorTargets{
+		podsByNamespace: make(map[string][]*objectMapRecord),
+		slicesByService: make(map[string][]*objectMapRecord),
+	}
+	for _, record := range idx.records {
+		switch record.ref.Kind {
+		case podres.Identity.Kind:
+			targets.podsByNamespace[record.ref.Namespace] = append(targets.podsByNamespace[record.ref.Namespace], record)
+		case endpointslice.Identity.Kind:
+			key := objectMapServiceSliceKey(record.ref.Namespace, record.labels[discoveryv1.LabelServiceName])
+			targets.slicesByService[key] = append(targets.slicesByService[key], record)
+		case clusterrolepkg.Identity.Kind:
+			targets.clusterRoles = append(targets.clusterRoles, record)
+		}
+	}
+	idx.selectorTargets = targets
+}
+
+func objectMapServiceSliceKey(namespace, serviceName string) string {
+	return namespace + "\x00" + serviceName
 }
 
 func (idx *objectMapIndex) clusterRolesMatchingSelector(selector metav1.LabelSelector) []*objectMapRecord {
@@ -1312,10 +1334,7 @@ func (idx *objectMapIndex) clusterRolesMatchingSelector(selector metav1.LabelSel
 		return nil
 	}
 	result := []*objectMapRecord{}
-	for _, record := range idx.records {
-		if record.ref.Kind != clusterrolepkg.Identity.Kind {
-			continue
-		}
+	for _, record := range idx.selectorTargets.clusterRoles {
 		if parsed.Matches(labels.Set(record.labels)) {
 			result = append(result, record)
 		}
@@ -1347,10 +1366,7 @@ func (idx *objectMapIndex) matchingPodsByLabelSelector(namespace string, selecto
 
 func (idx *objectMapIndex) matchingPodsWhere(namespace string, matches func(map[string]string) bool) []*objectMapRecord {
 	result := []*objectMapRecord{}
-	for _, record := range idx.records {
-		if record.ref.Kind != podres.Identity.Kind || record.ref.Namespace != namespace {
-			continue
-		}
+	for _, record := range idx.selectorTargets.podsByNamespace[namespace] {
 		if matches(record.labels) {
 			result = append(result, record)
 		}
@@ -1359,16 +1375,7 @@ func (idx *objectMapIndex) matchingPodsWhere(namespace string, matches func(map[
 }
 
 func (idx *objectMapIndex) endpointSlicesForService(namespace, serviceName string) []*objectMapRecord {
-	result := []*objectMapRecord{}
-	for _, record := range idx.records {
-		if record.ref.Kind != endpointslice.Identity.Kind || record.ref.Namespace != namespace {
-			continue
-		}
-		if record.labels[discoveryv1.LabelServiceName] == serviceName {
-			result = append(result, record)
-		}
-	}
-	return result
+	return idx.selectorTargets.slicesByService[objectMapServiceSliceKey(namespace, serviceName)]
 }
 
 func labelsMatch(selector, labels map[string]string) bool {
@@ -1386,7 +1393,7 @@ func labelsMatch(selector, labels map[string]string) bool {
 func (idx *objectMapIndex) resolveEdgeTargets(source *objectMapRecord, e objectmapspec.Edge) []*objectMapRecord {
 	switch {
 	case e.CoreRef != nil:
-		return []*objectMapRecord{idx.byIdent[objectMapIdentityKey(e.CoreRef.Namespace, e.CoreRef.Group, e.CoreRef.Version, e.CoreRef.Kind, e.CoreRef.Name)]}
+		return []*objectMapRecord{idx.recordByIdentity(e.CoreRef.Namespace, e.CoreRef.Group, e.CoreRef.Version, e.CoreRef.Kind, e.CoreRef.Name)}
 	case e.PodsSelector != nil:
 		return idx.matchingPods(source.ref.Namespace, e.PodsSelector)
 	case e.PodsLabelSelector != nil:

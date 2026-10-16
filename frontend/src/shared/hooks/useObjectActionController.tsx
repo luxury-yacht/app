@@ -7,7 +7,7 @@
  */
 
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { isObjectMapSupportedKind } from '@modules/object-panel/objectPanelRef';
+import { isObjectMapSupportedRef } from '@modules/object-panel/objectPanelRef';
 import { PortForwardModal, type PortForwardTarget } from '@modules/port-forward';
 import {
   buildObjectActionTarget,
@@ -276,7 +276,7 @@ const buildNavigationHandlers = ({
       () => navigateToView(actionObject),
       navigateToViewAvailable
     ),
-    onObjectMap: isObjectMapSupportedKind(object.kind)
+    onObjectMap: isObjectMapSupportedRef(object)
       ? () => {
           if (onOpenObjectMap) {
             onOpenObjectMap(actionObject);

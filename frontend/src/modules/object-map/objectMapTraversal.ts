@@ -1,6 +1,8 @@
 /**
- * Shared directional graph traversal for map filtering and selection.
- * Each direction has its own visited set, so paths never switch direction.
+ * Directional graph traversal for selection highlight and focus mode: the
+ * active object's lineage, reached by following links purely forward or purely
+ * backward. Each direction has its own visited set, so paths never switch
+ * direction. Map membership is the backend's job and does not use this.
  */
 
 type DirectionalNeighbor = { edgeId: string; neighbor: string };

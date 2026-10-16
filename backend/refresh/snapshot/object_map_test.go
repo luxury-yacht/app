@@ -252,7 +252,9 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 	assertEdge(t, payload, "ReplicaSet", "web-rs", "Pod", "web-pod", "owner")
 	assertEdge(t, payload, "PodDisruptionBudget", "web", "Pod", "web-pod", "selector")
 	assertEdge(t, payload, "NetworkPolicy", "web", "Pod", "web-pod", "selector")
-	assertEdge(t, payload, "Service", "web", "Pod", "web-pod", "selector")
+	// web-pod is in web-slice, so the endpoint chain carries the Service's
+	// relationship to it and the direct selector edge is canonicalized away.
+	assertMissingEdge(t, payload, "Service", "web", "Pod", "web-pod", "selector")
 	assertEdge(t, payload, "Service", "web", "EndpointSlice", "web-slice", "endpoint")
 	assertEdge(t, payload, "EndpointSlice", "web-slice", "Pod", "web-pod", "endpoint")
 	assertEdge(t, payload, "Pod", "web-pod", "Node", "node-1", "schedules")
@@ -473,6 +475,53 @@ func TestObjectMapBuildsNamespaceGraph(t *testing.T) {
 	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "volume-binding")
 }
 
+// A truncated namespace map keeps connected objects before isolated ones, and
+// cluster-scoped neighbors (here the Pod's Node) compete for the same slots
+// as the namespace's own objects instead of being cut off once they fill.
+func TestObjectMapNamespaceTruncationKeepsConnectedObjectsFirst(t *testing.T) {
+	isolatedConfigMap := func(name, uid string) *corev1.ConfigMap {
+		return &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", UID: types.UID(uid)}}
+	}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	t.Run("cluster-scoped neighbor", func(t *testing.T) {
+		client := fake.NewSimpleClientset(
+			podFixture("default", "web-pod", "pod-uid", "", map[string]string{"app": "web"}),
+			&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", UID: types.UID("node-uid")}},
+			isolatedConfigMap("settings", "settings-uid"),
+		)
+		builder := newObjectMapTestBuilder(t, client)
+
+		snap, err := builder.Build(ctx, "namespace:default?maxNodes=2")
+		require.NoError(t, err)
+		payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+		require.True(t, payload.Truncated)
+		require.Len(t, payload.Nodes, 2)
+		assertEdge(t, payload, "Pod", "web-pod", "Node", "node-1", "schedules")
+		assertMissingNode(t, payload, "ConfigMap", "settings")
+	})
+
+	t.Run("connected before alphabetical kind", func(t *testing.T) {
+		client := fake.NewSimpleClientset(
+			serviceFixture("default", "web", "svc-uid", map[string]string{"app": "web"}),
+			podFixture("default", "web-a", "pod-a-uid", "", map[string]string{"app": "web"}),
+			podFixture("default", "web-b", "pod-b-uid", "", map[string]string{"app": "web"}),
+			isolatedConfigMap("a-settings", "settings-uid"),
+		)
+		builder := newObjectMapTestBuilder(t, client)
+
+		snap, err := builder.Build(ctx, "namespace:default?maxNodes=3")
+		require.NoError(t, err)
+		payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+		require.True(t, payload.Truncated)
+		assertEdge(t, payload, "Service", "web", "Pod", "web-a", "selector")
+		assertEdge(t, payload, "Service", "web", "Pod", "web-b", "selector")
+		assertMissingNode(t, payload, "ConfigMap", "a-settings")
+	})
+}
+
 func TestObjectMapNamespaceGraphDoesNotReverseExpandFromStorageClass(t *testing.T) {
 	objects := append(objectMapStorageFixtureObjects(),
 		&corev1.PersistentVolume{
@@ -515,6 +564,76 @@ func TestObjectMapDoesNotFanOutThroughSharedHubResources(t *testing.T) {
 	assertMissingNode(t, payload, "Deployment", "api")
 	assertMissingNode(t, payload, "ReplicaSet", "api-rs")
 	assertMissingNode(t, payload, "Pod", "api-pod")
+}
+
+// A Deployment's map shows what its Service also routes to: Pods of another
+// workload behind the same Service appear at the default depth, but that
+// workload's ReplicaSet and Deployment stay out.
+func TestObjectMapWorkloadMapIncludesPodsSharingItsService(t *testing.T) {
+	client := fake.NewSimpleClientset(
+		deploymentFixture("default", "web", "deploy-web-uid", "", "web-config"),
+		replicaSetFixture("default", "web-rs", "rs-web-uid", "web", "deploy-web-uid"),
+		podFixture("default", "web-pod", "pod-web-uid", "rs-web-uid", map[string]string{"app": "shop"}),
+		deploymentFixture("default", "canary", "deploy-canary-uid", "", "canary-config"),
+		replicaSetFixture("default", "canary-rs", "rs-canary-uid", "canary", "deploy-canary-uid"),
+		podFixture("default", "canary-pod", "pod-canary-uid", "rs-canary-uid", map[string]string{"app": "shop"}),
+		serviceFixture("default", "shop", "svc-shop-uid", map[string]string{"app": "shop"}),
+	)
+	builder := newObjectMapTestBuilder(t, client)
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	snap, err := builder.Build(ctx, "default:apps/v1:Deployment:web")
+	require.NoError(t, err)
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	assertEdge(t, payload, "Service", "shop", "Pod", "web-pod", "selector")
+	assertEdge(t, payload, "Service", "shop", "Pod", "canary-pod", "selector")
+	assertMissingNode(t, payload, "ReplicaSet", "canary-rs")
+	assertMissingNode(t, payload, "Deployment", "canary")
+}
+
+// A Service's traffic is shown once, through its endpoint chain. The direct
+// selector edge survives only for a selected Pod the endpoints leave out (the
+// discrepancy worth seeing), and the slice's owner edge never doubles the
+// endpoint edge between the same pair.
+func TestObjectMapCanonicalizesServiceEndpointEdges(t *testing.T) {
+	slice := &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "web-slice",
+			Namespace:       "default",
+			UID:             types.UID("slice-uid"),
+			Labels:          map[string]string{discoveryv1.LabelServiceName: "web"},
+			OwnerReferences: []metav1.OwnerReference{ownerRef("v1", "Service", "web", "svc-uid")},
+		},
+		AddressType: discoveryv1.AddressTypeIPv4,
+		Endpoints: []discoveryv1.Endpoint{{
+			Addresses: []string{"10.0.0.1"},
+			TargetRef: &corev1.ObjectReference{APIVersion: "v1", Kind: "Pod", Namespace: "default", Name: "web-pod", UID: types.UID("pod-uid")},
+		}},
+	}
+	client := fake.NewSimpleClientset(
+		serviceFixture("default", "web", "svc-uid", map[string]string{"app": "web"}),
+		podFixture("default", "web-pod", "pod-uid", "", map[string]string{"app": "web"}),
+		podFixture("default", "web-pod-pending", "pod-pending-uid", "", map[string]string{"app": "web"}),
+		slice,
+	)
+	builder := newObjectMapTestBuilder(t, client)
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	for _, scope := range []string{"default:/v1:Service:web?maxDepth=3&maxNodes=100", "namespace:default?maxNodes=100"} {
+		t.Run(scope, func(t *testing.T) {
+			snap, err := builder.Build(ctx, scope)
+			require.NoError(t, err)
+			payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+			assertEdge(t, payload, "Service", "web", "EndpointSlice", "web-slice", "endpoint")
+			assertEdge(t, payload, "EndpointSlice", "web-slice", "Pod", "web-pod", "endpoint")
+			assertMissingEdge(t, payload, "Service", "web", "EndpointSlice", "web-slice", "owner")
+			assertMissingEdge(t, payload, "Service", "web", "Pod", "web-pod", "selector")
+			assertEdge(t, payload, "Service", "web", "Pod", "web-pod-pending", "selector")
+			assertEdgesReferenceNodes(t, payload)
+		})
+	}
 }
 
 func TestObjectMapReverseTraversesHubEdgesFromSeed(t *testing.T) {
@@ -1528,6 +1647,26 @@ func stringPtr(value string) *string {
 func objectNamePtr(value string) *gatewayv1.ObjectName {
 	name := gatewayv1.ObjectName(value)
 	return &name
+}
+
+// ReplicaSets come from the cluster-wide shared informer, so a namespace-scoped
+// build must filter them to the scope like the Gateway API and HPA collectors.
+func TestObjectMapScopedCollectionFiltersReplicaSets(t *testing.T) {
+	client := fake.NewSimpleClientset(
+		replicaSetFixture("default", "web-rs", "rs-web-uid", "web", "deploy-web-uid"),
+		replicaSetFixture("outside", "outside-rs", "rs-outside-uid", "outside", "deploy-outside-uid"),
+	)
+	builder := newObjectMapTestBuilder(t, client)
+	builder.allowedNamespaces = []string{"default"}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	inScope, err := builder.Build(ctx, "namespace:default?maxNodes=100")
+	require.NoError(t, err)
+	assertNode(t, inScope.Payload.(ObjectMapSnapshotPayload), "ReplicaSet", "web-rs")
+
+	outOfScope, err := builder.Build(ctx, "namespace:outside?maxNodes=100")
+	require.NoError(t, err)
+	assertMissingNode(t, outOfScope.Payload.(ObjectMapSnapshotPayload), "ReplicaSet", "outside-rs")
 }
 
 func TestObjectMapScopedGatewayCollectionFiltersInformerCache(t *testing.T) {

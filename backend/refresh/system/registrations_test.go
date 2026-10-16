@@ -374,7 +374,7 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 	objectMap := contract.DomainInventory["object-map"]
 	require.Equal(t, "graph-payload", objectMap.BehaviorClass)
 	require.Equal(t, "object-map", objectMap.ScopeContract.Kind)
-	require.Equal(t, "backend/refresh/snapshot.ObjectMapBuilder", objectMap.PayloadOwner)
+	require.Equal(t, "backend/refresh/snapshot.objectMapBuilder", objectMap.PayloadOwner)
 	require.Equal(t, "snapshot-cache", objectMap.CachePolicy)
 	require.Equal(t, []string{"snapshot-replace"}, objectMap.StreamSemantics)
 	require.Equal(t, "graph-payload-identity", objectMap.CoverageContract)

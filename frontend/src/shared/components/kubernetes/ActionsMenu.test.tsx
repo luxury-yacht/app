@@ -7,7 +7,7 @@
  * the panel lifecycle callbacks (onAfterDelete / onAfterAction).
  */
 
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import type React from 'react';
@@ -254,6 +254,28 @@ describe('ActionsMenu', () => {
     const menu = document.body.querySelector<HTMLElement>('.context-menu');
     expect(menu).toBeTruthy();
     expect(container.contains(menu)).toBe(false);
+  });
+
+  it('offers Open Map for built-in map kinds but not for same-named custom resources', async () => {
+    const openMapLabel = objectActionLabel(OBJECT_ACTION_IDS.viewMap);
+    const menuLabels = () =>
+      Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item')).map(
+        (item) => item.textContent ?? ''
+      );
+
+    await renderMenu({
+      object: makeObject('Gateway', { group: 'networking.istio.io', version: 'v1beta1' }),
+    });
+    openMenu(container);
+    expect(menuLabels().length).toBeGreaterThan(0);
+    expect(menuLabels().some((label) => label.includes(openMapLabel))).toBe(false);
+    openMenu(container); // the trigger toggles; close before the next object
+
+    await renderMenu({
+      object: makeObject('Gateway', { group: 'gateway.networking.k8s.io', version: 'v1' }),
+    });
+    openMenu(container);
+    expect(menuLabels().some((label) => label.includes(openMapLabel))).toBe(true);
   });
 
   it('does not render when object is null', async () => {

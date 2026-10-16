@@ -6,13 +6,12 @@
 
 import { describe, expect, it } from 'vitest';
 import { computeCollapseInfo, filterByCollapseInfo } from './objectMapCollapse';
-import { dedupeServiceEdges } from './objectMapDedupe';
-import { filterByDirectionalReachability } from './objectMapDirectionalFilter';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import { toObjectMapG6Data } from './objectMapG6Data';
 import { computeObjectMapLayout, routeObjectMapEdges } from './objectMapLayout';
 import { createObjectMapPerformanceFixture } from './objectMapPerformanceFixtures';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
+import { filterBySeedConnectivity } from './objectMapSeedConnectivity';
 import { computeObjectMapSelectionState } from './objectMapSelection';
 
 const EMPTY_SELECTION: ObjectMapSelectionState = {
@@ -89,24 +88,11 @@ const PALETTE: ObjectMapG6Palette = {
 
 const prepareFixture = (nodeCount: number, edgeCount: number) => {
   const payload = createObjectMapPerformanceFixture({ nodeCount, edgeCount });
-  const dedupedEdges = dedupeServiceEdges(payload.nodes, payload.edges);
-  const reachable = filterByDirectionalReachability(
-    payload.nodes,
-    dedupedEdges,
-    payload.nodes[0].id
-  );
-  const collapseInfo = computeCollapseInfo(
-    reachable.nodes,
-    reachable.edges,
-    payload.nodes[0].id,
-    new Set()
-  );
-  const visible = filterByCollapseInfo(
-    reachable.nodes,
-    reachable.edges,
-    collapseInfo.visibleNodeIds
-  );
-  const layout = computeObjectMapLayout(visible.nodes, visible.edges, payload.nodes[0].id);
+  const seedId = payload.nodes[0].id;
+  const collapseInfo = computeCollapseInfo(payload.nodes, payload.edges, seedId, new Set());
+  const collapsed = filterByCollapseInfo(payload.nodes, payload.edges, collapseInfo.visibleNodeIds);
+  const visible = filterBySeedConnectivity(collapsed.nodes, collapsed.edges, seedId);
+  const layout = computeObjectMapLayout(visible.nodes, visible.edges, seedId);
   const graphData = toObjectMapG6Data(layout, EMPTY_SELECTION, () => null, PALETTE);
   return { payload, visible, layout, graphData };
 };

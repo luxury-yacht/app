@@ -413,12 +413,13 @@ const ObjectMapLegend: React.FC<ObjectMapLegendProps> = ({
 const ObjectMapMessages: React.FC<{
   truncated: boolean;
   nodeCount: number;
+  maxNodes: number;
   warnings?: string[];
-}> = ({ truncated, nodeCount, warnings }) => (
+}> = ({ truncated, nodeCount, maxNodes, warnings }) => (
   <>
     {!!truncated && (
       <div className="object-map__banner object-map__banner--truncated">
-        Showing {nodeCount} of many. Increase the depth/node limits to see more.
+        Showing {nodeCount} objects. This map is limited to {maxNodes} objects.
       </div>
     )}
     {!!warnings && warnings.length > 0 && (
@@ -524,6 +525,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       enabledEdgeTypes,
       searchQuery,
       useShortResourceNames,
+      pinnedPositions: model.pinnedPositions,
     });
     return { state, durationMs: objectMapTimingNow() - startedAt };
   }, [
@@ -531,6 +533,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     focusMode,
     model.activeNodeId,
     model.layout,
+    model.pinnedPositions,
     model.seedId,
     searchQuery,
     selectedKinds,
@@ -848,7 +851,13 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   if (model.layout.nodes.length === 0) {
     return (
       <div className="object-map object-map--empty" data-testid="object-map-empty">
-        <p>No related objects found.</p>
+        <p className="object-map__empty-message">No related objects found.</p>
+        <ObjectMapMessages
+          truncated={payload.truncated}
+          nodeCount={0}
+          maxNodes={payload.maxNodes}
+          warnings={payload.warnings}
+        />
       </div>
     );
   }
@@ -934,6 +943,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       <ObjectMapMessages
         truncated={payload.truncated}
         nodeCount={model.layout.nodes.length}
+        maxNodes={payload.maxNodes}
         warnings={payload.warnings}
       />
     </div>

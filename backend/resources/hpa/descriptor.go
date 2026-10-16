@@ -11,6 +11,7 @@ var Descriptor = kindspec.Descriptor{
 	CatalogSource:   kindspec.CatalogShared,
 	DetailCacheable: true,
 	Stream:          &StreamDescriptor,
+	Collector:       &ObjectMapNode,
 	Edges:           ObjectMapEdges,
 	Binding:         &DetailBinding,
 }
