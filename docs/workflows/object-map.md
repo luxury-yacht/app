@@ -83,7 +83,8 @@ One rule decides what a map contains, and nothing else changes it.
   it uses or contains) or toward it (what uses or contains it). Paths never
   turn around.
 - The same rule drives click highlight, focus mode, and the frontend's prune
-  after ReplicaSet collapse (`objectMapTraversal.ts`).
+  after ReplicaSet collapse (`collectLineage` in `objectMapTraversal.ts`). Each
+  keeps every link between the objects it keeps, as the map does.
 - The backend walks breadth-first in both directions at once, so nearer
   objects come first. The node cap is the only bound, and the banner says
   when it was reached. There is no depth limit and there are no per-kind or

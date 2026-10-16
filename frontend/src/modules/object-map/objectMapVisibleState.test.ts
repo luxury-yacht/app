@@ -207,6 +207,40 @@ describe('deriveObjectMapVisibleState', () => {
     ]);
   });
 
+  it('keeps every link between the focused objects, not only the links walked', () => {
+    // The Pod's lineage reaches the ConfigMap forward and the Deployment
+    // backward; the Deployment's template also uses the ConfigMap.
+    const result = derive({
+      nodes: [
+        node('deploy', 'Deployment', 'web', 0),
+        node('rs', 'ReplicaSet', 'web-rs', 1),
+        node('pod', 'Pod', 'web-pod', 2),
+        node('config', 'ConfigMap', 'web-config', 1),
+      ],
+      edges: [
+        edge('deploy-rs', 'deploy', 'rs', 'owner'),
+        edge('rs-pod', 'rs', 'pod', 'owner'),
+        edge('pod-config', 'pod', 'config', 'uses'),
+        edge('deploy-config', 'deploy', 'config', 'uses'),
+      ],
+      activeNodeId: 'pod',
+      focusMode: true,
+    });
+
+    expect(result.visibleLayout.nodes.map((n) => n.id).sort(compareUtf16Strings)).toEqual([
+      'config',
+      'deploy',
+      'pod',
+      'rs',
+    ]);
+    expect(result.visibleLayout.edges.map((e) => e.id).sort(compareUtf16Strings)).toEqual([
+      'deploy-config',
+      'deploy-rs',
+      'pod-config',
+      'rs-pod',
+    ]);
+  });
+
   it('keeps the active object at the same map coordinate in focus mode', () => {
     const nodes = [
       node('deploy', 'Deployment', 'web', 0),
