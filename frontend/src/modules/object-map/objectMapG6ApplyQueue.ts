@@ -153,6 +153,7 @@ const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
   return (
     previous.type !== next.type ||
     fieldsChanged(previousStyle, nextStyle, NODE_STYLE_FIELDS) ||
+    lineDashChanged(previousStyle.lineDash, nextStyle.lineDash) ||
     sizeChanged
   );
 };

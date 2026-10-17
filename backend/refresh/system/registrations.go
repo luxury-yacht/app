@@ -606,7 +606,7 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 					Shared: deps.informerFactory.SharedInformerFactory(), Permissions: deps.informerFactory,
 					GatewayShared: deps.informerFactory.GatewayInformerFactory(), GatewayPresence: deps.cfg.GatewayAPIPresence,
 					CatalogService: deps.cfg.ObjectCatalogService, IngestSource: deps.ingestManager,
-					AllowedNamespaces: deps.cfg.AllowedNamespaces,
+					AllowedNamespaces: deps.cfg.AllowedNamespaces, HelmManifests: helmProvider,
 				},
 			)
 		}),

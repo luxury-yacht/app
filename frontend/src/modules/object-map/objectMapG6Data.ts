@@ -13,6 +13,7 @@ import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
 import {
   OBJECT_MAP_G6_CARD_NODE,
   OBJECT_MAP_G6_PATH_EDGE,
+  OBJECT_MAP_MISSING_LABEL,
   type ObjectMapG6CardDetailLevel,
   type ObjectMapG6EdgeDetailLevel,
 } from './objectMapG6Constants';
@@ -225,6 +226,37 @@ const objectMapG6SimpleEdgePath = (
   ];
 };
 
+interface ObjectMapCardState {
+  lineDash: number[] | undefined;
+  statusFill: string | undefined;
+  ageText: string;
+}
+
+// A missing object's card keeps its shape and size but is outlined dashed,
+// shows no status dot, and says it was not found where the age would be.
+const objectMapCardState = (
+  node: PositionedNode,
+  palette: ObjectMapG6Palette,
+  ageNow: ObjectMapG6DataOptions['ageNow']
+): ObjectMapCardState =>
+  node.missing
+    ? { lineDash: palette.edgeDash, statusFill: undefined, ageText: OBJECT_MAP_MISSING_LABEL }
+    : {
+        lineDash: undefined,
+        statusFill: objectMapStatusFill(node.status, palette),
+        ageText: formatNodeAge(node.creationTimestamp, ageNow),
+      };
+
+// The ReplicaSet collapse badge reads "−" when expanded and "+N" when N are hidden.
+const objectMapCollapseBadgeText = (
+  badge: ReturnType<ObjectMapNodeBadgeLookup>
+): string | undefined => {
+  if (!badge) {
+    return undefined;
+  }
+  return badge.expanded ? '\u2212' : `+${badge.hiddenCount}`;
+};
+
 export const objectMapG6NodeState = (
   node: PositionedNode,
   selectionState: ObjectMapSelectionState,
@@ -290,16 +322,12 @@ export const toObjectMapG6Data = (
       const badge = badgeForNode(node.id);
       const kindLabel = getDisplayKind(node.ref.kind, useShortResourceNames);
       const namespaceLabel = truncate(formatNamespace(node), NODE_NAMESPACE_MAX_CHARS);
-      const ageLabel = formatNodeAge(node.creationTimestamp, ageNow);
-      const statusFill = objectMapStatusFill(node.status, palette);
+      const cardState = objectMapCardState(node, palette, ageNow);
       const kindBadgeStyle = kindBadgeStyleForKind(node.ref.kind);
       const states = objectMapG6NodeState(node, selectionState);
       const isDimmed = states.includes('dimmed');
 
-      let cardCollapseBadgeText: string | undefined;
-      if (badge) {
-        cardCollapseBadgeText = badge.expanded ? '\u2212' : `+${badge.hiddenCount}`;
-      }
+      const cardCollapseBadgeText = objectMapCollapseBadgeText(badge);
 
       return {
         id: node.id,
@@ -310,8 +338,9 @@ export const toObjectMapG6Data = (
           kindLabel,
           nameLabel: node.ref.name,
           namespaceLabel,
-          ageLabel,
+          ageLabel: cardState.ageText,
           status: node.status,
+          missing: node.missing,
         },
         states,
         style: {
@@ -322,6 +351,7 @@ export const toObjectMapG6Data = (
           fill: palette.backgroundSecondary,
           stroke: node.isSeed ? palette.accent : palette.border,
           lineWidth: node.isSeed ? NODE_SEED_LINE_WIDTH : NODE_LINE_WIDTH,
+          lineDash: cardState.lineDash,
           opacity: palette.fullOpacity,
           label: false,
           cardBackgroundOpacity: isDimmed
@@ -348,10 +378,10 @@ export const toObjectMapG6Data = (
           cardCollapseBadgeStroke: palette.textTertiary,
           cardNameText: node.ref.name,
           cardNamespaceText: namespaceLabel,
-          cardAgeText: ageLabel,
+          cardAgeText: cardState.ageText,
           cardStatusText: node.status?.label,
           cardStatusReason: node.status?.reason,
-          cardStatusFill: statusFill,
+          cardStatusFill: cardState.statusFill,
           cardStatusStroke: palette.backgroundSecondary,
           cardFontFamily: palette.fontFamily,
           cardNameFill: palette.text,

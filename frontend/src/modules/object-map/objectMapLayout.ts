@@ -78,6 +78,8 @@ export interface PositionedNode {
   ref: ObjectMapNode['ref'];
   creationTimestamp?: string;
   status?: ObjectMapStatus;
+  // A display-only card for an object the cluster does not have.
+  missing?: boolean;
 }
 
 export interface PositionedEdge {
@@ -621,6 +623,7 @@ const positionLane = (
       ref: node.ref,
       creationTimestamp: node.creationTimestamp,
       status: node.status,
+      missing: node.missing,
     };
   });
 };

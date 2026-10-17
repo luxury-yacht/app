@@ -8,6 +8,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// HelmReleaseGVK is the app's synthetic identity for a Helm release. A release
+// is not a Kubernetes API object; panels, actions, and maps address it by this
+// identity plus its namespace and name.
+var HelmReleaseGVK = schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmRelease"}
+
+// IsHelmReleaseGVK reports whether gvk is the synthetic Helm release identity.
+func IsHelmReleaseGVK(gvk schema.GroupVersionKind) bool {
+	return strings.TrimSpace(gvk.Group) == HelmReleaseGVK.Group &&
+		strings.TrimSpace(gvk.Version) == HelmReleaseGVK.Version &&
+		strings.EqualFold(strings.TrimSpace(gvk.Kind), HelmReleaseGVK.Kind)
+}
+
 type HelmManifestResourceIdentity struct {
 	Group     string
 	Version   string

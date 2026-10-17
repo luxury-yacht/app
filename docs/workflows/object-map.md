@@ -43,6 +43,11 @@ frontend code owns visibility, layout, rendering, and interaction state.
   contract's `objectMap` facet carries it to the frontend gate
   (`isObjectMapSupportedRef`), and the `object-map` permission list derives
   from it. A custom resource that shares a built-in kind name gets no map.
+  The one other map seed is the app's synthetic Helm release identity
+  (`helm.sh/v3` `HelmRelease`, `resourcemodel.HelmReleaseGVK`); its scope is
+  the release's object scope, and its builder is
+  `backend/refresh/snapshot/object_map_helm.go`. A Flux `HelmRelease` custom
+  resource gets no map.
 - Declare map collectors and relationship builders in the owning kind's
   registry descriptor. Shared edge projections belong in
   `backend/kind/objectmapspec`, avoiding imports between kind packages or back
@@ -116,6 +121,23 @@ One rule decides what a map contains, and nothing else changes it.
 - When a namespace map exceeds the cap, objects with a link to another
   candidate rank before isolated ones, each ordered by kind, namespace, and
   name.
+- A Helm release map holds exactly the objects the release's rendered
+  manifest names, with the links between them. Objects controllers create from
+  them (ReplicaSets, Pods, EndpointSlices) are not part of the release and stay
+  off. There is no release card; the cap ranks objects as a namespace map does.
+- Manifest objects are matched by group, kind, namespace, and name, so an
+  object the chart names by an older served version (`autoscaling/v1`) is the
+  live object the map collects under another version. Kinds the map does not
+  collect come from the object catalog (`LookupObject`).
+- A manifest object the cluster confirms it does not have is a display-only
+  missing node (`missing: true`): the manifest's identity, no live state, a
+  dashed card of the same shape with "Not found" in place of its age, and no
+  object actions. Absence is confirmed only when the build read the object's
+  kind completely: a collected kind this build listed whose readiness is ready,
+  or a catalog kind the catalog has fully listed. An object of a denied kind,
+  of a kind still loading, in a namespace outside the cluster's namespace
+  scope, or whose API version the cluster does not serve is reported in the
+  warnings instead and never drawn as missing.
 - The payload is what the map shows before the view controls: the Kind
   filter, the legend's link toggles, focus mode, ReplicaSet collapse (with its
   +N badge), and search. The frontend applies no relationship rules of its own.
@@ -132,7 +154,8 @@ One rule decides what a map contains, and nothing else changes it.
   centers a matching visible object; repeated presses cycle through matches.
 - Right-clicking an object opens its canvas menu, which uses the shared
   resource-action controller and complete object reference. Partial references
-  offer no object actions. A removed or filtered object closes its menu; an
+  and missing objects offer no object actions, and modifier clicks on a missing
+  object only select it. A removed or filtered object closes its menu; an
   empty map has no object actions.
 
 ## Table Navigation

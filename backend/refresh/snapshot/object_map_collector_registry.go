@@ -3,6 +3,8 @@ package snapshot
 import (
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
+	"github.com/luxury-yacht/app/backend/resourcekind"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // objectMapIngestOwnedGVRs is the set of GVRs cut over to the owned-reflector ingest
@@ -41,3 +43,17 @@ func objectMapGatewayCollectorsFromRegistry() []objectmapnode.GatewayCollector {
 	}
 	return out
 }
+
+// objectMapCollectedKinds indexes every collector kind (shared informer,
+// ingest, and Gateway API) by group and kind, so a lookup that names an object
+// by another served version finds the version the map collects it under.
+var objectMapCollectedKinds = func() map[schema.GroupKind]resourcekind.Identity {
+	kinds := make(map[schema.GroupKind]resourcekind.Identity, len(objectMapCollectors)+len(objectMapGatewayCollectors))
+	for _, collector := range objectMapCollectors {
+		kinds[collector.Identity.GVK().GroupKind()] = collector.Identity
+	}
+	for _, collector := range objectMapGatewayCollectors {
+		kinds[collector.Identity.GVK().GroupKind()] = collector.Identity
+	}
+	return kinds
+}()

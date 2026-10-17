@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -66,6 +67,10 @@ type ObjectMapNode struct {
 	CreationTimestamp string                `json:"creationTimestamp,omitempty"`
 	Status            *ObjectMapStatus      `json:"status,omitempty"`
 	ActionFacts       *ObjectMapActionFacts `json:"actionFacts,omitempty"`
+	// Missing marks a display-only node for an object a Helm release's manifest
+	// names that the cluster confirms it does not have. It carries the manifest
+	// identity and no live state.
+	Missing bool `json:"missing,omitempty"`
 }
 
 // ObjectMapActionFacts carries the state needed to present context-menu actions
@@ -134,6 +139,9 @@ type objectMapBuilder struct {
 	// allowedNamespaces is the cluster's namespace scope. Informer-backed
 	// collectors filter their cluster-wide caches to this set.
 	allowedNamespaces []string
+	// helmManifests reads Helm release manifests for release-scoped maps; nil
+	// when the cluster has no Helm content provider.
+	helmManifests HelmManifestProvider
 }
 
 // objectMapTypedSource carries everything collectTyped needs for one build.
@@ -157,6 +165,9 @@ type objectMapScopeKind int
 const (
 	objectMapScopeObject objectMapScopeKind = iota
 	objectMapScopeNamespace
+	// objectMapScopeHelmRelease maps the objects a Helm release's manifest
+	// names. Its scope is the release's synthetic object identity.
+	objectMapScopeHelmRelease
 )
 
 type objectMapOptions struct {
@@ -200,6 +211,10 @@ type objectMapIndex struct {
 	// error, so joins that need a kind's complete set can tell a missing kind
 	// from an empty one.
 	listedGVRs map[schema.GroupVersionResource]struct{}
+	// collectedResources records every collector kind this build read without
+	// skipping it (shared informer, ingest, or Gateway API), so a Helm release
+	// map only calls an object missing when its kind was actually read.
+	collectedResources map[schema.GroupResource]struct{}
 	// selectorTargets is built by buildAllEdges once collection is complete.
 	selectorTargets *objectMapSelectorTargets
 	// catalog supplies objects the map does not collect itself (for example a
@@ -233,6 +248,9 @@ type ObjectMapDomainConfig struct {
 	CatalogService    func() *objectcatalog.Service
 	IngestSource      objectMapRowsProvider
 	AllowedNamespaces []string
+	// HelmManifests reads release manifests for Helm release maps; nil when
+	// the cluster has no Helm content provider.
+	HelmManifests HelmManifestProvider
 }
 
 func RegisterObjectMapDomain(reg *domain.Registry, config ObjectMapDomainConfig) error {
@@ -247,6 +265,7 @@ func RegisterObjectMapDomain(reg *domain.Registry, config ObjectMapDomainConfig)
 		permissions:       config.Permissions,
 		ingest:            config.IngestSource,
 		allowedNamespaces: append([]string(nil), config.AllowedNamespaces...),
+		helmManifests:     config.HelmManifests,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          objectMapDomain,
@@ -261,6 +280,9 @@ func (b *objectMapBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	}
 	if opts.scopeKind == objectMapScopeObject && opts.identity.GVK.Group == "" && opts.identity.GVK.Version == "" {
 		return nil, fmt.Errorf("object-map scope for %s/%s is missing group/version", opts.identity.GVK.Kind, opts.identity.Name)
+	}
+	if opts.scopeKind == objectMapScopeHelmRelease {
+		return b.buildHelmReleaseSnapshot(ctx, scope, opts)
 	}
 
 	assembler, err := b.newObjectMapAssembler(ctx)
@@ -296,6 +318,9 @@ func parseObjectMapScope(scope string) (objectMapOptions, error) {
 			return objectMapOptions{}, err
 		}
 		opts.identity = identity
+		if resourcemodel.IsHelmReleaseGVK(identity.GVK) {
+			opts.scopeKind = objectMapScopeHelmRelease
+		}
 	}
 	if !hasQuery {
 		return opts, nil
@@ -346,6 +371,8 @@ func newObjectMapIndex(meta ClusterMeta, allowedNamespaces []string) *objectMapI
 		byUID:      make(map[string]*objectMapRecord),
 		byIdent:    make(map[string]*objectMapRecord),
 		listedGVRs: make(map[schema.GroupVersionResource]struct{}),
+
+		collectedResources: make(map[schema.GroupResource]struct{}),
 	}
 }
 
@@ -374,6 +401,9 @@ func (idx *objectMapIndex) collectTypedCollector(src objectMapTypedSource, colle
 	// Ingest-owned (cut) kinds are no longer cached by the shared factory; their
 	// projected object-map nodes come from the ingest source instead of a lister.
 	if _, cut := objectMapIngestOwnedGVRs[identity.GVR()]; cut {
+		if src.ingest != nil {
+			idx.collectedResources[identity.GVR().GroupResource()] = struct{}{}
+		}
 		idx.collectIngestNodes(identity, src.ingest)
 		return true
 	}
@@ -382,6 +412,7 @@ func (idx *objectMapIndex) collectTypedCollector(src objectMapTypedSource, colle
 		return !idx.hasListError()
 	}
 	idx.listedGVRs[identity.GVR()] = struct{}{}
+	idx.collectedResources[identity.GVR().GroupResource()] = struct{}{}
 	idx.addTypedCollectorItems(collector, items)
 	return true
 }
@@ -459,6 +490,13 @@ func (idx *objectMapIndex) warnSkippedPermission(resource string) {
 	idx.warnings = append(idx.warnings, fmt.Sprintf("skipped %s: insufficient permissions", resource))
 }
 
+// warnOnce adds a warning unless the build already reported it.
+func (idx *objectMapIndex) warnOnce(warning string) {
+	if !slices.Contains(idx.warnings, warning) {
+		idx.warnings = append(idx.warnings, warning)
+	}
+}
+
 func (idx *objectMapIndex) collectGatewayTyped(
 	factory gatewayinformers.SharedInformerFactory,
 	presence objectMapGatewayPresenceChecker,
@@ -491,6 +529,7 @@ func (idx *objectMapIndex) collectGatewayCollector(
 	if idx.skipListError(collector.Identity.Resource, err) {
 		return idx.hasListError()
 	}
+	idx.collectedResources[collector.Identity.GVR().GroupResource()] = struct{}{}
 	idx.addGatewayCollectorItems(collector, items)
 	return false
 }
@@ -902,13 +941,13 @@ func (idx *objectMapIndex) buildNamespaceGraph(namespace string, maxNodes int) o
 		}
 	}
 	idx.walkNamespaceLineage(&candidates, starts)
-	return capNamespaceObjectMapGraph(candidates.nodes, adjacency.edgesBetween(candidates.nodes), maxNodes)
+	return capObjectMapCandidates(candidates.nodes, adjacency.edgesBetween(candidates.nodes), maxNodes)
 }
 
-// capNamespaceObjectMapGraph keeps at most maxNodes candidates. Objects with a
+// capObjectMapCandidates keeps at most maxNodes candidates. Objects with a
 // relationship to another candidate rank before isolated ones, so a cap keeps
 // workload chains instead of an alphabetical prefix of kinds.
-func capNamespaceObjectMapGraph(
+func capObjectMapCandidates(
 	candidates map[string]ObjectMapNode,
 	candidateEdges map[string]ObjectMapEdge,
 	maxNodes int,
@@ -923,7 +962,7 @@ func capNamespaceObjectMapGraph(
 		ranked = append(ranked, node)
 	}
 	sort.Slice(ranked, func(i, j int) bool {
-		return lessNamespaceObjectMapCandidate(ranked[i], ranked[j], connected)
+		return lessObjectMapCandidate(ranked[i], ranked[j], connected)
 	})
 	kept := ranked[:min(len(ranked), maxNodes)]
 	graph := objectMapGraph{
@@ -937,7 +976,7 @@ func capNamespaceObjectMapGraph(
 	return graph
 }
 
-func lessNamespaceObjectMapCandidate(a, b ObjectMapNode, connected map[string]struct{}) bool {
+func lessObjectMapCandidate(a, b ObjectMapNode, connected map[string]struct{}) bool {
 	_, aConnected := connected[a.ID]
 	_, bConnected := connected[b.ID]
 	if aConnected != bConnected {

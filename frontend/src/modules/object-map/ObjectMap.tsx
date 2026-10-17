@@ -823,7 +823,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     const node = visibleState.visibleLayout.nodes.find(
       (item) => objectMapReferenceKey(item.ref) === objectMapReferenceKey(contextMenu.request.ref)
     );
-    if (!node) {
+    // A missing object has nothing to act on.
+    if (!node || node.missing) {
       return [];
     }
     return hasCompleteObjectMapReference({ ...node.ref })

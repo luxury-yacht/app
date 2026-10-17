@@ -19,6 +19,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcecontract"
 	"github.com/luxury-yacht/app/backend/resourcekind"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/helm"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -133,9 +134,7 @@ func sameGVK(a, b schema.GroupVersionKind) bool {
 }
 
 func isHelmReleaseGVK(gvk schema.GroupVersionKind) bool {
-	return strings.TrimSpace(gvk.Group) == helmReleaseAPIGroup &&
-		strings.TrimSpace(gvk.Version) == "v3" &&
-		strings.EqualFold(strings.TrimSpace(gvk.Kind), "HelmRelease")
+	return resourcemodel.IsHelmReleaseGVK(gvk)
 }
 
 // FetchObjectDetails retrieves the details of a Kubernetes object.

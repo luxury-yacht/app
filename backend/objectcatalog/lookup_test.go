@@ -238,3 +238,59 @@ func TestResourceResolverFallsBackToCRDWhenDiscoveryFails(t *testing.T) {
 		t.Fatalf("unexpected resolved resource: %+v", resolved)
 	}
 }
+
+// A Helm manifest can name an object by any version the cluster serves, while
+// the catalog stores each resource under one. LookupObject finds the object
+// whatever version was asked for, and calls a miss absent only once the
+// catalog has completely listed that resource.
+func TestLookupObjectMatchesAnyServedVersionAndVouchesForAbsence(t *testing.T) {
+	svc := NewService(Dependencies{}, nil)
+	desc := Descriptor{
+		Group: "cert-manager.io", Version: "v1", Kind: "Certificate",
+		Resource: "certificates", Namespaced: true, Scope: ScopeNamespace,
+	}
+	svc.mu.Lock()
+	svc.setResource(desc.GVR().String(), desc)
+	svc.items = map[string]Summary{
+		catalogKey(desc, "apps", "web-tls"): {Ref: resourcemodel.ResourceRef{
+			ClusterID: "cluster-a", Group: "cert-manager.io", Version: "v1", Kind: "Certificate",
+			Resource: "certificates", Namespace: "apps", Name: "web-tls", UID: "cert-uid",
+		}, Scope: ScopeNamespace},
+	}
+	svc.mu.Unlock()
+
+	found := svc.LookupObject("apps", "cert-manager.io", "Certificate", "web-tls")
+	if !found.Found || found.Summary.Ref.UID != "cert-uid" {
+		t.Fatalf("expected the stored certificate, got %+v", found)
+	}
+
+	// Before the catalog has finished listing, a miss proves nothing.
+	if early := svc.LookupObject("apps", "cert-manager.io", "Certificate", "api-tls"); early.Found || early.Absent {
+		t.Fatalf("a miss before the catalog is ready must not be absent, got %+v", early)
+	}
+
+	svc.mu.Lock()
+	svc.cachesReady = true
+	svc.mu.Unlock()
+	if absent := svc.LookupObject("apps", "cert-manager.io", "Certificate", "api-tls"); absent.Found || !absent.Absent {
+		t.Fatalf("a miss in a fully listed resource must be absent, got %+v", absent)
+	}
+
+	// A kind the catalog has not listed is never absent.
+	if unlisted := svc.LookupObject("apps", "example.com", "Widget", "w"); unlisted.Found || unlisted.Absent {
+		t.Fatalf("an unlisted kind must not be absent, got %+v", unlisted)
+	}
+
+	// A failed sync leaves the catalog stale: misses are no longer proof.
+	svc.updateHealth(false, true, errors.New("list failed"), 1)
+	if stale := svc.LookupObject("apps", "cert-manager.io", "Certificate", "api-tls"); stale.Absent {
+		t.Fatalf("a stale catalog must not vouch for absence, got %+v", stale)
+	}
+	svc.updateHealth(true, false, nil, 0)
+
+	svc.recordDeniedResource("certificates.cert-manager.io")
+	denied := svc.LookupObject("apps", "cert-manager.io", "Certificate", "api-tls")
+	if denied.Absent || denied.Denied != "certificates.cert-manager.io" {
+		t.Fatalf("a forbidden resource must report the denial instead of absence, got %+v", denied)
+	}
+}

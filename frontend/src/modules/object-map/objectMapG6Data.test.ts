@@ -10,6 +10,7 @@ import { formatAge } from '@/utils/ageFormatter';
 import {
   OBJECT_MAP_G6_CARD_NODE,
   OBJECT_MAP_G6_PATH_EDGE,
+  OBJECT_MAP_MISSING_LABEL,
   objectMapG6CardDetailLevelForZoom,
 } from './objectMapG6Constants';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
@@ -290,6 +291,28 @@ describe('objectMapG6Data', () => {
     expect(secondDeploy?.style?.cardAgeText).toBe('11s');
     expect(secondDeploy?.style?.x).toBe(firstDeploy?.style?.x);
     expect(secondDeploy?.style?.y).toBe(firstDeploy?.style?.y);
+  });
+
+  it('draws a missing object as a same-size dashed card with no live status or age', () => {
+    const missing: PositionedNode = {
+      ...node('cm', 'ConfigMap', 'web-settings', 320, false, '2024-01-01T00:00:00Z'),
+      missing: true,
+    };
+    const graphData = toObjectMapG6Data(
+      { ...layout, nodes: [missing, layout.nodes[0]], edges: [] },
+      selectionState(null),
+      () => null,
+      palette,
+      { ageNow: '2024-01-02T00:00:00Z' }
+    );
+
+    const [missingCard, liveCard] = graphData.nodes ?? [];
+    expect(missingCard.data?.missing).toBe(true);
+    expect(missingCard.style?.size).toEqual(liveCard.style?.size);
+    expect(missingCard.style?.lineDash).toEqual(palette.edgeDash);
+    expect(liveCard.style?.lineDash).toBeUndefined();
+    expect(missingCard.style?.cardStatusFill).toBeUndefined();
+    expect(missingCard.style?.cardAgeText).toBe(OBJECT_MAP_MISSING_LABEL);
   });
 
   it('does not style raw status state when backend presentation is missing', () => {

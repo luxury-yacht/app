@@ -1712,6 +1712,7 @@ export interface ObjectMapNode {
   creationTimestamp?: string;
   status?: ObjectMapStatus;
   actionFacts?: ObjectMapActionFacts;
+  missing?: boolean;
 }
 
 export interface ObjectMapReference {

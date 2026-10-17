@@ -8,6 +8,7 @@ package objectcatalog
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -39,6 +40,49 @@ func (s *Service) FindExactMatch(namespace, group, version, kind, name string) (
 		normalizedKind,
 		normalizedName,
 	)
+}
+
+// ObjectLookup is the catalog's answer for one object identity.
+type ObjectLookup struct {
+	Summary Summary
+	Found   bool
+	// Absent is true only when the catalog has completely listed the object's
+	// resource, so not finding the object means the cluster does not have it.
+	Absent bool
+	// Denied names the resource (kubectl-style resource[.group]) when listing
+	// it was forbidden; a miss then proves nothing.
+	Denied string
+}
+
+// LookupObject finds an object by group, kind, namespace, and name under
+// whichever served version the catalog lists its resource, so a caller holding
+// another served version of the same object still finds it.
+func (s *Service) LookupObject(namespace, group, kind, name string) ObjectLookup {
+	if s == nil {
+		return ObjectLookup{}
+	}
+	s.mu.RLock()
+	desc, listed := s.catalogIndex.descriptorForGroupKind(strings.TrimSpace(group), strings.TrimSpace(kind))
+	var summary Summary
+	found := false
+	if listed {
+		summary, found = s.catalogIndex.findExact(normalizeLookupNamespace(namespace), desc.Group, desc.Version, desc.Kind, strings.TrimSpace(name))
+	}
+	ready := s.catalogIndex.cachesAreReady()
+	s.mu.RUnlock()
+
+	if found {
+		return ObjectLookup{Summary: summary, Found: true}
+	}
+	if !listed {
+		return ObjectLookup{}
+	}
+	health := s.Health()
+	resource := deniedResourceName(desc)
+	if slices.Contains(health.DeniedResources, resource) {
+		return ObjectLookup{Denied: resource}
+	}
+	return ObjectLookup{Absent: ready && !health.Stale}
 }
 
 // FindByUID resolves a single catalog item by UID within this cluster's

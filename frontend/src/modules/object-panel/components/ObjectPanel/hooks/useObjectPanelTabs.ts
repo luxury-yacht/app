@@ -37,9 +37,9 @@ interface ObjectPanelTabsResult {
 
 type PanelTab = (typeof TABS)[keyof typeof TABS];
 
-// Helm releases show their manifest and values instead of the object tabs; Event objects have no
-// events, YAML, or map of their own.
-const HELM_HIDDEN_TABS = new Set(['events', 'yaml', 'pods', 'jobs', 'map', 'metrics']);
+// Helm releases show their manifest, values, and a map of the manifest's objects instead of the
+// object tabs; Event objects have no events, YAML, or map of their own.
+const HELM_HIDDEN_TABS = new Set(['events', 'yaml', 'pods', 'jobs', 'metrics']);
 const HELM_ONLY_TABS = new Set(['manifest', 'values']);
 const EVENT_HIDDEN_TABS = new Set(['events', 'yaml', 'map']);
 

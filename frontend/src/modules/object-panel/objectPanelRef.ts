@@ -63,15 +63,17 @@ const HELM_RELEASE_GVK = { group: 'helm.sh', version: 'v3' };
 const objectMapGvkKey = (group: string, version: string, kind: string): string =>
   `${group.trim()}/${version.trim()}/${kind.trim().toLowerCase()}`;
 
-// Built-in identities an object map can be opened for, from the backend kind
-// registry via the identity contract. Matching uses the complete identity, so
-// a custom resource that shares a built-in kind name (an Istio Gateway, a
-// Calico NetworkPolicy) is not mistaken for the built-in.
-const MAP_SUPPORTED_GVKS = new Set(
-  builtinResourceIdentityContract.resources
+// Identities an object map can be opened for: the built-ins from the backend
+// kind registry via the identity contract, plus the synthetic Helm release,
+// whose map holds the objects in its manifest. Matching uses the complete
+// identity, so a custom resource that shares a kind name (an Istio Gateway, a
+// Flux HelmRelease) is not mistaken for the supported one.
+const MAP_SUPPORTED_GVKS = new Set([
+  ...builtinResourceIdentityContract.resources
     .filter((resource) => 'objectMap' in resource && resource.objectMap)
-    .map((resource) => objectMapGvkKey(resource.group, resource.version, resource.kind))
-);
+    .map((resource) => objectMapGvkKey(resource.group, resource.version, resource.kind)),
+  objectMapGvkKey(HELM_RELEASE_GVK.group, HELM_RELEASE_GVK.version, 'HelmRelease'),
+]);
 
 const normalizeOptional = (value: string | null | undefined): string | undefined => {
   const trimmed = value?.trim() ?? '';
@@ -247,7 +249,7 @@ export const getObjectPanelScopes = (
     })
   );
   const containerLogsScope = detailScope;
-  const mapScope = hasCompleteObjectMapReference(objectData) ? eventsScope : null;
+  const mapScope = hasCompleteObjectMapReference(normalizedObjectData) ? eventsScope : null;
   const syntheticHelmRelease = isSyntheticHelmRelease(ref);
   const helmScope = syntheticHelmRelease
     ? buildClusterScope(clusterId, `${scopeNamespace}:${ref.name}`)

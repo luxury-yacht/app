@@ -326,6 +326,24 @@ describe('deriveObjectMapVisibleState', () => {
     );
   });
 
+  it('keeps a missing object marked missing when the kind filter re-lays out the map', () => {
+    const result = derive({
+      nodes: [
+        node('deploy', 'Deployment', 'web', 0),
+        { ...node('cm', 'ConfigMap', 'web-settings', 0), missing: true },
+        node('svc', 'Service', 'web', 0),
+      ],
+      edges: [],
+      seedId: '',
+      selectedKinds: { mode: 'some', values: ['Deployment', 'ConfigMap'] },
+    });
+
+    const visible = result.visibleLayout.nodes;
+    expect(visible.map((n) => n.id).sort(compareUtf16Strings)).toEqual(['cm', 'deploy']);
+    expect(visible.find((n) => n.id === 'cm')?.missing).toBe(true);
+    expect(visible.find((n) => n.id === 'deploy')?.missing).toBeFalsy();
+  });
+
   it('searches only visible nodes', () => {
     const result = derive({
       nodes: [

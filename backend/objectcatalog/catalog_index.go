@@ -161,6 +161,17 @@ func (idx *catalogIndex) resourceForGroupResource(group, resource string) (strin
 	return "", nil
 }
 
+// descriptorForGroupKind returns the listed resource for a group and kind. The
+// catalog lists each resource under one served version.
+func (idx *catalogIndex) descriptorForGroupKind(group, kind string) (Descriptor, bool) {
+	for _, desc := range idx.resources {
+		if desc.Group == group && desc.Kind == kind {
+			return desc, true
+		}
+	}
+	return Descriptor{}, false
+}
+
 func (idx *catalogIndex) cachesAreReady() bool {
 	return idx.cachesReady
 }

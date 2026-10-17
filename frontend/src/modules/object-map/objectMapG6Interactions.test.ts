@@ -48,7 +48,7 @@ const layout: ObjectMapLayout = {
   bounds: { minX: 0, minY: 0, maxX: 500, maxY: 170 },
 };
 
-const createContext = () => {
+const createContext = (currentLayout: ObjectMapLayout = layout) => {
   const handlers = {
     badgeForNode: vi.fn(() => null),
     onNavigateView: vi.fn(),
@@ -64,7 +64,7 @@ const createContext = () => {
     onUserViewportChange: vi.fn(),
   };
   const context: ObjectMapG6NodeInteractionContext = {
-    getLayout: () => layout,
+    getLayout: () => currentLayout,
     gestureState: createObjectMapNodeGestureState(),
     graph: {
       getCanvasByClient: ([x, y]) => [x + 10, y + 20],
@@ -233,6 +233,21 @@ describe('object map G6 interactions', () => {
     expect(handlers.onOpenObjectMap).toHaveBeenCalledWith(layout.nodes[1].ref);
     expect(handlers.onNavigateView).toHaveBeenCalledWith(layout.nodes[1].ref);
     expect(handlers.onSelectNode).not.toHaveBeenCalled();
+  });
+
+  it('only selects a missing object on modifier clicks, since it has nothing to open', () => {
+    const missing: PositionedNode = { ...node('cm', 'ConfigMap', 'web-settings'), missing: true };
+    const { context, handlers } = createContext({ ...layout, nodes: [...layout.nodes, missing] });
+
+    handleObjectMapG6NodeClick(context, { target: { id: 'cm' }, metaKey: true });
+    handleObjectMapG6NodeClick(context, { target: { id: 'cm' }, shiftKey: true });
+    handleObjectMapG6NodeClick(context, { target: { id: 'cm' }, altKey: true });
+
+    expect(handlers.onOpenPanel).not.toHaveBeenCalled();
+    expect(handlers.onOpenObjectMap).not.toHaveBeenCalled();
+    expect(handlers.onNavigateView).not.toHaveBeenCalled();
+    expect(handlers.onSelectNode).toHaveBeenCalledTimes(3);
+    expect(handlers.onSelectNode).toHaveBeenCalledWith('cm');
   });
 
   it('emits context menu requests and prevents the native menu', () => {

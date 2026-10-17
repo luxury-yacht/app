@@ -346,6 +346,35 @@ describe('getObjectPanelScopes', () => {
     expect(result.mapScope).toBe('cluster-1|team-a:apps/v1:Deployment:api');
   });
 
+  it('builds a Helm release mapScope from the release identity and evicts it with the panel', () => {
+    const release = {
+      kind: 'HelmRelease',
+      name: 'shopping-cart',
+      namespace: 'apps',
+      clusterId: 'cluster-1',
+    };
+    const mapScope = 'cluster-1|apps:helm.sh/v3:HelmRelease:shopping-cart';
+
+    expect(getObjectPanelScopes(release).mapScope).toBe(mapScope);
+    expect(getObjectPanelScopeEvictions(release)).toContainEqual({
+      domain: 'object-map',
+      scope: mapScope,
+    });
+  });
+
+  it('offers maps for Helm releases but not for Flux HelmRelease custom resources', () => {
+    expect(isObjectMapSupportedRef({ group: 'helm.sh', version: 'v3', kind: 'HelmRelease' })).toBe(
+      true
+    );
+    expect(
+      isObjectMapSupportedRef({
+        group: 'helm.toolkit.fluxcd.io',
+        version: 'v2',
+        kind: 'HelmRelease',
+      })
+    ).toBe(false);
+  });
+
   it('returns null mapScope when objectData is incomplete', () => {
     expect(getObjectPanelScopes(null).mapScope).toBeNull();
     expect(getObjectPanelScopes({ kind: 'Pod' }).mapScope).toBeNull();

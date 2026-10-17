@@ -749,6 +749,24 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[data-context-action-id]')).toBeNull();
     cleanup();
   });
+
+  it('does not offer an object menu for a missing object, which has nothing to act on', async () => {
+    const node = {
+      ...requireValue(payload.nodes?.[0], 'expected deployment node'),
+      status: undefined,
+      missing: true,
+    };
+    const { container, cleanup } = await renderObjectMap({
+      testPayload: { ...payload, nodes: [node], edges: [] },
+    });
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]')
+        ?.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+    });
+    expect(container.querySelector('[data-context-action-id]')).toBeNull();
+    cleanup();
+  });
   it('keeps resource actions without movement or connection entries in the map context menu', async () => {
     const onOpenPanel = vi.fn();
     const { container, cleanup } = await renderObjectMap({ onOpenPanel });

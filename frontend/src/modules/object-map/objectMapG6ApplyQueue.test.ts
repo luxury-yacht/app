@@ -464,6 +464,19 @@ describe('applyGraphData', () => {
     expect(g.render).not.toHaveBeenCalled();
   });
 
+  it('patches and redraws when a card outline turns dashed or solid', async () => {
+    const previous: GraphData = { nodes: [{ id: 'cm', style: {} }], edges: [] };
+    const next: GraphData = { nodes: [{ id: 'cm', style: { lineDash: [4, 3] } }], edges: [] };
+    const g = graph();
+
+    await applyGraphData(g, previous, next);
+
+    expect(g.updateData).toHaveBeenCalledWith({
+      nodes: [requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
+    });
+    expect(g.draw).toHaveBeenCalledTimes(1);
+  });
+
   it('patches and redraws when card detail level changes', async () => {
     const previous: GraphData = {
       nodes: [{ id: 'deploy', style: { cardDetailLevel: 'full' } }],

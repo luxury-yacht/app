@@ -54,6 +54,15 @@ describe('useObjectPanelTabs', () => {
     version: 'v1',
   };
 
+  const helmReleaseData: PanelObjectData = {
+    kind: 'HelmRelease',
+    name: 'shop',
+    namespace: 'team-a',
+    clusterId: 'cluster-a',
+    group: 'helm.sh',
+    version: 'v3',
+  };
+
   const renderHook = async (
     props?: Partial<Parameters<typeof useObjectPanelTabs>[0]>
   ): Promise<ReturnType<typeof useObjectPanelTabs>> => {
@@ -205,13 +214,14 @@ describe('useObjectPanelTabs', () => {
     ]);
   });
 
-  it('includes manifest/values and omits events/yaml for Helm releases', async () => {
+  it('includes map/manifest/values and omits events/yaml for Helm releases', async () => {
     const { availableTabs } = await renderHook({
       isHelmRelease: true,
+      objectData: helmReleaseData,
       capabilities: { ...baseCapabilities, hasManifest: true, hasValues: true },
     });
     const labels = availableTabs.map((tab) => tab.label);
-    expect(labels).toEqual(['Details', 'Logs', 'Manifest', 'Values']);
+    expect(labels).toEqual(['Details', 'Map', 'Logs', 'Manifest', 'Values']);
   });
 
   it('hides events and YAML tabs for Event objects', async () => {
@@ -397,18 +407,20 @@ describe('useObjectPanelTabs', () => {
   });
 
   it('numbers shortcuts by position so hidden tabs do not leave gaps', async () => {
-    // Helm releases hide events/yaml/pods, showing: Details, Logs, Manifest, Values.
+    // Helm releases hide events/yaml/pods, showing: Details, Map, Logs, Manifest, Values.
     await renderHook({
       isHelmRelease: true,
+      objectData: helmReleaseData,
       capabilities: { ...baseCapabilities, hasManifest: true, hasValues: true },
     });
 
     const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
       | Array<{ key: string; description: string }>
       | undefined;
-    expect(tabShortcuts?.map((s) => s.key)).toEqual(['1', '2', '3', '4']);
+    expect(tabShortcuts?.map((s) => s.key)).toEqual(['1', '2', '3', '4', '5']);
     expect(tabShortcuts?.map((s) => s.description)).toEqual([
       'Switch to Details tab',
+      'Switch to Map tab',
       'Switch to Logs tab',
       'Switch to Manifest tab',
       'Switch to Values tab',

@@ -28,9 +28,14 @@ type ObjectYAMLProvider interface {
 	FetchObjectYAML(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (string, error)
 }
 
+// HelmManifestProvider supplies a release's rendered manifest and revision.
+type HelmManifestProvider interface {
+	FetchHelmManifest(ctx context.Context, namespace, name string) (string, int, error)
+}
+
 // HelmContentProvider supplies Helm manifest/values for a release.
 type HelmContentProvider interface {
-	FetchHelmManifest(ctx context.Context, namespace, name string) (string, int, error)
+	HelmManifestProvider
 	FetchHelmValues(ctx context.Context, namespace, name string) (helm.HelmReleaseValues, int, error)
 }
 
@@ -141,18 +146,14 @@ func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*r
 	}
 	meta := ClusterMetaFromContext(ctx)
 
-	manifest, revision, err := b.provider.FetchHelmManifest(ctx, namespace, name)
+	release, err := fetchHelmManifestResources(ctx, b.provider, meta.ClusterID, namespace, name)
 	if err != nil {
 		return nil, err
 	}
 
 	version := uint64(0)
-	if revision > 0 {
-		version = uint64(revision)
-	}
-	var resolver common.ResourceResolver
-	if resolverProvider, ok := b.provider.(HelmResourceResolverProvider); ok {
-		resolver = resolverProvider.ResourceResolver(ctx)
+	if release.revision > 0 {
+		version = uint64(release.revision)
 	}
 
 	return &refresh.Snapshot{
@@ -161,13 +162,39 @@ func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*r
 		Version: version,
 		Payload: ObjectHelmManifestSnapshotPayload{
 			ClusterMeta: meta,
-			Manifest:    manifest,
-			Revision:    revision,
-			Resources:   extractHelmManifestResourceLinks(ctx, resolver, meta.ClusterID, manifest, namespace),
+			Manifest:    release.manifest,
+			Revision:    release.revision,
+			Resources:   release.resources,
 		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: 1,
 		},
+	}, nil
+}
+
+// helmManifestResources is one read of a release's manifest with the
+// identities of the objects it names.
+type helmManifestResources struct {
+	manifest  string
+	revision  int
+	resources []resourcemodel.ResourceLink
+}
+
+// fetchHelmManifestResources reads a release's manifest and resolves each
+// object it names through the provider's resource resolver, when it has one.
+func fetchHelmManifestResources(ctx context.Context, provider HelmManifestProvider, clusterID, namespace, name string) (helmManifestResources, error) {
+	manifest, revision, err := provider.FetchHelmManifest(ctx, namespace, name)
+	if err != nil {
+		return helmManifestResources{}, err
+	}
+	var resolver common.ResourceResolver
+	if resolverProvider, ok := provider.(HelmResourceResolverProvider); ok {
+		resolver = resolverProvider.ResourceResolver(ctx)
+	}
+	return helmManifestResources{
+		manifest:  manifest,
+		revision:  revision,
+		resources: extractHelmManifestResourceLinks(ctx, resolver, clusterID, manifest, namespace),
 	}, nil
 }
 
