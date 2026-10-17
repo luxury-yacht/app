@@ -43,8 +43,16 @@ export interface HelmValuesOverride {
   source: string[];
   /** The chart's default at `path`, or null when the chart has none. */
   chartDefault: { value: unknown } | null;
-  /** Text offsets of the overridden key, the label the view colors. */
-  label: { from: number; to: number };
+  /**
+   * Text offsets of the keys the view colors: the overridden key and every key
+   * inside a value the override replaces whole, such as list items' keys.
+   */
+  labels: HelmValuesLabel[];
+}
+
+export interface HelmValuesLabel {
+  from: number;
+  to: number;
 }
 
 export interface HelmValuesRemovedKey {
@@ -127,6 +135,22 @@ const endOf = (pair: ValuesPair) => {
   return Math.max(startOf(pair), end - 1);
 };
 
+const keyLabel = (pair: ValuesPair): HelmValuesLabel => {
+  const from = startOf(pair);
+  return { from, to: rangeOf(pair.key)?.[1] ?? from };
+};
+
+// Every map key inside a value, through nested lists and maps.
+const nestedKeyLabels = (node: unknown): HelmValuesLabel[] => {
+  if (YAML.isMap(node)) {
+    return node.items.flatMap((pair) => [keyLabel(pair), ...nestedKeyLabels(pair.value)]);
+  }
+  if (YAML.isSeq(node)) {
+    return node.items.flatMap((item) => nestedKeyLabels(item));
+  }
+  return [];
+};
+
 // Candidate overrides for a value inside a subchart's `global` map, outermost
 // parent first; otherwise the value's own path.
 const overrideCandidates = (path: string[], subcharts: Set<string>): string[][] => {
@@ -189,17 +213,16 @@ const markPair = (
   context: MarkContext
 ) => {
   const chartDefault = lookup(context.values.defaults, path);
-  const labelFrom = startOf(pair);
+  // An empty-map override leaves the chart's children in place; mark the key only.
+  const keyOnly =
+    isValuesObject(origin.value) && YAML.isMap(pair.value) && pair.value.items.length > 0;
   const override: HelmValuesOverride = {
     kind: overrideKind(path, origin, chartDefault, context),
     path,
     source: origin.source,
     chartDefault,
-    label: { from: labelFrom, to: rangeOf(pair.key)?.[1] ?? labelFrom },
+    labels: keyOnly ? [keyLabel(pair)] : [keyLabel(pair), ...nestedKeyLabels(pair.value)],
   };
-  // An empty-map override leaves the chart's children in place; mark the key only.
-  const keyOnly =
-    isValuesObject(origin.value) && YAML.isMap(pair.value) && pair.value.items.length > 0;
   const first = context.lineOf(startOf(pair));
   const last = keyOnly ? first : context.lineOf(endOf(pair));
   for (let line = first; line <= last; line += 1) {

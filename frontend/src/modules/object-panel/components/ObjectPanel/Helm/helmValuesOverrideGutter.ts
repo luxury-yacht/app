@@ -155,15 +155,17 @@ const tooltipContent = ({ title, chartDefault }: OverrideDescription) => {
 
 // Marks were computed for one rendering of the values; skip any that fall
 // outside the current document until the caller supplies fresh marks. Each
-// overridden key takes its marker's color; removed keys become widget rows.
+// labeled key takes its marker's color; removed keys become widget rows.
 const overrideDecorations = (marks: HelmValuesOverrideMarks, state: EditorState): DecorationSet => {
-  const labels = [...new Set(marks.lines.values())]
-    .filter(({ label }) => label.from < label.to && label.to <= state.doc.length)
-    .map(({ kind, label }) =>
-      Decoration.mark({
-        class: `helm-values-override-label helm-values-override-label--${kind}`,
-      }).range(label.from, label.to)
-    );
+  const labels = [...new Set(marks.lines.values())].flatMap(({ kind, labels: keys }) =>
+    keys
+      .filter(({ from, to }) => from < to && to <= state.doc.length)
+      .map(({ from, to }) =>
+        Decoration.mark({
+          class: `helm-values-override-label helm-values-override-label--${kind}`,
+        }).range(from, to)
+      )
+  );
   const rows = marks.removed
     .filter((removed) => removed.line <= state.doc.lines)
     .map((removed) => {

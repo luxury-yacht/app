@@ -72,13 +72,11 @@ describe('computeHelmValuesOverrideMarks', () => {
       expect(kindAt(content), content).toBeUndefined();
     }
     expect(marks.overriddenCount).toBe(5);
-    // The label is the overridden key alone, so its value keeps syntax colors.
-    const labelOf = (content: string) => {
-      const label = marks.lines.get(lineOf(content))?.label;
-      return label && text.slice(label.from, label.to);
-    };
-    expect(labelOf('  tag: v2')).toBe('tag');
-    expect(labelOf('    - b.example.com')).toBe('hosts');
+    // Labels are keys only, so values keep their syntax colors.
+    const labelsOf = (content: string) =>
+      marks.lines.get(lineOf(content))?.labels.map(({ from, to }) => text.slice(from, to));
+    expect(labelsOf('  tag: v2')).toEqual(['tag']);
+    expect(labelsOf('    - b.example.com')).toEqual(['hosts']);
   });
 
   it('marks subchart copies of global overrides only under reported subcharts', () => {
@@ -241,5 +239,26 @@ describe('computeHelmValuesOverrideMarks', () => {
     expect(marks.removed).toEqual([]);
     expect(marks.overriddenCount).toBe(5);
     expect(marks.removedCount).toBe(1);
+  });
+
+  it('labels every key inside a list the override replaces, but not chart keys it keeps', () => {
+    const hosts = [{ host: 'a.example.com', paths: [{ path: '/', pathType: 'Prefix' }] }];
+    const { marks, text } = marksFor({
+      defaults: {
+        ingress: { hosts: [{ host: 'chart.local', paths: [{ path: '/', pathType: 'Exact' }] }] },
+        podAnnotations: { owner: 'chart' },
+      },
+      overrides: { ingress: { hosts }, podAnnotations: {} },
+      merged: { ingress: { hosts }, podAnnotations: { owner: 'chart' } },
+      subchartPaths: null,
+    });
+    const labelsAt = (path: string) =>
+      [...marks.lines.values()]
+        .find((mark) => mark.path.join('.') === path)
+        ?.labels.map(({ from, to }) => text.slice(from, to));
+
+    expect(labelsAt('ingress.hosts')).toEqual(['hosts', 'host', 'paths', 'path', 'pathType']);
+    // An empty-map override keeps the chart's keys, so only its own key is a label.
+    expect(labelsAt('podAnnotations')).toEqual(['podAnnotations']);
   });
 });
