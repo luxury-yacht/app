@@ -31,10 +31,10 @@ const MAX_DEFAULT_LINES = 12;
 // Diff-style gutter symbols. A subchart copy of a global override is a
 // changed value; its tooltip names the global override.
 const OVERRIDE_SYMBOLS: Record<HelmValuesOverrideKind, string> = {
-  changed: '*',
+  changed: '>',
   added: '+',
   same: '=',
-  global: '*',
+  global: '>',
   removed: '-',
 };
 

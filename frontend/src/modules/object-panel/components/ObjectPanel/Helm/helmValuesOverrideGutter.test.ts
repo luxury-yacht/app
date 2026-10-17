@@ -61,8 +61,8 @@ describe('helmValuesOverrideGutter', () => {
     expect(changed).toHaveLength(1);
     expect(added).toHaveLength(1);
     expect(same).toHaveLength(1);
-    // Diff-style symbols: * changed, + new, = equal to the chart default.
-    expect(changed[0].textContent).toBe('*');
+    // Diff-style symbols: > changed, + new, = equal to the chart default.
+    expect(changed[0].textContent).toBe('>');
     expect(added[0].textContent).toBe('+');
     expect(same[0].textContent).toBe('=');
     expect(changed[0].getAttribute('title')).toContain('chart-stable');

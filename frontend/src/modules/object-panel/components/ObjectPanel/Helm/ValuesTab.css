@@ -20,8 +20,11 @@
 }
 
 .helm-values-override-marker--changed,
-.helm-values-override-marker--same,
 .helm-values-override-marker--global {
+  color: var(--color-modified-text);
+}
+
+.helm-values-override-marker--same {
   color: var(--color-info);
 }
 
@@ -35,14 +38,15 @@
 
 /*
  * Each overridden key takes its marker's color; values keep syntax colors, and
- * `same` keys stay unchanged because they change nothing. `.cm-line` raises
- * specificity above CodeMirror's injected highlight classes.
+ * `same` keys stay unchanged because they change nothing. Changed keys use a
+ * hue apart from the syntax key blue. `.cm-line` raises specificity above
+ * CodeMirror's injected highlight classes.
  */
 .codemirror-shell .cm-line .helm-values-override-label--changed,
 .codemirror-shell .cm-line .helm-values-override-label--changed *,
 .codemirror-shell .cm-line .helm-values-override-label--global,
 .codemirror-shell .cm-line .helm-values-override-label--global * {
-  color: var(--color-info);
+  color: var(--color-modified-text);
 }
 
 .codemirror-shell .cm-line .helm-values-override-label--added,

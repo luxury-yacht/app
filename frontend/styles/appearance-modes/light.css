@@ -22,6 +22,7 @@
   /* Semantic colors */
   --color-success: #22c55e;
   --color-success-text: #15803d;
+  --color-modified-text: #c026d3;
   --color-warning: #c47c00;
   --color-error: #ef4444;
   --color-error-bg: rgba(239, 68, 68, 0.1);
