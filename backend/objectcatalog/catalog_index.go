@@ -28,6 +28,12 @@ type catalogIndex struct {
 	cachedNamespaces  []string
 	cachedDescriptors []Descriptor
 	cachesReady       bool
+	// completeResources (GVR strings) are the resources the published sync
+	// listed completely, and deniedResources (resource[.group]) the ones it
+	// found forbidden. They are published with the rows, so a reader judges a
+	// miss against the same publication it read the rows from.
+	completeResources map[string]struct{}
+	deniedResources   map[string]struct{}
 	kindCounts        map[KindInfo]int
 	namespaceCounts   map[string]int
 
@@ -159,6 +165,13 @@ func (idx *catalogIndex) resourceForGroupResource(group, resource string) (strin
 		}
 	}
 	return "", nil
+}
+
+// replaceListOutcome publishes which resources a sync listed completely and
+// which it found forbidden. Call it under the same lock as the rows.
+func (idx *catalogIndex) replaceListOutcome(complete, denied map[string]struct{}) {
+	idx.completeResources = complete
+	idx.deniedResources = denied
 }
 
 // descriptorForGroupKind returns the listed resource for a group and kind. The

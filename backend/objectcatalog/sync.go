@@ -793,14 +793,31 @@ func (run *catalogSync) restoreFailedDescriptors() {
 	}
 }
 
+// completeResources are the resources this sync listed completely: collected
+// without error and without a forbidden page. A failed resource keeps its
+// previous rows, so a miss there proves nothing.
+func (run *catalogSync) completeResources(denied map[string]struct{}) map[string]struct{} {
+	complete := make(map[string]struct{}, len(run.succeeded))
+	for gvr := range run.succeeded {
+		if _, forbidden := denied[deniedResourceName(run.allowedSet[gvr])]; !forbidden {
+			complete[gvr] = struct{}{}
+		}
+	}
+	return complete
+}
+
 func (run *catalogSync) publish(descriptors []Descriptor, collectErr error) {
 	s := run.service
 	s.pruneMissing(run.newLastSeen)
+	denied := s.deniedResourceSet()
+	complete := run.completeResources(denied)
 	// Collection owns these maps until the complete replacement is ready. Swap
-	// rows, identities and query state together under the reader's lock.
+	// rows, identities, list outcome and query state together under the
+	// reader's lock.
 	s.mu.Lock()
 	s.items, s.lastSeen = run.newItems, run.newLastSeen
 	s.catalogIndex.replaceResources(run.allowedSet)
+	s.catalogIndex.replaceListOutcome(complete, denied)
 	s.cacheRebuilds.Add(1)
 	s.catalogIndex.rebuildCacheFromItems(run.newItems, descriptors)
 	s.mu.Unlock()

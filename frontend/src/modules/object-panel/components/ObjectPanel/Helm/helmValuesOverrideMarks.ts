@@ -194,16 +194,15 @@ const overrideKind = (
   if (origin.inherited) {
     return 'global';
   }
-  if (origin.value === null) {
-    // Only the Overrides view shows a null; it removes the chart's key, if any.
-    return chartDefault ? 'removed' : 'same';
+  const merged = lookup(context.values.merged, path);
+  // A null removes the chart's key; Helm keeps a null for a key the chart lacks.
+  if (origin.value === null && chartDefault && !merged) {
+    return 'removed';
   }
   if (!chartDefault) {
     return 'added';
   }
-  return sameValue(chartDefault.value, lookup(context.values.merged, path)?.value)
-    ? 'same'
-    : 'changed';
+  return sameValue(chartDefault.value, merged?.value) ? 'same' : 'changed';
 };
 
 const markPair = (
@@ -266,11 +265,10 @@ const removedKeyAnchor = (
     return null;
   }
   if (parent.items.length === 0) {
-    // An emptied `parent: {}` sits on one line; show the key after it.
+    // An emptied `parent: {}`, or an empty root `{}`, sits on one line; show
+    // the key after it.
     const start = rangeOf(parent)?.[0];
-    return start === undefined || parentPath.length === 0
-      ? null
-      : { line: lineOf(start), side: 'after' };
+    return start === undefined ? null : { line: lineOf(start), side: 'after' };
   }
   const next = parent.items.find((pair) => keyOf(pair) > key);
   if (next) {

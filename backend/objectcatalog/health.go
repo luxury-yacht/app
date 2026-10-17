@@ -8,6 +8,7 @@ package objectcatalog
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"time"
 
@@ -58,6 +59,13 @@ func (s *Service) recordDeniedResource(resource string) {
 		s.health.DeniedResources = make(map[string]struct{})
 	}
 	s.health.DeniedResources[resource] = struct{}{}
+}
+
+// deniedResourceSet copies the current sync's denial set.
+func (s *Service) deniedResourceSet() map[string]struct{} {
+	s.healthMu.RLock()
+	defer s.healthMu.RUnlock()
+	return maps.Clone(s.health.DeniedResources)
 }
 
 // resetDeniedResources clears the denial set at the start of a sync so a

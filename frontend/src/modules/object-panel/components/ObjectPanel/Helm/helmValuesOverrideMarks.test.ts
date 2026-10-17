@@ -179,6 +179,38 @@ describe('computeHelmValuesOverrideMarks', () => {
     );
   });
 
+  it('shows keys removed from an emptied Merged beside its empty root, matching Overrides', () => {
+    const source: HelmValuesOverrideSource = {
+      defaults: { only: 'default' },
+      overrides: { only: null },
+      merged: {},
+      subchartPaths: null,
+    };
+    const { marks, lineOf } = marksFor(source);
+
+    expect(marks.removed).toEqual([
+      { path: ['only'], chartDefault: 'default', line: lineOf('{}'), side: 'after' },
+    ]);
+    expect(marks.removedCount).toBe(1);
+    expect(marksFor(source, 'overrides').marks.removedCount).toBe(1);
+  });
+
+  it('marks a null override for a key the chart lacks as added, since Helm keeps it', () => {
+    const source: HelmValuesOverrideSource = {
+      defaults: { replicaCount: 1 },
+      overrides: { extra: null },
+      merged: { extra: null, replicaCount: 1 },
+      subchartPaths: null,
+    };
+
+    for (const view of ['merged', 'overrides'] as const) {
+      const { marks, lineOf } = marksFor(source, view);
+      expect(marks.lines.get(lineOf('extra: null'))?.kind, view).toBe('added');
+      expect(marks.overriddenCount, view).toBe(1);
+      expect(marks.removedCount, view).toBe(0);
+    }
+  });
+
   it('marks an empty-map override on its key line without claiming chart children', () => {
     const { marks, lineOf } = marksFor({
       defaults: { nodeSelector: {}, podAnnotations: { owner: 'chart' } },

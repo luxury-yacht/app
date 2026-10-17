@@ -61,21 +61,28 @@ func nodeKindNames(payload ObjectMapSnapshotPayload) []string {
 	return names
 }
 
-// seedCatalogDescriptors registers resource descriptors on a seeded catalog
-// and marks its caches ready, as a completed catalog sync does.
+// setCatalogField writes one unexported field of a seeded catalog, as the
+// other catalog seeding helpers in this package do.
+func setCatalogField(t *testing.T, svc *objectcatalog.Service, name string, value any) {
+	t.Helper()
+	field := reflect.ValueOf(svc).Elem().FieldByName(name)
+	require.True(t, field.IsValid(), "catalog field %s not found", name)
+	reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Set(reflect.ValueOf(value))
+}
+
+// seedCatalogDescriptors publishes resource descriptors on a seeded catalog
+// as a completed sync does: each resource listed completely, caches ready.
 func seedCatalogDescriptors(t *testing.T, svc *objectcatalog.Service, descriptors ...objectcatalog.Descriptor) {
 	t.Helper()
-	value := reflect.ValueOf(svc).Elem()
 	resources := make(map[string]objectcatalog.Descriptor, len(descriptors))
+	complete := make(map[string]struct{}, len(descriptors))
 	for _, desc := range descriptors {
 		resources[desc.GVR().String()] = desc
+		complete[desc.GVR().String()] = struct{}{}
 	}
-	resourcesField := value.FieldByName("resources")
-	require.True(t, resourcesField.IsValid(), "catalog resources field not found")
-	reflect.NewAt(resourcesField.Type(), unsafe.Pointer(resourcesField.UnsafeAddr())).Elem().Set(reflect.ValueOf(resources))
-	readyField := value.FieldByName("cachesReady")
-	require.True(t, readyField.IsValid(), "catalog cachesReady field not found")
-	reflect.NewAt(readyField.Type(), unsafe.Pointer(readyField.UnsafeAddr())).Elem().SetBool(true)
+	setCatalogField(t, svc, "resources", resources)
+	setCatalogField(t, svc, "completeResources", complete)
+	setCatalogField(t, svc, "cachesReady", true)
 }
 
 // A release map holds exactly the objects the release's manifest names, with
@@ -305,15 +312,12 @@ metadata:
 	})
 }
 
-// denyCatalogResource records a forbidden list in the catalog's health, as a
-// catalog sync does when listing the resource is RBAC-denied.
+// denyCatalogResource publishes a sync that found listing the resource
+// forbidden, so the resource is denied rather than completely listed.
 func denyCatalogResource(t *testing.T, svc *objectcatalog.Service, resource string) {
 	t.Helper()
-	health := reflect.ValueOf(svc).Elem().FieldByName("health")
-	require.True(t, health.IsValid(), "catalog health field not found")
-	denied := health.FieldByName("DeniedResources")
-	require.True(t, denied.IsValid(), "catalog health DeniedResources field not found")
-	reflect.NewAt(denied.Type(), unsafe.Pointer(denied.UnsafeAddr())).Elem().Set(reflect.ValueOf(map[string]struct{}{resource: {}}))
+	setCatalogField(t, svc, "deniedResources", map[string]struct{}{resource: {}})
+	setCatalogField(t, svc, "completeResources", map[string]struct{}{})
 }
 
 // A manifest object whose API the cluster no longer serves cannot be looked
