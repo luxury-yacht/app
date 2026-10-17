@@ -43,6 +43,8 @@ export interface HelmValuesOverride {
   source: string[];
   /** The chart's default at `path`, or null when the chart has none. */
   chartDefault: { value: unknown } | null;
+  /** Text offsets of the overridden key, the label the view colors. */
+  label: { from: number; to: number };
 }
 
 export interface HelmValuesRemovedKey {
@@ -187,11 +189,13 @@ const markPair = (
   context: MarkContext
 ) => {
   const chartDefault = lookup(context.values.defaults, path);
+  const labelFrom = startOf(pair);
   const override: HelmValuesOverride = {
     kind: overrideKind(path, origin, chartDefault, context),
     path,
     source: origin.source,
     chartDefault,
+    label: { from: labelFrom, to: rangeOf(pair.key)?.[1] ?? labelFrom },
   };
   // An empty-map override leaves the chart's children in place; mark the key only.
   const keyOnly =

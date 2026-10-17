@@ -1,4 +1,4 @@
-/* Override markers in the Merged view (helmValuesOverrideGutter.ts). */
+/* Override markers in the Merged and Overrides views (helmValuesOverrideGutter.ts). */
 .helm-values-override-summary {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
@@ -7,54 +7,63 @@
 
 /* Fixed width so the text does not shift as marked lines scroll into view. */
 .codemirror-shell .helm-values-override-gutter {
-  min-width: 7px;
+  min-width: 1.5ch;
 }
 
 .codemirror-shell .helm-values-override-gutter .cm-gutterElement {
-  display: flex;
-  align-items: stretch;
-  padding: 0 3px 0 1px;
+  padding: 0 4px 0 2px;
+  text-align: center;
 }
 
 .helm-values-override-marker {
-  width: 3px;
-  border-radius: 1px;
+  font-weight: 600;
 }
 
-.helm-values-override-marker--changed {
-  background: var(--color-info);
+.helm-values-override-marker--changed,
+.helm-values-override-marker--same,
+.helm-values-override-marker--global {
+  color: var(--color-info);
 }
 
 .helm-values-override-marker--added {
-  background: var(--color-success);
-}
-
-.helm-values-override-marker--same {
-  box-shadow: inset 0 0 0 1px var(--color-info);
-}
-
-/* Dashed: a subchart's copy of an overridden global value. */
-.helm-values-override-marker--global {
-  background: repeating-linear-gradient(to bottom, var(--color-info) 0 3px, transparent 3px 5px);
+  color: var(--color-success-text);
 }
 
 .helm-values-override-marker--removed {
-  background: var(--color-error);
+  color: var(--color-error-text);
+}
+
+/*
+ * Each overridden key takes its marker's color; values keep syntax colors, and
+ * `same` keys stay unchanged because they change nothing. `.cm-line` raises
+ * specificity above CodeMirror's injected highlight classes.
+ */
+.codemirror-shell .cm-line .helm-values-override-label--changed,
+.codemirror-shell .cm-line .helm-values-override-label--changed *,
+.codemirror-shell .cm-line .helm-values-override-label--global,
+.codemirror-shell .cm-line .helm-values-override-label--global * {
+  color: var(--color-info);
+}
+
+.codemirror-shell .cm-line .helm-values-override-label--added,
+.codemirror-shell .cm-line .helm-values-override-label--added * {
+  color: var(--color-success-text);
+}
+
+.codemirror-shell .cm-line .helm-values-override-label--removed,
+.codemirror-shell .cm-line .helm-values-override-label--removed * {
+  color: var(--color-error-text);
 }
 
 .codemirror-shell .helm-values-removed-key {
   padding: 0 2px 0 6px;
-  color: var(--color-text-tertiary);
+  color: var(--color-error-text);
   font-style: italic;
   white-space: pre;
 }
 
 .helm-values-removed-key__name {
   text-decoration: line-through;
-}
-
-.helm-values-removed-key__note {
-  color: var(--color-error);
 }
 
 .helm-values-override-tooltip {

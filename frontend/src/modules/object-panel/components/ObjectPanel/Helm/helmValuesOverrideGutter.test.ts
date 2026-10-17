@@ -22,7 +22,7 @@ const VALUES: HelmValuesOverrideSource = {
     testFramework: { enabled: true },
     zeta: 1,
   },
-  overrides: { image: { tag: 'v2' }, team: 'web', testFramework: null },
+  overrides: { image: { tag: 'v2' }, team: 'web', testFramework: null, zeta: 1 },
   merged: { image: { repository: 'nginx', tag: 'v2' }, team: 'web', zeta: 1 },
   subchartPaths: null,
 };
@@ -57,9 +57,18 @@ describe('helmValuesOverrideGutter', () => {
 
     const changed = parent.querySelectorAll('.helm-values-override-marker--changed');
     const added = parent.querySelectorAll('.helm-values-override-marker--added');
+    const same = parent.querySelectorAll('.helm-values-override-marker--same');
     expect(changed).toHaveLength(1);
     expect(added).toHaveLength(1);
+    expect(same).toHaveLength(1);
+    // Diff-style symbols: * changed, + new, = equal to the chart default.
+    expect(changed[0].textContent).toBe('*');
+    expect(added[0].textContent).toBe('+');
+    expect(same[0].textContent).toBe('=');
     expect(changed[0].getAttribute('title')).toContain('chart-stable');
+    // Only each overridden key is colored; values keep their syntax colors.
+    const labels = [...parent.querySelectorAll('.helm-values-override-label')];
+    expect(labels.map((label) => label.textContent)).toEqual(['tag', 'team', 'zeta']);
   });
 
   it('shows a removed key beside its siblings without adding it to the document', () => {
@@ -70,7 +79,9 @@ describe('helmValuesOverrideGutter', () => {
     expect(ghost?.getAttribute('title')).toContain('enabled: true');
     expect(ghost?.nextElementSibling?.textContent).toBe('zeta: 1');
     expect(view.state.doc.toString()).not.toContain('testFramework');
-    expect(parent.querySelectorAll('.helm-values-override-marker--removed')).toHaveLength(1);
+    const removed = parent.querySelectorAll('.helm-values-override-marker--removed');
+    expect(removed).toHaveLength(1);
+    expect(removed[0].textContent).toBe('-');
   });
 
   it('names the chart default, or the global override a subchart copied, on hover', () => {

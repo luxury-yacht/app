@@ -28,6 +28,16 @@ import {
 
 const MAX_DEFAULT_LINES = 12;
 
+// Diff-style gutter symbols. A subchart copy of a global override is a
+// changed value; its tooltip names the global override.
+const OVERRIDE_SYMBOLS: Record<HelmValuesOverrideKind, string> = {
+  changed: '*',
+  added: '+',
+  same: '=',
+  global: '*',
+  removed: '-',
+};
+
 const OVERRIDE_TITLES: Record<HelmValuesOverrideKind, string> = {
   changed: 'Override',
   added: 'Added by override · not in chart defaults',
@@ -93,6 +103,7 @@ class OverrideMarker extends GutterMarker {
   toDOM() {
     const marker = document.createElement('div');
     marker.className = `helm-values-override-marker helm-values-override-marker--${this.kind}`;
+    marker.textContent = OVERRIDE_SYMBOLS[this.kind];
     marker.title = this.label;
     return marker;
   }
@@ -118,10 +129,7 @@ class RemovedKeyWidget extends WidgetType {
     const name = document.createElement('span');
     name.className = 'helm-values-removed-key__name';
     name.textContent = `${path[path.length - 1]}:`;
-    const note = document.createElement('span');
-    note.className = 'helm-values-removed-key__note';
-    note.textContent = ' removed by override';
-    row.append('  '.repeat(path.length - 1), name, note);
+    row.append('  '.repeat(path.length - 1), name, ' removed by override');
     return row;
   }
 }
@@ -146,22 +154,29 @@ const tooltipContent = ({ title, chartDefault }: OverrideDescription) => {
 };
 
 // Marks were computed for one rendering of the values; skip any that fall
-// outside the current document until the caller supplies fresh marks.
-const removedRows = (marks: HelmValuesOverrideMarks, state: EditorState): DecorationSet =>
-  Decoration.set(
-    marks.removed
-      .filter((removed) => removed.line <= state.doc.lines)
-      .map((removed) => {
-        const line = state.doc.line(removed.line);
-        const before = removed.side === 'before';
-        return Decoration.widget({
-          widget: new RemovedKeyWidget(removed),
-          block: true,
-          side: before ? -1 : 1,
-        }).range(before ? line.from : line.to);
-      }),
-    true
-  );
+// outside the current document until the caller supplies fresh marks. Each
+// overridden key takes its marker's color; removed keys become widget rows.
+const overrideDecorations = (marks: HelmValuesOverrideMarks, state: EditorState): DecorationSet => {
+  const labels = [...new Set(marks.lines.values())]
+    .filter(({ label }) => label.from < label.to && label.to <= state.doc.length)
+    .map(({ kind, label }) =>
+      Decoration.mark({
+        class: `helm-values-override-label helm-values-override-label--${kind}`,
+      }).range(label.from, label.to)
+    );
+  const rows = marks.removed
+    .filter((removed) => removed.line <= state.doc.lines)
+    .map((removed) => {
+      const line = state.doc.line(removed.line);
+      const before = removed.side === 'before';
+      return Decoration.widget({
+        widget: new RemovedKeyWidget(removed),
+        block: true,
+        side: before ? -1 : 1,
+      }).range(before ? line.from : line.to);
+    });
+  return Decoration.set([...labels, ...rows], true);
+};
 
 const markAt = (marks: HelmValuesOverrideMarks, state: EditorState, pos: number) =>
   marks.lines.get(state.doc.lineAt(pos).number) ?? null;
@@ -194,15 +209,15 @@ export function helmValuesOverrideGutter(marks: HelmValuesOverrideMarks): Extens
     }
     return marker;
   };
-  const rows = StateField.define<DecorationSet>({
-    create: (state) => removedRows(marks, state),
+  const decorations = StateField.define<DecorationSet>({
+    create: (state) => overrideDecorations(marks, state),
     update: (value, transaction) =>
-      transaction.docChanged ? removedRows(marks, transaction.state) : value,
+      transaction.docChanged ? overrideDecorations(marks, transaction.state) : value,
     provide: (field) => EditorView.decorations.from(field),
   });
 
   return [
-    rows,
+    decorations,
     gutter({
       class: 'helm-values-override-gutter',
       lineMarker: (view, block) => {

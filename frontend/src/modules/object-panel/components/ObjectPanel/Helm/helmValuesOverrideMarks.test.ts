@@ -28,12 +28,12 @@ const marksFor = (source: HelmValuesOverrideSource, view: HelmValuesMarkedView =
   const byPath = new Map(
     [...marks.lines.values()].map((mark) => [mark.path.join('.'), mark] as const)
   );
-  return { marks, lineOf, byPath };
+  return { marks, lineOf, byPath, text };
 };
 
 describe('computeHelmValuesOverrideMarks', () => {
   it('marks each overridden value by line with how it relates to the chart default', () => {
-    const { marks, lineOf } = marksFor({
+    const { marks, lineOf, text } = marksFor({
       defaults: {
         image: { repository: 'nginx', tag: '' },
         ingress: { hosts: ['chart.local'] },
@@ -72,6 +72,13 @@ describe('computeHelmValuesOverrideMarks', () => {
       expect(kindAt(content), content).toBeUndefined();
     }
     expect(marks.overriddenCount).toBe(5);
+    // The label is the overridden key alone, so its value keeps syntax colors.
+    const labelOf = (content: string) => {
+      const label = marks.lines.get(lineOf(content))?.label;
+      return label && text.slice(label.from, label.to);
+    };
+    expect(labelOf('  tag: v2')).toBe('tag');
+    expect(labelOf('    - b.example.com')).toBe('hosts');
   });
 
   it('marks subchart copies of global overrides only under reported subcharts', () => {
