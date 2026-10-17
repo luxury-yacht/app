@@ -16,16 +16,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const syntheticAPIGroup = "helm.sh"
+// releaseResource is the synthetic resource name paired with
+// resourcemodel.HelmReleaseGVK in Helm release references.
+const releaseResource = "releases"
 
 // ReleaseRef is the synthetic object identity of the named Helm release.
 func ReleaseRef(clusterID, namespace, name string) resourcemodel.ResourceRef {
 	return resourcemodel.ResourceRef{
 		ClusterID: clusterID,
-		Group:     syntheticAPIGroup,
-		Version:   "v3",
-		Kind:      "HelmRelease",
-		Resource:  "releases",
+		Group:     resourcemodel.HelmReleaseGVK.Group,
+		Version:   resourcemodel.HelmReleaseGVK.Version,
+		Kind:      resourcemodel.HelmReleaseGVK.Kind,
+		Resource:  releaseResource,
 		Namespace: namespace,
 		Name:      name,
 	}

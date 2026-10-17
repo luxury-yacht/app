@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
@@ -19,7 +18,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
-	"gopkg.in/yaml.v2"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
@@ -227,156 +225,26 @@ func (s *Service) initActionConfig(settings *cli.EnvSettings, namespace string) 
 }
 
 func (s *Service) extractResourcesFromManifest(ctx context.Context, manifest, defaultNamespace string) []HelmResource {
-	resources := newManifestResourceAccumulator(s, defaultNamespace)
-	for _, document := range splitManifestDocuments(manifest) {
-		if object, ok := parseManifestDocument(document); ok {
-			resources.addObject(ctx, object)
-		}
+	var resources []HelmResource
+	for _, resource := range ParseManifestResources(manifest, defaultNamespace) {
+		identity := resourcemodel.ResolveHelmManifestResourceIdentityWithResolver(
+			ctx,
+			s.deps.Common.ResourceResolver,
+			resource.APIVersion,
+			resource.Kind,
+			resource.Namespace,
+			resource.Name,
+			resource.NamespaceExplicit,
+		)
+		resources = append(resources, HelmResource{
+			Kind:       resource.Kind,
+			APIVersion: resource.APIVersion,
+			Name:       resource.Name,
+			Namespace:  identity.Namespace,
+			Scope:      string(identity.Scope),
+		})
 	}
-	return resources.items
-}
-
-type manifestResourceKey struct {
-	apiVersion string
-	kind       string
-	namespace  string
-	name       string
-}
-
-type manifestResourceAccumulator struct {
-	service          *Service
-	defaultNamespace string
-	seen             map[manifestResourceKey]struct{}
-	items            []HelmResource
-}
-
-func newManifestResourceAccumulator(service *Service, defaultNamespace string) *manifestResourceAccumulator {
-	return &manifestResourceAccumulator{
-		service:          service,
-		defaultNamespace: defaultNamespace,
-		seen:             make(map[manifestResourceKey]struct{}),
-	}
-}
-
-func splitManifestDocuments(manifest string) []string {
-	trimmed := strings.TrimPrefix(strings.TrimSpace(manifest), "---")
-	return strings.Split(trimmed, "\n---")
-}
-
-func parseManifestDocument(document string) (map[string]interface{}, bool) {
-	document = strings.TrimSpace(document)
-	if document == "" || document == "---" {
-		return nil, false
-	}
-	var object map[string]interface{}
-	if err := yaml.Unmarshal([]byte(document), &object); err != nil {
-		return nil, false
-	}
-	return object, object != nil
-}
-
-func (resources *manifestResourceAccumulator) addObject(ctx context.Context, object map[string]interface{}) {
-	kind, _ := object["kind"].(string)
-	if kind == "" {
-		return
-	}
-	// apiVersion is the wire-form "group/version" (or just "version" for core
-	// resources), allowing Helm-managed CRDs to retain their complete GVK.
-	apiVersion, _ := object["apiVersion"].(string)
-	if strings.HasSuffix(kind, "List") {
-		resources.addListItems(ctx, object, apiVersion)
-		return
-	}
-	resources.addResource(ctx, object, apiVersion, kind)
-}
-
-func (resources *manifestResourceAccumulator) addListItems(ctx context.Context, object map[string]interface{}, inheritedAPIVersion string) {
-	items, ok := object["items"].([]interface{})
-	if !ok {
-		return
-	}
-	for _, item := range items {
-		resources.addListItem(ctx, item, inheritedAPIVersion)
-	}
-}
-
-func (resources *manifestResourceAccumulator) addListItem(ctx context.Context, item interface{}, inheritedAPIVersion string) {
-	object, ok := toStringMap(item)
-	if !ok {
-		return
-	}
-	kind, _ := object["kind"].(string)
-	if kind == "" {
-		return
-	}
-	apiVersion, _ := object["apiVersion"].(string)
-	if apiVersion == "" {
-		apiVersion = inheritedAPIVersion
-	}
-	resources.addResource(ctx, object, apiVersion, kind)
-}
-
-func (resources *manifestResourceAccumulator) addResource(ctx context.Context, object map[string]interface{}, apiVersion, kind string) {
-	name, namespace, namespaceExplicit := extractNameNamespace(object, resources.defaultNamespace)
-	if name == "" {
-		return
-	}
-	key := manifestResourceKey{apiVersion: apiVersion, kind: kind, namespace: namespace, name: name}
-	if _, exists := resources.seen[key]; exists {
-		return
-	}
-	resources.seen[key] = struct{}{}
-	identity := resourcemodel.ResolveHelmManifestResourceIdentityWithResolver(
-		ctx,
-		resources.service.deps.Common.ResourceResolver,
-		apiVersion,
-		kind,
-		namespace,
-		name,
-		namespaceExplicit,
-	)
-	resources.items = append(resources.items, HelmResource{
-		Kind:       kind,
-		APIVersion: apiVersion,
-		Name:       name,
-		Namespace:  identity.Namespace,
-		Scope:      string(identity.Scope),
-	})
-}
-
-func extractNameNamespace(obj map[string]interface{}, defaultNamespace string) (string, string, bool) {
-	metadata, ok := toStringMap(obj["metadata"])
-	if !ok {
-		return "", defaultNamespace, false
-	}
-
-	name, _ := metadata["name"].(string)
-	namespace := defaultNamespace
-	namespaceExplicit := false
-	if ns, ok := metadata["namespace"].(string); ok && ns != "" {
-		namespace = ns
-		namespaceExplicit = true
-	}
-	return name, namespace, namespaceExplicit
-}
-
-func toStringMap(value interface{}) (map[string]interface{}, bool) {
-	switch typed := value.(type) {
-	case map[string]interface{}:
-		return typed, true
-	case map[interface{}]interface{}:
-		result := make(map[string]interface{}, len(typed))
-		for k, v := range typed {
-			key, ok := k.(string)
-			if !ok {
-				continue
-			}
-			result[key] = v
-		}
-		return result, true
-	default:
-		return nil, false
-	}
+	return resources
 }
 
 func helmUpdatedAge(updated *metav1.Time) string {
@@ -400,7 +268,7 @@ func (s *Service) logWarn(msg string) {
 
 func (s *Service) logDeleteError(err error, msg string, privateResourceNames ...string) error {
 	operation := common.DynamicResourceRequestOperation(common.DynamicResourceRequestSpec{
-		Action: "delete", Group: "helm.sh", Version: "v3", Resource: "releases", Namespaced: true,
+		Action: "delete", Group: resourcemodel.HelmReleaseGVK.Group, Version: resourcemodel.HelmReleaseGVK.Version, Resource: releaseResource, Namespaced: true,
 	}).WithPrivateResourceNames(privateResourceNames...)
 	return s.deps.Common.LogRequestFailure(
 		err,

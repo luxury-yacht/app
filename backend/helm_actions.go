@@ -7,17 +7,16 @@
 package backend
 
 import (
-	"strings"
-
 	configmappkg "github.com/luxury-yacht/app/backend/resources/configmap"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/helm"
 )
 
 func (g *ResourceGateway) deleteHelmReleaseAction(target ObjectActionTargetRef) error {
-	if target.Group != "helm.sh" || target.Version != "v3" || !strings.EqualFold(target.Kind, "HelmRelease") {
-		return errUnsupportedActionTarget(ObjectActionDelete, target, "helm.sh/v3", "HelmRelease")
+	if !resourcemodel.IsHelmReleaseGVK(objectActionTargetGVK(target)) {
+		return errUnsupportedActionTarget(ObjectActionDelete, target, resourcemodel.HelmReleaseGVK.GroupVersion().String(), resourcemodel.HelmReleaseGVK.Kind)
 	}
 	if err := requireNamespacedObject(target.Namespace, target.Name); err != nil {
 		return err

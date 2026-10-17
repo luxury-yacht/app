@@ -167,7 +167,7 @@ func (g *ResourceGateway) deleteObjectAction(target ObjectActionTargetRef, force
 		return g.deletePodAction(target)
 	case target.Group == "" && target.Version == "v1" && target.Kind == nodes.Identity.Kind:
 		return g.deleteNodeAction(target, force)
-	case target.Group == "helm.sh" && target.Version == "v3" && strings.EqualFold(target.Kind, "HelmRelease"):
+	case resourcemodel.IsHelmReleaseGVK(objectActionTargetGVK(target)):
 		return g.deleteHelmReleaseAction(target)
 	default:
 		if force {

@@ -6,6 +6,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/helm"
 )
 
 func (m *Manager) resourceRefForObject(obj metav1.Object, group, version, kind, resource string) resourcemodel.ResourceRef {
@@ -17,7 +18,7 @@ func (m *Manager) resourceRefForObject(obj metav1.Object, group, version, kind, 
 }
 
 func (m *Manager) helmReleaseRef(namespace, name string) resourcemodel.ResourceRef {
-	return resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: m.clusterMeta.ClusterID, Group: "helm.sh", Version: "v3", Kind: "HelmRelease", Resource: "releases", Namespace: namespace, Name: name, UID: ""})
+	return resourcemodel.NewResourceRef(helm.ReleaseRef(m.clusterMeta.ClusterID, namespace, name))
 
 }
 

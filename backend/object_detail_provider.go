@@ -27,8 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-const helmReleaseAPIGroup = "helm.sh"
-
 type objectDetailProvider struct {
 	gateway *ResourceGateway
 }
@@ -68,8 +66,8 @@ var objectDetailFetcherGVKs = buildObjectDetailFetcherGVKs()
 func buildObjectDetailFetcherGVKs() map[string]schema.GroupVersionKind {
 	gvks := make(map[string]schema.GroupVersionKind, len(objectDetailFetchers))
 	for kind := range objectDetailFetchers {
-		// HelmRelease uses the synthetic helm.sh identity (isHelmReleaseGVK), not a
-		// built-in contract entry, so it has no exact-GVK gate.
+		// HelmRelease uses the synthetic identity (resourcemodel.HelmReleaseGVK),
+		// not a built-in contract entry, so it has no exact-GVK gate.
 		if kind == helmReleaseKind {
 			continue
 		}
@@ -117,7 +115,7 @@ func lookupObjectDetailFetcher(gvk schema.GroupVersionKind) (objectDetailFetcher
 	if !ok {
 		return objectDetailFetcher{}, false
 	}
-	if isHelmReleaseGVK(gvk) {
+	if resourcemodel.IsHelmReleaseGVK(gvk) {
 		return fetcher, true
 	}
 	supported, ok := objectDetailFetcherGVKs[normalized]
@@ -133,10 +131,6 @@ func sameGVK(a, b schema.GroupVersionKind) bool {
 		strings.EqualFold(strings.TrimSpace(a.Kind), strings.TrimSpace(b.Kind))
 }
 
-func isHelmReleaseGVK(gvk schema.GroupVersionKind) bool {
-	return resourcemodel.IsHelmReleaseGVK(gvk)
-}
-
 // FetchObjectDetails retrieves the details of a Kubernetes object.
 func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (interface{}, error) {
 	resolved := p.resolveDetailContext(ctx)
@@ -147,7 +141,7 @@ func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schem
 	if _, ok := objectDetailFetchers[strings.ToLower(strings.TrimSpace(gvk.Kind))]; !ok {
 		return nil, snapshot.ErrObjectDetailNotImplemented
 	}
-	if !isHelmReleaseGVK(gvk) && strings.TrimSpace(gvk.Version) == "" {
+	if !resourcemodel.IsHelmReleaseGVK(gvk) && strings.TrimSpace(gvk.Version) == "" {
 		return nil, snapshot.ErrObjectDetailNotImplemented
 	}
 	if !resolved.scoped {
@@ -184,7 +178,7 @@ func confirmMissingObject(
 	namespace, name string,
 	err error,
 ) error {
-	if isHelmReleaseGVK(gvk) {
+	if resourcemodel.IsHelmReleaseGVK(gvk) {
 		return confirmMissingHelmRelease(resolved, namespace, name, err)
 	}
 	if !apierrors.IsNotFound(err) {
@@ -436,7 +430,7 @@ func cachedHelmContent[T any](
 		ctx,
 		resolved.deps,
 		resolved.selectionKey,
-		schema.GroupVersionKind{Group: helmReleaseAPIGroup, Version: "v3", Kind: kind},
+		resourcemodel.HelmReleaseGVK.GroupVersion().WithKind(kind),
 	)
 	if !allowed {
 		p.gateway.responseCacheDelete(resolved.selectionKey, cacheKey)
