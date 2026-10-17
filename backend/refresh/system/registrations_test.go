@@ -18,6 +18,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resources/helm"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
@@ -849,8 +850,8 @@ func (fullObjectDetailProvider) FetchHelmManifest(context.Context, string, strin
 	return "", 0, nil
 }
 
-func (fullObjectDetailProvider) FetchHelmValues(context.Context, string, string) (map[string]interface{}, int, error) {
-	return nil, 0, nil
+func (fullObjectDetailProvider) FetchHelmValues(context.Context, string, string) (helm.HelmReleaseValues, int, error) {
+	return helm.HelmReleaseValues{}, 0, nil
 }
 
 func loadRefreshDomainContract(t *testing.T) refreshDomainContract {

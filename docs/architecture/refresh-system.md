@@ -241,7 +241,10 @@ typed `Rows` ([large-data.md](large-data.md), [GridTable](../frontend/gridtable.
   get a wrong `304`.
 - The `ResourceGateway` response cache (details, header metadata, Helm content;
   `backend/response_cache.go`) stores a fetch only if its entry was not evicted
-  after the fetch began. Kinds whose details embed pods set `DetailListsPods`;
+  after the fetch began. Helm manifest and values content come from one
+  release read and are cached with that read's revision, since every Helm
+  storage read lists and decodes all stored revisions. Kinds whose details
+  embed pods set `DetailListsPods`;
   any pod change in a namespace evicts their cached details there, since a pod
   row does not name its workload (a stale pod list hides a new pod's logs).
 

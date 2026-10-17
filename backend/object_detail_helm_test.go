@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/resources/helm"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/release"
@@ -36,12 +37,13 @@ func TestObjectDetailProviderHelmContentCacheAndClusterIsolation(t *testing.T) {
 				Config: map[string]interface{}{"replicas": float64(3)},
 			}
 			require.NoError(t, driver.NewSecrets(client.CoreV1().Secrets("default")).Create("sh.helm.release.v1.demo.v7", rel))
-			var secretReads atomic.Int32
+			var secretReads, versionReads atomic.Int32
 			var rejectReads atomic.Bool
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch r.URL.Path {
 				case "/version":
+					versionReads.Add(1)
 					_, _ = w.Write([]byte(`{"major":"1","minor":"34","gitVersion":"v1.34.0"}`))
 				case "/api/v1/namespaces/default/secrets":
 					secretReads.Add(1)
@@ -90,13 +92,17 @@ func TestObjectDetailProviderHelmContentCacheAndClusterIsolation(t *testing.T) {
 			content, revision, err := read("cluster-a")
 			require.NoError(t, err)
 			require.Equal(t, 7, revision)
+			// Every Helm storage read lists and decodes all stored revisions, so an
+			// uncached fetch must build its content and revision from one read.
+			require.EqualValues(t, 1, secretReads.Load(), "one release read per uncached fetch")
+			require.EqualValues(t, 1, versionReads.Load(), "one reachability check per uncached fetch")
 			if kind == "HelmManifest" {
 				require.Equal(t, rel.Manifest, content)
 			} else {
-				require.Equal(t, map[string]interface{}{
-					"defaultValues": map[string]interface{}{"replicas": float64(1)},
-					"allValues":     map[string]interface{}{"replicas": float64(3)},
-					"userValues":    map[string]interface{}{"replicas": float64(3)},
+				require.Equal(t, helm.HelmReleaseValues{
+					Defaults:  map[string]interface{}{"replicas": float64(1)},
+					Merged:    map[string]interface{}{"replicas": float64(3)},
+					Overrides: map[string]interface{}{"replicas": float64(3)},
 				}, content)
 			}
 			readsAfterFetch := secretReads.Load()
@@ -104,15 +110,10 @@ func TestObjectDetailProviderHelmContentCacheAndClusterIsolation(t *testing.T) {
 			cached, cachedRevision, err := read("cluster-a")
 			require.NoError(t, err)
 			require.Equal(t, content, cached)
-			require.Equal(t, revision, cachedRevision)
+			require.Equal(t, revision, cachedRevision, "the revision is cached with the content it was read with")
 			require.Equal(t, readsAfterFetch, secretReads.Load(), "authorized cached content should survive unavailable release reads")
 			_, _, err = read("cluster-b")
 			require.Error(t, err, "another cluster must not receive the cached release")
-			gateway.responseCacheDelete("cluster-a", objectDetailCacheKey("HelmRelease", "default", "demo"))
-			cached, cachedRevision, err = read("cluster-a")
-			require.NoError(t, err, "revision lookup failure must not discard content")
-			require.Equal(t, content, cached)
-			require.Zero(t, cachedRevision)
 			denySelfSubjectAccessReviews(client, "secrets denied")
 			_, _, err = read("cluster-a")
 			require.Error(t, err)

@@ -6,6 +6,10 @@
  */
 
 import {
+  getHelmValuesView,
+  setHelmValuesView,
+} from '@modules/object-panel/components/ObjectPanel/Helm/helmValuesViewCache';
+import {
   ObjectPanelStateProvider,
   useObjectPanelActiveTab,
   useObjectPanelState,
@@ -693,6 +697,7 @@ describe('ObjectPanelStateContext', () => {
             name: 'api',
           }) ?? '';
       });
+      setHelmValuesView(panelId, 'merged');
       const panelStillMountedAtEviction: boolean[] = [];
       resetScopedDomainMock.mockImplementation(() => {
         panelStillMountedAtEviction.push(stateRef.current?.openPanels.has(panelId) ?? false);
@@ -722,6 +727,7 @@ describe('ObjectPanelStateContext', () => {
       );
       expect(new Set(evictedScopes).size).toBe(evictedScopes.length);
       expect(clearLogViewerPrefsMock).toHaveBeenCalledTimes(1);
+      expect(getHelmValuesView(panelId)).toBeUndefined();
     }
   );
 });

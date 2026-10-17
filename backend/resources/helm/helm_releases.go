@@ -21,6 +21,8 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/types"
 	"gopkg.in/yaml.v2"
 	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/release"
 	"helm.sh/helm/v3/pkg/storage/driver"
@@ -83,44 +85,64 @@ func (s *Service) ReleaseDetails(ctx context.Context, namespace, name string) (*
 	return details, nil
 }
 
-// ReleaseManifest returns the rendered manifest for a Helm release.
-func (s *Service) ReleaseManifest(namespace, name string) (string, error) {
+// ReleaseManifest returns the rendered manifest and revision of a Helm release.
+func (s *Service) ReleaseManifest(namespace, name string) (string, int, error) {
 	_, release, err := s.getRelease(namespace, name)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 
-	return release.Manifest, nil
+	return release.Manifest, release.Version, nil
 }
 
-// ReleaseValues returns chart defaults, merged values, and user overrides for a Helm release.
-func (s *Service) ReleaseValues(namespace, name string) (map[string]interface{}, error) {
-	actionConfig, release, err := s.getRelease(namespace, name)
+// HelmReleaseValues holds the Values tab's three views of one release revision.
+type HelmReleaseValues struct {
+	// Defaults are the chart's own values, including subchart defaults.
+	Defaults map[string]interface{}
+	// Merged are the values Helm rendered with (`helm get values --all`).
+	Merged map[string]interface{}
+	// Overrides are the user-supplied values (`helm get values`).
+	Overrides map[string]interface{}
+	// SubchartPaths locate each subchart's values, nested subcharts included.
+	// Helm copies the parent's `global` values into every one of them.
+	SubchartPaths [][]string
+}
+
+// ReleaseValues returns a release's chart defaults, merged values, and user
+// overrides, all computed from the single stored revision it reads.
+func (s *Service) ReleaseValues(namespace, name string) (HelmReleaseValues, int, error) {
+	_, release, err := s.getRelease(namespace, name)
 	if err != nil {
-		return nil, err
+		return HelmReleaseValues{}, 0, err
 	}
 
-	defaults := release.Chart.Values
-
-	valuesClient := action.NewGetValues(actionConfig)
-	valuesClient.AllValues = true
-	mergedValues, err := valuesClient.Run(name)
+	defaults, err := chartutil.CoalesceValues(release.Chart, map[string]interface{}{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get values for release %s: %w", name, err)
+		return HelmReleaseValues{}, 0, fmt.Errorf("failed to compute chart defaults for release %s: %w", name, err)
+	}
+	merged, err := chartutil.CoalesceValues(release.Chart, release.Config)
+	if err != nil {
+		return HelmReleaseValues{}, 0, fmt.Errorf("failed to get values for release %s: %w", name, err)
 	}
 
-	userClient := action.NewGetValues(actionConfig)
-	userClient.AllValues = false
-	userValues, err := userClient.Run(name)
-	if err != nil {
-		userValues = map[string]interface{}{}
-	}
+	return HelmReleaseValues{
+		Defaults:      defaults,
+		Merged:        merged,
+		Overrides:     release.Config,
+		SubchartPaths: subchartPaths(release.Chart, nil),
+	}, release.Version, nil
+}
 
-	return map[string]interface{}{
-		"defaultValues": defaults,
-		"allValues":     mergedValues,
-		"userValues":    userValues,
-	}, nil
+// subchartPaths lists dependency value paths in the order Helm coalesces them:
+// a subchart's values live under its name inside its parent's values.
+func subchartPaths(ch *chart.Chart, parent []string) [][]string {
+	var paths [][]string
+	for _, dependency := range ch.Dependencies() {
+		path := append(append([]string{}, parent...), dependency.Name())
+		paths = append(paths, path)
+		paths = append(paths, subchartPaths(dependency, path)...)
+	}
+	return paths
 }
 
 // getRelease keeps the client, configuration, and release-read policy shared by

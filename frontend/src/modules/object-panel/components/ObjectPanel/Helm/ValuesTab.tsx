@@ -2,31 +2,56 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.tsx
  */
 
+import type { Extension } from '@codemirror/state';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import SegmentedButton from '@shared/components/SegmentedButton';
 import { YamlEditor } from '@shared/components/yaml';
-import { errorHandler } from '@utils/errorHandler';
 import type React from 'react';
 import { useMemo, useState } from 'react';
-import * as YAML from 'yaml';
 import { useRefreshDomainHandle } from '@/core/data-access';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
-import { type HelmValuesData, type HelmValuesMode, selectHelmValues } from './helmValues';
-import './ValuesTab.css';
+import { helmValuesOverrideGutter } from './helmValuesOverrideGutter';
+import {
+  computeHelmValuesOverrideMarks,
+  type HelmValuesOverrideMarks,
+  stringifyHelmValues,
+} from './helmValuesOverrideMarks';
+import { getHelmValuesView, type HelmValuesView, setHelmValuesView } from './helmValuesViewCache';
 import '../Yaml/YamlTab.css';
+import './ValuesTab.css';
 import { failureMessage } from '@/core/refresh/refreshFailure';
+
+const VIEW_OPTIONS: { label: string; value: HelmValuesView }[] = [
+  { label: 'Defaults', value: 'defaults' },
+  { label: 'Overrides', value: 'overrides' },
+  { label: 'Merged', value: 'merged' },
+];
+
+const NO_EXTENSIONS: Extension[] = [];
+
+const overrideSummary = (marks: HelmValuesOverrideMarks) => {
+  const parts: string[] = [];
+  if (marks.overriddenCount > 0) {
+    parts.push(`${marks.overriddenCount} overridden`);
+  }
+  if (marks.removedCount > 0) {
+    parts.push(`${marks.removedCount} removed`);
+  }
+  return parts.join(' · ') || 'No overrides';
+};
 
 interface ValuesTabProps {
   scope: string | null;
   isActive?: boolean;
+  panelId: string;
 }
 
-const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
+const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false, panelId }) => {
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
-  const [showMode, setShowMode] = useState<HelmValuesMode>('defaults');
+  const [view, setView] = useState<HelmValuesView>(() => getHelmValuesView(panelId) ?? 'defaults');
   const { state: snapshot } = useRefreshDomainHandle({
     domain: 'object-helm-values',
     scope,
@@ -35,7 +60,7 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
     fetchOnEnable: isActive && scope ? 'startup' : false,
   });
 
-  const valuesData = snapshot.data?.values as HelmValuesData | undefined;
+  const valuesData = snapshot.data;
   const valuesLoadingState = applyPassiveLoadingPolicy({
     loading:
       snapshot.status === 'loading' ||
@@ -50,27 +75,28 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
   const showPausedValuesState = valuesLoadingState.showPausedEmptyState;
   const valuesError = failureMessage(snapshot.error);
 
-  const displayContent = useMemo(() => {
-    if (!valuesData) {
-      return '';
-    }
+  const displayContent = useMemo(
+    () => (valuesData ? stringifyHelmValues(valuesData[view] ?? {}) : ''),
+    [valuesData, view]
+  );
+  // Defaults holds only chart values, so only Merged and Overrides are marked.
+  const markedView = view === 'defaults' ? null : view;
+  const overrideMarks = useMemo(
+    () =>
+      markedView && valuesData
+        ? computeHelmValuesOverrideMarks(displayContent, valuesData, markedView)
+        : null,
+    [displayContent, valuesData, markedView]
+  );
+  const overrideExtensions = useMemo(
+    () => (overrideMarks ? [helmValuesOverrideGutter(overrideMarks)] : NO_EXTENSIONS),
+    [overrideMarks]
+  );
 
-    const content = selectHelmValues(valuesData, showMode);
-
-    try {
-      return YAML.stringify(content ?? {}, {
-        indent: 2,
-        lineWidth: 0,
-        doubleQuotedAsJSON: false,
-        singleQuote: false,
-        defaultKeyType: 'PLAIN',
-        defaultStringType: 'PLAIN',
-      });
-    } catch (e) {
-      errorHandler.handle(e, { action: 'processHelmValues' });
-      return YAML.stringify(content ?? {});
-    }
-  }, [valuesData, showMode]);
+  const selectView = (next: HelmValuesView) => {
+    setView(next);
+    setHelmValuesView(panelId, next);
+  };
 
   if (valuesLoading) {
     return (
@@ -114,7 +140,7 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
 
   return (
     <div className="object-panel-tab-content">
-      <div className="values-display">
+      <div className="yaml-display">
         <YamlEditor
           value={displayContent}
           editable={false}
@@ -122,16 +148,16 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
           shortcutLabel="Helm values search"
           shortcutPriority={20}
           ariaLabel="Helm values YAML"
+          extraExtensions={overrideExtensions}
           toolbarActions={
-            <SegmentedButton
-              options={[
-                { label: 'Defaults', value: 'defaults' },
-                { label: 'Overrides', value: 'overrides' },
-                { label: 'Merged', value: 'merged' },
-              ]}
-              value={showMode}
-              onChange={(value) => setShowMode(value as typeof showMode)}
-            />
+            <>
+              <SegmentedButton options={VIEW_OPTIONS} value={view} onChange={selectView} />
+              {!!overrideMarks && (
+                <span className="helm-values-override-summary">
+                  {overrideSummary(overrideMarks)}
+                </span>
+              )}
+            </>
           }
         />
       </div>

@@ -481,6 +481,7 @@ describe('ObjectPanelContent', () => {
     expect(hoistedRefs.valuesTabProps.current).toMatchObject({
       scope: baseProps.helmScope,
       isActive: true,
+      panelId: baseProps.panelId,
     });
   });
 

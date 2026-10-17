@@ -375,7 +375,7 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
   ],
   [
     'values',
-    ({ helmScope, isPanelOpen }) => {
+    ({ helmScope, isPanelOpen, panelId }) => {
       return (
         <PanelTabBoundary
           scope="panel-values"
@@ -383,7 +383,7 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
           tabName="Values"
           loadingName="values"
         >
-          <ValuesTab scope={helmScope} isActive={isPanelOpen} />
+          <ValuesTab scope={helmScope} isActive={isPanelOpen} panelId={panelId} />
         </PanelTabBoundary>
       );
     },

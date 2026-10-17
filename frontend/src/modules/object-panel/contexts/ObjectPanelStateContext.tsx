@@ -15,6 +15,7 @@ import {
  */
 
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { clearHelmValuesView } from '@modules/object-panel/components/ObjectPanel/Helm/helmValuesViewCache';
 import { clearLogViewerPrefs } from '@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import { getObjectPanelScopeEvictions } from '@modules/object-panel/objectPanelRef';
@@ -107,6 +108,7 @@ const evictRemovedPanelCaches = (
       if (!current[clusterId]?.openPanels.has(panelId)) {
         evictPanelScopes(ref);
         clearLogViewerPrefs(panelId);
+        clearHelmValuesView(panelId);
       }
     }
   }

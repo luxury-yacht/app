@@ -282,7 +282,7 @@ func TestRenderMatchesEncodingJSONOptionalityAndNullability(t *testing.T) {
 
 	require.Contains(t, contract, "export interface NodeMaintenanceSnapshotPayload {\n  clusterId: string;")
 	require.Contains(t, contract, "recentEvents: Array<RecentEventEntry> | null;")
-	require.Contains(t, contract, "values: Record<string, unknown> | null;")
+	require.Contains(t, contract, "merged: Record<string, unknown> | null;")
 	require.Contains(t, contract, "events?: Array<NodeMaintenanceDrainEvent>;")
 	require.Contains(t, contract, "warnings?: Array<ContainerLogsWarning> | null;")
 	require.Contains(t, contract, "lastTransitionTime: string | null;")

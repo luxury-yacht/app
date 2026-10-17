@@ -1,14 +1,81 @@
-.values-display {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  position: relative;
+/* Override markers in the Merged view (helmValuesOverrideGutter.ts). */
+.helm-values-override-summary {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 
-/* Floating control panel like YAML tab */
-/* Ensure proper scrolling */
-.object-panel-tab-content .values-display {
-  height: 100%;
-  min-height: 0;
+/* Fixed width so the text does not shift as marked lines scroll into view. */
+.codemirror-shell .helm-values-override-gutter {
+  min-width: 7px;
+}
+
+.codemirror-shell .helm-values-override-gutter .cm-gutterElement {
+  display: flex;
+  align-items: stretch;
+  padding: 0 3px 0 1px;
+}
+
+.helm-values-override-marker {
+  width: 3px;
+  border-radius: 1px;
+}
+
+.helm-values-override-marker--changed {
+  background: var(--color-info);
+}
+
+.helm-values-override-marker--added {
+  background: var(--color-success);
+}
+
+.helm-values-override-marker--same {
+  box-shadow: inset 0 0 0 1px var(--color-info);
+}
+
+/* Dashed: a subchart's copy of an overridden global value. */
+.helm-values-override-marker--global {
+  background: repeating-linear-gradient(to bottom, var(--color-info) 0 3px, transparent 3px 5px);
+}
+
+.helm-values-override-marker--removed {
+  background: var(--color-error);
+}
+
+.codemirror-shell .helm-values-removed-key {
+  padding: 0 2px 0 6px;
+  color: var(--color-text-tertiary);
+  font-style: italic;
+  white-space: pre;
+}
+
+.helm-values-removed-key__name {
+  text-decoration: line-through;
+}
+
+.helm-values-removed-key__note {
+  color: var(--color-error);
+}
+
+.helm-values-override-tooltip {
+  max-width: 360px;
+  padding: 6px 8px;
+  font-size: var(--font-size-sm);
+}
+
+.helm-values-override-tooltip__title {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.helm-values-override-tooltip__label {
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+}
+
+.helm-values-override-tooltip__value {
+  margin: 2px 0 0;
+  font-family: var(--font-family-mono);
+  white-space: pre;
+  color: var(--color-text-secondary);
 }

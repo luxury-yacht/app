@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/helm"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -28,7 +29,7 @@ type stubHelmContentProvider struct {
 	manifestRevision  int
 	manifestNamespace string
 	manifestName      string
-	values            map[string]interface{}
+	values            helm.HelmReleaseValues
 	valuesRevision    int
 	valuesNamespace   string
 	valuesName        string
@@ -48,7 +49,7 @@ func (s *stubHelmContentProvider) FetchHelmManifest(_ context.Context, namespace
 	return s.manifest, s.manifestRevision, nil
 }
 
-func (s *stubHelmContentProvider) FetchHelmValues(_ context.Context, namespace, name string) (map[string]interface{}, int, error) {
+func (s *stubHelmContentProvider) FetchHelmValues(_ context.Context, namespace, name string) (helm.HelmReleaseValues, int, error) {
 	s.valuesNamespace = namespace
 	s.valuesName = name
 	return s.values, s.valuesRevision, nil
@@ -152,9 +153,14 @@ func TestObjectHelmManifestBuilderUsesContextScopedProviderResolver(t *testing.T
 	require.Equal(t, "apps", resources[0].Ref.Namespace)
 }
 
-func TestObjectHelmValuesBuilderUsesReleaseScopeAndCountsValues(t *testing.T) {
+func TestObjectHelmValuesBuilderPublishesEachViewOfTheReleaseRevision(t *testing.T) {
 	provider := &stubHelmContentProvider{
-		values:         map[string]interface{}{"replicas": 2, "image": "example/api:1.0"},
+		values: helm.HelmReleaseValues{
+			Defaults:      map[string]interface{}{"replicas": 1},
+			Merged:        map[string]interface{}{"replicas": 2},
+			Overrides:     map[string]interface{}{"replicas": 3},
+			SubchartPaths: [][]string{{"redis"}},
+		},
 		valuesRevision: 7,
 	}
 	builder := &ObjectHelmValuesBuilder{provider: provider}
@@ -167,12 +173,14 @@ func TestObjectHelmValuesBuilderUsesReleaseScopeAndCountsValues(t *testing.T) {
 	require.Equal(t, "checkout", provider.valuesName)
 	require.Equal(t, objectHelmValuesDomain, snapshot.Domain)
 	require.Equal(t, uint64(7), snapshot.Version)
-	require.Equal(t, 2, snapshot.Stats.ItemCount)
 
 	payload := snapshot.Payload.(ObjectHelmValuesSnapshotPayload)
 	require.Equal(t, "cluster-a", payload.ClusterID)
 	require.Equal(t, 7, payload.Revision)
-	require.Equal(t, provider.values, payload.Values)
+	require.Equal(t, provider.values.Defaults, payload.Defaults)
+	require.Equal(t, provider.values.Merged, payload.Merged)
+	require.Equal(t, provider.values.Overrides, payload.Overrides)
+	require.Equal(t, provider.values.SubchartPaths, payload.SubchartPaths)
 }
 
 func TestParseHelmScopeHandlesClusterPrefixAndClusterScopedReleases(t *testing.T) {

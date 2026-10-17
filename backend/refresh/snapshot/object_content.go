@@ -12,6 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/helm"
 )
 
 const (
@@ -30,7 +31,7 @@ type ObjectYAMLProvider interface {
 // HelmContentProvider supplies Helm manifest/values for a release.
 type HelmContentProvider interface {
 	FetchHelmManifest(ctx context.Context, namespace, name string) (string, int, error)
-	FetchHelmValues(ctx context.Context, namespace, name string) (map[string]interface{}, int, error)
+	FetchHelmValues(ctx context.Context, namespace, name string) (helm.HelmReleaseValues, int, error)
 }
 
 type HelmResourceResolverProvider interface {
@@ -51,11 +52,17 @@ type ObjectHelmManifestSnapshotPayload struct {
 	Resources []resourcemodel.ResourceLink `json:"resources,omitempty"`
 }
 
-// ObjectHelmValuesSnapshotPayload represents the Helm values payload.
+// ObjectHelmValuesSnapshotPayload carries the Values tab's three views of one
+// release revision.
 type ObjectHelmValuesSnapshotPayload struct {
 	ClusterMeta
-	Values   map[string]interface{} `json:"values"`
-	Revision int                    `json:"revision,omitempty"`
+	Defaults  map[string]interface{} `json:"defaults"`
+	Merged    map[string]interface{} `json:"merged"`
+	Overrides map[string]interface{} `json:"overrides"`
+	// SubchartPaths locate subchart values, so the Values tab can mark the
+	// subchart copies Helm makes of overridden `global` values.
+	SubchartPaths [][]string `json:"subchartPaths"`
+	Revision      int        `json:"revision,omitempty"`
 }
 
 // RegisterObjectYAMLDdomain wires the YAML domain.
@@ -315,12 +322,15 @@ func (b *ObjectHelmValuesBuilder) Build(ctx context.Context, scope string) (*ref
 		Scope:   scope,
 		Version: version,
 		Payload: ObjectHelmValuesSnapshotPayload{
-			ClusterMeta: meta,
-			Values:      values,
-			Revision:    revision,
+			ClusterMeta:   meta,
+			Defaults:      values.Defaults,
+			Merged:        values.Merged,
+			Overrides:     values.Overrides,
+			SubchartPaths: values.SubchartPaths,
+			Revision:      revision,
 		},
 		Stats: refresh.SnapshotStats{
-			ItemCount: len(values),
+			ItemCount: 1,
 		},
 	}, nil
 }

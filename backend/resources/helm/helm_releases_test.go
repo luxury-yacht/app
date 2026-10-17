@@ -410,33 +410,67 @@ func TestReleaseDetailsReturnsErrorWhenReleaseMissing(t *testing.T) {
 	require.Contains(t, err.Error(), "failed to get release")
 }
 
-func TestReleaseValuesReturnsMergedMaps(t *testing.T) {
-	t.Helper()
-
-	release := buildTestRelease("demo", "observability", 3, time.Now().Add(-4*time.Hour), time.Now().Add(-30*time.Minute))
+// The Values tab compares what the chart ships, what the user supplied, and
+// what Helm rendered with; all three must come from the same stored revision.
+func TestReleaseValuesBuildsChartDefaultsMergedAndOverridesFromOneRevision(t *testing.T) {
+	release := buildTestRelease("demo", "observability", 4, time.Now().Add(-4*time.Hour), time.Now().Add(-30*time.Minute))
+	release.Chart.Values = map[string]interface{}{
+		"replicaCount":   1,
+		"image":          map[string]interface{}{"repository": "nginx", "tag": ""},
+		"podAnnotations": map[string]interface{}{},
+		"legacy":         "chart",
+	}
+	release.Chart.SetDependencies(&chart.Chart{
+		Metadata: &chart.Metadata{Name: "redis", Version: "1.0.0"},
+		Values:   map[string]interface{}{"port": 6379},
+	})
 	release.Config = map[string]interface{}{
 		"replicaCount": 3,
-		"service": map[string]interface{}{
-			"type": "ClusterIP",
-		},
+		"image":        map[string]interface{}{"tag": "v2"},
+		"legacy":       nil,
 	}
-
 	service := newHelmServiceWithReleases(t, "observability", release)
 
-	values, err := service.ReleaseValues("observability", "demo")
+	values, revision, err := service.ReleaseValues("observability", "demo")
 	require.NoError(t, err)
+	require.Equal(t, 4, revision)
 
-	defaults, ok := values["defaultValues"].(map[string]interface{})
-	require.True(t, ok)
-	require.EqualValues(t, 1, defaults["replicaCount"])
+	// Defaults keep overridden keys, empty maps, and subchart defaults.
+	require.Equal(t, map[string]interface{}{
+		"replicaCount":   1,
+		"image":          map[string]interface{}{"repository": "nginx", "tag": ""},
+		"podAnnotations": map[string]interface{}{},
+		"legacy":         "chart",
+		"redis":          map[string]interface{}{"port": 6379, "global": map[string]interface{}{}},
+	}, values.Defaults)
+	// Merged is what Helm rendered with: overrides win and null removes a key.
+	require.Equal(t, map[string]interface{}{
+		"replicaCount":   3,
+		"image":          map[string]interface{}{"repository": "nginx", "tag": "v2"},
+		"podAnnotations": map[string]interface{}{},
+		"redis":          map[string]interface{}{"port": 6379, "global": map[string]interface{}{}},
+	}, values.Merged)
+	// Overrides are the user-supplied values exactly, including the null.
+	require.Equal(t, map[string]interface{}{
+		"replicaCount": 3,
+		"image":        map[string]interface{}{"tag": "v2"},
+		"legacy":       nil,
+	}, values.Overrides)
+}
 
-	allValues, ok := values["allValues"].(map[string]interface{})
-	require.True(t, ok)
-	require.EqualValues(t, 3, allValues["replicaCount"])
+// The Values tab marks subchart copies of global overrides, which needs the
+// value path of every subchart, nested ones included.
+func TestReleaseValuesReportsNestedSubchartPaths(t *testing.T) {
+	release := buildTestRelease("demo", "observability", 2, time.Now().Add(-time.Hour), time.Now())
+	sentinel := &chart.Chart{Metadata: &chart.Metadata{Name: "sentinel", Version: "1.0.0"}}
+	redis := &chart.Chart{Metadata: &chart.Metadata{Name: "redis", Version: "1.0.0"}}
+	redis.SetDependencies(sentinel)
+	release.Chart.SetDependencies(redis, &chart.Chart{Metadata: &chart.Metadata{Name: "postgresql", Version: "1.0.0"}})
+	service := newHelmServiceWithReleases(t, "observability", release)
 
-	userValues, ok := values["userValues"].(map[string]interface{})
-	require.True(t, ok)
-	require.Equal(t, "ClusterIP", userValues["service"].(map[string]interface{})["type"])
+	values, _, err := service.ReleaseValues("observability", "demo")
+	require.NoError(t, err)
+	require.Equal(t, [][]string{{"redis"}, {"redis", "sentinel"}, {"postgresql"}}, values.SubchartPaths)
 }
 
 func newHelmServiceWithReleases(t *testing.T, namespace string, releases ...*release.Release) *Service {
@@ -511,7 +545,7 @@ func TestReleaseManifestEnsureClientError(t *testing.T) {
 		},
 	})
 
-	_, err := service.ReleaseManifest("default", "web")
+	_, _, err := service.ReleaseManifest("default", "web")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no kube client")
 }
@@ -527,7 +561,7 @@ func TestReleaseManifestInitError(t *testing.T) {
 		},
 	})
 
-	_, err := service.ReleaseManifest("default", "web")
+	_, _, err := service.ReleaseManifest("default", "web")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "Kubernetes cluster unreachable")
 }
@@ -550,7 +584,7 @@ func TestReleaseValuesEnsureClientError(t *testing.T) {
 		EnsureClient: func(string) error { return fmt.Errorf("ensure") },
 	}})
 
-	_, err := service.ReleaseValues("default", "demo")
+	_, _, err := service.ReleaseValues("default", "demo")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ensure")
 }
@@ -664,7 +698,7 @@ func TestDeleteReleaseMissingReturnsError(t *testing.T) {
 }
 
 func TestReleaseManifestReturnsContent(t *testing.T) {
-	rel := buildTestRelease("demo", "ns1", 1, time.Now().Add(-time.Hour), time.Now())
+	rel := buildTestRelease("demo", "ns1", 6, time.Now().Add(-time.Hour), time.Now())
 	rel.Manifest = "kind: ConfigMap"
 	store := storage.Init(driver.NewMemory())
 	require.NoError(t, store.Create(rel))
@@ -682,7 +716,8 @@ func TestReleaseManifestReturnsContent(t *testing.T) {
 		},
 	})
 
-	out, err := service.ReleaseManifest("ns1", "demo")
+	out, revision, err := service.ReleaseManifest("ns1", "demo")
 	require.NoError(t, err)
 	require.Equal(t, "kind: ConfigMap", out)
+	require.Equal(t, 6, revision)
 }

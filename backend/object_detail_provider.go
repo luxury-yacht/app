@@ -378,56 +378,61 @@ func (p *objectDetailProvider) ResourceResolver(ctx context.Context) common.Reso
 	return resolved.deps.ResourceResolver
 }
 
-// FetchHelmValues retrieves the values for a Helm release.
-func (p *objectDetailProvider) FetchHelmValues(ctx context.Context, namespace, name string) (map[string]interface{}, int, error) {
+// FetchHelmValues retrieves the chart defaults, merged values, and user
+// overrides for a Helm release.
+func (p *objectDetailProvider) FetchHelmValues(ctx context.Context, namespace, name string) (helm.HelmReleaseValues, int, error) {
 	return fetchHelmContent(p, ctx, "HelmValues", namespace, name, (*helm.Service).ReleaseValues)
 }
 
-// fetchHelmContent preserves the shared cache authorization and best-effort
-// revision sequence for both Helm content domains.
+// helmContent caches Helm content with the revision it was read from, so a
+// cache hit never needs another release read to report its revision.
+type helmContent[T any] struct {
+	content  T
+	revision int
+}
+
+// fetchHelmContent preserves the shared cache authorization for both Helm
+// content domains.
 func fetchHelmContent[T any](
 	p *objectDetailProvider,
 	ctx context.Context,
 	kind, namespace, name string,
-	fetch func(*helm.Service, string, string) (T, error),
+	fetch func(*helm.Service, string, string) (T, int, error),
 ) (T, int, error) {
 	var zero T
 	resolved := p.resolveDetailContext(ctx)
 	if !resolved.scoped {
 		return zero, 0, fmt.Errorf("cluster scope is required")
 	}
-	service := helm.NewService(helm.Dependencies{Common: resolved.deps})
-	if content, revision, ok := cachedHelmDetail[T](p, ctx, resolved, service, kind, namespace, name); ok {
-		return content, revision, nil
+	if cached, ok := cachedHelmContent[T](p, ctx, resolved, kind, namespace, name); ok {
+		return cached.content, cached.revision, nil
 	}
 	since := p.cacheGeneration()
-	content, err := fetch(service, namespace, name)
+	content, revision, err := fetch(helm.NewService(helm.Dependencies{Common: resolved.deps}), namespace, name)
 	if err != nil {
 		return zero, 0, err
 	}
 	if p != nil && p.gateway != nil {
-		p.gateway.responseCacheStore(resolved.selectionKey, objectDetailCacheKey(kind, namespace, name), content, since)
+		p.gateway.responseCacheStore(resolved.selectionKey, objectDetailCacheKey(kind, namespace, name), helmContent[T]{content: content, revision: revision}, since)
 	}
-	return content, helmRevisionOrZero(ctx, p, resolved, service, namespace, name), nil
+	return content, revision, nil
 }
 
-func cachedHelmDetail[T any](
+func cachedHelmContent[T any](
 	p *objectDetailProvider,
 	ctx context.Context,
 	resolved resolvedObjectDetailContext,
-	service *helm.Service,
 	kind, namespace, name string,
-) (T, int, bool) {
-	var zero T
+) (helmContent[T], bool) {
 	if p == nil || p.gateway == nil {
-		return zero, 0, false
+		return helmContent[T]{}, false
 	}
 	cacheKey := objectDetailCacheKey(kind, namespace, name)
 	cached, ok := p.gateway.responseCacheLookup(resolved.selectionKey, cacheKey)
 	if !ok {
-		return zero, 0, false
+		return helmContent[T]{}, false
 	}
-	detail, typeOK := cached.(T)
+	content, typeOK := cached.(helmContent[T])
 	allowed := typeOK && p.gateway.canServeCachedResponse(
 		ctx,
 		resolved.deps,
@@ -436,71 +441,9 @@ func cachedHelmDetail[T any](
 	)
 	if !allowed {
 		p.gateway.responseCacheDelete(resolved.selectionKey, cacheKey)
-		return zero, 0, false
+		return helmContent[T]{}, false
 	}
-	return detail, helmRevisionOrZero(ctx, p, resolved, service, namespace, name), true
-}
-
-func helmRevisionOrZero(
-	ctx context.Context,
-	p *objectDetailProvider,
-	resolved resolvedObjectDetailContext,
-	service *helm.Service,
-	namespace, name string,
-) int {
-	revision, err := p.helmReleaseRevisionWithCache(ctx, resolved, service, namespace, name)
-	if err != nil {
-		return 0
-	}
-	return revision
-}
-
-// helmReleaseRevisionWithCache reuses cached Helm release details when possible.
-func (p *objectDetailProvider) helmReleaseRevisionWithCache(
-	ctx context.Context,
-	resolved resolvedObjectDetailContext,
-	service *helm.Service,
-	namespace, name string,
-) (int, error) {
-	detailsCacheKey := objectDetailCacheKey("HelmRelease", namespace, name)
-	if revision, ok := p.cachedHelmReleaseRevision(ctx, resolved, detailsCacheKey, namespace, name); ok {
-		return revision, nil
-	}
-	since := p.cacheGeneration()
-
-	details, err := service.ReleaseDetails(ctx, namespace, name)
-	if err != nil || details == nil {
-		return 0, err
-	}
-	if p != nil && p.gateway != nil {
-		p.gateway.responseCacheStore(resolved.selectionKey, detailsCacheKey, details, since)
-	}
-	return details.Revision, nil
-}
-
-func (p *objectDetailProvider) cachedHelmReleaseRevision(
-	ctx context.Context,
-	resolved resolvedObjectDetailContext,
-	detailsCacheKey, namespace, name string,
-) (int, bool) {
-	if p == nil || p.gateway == nil {
-		return 0, false
-	}
-	cached, ok := p.gateway.responseCacheLookup(resolved.selectionKey, detailsCacheKey)
-	if !ok {
-		return 0, false
-	}
-	details, ok := cached.(*HelmReleaseDetails)
-	if ok && details != nil && p.gateway.canServeCachedResponse(
-		ctx,
-		resolved.deps,
-		resolved.selectionKey,
-		schema.GroupVersionKind{Group: helmReleaseAPIGroup, Version: "v3", Kind: "HelmRelease"},
-	) {
-		return details.Revision, true
-	}
-	p.gateway.responseCacheDelete(resolved.selectionKey, detailsCacheKey)
-	return 0, false
+	return content, true
 }
 
 // cacheGeneration is read after the cache lookup, which may evict, and before

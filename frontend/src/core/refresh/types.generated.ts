@@ -1681,7 +1681,10 @@ export interface ObjectHelmManifestSnapshotPayload {
 export interface ObjectHelmValuesSnapshotPayload {
   clusterId: string;
   clusterName: string;
-  values: Record<string, unknown> | null;
+  defaults: Record<string, unknown> | null;
+  merged: Record<string, unknown> | null;
+  overrides: Record<string, unknown> | null;
+  subchartPaths: Array<Array<string> | null> | null;
   revision?: number;
 }
 

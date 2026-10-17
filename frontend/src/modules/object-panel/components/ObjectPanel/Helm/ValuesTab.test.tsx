@@ -1,8 +1,9 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.test.tsx
  *
- * Covers mode switching (defaults, overrides, merged), loading/error/empty
- * states, and correct recursive value computation with typed helpers.
+ * Covers the Defaults/Overrides/Merged views of the backend payload, YAML that
+ * Helm reads back unchanged, per-panel view memory, and loading/error/empty
+ * states.
  */
 
 import React, { act } from 'react';
@@ -146,21 +147,6 @@ vi.mock('@codemirror/lang-yaml', () => ({
   yaml: () => 'yaml-extension',
 }));
 
-vi.mock('@codemirror/view', () => ({
-  EditorView: Object.assign(class EditorViewMock {}, {
-    contentAttributes: {
-      of: (attrs: unknown) => ({ type: 'contentAttributes', attrs }),
-    },
-    domEventHandlers(handlers: unknown) {
-      return handlers;
-    },
-    lineWrapping: 'lineWrapping',
-  }),
-  keymap: {
-    of: (bindings: unknown) => bindings,
-  },
-}));
-
 vi.mock('@codemirror/search', () => ({
   SearchQuery: codemirrorSearchMocks.SearchQuery,
   findNext: codemirrorSearchMocks.findNext,
@@ -178,10 +164,6 @@ vi.mock('@/core/codemirror/search', () => ({
   closeSearchPanel: searchModuleMocks.closeSearchPanel,
 }));
 
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: { handle: vi.fn() },
-}));
-
 vi.mock('@shared/components/LoadingSpinner', () => ({
   __esModule: true,
   default: ({ message }: { message: string }) => <div data-testid="spinner">{message}</div>,
@@ -191,33 +173,31 @@ vi.mock('@shared/components/LoadingSpinner', () => ({
 // Test data
 // ---------------------------------------------------------------------------
 
-const ALL_VALUES = {
-  replicaCount: 1,
-  image: { repository: 'nginx', tag: 'latest' },
-  service: { type: 'ClusterIP', port: 80 },
+type ValuesMap = Record<string, unknown> | null;
+type ValuesPayload = {
+  defaults: ValuesMap;
+  merged: ValuesMap;
+  overrides: ValuesMap;
+  subchartPaths: string[][] | null;
 };
 
-const USER_VALUES = {
-  replicaCount: 3,
-  image: { tag: 'v2.0' },
+const VALUES: ValuesPayload = {
+  defaults: { replicaCount: 1, image: { repository: 'nginx', tag: '' }, podAnnotations: {} },
+  overrides: { replicaCount: 3, image: { tag: 'v2.0' } },
+  merged: { replicaCount: 3, image: { repository: 'nginx', tag: 'v2.0' }, podAnnotations: {} },
+  subchartPaths: null,
 };
 
 type SnapshotStatus = 'idle' | 'loading' | 'ready' | 'updating' | 'initialising' | 'error';
 
 type Snapshot = {
   status: SnapshotStatus;
-  data?: {
-    values?: { allValues?: Record<string, unknown>; userValues?: Record<string, unknown> } | null;
-  } | null;
+  data?: ValuesPayload | null;
   error?: RefreshFailure | null;
 };
 
 const snapshotState: { current: Snapshot } = {
-  current: {
-    status: 'ready',
-    data: { values: { allValues: ALL_VALUES, userValues: USER_VALUES } },
-    error: null,
-  },
+  current: { status: 'ready', data: VALUES, error: null },
 };
 
 refreshStoreMocks.useRefreshScopedDomain.mockImplementation(() => snapshotState.current);
@@ -238,14 +218,22 @@ const waitForUpdates = async () => {
   });
 };
 
+let panelSequence = 0;
+
 const renderValuesTab = async (
-  props: Partial<{ scope: string | null; isActive: boolean }> = {}
+  props: Partial<{ scope: string | null; isActive: boolean; panelId: string }> = {}
 ) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
 
-  const defaultProps = { scope: 'prod:helmrelease:my-app', isActive: true };
+  // Each render gets its own panel unless a test is checking panel memory.
+  panelSequence += 1;
+  const defaultProps = {
+    scope: 'prod:helmrelease:my-app',
+    isActive: true,
+    panelId: `panel-${panelSequence}`,
+  };
 
   await act(async () => {
     const { default: ValuesTab } = await import('./ValuesTab');
@@ -283,11 +271,7 @@ const clickSegmentedOption = async (container: HTMLElement, label: string) => {
 
 describe('ValuesTab', () => {
   beforeEach(() => {
-    snapshotState.current = {
-      status: 'ready',
-      data: { values: { allValues: ALL_VALUES, userValues: USER_VALUES } },
-      error: null,
-    };
+    snapshotState.current = { status: 'ready', data: VALUES, error: null };
     codeMirrorState.value = '';
     codeMirrorState.latestProps.current = { value: '' };
     codeMirrorState.editorView.dispatch.mockClear();
@@ -311,16 +295,16 @@ describe('ValuesTab', () => {
   // Mode switching & value computation
   // -----------------------------------------------------------------------
 
-  it('renders defaults mode: allValues minus user-overridden keys', async () => {
-    const { unmount } = await renderValuesTab();
-    await waitForUpdates();
+  it('shows the chart defaults, user overrides, and merged values for the selected view', async () => {
+    const { container, unmount } = await renderValuesTab();
 
-    // Default mode is 'defaults' — should exclude keys present in userValues.
-    const parsed = parsedValue();
-    expect(parsed.replicaCount).toBeUndefined();
-    expect(parsed.image?.tag).toBeUndefined();
-    expect(parsed.image?.repository).toBe('nginx');
-    expect(parsed.service).toEqual({ type: 'ClusterIP', port: 80 });
+    expect(parsedValue()).toEqual(VALUES.defaults);
+
+    await clickSegmentedOption(container, 'Overrides');
+    expect(parsedValue()).toEqual(VALUES.overrides);
+
+    await clickSegmentedOption(container, 'Merged');
+    expect(parsedValue()).toEqual(VALUES.merged);
 
     await unmount();
   });
@@ -339,111 +323,71 @@ describe('ValuesTab', () => {
     await unmount();
   });
 
-  it('renders overrides mode: only user-supplied values', async () => {
+  it('shows an empty map when the release has no user-supplied values', async () => {
+    snapshotState.current = { status: 'ready', data: { ...VALUES, overrides: null }, error: null };
     const { container, unmount } = await renderValuesTab();
-    await waitForUpdates();
 
     await clickSegmentedOption(container, 'Overrides');
-
-    const parsed = parsedValue();
-    expect(parsed.replicaCount).toBe(3);
-    expect(parsed.image).toEqual({ tag: 'v2.0' });
-    // Keys not in userValues should be absent.
-    expect(parsed.service).toBeUndefined();
+    expect(parsedValue()).toEqual({});
 
     await unmount();
   });
 
-  it('renders merged mode: allValues with user overrides applied', async () => {
-    const { container, unmount } = await renderValuesTab();
-    await waitForUpdates();
-
-    await clickSegmentedOption(container, 'Merged');
-
-    const parsed = parsedValue();
-    expect(parsed.replicaCount).toBe(3);
-    expect(parsed.image).toEqual({ repository: 'nginx', tag: 'v2.0' });
-    expect(parsed.service).toEqual({ type: 'ClusterIP', port: 80 });
-
-    await unmount();
-  });
-
-  it('ignores inherited properties when deriving Helm value modes', async () => {
-    const allValues = Object.assign(Object.create({ inheritedDefault: 'not-a-value' }), {
-      ownDefault: 'default',
-      ownOverride: 'base',
-    });
-    const userValues = Object.assign(Object.create({ inheritedOverride: 'not-an-override' }), {
-      ownOverride: 'override',
-    });
-    snapshotState.current = {
-      status: 'ready',
-      data: { values: { allValues, userValues } },
-      error: null,
-    };
-
-    const { container, unmount } = await renderValuesTab();
-    await waitForUpdates();
-
-    expect(parsedValue()).toEqual({ ownDefault: 'default' });
-
-    await clickSegmentedOption(container, 'Overrides');
-    expect(parsedValue()).toEqual({ ownOverride: 'override' });
-
-    await clickSegmentedOption(container, 'Merged');
-    expect(parsedValue()).toEqual({ ownDefault: 'default', ownOverride: 'override' });
-
-    await unmount();
-  });
-
-  it('preserves arrays, nulls, empty maps and nested overrides when switching modes', async () => {
+  it('summarizes the overrides it marks in the Merged and Overrides views', async () => {
     snapshotState.current = {
       status: 'ready',
       data: {
-        values: {
-          allValues: {
-            nested: { retained: null, replaced: 'base', empty: {} },
-            list: ['base'],
-            disabled: true,
-            count: 1,
-            text: 'base',
-            shape: { child: 'retained' },
-          },
-          userValues: {
-            nested: { replaced: null },
-            list: ['override', { enabled: false }],
-            disabled: false,
-            count: 0,
-            text: '',
-            shape: 'scalar',
-            extra: 'user-only',
-          },
-        },
+        ...VALUES,
+        defaults: { ...VALUES.defaults, testFramework: { enabled: true } },
+        overrides: { ...VALUES.overrides, testFramework: null },
       },
       error: null,
     };
-    const original = structuredClone(snapshotState.current.data);
     const { container, unmount } = await renderValuesTab();
-    try {
-      expect(parsedValue()).toEqual({
-        nested: { retained: null },
-        shape: { child: 'retained' },
-      });
-      await clickSegmentedOption(container, 'Overrides');
-      expect(parsedValue()).toEqual(original?.values?.userValues);
-      await clickSegmentedOption(container, 'Merged');
-      expect(parsedValue()).toEqual({
-        nested: { retained: null, replaced: null, empty: {} },
-        list: ['override', { enabled: false }],
-        disabled: false,
-        count: 0,
-        text: '',
-        shape: { child: 'retained' },
-      });
-      expect(snapshotState.current.data).toEqual(original);
-    } finally {
-      await unmount();
+    const summary = () => container.querySelector('.helm-values-override-summary');
+
+    expect(summary()).toBeNull();
+
+    // replicaCount and image.tag are overridden; testFramework was removed.
+    for (const view of ['Merged', 'Overrides']) {
+      await clickSegmentedOption(container, view);
+      expect(summary()?.textContent, view).toContain('2 overridden');
+      expect(summary()?.textContent, view).toContain('1 removed');
     }
+
+    await clickSegmentedOption(container, 'Defaults');
+    expect(summary()).toBeNull();
+
+    await unmount();
+  });
+
+  it('quotes strings that Helm would otherwise read back as booleans', async () => {
+    const strings = { tls: 'on', enabled: 'yes', legacy: 'off', confirm: 'n' };
+    snapshotState.current = {
+      status: 'ready',
+      data: { ...VALUES, defaults: strings },
+      error: null,
+    };
+    const { unmount } = await renderValuesTab();
+
+    // Helm parses values files as YAML 1.1, where bare yes/on/off/n are booleans.
+    expect(YAML.parse(codeMirrorState.value, { version: '1.1' })).toEqual(strings);
+
+    await unmount();
+  });
+
+  it('keeps the selected view for its panel when the tab remounts', async () => {
+    const first = await renderValuesTab({ panelId: 'panel-remount' });
+    await clickSegmentedOption(first.container, 'Merged');
+    await first.unmount();
+
+    const remounted = await renderValuesTab({ panelId: 'panel-remount' });
+    expect(parsedValue()).toEqual(VALUES.merged);
+    await remounted.unmount();
+
+    const otherPanel = await renderValuesTab({ panelId: 'panel-other' });
+    expect(parsedValue()).toEqual(VALUES.defaults);
+    await otherPanel.unmount();
   });
 
   // -----------------------------------------------------------------------
@@ -475,7 +419,7 @@ describe('ValuesTab', () => {
   it('shows error message when snapshot has an error', async () => {
     snapshotState.current = {
       status: 'error',
-      data: { values: { allValues: ALL_VALUES, userValues: USER_VALUES } },
+      data: VALUES,
       error: localFailure('connection refused'),
     };
     const { container, unmount } = await renderValuesTab();
@@ -486,7 +430,7 @@ describe('ValuesTab', () => {
   });
 
   it('shows empty state when no values data is available', async () => {
-    snapshotState.current = { status: 'ready', data: { values: null }, error: null };
+    snapshotState.current = { status: 'ready', data: null, error: null };
     const { container, unmount } = await renderValuesTab();
 
     expect(container.textContent).toContain('No values available');

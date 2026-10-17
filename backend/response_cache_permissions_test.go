@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/resources/helm"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	cgofake "k8s.io/client-go/kubernetes/fake"
 )
@@ -20,14 +19,13 @@ func TestCachedHelmContentIsNotServedAfterPermissionDenial(t *testing.T) {
 	denySelfSubjectAccessReviews(client, "no secrets")
 
 	detailKey := objectDetailCacheKey("HelmManifest", "default", "demo")
-	gateway.seedResponseCache(selectionKey, detailKey, "manifest")
+	gateway.seedResponseCache(selectionKey, detailKey, helmContent[string]{content: "manifest", revision: 1})
 
 	deps := common.Dependencies{KubernetesClient: client}
 	provider := &objectDetailProvider{gateway: gateway}
 	resolved := resolvedObjectDetailContext{deps: deps, selectionKey: selectionKey, scoped: true}
-	service := helm.NewService(helm.Dependencies{Common: deps})
-	if content, _, ok := cachedHelmDetail[string](provider, context.Background(), resolved, service, "HelmManifest", "default", "demo"); ok {
-		t.Fatalf("expected permission denial to block the cached manifest, got %q", content)
+	if cached, ok := cachedHelmContent[string](provider, context.Background(), resolved, "HelmManifest", "default", "demo"); ok {
+		t.Fatalf("expected permission denial to block the cached manifest, got %q", cached.content)
 	}
 	if _, ok := gateway.responseCacheLookup(selectionKey, detailKey); ok {
 		t.Fatalf("expected the denied manifest cache entry to be evicted")
