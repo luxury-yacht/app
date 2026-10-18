@@ -1,6 +1,8 @@
 ### Changed
 
-- Misc performance enhancements and fixes for Object Maps.
+- Object Maps:
+  - Misc performance enhancements and fixes.
+  - Objects with no links, such as a namespace's unused ConfigMaps and Secrets, are grouped by kind in their own block beside or below the linked objects instead of one tall column, so the map uses the window's width.
 - Helm releases:
   - New Map tab showing the objects the release created and the links between them. Objects the release's manifest names that are no longer in the cluster appear as dashed "Not found" cards. Helm release rows also offer **Open Map**.
   - The Values tab's Defaults view shows the chart's own defaults, including subchart defaults, settings you overrode, and empty settings such as `podAnnotations: {}`.

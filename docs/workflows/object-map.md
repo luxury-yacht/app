@@ -142,6 +142,15 @@ One rule decides what a map contains, and nothing else changes it.
   filter, the legend's link toggles, focus mode, ReplicaSet collapse (with its
   +N badge), and search. The frontend applies no relationship rules of its own.
 
+## Layout
+
+- Objects with a link to another object on the map are laid out in columns
+  that follow their links, with the seed in column 0.
+- Objects with no such link, common on namespace and Helm release maps and
+  under a Kind filter, form their own block of lanes ordered by kind. It sits
+  right of or below the linked layout, whichever lets the whole map fit a
+  16:10 view at the largest zoom, and never moves the linked objects.
+
 ## Map Interactions
 
 - Every wheel gesture zooms around the pointer: a mouse wheel, a trackpad

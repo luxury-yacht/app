@@ -144,6 +144,16 @@ describe('object map performance fixtures', () => {
     expect(durationMs).toBeLessThan(3000);
   });
 
+  it('lays out a 1000 object map with no links without pathological growth', () => {
+    const payload = createObjectMapPerformanceFixture({ nodeCount: 1000, edgeCount: 999 });
+    const { result, durationMs } = measure(() =>
+      computeObjectMapLayout(payload.nodes, [], payload.nodes[0].id)
+    );
+
+    expect(result.nodes).toHaveLength(1000);
+    expect(durationMs).toBeLessThan(1000);
+  });
+
   it('computes large-map selection highlighting within an interaction budget', () => {
     const { result } = measure(() => prepareFixture(1000, 2000));
     const activeNodeId = result.layout.nodes[500].id;
