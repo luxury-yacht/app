@@ -12,7 +12,7 @@ import (
 )
 
 type stubDetailProvider struct {
-	details interface{}
+	details ObjectDetail
 	err     error
 	calls   int
 	gvk     schema.GroupVersionKind
@@ -20,7 +20,7 @@ type stubDetailProvider struct {
 	metaErr error
 }
 
-func (s *stubDetailProvider) FetchObjectDetails(_ context.Context, gvk schema.GroupVersionKind, _ string, _ string) (interface{}, error) {
+func (s *stubDetailProvider) FetchObjectDetails(_ context.Context, gvk schema.GroupVersionKind, _ string, _ string) (ObjectDetail, error) {
 	s.calls++
 	s.gvk = gvk
 	return s.details, s.err
@@ -32,7 +32,7 @@ func (s *stubDetailProvider) FetchObjectHeaderMetadata(_ context.Context, _ sche
 
 func TestObjectDetailsBuilderUsesProviderWhenAvailable(t *testing.T) {
 	provider := &stubDetailProvider{
-		details: map[string]string{"foo": "bar"},
+		details: ObjectDetail{Type: "pod", Details: map[string]string{"foo": "bar"}},
 		// The object's source version (snapshot Version) comes from the header
 		// metadata read, not the per-kind detail fetcher.
 		meta: ObjectHeaderMetadata{ResourceVersion: "42"},
@@ -62,6 +62,10 @@ func TestObjectDetailsBuilderUsesProviderWhenAvailable(t *testing.T) {
 
 	if payload.Details == nil {
 		t.Fatalf("expected details from provider, got nil")
+	}
+	// The frontend narrows the payload on this tag to type its details.
+	if payload.Type != "pod" {
+		t.Fatalf("expected the provider's detail type, got %q", payload.Type)
 	}
 
 	if snapshot.Version != 42 {
@@ -95,11 +99,14 @@ func TestObjectDetailsBuilderFallsBackToGenericDetails(t *testing.T) {
 		t.Fatalf("unexpected payload type: %T", snapshot.Payload)
 	}
 
-	details, ok := payload.Details.(map[string]string)
-	if !ok {
-		t.Fatalf("expected generic details map, got %T", payload.Details)
+	if payload.Type != GenericObjectDetailType {
+		t.Fatalf("expected the generic detail type, got %q", payload.Type)
 	}
-	if details["kind"] != "Configmap" || details["name"] != "demo" || details["namespace"] != "default" {
+	details, ok := payload.Details.(GenericObjectDetails)
+	if !ok {
+		t.Fatalf("expected generic details, got %T", payload.Details)
+	}
+	if details.Kind != "Configmap" || details.Name != "demo" || details.Namespace != "default" {
 		t.Fatalf("unexpected generic details: %#v", details)
 	}
 	if payload.ClusterID != "cluster-a" || payload.ClusterName != "Cluster A" {
@@ -116,7 +123,7 @@ func TestObjectDetailsBuilderFallsBackToGenericDetails(t *testing.T) {
 
 func TestObjectDetailsBuilderIncludesCreationTimestampOnTypedPath(t *testing.T) {
 	provider := &stubDetailProvider{
-		details: map[string]string{"foo": "bar"},
+		details: ObjectDetail{Type: "pod", Details: map[string]string{"foo": "bar"}},
 		meta:    ObjectHeaderMetadata{CreationTimestamp: "2023-01-02T03:04:05Z", LastModified: "5m"},
 	}
 
@@ -145,7 +152,7 @@ func TestObjectDetailsBuilderIncludesDeletionMetadataOnTypedPath(t *testing.T) {
 		Finalizers:        []string{"example.com/cleanup"},
 	}
 	provider := &stubDetailProvider{
-		details: map[string]string{"foo": "bar"},
+		details: ObjectDetail{Type: "pod", Details: map[string]string{"foo": "bar"}},
 		meta:    ObjectHeaderMetadata{Deletion: deletion},
 	}
 
@@ -235,11 +242,11 @@ func TestObjectDetailsBuilderDoesNotFetchBuiltInDetailsAfterProviderNotImplement
 	if !ok {
 		t.Fatalf("unexpected payload type: %T", snapshot.Payload)
 	}
-	details, ok := payload.Details.(map[string]string)
-	if !ok {
-		t.Fatalf("expected generic details map, got %T", payload.Details)
+	details, ok := payload.Details.(GenericObjectDetails)
+	if !ok || payload.Type != GenericObjectDetailType {
+		t.Fatalf("expected tagged generic details, got %q %T", payload.Type, payload.Details)
 	}
-	if details["kind"] != "ConfigMap" || details["name"] != "demo" {
+	if details.Kind != "ConfigMap" || details.Name != "demo" {
 		t.Fatalf("unexpected generic details: %#v", details)
 	}
 }
@@ -349,7 +356,7 @@ func TestRegisterObjectDetailsDomainRequiresProvider(t *testing.T) {
 
 func TestRegisterObjectDetailsDomainRegistersBuilder(t *testing.T) {
 	reg := domain.New()
-	provider := &stubDetailProvider{details: map[string]string{"ok": "true"}}
+	provider := &stubDetailProvider{details: ObjectDetail{Type: "pod", Details: map[string]string{"ok": "true"}}}
 
 	if err := RegisterObjectDetailsDomain(reg, provider); err != nil {
 		t.Fatalf("RegisterObjectDetailsDomain returned error: %v", err)

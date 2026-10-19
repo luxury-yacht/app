@@ -43,7 +43,17 @@ type resolvedObjectDetailContext struct {
 
 // objectDetailFetcher maps a kind to dependency-based detail retrievals.
 type objectDetailFetcher struct {
-	withDeps func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error)
+	withDeps func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error)
+}
+
+// tagObjectDetail tags a fetched DTO with its detail type. Callers name T
+// explicitly, so a service that returns another DTO fails to compile instead
+// of reaching the frontend under the wrong generated TypeScript type.
+func tagObjectDetail[T any](detailType string, detail T, err error) (snapshot.ObjectDetail, error) {
+	if err != nil {
+		return snapshot.ObjectDetail{}, err
+	}
+	return snapshot.ObjectDetail{Type: detailType, Details: detail}, nil
 }
 
 // objectDetailFetchers is generated from the genappbindings binding descriptor
@@ -132,24 +142,24 @@ func sameGVK(a, b schema.GroupVersionKind) bool {
 }
 
 // FetchObjectDetails retrieves the details of a Kubernetes object.
-func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (interface{}, error) {
+func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (snapshot.ObjectDetail, error) {
 	resolved := p.resolveDetailContext(ctx)
 	if resourcekind.FamilyForResource(gvk.Group, gvk.Kind, namespace != "") != "" && gvk.Version != "" {
 		detail, err := p.fetchDiscoveredResourceDetails(ctx, resolved, gvk, namespace, name)
 		return detail, confirmMissingObject(ctx, resolved, gvk, namespace, name, err)
 	}
 	if _, ok := objectDetailFetchers[strings.ToLower(strings.TrimSpace(gvk.Kind))]; !ok {
-		return nil, snapshot.ErrObjectDetailNotImplemented
+		return snapshot.ObjectDetail{}, snapshot.ErrObjectDetailNotImplemented
 	}
 	if !resourcemodel.IsHelmReleaseGVK(gvk) && strings.TrimSpace(gvk.Version) == "" {
-		return nil, snapshot.ErrObjectDetailNotImplemented
+		return snapshot.ObjectDetail{}, snapshot.ErrObjectDetailNotImplemented
 	}
 	if !resolved.scoped {
-		return nil, fmt.Errorf("cluster scope is required")
+		return snapshot.ObjectDetail{}, fmt.Errorf("cluster scope is required")
 	}
 	fetcher, ok := lookupObjectDetailFetcher(gvk)
 	if !ok {
-		return nil, snapshot.ErrObjectDetailNotImplemented
+		return snapshot.ObjectDetail{}, snapshot.ErrObjectDetailNotImplemented
 	}
 
 	cacheKey := objectDetailCacheKeyForGVK(gvk, namespace, name)
@@ -160,7 +170,7 @@ func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schem
 
 	detail, err := fetcher.withDeps(ctx, resolved.deps, namespace, name)
 	if err != nil {
-		return nil, confirmMissingObject(ctx, resolved, gvk, namespace, name, err)
+		return snapshot.ObjectDetail{}, confirmMissingObject(ctx, resolved, gvk, namespace, name, err)
 	}
 	if p != nil && p.gateway != nil {
 		p.gateway.responseCacheStore(resolved.selectionKey, cacheKey, detail, since)
@@ -448,15 +458,15 @@ func (p *objectDetailProvider) cacheGeneration() uint64 {
 	return p.gateway.responseCacheGeneration()
 }
 
-func (p *objectDetailProvider) cachedObjectDetails(ctx context.Context, resolved resolvedObjectDetailContext, gvk schema.GroupVersionKind, namespace, name, cacheKey string) (interface{}, bool) {
+func (p *objectDetailProvider) cachedObjectDetails(ctx context.Context, resolved resolvedObjectDetailContext, gvk schema.GroupVersionKind, namespace, name, cacheKey string) (snapshot.ObjectDetail, bool) {
 	if p != nil && p.gateway != nil {
 		if cached, ok := p.gateway.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
 			// Avoid serving cached details when permission checks deny access.
-			if p.gateway.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk) {
-				return cached, true
+			if detail, tagged := cached.(snapshot.ObjectDetail); tagged && p.gateway.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk) {
+				return detail, true
 			}
 			p.gateway.responseCacheDelete(resolved.selectionKey, cacheKey)
 		}
 	}
-	return nil, false
+	return snapshot.ObjectDetail{}, false
 }

@@ -785,8 +785,8 @@ func setOf(values ...string) map[string]struct{} {
 
 type fullObjectDetailProvider struct{}
 
-func (fullObjectDetailProvider) FetchObjectDetails(context.Context, schema.GroupVersionKind, string, string) (interface{}, error) {
-	return nil, nil
+func (fullObjectDetailProvider) FetchObjectDetails(context.Context, schema.GroupVersionKind, string, string) (snapshot.ObjectDetail, error) {
+	return snapshot.ObjectDetail{}, nil
 }
 
 func (fullObjectDetailProvider) FetchObjectYAML(context.Context, schema.GroupVersionKind, string, string) (string, error) {

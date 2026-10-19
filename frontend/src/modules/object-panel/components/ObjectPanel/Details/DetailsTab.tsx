@@ -16,14 +16,6 @@ import './DetailsTabData.css';
 // Import from extracted modules
 import type { DetailsTabProps } from './detailsTabTypes';
 
-// Action-relevant fields read off the active detail DTO for the Overview/ActionsMenu.
-interface ActionDetail {
-  status?: string;
-  ready?: string | number;
-  replicas?: string | number;
-  unschedulable?: boolean;
-}
-
 export type { DetailsTabProps } from './detailsTabTypes';
 
 const DetailOverview = ({
@@ -35,17 +27,17 @@ const DetailOverview = ({
   if (!objectData) {
     return null;
   }
-  const detail = (model.activeDetail ?? undefined) as ActionDetail | undefined;
+  const { actionState } = model;
   return (
     <Overview
       kind={objectData.kind ?? ''}
       name={objectData.name ?? ''}
       namespace={objectData.namespace ?? undefined}
       activeDetail={model.activeDetail}
-      status={detail?.status}
-      ready={detail?.ready}
-      replicas={detail?.replicas}
-      unschedulable={detail?.unschedulable}
+      status={actionState.status}
+      ready={actionState.ready}
+      replicas={actionState.replicas}
+      unschedulable={actionState.unschedulable}
       suspend={model.cronJobSuspended}
       desiredReplicas={model.desiredScaleReplicas}
       objectKind={objectData.kind}

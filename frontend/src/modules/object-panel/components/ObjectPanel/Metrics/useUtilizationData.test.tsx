@@ -12,6 +12,8 @@ import {
   makePodSnapshotPayload,
 } from '@/core/refresh/refreshContractTestBuilders';
 import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
+import type { ObjectDetail } from '@/core/refresh/types';
+import { objectDetailOf } from '@/test-utils/objectDetail';
 import { type UtilizationData, useUtilizationData } from './useUtilizationData';
 
 const MIB = 1024 ** 2;
@@ -39,7 +41,7 @@ vi.mock('@/core/settings/appPreferences', () => ({
 
 interface HookProps {
   objectData: ObjectPanelRef;
-  detail: unknown;
+  detail: ObjectDetail | null | undefined;
 }
 
 const renderUtilizationHook = async (initialProps: HookProps) => {
@@ -97,14 +99,14 @@ describe('useUtilizationData', () => {
       namespace: 'team-a',
       name: 'api',
     };
-    const detail = {
+    const detail = objectDetailOf('pod', {
       cpuUsage: '100m',
       cpuRequest: '50m',
       cpuLimit: '500m',
       memUsage: '128Mi',
       memRequest: '64Mi',
       memLimit: '256Mi',
-    };
+    });
     const hook = await renderUtilizationHook({ objectData, detail });
 
     expect(hook.latest.current).toMatchObject({
@@ -163,7 +165,7 @@ describe('useUtilizationData', () => {
       namespace: 'team-a',
       name: 'api',
     };
-    const detail = {
+    const detail = objectDetailOf('deployment', {
       podMetricsSummary: {
         cpuUsage: '100m',
         cpuRequest: '50m',
@@ -174,7 +176,7 @@ describe('useUtilizationData', () => {
         pods: 1,
         readyPods: 1,
       },
-    };
+    });
     const hook = await renderUtilizationHook({ objectData: deploymentRef, detail });
 
     expect(hook.latest.current).toMatchObject({
@@ -233,7 +235,7 @@ describe('useUtilizationData', () => {
         namespace: 'team-a',
         name: 'api',
       };
-      const detail = {
+      const detail = objectDetailOf(kind === 'DaemonSet' ? 'daemonset' : 'statefulset', {
         podMetricsSummary: {
           cpuUsage: '100m',
           cpuRequest: '50m',
@@ -244,7 +246,7 @@ describe('useUtilizationData', () => {
           pods: 1,
           readyPods: 1,
         },
-      };
+      });
       const hook = await renderUtilizationHook({ objectData, detail });
 
       await act(async () => {
@@ -296,7 +298,7 @@ describe('useUtilizationData', () => {
       kind: 'Node',
       name: 'node-a',
     };
-    const detail = {
+    const detail = objectDetailOf('node', {
       cpuUsage: '100m',
       cpuCapacity: '4',
       cpuAllocatable: '3800m',
@@ -310,7 +312,7 @@ describe('useUtilizationData', () => {
       podsCount: 8,
       podsCapacity: '110',
       podsAllocatable: '100',
-    };
+    });
     const hook = await renderUtilizationHook({ objectData, detail });
 
     await act(async () => {
@@ -359,7 +361,7 @@ describe('useUtilizationData', () => {
         namespace: 'team-a',
         name: 'api-7c9d',
       },
-      detail: {
+      detail: objectDetailOf('replicaset', {
         isActive: true,
         podMetricsSummary: {
           cpuUsage: '100m',
@@ -367,7 +369,7 @@ describe('useUtilizationData', () => {
           pods: 1,
           readyPods: 1,
         },
-      },
+      }),
     });
 
     expect(hook.latest.current).toBeNull();
@@ -385,7 +387,7 @@ describe('useUtilizationData', () => {
         namespace: 'team-a',
         name: 'api',
       },
-      detail: { cpuUsage: '100m', memUsage: '128Mi' },
+      detail: objectDetailOf('pod', { cpuUsage: '100m', memUsage: '128Mi' }),
     });
     expect(refreshMocks.acquireScopedDomainLease).not.toHaveBeenCalled();
     expect(refreshMocks.fetchScopedDomain).not.toHaveBeenCalled();

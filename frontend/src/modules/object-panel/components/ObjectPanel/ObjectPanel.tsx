@@ -168,7 +168,7 @@ function ObjectPanel({
 
   // Only poll when this tab is active in its group (Step 8: active-tab-only polling).
   const {
-    detailPayload,
+    detail,
     creationTimestamp,
     lastModified,
     deletion,
@@ -246,8 +246,8 @@ function ObjectPanel({
   // Keep DetailsTab props derived from this memoized model, not from the
   // enclosing props object; ObjectPanelContent depends on that stability.
   const detailModel = useMemo(
-    () => buildObjectDetailModel(objectData, objectKind, detailPayload),
-    [detailPayload, objectData, objectKind]
+    () => buildObjectDetailModel(objectData, detail),
+    [detail, objectData]
   );
 
   // The shared object action controller (in ActionsMenu) executes every action

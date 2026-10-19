@@ -1,19 +1,6 @@
-import type {
-  configmap,
-  cronjob,
-  deployment,
-  hpa,
-  ingress,
-  job,
-  namespaces,
-  nodes,
-  replicaset,
-  secret,
-  service,
-  statefulset,
-  types,
-} from '@core/backend-api/models';
+import type { types } from '@core/backend-api/models';
 import { describe, expect, it } from 'vitest';
+import { objectDetailOf } from '@/test-utils/objectDetail';
 import { buildObjectDetailModel } from './objectDetailModel';
 
 const container = (
@@ -28,40 +15,46 @@ const container = (
 
 describe('objectDetailModel', () => {
   it('exposes the active detail payload and cronjob suspend', () => {
-    const cronJob = { suspend: true } as cronjob.CronJobDetails;
+    const cronJob = objectDetailOf('cronjob', { suspend: true });
 
-    const model = buildObjectDetailModel(null, 'cronjob', cronJob);
+    const model = buildObjectDetailModel(null, cronJob);
 
     expect(model.activeDetail).toBe(cronJob);
     expect(model.cronJobSuspended).toBe(true);
   });
 
   it('selects workload containers and active pod names', () => {
-    const deploy = {
+    const deploy = objectDetailOf('deployment', {
       desiredReplicas: 3,
       containers: [container({ name: 'api' })],
       initContainers: [container({ name: 'init' })],
       pods: [{ name: 'pod-a' }, { name: '  ' }, { name: 'pod-b' }],
-    } as deployment.DeploymentDetails;
+    });
 
-    const model = buildObjectDetailModel(null, 'deployment', deploy);
+    const model = buildObjectDetailModel(null, deploy);
 
     expect(model.containerSection).toEqual({
-      containers: deploy.containers,
-      initContainers: deploy.initContainers,
+      containers: deploy.details.containers,
+      initContainers: deploy.details.initContainers,
     });
     expect(model.activePodNames).toEqual(['pod-a', 'pod-b']);
     expect(model.desiredScaleReplicas).toBe(3);
   });
 
   it('selects data sections for configmaps and secrets', () => {
-    const configMapModel = buildObjectDetailModel(null, 'configmap', {
-      data: { key: 'value' },
-      binaryData: { cert: 'base64' },
-    } as unknown as configmap.ConfigMapDetails);
-    const secretModel = buildObjectDetailModel(null, 'secret', {
-      data: { token: 'masked' },
-    } as unknown as secret.SecretDetails);
+    const configMapModel = buildObjectDetailModel(
+      null,
+      objectDetailOf('configmap', {
+        data: { key: 'value' },
+        binaryData: { cert: 'base64' },
+      })
+    );
+    const secretModel = buildObjectDetailModel(
+      null,
+      objectDetailOf('secret', {
+        data: { token: 'masked' },
+      })
+    );
 
     expect(configMapModel.dataSection).toEqual({
       data: { key: 'value' },
@@ -76,18 +69,30 @@ describe('objectDetailModel', () => {
   });
 
   it('detects port-forward availability for pod-like resources and services', () => {
-    const tcpPod = buildObjectDetailModel(null, 'pod', {
-      containers: [container({ ports: ['8080/TCP'] })],
-    } as types.PodDetailInfo);
-    const udpPod = buildObjectDetailModel(null, 'pod', {
-      containers: [container({ ports: ['53/UDP'] })],
-    } as types.PodDetailInfo);
-    const tcpService = buildObjectDetailModel(null, 'service', {
-      ports: [{ port: 443, targetPort: 'https', protocol: 'TCP' }],
-    } as service.ServiceDetails);
-    const udpService = buildObjectDetailModel(null, 'service', {
-      ports: [{ port: 53, targetPort: 'dns', protocol: 'UDP' }],
-    } as service.ServiceDetails);
+    const tcpPod = buildObjectDetailModel(
+      null,
+      objectDetailOf('pod', {
+        containers: [container({ ports: ['8080/TCP'] })],
+      })
+    );
+    const udpPod = buildObjectDetailModel(
+      null,
+      objectDetailOf('pod', {
+        containers: [container({ ports: ['53/UDP'] })],
+      })
+    );
+    const tcpService = buildObjectDetailModel(
+      null,
+      objectDetailOf('service', {
+        ports: [{ port: 443, targetPort: 'https', protocol: 'TCP' }],
+      })
+    );
+    const udpService = buildObjectDetailModel(
+      null,
+      objectDetailOf('service', {
+        ports: [{ port: 53, targetPort: 'dns', protocol: 'UDP' }],
+      })
+    );
 
     expect(tcpPod.portForwardAvailable).toBe(true);
     expect(udpPod.portForwardAvailable).toBe(false);
@@ -97,51 +102,72 @@ describe('objectDetailModel', () => {
 
   it('selects desired replicas only for scalable workload kinds', () => {
     expect(
-      buildObjectDetailModel(null, 'statefulset', {
-        desiredReplicas: 2,
-      } as statefulset.StatefulSetDetails).desiredScaleReplicas
+      buildObjectDetailModel(
+        null,
+        objectDetailOf('statefulset', {
+          desiredReplicas: 2,
+        })
+      ).desiredScaleReplicas
     ).toBe(2);
     expect(
-      buildObjectDetailModel(null, 'replicaset', {
-        desiredReplicas: 5,
-      } as replicaset.ReplicaSetDetails).desiredScaleReplicas
+      buildObjectDetailModel(
+        null,
+        objectDetailOf('replicaset', {
+          desiredReplicas: 5,
+        })
+      ).desiredScaleReplicas
     ).toBe(5);
-    expect(buildObjectDetailModel(null, 'job', {} as job.JobDetails).desiredScaleReplicas).toBe(0);
+    expect(buildObjectDetailModel(null, objectDetailOf('job', {})).desiredScaleReplicas).toBe(0);
   });
 
   // Derivation exclusions: semantic, NOT structural — the DTO has the field but the section must not
   // appear. A pure field-presence chokepoint would regress each of these.
   it('excludes Jobs from the container section even though JobDetails carries containers', () => {
-    const model = buildObjectDetailModel(null, 'job', {
-      containers: [container()],
-    } as unknown as job.JobDetails);
+    const model = buildObjectDetailModel(
+      null,
+      objectDetailOf('job', {
+        containers: [container()],
+      })
+    );
     expect(model.containerSection).toBeNull();
   });
 
   it('does not treat Ingress rules as RBAC roleRules', () => {
-    const model = buildObjectDetailModel(null, 'ingress', {
-      rules: [{ host: 'x' }],
-    } as unknown as ingress.IngressDetails);
+    const model = buildObjectDetailModel(
+      null,
+      objectDetailOf('ingress', {
+        rules: [{ host: 'x' }],
+      })
+    );
     expect(model.roleRules).toBeUndefined();
   });
 
   it('reports zero desired scale replicas for HPA (not scalable via the scale action)', () => {
-    const model = buildObjectDetailModel(null, 'horizontalpodautoscaler', {
-      desiredReplicas: 9,
-    } as hpa.HorizontalPodAutoscalerDetails);
+    const model = buildObjectDetailModel(
+      null,
+      objectDetailOf('horizontalpodautoscaler', {
+        desiredReplicas: 9,
+      })
+    );
     expect(model.desiredScaleReplicas).toBe(0);
   });
 
   // The Logs tab hides lines of pods missing from a known pod list, and hides
   // nothing while the list is unknown.
   it('keeps a workload with no pods apart from one whose pods could not be listed', () => {
-    const scaledToZero = buildObjectDetailModel(null, 'deployment', {
-      pods: [],
-    } as unknown as deployment.DeploymentDetails);
-    const unlisted = buildObjectDetailModel(null, 'cronjob', {
-      pods: null,
-    } as unknown as cronjob.CronJobDetails);
-    const loading = buildObjectDetailModel(null, 'deployment', null);
+    const scaledToZero = buildObjectDetailModel(
+      null,
+      objectDetailOf('deployment', {
+        pods: [],
+      })
+    );
+    const unlisted = buildObjectDetailModel(
+      null,
+      objectDetailOf('cronjob', {
+        pods: null,
+      })
+    );
+    const loading = buildObjectDetailModel(null, null);
 
     expect(scaledToZero.activePodNames).toEqual([]);
     expect(unlisted.activePodNames).toBeNull();
@@ -149,22 +175,23 @@ describe('objectDetailModel', () => {
   });
 
   it('lists the pods of a ReplicaSet', () => {
-    const model = buildObjectDetailModel(null, 'replicaset', {
-      pods: [{ name: 'web-abc12' }],
-    } as unknown as replicaset.ReplicaSetDetails);
+    const model = buildObjectDetailModel(
+      null,
+      objectDetailOf('replicaset', {
+        pods: [{ name: 'web-abc12' }],
+      })
+    );
 
     expect(model.activePodNames).toEqual(['web-abc12']);
   });
 
   it('does not derive activePodNames for a Node even though NodeDetails carries pods', () => {
-    const model = buildObjectDetailModel(null, 'node', {
-      pods: [{ name: 'p' }],
-    } as unknown as nodes.NodeDetails);
+    const model = buildObjectDetailModel(null, objectDetailOf('node', { pods: '12' }));
     expect(model.activePodNames).toBeNull();
   });
 
   it('selects Namespace finalization diagnostics from the typed detail DTO', () => {
-    const detail = {
+    const detail = objectDetailOf('namespace', {
       finalizers: ['kubernetes'],
       conditions: [
         {
@@ -174,13 +201,13 @@ describe('objectDetailModel', () => {
           message: 'unable to retrieve the complete list of server APIs',
         },
       ],
-    } as namespaces.NamespaceDetails;
+    });
 
-    const model = buildObjectDetailModel(null, 'namespace', detail);
+    const model = buildObjectDetailModel(null, detail);
 
     expect(model.namespaceFinalization).toEqual({
-      finalizers: detail.finalizers,
-      conditions: detail.conditions,
+      finalizers: detail.details.finalizers,
+      conditions: detail.details.conditions,
     });
   });
 });

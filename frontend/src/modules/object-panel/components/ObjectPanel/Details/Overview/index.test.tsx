@@ -8,11 +8,12 @@ import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { objectDetailOf } from '@/test-utils/objectDetail';
 import Overview from './index';
 
 const renderComponentMock = vi.fn();
 const descriptorMock = vi.hoisted(() =>
-  vi.fn<typeof import('./descriptorRegistry').getOverviewDescriptor>()
+  vi.fn<typeof import('./descriptorRegistry').resolveOverviewDescriptor>()
 );
 
 vi.mock('./GenericOverview', () => ({
@@ -22,7 +23,7 @@ vi.mock('./GenericOverview', () => ({
 // Most cases isolate action wiring through the generic path; the dispatch case
 // below uses the real descriptor registry and renderer.
 vi.mock('./descriptorRegistry', () => ({
-  getOverviewDescriptor: descriptorMock,
+  resolveOverviewDescriptor: descriptorMock,
 }));
 
 const actionsMenuMock = vi.fn((props: unknown) => {
@@ -120,11 +121,15 @@ describe('Overview component', () => {
   it('renders the registered raw detail and switches to generic metadata for an unregistered kind', async () => {
     const registry =
       await vi.importActual<typeof import('./descriptorRegistry')>('./descriptorRegistry');
-    descriptorMock.mockImplementation(registry.getOverviewDescriptor);
+    descriptorMock.mockImplementation(registry.resolveOverviewDescriptor);
     await renderComponent({
       kind: 'ConfigMap',
       name: 'action-target',
-      activeDetail: { kind: 'ConfigMap', name: 'raw-detail-name', usedBy: [] },
+      activeDetail: objectDetailOf('configmap', {
+        kind: 'ConfigMap',
+        name: 'raw-detail-name',
+        usedBy: [],
+      }),
     });
     expect(container.textContent).toContain('raw-detail-name');
     expect(renderComponentMock).not.toHaveBeenCalled();

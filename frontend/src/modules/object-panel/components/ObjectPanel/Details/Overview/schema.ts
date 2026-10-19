@@ -88,13 +88,29 @@ export interface OverviewDescriptor<T> {
   masksValues?: boolean;
 }
 
+type CoverageItem =
+  | { kind: 'status' }
+  | { kind: 'widget'; consumes?: readonly string[] }
+  | { kind?: 'field'; field?: string; derivedFrom?: readonly string[] };
+
+/**
+ * The DTO keys a descriptor names, whatever its DTO type: what the drift-check reads. Every
+ * `OverviewDescriptor<T>` satisfies it, so descriptors for different DTOs share one list.
+ */
+export interface DescriptorCoverageSource {
+  displayKind: string;
+  dtoName: string;
+  schema: { showSelector?: boolean; items: readonly CoverageItem[] };
+  coveredElsewhere?: readonly string[];
+}
+
 const addCoverageKeys = (keys: Set<string>, additions: readonly string[] | undefined): void => {
   additions?.forEach((key) => {
     keys.add(key);
   });
 };
 
-const addItemCoverageKeys = <T>(keys: Set<string>, item: OverviewItemSpec<T>): void => {
+const addItemCoverageKeys = (keys: Set<string>, item: CoverageItem): void => {
   if (item.kind === 'status') {
     addCoverageKeys(keys, STATUS_FIELDS);
     return;
@@ -115,7 +131,7 @@ const addItemCoverageKeys = <T>(keys: Set<string>, item: OverviewItemSpec<T>): v
  * `derivedFrom`) ∪ status-item fields ∪ widget `consumes` ∪ `selector` (when shown) ∪
  * `coveredElsewhere`. The drift-check compares this set with the generated interface fields.
  */
-export function coverageKeys<T>(descriptor: OverviewDescriptor<T>): Set<string> {
+export function coverageKeys(descriptor: DescriptorCoverageSource): Set<string> {
   const keys = new Set<string>(FRAME_FIELDS);
   if (descriptor.schema.showSelector) {
     keys.add('selector');

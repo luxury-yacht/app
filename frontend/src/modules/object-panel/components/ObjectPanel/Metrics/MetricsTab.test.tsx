@@ -6,6 +6,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResourceMetricsResult, ResourceMetricValues } from '@/core/resource-metrics';
+import { objectDetailOf } from '@/test-utils/objectDetail';
 import { requireValue } from '@/test-utils/requireValue';
 import MetricsTab from './MetricsTab';
 import type { LiveMetricSample, MetricGraph } from './metricsTabModel';
@@ -231,7 +232,7 @@ describe('MetricsTab', () => {
   });
 
   it('feeds utilization the panel object and its details', async () => {
-    const detail = { cpuUsage: '100m' };
+    const detail = objectDetailOf('pod', { cpuUsage: '100m' });
     await render({ detail });
 
     const lastCall = () => hoisted.utilizationCalls[hoisted.utilizationCalls.length - 1];

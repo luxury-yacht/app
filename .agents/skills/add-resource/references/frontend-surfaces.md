@@ -6,17 +6,20 @@ YAML/permissions, or frontend built-in identity. The Overview contract lives in
 
 ## Overview and detail sections
 
-- The object-details payload flows through one `detailPayload` into
-  `ObjectDetailModel.activeDetail`, which Overview consumes as the raw DTO.
+- The object-details payload is a tagged union (`ObjectDetail`, narrowed on
+  `detailType`). It flows through one `detail` into
+  `ObjectDetailModel.activeDetail`; Overview renders `details` through that
+  `detailType`'s descriptor.
   Never add per-kind detail slots to `ObjectPanel.tsx` or `DetailsTabProps`, or
   prop-drill per-kind fields through `DetailsTab.tsx`.
 - Create or extend the kind's `OverviewDescriptor<KindDetails>` under
-  `Details/Overview/descriptors` and register built-ins in
-  `Details/Overview/descriptorRegistry.ts`. Use `derivedFrom` when a field
+  `Details/Overview/descriptors` and add built-ins to `BUILTIN_DESCRIPTORS` in
+  `Details/Overview/descriptorRegistry.ts` (required: a new detail fetcher
+  without a descriptor fails typecheck). Use `derivedFrom` when a field
   renderer reads extra keys, widgets only for irreducible UI with every consumed
   key declared, and `coveredElsewhere` for omitted or sibling-rendered fields.
   Reuse shared render helpers; no per-kind branching in the renderer.
-- Update `DETAIL_KIND_CONFIG` only for an existing derived sibling section
+- Update `DETAIL_DERIVATIONS` only for an existing derived sibling section
   (containers, ConfigMap/Secret data, RBAC rules, active pods, scaling,
   port-forward, CronJob suspension), with focused model/composition tests for a
   new derivation. Overview-only fields stay in the descriptor.

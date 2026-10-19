@@ -16,5 +16,6 @@ type Spec struct {
 	Service   string // service constructor expression, e.g. "deployment.NewService(deps)"
 	Import    string // service package import path
 	DTOImport string // DTO package import (default Import — DTO shares the service package)
+	DTOName   string // DTO type name (default <Kind>Details)
 	Fetch     string // raw detail-fetch expression override (hand-written bindings only)
 }

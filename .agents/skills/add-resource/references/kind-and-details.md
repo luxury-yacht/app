@@ -59,7 +59,9 @@ var DetailBinding = appbinding.Spec{
 ```
 
 - Attach it to the descriptor and run `mise exec -- go generate ./backend`.
-  Generation owns `objectDetailFetchers` and the `BindingModelAnchor`;
+  Generation owns `objectDetailFetchers` (each tags its detail with the kind's
+  dispatch key and names its DTO, so a mismatched service fails to compile),
+  the `BindingModelAnchor`, and the payload's `ObjectDetailTypes` union;
   `objectDetailFetcherGVKs` derives from that dispatch plus
   `resourcecontract.BuiltinResources`. Never hand-edit either map or the
   generated files.

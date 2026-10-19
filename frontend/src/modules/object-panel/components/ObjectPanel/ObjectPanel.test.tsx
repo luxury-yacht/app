@@ -9,7 +9,7 @@ import { act, createContext, useSyncExternalStore } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
-import type { ErrorStatusObjectRef } from '@/core/refresh/types';
+import type { ErrorStatusObjectRef, ObjectDetail } from '@/core/refresh/types';
 import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { testScope } from '@/test-utils/refreshScope';
 import { requireValue } from '@/test-utils/requireValue';
@@ -27,7 +27,7 @@ interface DetailsTabCapture {
     finalizers?: string[];
   } | null;
   detailModel: {
-    activeDetail: unknown;
+    activeDetail: ObjectDetail | null;
     containerSection: unknown;
     dataSection: unknown;
     roleRules?: unknown;
@@ -754,7 +754,7 @@ describe('ObjectPanel tab availability', () => {
     });
 
     expect(ctx.container.querySelector('.object-panel-empty-state')).toBeNull();
-    expect(getDetailsTabProps().detailModel.activeDetail).toEqual({ status: 'Ready' });
+    expect(getDetailsTabProps().detailModel.activeDetail?.details).toEqual({ status: 'Ready' });
   });
 
   // The panel closes on a NotFound only when it names this exact object.
@@ -826,7 +826,7 @@ describe('ObjectPanel tab availability', () => {
       },
     });
 
-    expect(getDetailsTabProps().detailModel.activeDetail).toEqual(detailsPayload);
+    expect(getDetailsTabProps().detailModel.activeDetail?.details).toEqual(detailsPayload);
   });
 
   it('passes deletion metadata from the refresh envelope to DetailsTab', async () => {

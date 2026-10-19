@@ -191,11 +191,11 @@ describe('useObjectPanelRefresh', () => {
 
   it('exposes fetch helper and derives loading/error state', async () => {
     const { getResult } = await renderHook();
-    const { fetchResourceDetails, detailsLoading, detailsError, detailPayload } = getResult();
+    const { fetchResourceDetails, detailsLoading, detailsError, detail } = getResult();
 
     expect(detailsLoading).toBe(false);
     expect(detailsError).toBeNull();
-    expect(detailPayload).toEqual({ replicas: 3 });
+    expect(detail?.details).toEqual({ replicas: 3 });
 
     await fetchResourceDetails('user');
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(

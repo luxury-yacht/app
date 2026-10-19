@@ -3,6 +3,46 @@
 // Backend Go DTOs and refresh-domains.json are the sources of truth.
 // Regenerate with: go generate ./backend
 
+import type {
+  admission,
+  apiextensions,
+  backendtlspolicy,
+  clusterrole,
+  clusterrolebinding,
+  configmap,
+  cronjob,
+  daemonset,
+  deployment,
+  endpointslice,
+  events,
+  gateway,
+  gatewayclass,
+  helm,
+  hpa,
+  ingress,
+  ingressclass,
+  job,
+  limitrange,
+  listenerset,
+  namespaces,
+  networkpolicy,
+  nodes,
+  persistentvolume,
+  persistentvolumeclaim,
+  poddisruptionbudget,
+  referencegrant,
+  replicaset,
+  resourcequota,
+  role,
+  rolebinding,
+  secret,
+  service,
+  serviceaccount,
+  statefulset,
+  storageclass,
+  types,
+} from '@core/backend-api/models';
+
 export type DrainEventKind = 'info' | 'pod' | 'error';
 
 export type DrainEventPhase =
@@ -1117,6 +1157,14 @@ export interface ExternalsecretsRetrySettings {
   retryInterval?: string;
 }
 
+export interface GenericObjectDetails {
+  kind: string;
+  name: string;
+  group?: string;
+  version?: string;
+  namespace?: string;
+}
+
 export interface KarpenterBudget {
   nodes: string;
   reasons?: Array<string>;
@@ -1636,15 +1684,14 @@ export interface ObjectDeletionMetadata {
   finalizers?: Array<string>;
 }
 
-export interface ObjectDetailsSnapshotPayload {
+export type ObjectDetailsSnapshotPayload = {
   clusterId: string;
   clusterName: string;
-  details: unknown;
   creationTimestamp?: string;
   lastModified?: string;
   deletion?: ObjectDeletionMetadata;
   resourceModel?: ResourceModel;
-}
+} & ObjectDetail;
 
 export interface ObjectEventSummary {
   ref: CanonicalResourceRef;
@@ -2243,6 +2290,58 @@ export interface RefreshSnapshot<TPayload> {
   payload: TPayload;
   stats: SnapshotStats;
 }
+
+export interface ObjectDetailTypes {
+  backendtlspolicy: backendtlspolicy.BackendTLSPolicyDetails;
+  clusterrole: clusterrole.ClusterRoleDetails;
+  clusterrolebinding: clusterrolebinding.ClusterRoleBindingDetails;
+  configmap: configmap.ConfigMapDetails;
+  cronjob: cronjob.CronJobDetails;
+  customresourcedefinition: apiextensions.CustomResourceDefinitionDetails;
+  daemonset: daemonset.DaemonSetDetails;
+  deployment: deployment.DeploymentDetails;
+  endpointslice: endpointslice.EndpointSliceDetails;
+  event: events.EventDetails;
+  gateway: gateway.GatewayDetails;
+  gatewayclass: gatewayclass.GatewayClassDetails;
+  grpcroute: types.GRPCRouteDetails;
+  helmrelease: helm.HelmReleaseDetails;
+  horizontalpodautoscaler: hpa.HorizontalPodAutoscalerDetails;
+  httproute: types.HTTPRouteDetails;
+  ingress: ingress.IngressDetails;
+  ingressclass: ingressclass.IngressClassDetails;
+  job: job.JobDetails;
+  limitrange: limitrange.LimitRangeDetails;
+  listenerset: listenerset.ListenerSetDetails;
+  mutatingwebhookconfiguration: admission.MutatingWebhookConfigurationDetails;
+  namespace: namespaces.NamespaceDetails;
+  networkpolicy: networkpolicy.NetworkPolicyDetails;
+  node: nodes.NodeDetails;
+  persistentvolume: persistentvolume.PersistentVolumeDetails;
+  persistentvolumeclaim: persistentvolumeclaim.PersistentVolumeClaimDetails;
+  pod: types.PodDetailInfo;
+  poddisruptionbudget: poddisruptionbudget.PodDisruptionBudgetDetails;
+  referencegrant: referencegrant.ReferenceGrantDetails;
+  replicaset: replicaset.ReplicaSetDetails;
+  resourcequota: resourcequota.ResourceQuotaDetails;
+  role: role.RoleDetails;
+  rolebinding: rolebinding.RoleBindingDetails;
+  secret: secret.SecretDetails;
+  service: service.ServiceDetails;
+  serviceaccount: serviceaccount.ServiceAccountDetails;
+  statefulset: statefulset.StatefulSetDetails;
+  storageclass: storageclass.StorageClassDetails;
+  tlsroute: types.TLSRouteDetails;
+  validatingwebhookconfiguration: admission.ValidatingWebhookConfigurationDetails;
+  customresource: CustomResourceDetails;
+  generic: GenericObjectDetails;
+}
+
+export type ObjectDetailType = keyof ObjectDetailTypes;
+
+export type ObjectDetail<K extends ObjectDetailType = ObjectDetailType> = {
+  [P in K]: { detailType: P; details: ObjectDetailTypes[P] };
+}[K];
 
 export type ClusterNodeRow = ClusterNodeSnapshotEntry;
 

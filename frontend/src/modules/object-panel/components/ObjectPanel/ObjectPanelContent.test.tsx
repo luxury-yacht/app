@@ -8,6 +8,7 @@ import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { objectDetailOf } from '@/test-utils/objectDetail';
 import { requireValue } from '@/test-utils/requireValue';
 
 const hoistedRefs = vi.hoisted(() => ({
@@ -128,7 +129,7 @@ describe('ObjectPanelContent', () => {
     activeTab: 'details',
     detailTabProps: {
       objectData,
-      detailModel: buildObjectDetailModel(objectData, 'deployment', null),
+      detailModel: buildObjectDetailModel(objectData, null),
       isActive: true,
       detailsLoading: false,
       detailsError: null,
@@ -429,11 +430,11 @@ describe('ObjectPanelContent', () => {
       version: 'v1',
     };
     // The tab reads the panel's complete reference and its details from the details props.
-    const podDetail = { cpuUsage: '100m' };
+    const podDetail = objectDetailOf('pod', { cpuUsage: '100m' });
     const detailTabProps = {
       ...requireValue(baseProps.detailTabProps, 'expected detail tab props'),
       objectData: pod,
-      detailModel: buildObjectDetailModel(pod, 'pod', podDetail),
+      detailModel: buildObjectDetailModel(pod, podDetail),
     };
     const podProps = { objectData: pod, objectKind: 'pod', detailTabProps };
     await renderContent({ activeTab: 'details', ...podProps });

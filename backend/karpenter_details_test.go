@@ -44,7 +44,9 @@ func TestKarpenterDetailsUseDiscoveredVersionAndCluster(t *testing.T) {
 	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{ClusterID: "a"})
 	raw, err := provider.FetchObjectDetails(ctx, gvk, "", "pool")
 	require.NoError(t, err)
-	detail := raw.(*customresource.Details)
+	// Add-on resources carry the custom-resource detail type, never a built-in kind's.
+	require.Equal(t, customResourceDetailType, raw.Type)
+	detail := raw.Details.(*customresource.Details)
 	require.Equal(t, "a", detail.Ref.ClusterID)
 	require.Equal(t, "v1beta1", detail.Ref.Version)
 	require.Equal(t, int64(30), *detail.Karpenter.Weight)
@@ -58,7 +60,7 @@ func TestKarpenterDetailsUseDiscoveredVersionAndCluster(t *testing.T) {
 	gateway.refreshProjection.publishCatalogEntry("a", &objectCatalogEntry{service: catalog, meta: ClusterMeta{ID: "a"}})
 	raw, err = provider.FetchObjectDetails(ctx, gvk, "", "pool")
 	require.NoError(t, err)
-	detail = raw.(*customresource.Details)
+	detail = raw.Details.(*customresource.Details)
 	require.NotNil(t, detail.Karpenter.NodeClass.Ref, "versionless NodeClass reference must resolve through this cluster's discovery")
 	classRef := detail.Karpenter.NodeClass.Ref
 	require.Equal(t, "a", classRef.ClusterID)
@@ -71,12 +73,12 @@ func TestKarpenterDetailsUseDiscoveredVersionAndCluster(t *testing.T) {
 	require.Equal(t, detail.Karpenter.NodeClass, rows[0].Karpenter.NodeClass, "table and details must share the resolved target")
 	classRaw, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Group: classRef.Group, Version: classRef.Version, Kind: classRef.Kind}, classRef.Namespace, classRef.Name)
 	require.NoError(t, err)
-	require.Equal(t, "class", classRaw.(*customresource.Details).Name)
+	require.Equal(t, "class", classRaw.Details.(*customresource.Details).Name)
 	lowerCaseKind := gvk
 	lowerCaseKind.Kind = "nodepool"
 	lowerRaw, err := provider.FetchObjectDetails(ctx, lowerCaseKind, "", "pool")
 	require.NoError(t, err)
-	lowerDetail := lowerRaw.(*customresource.Details)
+	lowerDetail := lowerRaw.Details.(*customresource.Details)
 	require.Equal(t, "NodePool", lowerDetail.Kind, "panel scopes normalize kind case; projection must preserve the API object's identity")
 	require.Equal(t, int64(30), *lowerDetail.Karpenter.Weight)
 

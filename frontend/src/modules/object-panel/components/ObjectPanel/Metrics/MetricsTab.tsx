@@ -13,6 +13,7 @@ import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { StatusChip } from '@shared/components/StatusChip';
 import { useMemo } from 'react';
 import { useAutoRefreshEnabled } from '@/core/refresh/hooks/useRefreshPreferences';
+import type { ObjectDetail } from '@/core/refresh/types';
 import { type ResourceMetricValues, useResourceMetrics } from '@/core/resource-metrics';
 import { MetricChart } from './MetricChart';
 import { liveTimeline, type MetricGraph, peakUsage } from './metricsTabModel';
@@ -24,7 +25,7 @@ import './MetricsTab.css';
 interface MetricsTabProps {
   objectData: ObjectPanelRef | null;
   /** The panel's object details: utilization values until live metrics arrive. */
-  detail: unknown;
+  detail: ObjectDetail | null | undefined;
   /** The panel is visible (any of its tabs); the tab reads and leases only while it is. */
   isPanelOpen: boolean;
   /** Whose collected samples to chart (the backend panel metrics buffer). */

@@ -1,12 +1,18 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptorRegistry.ts
  *
- * Single source of truth mapping a Kubernetes kind to its Overview descriptor. Production dispatch
- * (index.tsx) and the runtime drift-check both read from here. Every built-in kind is registered;
- * kinds without a descriptor (custom resources and anything unregistered) fall back to the generic
- * GenericOverview path.
+ * Single source of truth mapping an object-details payload's `detailType` to its Overview
+ * descriptor. Production dispatch (index.tsx) and the drift-check both read from here. Every
+ * built-in detail type must have a descriptor typed against its own DTO; custom resources resolve
+ * by their family facts; anything else falls back to the generic GenericOverview path.
  */
 
+import type {
+  CustomResourceDetails,
+  ObjectDetail,
+  ObjectDetailType,
+  ObjectDetailTypes,
+} from '@/core/refresh/types';
 import { argoCDDescriptor, getArgoCDOverviewDescriptor } from './descriptors/argocd';
 import {
   crdDescriptor,
@@ -58,88 +64,86 @@ import {
   replicaSetDescriptor,
   statefulSetDescriptor,
 } from './descriptors/workload';
-import type { OverviewDescriptor } from './schema';
+import type { DescriptorCoverageSource, OverviewDescriptor } from './schema';
 
-interface Registration {
-  kinds: string[];
-  descriptor: OverviewDescriptor<never>;
+type DescriptorFor<K extends ObjectDetailType> = OverviewDescriptor<ObjectDetailTypes[K]>;
+
+/** Detail types fetched for built-in kinds: one per generated detail fetcher. */
+type BuiltinDetailType = Exclude<ObjectDetailType, 'customresource' | 'generic'>;
+
+// Required per built-in detail type, and each descriptor is checked against that type's DTO, so a
+// new fetcher without a descriptor, or a descriptor for the wrong DTO, fails to compile.
+const BUILTIN_DESCRIPTORS: { [K in BuiltinDetailType]: DescriptorFor<K> } = {
+  event: eventDescriptor,
+  configmap: configMapDescriptor,
+  service: serviceDescriptor,
+  secret: secretDescriptor,
+  networkpolicy: networkPolicyDescriptor,
+  ingress: ingressDescriptor,
+  helmrelease: helmReleaseDescriptor,
+  persistentvolumeclaim: pvcDescriptor,
+  persistentvolume: pvDescriptor,
+  storageclass: storageClassDescriptor,
+  customresourcedefinition: crdDescriptor,
+  ingressclass: ingressClassDescriptor,
+  namespace: namespaceDescriptor,
+  mutatingwebhookconfiguration: mutatingWebhookDescriptor,
+  validatingwebhookconfiguration: validatingWebhookDescriptor,
+  pod: podDescriptor,
+  endpointslice: endpointSliceDescriptor,
+  node: nodeDescriptor,
+  serviceaccount: serviceAccountDescriptor,
+  role: roleDescriptor,
+  rolebinding: roleBindingDescriptor,
+  clusterrole: clusterRoleDescriptor,
+  clusterrolebinding: clusterRoleBindingDescriptor,
+  horizontalpodautoscaler: hpaDescriptor,
+  limitrange: limitRangeDescriptor,
+  poddisruptionbudget: pdbDescriptor,
+  resourcequota: resourceQuotaDescriptor,
+  deployment: deploymentDescriptor,
+  daemonset: daemonSetDescriptor,
+  statefulset: statefulSetDescriptor,
+  replicaset: replicaSetDescriptor,
+  job: jobDescriptor,
+  cronjob: cronJobDescriptor,
+  gateway: gatewayDescriptor,
+  gatewayclass: gatewayClassDescriptor,
+  listenerset: listenerSetDescriptor,
+  httproute: httpRouteDescriptor,
+  grpcroute: grpcRouteDescriptor,
+  tlsroute: tlsRouteDescriptor,
+  referencegrant: referenceGrantDescriptor,
+  backendtlspolicy: backendTLSPolicyDescriptor,
+};
+
+// Add-on families share the custom-resource DTO; the first family whose facts are present renders it.
+const customResourceDescriptor = (
+  details: CustomResourceDetails
+): DescriptorFor<'customresource'> | undefined =>
+  getArgoCDOverviewDescriptor(details) ??
+  getKarpenterOverviewDescriptor(details) ??
+  getOperatorOverviewDescriptor(details);
+
+type OverviewEntry<T> = OverviewDescriptor<T> | ((details: T) => OverviewDescriptor<T> | undefined);
+
+const OVERVIEW_ENTRIES: { [K in ObjectDetailType]?: OverviewEntry<ObjectDetailTypes[K]> } = {
+  ...BUILTIN_DESCRIPTORS,
+  customresource: customResourceDescriptor,
+};
+
+/** The Overview descriptor for a detail, typed against that detail's DTO; undefined → generic. */
+export function resolveOverviewDescriptor<K extends ObjectDetailType>(
+  detail: ObjectDetail<K>
+): DescriptorFor<K> | undefined {
+  const entry = OVERVIEW_ENTRIES[detail.detailType];
+  return typeof entry === 'function' ? entry(detail.details) : entry;
 }
 
-const registration = <T>(kinds: string[], descriptor: OverviewDescriptor<T>): Registration => ({
-  kinds,
-  descriptor: descriptor as unknown as OverviewDescriptor<never>,
-});
-
-const registrations: Registration[] = [
-  registration(['event'], eventDescriptor),
-  registration(['configmap'], configMapDescriptor),
-  registration(['service'], serviceDescriptor),
-  registration(['secret'], secretDescriptor),
-  registration(['networkpolicy'], networkPolicyDescriptor),
-  registration(['ingress'], ingressDescriptor),
-  registration(['helmrelease'], helmReleaseDescriptor),
-  registration(['persistentvolumeclaim'], pvcDescriptor),
-  registration(['persistentvolume'], pvDescriptor),
-  registration(['storageclass'], storageClassDescriptor),
-  registration(['customresourcedefinition'], crdDescriptor),
-  registration(['ingressclass'], ingressClassDescriptor),
-  registration(['namespace'], namespaceDescriptor),
-  registration(['mutatingwebhookconfiguration'], mutatingWebhookDescriptor),
-  registration(['validatingwebhookconfiguration'], validatingWebhookDescriptor),
-  registration(['pod'], podDescriptor),
-  registration(['endpointslice'], endpointSliceDescriptor),
-  registration(['node'], nodeDescriptor),
-  registration(['serviceaccount'], serviceAccountDescriptor),
-  registration(['role'], roleDescriptor),
-  registration(['rolebinding'], roleBindingDescriptor),
-  registration(['clusterrole'], clusterRoleDescriptor),
-  registration(['clusterrolebinding'], clusterRoleBindingDescriptor),
-  registration(['horizontalpodautoscaler'], hpaDescriptor),
-  registration(['limitrange'], limitRangeDescriptor),
-  registration(['poddisruptionbudget'], pdbDescriptor),
-  registration(['resourcequota'], resourceQuotaDescriptor),
-  registration(['deployment'], deploymentDescriptor),
-  registration(['daemonset'], daemonSetDescriptor),
-  registration(['statefulset'], statefulSetDescriptor),
-  registration(['replicaset'], replicaSetDescriptor),
-  registration(['job'], jobDescriptor),
-  registration(['cronjob'], cronJobDescriptor),
-  registration(['gateway'], gatewayDescriptor),
-  registration(['gatewayclass'], gatewayClassDescriptor),
-  registration(['listenerset'], listenerSetDescriptor),
-  registration(['httproute'], httpRouteDescriptor),
-  registration(['grpcroute'], grpcRouteDescriptor),
-  registration(['tlsroute'], tlsRouteDescriptor),
-  registration(['referencegrant'], referenceGrantDescriptor),
-  registration(['backendtlspolicy'], backendTLSPolicyDescriptor),
-];
-
-const byKind = new Map<string, OverviewDescriptor<never>>();
-for (const reg of registrations) {
-  for (const kind of reg.kinds) {
-    byKind.set(kind.toLowerCase(), reg.descriptor);
-  }
-}
-
-export function getOverviewDescriptor(
-  kind: string | null | undefined,
-  detail?: unknown
-): OverviewDescriptor<never> | undefined {
-  if (!kind) {
-    return undefined;
-  }
-  return (
-    getArgoCDOverviewDescriptor(kind, detail) ??
-    getKarpenterOverviewDescriptor(kind, detail) ??
-    getOperatorOverviewDescriptor(kind, detail) ??
-    byKind.get(kind.toLowerCase())
-  );
-}
-
-/** Unique descriptors (one per registration) — for the drift-check to iterate. */
-export const registeredDescriptors = [
-  ...registrations.map((reg) => reg.descriptor),
-  karpenterDescriptor as OverviewDescriptor<never>,
-  argoCDDescriptor as OverviewDescriptor<never>,
-  operatorDescriptor as OverviewDescriptor<never>,
+/** Every registered descriptor (built-ins plus custom-resource families) — for the drift-check. */
+export const registeredDescriptors: readonly DescriptorCoverageSource[] = [
+  ...Object.values(BUILTIN_DESCRIPTORS),
+  karpenterDescriptor,
+  argoCDDescriptor,
+  operatorDescriptor,
 ];

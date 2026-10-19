@@ -119,8 +119,8 @@ type noopObjectDetailProvider struct {
 	err error
 }
 
-func (p noopObjectDetailProvider) FetchObjectDetails(context.Context, schema.GroupVersionKind, string, string) (interface{}, error) {
-	return nil, p.err
+func (p noopObjectDetailProvider) FetchObjectDetails(context.Context, schema.GroupVersionKind, string, string) (snapshot.ObjectDetail, error) {
+	return snapshot.ObjectDetail{}, p.err
 }
 
 type fakeInformerHub struct {

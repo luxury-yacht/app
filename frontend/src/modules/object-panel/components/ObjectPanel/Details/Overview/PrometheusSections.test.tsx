@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { CustomResourceDetails, PrometheusMonitor } from '@/core/refresh/types';
-import { getOverviewDescriptor } from './descriptorRegistry';
+import { resolveOverviewDescriptor } from './descriptorRegistry';
 import { OverviewRenderer } from './OverviewRenderer';
 import { PrometheusSections } from './PrometheusSections';
 
@@ -154,13 +154,13 @@ describe('Prometheus monitor overview wiring', () => {
         },
       },
     };
-    const descriptor = getOverviewDescriptor('PodMonitor', detail);
+    const descriptor = resolveOverviewDescriptor({ detailType: 'customresource', details: detail });
     if (!descriptor) {
       throw new Error('operator descriptor missing');
     }
     const dom = document.createElement('div');
     dom.innerHTML = renderToStaticMarkup(
-      <OverviewRenderer descriptor={descriptor} data={detail as never} />
+      <OverviewRenderer descriptor={descriptor} data={detail} />
     );
     // Monitors carry no status in the API, so the backend projects none and no Status row renders.
     expect(rowValue(dom, 'Status')).toBeUndefined();

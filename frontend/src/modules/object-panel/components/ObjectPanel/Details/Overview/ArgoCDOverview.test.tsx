@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { CustomResourceDetails } from '@/core/refresh/types';
-import { getOverviewDescriptor } from './descriptorRegistry';
+import { resolveOverviewDescriptor } from './descriptorRegistry';
 import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@core/contexts/ZoomContext', () => ({ useZoom: () => ({ zoomLevel: 1 }) }));
@@ -31,11 +31,11 @@ const base: CustomResourceDetails = {
   statusPresentation: 'error',
 };
 function render(data: CustomResourceDetails) {
-  const descriptor = getOverviewDescriptor(data.kind, data);
+  const descriptor = resolveOverviewDescriptor({ detailType: 'customresource', details: data });
   if (!descriptor) {
     throw new Error('Argo CD overview missing');
   }
-  return renderToStaticMarkup(<OverviewRenderer descriptor={descriptor} data={data as never} />);
+  return renderToStaticMarkup(<OverviewRenderer descriptor={descriptor} data={data} />);
 }
 const mount = (data: CustomResourceDetails) => {
   const dom = document.createElement('div');
@@ -193,7 +193,12 @@ describe('Argo CD overview', () => {
     expect(project).not.toContain('Sync Policy');
   });
   it('keeps unrelated custom resources on their existing fallback', () => {
-    expect(getOverviewDescriptor('Application', { ...base, resourceFamily: '' })).toBeUndefined();
+    expect(
+      resolveOverviewDescriptor({
+        detailType: 'customresource',
+        details: { ...base, resourceFamily: '' },
+      })
+    ).toBeUndefined();
   });
 
   it('leads an Application with health, sync and the last operation before its identity rows', () => {

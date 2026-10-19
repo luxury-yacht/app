@@ -175,12 +175,10 @@ export const karpenterDescriptor: OverviewDescriptor<CustomResourceDetails> = {
 };
 
 export function getKarpenterOverviewDescriptor(
-  kind: string,
-  detail: unknown
-): OverviewDescriptor<never> | undefined {
-  const data = detail as Partial<CustomResourceDetails> | null | undefined;
-  if (data?.resourceFamily !== 'karpenter' || !data.karpenter) {
+  details: CustomResourceDetails
+): OverviewDescriptor<CustomResourceDetails> | undefined {
+  if (details.resourceFamily !== 'karpenter' || !details.karpenter) {
     return undefined;
   }
-  return { ...karpenterDescriptor, displayKind: data.kind ?? kind } as OverviewDescriptor<never>;
+  return { ...karpenterDescriptor, displayKind: details.kind };
 }

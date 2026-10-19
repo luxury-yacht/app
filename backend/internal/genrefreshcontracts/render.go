@@ -77,14 +77,21 @@ func newRenderer(resolvedEnums []enumSpec) (*renderer, error) {
 }
 
 func (r *renderer) renderOutput(resolvedEnums []enumSpec, domains []domainSpec) ([]byte, error) {
+	tagField, detailsField, err := objectDetailCarrierFields()
+	if err != nil {
+		return nil, err
+	}
+	variants := r.resolveObjectDetailVariants()
 	var out bytes.Buffer
 	out.WriteString(generatedHeader)
+	renderObjectDetailImports(&out, variants)
 	for _, spec := range resolvedEnums {
 		r.renderEnum(&out, spec)
 	}
 	if err := r.renderDefinitions(&out); err != nil {
 		return nil, err
 	}
+	renderObjectDetailUnion(&out, variants, tagField, detailsField)
 	r.renderAliasesAndDomains(&out, domains)
 	r.renderDomainPolicies(&out, domains)
 	r.renderValidationSupport(&out)
@@ -748,15 +755,26 @@ func (r *renderer) renderInterface(out *bytes.Buffer, typeOf reflect.Type) error
 	if name == "" {
 		return fmt.Errorf("missing TypeScript name for %s", typeOf)
 	}
-	fmt.Fprintf(out, "export interface %s {\n", name)
 	fields, err := r.renderFields(typeOf, false)
 	if err != nil {
 		return err
 	}
+	// A payload embedding the tagged object detail is the intersection of its
+	// own fields with the detail union; an interface cannot extend a union.
+	tagged := embedsObjectDetail(typeOf)
+	if tagged {
+		fmt.Fprintf(out, "export type %s = {\n", name)
+	} else {
+		fmt.Fprintf(out, "export interface %s {\n", name)
+	}
 	for _, field := range fields {
 		fmt.Fprintf(out, "  %s%s: %s;\n", quoteProperty(field.name), optionalMarker(field.optional), field.typeScript)
 	}
-	out.WriteString("}\n\n")
+	if tagged {
+		fmt.Fprintf(out, "} & %s;\n\n", objectDetailUnionName)
+	} else {
+		out.WriteString("}\n\n")
+	}
 	return nil
 }
 
@@ -785,6 +803,10 @@ func (r *renderer) renderField(typeOf reflect.Type, field reflect.StructField, i
 	}
 	if field.Anonymous && name == "" {
 		embedded := indirect(field.Type)
+		if embedded == objectDetailCarrier {
+			// Rendered as the ObjectDetail intersection by renderInterface.
+			return nil, nil
+		}
 		if embedded.Kind() != reflect.Struct {
 			return nil, fmt.Errorf("cannot flatten non-struct embedded field %s.%s", typeOf, field.Name)
 		}

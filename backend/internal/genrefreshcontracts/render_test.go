@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/luxury-yacht/app/backend/internal/genappbindings"
 )
 
 func TestRenderEmitsBackendOwnedRefreshContract(t *testing.T) {
@@ -54,6 +56,29 @@ func TestRenderEmitsBackendOwnedRefreshContract(t *testing.T) {
 	require.Contains(t, contract, "    scope: { selectors: ['namespace', 'all-namespaces', 'node', 'workload'], query: 'typed-table' },\n")
 	require.Contains(t, contract, "export interface BackendDomainPayloadMap")
 	require.Contains(t, contract, "'object-maintenance': NodeMaintenanceSnapshotPayload;")
+}
+
+// The object-details payload is a union narrowed by detailType: each tag maps to
+// the DTO its producer returns, so panel consumers read typed fields, never casts.
+func TestRenderEmitsTaggedObjectDetailUnion(t *testing.T) {
+	generated, err := Render()
+	require.NoError(t, err)
+
+	contract := string(generated)
+	require.Regexp(t, `import type \{[^}]*\bdeployment\b[^}]*\} from '@core/backend-api/models';`, contract)
+	require.Contains(t, contract, "export interface ObjectDetailTypes {\n")
+	require.Contains(t, contract, "  deployment: deployment.DeploymentDetails;\n")
+	require.Contains(t, contract, "  pod: types.PodDetailInfo;\n")
+	require.Contains(t, contract, "  customresource: CustomResourceDetails;\n")
+	require.Contains(t, contract, "  generic: GenericObjectDetails;\n")
+	require.Contains(t, contract, "export type ObjectDetailType = keyof ObjectDetailTypes;")
+	require.Contains(t, contract, "export type ObjectDetail<K extends ObjectDetailType = ObjectDetailType> = {\n  [P in K]: { detailType: P; details: ObjectDetailTypes[P] };\n}[K];")
+	require.Contains(t, contract, "export type ObjectDetailsSnapshotPayload = {\n  clusterId: string;")
+	require.Contains(t, contract, "} & ObjectDetail;\n")
+	require.NotContains(t, contract, "details: unknown;")
+	for _, detailType := range genappbindings.DetailTypes() {
+		require.Contains(t, contract, "\n  "+detailType.Tag+": ", detailType.Tag)
+	}
 }
 
 func TestRenderEmitsTypedGoDomainPolicy(t *testing.T) {

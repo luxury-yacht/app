@@ -52,12 +52,10 @@ export const operatorDescriptor: OverviewDescriptor<CustomResourceDetails> = {
 };
 
 export function getOperatorOverviewDescriptor(
-  kind: string,
-  detail: unknown
-): OverviewDescriptor<never> | undefined {
-  const data = detail as Partial<CustomResourceDetails> | null | undefined;
-  if (!data?.certManager && !data?.externalSecrets && !data?.prometheus) {
+  details: CustomResourceDetails
+): OverviewDescriptor<CustomResourceDetails> | undefined {
+  if (!details.certManager && !details.externalSecrets && !details.prometheus) {
     return undefined;
   }
-  return { ...operatorDescriptor, displayKind: data.kind ?? kind } as OverviewDescriptor<never>;
+  return { ...operatorDescriptor, displayKind: details.kind };
 }

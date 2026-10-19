@@ -116,20 +116,25 @@ Files under `modules/object-panel/components/ObjectPanel/Details/`:
   `{kind:'widget'}` for irreducible UI. Panel-only values (hpaManaged, drain,
   cluster identity) come from the `OverviewContext` argument, not hooks. Use a
   field's `hidden(dto)` predicate to hide empty rows without layout jitter.
-- `Overview/descriptorRegistry.ts` — single kind → descriptor map for dispatch
-  and drift check; register new kinds here.
+- `Overview/descriptorRegistry.ts` — maps each payload `detailType` to its
+  descriptor for dispatch and the drift check. Every built-in detail type needs
+  an entry typed against its own DTO (a missing or mistyped descriptor fails
+  typecheck); custom resources resolve by their family facts.
 - `Overview/driftCheck.test.ts` — every field of `new DtoClass({})` must be
   covered (schema field, `derivedFrom`, status item, widget `consumes`, or
   `coveredElsewhere`); a new DTO field fails by name until placed.
 - `Overview/GenericOverview.tsx` — fallback for custom/unregistered resources.
-- `objectDetailModel.ts` — builds the single `activeDetail` (raw DTO) plus the
-  sibling sections `DetailsTab` composes (Containers, RBAC rules,
+- `objectDetailModel.ts` — builds `activeDetail` (the tagged `ObjectDetail`)
+  plus the sibling sections `DetailsTab` composes (Containers, RBAC rules,
   ConfigMap/Secret data, active pods, port-forward availability, scale
-  replicas, CronJob suspend). These are capability-gated per kind via
-  `DETAIL_KIND_CONFIG`, never inferred from field presence, because names are
-  overloaded (`rules` on Ingress/Webhook vs RBAC, `containers` on Job,
-  `desiredReplicas` on HPA, `pods` on Node); `objectDetailModel.test.ts` locks
-  those four exclusions.
+  replicas, CronJob suspend). Each is declared per detail type in
+  `DETAIL_DERIVATIONS`, reading that type's DTO, never inferred from field
+  presence, because names are overloaded (`rules` on Ingress/Webhook vs RBAC,
+  `containers` on Job, `desiredReplicas` on HPA, `pods` on Node);
+  `objectDetailModel.test.ts` locks those four exclusions.
+- The object-details payload is `{…} & ObjectDetail`: `detailType` selects the
+  generated `ObjectDetailTypes` DTO of `details`. Consumers narrow on
+  `detailType` or index a tag-keyed table; they never cast `details`.
 
 Per-kind parity lives in each `*Overview.test.tsx`, which renders
 `OverviewRenderer(descriptor, dto)` directly.

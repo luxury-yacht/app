@@ -24,7 +24,28 @@ var ErrObjectDetailNotImplemented = errors.New("object detail provider not imple
 
 // ObjectDetailProvider resolves rich object payloads for the object panel.
 type ObjectDetailProvider interface {
-	FetchObjectDetails(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (interface{}, error)
+	FetchObjectDetails(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (ObjectDetail, error)
+}
+
+// ObjectDetail is an object's detail DTO tagged with its detail type: the
+// detail fetcher's dispatch key, the custom-resource type, or the generic
+// fallback. The tag selects the generated TypeScript type of Details, so the
+// frontend narrows on it instead of casting.
+type ObjectDetail struct {
+	Type    string      `json:"detailType"`
+	Details interface{} `json:"details"`
+}
+
+// GenericObjectDetailType tags the minimal details of kinds without a detail fetcher.
+const GenericObjectDetailType = "generic"
+
+// GenericObjectDetails is the identity sent for kinds without a detail fetcher.
+type GenericObjectDetails struct {
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Group     string `json:"group,omitempty"`
+	Version   string `json:"version,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // ObjectDeletionMetadata carries deletion fields shared by every Kubernetes
@@ -72,7 +93,7 @@ type ObjectDetailsBuilder struct {
 // ObjectDetailsSnapshotPayload is returned to the frontend.
 type ObjectDetailsSnapshotPayload struct {
 	ClusterMeta
-	Details interface{} `json:"details"`
+	ObjectDetail
 	// CreationTimestamp is the object's creation time (RFC3339 UTC); the
 	// frontend formats it into the Age field for every kind. Omitted when
 	// unavailable.
@@ -118,9 +139,9 @@ func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refres
 	name := identity.Name
 
 	if b.provider != nil {
-		if details, err := b.provider.FetchObjectDetails(ctx, gvk, namespace, name); err == nil {
+		if detail, err := b.provider.FetchObjectDetails(ctx, gvk, namespace, name); err == nil {
 			meta := b.fetchHeaderMetadata(ctx, gvk, namespace, name)
-			return b.buildSnapshot(ctx, scope, details, meta, nil), nil
+			return b.buildSnapshot(ctx, scope, detail, meta, nil), nil
 		} else if !errors.Is(err, ErrObjectDetailNotImplemented) {
 			return nil, err
 		}
@@ -129,24 +150,17 @@ func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refres
 	// Provide a minimal details payload rather than surfacing an error so the
 	// frontend can render generic metadata for custom resources. Rich built-in
 	// details belong in the app-level ObjectDetailProvider, not in refresh/snapshot.
-	details := map[string]string{
-		"kind": cases.Title(language.English, cases.NoLower).String(kind),
-		"name": name,
-	}
-	group := gvk.Group
-	version := gvk.Version
-	if group != "" {
-		details["group"] = group
-	}
-	if version != "" {
-		details["version"] = version
-	}
-	if namespace != "" {
-		details["namespace"] = namespace
+	details := GenericObjectDetails{
+		Kind:      cases.Title(language.English, cases.NoLower).String(kind),
+		Name:      name,
+		Group:     gvk.Group,
+		Version:   gvk.Version,
+		Namespace: namespace,
 	}
 	meta := b.fetchHeaderMetadata(ctx, gvk, namespace, name)
 	resourceModel := genericObjectResourceModel(ClusterMetaFromContext(ctx), gvk, namespace, name)
-	return b.buildSnapshot(ctx, scope, details, meta, &resourceModel), nil
+	detail := ObjectDetail{Type: GenericObjectDetailType, Details: details}
+	return b.buildSnapshot(ctx, scope, detail, meta, &resourceModel), nil
 }
 
 // fetchHeaderMetadata resolves the object's header metadata (creation +
@@ -163,7 +177,7 @@ func (b *ObjectDetailsBuilder) fetchHeaderMetadata(ctx context.Context, gvk sche
 	return value
 }
 
-func (b *ObjectDetailsBuilder) buildSnapshot(ctx context.Context, scope string, details interface{}, meta ObjectHeaderMetadata, resourceModel *resourcemodel.ResourceModel) *refresh.Snapshot {
+func (b *ObjectDetailsBuilder) buildSnapshot(ctx context.Context, scope string, detail ObjectDetail, meta ObjectHeaderMetadata, resourceModel *resourcemodel.ResourceModel) *refresh.Snapshot {
 	// The object's resourceVersion is the source clock: a change to the object
 	// (new image tag → new resourceVersion) changes the snapshot Version and thus
 	// the source-version ETag, so the panel refreshes instead of getting a 304.
@@ -175,7 +189,7 @@ func (b *ObjectDetailsBuilder) buildSnapshot(ctx context.Context, scope string, 
 		Version: version,
 		Payload: ObjectDetailsSnapshotPayload{
 			ClusterMeta:       ClusterMetaFromContext(ctx),
-			Details:           details,
+			ObjectDetail:      detail,
 			CreationTimestamp: meta.CreationTimestamp,
 			LastModified:      meta.LastModified,
 			Deletion:          meta.Deletion,

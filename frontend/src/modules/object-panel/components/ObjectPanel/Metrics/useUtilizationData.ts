@@ -5,9 +5,11 @@
  * metrics collector), falling back to the active detail DTO while those domains load.
  */
 
+import type { daemonset, deployment, nodes, statefulset } from '@core/backend-api/models';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import { parseResourceQuantity } from '@shared/utils/resourceCalculations';
 import { useMemo } from 'react';
+import type { ObjectDetail } from '@/core/refresh/types';
 import { type ResourceMetricValues, useResourceMetrics } from '@/core/resource-metrics';
 
 export interface UtilizationData {
@@ -25,51 +27,25 @@ export interface UtilizationData {
 
 const UTILIZATION_KINDS = new Set(['pod', 'deployment', 'daemonset', 'statefulset', 'node']);
 
-const WORKLOAD_UTILIZATION_KINDS = new Set(['deployment', 'daemonset', 'statefulset']);
-
-// Structural view of the utilization-bearing fields across the relevant detail DTOs.
 // Detail DTOs carry formatted quantity strings; they are parsed once here.
-interface UtilizationDetail {
+interface StandardMetricSource {
   cpuUsage?: string;
   cpuRequest?: string;
   cpuLimit?: string;
   memUsage?: string;
   memRequest?: string;
   memLimit?: string;
-  cpuCapacity?: string;
-  cpuAllocatable?: string;
-  cpuRequests?: string;
-  cpuLimits?: string;
-  memoryUsage?: string;
-  memoryCapacity?: string;
-  memoryAllocatable?: string;
-  memRequests?: string;
-  memLimits?: string;
-  podsCount?: number;
-  podsCapacity?: string;
-  podsAllocatable?: string;
-  pods?: unknown[];
-  podMetricsSummary?: {
-    cpuUsage?: string;
-    cpuRequest?: string;
-    cpuLimit?: string;
-    memUsage?: string;
-    memRequest?: string;
-    memLimit?: string;
-    pods?: number;
-    readyPods?: number;
-  };
 }
+
+type WorkloadDetails =
+  | deployment.DeploymentDetails
+  | daemonset.DaemonSetDetails
+  | statefulset.StatefulSetDetails;
 
 interface UseUtilizationDataParams {
   objectData: ObjectPanelRef | null | undefined;
-  detail: unknown;
+  detail: ObjectDetail | null | undefined;
 }
-
-type StandardMetricSource = Pick<
-  UtilizationDetail,
-  'cpuUsage' | 'cpuRequest' | 'cpuLimit' | 'memUsage' | 'memRequest' | 'memLimit'
->;
 
 const hasMetricValue = (values: Array<string | undefined>): boolean => values.some(Boolean);
 
@@ -102,7 +78,7 @@ const standardMetricSections = (
   };
 };
 
-const deriveNodeUtilization = (detail: UtilizationDetail): UtilizationData | null => {
+const deriveNodeUtilization = (detail: nodes.NodeDetails): UtilizationData | null => {
   const hasCpuData = hasMetricValue([
     detail.cpuCapacity,
     detail.cpuAllocatable,
@@ -148,7 +124,7 @@ const deriveNodeUtilization = (detail: UtilizationDetail): UtilizationData | nul
   };
 };
 
-const workloadMetricSource = (detail: UtilizationDetail): StandardMetricSource => {
+const workloadMetricSource = (detail: WorkloadDetails): StandardMetricSource => {
   const summary = detail.podMetricsSummary;
   const hasSummary = hasMetricValue([
     summary?.cpuUsage,
@@ -159,7 +135,7 @@ const workloadMetricSource = (detail: UtilizationDetail): StandardMetricSource =
   return hasSummary && summary ? summary : detail;
 };
 
-const deriveWorkloadUtilization = (detail: UtilizationDetail): UtilizationData | null => {
+const deriveWorkloadUtilization = (detail: WorkloadDetails): UtilizationData | null => {
   const metrics = standardMetricSections(workloadMetricSource(detail));
   if (!metrics) {
     return null;
@@ -171,38 +147,38 @@ const deriveWorkloadUtilization = (detail: UtilizationDetail): UtilizationData |
   };
 };
 
+// Utilization from the active detail, by the DTO that carries it: node capacity, pod usage, or
+// workload totals (podMetricsSummary when available, else averages on the detail itself).
+const detailUtilization = (detail: ObjectDetail): UtilizationData | null => {
+  switch (detail.detailType) {
+    case 'node':
+      return deriveNodeUtilization(detail.details);
+    case 'pod':
+      return standardMetricSections(detail.details);
+    case 'deployment':
+    case 'daemonset':
+    case 'statefulset':
+      return deriveWorkloadUtilization(detail.details);
+    default:
+      return null;
+  }
+};
+
 function deriveDetailUtilizationData(
   objectData: ObjectPanelRef | null | undefined,
-  detail: unknown
+  detail: ObjectDetail | null | undefined
 ): UtilizationData | null {
   if (!objectData) {
     return null;
   }
-  const objectKind = objectData.kind.toLowerCase();
-  const d = (detail ?? undefined) as UtilizationDetail | undefined;
-
-  // Node utilization
-  if (d && objectKind === 'node') {
-    return deriveNodeUtilization(d);
+  if (detail) {
+    return detailUtilization(detail);
   }
-
-  if (!UTILIZATION_KINDS.has(objectKind)) {
+  if (!UTILIZATION_KINDS.has(objectData.kind.toLowerCase())) {
     return null;
   }
-
-  // Pod utilization
-  if (d && objectKind === 'pod') {
-    return standardMetricSections(d);
-  }
-
-  // Workload utilization (deployment/daemonset/statefulset): aggregated totals from
-  // podMetricsSummary when available, falling back to averages on the detail itself.
-  if (d && WORKLOAD_UTILIZATION_KINDS.has(objectKind)) {
-    return deriveWorkloadUtilization(d);
-  }
-
   // Fallback to objectData fields (dynamic properties on the object reference).
-  return standardMetricSections(objectData as unknown as UtilizationDetail);
+  return standardMetricSections(objectData as unknown as StandardMetricSource);
 }
 
 export function useUtilizationData(params: UseUtilizationDataParams): UtilizationData | null {

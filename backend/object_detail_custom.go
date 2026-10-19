@@ -14,19 +14,19 @@ import (
 
 // Custom enrichments use the discovered GVR and the live GET authorization on
 // every request. They do not enter the informer-invalidated built-in detail cache.
-func (p *objectDetailProvider) fetchDiscoveredResourceDetails(ctx context.Context, resolved resolvedObjectDetailContext, gvk schema.GroupVersionKind, namespace, name string) (interface{}, error) {
+func (p *objectDetailProvider) fetchDiscoveredResourceDetails(ctx context.Context, resolved resolvedObjectDetailContext, gvk schema.GroupVersionKind, namespace, name string) (snapshot.ObjectDetail, error) {
 	if !resolved.scoped {
-		return nil, fmt.Errorf("cluster scope is required")
+		return snapshot.ObjectDetail{}, fmt.Errorf("cluster scope is required")
 	}
 	gvr, namespaced, err := resolveObjectYAMLGVR(ctx, resolved.deps, gvk, objectYAMLResolverStrict)
 	if err != nil {
-		return nil, err
+		return snapshot.ObjectDetail{}, err
 	}
 	if namespaced != (namespace != "") {
-		return nil, fmt.Errorf("resource namespace does not match discovered scope")
+		return snapshot.ObjectDetail{}, fmt.Errorf("resource namespace does not match discovered scope")
 	}
 	if resolved.deps.DynamicClient == nil {
-		return nil, fmt.Errorf("dynamic client not initialized")
+		return snapshot.ObjectDetail{}, fmt.Errorf("dynamic client not initialized")
 	}
 	resource := resolved.deps.DynamicClient.Resource(gvr)
 	var client dynamic.ResourceInterface = resource
@@ -38,7 +38,7 @@ func (p *objectDetailProvider) fetchDiscoveredResourceDetails(ctx context.Contex
 	since := p.gateway.responseCacheGeneration()
 	object, err := client.Get(ctx, name, v1.GetOptions{})
 	if err != nil {
-		return nil, err
+		return snapshot.ObjectDetail{}, err
 	}
 	// Snapshot ETags read header metadata after details. Publish both from this
 	// live object so a prior header cache entry cannot conceal a changed spec.
@@ -48,5 +48,5 @@ func (p *objectDetailProvider) fetchDiscoveredResourceDetails(ctx context.Contex
 	details := customresource.BuildDetails(clusterID, object, descriptor, scope)
 	argocd.NewDestinationResolver(clusterID, resolved.deps.DynamicClient).EnrichFacts(ctx, object, details.ArgoCD)
 	details.ResolveLinks(p.gateway.objectCatalogServiceForCluster(clusterID).ResolveRelatedResourceLink)
-	return details, nil
+	return tagObjectDetail[*customresource.Details](customResourceDetailType, details, nil)
 }

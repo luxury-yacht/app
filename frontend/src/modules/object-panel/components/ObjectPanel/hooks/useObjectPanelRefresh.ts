@@ -15,7 +15,7 @@ import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import { type DomainSnapshotState, useRefreshScopedDomain } from '@/core/refresh/store';
 import type { DomainPayloadMap } from '@/core/refresh/types';
-import type { ObjectDeletionMetadata } from '@/core/refresh/types.generated';
+import type { ObjectDeletionMetadata, ObjectDetail } from '@/core/refresh/types.generated';
 
 import { getObjectDetailsRefresherName, INACTIVE_SCOPE } from '../constants';
 import type { PanelObjectData } from '../types';
@@ -36,7 +36,8 @@ interface UseObjectPanelRefreshArgs {
 }
 
 interface ObjectPanelRefreshResult {
-  detailPayload: unknown;
+  /** The object's detail DTO tagged with its type; null until the first snapshot. */
+  detail: ObjectDetail | null;
   // Object creation time (RFC3339 UTC) from the details envelope; null when the
   // backend can't determine it. The header formats it into Age for every kind.
   creationTimestamp: string | null;
@@ -57,7 +58,7 @@ const selectDetailSnapshot = (
 ) => {
   if (!detailScope) {
     return {
-      detailPayload: null,
+      detail: null,
       creationTimestamp: null,
       lastModified: null,
       deletion: null,
@@ -67,7 +68,7 @@ const selectDetailSnapshot = (
   }
   const data = snapshot.data;
   return {
-    detailPayload: data?.details ?? null,
+    detail: data ?? null,
     creationTimestamp: data?.creationTimestamp ?? null,
     lastModified: data?.lastModified ?? null,
     deletion: data?.deletion ?? null,
@@ -88,12 +89,12 @@ export const useObjectPanelRefresh = ({
   // Refresh context sync lives in RefreshSyncProvider; this hook only manages object-detail refreshes.
   const detailSnapshot = useRefreshScopedDomain('object-details', detailScope ?? INACTIVE_SCOPE);
 
-  const { detailPayload, creationTimestamp, lastModified, deletion, detailStatus, detailsError } =
+  const { detail, creationTimestamp, lastModified, deletion, detailStatus, detailsError } =
     selectDetailSnapshot(detailScope, detailSnapshot);
 
   const detailsLoadingState = applyPassiveLoadingPolicy({
-    loading: !detailPayload && (detailStatus === 'loading' || detailStatus === 'updating'),
-    hasLoaded: Boolean(detailPayload),
+    loading: !detail && (detailStatus === 'loading' || detailStatus === 'updating'),
+    hasLoaded: Boolean(detail),
     isPaused,
     isManualRefreshActive,
   });
@@ -161,7 +162,7 @@ export const useObjectPanelRefresh = ({
   });
 
   return {
-    detailPayload,
+    detail,
     creationTimestamp,
     lastModified,
     deletion,
