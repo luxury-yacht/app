@@ -303,47 +303,31 @@ func (b *objectMapBuilder) catalog() *objectcatalog.Service {
 }
 
 func parseObjectMapScope(scope string) (objectMapOptions, error) {
-	objectScope, rawQuery, hasQuery := strings.Cut(scope, "?")
-	opts := objectMapOptions{
-		scopeKind: objectMapScopeObject,
-		maxNodes:  defaultObjectMapNodes,
+	_, tail := refresh.SplitClusterScope(scope)
+	selector, query, err := domain.ParseDomainScopeTail(objectMapDomain, tail)
+	if err != nil {
+		return objectMapOptions{}, err
 	}
-	_, trimmedScope := refresh.SplitClusterScope(objectScope)
-	if namespace, ok := parseObjectMapNamespaceScope(trimmedScope); ok {
+	opts := objectMapOptions{scopeKind: objectMapScopeObject, maxNodes: defaultObjectMapNodes}
+	switch selector.Kind {
+	case refresh.ScopeSelectorNamespace:
 		opts.scopeKind = objectMapScopeNamespace
-		opts.namespace = namespace
-	} else {
-		identity, err := refresh.ParseObjectScope(objectScope)
-		if err != nil {
-			return objectMapOptions{}, err
-		}
-		opts.identity = identity
-		if resourcemodel.IsHelmReleaseGVK(identity.GVK) {
+		opts.namespace = selector.Namespace
+	default:
+		opts.identity = selector.Object
+		if resourcemodel.IsHelmReleaseGVK(selector.Object.GVK) {
 			opts.scopeKind = objectMapScopeHelmRelease
 		}
 	}
-	if !hasQuery {
+	if query == "" {
 		return opts, nil
 	}
-	values, err := url.ParseQuery(rawQuery)
+	values, err := url.ParseQuery(query)
 	if err != nil {
 		return objectMapOptions{}, err
 	}
 	opts.maxNodes = parseBoundedInt(values.Get("maxNodes"), defaultObjectMapNodes, 1, maxObjectMapNodes)
 	return opts, nil
-}
-
-func parseObjectMapNamespaceScope(scope string) (string, bool) {
-	trimmed := strings.TrimSpace(scope)
-	prefix := "namespace:"
-	if !strings.HasPrefix(strings.ToLower(trimmed), prefix) {
-		return "", false
-	}
-	namespace := strings.TrimSpace(trimmed[len(prefix):])
-	if namespace == "" {
-		return "", false
-	}
-	return namespace, true
 }
 
 func parseBoundedInt(raw string, fallback, minValue, maxValue int) int {

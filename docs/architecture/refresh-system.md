@@ -47,13 +47,34 @@ diagnostics, and tests.
 
 ## Scope and identity
 
-Every API scope names exactly one cluster (format:
-[multi-cluster.md](multi-cluster.md#identity-and-scopes)). Refresh domains
-never accept multi-cluster scopes; aggregate handlers route through the
-per-cluster mux, and cross-cluster views fan out over single-cluster entries
-above refresh state. Concrete rows carry a complete `ResourceRef`
+Every API scope names exactly one cluster: the prefix before the first `|` is
+one opaque cluster id, never a list (format:
+[multi-cluster.md](multi-cluster.md#identity-and-scopes)). Aggregate handlers
+route by that id through the per-cluster mux, and cross-cluster views fan out
+over single-cluster entries above refresh state. Concrete rows carry a complete `ResourceRef`
 (cluster-scoped objects omit namespace); stream identity crosses the wire in
 the top-level full `ref`.
+
+Scope tails are one executable contract:
+
+- Each domain's `scopeContract` authors its `selectors` (`cluster`,
+  `namespace`, `all-namespaces`, `node`, `workload`, `object`,
+  `helm-release`), its `query` mode (`none`, `typed-table` `?query`,
+  `object-map` `?maxNodes`, or a `catalog` tail that is the query), and
+  canonical `valid`/`invalid` example tails. The generator emits the grammar
+  into both policy tables.
+- Build and decode scopes only through the codec: `frontend/src/core/refresh/scopeSelector.ts`
+  (`buildRefreshScope`, `parseRefreshScope`) and `backend/refresh/scope_selector.go`
+  with `domain.ParseDomainScope`/`ParseDomainScopeTail`/`ParseDomainSelector`.
+  Never assemble or prefix-sniff a tail by hand; tests use
+  `frontend/src/test-utils/refreshScope.ts` to state wire strings.
+- Only canonical encodings decode: no bare namespaces, `*`/`cluster`
+  aliases, unprefixed scopes, or selected-cluster fallback. The refresh API
+  answers anything else with `BadRequest` before a build or job runs, and the
+  orchestrator throws on entry.
+- Both codecs execute every domain's examples
+  (`backend/refresh/domain/scope_contract_test.go`, `scopeSelector.test.ts`);
+  doorbell producers encode with the same selectors subscribers key on.
 
 ## Ownership
 

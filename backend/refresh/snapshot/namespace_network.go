@@ -177,7 +177,7 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 	if err != nil {
 		return nil, err
 	}
-	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), errNamespaceNetworkScopeRequired)
+	parsedScope, err := parseNamespaceSnapshotScope(namespaceNetworkDomainName, clusterID, baseScope, errNamespaceNetworkScopeRequired)
 	if err != nil {
 		return nil, err
 	}

@@ -82,7 +82,7 @@ func buildTypedTableSnapshot[T any](
 	// namespace-scoped domain, all rows ("") for a cluster-scoped one.
 	rowsScope := ""
 	if spec.scopeRequiredErr != "" {
-		parsedScope, scopeErr := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), spec.scopeRequiredErr)
+		parsedScope, scopeErr := parseNamespaceSnapshotScope(spec.domain, clusterID, baseScope, spec.scopeRequiredErr)
 		if scopeErr != nil {
 			return nil, scopeErr
 		}

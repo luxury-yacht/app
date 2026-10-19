@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { buildClusterScope } from '../clusterScope';
-import { RESOURCE_STREAM_DOMAINS, type ResourceDomain } from './resourceStreamDomains';
+import { testScope } from '@/test-utils/refreshScope';
 import {
   ResourceStreamSubscriptionStore,
   resolveResourceStreamSubscriptionScope,
@@ -20,83 +19,86 @@ describe('ResourceStreamSubscriptionStore', () => {
     window.clearTimeout = globalThis.clearTimeout;
   });
 
-  it('resolves single-cluster resource stream scopes and rejects multi-cluster scopes', () => {
-    const scope = buildClusterScope('cluster-a', 'namespace:default');
+  it('resolves a resource stream scope to its one cluster', () => {
+    const scope = testScope('cluster-a', 'namespace:default');
 
     expect(resolveResourceStreamSubscriptionScope('pods', scope)).toEqual({
-      clusterIds: ['cluster-a'],
+      clusterId: 'cluster-a',
       normalizedScope: 'namespace:default',
       reportScope: scope,
+      storeScope: scope,
     });
+  });
 
-    expect(() =>
-      resolveResourceStreamSubscriptionScope(
-        'pods',
-        'clusters=cluster-a,cluster-b|namespace:default'
-      )
-    ).toThrow('single cluster');
+  // A kubeconfig file or context name may contain a comma; the scope prefix is
+  // one cluster id, never a list.
+  it('subscribes a comma-containing cluster id as one cluster', () => {
+    const scope = testScope('prod,eu.yaml:ctx', 'namespace:default');
+    const store = new ResourceStreamSubscriptionStore(500, vi.fn());
+
+    const subscription = store.ensure('pods', scope);
+
+    expect(subscription.clusterId).toBe('prod,eu.yaml:ctx');
+    expect(store.getForScope('pods', scope)).toBe(subscription);
   });
 
   it('resolves catalog query scopes to a cluster doorbell subscription while preserving the report scope', () => {
-    const queryScope = buildClusterScope(
+    const queryScope = testScope(
       'fusionauth-prod-ap-southeast-2',
       'limit=1000&customOnly=true&sort=name&sortDirection=asc&namespace=fa-atmail-au'
     );
 
     expect(resolveResourceStreamSubscriptionScope('catalog', queryScope)).toEqual({
-      clusterIds: ['fusionauth-prod-ap-southeast-2'],
+      clusterId: 'fusionauth-prod-ap-southeast-2',
       normalizedScope: '',
       reportScope: queryScope,
+      storeScope: testScope('fusionauth-prod-ap-southeast-2'),
     });
 
     const store = new ResourceStreamSubscriptionStore(500, vi.fn());
-    const [subscription] = store.ensure('catalog', queryScope);
+    const subscription = store.ensure('catalog', queryScope);
 
     expect(store.buildRequestMessage(subscription)).toEqual(
       expect.objectContaining({
         type: 'REQUEST',
         clusterId: 'fusionauth-prod-ap-southeast-2',
         domain: 'catalog',
-        scope: buildClusterScope('fusionauth-prod-ap-southeast-2', ''),
+        scope: testScope('fusionauth-prod-ap-southeast-2', ''),
       })
     );
   });
 
   it('shares one catalog doorbell subscription across active catalog query report scopes', () => {
     const store = new ResourceStreamSubscriptionStore(500, vi.fn());
-    const pageScope = buildClusterScope(
+    const pageScope = testScope(
       'cluster-a',
       'limit=1000&customOnly=true&sort=name&sortDirection=asc&namespace=team-a'
     );
-    const metadataScope = buildClusterScope(
-      'cluster-a',
-      'limit=1&customOnly=true&namespace=team-a'
-    );
+    const metadataScope = testScope('cluster-a', 'limit=1&customOnly=true&namespace=team-a');
 
-    const [pageSubscription] = store.ensure('catalog', pageScope);
-    const [metadataSubscription] = store.ensure('catalog', metadataScope);
+    const pageSubscription = store.ensure('catalog', pageScope);
+    const metadataSubscription = store.ensure('catalog', metadataScope);
 
     expect(metadataSubscription).toBe(pageSubscription);
     expect(pageSubscription.reportScopes).toEqual(new Set([pageScope, metadataScope]));
-    expect(store.release('catalog', pageScope)).toEqual([]);
+    expect(store.release('catalog', pageScope)).toBeUndefined();
     expect(pageSubscription.reportScopes).toEqual(new Set([metadataScope]));
-    expect(store.release('catalog', metadataScope)).toEqual([pageSubscription]);
+    expect(store.release('catalog', metadataScope)).toBe(pageSubscription);
   });
 
-  it('rejects multi-cluster scopes for every resource stream domain', () => {
-    const multiClusterScope = 'clusters=cluster-a,cluster-b|namespace:default';
-
-    RESOURCE_STREAM_DOMAINS.forEach((domain: ResourceDomain) => {
-      expect(() => resolveResourceStreamSubscriptionScope(domain, multiClusterScope)).toThrow(
-        'single cluster'
-      );
-    });
+  it('rejects stream scopes outside the domain grammar or carrying a query', () => {
+    expect(() => resolveResourceStreamSubscriptionScope('pods', 'cluster-a|namespace:*')).toThrow();
+    expect(() => resolveResourceStreamSubscriptionScope('pods', 'namespace:default')).toThrow();
+    expect(() =>
+      resolveResourceStreamSubscriptionScope('pods', 'cluster-a|namespace:all?limit=50')
+    ).toThrow();
+    expect(() => resolveResourceStreamSubscriptionScope('nodes', 'cluster-a|cluster')).toThrow();
   });
 
   it('builds resume-capable request messages from subscription state', () => {
     const store = new ResourceStreamSubscriptionStore(500, vi.fn());
-    const scope = buildClusterScope('cluster-a', 'namespace:default');
-    const [subscription] = store.ensure('pods', scope);
+    const scope = testScope('cluster-a', 'namespace:default');
+    const subscription = store.ensure('pods', scope);
 
     const initialRequest = store.buildRequestMessage(subscription);
     expect(initialRequest).toEqual(
@@ -124,8 +126,8 @@ describe('ResourceStreamSubscriptionStore', () => {
     window.setTimeout = globalThis.setTimeout;
     window.clearTimeout = globalThis.clearTimeout;
     const store = new ResourceStreamSubscriptionStore(500, vi.fn());
-    const scope = buildClusterScope('cluster-a', '');
-    const [subscription] = store.ensure('nodes', scope);
+    const scope = testScope('cluster-a', '');
+    const subscription = store.ensure('nodes', scope);
     const unsubscribe = vi.fn();
 
     store.scheduleUnsubscribe(subscription, false, unsubscribe);

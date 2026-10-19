@@ -205,7 +205,7 @@ func (b *NamespaceHelmBuilder) Build(ctx context.Context, scope string) (*refres
 	if err != nil {
 		return nil, err
 	}
-	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), "namespace scope is required")
+	parsedScope, err := parseNamespaceSnapshotScope(namespaceHelmDomainName, clusterID, baseScope, "namespace scope is required")
 	if err != nil {
 		return nil, err
 	}

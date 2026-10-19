@@ -4,6 +4,7 @@ import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isPermissionDenied, localFailure } from '@/core/refresh/refreshFailure';
+import { ALL_NAMESPACES_SELECTOR } from '@/core/refresh/scopeSelector';
 import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireValue } from '@/test-utils/requireValue';
 import type { TypedQueryPayload } from './typedResourceQueryScope';
@@ -56,6 +57,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'All Namespaces Pods',
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
         sortConfig,
@@ -77,6 +79,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'All Namespaces Pods',
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
         sortConfig,
@@ -133,6 +136,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'namespace-config',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'Config',
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
         sortConfig,
@@ -356,6 +360,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'All Namespaces Pods',
         filters: {
           ...DEFAULT_GRID_TABLE_FILTER_STATE,
@@ -413,6 +418,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'Cluster Events',
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
         sortConfig,
@@ -474,6 +480,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'namespace-storage',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'Namespace Storage',
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
         sortConfig,
@@ -525,6 +532,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'namespace-storage',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'Namespace Storage',
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
         sortConfig,
@@ -562,6 +570,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'Cluster Events',
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
         sortConfig,
@@ -593,6 +602,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'All Namespaces Pods',
         filters: {
           ...DEFAULT_GRID_TABLE_FILTER_STATE,
@@ -657,6 +667,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'All Namespaces Pods',
         filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, search },
         sortConfig,
@@ -774,6 +785,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'All Namespaces Pods',
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
         sortConfig,
@@ -846,6 +858,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'All Namespaces Pods',
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
         sortConfig,
@@ -929,6 +942,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId,
         domain: 'pods',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'All Namespaces Pods',
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
         sortConfig,
@@ -1068,6 +1082,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'All Namespaces Pods',
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
         sortConfig,
@@ -1147,6 +1162,7 @@ describe('useTypedResourceQuery', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'All Namespaces Pods',
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
         sortConfig: activeSort,

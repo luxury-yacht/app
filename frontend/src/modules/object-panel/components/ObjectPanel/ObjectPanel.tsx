@@ -24,10 +24,7 @@ import { queryNamespacePermissions } from '@/core/capabilities';
 import { PanelLifecycleClusterSurface } from '@/core/panel-windows/panelLifecycleGuards';
 import { useAutoRefreshEnabled } from '@/core/refresh/hooks/useRefreshPreferences';
 import './ObjectPanel.css';
-import {
-  CLUSTER_SCOPE,
-  RESOURCE_CAPABILITIES,
-} from '@modules/object-panel/components/ObjectPanel/constants';
+import { RESOURCE_CAPABILITIES } from '@modules/object-panel/components/ObjectPanel/constants';
 import { useObjectPanelCapabilities } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities';
 import { useObjectPanelFeatureSupport } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport';
 import { useObjectPanelRefresh } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh';
@@ -137,9 +134,7 @@ function ObjectPanel({
     helmScope,
     isHelmRelease,
     isEvent,
-  } = getObjectPanelScopes(objectData, {
-    clusterScope: CLUSTER_SCOPE,
-  });
+  } = getObjectPanelScopes(objectData);
 
   const lastPermissionScopeRef = useRef<string | null>(null);
   useEffect(() => {

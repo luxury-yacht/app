@@ -786,11 +786,11 @@ describe('ClusterViewNodes', () => {
     // Metrics ride the nodes domain now — there is no separate metric domain
     // lease, and the scope must stay pinned to the active cluster.
     expect(scopedDomainCallsRef.current).toContainEqual(['nodes', 'path:context|']);
-    expect(scopedDomainCallsRef.current).not.toContainEqual([
-      'nodes',
-      'clusters=path:context,other:context|',
-    ]);
-    expect(scopedDomainCallsRef.current.every(([domain]) => domain === 'nodes')).toBe(true);
+    expect(
+      scopedDomainCallsRef.current.every(
+        ([domain, scope]) => domain === 'nodes' && scope === 'path:context|'
+      )
+    ).toBe(true);
   });
 
   it('loads fresh query rows on revisit after the live nodes domain advances', async () => {

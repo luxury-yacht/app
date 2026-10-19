@@ -23,9 +23,14 @@ import { errorHandler } from '@utils/errorHandler';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useQueryStreamSignal } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
+import {
+  buildRefreshScope,
+  CLUSTER_SELECTOR,
+  type ScopeSelector,
+  selectorForNamespaceSelection,
+} from '@/core/refresh/scopeSelector';
 import type { RefreshDomain } from '@/core/refresh/types';
 import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 import type { SortConfig } from '@/hooks/useTableSort';
@@ -51,12 +56,6 @@ import {
   type UseTypedResourceQueryResult,
   useTypedResourceQuery,
 } from './useTypedResourceQuery';
-
-// The namespace prop is the raw name for a single namespace but the `namespace:all` sentinel for
-// all-namespaces; the backend scope key is always `namespace:<value>` (see pods.go collectPods,
-// which splits the scope on ':' and rejects a bare name). Normalize before building any scope.
-const namespaceScopeKey = (namespace: string): string =>
-  namespace.startsWith('namespace:') ? namespace : `namespace:${namespace}`;
 
 // The revisit replay cache's identity. A row selection narrows the rows, so it
 // is part of it: another parent's rows must never replay while this one loads.
@@ -163,7 +162,12 @@ interface QueryBackedGridParamsCommon<
   enabled?: boolean;
   domain: RefreshDomain;
   label: string;
-  baseScope?: string;
+  /**
+   * The query's selector; memoize it, since its identity keys the request. The
+   * namespace wrapper defaults it from `namespace`, the cluster wrapper to the
+   * cluster.
+   */
+  baseSelector?: ScopeSelector;
   queryTableMode?: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
@@ -209,7 +213,7 @@ function useTypedQueryLifecycle<
   domain,
   viewId,
   label,
-  baseScope,
+  baseSelector,
   queryTableMode,
   selectRows,
   predicates,
@@ -226,7 +230,7 @@ function useTypedQueryLifecycle<
   domain: RefreshDomain;
   viewId: string;
   label: string;
-  baseScope?: string;
+  baseSelector: ScopeSelector;
   queryTableMode: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
@@ -306,7 +310,7 @@ function useTypedQueryLifecycle<
     clusterId,
     domain,
     label,
-    baseScope,
+    baseSelector,
     filters: queryFilters,
     sortConfig: tableState.sortConfig,
     pageLimit,
@@ -589,7 +593,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   enabled = true,
   domain,
   label,
-  baseScope,
+  baseSelector,
   queryTableMode = 'Query Backed Dynamic',
   selectRows,
   predicates,
@@ -624,10 +628,13 @@ export function useQueryBackedNamespaceResourceGridTable<
     shareNamespaceFilter: allNamespaces && Boolean(tableParams.showNamespaceFilters),
     transient: transientTableState,
   });
+  const namespaceSelector = useMemo(
+    () => baseSelector ?? selectorForNamespaceSelection(namespace),
+    [baseSelector, namespace]
+  );
   const liveScope = useMemo(
-    () =>
-      clusterId ? buildClusterScope(clusterId, baseScope ?? namespaceScopeKey(namespace)) : '',
-    [baseScope, clusterId, namespace]
+    () => (clusterId ? buildRefreshScope(domain, { clusterId, selector: namespaceSelector }) : ''),
+    [clusterId, domain, namespaceSelector]
   );
   const lifecycle = useTypedQueryLifecycle<TPayload, TRow>({
     clusterId,
@@ -635,10 +642,9 @@ export function useQueryBackedNamespaceResourceGridTable<
     domain,
     viewId: tableParams.viewId,
     label,
-    // Scope the typed query to the selected namespace, reusing the exact base the live
-    // subscription above already uses. namespaceScopeKey normalizes the raw namespace name to the
-    // backend scope key `namespace:<name>`; all-namespaces stays `namespace:all` (cluster-wide).
-    baseScope: baseScope ?? namespaceScopeKey(namespace),
+    // Scope the typed query to the selected namespace, reusing the exact selector the
+    // live subscription above already uses.
+    baseSelector: namespaceSelector,
     queryTableMode,
     selectRows,
     predicates,
@@ -706,7 +712,7 @@ export function useQueryBackedClusterResourceGridTable<
   enabled = true,
   domain,
   label,
-  baseScope = '',
+  baseSelector = CLUSTER_SELECTOR,
   queryTableMode = 'Query Backed Static',
   selectRows,
   predicates,
@@ -740,8 +746,8 @@ export function useQueryBackedClusterResourceGridTable<
     transient: transientTableState,
   });
   const liveScope = useMemo(
-    () => (clusterId ? buildClusterScope(clusterId, baseScope) : ''),
-    [baseScope, clusterId]
+    () => (clusterId ? buildRefreshScope(domain, { clusterId, selector: baseSelector }) : ''),
+    [baseSelector, clusterId, domain]
   );
   const lifecycle = useTypedQueryLifecycle<TPayload, TRow>({
     clusterId,
@@ -749,7 +755,7 @@ export function useQueryBackedClusterResourceGridTable<
     domain,
     viewId: tableParams.viewId,
     label,
-    baseScope,
+    baseSelector,
     queryTableMode,
     selectRows,
     predicates,

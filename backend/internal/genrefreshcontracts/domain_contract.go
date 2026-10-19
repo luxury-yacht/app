@@ -11,12 +11,14 @@ import (
 	"runtime"
 )
 
+// authoredScopeContract is one domain's scope language. Valid and invalid hold
+// canonical scope tails (after "<clusterId>|") that both layers' codecs must
+// accept or reject; the generator validates only the vocabulary.
 type authoredScopeContract struct {
-	Kind              string   `json:"kind"`
-	ClusterPrefix     string   `json:"clusterPrefix"`
-	Parser            string   `json:"parser"`
-	FrontendBuilder   string   `json:"frontendBuilder"`
-	AcceptedEncodings []string `json:"acceptedEncodings"`
+	Selectors []string `json:"selectors"`
+	Query     string   `json:"query"`
+	Valid     []string `json:"valid"`
+	Invalid   []string `json:"invalid,omitempty"`
 }
 
 type authoredDomainInventory struct {
@@ -92,6 +94,12 @@ var knownFrontendOrchestrators = stringSet(
 	"container-logs-stream",
 )
 var knownDiagnosticsStreams = stringSet("resources", "container-logs")
+
+// knownScopeSelectors and knownScopeQueries mirror refresh.ScopeSelectorKind
+// and refresh.ScopeQueryMode; the generated Go policy references those constants,
+// so an unknown value here would fail to compile there.
+var knownScopeSelectors = []string{"cluster", "namespace", "all-namespaces", "node", "workload", "object", "helm-release"}
+var knownScopeQueries = []string{"none", "typed-table", "object-map", "catalog"}
 
 func stringSet(values ...string) map[string]struct{} {
 	result := make(map[string]struct{}, len(values))
@@ -291,6 +299,9 @@ func contractDomainSpec(
 	if err := validateDomainSourceClocks(registration); err != nil {
 		return domainSpec{}, err
 	}
+	if err := validateScopeContract(registration.Domain, inventory.ScopeContract); err != nil {
+		return domainSpec{}, err
+	}
 
 	payload, frontendOwned, err := decodePayloadType(inventory.RefreshPayloadType)
 	if err != nil {
@@ -320,7 +331,37 @@ func contractDomainSpec(
 		frontendHasPriority:       frontend.hasPriority,
 		frontendRegistrationOrder: frontend.registrationOrder,
 		frontendScheduled:         frontend.scheduled,
+		scopeSelectors:            append([]string(nil), inventory.ScopeContract.Selectors...),
+		scopeQuery:                inventory.ScopeContract.Query,
 	}, nil
+}
+
+func validateScopeContract(domain string, contract authoredScopeContract) error {
+	if len(contract.Selectors) == 0 {
+		return fmt.Errorf("refresh domain %q scopeContract.selectors is empty", domain)
+	}
+	known := stringSet(knownScopeSelectors...)
+	seen := make(map[string]struct{}, len(contract.Selectors))
+	for _, selector := range contract.Selectors {
+		if err := validateKnownValue(domain, "scopeContract.selectors", selector, known); err != nil {
+			return err
+		}
+		if _, duplicate := seen[selector]; duplicate {
+			return fmt.Errorf("refresh domain %q declares scope selector %q more than once", domain, selector)
+		}
+		seen[selector] = struct{}{}
+	}
+	if err := validateKnownValue(domain, "scopeContract.query", contract.Query, stringSet(knownScopeQueries...)); err != nil {
+		return err
+	}
+	// A catalog tail is the query itself, so there is no selector to choose.
+	if contract.Query == "catalog" && (len(contract.Selectors) != 1 || contract.Selectors[0] != "cluster") {
+		return fmt.Errorf("refresh domain %q catalog scope query requires exactly the cluster selector", domain)
+	}
+	if len(contract.Valid) == 0 {
+		return fmt.Errorf("refresh domain %q scopeContract.valid is empty", domain)
+	}
+	return nil
 }
 
 func validateKnownValue(domain, field, value string, known map[string]struct{}) error {

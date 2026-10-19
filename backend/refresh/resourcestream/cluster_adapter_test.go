@@ -4,7 +4,7 @@ import "testing"
 
 func TestClusterAdapterParsesSelector(t *testing.T) {
 	adapter := NewResolvingClusterAdapter(func(string) *Manager { return nil })
-	selector, err := adapter.ParseSelector("cluster-a", "namespace-workloads", "default")
+	selector, err := adapter.ParseSelector("cluster-a", "namespace-workloads", "namespace:default")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

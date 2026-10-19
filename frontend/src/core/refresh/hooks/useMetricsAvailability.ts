@@ -12,7 +12,7 @@ import { useViewState } from '@/core/contexts/ViewStateContext';
 import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { canActivateClusterOverviewRefresh } from '@/core/refresh/clusterOverviewLifecycle';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { ClusterOverviewMetrics } from '@/core/refresh/types';
 
 export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null => {
@@ -24,7 +24,7 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
 
   // Metrics for foreground UI should follow the active cluster only.
   const overviewScope = useMemo(
-    () => buildClusterScope(selectedClusterId ?? undefined, ''),
+    () => buildClusterRefreshScope('cluster-overview', selectedClusterId),
     [selectedClusterId]
   );
 

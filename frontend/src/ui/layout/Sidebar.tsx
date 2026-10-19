@@ -38,9 +38,9 @@ import {
   type NamespaceViewDescriptor,
   SIDEBAR_VIEW_GROUPS,
 } from '@/core/navigation/viewRegistry';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { AttentionSeverity } from '@/core/refresh/types';
 import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
 import { useExclusiveNamespaces } from '@/hooks/useExclusiveNamespaces';
@@ -50,10 +50,10 @@ import { NamespaceScopeAddRow, useNamespaceScope } from './NamespaceScopeEditor'
 import { type SidebarCursorTarget, useSidebarKeyboardControls } from './SidebarKeys';
 import { useSidebarGroupExpansion } from './useSidebarGroupExpansion';
 
-const toNamespaceKey = (clusterId: string | undefined, scope: string): string => {
-  const scoped = buildClusterScope(clusterId, scope);
-  return scoped || scope;
-};
+// A namespace row's sidebar identity (expansion state, DOM ids), keyed by
+// cluster; the namespace is a selection value, not a refresh scope.
+const toNamespaceKey = (clusterId: string | undefined, namespace: string): string =>
+  clusterId ? `${clusterId}|${namespace}` : namespace;
 
 const escapeAttributeSelectorValue = (value: string): string =>
   value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -861,7 +861,7 @@ function Sidebar() {
 
   const width = viewState.isSidebarVisible ? viewState.sidebarWidth : 50;
   const isCollapsed = !viewState.isSidebarVisible;
-  const attentionScope = buildClusterScope(selectedClusterId, '');
+  const attentionScope = buildClusterRefreshScope('cluster-attention', selectedClusterId);
   const attentionBadgesEnabled = Boolean(attentionScope) && viewState.viewType !== 'global';
   const { data: attentionData } = useRefreshDomainHandle({
     domain: 'cluster-attention',

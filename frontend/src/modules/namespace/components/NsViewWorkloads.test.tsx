@@ -926,10 +926,11 @@ describe('NsViewWorkloads', () => {
       'namespace-workloads',
       'path:context|namespace:team-a',
     ]);
-    expect(scopedDomainCallsRef.current).not.toContainEqual([
-      'namespace-workloads',
-      'clusters=path:context,other:context|namespace:team-a',
-    ]);
+    expect(
+      scopedDomainCallsRef.current
+        .filter(([domain]) => domain === 'namespace-workloads')
+        .every(([, scope]) => scope.startsWith('path:context|'))
+    ).toBe(true);
   });
 
   it('keeps metrics availability out of the Workloads table surface', async () => {

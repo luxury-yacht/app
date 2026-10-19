@@ -163,16 +163,18 @@ func TestSessionSendErrorIncludesPermissionDetails(t *testing.T) {
 	}
 }
 
-func TestSessionResolveClusterIDRejectsMultiClusterScope(t *testing.T) {
+// A kubeconfig file or context name may contain a comma; the scope prefix is
+// one cluster ID, never a list.
+func TestSessionResolveClusterIDAcceptsCommaInClusterID(t *testing.T) {
 	session := newSession(stubConn{}, Config{Adapter: stubAdapter{}, Logger: applog.Noop, Telemetry: nil, ClusterID: "", ClusterName: "", StreamName: "resources", SendReset: true, AllowClusterScopedRequests: true, ResolveClusterName: nil})
 
-	_, err := session.resolveClusterID(ClientMessage{
-		ClusterID: "cluster-a",
-		Scope:     "clusters=cluster-a,cluster-b|namespace:default",
+	clusterID, err := session.resolveClusterID(ClientMessage{
+		ClusterID: "prod,eu.yaml:ctx",
+		Scope:     "prod,eu.yaml:ctx|namespace:default",
 	})
 
-	if err == nil || err.Error() != "stream scope must target a single cluster" {
-		t.Fatalf("expected single-cluster scope error, got %v", err)
+	if err != nil || clusterID != "prod,eu.yaml:ctx" {
+		t.Fatalf("expected the comma-containing cluster id, got %q, %v", clusterID, err)
 	}
 }
 

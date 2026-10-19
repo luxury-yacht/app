@@ -5,8 +5,9 @@ import type {
   GridTableFilterOptions,
   GridTableFilterState,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { buildRefreshScope, type ScopeSelector } from '@/core/refresh/scopeSelector';
 import type {
+  RefreshDomain,
   ResourceQueryAnchor,
   ResourceQueryAnchorResult,
   ResourceQueryCapabilities,
@@ -47,7 +48,8 @@ export interface TypedResourceQueryDescriptor {
   filters: GridTableFilterState;
   sortConfig: SortConfig | null;
   pageLimit: number;
-  baseScope?: string;
+  /** The query's selector; memoize it, since its identity keys the request. */
+  baseSelector: ScopeSelector;
   predicates?: Record<string, string | null | undefined>;
   continueToken?: string | null;
   /**
@@ -65,7 +67,7 @@ export interface TypedResourceQueryDescriptor {
 export interface TypedResourceQueryLifecycleDescriptor extends TypedResourceQueryDescriptor {
   enabled: boolean;
   clusterId?: string | null;
-  domain: string;
+  domain: RefreshDomain;
   liveDataVersion?: string | null;
 }
 
@@ -118,7 +120,7 @@ export const typedResourceQueryLifecycleIdentity = ({
   clusterId,
   domain,
   pageLimit,
-  baseScope,
+  baseSelector,
   filters,
   sortConfig,
   predicates,
@@ -130,7 +132,7 @@ export const typedResourceQueryLifecycleIdentity = ({
     domain,
     liveDataVersion: liveDataVersion ?? '',
     pageLimit,
-    baseScope: baseScope ?? 'namespace:all',
+    baseSelector,
     query: typedResourceQueryIdentity({ filters, sortConfig, predicates }),
   });
 
@@ -218,6 +220,7 @@ const appendPageAddress = (
 };
 
 export function buildTypedResourceQueryScope(
+  domain: RefreshDomain,
   clusterId: string | null | undefined,
   descriptor: TypedResourceQueryDescriptor
 ): string | null {
@@ -235,8 +238,11 @@ export function buildTypedResourceQueryScope(
   // Anchor, start rank, and continue token are mutually exclusive on the wire;
   // the most intentful address present wins.
   appendPageAddress(params, descriptor);
-  const baseScope = descriptor.baseScope ?? 'namespace:all';
-  return buildClusterScope(clusterId, `${baseScope}?${params.toString()}`);
+  return buildRefreshScope(domain, {
+    clusterId,
+    selector: descriptor.baseSelector,
+    query: params.toString(),
+  });
 }
 
 /**

@@ -20,8 +20,10 @@ permission gate, or streamed table registration. Contract rules live in
 | Telemetry; catalog lifecycle | `backend/refresh/telemetry/recorder.go`; `backend/refresh_object_catalog.go` |
 
 1. Add the authored entry (category, refresher, timing, orchestrator,
-   diagnostics, source clocks, stream, `refreshPayloadType`) to
-   `backend/refresh/domain/refresh-domain-contract.json`.
+   diagnostics, source clocks, stream, `refreshPayloadType`, and a
+   `scopeContract` with selectors, query mode, and canonical valid/invalid
+   example tails) to `backend/refresh/domain/refresh-domain-contract.json`.
+   Producers build its scopes with the scope codec, never by hand.
 2. Register backend-owned DTOs/enums in
    `backend/internal/genrefreshcontracts/registry.go`, run
    `mise exec -- go generate ./backend`, and never Biome-format

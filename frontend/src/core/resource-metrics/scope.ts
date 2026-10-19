@@ -4,7 +4,7 @@ import {
   buildRequiredObjectReference,
   type ClusterObjectReference,
 } from '@shared/utils/objectIdentity';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { buildClusterRefreshScope, buildRefreshScope } from '@/core/refresh/scopeSelector';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import type { ResourceMetricsResolution } from './types';
 
@@ -20,7 +20,7 @@ const resolveMetricsReference = (ref: ClusterObjectReference): ResourceMetricsRe
       ref,
       source: 'nodes',
       domain: 'nodes',
-      scope: buildClusterScope(ref.clusterId, ''),
+      scope: buildClusterRefreshScope('nodes', ref.clusterId),
     };
   }
   if (!['pod', 'deployment', 'daemonset', 'statefulset'].includes(kind)) {
@@ -38,7 +38,10 @@ const resolveMetricsReference = (ref: ClusterObjectReference): ResourceMetricsRe
     ref,
     source: domain,
     domain,
-    scope: buildClusterScope(ref.clusterId, `namespace:${ref.namespace}`),
+    scope: buildRefreshScope(domain, {
+      clusterId: ref.clusterId,
+      selector: { kind: 'namespace', namespace: ref.namespace },
+    }),
   };
 };
 

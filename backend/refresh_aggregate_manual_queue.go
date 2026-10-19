@@ -67,9 +67,8 @@ func (q *aggregateManualQueue) Enqueue(ctx context.Context, domain, scope, reaso
 		return nil, errorstatus.BadRequest(errors.New("domain is required"))
 	}
 	queues := q.snapshotConfig()
-	clusterIDs, scopeValue := refresh.SplitClusterScopeList(scope)
-	target, err := q.resolveTarget(domain, clusterIDs, queues)
-	if err != nil {
+	target, scopeValue := refresh.SplitClusterScope(scope)
+	if err := requireActiveTarget(domain, target, queues); err != nil {
 		return nil, err
 	}
 	queue := queues[target]
@@ -132,25 +131,6 @@ func (q *aggregateManualQueue) Update(job *refresh.ManualRefreshJob) {
 func (q *aggregateManualQueue) Next(ctx context.Context) (*refresh.ManualRefreshJob, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
-}
-
-func (q *aggregateManualQueue) resolveTarget(
-	domain string,
-	clusterIDs []string,
-	queues map[string]refresh.ManualQueue,
-) (string, error) {
-	if len(clusterIDs) == 0 {
-		return "", errorstatus.BadRequest(fmt.Errorf("cluster scope is required for domain %s", domain))
-	}
-	if len(clusterIDs) > 1 {
-		return "", errorstatus.BadRequest(fmt.Errorf("domain %s requires a single cluster scope (requested: %v)", domain, clusterIDs))
-	}
-
-	target := clusterIDs[0]
-	if _, ok := queues[target]; !ok {
-		return "", errorstatus.ClusterNotReady(fmt.Errorf("cluster %s not active", target))
-	}
-	return target, nil
 }
 
 func buildAggregateStatus(
@@ -234,7 +214,7 @@ func (q *aggregateManualQueue) unfinishedJobMigrations(queues map[string]refresh
 		if !manualChildNeedsMigration(aggregateJob.child, replacement) {
 			continue
 		}
-		_, scope := refresh.SplitClusterScopeList(aggregateJob.job.Scope)
+		_, scope := refresh.SplitClusterScope(aggregateJob.job.Scope)
 		migrations = append(migrations, aggregateManualJobMigration{
 			aggregateJobID: aggregateJobID,
 			clusterID:      aggregateJob.clusterID,

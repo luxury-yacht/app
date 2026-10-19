@@ -7,7 +7,7 @@
  */
 
 import builtinResourceIdentityContract from '@builtin-resource-identities';
-import { buildObjectPanelPodsScope } from '@modules/object-panel/components/ObjectPanel/Pods/objectPanelPodsScope';
+import { buildObjectPanelPodsSelector } from '@modules/object-panel/components/ObjectPanel/Pods/objectPanelPodsScope';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import {
   buildObjectReference,
@@ -15,7 +15,7 @@ import {
   type ClusterObjectReference,
   type ResolvedObjectReference,
 } from '@shared/utils/objectIdentity';
-import { buildClusterScope, buildObjectScope } from '@/core/refresh/clusterScope';
+import { buildRefreshScope, type ScopeSelector } from '@/core/refresh/scopeSelector';
 import type { KubernetesObjectReference } from '@/types/view-state';
 
 /**
@@ -26,13 +26,11 @@ import type { KubernetesObjectReference } from '@/types/view-state';
 export type ObjectPanelRef = ClusterObjectReference;
 
 export interface ObjectPanelRefOptions {
-  clusterScope?: string;
   fallbackClusterId?: string | null;
 }
 
 export interface ObjectPanelScopes {
   objectKind: string | null;
-  scopeNamespace: string | null;
   detailScope: string | null;
   eventsScope: string | null;
   containerLogsScope: string | null;
@@ -57,7 +55,6 @@ export interface ObjectPanelScopeEviction {
   scope: string;
 }
 
-const DEFAULT_CLUSTER_SCOPE = '__cluster__';
 const HELM_RELEASE_GVK = { group: 'helm.sh', version: 'v3' };
 
 const objectMapGvkKey = (group: string, version: string, kind: string): string =>
@@ -172,21 +169,10 @@ export const hasCompleteObjectMapReference = (
   );
 };
 
-const buildClusterObjectScope = (
-  clusterId: string | undefined,
-  objectScope: string | null
-): string | null => {
-  if (!objectScope) {
-    return null;
-  }
-  return buildClusterScope(clusterId, objectScope);
-};
-
 const emptyObjectPanelScopes = (
   objectData: KubernetesObjectReference | null
 ): ObjectPanelScopes => ({
   objectKind: objectData?.kind ? objectData.kind.toLowerCase() : null,
-  scopeNamespace: null,
   detailScope: null,
   eventsScope: null,
   containerLogsScope: null,
@@ -226,37 +212,29 @@ export const getObjectPanelScopes = (
   }
 
   const objectKind = ref.kind.toLowerCase();
-  const clusterScope = options.clusterScope ?? DEFAULT_CLUSTER_SCOPE;
-  const scopeNamespace = ref.namespace || clusterScope;
-  const detailScope = buildClusterObjectScope(
-    clusterId,
-    buildObjectScope({
-      namespace: scopeNamespace,
-      group: ref.group,
-      version: ref.version,
-      kind: objectKind,
-      name: ref.name,
-    })
-  );
-  const eventsScope = buildClusterObjectScope(
-    clusterId,
-    buildObjectScope({
-      namespace: scopeNamespace,
+  // Every object-scoped domain decodes the same object selector, so the panel's
+  // detail, YAML, events, log, and map consumers share one canonical scope.
+  const objectSelector: ScopeSelector = {
+    kind: 'object',
+    object: {
+      namespace: ref.namespace ?? '',
       group: ref.group,
       version: ref.version,
       kind: ref.kind,
       name: ref.name,
-    })
-  );
-  const containerLogsScope = detailScope;
-  const mapScope = hasCompleteObjectMapReference(normalizedObjectData) ? eventsScope : null;
+    },
+  };
+  const detailScope = buildRefreshScope('object-details', { clusterId, selector: objectSelector });
   const syntheticHelmRelease = isSyntheticHelmRelease(ref);
   const helmScope = syntheticHelmRelease
-    ? buildClusterScope(clusterId, `${scopeNamespace}:${ref.name}`)
+    ? buildRefreshScope('object-helm-manifest', {
+        clusterId,
+        selector: { kind: 'helm-release', namespace: ref.namespace ?? '', name: ref.name },
+      })
     : null;
-  // The PodsTab leases a pods window under this exact scope (same builder the
+  // The PodsTab leases a pods window under this exact scope (same selector the
   // query-backed wrapper uses); null for kinds without a pods tab.
-  const podsBaseScope = buildObjectPanelPodsScope(
+  const podsSelector = buildObjectPanelPodsSelector(
     {
       kind: ref.kind,
       group: ref.group,
@@ -266,17 +244,22 @@ export const getObjectPanelScopes = (
     },
     ref.kind
   );
-  const podsScope = podsBaseScope ? buildClusterScope(clusterId, podsBaseScope) : null;
 
   return {
     objectKind,
-    scopeNamespace,
     detailScope,
-    eventsScope,
-    containerLogsScope,
-    mapScope,
+    eventsScope: buildRefreshScope('object-events', { clusterId, selector: objectSelector }),
+    containerLogsScope: buildRefreshScope('container-logs', {
+      clusterId,
+      selector: objectSelector,
+    }),
+    mapScope: hasCompleteObjectMapReference(normalizedObjectData)
+      ? buildRefreshScope('object-map', { clusterId, selector: objectSelector })
+      : null,
     helmScope,
-    podsScope,
+    podsScope: podsSelector
+      ? buildRefreshScope('pods', { clusterId, selector: podsSelector })
+      : null,
     isHelmRelease: syntheticHelmRelease,
     isEvent: objectKind === 'event',
   };

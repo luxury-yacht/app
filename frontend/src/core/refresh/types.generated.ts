@@ -2316,6 +2316,17 @@ export type GeneratedRefreshDiagnosticsStream =
   | 'resources'
   | 'container-logs';
 
+export type GeneratedRefreshScopeSelector =
+  | 'cluster'
+  | 'namespace'
+  | 'all-namespaces'
+  | 'node'
+  | 'workload'
+  | 'object'
+  | 'helm-release';
+
+export type GeneratedRefreshScopeQuery = 'none' | 'typed-table' | 'object-map' | 'catalog';
+
 export interface GeneratedRefreshDomainPolicy {
   domain: RefreshDomain;
   category: GeneratedRefreshDomainCategory;
@@ -2336,6 +2347,10 @@ export interface GeneratedRefreshDomainPolicy {
     registrationOrder: number;
     scheduled: boolean;
   };
+  scope: {
+    selectors: ReadonlyArray<GeneratedRefreshScopeSelector>;
+    query: GeneratedRefreshScopeQuery;
+  };
 }
 
 export const REFRESH_DOMAIN_POLICIES = [
@@ -2354,6 +2369,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 0,
       scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'none' },
   },
   {
     domain: 'namespace-metrics',
@@ -2370,6 +2386,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 1,
       scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'none' },
   },
   {
     domain: 'cluster-overview',
@@ -2386,6 +2403,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 3,
       scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'none' },
   },
   {
     domain: 'cluster-identities',
@@ -2402,6 +2420,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 30,
       scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'cluster-attention',
@@ -2418,6 +2437,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 4,
       scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'catalog',
@@ -2434,6 +2454,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 13,
       scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'catalog' },
   },
   {
     domain: 'catalog-diff',
@@ -2450,6 +2471,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 14,
       scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'catalog' },
   },
   {
     domain: 'nodes',
@@ -2466,6 +2488,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 16,
       scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'cluster-config',
@@ -2482,6 +2505,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 19,
       scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'cluster-crds',
@@ -2498,6 +2522,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 20,
       scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'cluster-events',
@@ -2514,6 +2539,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 15,
       scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'cluster-rbac',
@@ -2530,6 +2556,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 17,
       scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'cluster-storage',
@@ -2546,6 +2573,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 18,
       scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'namespace-workloads',
@@ -2562,6 +2590,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 22,
       scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-autoscaling',
@@ -2578,6 +2607,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 27,
       scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-config',
@@ -2594,6 +2624,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 23,
       scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-events',
@@ -2610,6 +2641,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 21,
       scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-helm',
@@ -2626,6 +2658,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 29,
       scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-network',
@@ -2642,6 +2675,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 24,
       scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-quotas',
@@ -2658,6 +2692,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 28,
       scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-rbac',
@@ -2674,6 +2709,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 25,
       scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-storage',
@@ -2690,6 +2726,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 26,
       scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'pods',
@@ -2706,6 +2743,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 12,
       scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces', 'node', 'workload'], query: 'typed-table' },
   },
   {
     domain: 'object-details',
@@ -2722,6 +2760,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 6,
       scheduled: false,
     },
+    scope: { selectors: ['object'], query: 'none' },
   },
   {
     domain: 'object-yaml',
@@ -2738,6 +2777,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 8,
       scheduled: true,
     },
+    scope: { selectors: ['object'], query: 'none' },
   },
   {
     domain: 'object-helm-manifest',
@@ -2754,6 +2794,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 9,
       scheduled: true,
     },
+    scope: { selectors: ['helm-release'], query: 'none' },
   },
   {
     domain: 'object-helm-values',
@@ -2770,6 +2811,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 10,
       scheduled: true,
     },
+    scope: { selectors: ['helm-release'], query: 'none' },
   },
   {
     domain: 'object-events',
@@ -2786,6 +2828,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 2,
       scheduled: true,
     },
+    scope: { selectors: ['object'], query: 'none' },
   },
   {
     domain: 'object-map',
@@ -2802,6 +2845,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 7,
       scheduled: true,
     },
+    scope: { selectors: ['object', 'namespace'], query: 'object-map' },
   },
   {
     domain: 'object-maintenance',
@@ -2818,6 +2862,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 5,
       scheduled: true,
     },
+    scope: { selectors: ['cluster', 'node'], query: 'none' },
   },
   {
     domain: 'container-logs',
@@ -2834,6 +2879,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       registrationOrder: 11,
       scheduled: false,
     },
+    scope: { selectors: ['object'], query: 'none' },
   },
 ] as const satisfies ReadonlyArray<GeneratedRefreshDomainPolicy>;
 

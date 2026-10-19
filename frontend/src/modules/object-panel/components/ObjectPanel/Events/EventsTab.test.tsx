@@ -49,31 +49,12 @@ vi.mock('@core/backend-api', () => ({
 }));
 
 vi.mock('@/core/refresh/clusterScope', () => ({
-  buildClusterScope: (_clusterId: string | undefined, scope: string) => `scoped:${scope}`,
   // The broker-read diagnostics store parses the request scope to attribute a
-  // read to its cluster, so this module's mock must carry that export too.
+  // read to its cluster, so this module's mock must carry that export.
   parseClusterScope: (value?: string | null) => ({
     clusterId: '',
     scope: (value ?? '').trim(),
-    isMultiCluster: false,
   }),
-  // Minimal stub matching the real signature. Tests that care about the
-  // GVK form assert on the scope string they get back; the legacy
-  // kind-only tests are agnostic.
-  buildObjectScope: (args: {
-    namespace: string;
-    group?: string | null;
-    version?: string | null;
-    kind: string;
-    name: string;
-  }) => {
-    const version = (args.version ?? '').trim();
-    if (!version) {
-      return `${args.namespace}:${args.kind}:${args.name}`;
-    }
-    const group = (args.group ?? '').trim();
-    return `${args.namespace}:${group}/${version}:${args.kind}:${args.name}`;
-  },
 }));
 
 const hoistedSnapshot = vi.hoisted(() => ({

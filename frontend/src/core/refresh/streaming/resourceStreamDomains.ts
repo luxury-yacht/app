@@ -9,17 +9,14 @@ import {
   type ResourceStreamDomain,
   refreshDomainContract,
 } from '../domainRegistry';
+import { domainScopeSelectors } from '../scopeSelector';
 import type { RefreshDomain } from '../types';
 
 export type ResourceDomain = ResourceStreamDomain;
 export type DoorbellDomain = (typeof doorbellDomainDescriptors)[number]['domain'];
 
-export type ResourceStreamScopeKind = 'pod' | 'namespace' | 'cluster' | 'object';
-
 export type ResourceStreamDomainDescriptor = {
   domain: RefreshDomain;
-  scopeKind: ResourceStreamScopeKind;
-  isClusterScoped: boolean;
   // The doorbell AUGMENTS polling instead of replacing it: a healthy stream
   // must not suppress this domain's polls, because the doorbell's signal
   // source is not guaranteed to ever fire (e.g. metric doorbells ring only
@@ -29,124 +26,40 @@ export type ResourceStreamDomainDescriptor = {
 
 export type ResourceStreamSourceClock = RefreshSourceClock;
 
-const normalizeNamespaceToken = (value: string): string => {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return '';
-  }
-  const lowered = trimmed.toLowerCase();
-  if (lowered === '*' || lowered === 'all') {
-    return 'all';
-  }
-  return trimmed;
-};
-
-const normalizeNamespaceScope = (scope: string, label: string): string => {
-  const value = scope.trim();
-  if (!value) {
-    throw new Error(`${label} scope is required`);
-  }
-  if (value.startsWith('namespace:')) {
-    const trimmed = value
-      .replace(/^namespace:/, '')
-      .replace(/^:/, '')
-      .trim();
-    const token = normalizeNamespaceToken(trimmed);
-    if (!token) {
-      throw new Error(`${label} scope is required`);
-    }
-    return `namespace:${token}`;
-  }
-  const token = normalizeNamespaceToken(value);
-  if (!token) {
-    throw new Error(`${label} scope is required`);
-  }
-  return `namespace:${token}`;
-};
-
-const normalizePodScope = (scope: string): string => {
-  const trimmed = scope.trim();
-  if (!trimmed) {
-    throw new Error('pods scope is required');
-  }
-  if (trimmed.startsWith('namespace:')) {
-    return normalizeNamespaceScope(trimmed, 'pods');
-  }
-  if (trimmed.startsWith('node:')) {
-    const value = trimmed
-      .replace(/^node:/, '')
-      .replace(/^:/, '')
-      .trim();
-    if (!value) {
-      throw new Error('pods node scope is required');
-    }
-    return `node:${value}`;
-  }
-  if (trimmed.startsWith('workload:')) {
-    const value = trimmed
-      .replace(/^workload:/, '')
-      .replace(/^:/, '')
-      .trim();
-    const parts = value.split(':').map((part) => part.trim());
-    if (parts.length !== 5) {
-      throw new Error('pods workload scope requires namespace:group:version:kind:name');
-    }
-    const [namespace, group, version, kind, name] = parts;
-    if (!namespace || !group || !version || !kind || !name) {
-      throw new Error('pods workload scope requires namespace:group:version:kind:name');
-    }
-    return `workload:${namespace}:${group}:${version}:${kind}:${name}`;
-  }
-  throw new Error(`unsupported pods scope ${scope}`);
-};
-
 export const RESOURCE_STREAM_DOMAINS = Object.keys(
   refreshDomainContract.resourceStream.domains
 ) as ResourceDomain[];
 
-export const resourceStreamDomainDescriptors = RESOURCE_STREAM_DOMAINS.map((domain) => {
-  const { scopeKind } = refreshDomainContract.resourceStream.domains[domain];
-  return { domain, scopeKind, isClusterScoped: scopeKind === 'cluster' };
-});
+export const resourceStreamDomainDescriptors = RESOURCE_STREAM_DOMAINS.map((domain) => ({
+  domain,
+}));
 
 const doorbellDomainDescriptors = [
   ...resourceStreamDomainDescriptors,
   {
     domain: 'catalog',
-    scopeKind: 'cluster',
-    isClusterScoped: true,
   },
   {
     domain: 'cluster-events',
-    scopeKind: 'cluster',
-    isClusterScoped: true,
   },
   {
     domain: 'namespace-events',
-    scopeKind: 'namespace',
-    isClusterScoped: false,
   },
   // Signal-only doorbell for the namespaces snapshot domain: namespace object
   // changes and workload-presence flips replace the sidebar's poll.
   {
     domain: 'namespaces',
-    scopeKind: 'cluster',
-    isClusterScoped: true,
   },
   // Signal-only metric doorbell for the separate namespace utilization
   // payload. It never advances the namespaces object clock.
   {
     domain: 'namespace-metrics',
-    scopeKind: 'cluster',
-    isClusterScoped: true,
   },
   // Signal-only per-object doorbell for the object-events snapshot domain: an
   // event for a panel's object replaces the Events tab's poll. The scope is
   // the snapshot domain's object-scope tail, passed through verbatim.
   {
     domain: 'object-events',
-    scopeKind: 'object',
-    isClusterScoped: false,
   },
   // Signal-only metric doorbell for the cluster-overview snapshot domain: a
   // successful metrics collection refetches the overview so live usage
@@ -157,19 +70,13 @@ const doorbellDomainDescriptors = [
   // skip-while-stream-healthy gate.
   {
     domain: 'cluster-overview',
-    scopeKind: 'cluster',
-    isClusterScoped: true,
     pollingContinuesWhileStreaming: true,
   },
   {
     domain: 'cluster-attention',
-    scopeKind: 'cluster',
-    isClusterScoped: true,
   },
   {
     domain: 'cluster-identities',
-    scopeKind: 'cluster',
-    isClusterScoped: true,
   },
 ] satisfies ResourceStreamDomainDescriptor[];
 
@@ -214,18 +121,11 @@ export const domainSupportsSourceClock = (
   source: ResourceStreamSourceClock
 ): boolean => sourceClocksByDomain.get(domain)?.includes(source) ?? false;
 
-const getResourceStreamDomainDescriptor = (
-  domain: DoorbellDomain
-): ResourceStreamDomainDescriptor => {
-  const descriptor = doorbellDescriptorByDomain.get(domain);
-  if (!descriptor) {
-    throw new Error(`Missing resource stream descriptor for domain "${domain}".`);
-  }
-  return descriptor;
+// A domain whose only scope is the whole cluster; its stream scope is empty.
+export const isClusterScopedDomain = (domain: DoorbellDomain): boolean => {
+  const selectors = domainScopeSelectors(domain);
+  return selectors.length === 1 && selectors[0] === 'cluster';
 };
-
-export const isClusterScopedDomain = (domain: DoorbellDomain): boolean =>
-  getResourceStreamDomainDescriptor(domain).isClusterScoped;
 
 export const COMPLETE_RESYNC_STREAM_DOMAINS = new Set<ResourceDomain>(
   Object.entries(refreshDomainContract.domainInventory)
@@ -238,29 +138,3 @@ export const COMPLETE_RESYNC_STREAM_DOMAINS = new Set<ResourceDomain>(
 
 export const isCompleteResyncStreamDomain = (domain: DoorbellDomain): boolean =>
   COMPLETE_RESYNC_STREAM_DOMAINS.has(domain as ResourceDomain);
-
-export const normalizeResourceScope = (domain: DoorbellDomain, scope: string): string => {
-  const descriptor = getResourceStreamDomainDescriptor(domain);
-  switch (descriptor.scopeKind) {
-    case 'pod':
-      return normalizePodScope(scope);
-    case 'namespace':
-      return normalizeNamespaceScope(scope, domain);
-    case 'cluster':
-      if (!scope || scope.trim() === '' || scope.trim().toLowerCase() === 'cluster') {
-        return '';
-      }
-      throw new Error(`${domain} stream does not accept scope ${scope}`);
-    case 'object': {
-      // The object-scope tail (namespace:group/version:kind:name) is the wire
-      // format; the backend selector validates it via its single decoder.
-      const trimmed = scope.trim();
-      if (!trimmed) {
-        throw new Error(`${domain} scope is required`);
-      }
-      return trimmed;
-    }
-    default:
-      throw new Error(`unsupported resource stream domain ${domain}`);
-  }
-};

@@ -48,8 +48,8 @@ export interface DiagnosticsRow {
   scopeTooltip?: string;
   role: string;
   roleTooltip?: string;
-  // Structured scope entries for multi-line display (Active/Background clusters).
-  scopeEntries?: { label: 'Active' | 'Background'; clusterName: string }[];
+  // The scope's cluster, shown with an "(active)" marker for the foreground cluster.
+  scopeEntry?: { label: 'Active' | 'Background'; clusterName: string };
   mode: string;
   modeTooltip?: string;
   healthStatus: string;
@@ -134,7 +134,7 @@ export interface ClusterDataScopeRow extends ClusterDataTreeNode {
   domainLabel: string;
   scope: string;
   scopeTooltip?: string;
-  scopeEntries?: { label: 'Active' | 'Background'; clusterName: string }[];
+  scopeEntry?: { label: 'Active' | 'Background'; clusterName: string };
   health: ClusterDataHealth;
   feed: string;
   feedTooltip: string;

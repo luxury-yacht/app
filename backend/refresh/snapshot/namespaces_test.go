@@ -250,18 +250,17 @@ func TestNamespaceBuilderScopePayloadIdentityAndCatalogProjectionContract(t *tes
 		ClusterName: "prod",
 	})
 
-	snap, err := builder.Build(ctx, "cluster-a|alpha")
+	snap, err := builder.Build(ctx, "cluster-a|")
 	require.NoError(t, err)
 	require.Equal(t, "namespaces", snap.Domain)
-	require.Equal(t, "cluster-a|alpha", snap.Scope)
-	require.Equal(t, uint64(42), snap.Version)
-	require.Equal(t, 1, snap.Stats.ItemCount)
+	require.Equal(t, "cluster-a|", snap.Scope)
+	require.Equal(t, 2, snap.Stats.ItemCount)
 
 	payload, ok := snap.Payload.(NamespaceSnapshot)
 	require.True(t, ok)
 	require.Equal(t, "cluster-a", payload.ClusterID)
 	require.Equal(t, "prod", payload.ClusterName)
-	require.Len(t, payload.Namespaces, 1)
+	require.Len(t, payload.Namespaces, 2)
 
 	summary := payload.Namespaces[0]
 	require.Equal(t, "cluster-a", summary.Ref.ClusterID)
@@ -673,21 +672,6 @@ func TestNamespaceBuilderScopedReportsPresenceOnceIngestTracksWorkloads(t *testi
 	require.False(t, byName["prod"].WorkloadsUnknown)
 	require.False(t, byName["dev"].HasWorkloads)
 	require.False(t, byName["dev"].WorkloadsUnknown, "tracked ingest makes absence authoritative")
-}
-
-func TestNamespaceBuilderScopedViewScopeFiltersToConfiguredNames(t *testing.T) {
-	builder := &NamespaceBuilder{scope: []string{"prod", "dev"}}
-
-	snap, err := builder.Build(context.Background(), "cluster-a|prod")
-	require.NoError(t, err)
-	payload := snap.Payload.(NamespaceSnapshot)
-	require.Len(t, payload.Namespaces, 1)
-	require.Equal(t, "prod", payload.Namespaces[0].Ref.Name)
-
-	snap, err = builder.Build(context.Background(), "cluster-a|not-configured")
-	require.NoError(t, err)
-	payload = snap.Payload.(NamespaceSnapshot)
-	require.Empty(t, payload.Namespaces)
 }
 
 func TestRegisterNamespaceDomainScopedDoesNotTouchNamespaceInformer(t *testing.T) {

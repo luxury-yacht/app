@@ -1,7 +1,6 @@
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { useSidebarState } from '@core/contexts/SidebarStateContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
-import { buildClusterScope } from '@core/refresh/clusterScope';
 import NamespaceSummaryTable, {
   type NamespaceTableRow,
   projectNamespaceSummary,
@@ -21,6 +20,7 @@ import React, { useCallback, useMemo } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { localFailure } from '@/core/refresh/refreshFailure';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type {
   NamespaceMetricsSnapshotPayload,
   NamespaceSnapshotPayload,
@@ -76,13 +76,12 @@ const GlobalViewNamespaces: React.FC = () => {
           if (!isNamespaceRefreshAvailable(getClusterState(target.clusterId))) {
             return false;
           }
-          const data = namespaceStatesByScope[buildClusterScope(target.clusterId, '')]?.data as
-            | NamespaceSnapshotPayload
-            | null
-            | undefined;
+          const data = namespaceStatesByScope[
+            buildClusterRefreshScope('namespaces', target.clusterId)
+          ]?.data as NamespaceSnapshotPayload | null | undefined;
           return data?.clusterId === target.clusterId;
         })
-        .map((target) => buildClusterScope(target.clusterId, '')),
+        .map((target) => buildClusterRefreshScope('namespace-metrics', target.clusterId)),
     [getClusterState, namespaceStatesByScope, targets]
   );
   useStreamSignalRefetch('namespace-metrics', metricScopes);
@@ -90,7 +89,8 @@ const GlobalViewNamespaces: React.FC = () => {
   const resolvedTargets = useMemo(
     () =>
       targets.flatMap((target) => {
-        const state = namespaceStatesByScope[buildClusterScope(target.clusterId, '')];
+        const state =
+          namespaceStatesByScope[buildClusterRefreshScope('namespaces', target.clusterId)];
         const data = state?.data as NamespaceSnapshotPayload | null | undefined;
         if (!data || data.clusterId !== target.clusterId) {
           return [];
@@ -103,8 +103,9 @@ const GlobalViewNamespaces: React.FC = () => {
   const rows = useMemo<NamespaceTableRow[]>(
     () =>
       resolvedTargets.flatMap(({ target, data }) => {
-        const metrics = namespaceMetricStatesByScope[buildClusterScope(target.clusterId, '')]
-          ?.data as NamespaceMetricsSnapshotPayload | null | undefined;
+        const metrics = namespaceMetricStatesByScope[
+          buildClusterRefreshScope('namespace-metrics', target.clusterId)
+        ]?.data as NamespaceMetricsSnapshotPayload | null | undefined;
         return joinNamespaceMetrics(data.namespaces ?? [], metrics?.namespaces)
           .filter((namespace) => namespace.ref.clusterId === target.clusterId)
           .map((namespace) =>
@@ -212,7 +213,7 @@ const GlobalViewNamespaces: React.FC = () => {
     if (!isNamespaceRefreshAvailable(getClusterState(target.clusterId))) {
       return false;
     }
-    const state = namespaceStatesByScope[buildClusterScope(target.clusterId, '')];
+    const state = namespaceStatesByScope[buildClusterRefreshScope('namespaces', target.clusterId)];
     return (
       !state?.data &&
       (state?.status === undefined ||

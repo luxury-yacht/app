@@ -61,12 +61,11 @@ func requireMatchingContainerLogsScopeCluster(clusterID, scope string) error {
 	if strings.TrimSpace(scope) == "" {
 		return errorstatus.BadRequest(fmt.Errorf("container logs scope is required"))
 	}
-	clusterIDs, _ := refresh.SplitClusterScopeList(scope)
-	if len(clusterIDs) != 1 {
-		return errorstatus.BadRequest(fmt.Errorf("container logs scope requires a single cluster scope"))
+	scopeClusterID, _ := refresh.SplitClusterScope(scope)
+	if scopeClusterID == "" {
+		return errorstatus.BadRequest(fmt.Errorf("container logs scope requires a cluster scope"))
 	}
 	requestedClusterID := strings.TrimSpace(clusterID)
-	scopeClusterID := strings.TrimSpace(clusterIDs[0])
 	if scopeClusterID != requestedClusterID {
 		return errorstatus.BadRequest(fmt.Errorf("container logs scope cluster %q does not match requested cluster %q", scopeClusterID, requestedClusterID))
 	}

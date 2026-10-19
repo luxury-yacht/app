@@ -26,6 +26,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
@@ -880,10 +881,10 @@ func replicaSetDeploymentOwnerName(rs *appsv1.ReplicaSet) string {
 func scopesForPod(summary snapshot.PodSummary) []string {
 	scopes := make([]string, 0, 5)
 	if summary.Ref.Namespace != "" {
-		scopes = append(scopes, fmt.Sprintf("namespace:%s", summary.Ref.Namespace), namespaceAllScope)
+		scopes = append(scopes, scopesForNamespace(summary.Ref.Namespace)...)
 	}
 	if summary.Node != "" {
-		scopes = append(scopes, fmt.Sprintf("node:%s", summary.Node))
+		scopes = append(scopes, refresh.NodeSelector(summary.Node).String())
 	}
 	if summary.OwnerKind != "" && summary.OwnerKind != "None" && summary.OwnerName != "" && summary.OwnerName != "None" {
 		if scope := workloadScopeForOwner(summary.Ref.Namespace, summary.OwnerAPIVersion, summary.OwnerKind, summary.OwnerName); scope != "" {
@@ -910,19 +911,22 @@ func workloadScopeForOwner(namespace, apiVersion, kind, name string) string {
 	if err != nil || gv.Version == "" {
 		return ""
 	}
-	return fmt.Sprintf("workload:%s:%s:%s:%s:%s", namespace, gv.Group, gv.Version, kind, name)
+	return refresh.WorkloadSelector(refresh.ObjectScopeIdentity{Namespace: namespace, GVK: gv.WithKind(kind), Name: name}).String()
 }
 
-// Cluster-scoped domains always use the empty scope key.
+// Cluster-scoped domains always use the cluster selector's key.
 func scopesForCluster() []string {
-	return []string{""}
+	return []string{refresh.ClusterSelector().String()}
 }
 
+// scopesForNamespace rings the object's namespace and All Namespaces; an object
+// without a namespace rings All Namespaces only.
 func scopesForNamespace(namespace string) []string {
+	all := refresh.AllNamespacesSelector().String()
 	if strings.TrimSpace(namespace) == "" {
-		return []string{namespaceAllScope}
+		return []string{all}
 	}
-	return []string{fmt.Sprintf("namespace:%s", namespace), namespaceAllScope}
+	return []string{refresh.NamespaceSelector(namespace).String(), all}
 }
 
 func uniqueScopes(scopes []string) []string {

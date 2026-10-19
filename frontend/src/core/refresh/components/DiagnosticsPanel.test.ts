@@ -14,8 +14,8 @@ import type {
   PermissionQueryDiagnostics,
   PermissionStatus,
 } from '@/core/capabilities/permissionTypes';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { localFailure } from '@/core/refresh/refreshFailure';
+import { testScope } from '@/test-utils/refreshScope';
 import { requireValue } from '@/test-utils/requireValue';
 import type { ViewType } from '@/types/navigation/views';
 import type { KubernetesAPIClientDiagnostics } from '../client';
@@ -439,7 +439,7 @@ afterEach(() => {
 describe('resolveDomainNamespace', () => {
   test('returns namespace suffix for namespace domains', async () => {
     const module = await import('./DiagnosticsPanel');
-    expect(module.resolveDomainNamespace('namespace-workloads', 'alpha|cluster:default')).toBe(
+    expect(module.resolveDomainNamespace('namespace-workloads', 'alpha|namespace:default')).toBe(
       'default'
     );
   });
@@ -690,8 +690,8 @@ describe('DiagnosticsPanel component', () => {
     seedBaseDomainStates();
     mockKubeconfigState.selectedClusterId = 'cluster-a';
     const now = Date.now();
-    const namespaceScope = buildClusterScope('cluster-a', 'namespace:team-a');
-    const clusterScope = buildClusterScope('cluster-a', '');
+    const namespaceScope = testScope('cluster-a', 'namespace:team-a');
+    const clusterScope = testScope('cluster-a', '');
 
     // The metric refresh domains were deleted: the base payloads carry the
     // poller freshness block alongside their rows.
@@ -799,7 +799,7 @@ describe('DiagnosticsPanel component', () => {
 
     scopedEntriesMap.pods = [
       [
-        'namespace:team-a',
+        'cluster-a|namespace:team-a',
         {
           ...createReadyState({
             pods: [{ metadata: { name: 'pod-a' } }],
@@ -967,8 +967,8 @@ describe('DiagnosticsPanel component', () => {
   });
 
   test('renders active and background namespace and overview scopes as separate rows', async () => {
-    const clusterAScope = buildClusterScope('cluster-a', '');
-    const clusterBScope = buildClusterScope('cluster-b', '');
+    const clusterAScope = testScope('cluster-a', '');
+    const clusterBScope = testScope('cluster-b', '');
     mockKubeconfigState.selectedClusterId = 'cluster-b';
 
     setScopedEntries('namespaces', [
@@ -1075,7 +1075,6 @@ describe('DiagnosticsPanel component', () => {
         { scope: 'cluster-b (active)', count: '6' },
       ])
     );
-    expect(rendered.container.textContent).not.toContain('clusters=');
 
     await rendered.unmount();
   });
@@ -1083,8 +1082,8 @@ describe('DiagnosticsPanel component', () => {
   test('disambiguates durable query-backed scopes and hides transient resource table query scopes', async () => {
     mockKubeconfigState.selectedClusterId = 'cluster-a';
 
-    const catalogScope = buildClusterScope('cluster-a', 'limit=200&namespace=default');
-    const catalogMetadataScope = buildClusterScope('cluster-a', 'limit=1&namespace=default');
+    const catalogScope = testScope('cluster-a', 'limit=200&namespace=default');
+    const catalogMetadataScope = testScope('cluster-a', 'limit=1&namespace=default');
     setScopedEntries('catalog', [
       [
         catalogScope,
@@ -1135,22 +1134,14 @@ describe('DiagnosticsPanel component', () => {
       })
     );
 
-    const nodesScope = buildClusterScope('cluster-a', '');
-    const nodesAliasScope = buildClusterScope('cluster-a', 'cluster');
-    const nodesQueryScope = buildClusterScope('cluster-a', '?limit=50&sort=name');
+    const nodesScope = testScope('cluster-a', '');
+    const nodesQueryScope = testScope('cluster-a', '?limit=50&sort=name');
     setScopedEntries('nodes', [
       [
         nodesScope,
         {
           ...createReadyState({ nodes: [{ name: 'node-a', clusterId: 'cluster-a' }] }),
           scope: nodesScope,
-        },
-      ],
-      [
-        nodesAliasScope,
-        {
-          ...createReadyState({ nodes: [{ name: 'node-a', clusterId: 'cluster-a' }] }),
-          scope: nodesAliasScope,
         },
       ],
       [
@@ -1235,7 +1226,7 @@ describe('DiagnosticsPanel component', () => {
 
   test('surfaces catalog watch availability warnings alongside the retained object count', async () => {
     mockKubeconfigState.selectedClusterId = 'cluster-a';
-    const scope = buildClusterScope('cluster-a', '?limit=200');
+    const scope = testScope('cluster-a', '?limit=200');
     const warning = 'widgets.example.com (namespace list-only)';
     setScopedEntries('catalog', [
       [
@@ -1526,7 +1517,7 @@ describe('DiagnosticsPanel component', () => {
   });
 
   test('renders the recorded informer-sync-gate wait in the Sync Wait column', async () => {
-    const clusterScope = buildClusterScope('cluster-a', '');
+    const clusterScope = testScope('cluster-a', '');
     mockKubeconfigState.selectedClusterId = 'cluster-a';
 
     setScopedEntries('namespaces', [
@@ -1622,7 +1613,7 @@ describe('DiagnosticsPanel component', () => {
     const now = Date.now();
     mockKubeconfigState.selectedClusterId = 'cluster-a';
 
-    const scope = buildClusterScope('cluster-a', '');
+    const scope = testScope('cluster-a', '');
     const configState = {
       ...createReadyState({
         resources: [{ kind: 'ConfigMap', name: 'app-config', namespace: 'default', data: 2 }],
@@ -1720,8 +1711,8 @@ describe('DiagnosticsPanel component', () => {
 
   test('keeps container log socket health attached to its owning cluster', async () => {
     mockKubeconfigState.selectedClusterId = 'cluster-a';
-    const scopeA = buildClusterScope('cluster-a', 'default:apps/v1:deployment:web');
-    const scopeB = buildClusterScope('cluster-b', 'default:apps/v1:deployment:api');
+    const scopeA = testScope('cluster-a', 'default:apps/v1:deployment:web');
+    const scopeB = testScope('cluster-b', 'default:apps/v1:deployment:api');
     setScopedEntries('container-logs', [
       [scopeA, { ...createReadyState({ entries: [] }), scope: scopeA }],
       [scopeB, { ...createReadyState({ entries: [] }), scope: scopeB }],

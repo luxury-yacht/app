@@ -49,6 +49,9 @@ func TestRenderEmitsBackendOwnedRefreshContract(t *testing.T) {
 	require.Contains(t, contract, "export const REFRESH_DOMAIN_POLICIES = [")
 	require.Contains(t, contract, "registrationOrder: 0,")
 	require.Contains(t, contract, "scheduled: false,")
+	require.Contains(t, contract, "export type GeneratedRefreshScopeSelector =")
+	require.Contains(t, contract, "export type GeneratedRefreshScopeQuery =")
+	require.Contains(t, contract, "    scope: { selectors: ['namespace', 'all-namespaces', 'node', 'workload'], query: 'typed-table' },\n")
 	require.Contains(t, contract, "export interface BackendDomainPayloadMap")
 	require.Contains(t, contract, "'object-maintenance': NodeMaintenanceSnapshotPayload;")
 }
@@ -65,13 +68,18 @@ func TestRenderEmitsTypedGoDomainPolicy(t *testing.T) {
 	require.Contains(t, contract, "func LookupPolicy(domainName string) (DomainPolicy, bool)")
 	require.Contains(t, contract, "func BypassesSnapshotCache(domainName string) bool")
 	require.Contains(t, contract, "func BypassesSingleflight(domainName string) bool")
+	require.Contains(t, contract, `Scope: refresh.ScopeGrammar{Selectors: []refresh.ScopeSelectorKind{refresh.ScopeSelectorNamespace, refresh.ScopeSelectorAllNamespaces, refresh.ScopeSelectorNode, refresh.ScopeSelectorWorkload}, Query: refresh.ScopeQueryTypedTable}`)
 }
 
 func TestAuthoredPolicySchemaRejectsUnknownAndDuplicateValues(t *testing.T) {
 	valid := `{
   "version": 2,
   "domainInventory": {
-    "demo": {"refreshPayloadType": "DemoPayload", "cachePolicy": "snapshot-cache"}
+    "demo": {
+      "refreshPayloadType": "DemoPayload",
+      "cachePolicy": "snapshot-cache",
+      "scopeContract": {"selectors": ["cluster"], "query": "none", "valid": [""], "invalid": ["namespace:default"]}
+    }
   },
   "resourceStream": {},
   "domains": [{
@@ -189,6 +197,36 @@ func TestAuthoredPolicySchemaRejectsUnknownAndDuplicateValues(t *testing.T) {
 			contract:    strings.Replace(valid, `"domain": "demo",`, `"domain": "demo", "mystery": true,`, 1),
 			errorPhrase: `unknown field "mystery"`,
 		},
+		{
+			name:        "missing scope selectors",
+			contract:    strings.Replace(valid, `"selectors": ["cluster"]`, `"selectors": []`, 1),
+			errorPhrase: `scopeContract.selectors is empty`,
+		},
+		{
+			name:        "unknown scope selector",
+			contract:    strings.Replace(valid, `"selectors": ["cluster"]`, `"selectors": ["mystery-selector"]`, 1),
+			errorPhrase: `unsupported scopeContract.selectors "mystery-selector"`,
+		},
+		{
+			name:        "duplicate scope selector",
+			contract:    strings.Replace(valid, `"selectors": ["cluster"]`, `"selectors": ["cluster", "cluster"]`, 1),
+			errorPhrase: `declares scope selector "cluster" more than once`,
+		},
+		{
+			name:        "unknown scope query",
+			contract:    strings.Replace(valid, `"query": "none"`, `"query": "mystery-query"`, 1),
+			errorPhrase: `unsupported scopeContract.query "mystery-query"`,
+		},
+		{
+			name:        "catalog query on a non-cluster selector",
+			contract:    strings.Replace(strings.Replace(valid, `"query": "none"`, `"query": "catalog"`, 1), `"selectors": ["cluster"]`, `"selectors": ["namespace"]`, 1),
+			errorPhrase: `catalog scope query requires exactly the cluster selector`,
+		},
+		{
+			name:        "missing valid scope examples",
+			contract:    strings.Replace(valid, `"valid": [""]`, `"valid": []`, 1),
+			errorPhrase: `scopeContract.valid is empty`,
+		},
 	}
 
 	for _, test := range tests {
@@ -202,7 +240,7 @@ func TestAuthoredPolicySchemaRejectsUnknownAndDuplicateValues(t *testing.T) {
 func TestAuthoredPolicySchemaRejectsDuplicateDomainAndFrontendOrder(t *testing.T) {
 	duplicateDomain := `{
   "version": 2,
-  "domainInventory": {"demo": {"refreshPayloadType": "DemoPayload", "cachePolicy": "snapshot-cache"}},
+  "domainInventory": {"demo": {"refreshPayloadType": "DemoPayload", "cachePolicy": "snapshot-cache", "scopeContract": {"selectors": ["cluster"], "query": "none", "valid": [""]}}},
   "resourceStream": {},
   "domains": [
     {"domain":"demo","category":"system","backend":{"registration":"direct","permission":"exempt","resourceStream":false},"frontend":{"refresherName":"demo","orchestrator":"snapshot","diagnosticsStream":null,"timing":{"interval":1,"cooldown":1,"timeout":1},"registrationOrder":0}},
@@ -213,7 +251,7 @@ func TestAuthoredPolicySchemaRejectsDuplicateDomainAndFrontendOrder(t *testing.T
 	require.ErrorContains(t, err, `registers "demo" more than once`)
 
 	duplicateOrder := strings.ReplaceAll(duplicateDomain, `"demo"`, `"demo-a"`)
-	duplicateOrder = strings.Replace(duplicateOrder, `"demo-a":`, `"demo-a":{"refreshPayloadType":"DemoPayload","cachePolicy":"snapshot-cache"},"demo-b":`, 1)
+	duplicateOrder = strings.Replace(duplicateOrder, `"demo-a":`, `"demo-a":{"refreshPayloadType":"DemoPayload","cachePolicy":"snapshot-cache","scopeContract":{"selectors":["cluster"],"query":"none","valid":[""]}},"demo-b":`, 1)
 	duplicateOrder = strings.Replace(duplicateOrder, `"domain":"demo-a"`, `"domain":"demo-b"`, 1)
 	_, err = parseContractDomains([]byte(duplicateOrder))
 	require.ErrorContains(t, err, `share frontend.registrationOrder 0`)

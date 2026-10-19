@@ -84,24 +84,6 @@ func TestAggregateManualQueueEnqueueRoutesSingleCluster(t *testing.T) {
 	require.Equal(t, "cluster-a|namespace:default", queueA.scopes[0])
 }
 
-func TestAggregateManualQueueRejectsMultiClusterScope(t *testing.T) {
-	queueA := newStubManualQueue()
-	queueB := newStubManualQueue()
-	subsystems := map[string]*system.Subsystem{
-		"cluster-a": {ManualQueue: queueA},
-		"cluster-b": {ManualQueue: queueB},
-	}
-	aggregate := newAggregateManualQueue(subsystems)
-
-	job, err := aggregate.Enqueue(context.Background(), "namespaces", "clusters=cluster-a,cluster-b|", "")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "single cluster scope")
-	require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason)
-	require.Nil(t, job)
-	require.Empty(t, queueA.scopes)
-	require.Empty(t, queueB.scopes)
-}
-
 func TestAggregateManualQueueStatusReflectsChildFailure(t *testing.T) {
 	queueA := newStubManualQueue()
 	subsystems := map[string]*system.Subsystem{

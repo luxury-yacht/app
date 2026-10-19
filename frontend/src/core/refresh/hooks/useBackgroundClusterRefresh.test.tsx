@@ -53,7 +53,7 @@ describe('background refresh hook ownership', () => {
     });
     expect(mocks.fetch.mock.calls).toEqual([
       ['namespaces', 'cluster-b'],
-      ['namespace-network', 'cluster-b', 'namespace:current'],
+      ['namespace-network', 'cluster-b', { kind: 'namespace', namespace: 'current' }],
     ]);
     mocks.selectedClusterId = 'cluster-b';
     act(() => root.render(<Harness namespace="team-a" />));
@@ -63,7 +63,7 @@ describe('background refresh hook ownership', () => {
     });
     expect(mocks.fetch.mock.calls).toEqual([
       ['namespaces', 'cluster-a'],
-      ['namespace-network', 'cluster-a', 'namespace:team-a'],
+      ['namespace-network', 'cluster-a', { kind: 'namespace', namespace: 'team-a' }],
     ]);
     mocks.enabled = false;
     act(() => root.render(<Harness namespace="team-a" />));

@@ -3,66 +3,24 @@ import { describe, expect, it } from 'vitest';
 import { normalizeRefreshDomainScope } from './scopeNormalization';
 
 describe('normalizeRefreshDomainScope', () => {
-  it.each(['nodes', 'object-yaml'] as const)(
-    'keeps explicit cluster identity and query scope for %s',
-    (domain) => {
-      expect(
-        normalizeRefreshDomainScope({
-          domain,
-          value: ' clusters=Cluster-A|namespace:team-a?limit=25 ',
-          selectedClusterId: 'cluster-a',
-        })
-      ).toBe('Cluster-A|namespace:team-a?limit=25');
-      expect(() =>
-        normalizeRefreshDomainScope({
-          domain,
-          value: 'clusters=Cluster-A,cluster-a|namespace:team-a',
-        })
-      ).toThrow('single cluster');
-    }
-  );
-
-  it.each(['nodes', 'object-yaml'] as const)(
-    'only derives an empty scope from selection when explicitly allowed for %s',
-    (domain) => {
-      expect(
-        normalizeRefreshDomainScope({ domain, value: ' ', selectedClusterId: 'Cluster-A' })
-      ).toBeUndefined();
-      expect(
-        normalizeRefreshDomainScope({
-          domain,
-          value: null,
-          selectedClusterId: 'Cluster-A',
-          allowEmpty: true,
-        })
-      ).toBe('Cluster-A|');
-      expect(normalizeRefreshDomainScope({ domain, allowEmpty: true })).toBeUndefined();
-    }
-  );
-
-  it('retains a literal cluster tail for domains without the resource-stream alias', () => {
-    expect(normalizeRefreshDomainScope({ domain: 'object-yaml', value: 'Cluster-A|cluster' })).toBe(
-      'Cluster-A|cluster'
-    );
+  it('returns a canonical scope for the domain unchanged apart from whitespace', () => {
+    expect(
+      normalizeRefreshDomainScope('namespace-config', ' cluster-a|namespace:team-a?limit=25 ')
+    ).toBe('cluster-a|namespace:team-a?limit=25');
+    expect(normalizeRefreshDomainScope('nodes', 'cluster-a|')).toBe('cluster-a|');
   });
 
-  it('canonicalizes cluster resource-stream aliases', () => {
-    expect(
-      normalizeRefreshDomainScope({
-        domain: 'nodes',
-        value: 'cluster-a|cluster',
-        selectedClusterId: 'cluster-b',
-      })
-    ).toBe('cluster-a|');
+  it('treats a missing scope as absent', () => {
+    expect(normalizeRefreshDomainScope('nodes', ' ')).toBeUndefined();
+    expect(normalizeRefreshDomainScope('nodes', null)).toBeUndefined();
   });
 
-  it('preserves resource-stream query scopes for snapshot-backed table queries', () => {
-    expect(
-      normalizeRefreshDomainScope({
-        domain: 'nodes',
-        value: 'cluster-a|?limit=50&sort=name',
-        selectedClusterId: 'cluster-b',
-      })
-    ).toBe('cluster-a|?limit=50&sort=name');
+  it.each([
+    ['unprefixed scope', 'namespace-config', 'namespace:team-a'],
+    ['retired cluster alias', 'nodes', 'cluster-a|cluster'],
+    ['retired namespace wildcard', 'pods', 'cluster-a|namespace:*'],
+    ['selector outside the domain grammar', 'namespace-config', 'cluster-a|node:worker-1'],
+  ] as const)('rejects a %s', (_label, domain, value) => {
+    expect(() => normalizeRefreshDomainScope(domain, value)).toThrow();
   });
 });

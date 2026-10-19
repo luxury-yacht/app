@@ -280,7 +280,7 @@ func TestPodBuilderWorkloadScope(t *testing.T) {
 	require.Equal(t, "apps/v1", payload.Rows[0].OwnerAPIVersion)
 }
 
-func TestParseWorkloadScopeRejectsMissingIdentitySegments(t *testing.T) {
+func TestPodScopeFilterRejectsIncompleteWorkloadIdentity(t *testing.T) {
 	for _, value := range []string{
 		":apps:v1:Deployment:orders",
 		"prod::v1:Deployment:orders",
@@ -289,8 +289,8 @@ func TestParseWorkloadScopeRejectsMissingIdentitySegments(t *testing.T) {
 		"prod:apps:v1:Deployment:",
 	} {
 		t.Run(value, func(t *testing.T) {
-			_, err := parseWorkloadScope(value)
-			require.ErrorContains(t, err, "invalid workload scope")
+			_, err := filterPodRowsByScope(nil, "workload:"+value)
+			require.Error(t, err)
 		})
 	}
 }

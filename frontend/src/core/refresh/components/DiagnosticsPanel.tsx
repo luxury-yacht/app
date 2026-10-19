@@ -19,7 +19,8 @@ import { useShortcut } from '@ui/shortcuts';
 import { useCapabilityDiagnostics, useUserPermissions } from '@/core/capabilities';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import { useBrokerReadDiagnostics } from '@/core/read-diagnostics';
-import { parseClusterScopeList, stripClusterScope } from '@/core/refresh/clusterScope';
+import { parseClusterScope } from '@/core/refresh/clusterScope';
+import { type ScopeSelector, tryParseRefreshScope } from '@/core/refresh/scopeSelector';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
 import type { NormalizedTelemetrySummary } from '../client';
@@ -49,7 +50,6 @@ import {
   buildOrchestratorSummary,
   buildPermissionRows,
   type CapabilityBatchRow,
-  CLUSTER_SCOPE,
   type DiagnosticsPanelProps,
   type DiagnosticsRow,
   DOMAIN_REFRESHER_MAP,
@@ -104,13 +104,10 @@ type StreamHealthSummary = {
   lastDeliveryAt?: number;
 };
 
-// diagnosticsRowClusterId resolves the single cluster owning a scope. A scope
-// naming several clusters has no single owner, so it groups at the app level
-// rather than being attributed to an arbitrary member.
-const diagnosticsRowClusterId = (scope?: string | null): string => {
-  const parsed = parseClusterScopeList(scope);
-  return parsed.isMultiCluster ? '' : (parsed.clusterIds[0] ?? '');
-};
+// diagnosticsRowClusterId resolves the cluster owning a scope; an unprefixed
+// scope groups at the app level.
+const diagnosticsRowClusterId = (scope?: string | null): string =>
+  parseClusterScope(scope).clusterId;
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
@@ -176,8 +173,7 @@ const formatScopeQuery = (query: string): string => {
 
 const formatScopeTail = (scope: string): string => {
   const trimmed = scope.trim();
-  const normalized = trimmed.toLowerCase();
-  if (!trimmed || normalized === CLUSTER_SCOPE || normalized === 'cluster') {
+  if (!trimmed) {
     return '';
   }
   const queryIndex = trimmed.indexOf('?');
@@ -196,66 +192,36 @@ const resolveScopeDetails = (
   scope: string | undefined,
   activeClusterId: string,
   getClusterMeta: (config: string) => { id: string; name: string }
-): { display: string; tooltip?: string; entries?: ScopeEntry[] } => {
+): { display: string; tooltip?: string; entry?: ScopeEntry } => {
   const trimmed = (scope ?? '').trim();
   if (!trimmed) {
     return { display: '-', tooltip: 'No active scope' };
   }
-  const { clusterIds, scope: scopeTail } = parseClusterScopeList(trimmed);
-  if (clusterIds.length === 0) {
+  const { clusterId, scope: scopeTail } = parseClusterScope(trimmed);
+  if (!clusterId) {
     return { display: trimmed, tooltip: trimmed };
   }
+  const clusterName = getClusterMeta(clusterId).name || clusterId;
+  const isActive = clusterId === activeClusterId;
+  const display = isActive ? `${clusterName} (active)` : clusterName;
   const tailDisplay = formatScopeTail(scopeTail);
-  // Build structured entries sorted with active cluster first.
-  const entries: ScopeEntry[] = clusterIds
-    .map((id) => {
-      const meta = getClusterMeta(id);
-      const name = meta.name || id;
-      const isActive = id === activeClusterId;
-      return {
-        label: (isActive ? 'Active' : 'Background') as ScopeEntry['label'],
-        clusterName: name,
-      };
-    })
-    .sort((a, b) => {
-      if (a.label === 'Active' && b.label !== 'Active') {
-        return -1;
-      }
-      if (b.label === 'Active' && a.label !== 'Active') {
-        return 1;
-      }
-      return a.clusterName.localeCompare(b.clusterName);
-    });
-  // Format as "cluster-A (active), cluster-B, cluster-C".
-  const display = entries
-    .map((e) => (e.label === 'Active' ? `${e.clusterName} (active)` : e.clusterName))
-    .join(', ');
   if (tailDisplay) {
     return { display: `${display} - ${tailDisplay}`, tooltip: trimmed };
   }
-  return { display, tooltip: trimmed, entries };
+  return {
+    display,
+    tooltip: trimmed,
+    entry: { label: isActive ? 'Active' : 'Background', clusterName },
+  };
 };
 
-const parseScopeQueryParams = (scopeTail: string): URLSearchParams => {
-  const trimmed = scopeTail.trim();
-  const queryIndex = trimmed.indexOf('?');
-  const query = queryIndex >= 0 ? trimmed.slice(queryIndex + 1) : trimmed;
-  return new URLSearchParams(query);
-};
-
-const scopeTailHasQuery = (scopeTail: string): boolean =>
-  scopeTail.includes('?') || scopeTail.includes('=') || scopeTail.includes('&');
+const scopeQuery = (domain: RefreshDomain, scope: string | undefined): string =>
+  (scope ? tryParseRefreshScope(domain, scope)?.query : undefined) ?? '';
 
 const isTransientResourceTableQueryScope = (
   domain: RefreshDomain,
   scope: string | undefined
-): boolean => {
-  if (!isResourceTableDomain(domain)) {
-    return false;
-  }
-  const { scope: scopeTail } = parseClusterScopeList((scope ?? '').trim());
-  return scopeTailHasQuery(scopeTail);
-};
+): boolean => isResourceTableDomain(domain) && scopeQuery(domain, scope) !== '';
 
 const FIXED_SCOPE_ROLES: Partial<Record<RefreshDomain, { label: string; tooltip: string }>> = {
   'catalog-diff': { label: 'Object Diff', tooltip: 'Object diff modal catalog query' },
@@ -271,8 +237,8 @@ const FIXED_SCOPE_ROLES: Partial<Record<RefreshDomain, { label: string; tooltip:
   'cluster-overview': { label: 'System', tooltip: 'System refresh scope' },
 };
 
-const resolveCatalogScopeRole = (scopeTail: string): { label: string; tooltip: string } => {
-  const params = parseScopeQueryParams(scopeTail);
+const resolveCatalogScopeRole = (query: string): { label: string; tooltip: string } => {
+  const params = new URLSearchParams(query);
   return params.get('limit') === '1'
     ? {
         label: 'Metadata',
@@ -281,18 +247,21 @@ const resolveCatalogScopeRole = (scopeTail: string): { label: string; tooltip: s
     : { label: 'Page Query', tooltip: 'Current Browse table page query' };
 };
 
-const resolveResourceStreamScopeRole = (scopeTail: string): { label: string; tooltip: string } => {
-  if (scopeTailHasQuery(scopeTail)) {
+const resolveResourceStreamScopeRole = (
+  domain: RefreshDomain,
+  scope: string
+): { label: string; tooltip: string } => {
+  const parsed = tryParseRefreshScope(domain, scope);
+  if (parsed?.query) {
     return {
       label: 'Table Query',
       tooltip: 'Query-backed GridTable snapshot for filters, sorting, or pagination',
     };
   }
-  const normalizedTail = scopeTail.trim().toLowerCase();
   return {
     label: 'Live Scope',
     tooltip:
-      !normalizedTail || normalizedTail === 'cluster'
+      parsed?.selector.kind === 'cluster'
         ? 'Base resource-stream scope retained for live data and metrics'
         : 'Resource-stream scope retained for live data and metrics',
   };
@@ -303,12 +272,11 @@ const resolveScopeRole = (
   scope: string | undefined
 ): { label: string; tooltip?: string } => {
   const trimmed = (scope ?? '').trim();
-  const { scope: scopeTail } = parseClusterScopeList(trimmed);
   if (domain === 'catalog') {
-    return resolveCatalogScopeRole(scopeTail);
+    return resolveCatalogScopeRole(scopeQuery(domain, trimmed));
   }
   if (DOMAIN_STREAM_MAP[domain] === 'resources') {
-    return resolveResourceStreamScopeRole(scopeTail);
+    return resolveResourceStreamScopeRole(domain, trimmed);
   }
   return FIXED_SCOPE_ROLES[domain] ?? { label: 'Snapshot', tooltip: 'Snapshot refresh scope' };
 };
@@ -386,12 +354,12 @@ const entryMatchesCluster = (
   clusterId: string
 ): boolean => {
   const [scopeKey, state] = entry;
-  return parseClusterScopeList(state.scope ?? scopeKey).clusterIds.includes(clusterId);
+  return parseClusterScope(state.scope ?? scopeKey).clusterId === clusterId;
 };
 
 const entryHasClusterScope = (entry: [string, DomainSnapshotState<unknown>]): boolean => {
   const [scopeKey, state] = entry;
-  return parseClusterScopeList(state.scope ?? scopeKey).clusterIds.length > 0;
+  return parseClusterScope(state.scope ?? scopeKey).clusterId !== '';
 };
 
 const pickPreferredScopeState = (
@@ -928,22 +896,19 @@ const stateLastUpdated = (state: DomainSnapshotState<unknown>): number | undefin
 const stateVersion = (state: DomainSnapshotState<unknown>): string =>
   state.version !== null && state.version !== undefined ? String(state.version) : '—';
 
+const POD_SELECTOR_LABELS: Partial<
+  Record<ScopeSelector['kind'], (selector: ScopeSelector) => string>
+> = {
+  'all-namespaces': () => 'All namespaces',
+  namespace: (selector) => (selector.kind === 'namespace' ? selector.namespace : ''),
+  node: (selector) => (selector.kind === 'node' ? selector.node : ''),
+  workload: (selector) => (selector.kind === 'workload' ? selector.object.name : ''),
+};
+
 const resolvePodLabel = (scope: string): string => {
-  const displayScope = stripClusterScope(scope);
-  if (displayScope.startsWith('namespace:')) {
-    const namespace = displayScope.slice('namespace:'.length) || 'all';
-    return namespace === 'all'
-      ? 'ObjPanel - Pods - All namespaces'
-      : `ObjPanel - Pods - ${namespace}`;
-  }
-  if (displayScope.startsWith('node:')) {
-    return `ObjPanel - Pods - ${displayScope.slice('node:'.length)}`;
-  }
-  if (displayScope.startsWith('workload:')) {
-    const parts = displayScope.split(':');
-    return `ObjPanel - Pods - ${parts[parts.length - 1]}`;
-  }
-  return 'ObjPanel - Pods';
+  const selector = tryParseRefreshScope('pods', scope)?.selector;
+  const target = selector ? POD_SELECTOR_LABELS[selector.kind]?.(selector) : undefined;
+  return target ? `ObjPanel - Pods - ${target}` : 'ObjPanel - Pods';
 };
 
 const buildPodTelemetryTooltip = (
@@ -1028,7 +993,7 @@ const buildPodDiagnosticsRow = (
     scopeTooltip: scopeDetails.tooltip,
     role: roleDetails.label,
     roleTooltip: roleDetails.tooltip,
-    scopeEntries: scopeDetails.entries,
+    scopeEntry: scopeDetails.entry,
     mode: modeDetails.label,
     modeTooltip: modeDetails.tooltip,
     healthStatus: healthDetails.label,
@@ -1039,14 +1004,17 @@ const buildPodDiagnosticsRow = (
 };
 
 const resolveObjectPanelScopeIdentity = (
+  domain: RefreshDomain,
   scope: string
 ): { namespaceLabel: string; name: string } => {
-  const parts = stripClusterScope(scope).split(':');
-  const namespace = parts[0] ?? '';
-  return {
-    namespaceLabel: namespace && namespace !== CLUSTER_SCOPE ? namespace : '-',
-    name: parts.slice(2).join(':'),
-  };
+  const selector = tryParseRefreshScope(domain, scope)?.selector;
+  const identity =
+    selector?.kind === 'object'
+      ? selector.object
+      : selector?.kind === 'helm-release'
+        ? selector
+        : { namespace: '', name: '' };
+  return { namespaceLabel: identity.namespace || '-', name: identity.name };
 };
 
 interface ContainerLogsRowContext extends ScopedRowContext {
@@ -1096,7 +1064,7 @@ const buildContainerLogsDiagnosticsRow = (
 ): DiagnosticsRow => {
   const payload = state.data as ContainerLogsSnapshotPayload | null;
   const lastUpdatedInfo = formatLastUpdated(stateLastUpdated(state));
-  const identity = resolveObjectPanelScopeIdentity(scope);
+  const identity = resolveObjectPanelScopeIdentity('container-logs', scope);
   const roleDetails = resolveScopeRole('container-logs', scope);
   const countDetails = buildDiagnosticsCountDetails(
     payload?.entries?.length ?? 0,
@@ -1144,7 +1112,7 @@ const buildContainerLogsDiagnosticsRow = (
     scopeTooltip: scopeDetails.tooltip,
     role: roleDetails.label,
     roleTooltip: roleDetails.tooltip,
-    scopeEntries: scopeDetails.entries,
+    scopeEntry: scopeDetails.entry,
     mode: context.modeDetails.label,
     modeTooltip: context.modeDetails.tooltip,
     healthStatus: healthDetails.label,
@@ -1161,7 +1129,7 @@ const buildObjectPanelDiagnosticsRow = (
   context: ScopedRowContext
 ): DiagnosticsRow => {
   const lastUpdatedInfo = formatLastUpdated(stateLastUpdated(state));
-  const identity = resolveObjectPanelScopeIdentity(scope);
+  const identity = resolveObjectPanelScopeIdentity(domain, scope);
   const scopeDetails = resolveScopeDetails(
     scope,
     context.selectedClusterId,
@@ -1202,7 +1170,7 @@ const buildObjectPanelDiagnosticsRow = (
     scopeTooltip: scopeDetails.tooltip,
     role: roleDetails.label,
     roleTooltip: roleDetails.tooltip,
-    scopeEntries: scopeDetails.entries,
+    scopeEntry: scopeDetails.entry,
     mode: 'polling',
     modeTooltip: 'Polling via object panel refresher',
     healthStatus: healthDetails.label,
@@ -1423,7 +1391,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           scopeTooltip: scopeDetails.tooltip,
           role: roleDetails.label,
           roleTooltip: roleDetails.tooltip,
-          scopeEntries: scopeDetails.entries,
+          scopeEntry: scopeDetails.entry,
           mode: modeDetails.label,
           modeTooltip: modeDetails.tooltip,
           healthStatus: healthDetails.label,

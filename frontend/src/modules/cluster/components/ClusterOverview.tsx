@@ -13,8 +13,8 @@ import { setRefreshDomainEnabled } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { canActivateClusterOverviewRefresh } from '@/core/refresh/clusterOverviewLifecycle';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { ClusterOverviewPayload } from '@/core/refresh/types';
 import './ClusterOverview.css';
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
@@ -108,7 +108,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   // Cluster Overview is a foreground per-cluster page, so it must never
   // reuse a multi-cluster overview scope from other selected tabs.
   const overviewScope = useMemo(
-    () => buildClusterScope(selectedClusterId ?? undefined, ''),
+    () => buildClusterRefreshScope('cluster-overview', selectedClusterId),
     [selectedClusterId]
   );
   const overviewDomain = useRefreshScopedDomain('cluster-overview', overviewScope);

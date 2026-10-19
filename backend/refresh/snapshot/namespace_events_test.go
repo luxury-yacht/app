@@ -87,7 +87,7 @@ func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {
 		eventLister: testsupport.NewEventLister(t, eventNew, eventOld),
 	}
 
-	snapshot, err := builder.Build(context.Background(), "team-a")
+	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
 	require.NoError(t, err)
 	require.Equal(t, namespaceEventsDomainName, snapshot.Domain)
 	require.Equal(t, "namespace:team-a", snapshot.Scope)
@@ -150,7 +150,7 @@ func TestNamespaceEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 		eventLister: testsupport.NewEventLister(t, lowRV, highRV),
 	}
 
-	snapshot, err := builder.Build(context.Background(), "team-a")
+	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
 	require.NoError(t, err)
 
 	payload, ok := snapshot.Payload.(NamespaceEventsSnapshot)

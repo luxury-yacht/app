@@ -138,6 +138,17 @@ export type GeneratedRefreshDiagnosticsStream =
   | 'resources'
   | 'container-logs';
 
+export type GeneratedRefreshScopeSelector =
+  | 'cluster'
+  | 'namespace'
+  | 'all-namespaces'
+  | 'node'
+  | 'workload'
+  | 'object'
+  | 'helm-release';
+
+export type GeneratedRefreshScopeQuery = 'none' | 'typed-table' | 'object-map' | 'catalog';
+
 export interface GeneratedRefreshDomainPolicy {
   domain: RefreshDomain;
   category: GeneratedRefreshDomainCategory;
@@ -157,6 +168,10 @@ export interface GeneratedRefreshDomainPolicy {
     priority: number | null;
     registrationOrder: number;
     scheduled: boolean;
+  };
+  scope: {
+    selectors: ReadonlyArray<GeneratedRefreshScopeSelector>;
+    query: GeneratedRefreshScopeQuery;
   };
 }
 
@@ -200,9 +215,19 @@ export const REFRESH_DOMAIN_POLICIES = [
 		}
 		fmt.Fprintf(out, "      registrationOrder: %d,\n", domain.frontendRegistrationOrder)
 		fmt.Fprintf(out, "      scheduled: %t,\n", domain.frontendScheduled)
-		out.WriteString("    },\n  },\n")
+		out.WriteString("    },\n")
+		renderTSScopeGrammar(out, domain)
+		out.WriteString("  },\n")
 	}
 	out.WriteString("] as const satisfies ReadonlyArray<GeneratedRefreshDomainPolicy>;\n\n")
+}
+
+func renderTSScopeGrammar(out *bytes.Buffer, domain domainSpec) {
+	selectors := make([]string, 0, len(domain.scopeSelectors))
+	for _, selector := range domain.scopeSelectors {
+		selectors = append(selectors, quoteString(selector))
+	}
+	fmt.Fprintf(out, "    scope: { selectors: [%s], query: %s },\n", strings.Join(selectors, ", "), quoteString(domain.scopeQuery))
 }
 
 func (r *renderer) renderDefinitions(out *bytes.Buffer) error {

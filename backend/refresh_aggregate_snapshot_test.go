@@ -54,29 +54,26 @@ func TestAggregateSnapshotServiceBuildRequiresClusterScope(t *testing.T) {
 	require.Nil(t, snap)
 }
 
-func TestAggregateSnapshotServiceBuildRejectsMultiClusterScope(t *testing.T) {
-	services := map[string]refresh.SnapshotBuilder{
-		"cluster-a": stubSnapshotService{
-			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-				t.Fatalf("multi-cluster snapshot request should not reach a cluster service")
-				return nil, nil
-			},
-		},
-		"cluster-b": stubSnapshotService{
-			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-				t.Fatalf("multi-cluster snapshot request should not reach a cluster service")
-				return nil, nil
-			},
-		},
-	}
+// A kubeconfig file or context name may contain a comma; the cluster prefix
+// is one cluster ID and routes to that cluster's service.
+func TestAggregateSnapshotServiceRoutesClusterIDContainingComma(t *testing.T) {
+	const clusterID = "prod,eu.yaml:ctx"
+	var builtScope string
 	aggregate := &aggregateSnapshotService{
-		services: services,
+		services: map[string]refresh.SnapshotBuilder{
+			clusterID: stubSnapshotService{
+				build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+					builtScope = scope
+					return &refresh.Snapshot{Domain: domain, Scope: scope}, nil
+				},
+			},
+		},
 	}
 
-	snap, err := aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a,cluster-b|")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "single cluster scope")
-	require.Nil(t, snap)
+	snap, err := aggregate.Build(context.Background(), "pods", clusterID+"|namespace:default")
+	require.NoError(t, err)
+	require.NotNil(t, snap)
+	require.Equal(t, clusterID+"|namespace:default", builtScope)
 }
 
 func TestAggregateSnapshotServiceNamespaceSnapshotTriggersLifecycleCallback(t *testing.T) {
@@ -645,17 +642,15 @@ func TestAggregateSnapshotServiceBuildReturnsErrorWhenClusterUnavailable(t *test
 
 	snap, err := aggregate.Build(context.Background(), "namespaces", "cluster-b|")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "no active clusters available")
+	require.Contains(t, err.Error(), "cluster cluster-b not active")
 	require.Equal(t, errorstatus.ReasonClusterNotReady, errorstatus.Classify(err).Reason)
 	require.Nil(t, snap)
 }
 
-// A request without exactly one cluster is the caller's mistake, not a
-// cluster that is still starting.
-func TestAggregateSnapshotServiceRejectsScopeWithoutOneCluster(t *testing.T) {
+// A request without a cluster is the caller's mistake, not a cluster that is
+// still starting.
+func TestAggregateSnapshotServiceRejectsScopeWithoutACluster(t *testing.T) {
 	aggregate := &aggregateSnapshotService{services: map[string]refresh.SnapshotBuilder{}}
-	for _, scope := range []string{"namespace:default", "clusters=cluster-a,cluster-b|"} {
-		_, err := aggregate.Build(context.Background(), "pods", scope)
-		require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason, scope)
-	}
+	_, err := aggregate.Build(context.Background(), "pods", "namespace:default")
+	require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason)
 }

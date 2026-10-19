@@ -36,11 +36,9 @@ func (h *aggregateContainerLogsStreamHandler) Handle(
 	conn containerlogsstream.JSONSender,
 	request containerlogsstream.Request,
 ) error {
-	clusterIDs, _ := refresh.SplitClusterScopeList(request.Scope)
-
-	targetID, err := h.selectCluster(clusterIDs)
-	if err != nil {
-		return err
+	targetID, _ := refresh.SplitClusterScope(request.Scope)
+	if targetID == "" {
+		return errorstatus.BadRequest(errors.New("container logs stream requires a cluster scope"))
 	}
 	h.mu.RLock()
 	handler := h.handlers[targetID]
@@ -51,13 +49,6 @@ func (h *aggregateContainerLogsStreamHandler) Handle(
 	}
 	handler.Handle(ctx, conn, request)
 	return nil
-}
-
-func (h *aggregateContainerLogsStreamHandler) selectCluster(clusterIDs []string) (string, error) {
-	if len(clusterIDs) != 1 {
-		return "", errorstatus.BadRequest(errors.New("container logs stream requires a single cluster scope"))
-	}
-	return clusterIDs[0], nil
 }
 
 // Update refreshes the container logs stream handlers after selection changes.

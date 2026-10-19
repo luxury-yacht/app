@@ -5,7 +5,8 @@
  * Handles catalog scope building, normalization, and item management.
  */
 
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { parseClusterScope } from '@/core/refresh/clusterScope';
+import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
 import type { CatalogItem } from '@/core/refresh/types';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import { structuralShareResourceRows } from '@/shared/utils/structuralShareResourceRows';
@@ -16,25 +17,6 @@ import { structuralShareResourceRows } from '@/shared/utils/structuralShareResou
  */
 export const parseContinueToken = (value: unknown): string | null =>
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
-
-/**
- * Splits a cluster-prefixed scope string into its prefix and scope parts.
- * The delimiter is '|' (e.g., "cluster-1|limit=200" -> { prefix: "cluster-1", scope: "limit=200" }).
- */
-export const splitClusterScope = (value: string): { prefix: string; scope: string } => {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return { prefix: '', scope: '' };
-  }
-  const delimiterIndex = trimmed.indexOf('|');
-  if (delimiterIndex <= 0) {
-    return { prefix: '', scope: trimmed };
-  }
-  return {
-    prefix: trimmed.slice(0, delimiterIndex).trim(),
-    scope: trimmed.slice(delimiterIndex + 1).trim(),
-  };
-};
 
 /**
  * Deduplicates catalog items by UID, keeping the last occurrence.
@@ -200,13 +182,13 @@ const appendCatalogPageAddress = (
 };
 
 /**
- * Normalizes a catalog scope string by parsing and rebuilding it.
- * This ensures consistent parameter ordering for comparison.
+ * Normalizes a catalog scope by rebuilding its query with stable parameter
+ * ordering, so requested and backend-reported scopes compare equal.
  *
- * @param raw - The raw scope string from the backend or internal state
+ * @param raw - A catalog query, or a complete catalog scope
  * @param fallbackLimit - Default limit if not specified in the scope
  * @param pinnedNamespaces - Namespaces to pin (used for namespace-scoped views)
- * @param clusterId - The cluster ID to prefix the scope with
+ * @param clusterId - The cluster for a bare query
  */
 export const normalizeCatalogScope = (
   raw: string | null | undefined,
@@ -220,28 +202,19 @@ export const normalizeCatalogScope = (
   if (!raw) {
     return null;
   }
-  const cleaned = raw.trim().replace(/^\?/, '');
-  const { prefix, scope } = splitClusterScope(cleaned);
-  const trimmed = scope.trim().replace(/^\?/, '');
-  if (!trimmed) {
+  const parsed = parseClusterScope(raw);
+  const targetClusterId = parsed.clusterId || clusterId?.trim();
+  const query = parsed.scope;
+  if (!query || !targetClusterId) {
     return null;
   }
-
-  try {
-    const params = new URLSearchParams(trimmed);
-    const normalized = buildCatalogScope(
-      catalogScopeParameters(params, pinnedNamespaces, fallbackLimit)
-    );
-    if (prefix) {
-      return `${prefix}|${normalized}`;
-    }
-    return buildClusterScope(clusterId ?? undefined, normalized);
-  } catch {
-    if (prefix) {
-      return `${prefix}|${trimmed}`;
-    }
-    return buildClusterScope(clusterId ?? undefined, trimmed);
-  }
+  return buildRefreshScope('catalog', {
+    clusterId: targetClusterId,
+    selector: CLUSTER_SELECTOR,
+    query: buildCatalogScope(
+      catalogScopeParameters(new URLSearchParams(query), pinnedNamespaces, fallbackLimit)
+    ),
+  });
 };
 
 const positiveLimit = (value: string | null, fallback: number): number =>

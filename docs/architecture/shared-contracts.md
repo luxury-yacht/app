@@ -23,6 +23,8 @@ docs only name the rule and where to start.
 - Refresh domain metadata and `refreshPayloadType` mappings:
   `backend/refresh/domain/refresh-domain-contract.json`
   ([refresh-system.md](refresh-system.md#domain-contract))
+- Refresh scope grammar: `scopeContract` in the same file, executed by both
+  scope codecs ([refresh-system.md](refresh-system.md#scope-and-identity))
 - Refresh HTTP/stream DTOs and snapshot envelope:
   `backend/internal/genrefreshcontracts/registry.go`, generated as
   `frontend/src/core/refresh/types.generated.ts`

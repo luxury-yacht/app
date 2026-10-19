@@ -1,5 +1,5 @@
-import { stripClusterScope } from './clusterScope';
 import type { RefreshContext } from './RefreshManager';
+import { ALL_NAMESPACES_SELECTOR, type ScopeSelector, tryParseRefreshScope } from './scopeSelector';
 import { RESOURCE_STREAM_DOMAINS, type ResourceDomain } from './streaming/resourceStreamDomains';
 import type { RefreshDomain } from './types';
 
@@ -11,9 +11,12 @@ export const isResourceStreamDomain = (domain: RefreshDomain): domain is Resourc
 // Focused Pod scopes are small leased windows used by object panels. Their
 // owning component controls the lease lifetime, so they remain active
 // independently of the broad namespace-table view gate.
+const podsSelectorKind = (scope?: string): ScopeSelector['kind'] | undefined =>
+  scope ? tryParseRefreshScope('pods', scope)?.selector.kind : undefined;
+
 const isFocusedPodsScope = (scope?: string): boolean => {
-  const base = stripClusterScope(scope);
-  return base.startsWith('workload:') || base.startsWith('node:');
+  const kind = podsSelectorKind(scope);
+  return kind === 'workload' || kind === 'node';
 };
 
 // Views whose tables list pods: the Workloads and Pods views under the
@@ -22,7 +25,7 @@ const PODS_TABLE_NAMESPACE_VIEWS: ReadonlySet<RefreshContext['activeNamespaceVie
   'workloads',
   'pods',
 ]);
-export const NODES_VIEW_PODS_SCOPE = 'namespace:all';
+export const NODES_VIEW_PODS_SELECTOR = ALL_NAMESPACES_SELECTOR;
 
 export const isPodsTableNamespaceView = (context: RefreshContext): boolean =>
   context.currentView === 'namespace' &&
@@ -34,7 +37,7 @@ export const isNodesView = (context: RefreshContext): boolean =>
 const isPodsTableScopeActive = (context: RefreshContext, scope?: string): boolean =>
   isFocusedPodsScope(scope) ||
   isPodsTableNamespaceView(context) ||
-  (isNodesView(context) && stripClusterScope(scope) === NODES_VIEW_PODS_SCOPE);
+  (isNodesView(context) && podsSelectorKind(scope) === NODES_VIEW_PODS_SELECTOR.kind);
 
 const NAMESPACE_VIEW_BY_DOMAIN: Partial<
   Record<ResourceDomain, NonNullable<RefreshContext['activeNamespaceView']>>

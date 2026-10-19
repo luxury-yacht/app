@@ -121,7 +121,7 @@ func TestManagerBroadcastsEventAndCatalogDoorbellSources(t *testing.T) {
 	}
 	catalogSub, err := subscribeForTest(t, manager, domainCatalog, "")
 	require.NoError(t, err)
-	clusterEventsSub, err := subscribeForTest(t, manager, domainClusterEvents, "cluster")
+	clusterEventsSub, err := subscribeForTest(t, manager, domainClusterEvents, "")
 	require.NoError(t, err)
 	namespaceEventsSub, err := subscribeForTest(t, manager, domainNamespaceEvents, "namespace:prod")
 	require.NoError(t, err)
@@ -213,7 +213,7 @@ func TestManagerBroadcastsClusterAttentionDoorbell(t *testing.T) {
 func TestParseStreamSelectorAcceptsNamespacesClusterScope(t *testing.T) {
 	selector, err := ParseStreamSelector("c1", domainNamespaces, "")
 	require.NoError(t, err)
-	require.Equal(t, StreamScopeCluster, selector.ScopeKind)
+	require.Equal(t, refresh.ClusterSelector(), selector.Selector)
 	require.Equal(t, "", selector.CanonicalScope())
 
 	_, err = ParseStreamSelector("c1", domainNamespaces, "namespace:default")
@@ -261,7 +261,7 @@ func TestManagerBroadcastsObjectEventsDoorbellToMatchingScopes(t *testing.T) {
 func TestParseStreamSelectorAcceptsObjectEventsObjectScope(t *testing.T) {
 	selector, err := ParseStreamSelector("c1", domainObjectEvents, "team-a:/v1:Pod:web-1")
 	require.NoError(t, err)
-	require.Equal(t, StreamScopeObject, selector.ScopeKind)
+	require.Equal(t, refresh.ScopeSelectorObject, selector.Selector.Kind)
 	require.Equal(t, "team-a:/v1:Pod:web-1", selector.CanonicalScope())
 
 	_, err = ParseStreamSelector("c1", domainObjectEvents, "")

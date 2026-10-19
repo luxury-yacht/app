@@ -41,7 +41,7 @@ func TestNodeMaintenanceDomainFiltersDrainsByClusterAndScope(t *testing.T) {
 	}
 	requireNodeMaintenancePayload(t, nodeSnapshot, clusterA, "Phase8 A", jobA.ID)
 
-	aggregateSnapshot, err := cfg.BuildSnapshot(ctx, refresh.JoinClusterScope(clusterA, nodemaintenance.AggregateScope))
+	aggregateSnapshot, err := cfg.BuildSnapshot(ctx, refresh.JoinClusterScope(clusterA, ""))
 	if err != nil {
 		t.Fatalf("BuildSnapshot aggregate returned error: %v", err)
 	}

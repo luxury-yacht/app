@@ -19,7 +19,11 @@ describe('isResourceStreamViewActive', () => {
   it('keeps focused pod scopes active independently of the broad view', () => {
     const inactiveView = context({ currentView: 'settings' });
     expect(
-      isResourceStreamViewActive('pods', inactiveView, 'cluster-a|workload:team:Pod:api')
+      isResourceStreamViewActive(
+        'pods',
+        inactiveView,
+        'cluster-a|workload:team:apps:v1:Deployment:api'
+      )
     ).toBe(true);
     expect(isResourceStreamViewActive('pods', inactiveView, 'cluster-a|node:worker-a')).toBe(true);
   });

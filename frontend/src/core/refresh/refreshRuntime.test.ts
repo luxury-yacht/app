@@ -230,31 +230,9 @@ describe('ClusterRefreshRuntime', () => {
       'cluster-a|namespace:kube-system',
     ]);
 
-    expect(
-      runtime.applyScopedDomainEnabled('cluster-overview', 'cluster-a|namespace:default', true)
-    ).toEqual({
+    expect(runtime.setScopedDomainEnabled('pods', 'cluster-a|namespace:prod', true)).toEqual({
       previous: undefined,
       changed: true,
-      staleScopes: [],
-    });
-    expect(
-      runtime.applyScopedDomainEnabled('cluster-overview', 'cluster-a|namespace:kube-system', true)
-    ).toEqual({
-      previous: undefined,
-      changed: true,
-      staleScopes: ['cluster-a|namespace:default'],
-    });
-    expect(runtime.getEnabledScopes('cluster-overview')).toEqual([
-      'cluster-a|namespace:kube-system',
-    ]);
-    expect(runtime.isScopedDomainEnabled('cluster-overview', 'cluster-a|namespace:default')).toBe(
-      false
-    );
-
-    expect(runtime.applyScopedDomainEnabled('pods', 'cluster-a|namespace:prod', true)).toEqual({
-      previous: undefined,
-      changed: true,
-      staleScopes: [],
     });
     expect(runtime.getEnabledScopes('pods')).toEqual([
       'cluster-a|namespace:default',
@@ -266,13 +244,12 @@ describe('ClusterRefreshRuntime', () => {
   it('keeps live resource-stream table scopes enabled while typed query scopes run', () => {
     const runtime = new ClusterRefreshRuntime('cluster-a');
 
-    expect(runtime.applyScopedDomainEnabled('nodes', 'cluster-a|', true)).toEqual({
+    expect(runtime.setScopedDomainEnabled('nodes', 'cluster-a|', true)).toEqual({
       previous: undefined,
       changed: true,
-      staleScopes: [],
     });
     expect(
-      runtime.applyScopedDomainEnabled(
+      runtime.setScopedDomainEnabled(
         'nodes',
         'cluster-a|?limit=50&sort=name&sortDirection=asc',
         true
@@ -280,7 +257,6 @@ describe('ClusterRefreshRuntime', () => {
     ).toEqual({
       previous: undefined,
       changed: true,
-      staleScopes: [],
     });
 
     expect(runtime.getEnabledScopes('nodes')).toEqual([
@@ -290,7 +266,7 @@ describe('ClusterRefreshRuntime', () => {
     expect(runtime.isScopedDomainEnabled('nodes', 'cluster-a|')).toBe(true);
 
     expect(
-      runtime.applyScopedDomainEnabled(
+      runtime.setScopedDomainEnabled(
         'nodes',
         'cluster-a|?limit=50&sort=name&sortDirection=asc',
         false
@@ -298,7 +274,6 @@ describe('ClusterRefreshRuntime', () => {
     ).toEqual({
       previous: true,
       changed: true,
-      staleScopes: [],
     });
 
     expect(runtime.getEnabledScopes('nodes')).toEqual(['cluster-a|']);

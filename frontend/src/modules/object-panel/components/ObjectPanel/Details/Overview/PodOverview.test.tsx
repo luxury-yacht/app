@@ -10,7 +10,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { partialModelFixture } from '@/test-utils/partialModelFixture';
-import { buildObjectPanelPodsScope } from '../../Pods/objectPanelPodsScope';
+import { buildObjectPanelPodsSelector } from '../../Pods/objectPanelPodsScope';
 import type { PanelObjectData } from '../../types';
 import { podDescriptor } from './descriptors/pod';
 import { OverviewRenderer } from './OverviewRenderer';
@@ -169,9 +169,16 @@ describe('PodOverview', () => {
     );
 
     const ownerRef = openWithObjectMock.mock.calls[0]?.[0] as PanelObjectData;
-    expect(buildObjectPanelPodsScope(ownerRef, ownerRef.kind ?? null)).toBe(
-      'workload:cluster:apps:v1:StatefulSet:worker'
-    );
+    expect(buildObjectPanelPodsSelector(ownerRef, ownerRef.kind ?? null)).toEqual({
+      kind: 'workload',
+      object: {
+        namespace: 'cluster',
+        group: 'apps',
+        version: 'v1',
+        kind: 'StatefulSet',
+        name: 'worker',
+      },
+    });
   });
 
   it('navigates to related resources for node and service account links', async () => {

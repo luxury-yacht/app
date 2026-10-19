@@ -23,7 +23,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
 import { usePanelMutationGuard } from '@/core/panel-windows/usePanelMutationGuard';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
 import { type DomainSnapshotState, useRefreshScopedDomainEntries } from '@/core/refresh/store';
 import type { NodeMaintenanceDrainJob, NodeMaintenanceSnapshotPayload } from '@/core/refresh/types';
 import { compareUtf16Strings } from '@/shared/utils/sort';
@@ -37,8 +37,6 @@ export interface NodeActionTarget {
 }
 
 type NodeMaintenanceSnapshotState = DomainSnapshotState<NodeMaintenanceSnapshotPayload>;
-
-const NODE_MAINTENANCE_AGGREGATE_SCOPE = 'aggregate';
 
 const normalizeWatchClusterIds = (clusterIds: string[] | undefined): string[] => {
   const seen = new Set<string>();
@@ -54,8 +52,9 @@ const normalizeWatchClusterIds = (clusterIds: string[] | undefined): string[] =>
   return result.sort(compareUtf16Strings);
 };
 
+// The cluster-wide maintenance snapshot: every drain job in the cluster.
 export const buildNodeMaintenanceAggregateScope = (clusterId: string): string =>
-  buildClusterScope(clusterId, NODE_MAINTENANCE_AGGREGATE_SCOPE);
+  buildRefreshScope('object-maintenance', { clusterId, selector: CLUSTER_SELECTOR });
 
 export const collectNodeMaintenanceDrains = (
   entries: Array<[string, NodeMaintenanceSnapshotState]>,

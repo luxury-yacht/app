@@ -7,33 +7,8 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
-	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
 )
-
-func TestAggregateContainerLogsStreamHandlerRoutesFirstFrameByCluster(t *testing.T) {
-	handlerA := &containerlogsstream.Handler{}
-	handlerB := &containerlogsstream.Handler{}
-	aggregate := newAggregateContainerLogsStreamHandler(map[string]*system.Subsystem{
-		"cluster-a": {ContainerLogs: handlerA},
-		"cluster-b": {ContainerLogs: handlerB},
-	})
-
-	clusterID, err := aggregate.selectCluster([]string{"cluster-b"})
-	require.NoError(t, err)
-	require.Equal(t, "cluster-b", clusterID)
-	require.Same(t, handlerB, aggregate.handlers[clusterID])
-	require.NotSame(t, handlerA, aggregate.handlers[clusterID])
-}
-
-func TestAggregateContainerLogsStreamHandlerRequiresOneCluster(t *testing.T) {
-	aggregate := newAggregateContainerLogsStreamHandler(nil)
-
-	_, err := aggregate.selectCluster(nil)
-	require.EqualError(t, err, "container logs stream requires a single cluster scope")
-	_, err = aggregate.selectCluster([]string{"cluster-a", "cluster-b"})
-	require.EqualError(t, err, "container logs stream requires a single cluster scope")
-}
 
 // scriptedContainerLogsConn is a container-logs stream connection whose first
 // client frame is fixed and whose sent frames are recorded.
@@ -67,7 +42,7 @@ func TestContainerLogsStreamRoutingErrorsSayWhetherARetryCanHelp(t *testing.T) {
 	}{
 		{name: "refresh subsystem not published", request: `{"scope":"cluster-a|default:/v1:Pod:web"}`, reconnect: true, reason: errorstatus.ReasonRefreshUnavailable},
 		{name: "cluster handler not published", aggregates: routed, request: `{"scope":"cluster-a|default:/v1:Pod:web"}`, reconnect: true, reason: errorstatus.ReasonClusterNotReady},
-		{name: "scope without one cluster", aggregates: routed, request: `{"scope":"default:/v1:Pod:web"}`, reason: errorstatus.ReasonBadRequest},
+		{name: "scope without a cluster", aggregates: routed, request: `{"scope":"default:/v1:Pod:web"}`, reason: errorstatus.ReasonBadRequest},
 		{name: "undecodable request", aggregates: routed, request: `{"scope":`, reason: errorstatus.ReasonBadRequest},
 	}
 	for _, tt := range tests {

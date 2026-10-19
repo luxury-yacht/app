@@ -6,7 +6,6 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { refreshDomainContract } from '../domainRegistry';
 import {
   COMPLETE_RESYNC_STREAM_DOMAINS,
   DOORBELL_STREAM_DOMAINS,
@@ -15,7 +14,6 @@ import {
   isClusterScopedDomain,
   isCompleteResyncStreamDomain,
   isSupportedDomain,
-  normalizeResourceScope,
   RESOURCE_STREAM_DOMAINS,
   type ResourceDomain,
   resourceStreamDomainDescriptors,
@@ -46,12 +44,6 @@ const CLUSTER_SCOPED_DOMAINS = new Set<ResourceDomain>([
   'nodes',
 ]);
 
-const REPRESENTATIVE_DOMAIN_BY_SCOPE_KIND = {
-  pod: 'pods',
-  namespace: 'namespace-workloads',
-  cluster: 'nodes',
-} satisfies Record<'pod' | 'namespace' | 'cluster', ResourceDomain>;
-
 const EXPECTED_DOORBELL_DOMAINS: DoorbellDomain[] = [
   ...EXPECTED_DOMAINS,
   'catalog',
@@ -74,8 +66,9 @@ describe('resource stream domain descriptors', () => {
 
   it('declares scope and metrics behavior for every domain', () => {
     resourceStreamDomainDescriptors.forEach((descriptor) => {
-      expect(['pod', 'namespace', 'cluster']).toContain(descriptor.scopeKind);
-      expect(descriptor.isClusterScoped).toBe(CLUSTER_SCOPED_DOMAINS.has(descriptor.domain));
+      expect(isClusterScopedDomain(descriptor.domain)).toBe(
+        CLUSTER_SCOPED_DOMAINS.has(descriptor.domain)
+      );
       expect('supportsMultiCluster' in descriptor).toBe(false);
     });
   });
@@ -85,32 +78,6 @@ describe('resource stream domain descriptors', () => {
     EXPECTED_DOMAINS.forEach((domain) => {
       expect(isCompleteResyncStreamDomain(domain)).toBe(domain === 'namespace-helm');
     });
-  });
-
-  it('normalizes scopes through descriptor scope kinds', () => {
-    expect(normalizeResourceScope('pods', 'namespace:*')).toBe('namespace:all');
-    expect(normalizeResourceScope('pods', 'node:node-a')).toBe('node:node-a');
-    expect(normalizeResourceScope('pods', 'workload:default:apps:v1:Deployment:web')).toBe(
-      'workload:default:apps:v1:Deployment:web'
-    );
-    expect(() => normalizeResourceScope('pods', 'workload:default::v1:Deployment:web')).toThrow(
-      'pods workload scope requires namespace:group:version:kind:name'
-    );
-
-    resourceStreamDomainDescriptors
-      .filter((descriptor) => descriptor.scopeKind === 'namespace')
-      .forEach((descriptor) => {
-        expect(normalizeResourceScope(descriptor.domain, 'default')).toBe('namespace:default');
-        expect(normalizeResourceScope(descriptor.domain, 'namespace:all')).toBe('namespace:all');
-      });
-
-    resourceStreamDomainDescriptors
-      .filter((descriptor) => descriptor.scopeKind === 'cluster')
-      .forEach((descriptor) => {
-        expect(normalizeResourceScope(descriptor.domain, '')).toBe('');
-        expect(normalizeResourceScope(descriptor.domain, 'cluster')).toBe('');
-        expect(() => normalizeResourceScope(descriptor.domain, 'namespace:default')).toThrow();
-      });
   });
 
   it('exposes domain guards from the descriptor table', () => {
@@ -128,11 +95,6 @@ describe('resource stream domain descriptors', () => {
     expect(isSupportedDomain('cluster-events')).toBe(true);
     expect(isSupportedDomain('namespace-events')).toBe(true);
     expect(isSupportedDomain('namespace-metrics')).toBe(true);
-
-    expect(normalizeResourceScope('catalog', '')).toBe('');
-    expect(normalizeResourceScope('cluster-events', 'cluster')).toBe('');
-    expect(normalizeResourceScope('namespace-events', 'prod')).toBe('namespace:prod');
-    expect(() => normalizeResourceScope('catalog', 'limit=50')).toThrow('does not accept scope');
 
     expect(domainSupportsSourceClock('catalog', 'catalog')).toBe(true);
     expect(domainSupportsSourceClock('cluster-events', 'event')).toBe(true);
@@ -167,30 +129,7 @@ describe('resource stream domain descriptors', () => {
     for (const descriptor of resourceStreamDomainDescriptors) {
       const entry = contractDomains[descriptor.domain];
       expect(entry, `contract missing entry for ${descriptor.domain}`).toBeDefined();
-      expect(entry.scopeKind, `${descriptor.domain} scopeKind`).toBe(descriptor.scopeKind);
       expect(entry.completeIsScopeLevel, `${descriptor.domain} completeIsScopeLevel`).toBe(true);
-      const clusterScoped = entry.scopeKind === 'cluster';
-      expect(descriptor.isClusterScoped, `${descriptor.domain} isClusterScoped`).toBe(
-        clusterScoped
-      );
-    }
-  });
-
-  it('normalizes scopes from the backend-authored executable examples', () => {
-    const examples = refreshDomainContract.resourceStream.scopeExamples;
-
-    for (const [scopeKind, cases] of Object.entries(examples) as Array<
-      [keyof typeof REPRESENTATIVE_DOMAIN_BY_SCOPE_KIND, (typeof examples)[keyof typeof examples]]
-    >) {
-      const domain = REPRESENTATIVE_DOMAIN_BY_SCOPE_KIND[scopeKind];
-
-      for (const example of cases.valid) {
-        expect(normalizeResourceScope(domain, example.scope)).toBe(example.canonical);
-      }
-
-      for (const example of cases.invalid) {
-        expect(() => normalizeResourceScope(domain, example.scope)).toThrow(example.errorContains);
-      }
     }
   });
 });

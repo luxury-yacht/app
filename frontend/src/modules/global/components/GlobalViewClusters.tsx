@@ -5,7 +5,6 @@ import { useSidebarState } from '@core/contexts/SidebarStateContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useScopedRefreshDomainLifecycle } from '@core/data-access/useScopedRefreshDomainLifecycle';
 import { canActivateClusterOverviewRefresh } from '@core/refresh/clusterOverviewLifecycle';
-import { buildClusterScope } from '@core/refresh/clusterScope';
 import { useStreamSignalRefetch } from '@core/refresh/hooks/useStreamSignalRefetch';
 import { clusterOverviewCpuValue, clusterOverviewMemoryValue } from '@core/resource-metrics';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -18,6 +17,7 @@ import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import React, { useCallback, useMemo } from 'react';
 import { useRefreshScopedDomainStates } from '@/core/refresh';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type {
   ClusterOverviewMetrics,
   ClusterOverviewPayload,
@@ -58,7 +58,7 @@ const GlobalClusterOverviewOwner: React.FC<GlobalClusterOverviewOwnerProps> = ({
   clusterId,
   label,
 }) => {
-  const scope = buildClusterScope(clusterId, '');
+  const scope = buildClusterRefreshScope('cluster-overview', clusterId);
   const onFetchError = useCallback(
     (error: unknown) => {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
@@ -183,7 +183,7 @@ const GlobalViewClusters: React.FC = () => {
           isConfirmedAuthFailure(auth),
           auth.hasError && auth.isRecovering
         );
-        const scope = buildClusterScope(meta.id, '');
+        const scope = buildClusterRefreshScope('cluster-overview', meta.id);
         const snapshot = overviewStates[scope]?.data as ClusterOverviewSnapshotPayload | null;
         const overview: ClusterOverviewPayload | undefined = snapshot?.overview;
         const metrics: ClusterOverviewMetrics | undefined = snapshot?.metrics;
@@ -230,7 +230,10 @@ const GlobalViewClusters: React.FC = () => {
     [getClusterAuthState, getClusterMeta, getClusterState, selectedKubeconfigs]
   );
   const refreshScopes = useMemo(
-    () => refreshTargets.map(({ clusterId }) => buildClusterScope(clusterId, '')),
+    () =>
+      refreshTargets.map(({ clusterId }) =>
+        buildClusterRefreshScope('cluster-overview', clusterId)
+      ),
     [refreshTargets]
   );
   useStreamSignalRefetch('cluster-overview', refreshScopes);

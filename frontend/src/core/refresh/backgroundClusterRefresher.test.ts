@@ -132,20 +132,17 @@ describe('BackgroundClusterRefresher', () => {
     // contract is the full call set plus per-cluster ordering (namespaces before the
     // namespace view for the same cluster).
     expect(fetchForCluster).toHaveBeenCalledWith('namespaces', 'cluster-b');
-    expect(fetchForCluster).toHaveBeenCalledWith(
-      'namespace-network',
-      'cluster-b',
-      'namespace:default'
-    );
+    expect(fetchForCluster).toHaveBeenCalledWith('namespace-network', 'cluster-b', {
+      kind: 'namespace',
+      namespace: 'default',
+    });
     expect(fetchForCluster).toHaveBeenCalledWith('nodes', 'cluster-c', undefined);
     expect(fetchForCluster).toHaveBeenCalledWith('cluster-overview', 'cluster-d', undefined);
     const callIndex = (domain: string) =>
       fetchForCluster.mock.calls.findIndex(([calledDomain]) => calledDomain === domain);
     expect(callIndex('namespaces')).toBeLessThan(callIndex('namespace-network'));
-    fetchForCluster.mock.calls.forEach(([, clusterId, scope]) => {
+    fetchForCluster.mock.calls.forEach(([, clusterId]) => {
       expect(clusterId).not.toBe('cluster-a');
-      expect(scope ?? '').not.toContain('clusters=');
-      expect(scope ?? '').not.toContain('cluster-b,cluster-c');
     });
   });
 
@@ -211,12 +208,14 @@ describe('BackgroundClusterRefresher', () => {
     await (refresher as unknown as { tick: () => Promise<void> }).tick();
 
     expect(fetchForCluster).toHaveBeenCalledWith('namespaces', 'cluster-b');
-    expect(fetchForCluster).toHaveBeenCalledWith(
-      'namespace-workloads',
-      'cluster-b',
-      'namespace:team-a'
-    );
-    expect(fetchForCluster).toHaveBeenCalledWith('pods', 'cluster-b', 'namespace:team-a');
+    expect(fetchForCluster).toHaveBeenCalledWith('namespace-workloads', 'cluster-b', {
+      kind: 'namespace',
+      namespace: 'team-a',
+    });
+    expect(fetchForCluster).toHaveBeenCalledWith('pods', 'cluster-b', {
+      kind: 'namespace',
+      namespace: 'team-a',
+    });
   });
 
   it('does not refresh namespace content without a selected background namespace', async () => {

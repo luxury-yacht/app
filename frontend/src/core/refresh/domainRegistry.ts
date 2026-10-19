@@ -5,6 +5,8 @@ import {
   type GeneratedRefreshDiagnosticsStream,
   type GeneratedRefreshDomainCategory,
   type GeneratedRefreshOrchestratorKind,
+  type GeneratedRefreshScopeQuery,
+  type GeneratedRefreshScopeSelector,
   type GeneratedRefreshSourceClock,
   REFRESH_DOMAIN_POLICIES,
   type RefreshDomain,
@@ -45,18 +47,6 @@ export type RefreshBehaviorClass =
   | 'graph-payload'
   | 'operation-state';
 
-export type RefreshScopeContractKind =
-  | 'cluster'
-  | 'optional-namespace'
-  | 'catalog-query'
-  | 'resource-stream-selector'
-  | 'namespace-scope'
-  | 'object-ref'
-  | 'helm-release'
-  | 'object-map'
-  | 'node-maintenance'
-  | 'log-stream-selector';
-
 export type RefreshCachePolicy = GeneratedRefreshCachePolicy;
 
 export type RefreshStreamSemantic =
@@ -80,12 +70,13 @@ export type RefreshCoverageContract =
   | 'operation-state-transitions'
   | 'aggregate-snapshot-permission-fallback';
 
+// One domain's scope language. `valid`/`invalid` are canonical scope tails
+// (after "<clusterId>|") that the scope codec must accept or reject.
 export interface ScopeContract {
-  kind: RefreshScopeContractKind;
-  clusterPrefix: 'required';
-  parser: string;
-  frontendBuilder: string;
-  acceptedEncodings: string[];
+  selectors: GeneratedRefreshScopeSelector[];
+  query: GeneratedRefreshScopeQuery;
+  valid: string[];
+  invalid?: string[];
 }
 
 export interface DomainInventoryEntry {
@@ -134,29 +125,11 @@ export type RefreshSourceClock = GeneratedRefreshSourceClock;
 export type ResourceStreamDomain = keyof typeof refreshDomainContractJson.resourceStream.domains;
 
 export interface StreamDomainContractEntry {
-  scopeKind: 'pod' | 'namespace' | 'cluster';
   completeIsScopeLevel: boolean;
   rowProjection?: 'scope-level-complete-only';
   primaryResources: StreamResourceContractRecord[];
   relatedResources: StreamResourceContractRecord[];
   syntheticRowKind?: StreamResourceContractRecord;
-}
-
-export interface StreamScopeExample {
-  scope: string;
-}
-
-export interface StreamScopeValidExample extends StreamScopeExample {
-  canonical: string;
-}
-
-export interface StreamScopeInvalidExample extends StreamScopeExample {
-  errorContains: string;
-}
-
-export interface StreamScopeExamples {
-  valid: StreamScopeValidExample[];
-  invalid: StreamScopeInvalidExample[];
 }
 
 export interface RefreshDomainContract {
@@ -170,7 +143,6 @@ export interface RefreshDomainContract {
       completeSemantics: 'scope-level-resync';
       completeIdentity: 'diagnostic-only';
     };
-    scopeExamples: Record<'pod' | 'namespace' | 'cluster', StreamScopeExamples>;
     domains: Record<string, StreamDomainContractEntry>;
   };
   domains: RefreshDomainContractEntry[];

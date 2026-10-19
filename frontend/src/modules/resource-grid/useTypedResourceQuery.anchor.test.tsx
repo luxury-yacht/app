@@ -14,6 +14,7 @@ import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridT
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ALL_NAMESPACES_SELECTOR } from '@/core/refresh/scopeSelector';
 import type { TypedQueryPayload } from './typedResourceQueryScope';
 import { type UseTypedResourceQueryResult, useTypedResourceQuery } from './useTypedResourceQuery';
 
@@ -91,6 +92,7 @@ describe('useTypedResourceQuery anchor lifecycle', () => {
         enabled: true,
         clusterId: 'cluster-a',
         domain: 'pods',
+        baseSelector: ALL_NAMESPACES_SELECTOR,
         label: 'Pods',
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
         sortConfig: sort,

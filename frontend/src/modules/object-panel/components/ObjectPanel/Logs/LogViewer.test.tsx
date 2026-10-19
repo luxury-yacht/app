@@ -14,7 +14,6 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FetchContainerLogs, GetContainerLogsScopeContainers } from '@/core/backend-api';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { localFailure, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import {
   getScopedDomainState,
@@ -37,6 +36,7 @@ import {
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
 import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
+import { testScope } from '@/test-utils/refreshScope';
 import { requireValue } from '@/test-utils/requireValue';
 import LogViewer from './LogViewer';
 import type { ParsedLogEntry } from './logOptionsReducer';
@@ -318,7 +318,7 @@ vi.mock('@shared/components/Tooltip', () => ({
 }));
 
 const testClusterId = 'alpha:ctx';
-const buildContainerLogsScope = (scope: string) => buildClusterScope(testClusterId, scope);
+const buildContainerLogsScope = (scope: string) => testScope(testClusterId, scope);
 const defaultScope = buildContainerLogsScope('team-a:apps/v1:deployment:api');
 // A container in the list the backend returns for a log scope.
 const scopeContainer = (name: string, kind: 'regular' | 'init' | 'debug' = 'regular') => ({

@@ -62,7 +62,7 @@ const normalizeScope = (
 ): string | null => {
   if (typeof scope === 'string') {
     const parsed = parseClusterScope(scope);
-    if (parsed.isMultiCluster || (parsed.clusterId && parsed.clusterId !== clusterId)) {
+    if (parsed.clusterId && parsed.clusterId !== clusterId) {
       return null;
     }
     return parsed.scope || isClusterScopedDomain(domain) ? parsed.scope : null;

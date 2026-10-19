@@ -132,7 +132,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 	if err != nil {
 		return nil, err
 	}
-	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), "namespace scope is required")
+	parsedScope, err := parseNamespaceSnapshotScope(namespaceEventsDomainName, clusterID, baseScope, "namespace scope is required")
 	if err != nil {
 		return nil, err
 	}

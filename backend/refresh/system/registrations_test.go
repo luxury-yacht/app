@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	goruntime "runtime"
-	"strings"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
@@ -43,26 +42,16 @@ type refreshDomainContract struct {
 }
 
 type domainInventoryEntry struct {
-	BehaviorClass    string        `json:"behaviorClass"`
-	ScopeContract    scopeContract `json:"scopeContract"`
-	SingleCluster    bool          `json:"singleCluster"`
-	PayloadOwner     string        `json:"payloadOwner"`
-	CachePolicy      string        `json:"cachePolicy"`
-	StreamSemantics  []string      `json:"streamSemantics"`
-	CoverageContract string        `json:"coverageContract"`
-	CoverageStatus   string        `json:"coverageStatus"`
-}
-
-type scopeContract struct {
-	Kind              string   `json:"kind"`
-	ClusterPrefix     string   `json:"clusterPrefix"`
-	Parser            string   `json:"parser"`
-	FrontendBuilder   string   `json:"frontendBuilder"`
-	AcceptedEncodings []string `json:"acceptedEncodings"`
+	BehaviorClass    string   `json:"behaviorClass"`
+	SingleCluster    bool     `json:"singleCluster"`
+	PayloadOwner     string   `json:"payloadOwner"`
+	CachePolicy      string   `json:"cachePolicy"`
+	StreamSemantics  []string `json:"streamSemantics"`
+	CoverageContract string   `json:"coverageContract"`
+	CoverageStatus   string   `json:"coverageStatus"`
 }
 
 type streamDomainContract struct {
-	ScopeKind            string                 `json:"scopeKind"`
 	CompleteIsScopeLevel bool                   `json:"completeIsScopeLevel"`
 	RowProjection        string                 `json:"rowProjection,omitempty"`
 	PrimaryResources     []streamResourceRecord `json:"primaryResources"`
@@ -200,18 +189,6 @@ func TestDomainInventoryCoversAuthoredDomainsAndUsesKnownVocabulary(t *testing.T
 		"graph-payload",
 		"operation-state",
 	)
-	scopeKinds := setOf(
-		"cluster",
-		"optional-namespace",
-		"catalog-query",
-		"resource-stream-selector",
-		"namespace-scope",
-		"object-ref",
-		"helm-release",
-		"object-map",
-		"node-maintenance",
-		"log-stream-selector",
-	)
 	cachePolicies := setOf(
 		"snapshot-cache",
 		"snapshot-cache-with-merge",
@@ -248,13 +225,6 @@ func TestDomainInventoryCoversAuthoredDomainsAndUsesKnownVocabulary(t *testing.T
 	for domainID, inventory := range contract.DomainInventory {
 		require.Containsf(t, domainIDs, domainID, "inventory domain %q is not present in domains[]", domainID)
 		require.Containsf(t, behaviorClasses, inventory.BehaviorClass, "domain %q behaviorClass", domainID)
-		require.Containsf(t, scopeKinds, inventory.ScopeContract.Kind, "domain %q scope kind", domainID)
-		require.Equalf(t, "required", inventory.ScopeContract.ClusterPrefix, "domain %q cluster prefix", domainID)
-		require.NotEmptyf(t, inventory.ScopeContract.Parser, "domain %q parser owner", domainID)
-		require.NotEmptyf(t, inventory.ScopeContract.FrontendBuilder, "domain %q frontend builder owner", domainID)
-		requireSourcePathExists(t, inventory.ScopeContract.Parser)
-		requireSourcePathExists(t, inventory.ScopeContract.FrontendBuilder)
-		require.NotEmptyf(t, inventory.ScopeContract.AcceptedEncodings, "domain %q accepted encodings", domainID)
 		require.Truef(t, inventory.SingleCluster, "domain %q must stay single-cluster at refresh boundary", domainID)
 		require.NotEmptyf(t, inventory.PayloadOwner, "domain %q payload owner", domainID)
 		require.Containsf(t, cachePolicies, inventory.CachePolicy, "domain %q cachePolicy", domainID)
@@ -283,7 +253,6 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 		case true:
 			require.Containsf(t, contract.ResourceStream.Domains, domainID, "resource-stream domain %q must join resourceStream.domains", domainID)
 			require.Containsf(t, setOf("resource-stream-table", "complete-resync-stream"), inventory.BehaviorClass, "resource-stream domain %q behavior class", domainID)
-			require.Equalf(t, "resource-stream-selector", inventory.ScopeContract.Kind, "resource-stream domain %q scope kind", domainID)
 		case false:
 			require.NotContainsf(t, contract.ResourceStream.Domains, domainID, "non-resource-stream domain %q must not join resourceStream.domains", domainID)
 			require.NotContainsf(t, setOf("resource-stream-table", "complete-resync-stream"), inventory.BehaviorClass, "non-resource-stream domain %q behavior class", domainID)
@@ -312,7 +281,6 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 
 	catalog := contract.DomainInventory["catalog"]
 	require.Equal(t, "catalog-stream", catalog.BehaviorClass)
-	require.Equal(t, "catalog-query", catalog.ScopeContract.Kind)
 	require.Equal(t, "backend/objectcatalog.Service", catalog.PayloadOwner)
 	require.Equal(t, "external-catalog-cache", catalog.CachePolicy)
 	require.ElementsMatch(t, []string{"snapshot-replace", "change-signal"}, catalog.StreamSemantics)
@@ -320,7 +288,6 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 
 	catalogDiff := contract.DomainInventory["catalog-diff"]
 	require.Equal(t, "catalog-snapshot", catalogDiff.BehaviorClass)
-	require.Equal(t, "catalog-query", catalogDiff.ScopeContract.Kind)
 	require.Equal(t, "backend/objectcatalog.Service", catalogDiff.PayloadOwner)
 	require.Equal(t, "external-catalog-cache-with-merge", catalogDiff.CachePolicy)
 	require.Equal(t, []string{"snapshot-replace"}, catalogDiff.StreamSemantics)
@@ -329,14 +296,13 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 	// Event tables are doorbell-refetched snapshot tables whose doorbell rides the
 	// resource stream, like cluster-identities; their payload owner is the builder
 	// that serves the maintained store the doorbell is rung from.
-	for domainID, expected := range map[string]struct{ scopeKind, owner string }{
-		"cluster-events":   {scopeKind: "cluster", owner: "backend/refresh/snapshot.ClusterEventsBuilder"},
-		"namespace-events": {scopeKind: "namespace-scope", owner: "backend/refresh/snapshot.NamespaceEventsBuilder"},
+	for domainID, owner := range map[string]string{
+		"cluster-events":   "backend/refresh/snapshot.ClusterEventsBuilder",
+		"namespace-events": "backend/refresh/snapshot.NamespaceEventsBuilder",
 	} {
 		events := contract.DomainInventory[domainID]
 		require.Equal(t, "snapshot-table", events.BehaviorClass, domainID)
-		require.Equal(t, expected.scopeKind, events.ScopeContract.Kind, domainID)
-		require.Equal(t, expected.owner, events.PayloadOwner, domainID)
+		require.Equal(t, owner, events.PayloadOwner, domainID)
 		require.Equal(t, "snapshot-cache", events.CachePolicy, domainID)
 		require.Equal(t, []string{"snapshot-replace", "change-signal"}, events.StreamSemantics, domainID)
 		require.Equal(t, "snapshot-table-payload", events.CoverageContract, domainID)
@@ -344,7 +310,6 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 
 	objectEvents := contract.DomainInventory["object-events"]
 	require.Equal(t, "event-snapshot", objectEvents.BehaviorClass)
-	require.Equal(t, "object-ref", objectEvents.ScopeContract.Kind)
 	require.Equal(t, "backend/refresh/snapshot.ObjectEventsBuilder", objectEvents.PayloadOwner)
 	require.Equal(t, "snapshot-cache", objectEvents.CachePolicy)
 	require.ElementsMatch(t, []string{"snapshot-replace", "change-signal"}, objectEvents.StreamSemantics)
@@ -353,7 +318,6 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 	for _, domainID := range []string{"object-details", "object-yaml"} {
 		detail := contract.DomainInventory[domainID]
 		require.Equal(t, "detail-payload", detail.BehaviorClass)
-		require.Equal(t, "object-ref", detail.ScopeContract.Kind)
 		if domainID == "object-details" {
 			require.Equal(t, "provider-cache", detail.CachePolicy)
 		} else {
@@ -366,7 +330,6 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 	for _, domainID := range []string{"object-helm-manifest", "object-helm-values"} {
 		helm := contract.DomainInventory[domainID]
 		require.Equal(t, "helm-content-payload", helm.BehaviorClass)
-		require.Equal(t, "helm-release", helm.ScopeContract.Kind)
 		require.Equal(t, "snapshot-cache-plus-provider-cache", helm.CachePolicy)
 		require.Equal(t, []string{"snapshot-replace"}, helm.StreamSemantics)
 		require.Equal(t, "helm-content-shape", helm.CoverageContract)
@@ -374,7 +337,6 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 
 	objectMap := contract.DomainInventory["object-map"]
 	require.Equal(t, "graph-payload", objectMap.BehaviorClass)
-	require.Equal(t, "object-map", objectMap.ScopeContract.Kind)
 	require.Equal(t, "backend/refresh/snapshot.objectMapBuilder", objectMap.PayloadOwner)
 	require.Equal(t, "snapshot-cache", objectMap.CachePolicy)
 	require.Equal(t, []string{"snapshot-replace"}, objectMap.StreamSemantics)
@@ -382,7 +344,6 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 
 	objectMaintenance := contract.DomainInventory["object-maintenance"]
 	require.Equal(t, "operation-state", objectMaintenance.BehaviorClass)
-	require.Equal(t, "node-maintenance", objectMaintenance.ScopeContract.Kind)
 	require.Equal(t, "backend/refresh/snapshot.NodeMaintenanceBuilder", objectMaintenance.PayloadOwner)
 	require.Equal(t, "snapshot-cache-bypass", objectMaintenance.CachePolicy)
 	require.Equal(t, []string{"snapshot-replace"}, objectMaintenance.StreamSemantics)
@@ -390,7 +351,6 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 
 	containerLogs := contract.DomainInventory["container-logs"]
 	require.Equal(t, "log-stream", containerLogs.BehaviorClass)
-	require.Equal(t, "log-stream-selector", containerLogs.ScopeContract.Kind)
 	require.Equal(t, "backend/refresh/containerlogsstream", containerLogs.PayloadOwner)
 	require.Equal(t, "stream-only", containerLogs.CachePolicy)
 	require.Equal(t, []string{"line-stream"}, containerLogs.StreamSemantics)
@@ -530,7 +490,6 @@ func TestResourceStreamDomainsMatchProjectionDescriptors(t *testing.T) {
 	for domain, descriptor := range descriptors {
 		entry, ok := contract.ResourceStream.Domains[domain]
 		require.Truef(t, ok, "resourceStream.domains.%s missing from refresh-domain-contract.json", domain)
-		require.Equalf(t, descriptor.ScopeKind, entry.ScopeKind, "domain %s scopeKind drift", domain)
 		require.Equalf(t, descriptor.CompleteIsScopeLevel, entry.CompleteIsScopeLevel, "domain %s completeIsScopeLevel drift", domain)
 		requireResourceSetEqual(t, domain, "primaryResources", descriptor.PrimaryResources, entry.PrimaryResources)
 		requireResourceSetEqual(t, domain, "relatedResources", descriptor.RelatedResources, entry.RelatedResources)
@@ -822,18 +781,6 @@ func setOf(values ...string) map[string]struct{} {
 		result[value] = struct{}{}
 	}
 	return result
-}
-
-func requireSourcePathExists(t *testing.T, owner string) {
-	t.Helper()
-	path, _, ok := strings.Cut(owner, ":")
-	require.Truef(t, ok, "source owner %q must be formatted as path:symbol", owner)
-	require.NotEmpty(t, path)
-	_, filename, _, ok := goruntime.Caller(0)
-	require.True(t, ok)
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
-	_, err := os.Stat(filepath.Join(repoRoot, path))
-	require.NoErrorf(t, err, "source owner %q must reference an existing file", owner)
 }
 
 type fullObjectDetailProvider struct{}

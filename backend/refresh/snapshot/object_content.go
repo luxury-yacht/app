@@ -3,7 +3,6 @@ package snapshot
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -139,7 +138,7 @@ type ObjectHelmManifestBuilder struct {
 }
 
 func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	namespace, name, err := parseHelmScope(scope)
+	namespace, name, err := parseHelmScope(objectHelmManifestDomain, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +210,7 @@ type ObjectHelmValuesBuilder struct {
 }
 
 func (b *ObjectHelmValuesBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	namespace, name, err := parseHelmScope(scope)
+	namespace, name, err := parseHelmScope(objectHelmValuesDomain, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -245,22 +244,13 @@ func (b *ObjectHelmValuesBuilder) Build(ctx context.Context, scope string) (*ref
 	}, nil
 }
 
-func parseHelmScope(scope string) (string, string, error) {
-	if strings.TrimSpace(scope) == "" {
-		return "", "", fmt.Errorf("helm scope is required")
+// parseHelmScope decodes a Helm release scope for domainName (the manifest and
+// values domains share one grammar). The cluster comes from the request.
+func parseHelmScope(domainName, scope string) (string, string, error) {
+	_, tail := refresh.SplitClusterScope(scope)
+	selector, _, err := domain.ParseDomainScopeTail(domainName, tail)
+	if err != nil {
+		return "", "", err
 	}
-	_, trimmed := refresh.SplitClusterScope(scope)
-	parts := strings.SplitN(trimmed, ":", 2)
-	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid helm scope %q", trimmed)
-	}
-	namespace := parts[0]
-	if namespace == refresh.ObjectClusterScopeToken {
-		namespace = ""
-	}
-	name := parts[1]
-	if name == "" {
-		return "", "", fmt.Errorf("helm release name missing in scope %q", scope)
-	}
-	return namespace, name, nil
+	return selector.Namespace, selector.Name, nil
 }

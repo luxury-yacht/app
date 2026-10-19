@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -250,27 +251,37 @@ func TestSnapshotEndpointRejectsMissingClusterScope(t *testing.T) {
 	}
 }
 
-func TestSnapshotEndpointRejectsMultiClusterScope(t *testing.T) {
-	server := api.NewServer(snapshotService(), &fakeQueue{}, nil, nil)
-	mux := http.NewServeMux()
-	server.Register(mux)
+type recordingSnapshotService struct {
+	calls int
+}
 
-	req := httptest.NewRequest(http.MethodGet, "/snapshots/nodes?scope=clusters=cluster-a,cluster-b|", nil)
-	rr := httptest.NewRecorder()
-	mux.ServeHTTP(rr, req)
+func (f *recordingSnapshotService) Build(context.Context, string, string) (*refresh.Snapshot, error) {
+	f.calls++
+	return &refresh.Snapshot{}, nil
+}
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected status 400 got %d", rr.Code)
-	}
+func TestRefreshRequestsRejectScopesOutsideTheDomainGrammar(t *testing.T) {
+	for _, scope := range []string{"cluster-a|namespace:*", "cluster-a|default", "cluster-a|node:worker-1?limit=5"} {
+		svc := &recordingSnapshotService{}
+		queue := &fakeQueue{}
+		server := api.NewServer(svc, queue, nil, nil)
+		mux := http.NewServeMux()
+		server.Register(mux)
 
-	var payload struct {
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("failed to decode error payload: %v", err)
-	}
-	if !strings.Contains(payload.Message, "single cluster scope is required") {
-		t.Fatalf("unexpected error message: %s", payload.Message)
+		snapshotRequest := httptest.NewRequest(http.MethodGet, "/snapshots/namespace-config?scope="+url.QueryEscape(scope), nil)
+		snapshotResponse := httptest.NewRecorder()
+		mux.ServeHTTP(snapshotResponse, snapshotRequest)
+
+		refreshRequest := httptest.NewRequest(http.MethodPost, "/refresh/namespace-config", strings.NewReader(`{"scope":"`+scope+`"}`))
+		refreshResponse := httptest.NewRecorder()
+		mux.ServeHTTP(refreshResponse, refreshRequest)
+
+		if snapshotResponse.Code != http.StatusBadRequest || refreshResponse.Code != http.StatusBadRequest {
+			t.Fatalf("scope %q: expected 400/400, got %d/%d", scope, snapshotResponse.Code, refreshResponse.Code)
+		}
+		if svc.calls != 0 || queue.job != nil {
+			t.Fatalf("scope %q reached the builder or queue", scope)
+		}
 	}
 }
 
@@ -286,7 +297,7 @@ func TestManualRefreshEndpoint(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/refresh/nodes", strings.NewReader(`{"scope":"cluster-a|default"}`))
+	req := httptest.NewRequest(http.MethodPost, "/refresh/nodes", strings.NewReader(`{"scope":"cluster-a|"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", "wails://test")
 	req.Header.Set(api.CorrelationIDHeader, "broker-read-manual")
@@ -335,31 +346,6 @@ func TestManualRefreshEndpointRejectsMissingClusterScope(t *testing.T) {
 	}
 }
 
-func TestManualRefreshEndpointRejectsMultiClusterScope(t *testing.T) {
-	server := api.NewServer(snapshotService(), &fakeQueue{}, nil, nil)
-	mux := http.NewServeMux()
-	server.Register(mux)
-
-	req := httptest.NewRequest(http.MethodPost, "/refresh/nodes", strings.NewReader(`{"scope":"clusters=cluster-a,cluster-b|"}`))
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-	mux.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected status 400 got %d", rr.Code)
-	}
-
-	var payload struct {
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("failed to decode error payload: %v", err)
-	}
-	if !strings.Contains(payload.Message, "single cluster scope is required") {
-		t.Fatalf("unexpected error message: %s", payload.Message)
-	}
-}
-
 func TestManualRefreshHandlesQueueErrors(t *testing.T) {
 	svc := snapshotService()
 	server := api.NewServer(svc, errorQueue{}, nil, nil)
@@ -367,7 +353,7 @@ func TestManualRefreshHandlesQueueErrors(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/refresh/nodes", strings.NewReader(`{"scope":"cluster-a|default"}`))
+	req := httptest.NewRequest(http.MethodPost, "/refresh/nodes", strings.NewReader(`{"scope":"cluster-a|"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()
@@ -632,10 +618,8 @@ func TestRefreshAPIRejectsRequestsWithStatus(t *testing.T) {
 	}{
 		{name: "snapshot without domain", method: http.MethodGet, path: "/snapshots/", wantCode: 400, want: errorstatus.ReasonBadRequest},
 		{name: "snapshot without cluster scope", method: http.MethodGet, path: "/snapshots/nodes", wantCode: 400, want: errorstatus.ReasonBadRequest},
-		{name: "snapshot with several clusters", method: http.MethodGet, path: "/snapshots/nodes?scope=clusters=cluster-a,cluster-b|", wantCode: 400, want: errorstatus.ReasonBadRequest},
 		{name: "refresh without domain", method: http.MethodPost, path: "/refresh/", body: `{"scope":"cluster-a|"}`, wantCode: 400, want: errorstatus.ReasonBadRequest},
 		{name: "refresh without cluster scope", method: http.MethodPost, path: "/refresh/nodes", wantCode: 400, want: errorstatus.ReasonBadRequest},
-		{name: "refresh with several clusters", method: http.MethodPost, path: "/refresh/nodes", body: `{"scope":"clusters=cluster-a,cluster-b|"}`, wantCode: 400, want: errorstatus.ReasonBadRequest},
 		{name: "refresh the queue refuses", queue: errorQueue{}, method: http.MethodPost, path: "/refresh/nodes", body: `{"scope":"cluster-a|"}`, wantCode: 400, want: errorstatus.ReasonBadRequest},
 		{name: "refresh for a cluster not ready", queue: notReadyQueue{}, method: http.MethodPost, path: "/refresh/nodes", body: `{"scope":"cluster-a|"}`, wantCode: 503, want: errorstatus.ReasonClusterNotReady},
 		{name: "job without id", method: http.MethodGet, path: "/jobs/", wantCode: 400, want: errorstatus.ReasonBadRequest},

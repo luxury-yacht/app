@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
@@ -30,7 +31,6 @@ var (
 	errDomainNotSpecified = errorstatus.BadRequest(errors.New("domain not specified"))
 	errJobIDNotSpecified  = errorstatus.BadRequest(errors.New("job id not specified"))
 	errClusterScopeNeeded = errorstatus.BadRequest(errors.New("cluster scope is required"))
-	errSingleClusterScope = errorstatus.BadRequest(errors.New("single cluster scope is required"))
 	errClusterIDsNeeded   = errorstatus.BadRequest(errors.New("clusterIds is required"))
 )
 
@@ -81,7 +81,7 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scope := r.URL.Query().Get("scope")
-	if err := requireClusterScope(scope); err != nil {
+	if err := requireDomainScope(domainName, scope); err != nil {
 		writeError(w, err, correlationID)
 		return
 	}
@@ -152,7 +152,7 @@ func (s *Server) handleManualRefresh(w http.ResponseWriter, r *http.Request) {
 			_ = json.Unmarshal(data, &body)
 		}
 	}
-	if err := requireClusterScope(body.Scope); err != nil {
+	if err := requireDomainScope(domainName, body.Scope); err != nil {
 		writeError(w, err, correlationID)
 		return
 	}
@@ -179,13 +179,18 @@ func enqueueRejection(err error) error {
 	return errorstatus.BadRequest(err)
 }
 
-func requireClusterScope(scope string) error {
-	clusterIDs, _ := refresh.SplitClusterScopeList(scope)
-	if len(clusterIDs) == 0 {
+// requireDomainScope rejects a scope outside the domain's authored grammar
+// (scopeContract in refresh-domain-contract.json) before any build or job runs.
+// Unknown domains keep failing at the registry.
+func requireDomainScope(domainName, scope string) error {
+	if clusterID, _ := refresh.SplitClusterScope(scope); clusterID == "" {
 		return errClusterScopeNeeded
 	}
-	if len(clusterIDs) > 1 {
-		return errSingleClusterScope
+	if _, known := domain.LookupPolicy(domainName); !known {
+		return nil
+	}
+	if _, err := domain.ParseDomainScope(domainName, scope); err != nil {
+		return errorstatus.BadRequest(err)
 	}
 	return nil
 }

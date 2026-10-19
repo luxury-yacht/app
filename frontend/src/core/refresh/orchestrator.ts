@@ -18,7 +18,7 @@ import { compareUtf16Strings } from '@/shared/utils/sort';
 import { reportOperationalError } from '@/utils/errorHandler';
 import { fetchSnapshot, type Snapshot, setMetricsActive } from './client';
 import { clusterReadiness } from './clusterReadiness';
-import { buildClusterScope, parseClusterScope, parseClusterScopeList } from './clusterScope';
+import { parseClusterScope } from './clusterScope';
 import { registerDefaultRefreshDomains } from './domainRegistrations';
 import { METRIC_DEMAND_DOMAINS } from './domainRegistry';
 import {
@@ -44,12 +44,17 @@ import {
   isPodsTableNamespaceView,
   isResourceStreamDomain,
   isResourceStreamViewActive,
-  NODES_VIEW_PODS_SCOPE,
+  NODES_VIEW_PODS_SELECTOR,
 } from './resourceStreamViews';
+import { normalizeRefreshDomainScope } from './scopeNormalization';
 import {
-  normalizeNamespaceScope as normalizeNamespaceScopeValue,
-  normalizeRefreshDomainScope,
-} from './scopeNormalization';
+  buildRefreshScope,
+  CLUSTER_SELECTOR,
+  hasOneShotQuery,
+  type ScopeSelector,
+  selectorForNamespaceSelection,
+  tryParseRefreshScope,
+} from './scopeSelector';
 import { mergePollingListPayload } from './snapshotMerge';
 import {
   type DomainSnapshotState,
@@ -102,7 +107,6 @@ type ScopedDomainStateChange = {
   runtime: ClusterRefreshRuntime;
   wasActive: boolean;
   changed: boolean;
-  staleScopes: string[];
 };
 
 // Refreshers are disabled at registration by default. Most domains rely on
@@ -168,32 +172,36 @@ class RefreshOrchestrator {
     logInfo('[refresh] resource streaming enabled (mode=active, domains=all)');
   }
 
-  /** Every requested cluster has advertised a serving backend subsystem. */
+  /** The scope's cluster has advertised a serving backend subsystem. */
   private isScopeClusterServiceable(scope: string): boolean {
-    return parseClusterScopeList(scope).clusterIds.every((clusterId) =>
-      Boolean(
-        (this.clusterRuntimes.get(clusterId)?.isAuthAvailable() ?? true) &&
-          clusterReadiness.isServiceable(clusterId)
-      )
+    const { clusterId } = parseClusterScope(scope);
+    if (!clusterId) {
+      return true;
+    }
+    return Boolean(
+      (this.clusterRuntimes.get(clusterId)?.isAuthAvailable() ?? true) &&
+        clusterReadiness.isServiceable(clusterId)
     );
   }
 
-  /** Hold a fetch for re-dispatch when the scope's cluster(s) become serviceable. */
+  /** Hold a fetch for re-dispatch when the scope's cluster becomes serviceable. */
   private recordPendingClusterReadiness(
     domain: RefreshDomain,
     scope: string,
     options?: Pick<DomainFetchOptions, 'isManual' | 'streamSignal' | 'queryReconcile' | 'coalesce'>
   ): void {
-    for (const clusterId of parseClusterScopeList(scope).clusterIds) {
-      this.getClusterRuntime(clusterId).deferUntilClusterReady({
-        domain,
-        scope,
-        isManual: Boolean(options?.isManual),
-        streamSignal: Boolean(options?.streamSignal),
-        queryReconcile: Boolean(options?.queryReconcile),
-        ...(options?.coalesce ? { coalesce: true } : {}),
-      });
+    const { clusterId } = parseClusterScope(scope);
+    if (!clusterId) {
+      return;
     }
+    this.getClusterRuntime(clusterId).deferUntilClusterReady({
+      domain,
+      scope,
+      isManual: Boolean(options?.isManual),
+      streamSignal: Boolean(options?.streamSignal),
+      queryReconcile: Boolean(options?.queryReconcile),
+      ...(options?.coalesce ? { coalesce: true } : {}),
+    });
   }
 
   private handleForegroundActivationStarted(clusterId: string): void {
@@ -366,7 +374,7 @@ class RefreshOrchestrator {
       return;
     }
 
-    const runtime = this.getRuntimeForScope(domain, normalizedScope);
+    const runtime = this.getRuntimeForScope(normalizedScope);
     if (runtime.hasStreamingReady(domain, normalizedScope)) {
       return;
     }
@@ -451,22 +459,6 @@ class RefreshOrchestrator {
     resetAllScopedDomainStates(domain);
   }
 
-  private clearStaleScopes(
-    domain: RefreshDomain,
-    staleScopes: string[],
-    streaming?: StreamingRegistration
-  ): void {
-    staleScopes.forEach((staleScope) => {
-      this.cancelInFlightForScopedDomain(domain, staleScope);
-      if (streaming) {
-        this.getRuntimeForScope(domain, staleScope).clearStreamingReady(domain, staleScope);
-        this.stopStreamingScope(domain, staleScope, streaming, true);
-        return;
-      }
-      resetScopedDomainState(domain, staleScope);
-    });
-  }
-
   private reconcileRefresherActivity(
     config: DomainRegistration<RefreshDomain>,
     wasActive: boolean,
@@ -512,18 +504,7 @@ class RefreshOrchestrator {
   }
 
   private reconcileScopedDomainStateChange(change: ScopedDomainStateChange): void {
-    const {
-      config,
-      domain,
-      scope,
-      enabled,
-      preserveState,
-      runtime,
-      wasActive,
-      changed,
-      staleScopes,
-    } = change;
-    this.clearStaleScopes(domain, staleScopes, config.streaming);
+    const { config, domain, scope, enabled, preserveState, runtime, wasActive, changed } = change;
     if (!changed) {
       this.updateMetricsDemand();
       return;
@@ -565,7 +546,7 @@ class RefreshOrchestrator {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope value`);
     }
 
-    const runtime = this.getRuntimeForScope(domain, normalizedScope);
+    const runtime = this.getRuntimeForScope(normalizedScope);
 
     // A mounted lifecycle consumer holds a lease on this scope. Ignore direct
     // disables so an unrelated consumer (or an old instance mid-remount) cannot
@@ -578,11 +559,7 @@ class RefreshOrchestrator {
     }
 
     const wasActive = this.hasEnabledScopedSources(domain);
-    const { changed, staleScopes } = runtime.applyScopedDomainEnabled(
-      domain,
-      normalizedScope,
-      enabled
-    );
+    const { changed } = runtime.setScopedDomainEnabled(domain, normalizedScope, enabled);
     // When preserveState is true, toggling the domain stops/restarts activity
     // without clearing the last scoped snapshot from the store. This is useful
     // for event streams where reconnects should not blank the visible table.
@@ -596,7 +573,6 @@ class RefreshOrchestrator {
       runtime,
       wasActive,
       changed,
-      staleScopes,
     });
   }
 
@@ -612,7 +588,7 @@ class RefreshOrchestrator {
     if (!normalizedScope) {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope value`);
     }
-    const runtime = this.getRuntimeForScope(domain, normalizedScope);
+    const runtime = this.getRuntimeForScope(normalizedScope);
     const demand = options?.demand ?? 'snapshot';
     const hadSnapshotDemand = runtime.hasScopedDemand(domain, normalizedScope, 'snapshot');
     const wasActive = this.hasEnabledScopedSources(domain);
@@ -623,7 +599,7 @@ class RefreshOrchestrator {
     );
     if (firstLease) {
       const config = this.getConfig(domain);
-      const { staleScopes } = runtime.applyScopedDomainEnabled(domain, normalizedScope, true);
+      runtime.setScopedDomainEnabled(domain, normalizedScope, true);
       this.reconcileScopedDomainStateChange({
         config,
         domain,
@@ -633,7 +609,6 @@ class RefreshOrchestrator {
         runtime,
         wasActive,
         changed: activationChanged,
-        staleScopes,
       });
       return;
     }
@@ -657,7 +632,7 @@ class RefreshOrchestrator {
     if (!normalizedScope) {
       return;
     }
-    const runtime = this.getRuntimeForScope(domain, normalizedScope);
+    const runtime = this.getRuntimeForScope(normalizedScope);
     const { lastLease } = runtime.releaseScopedLease(
       domain,
       normalizedScope,
@@ -725,10 +700,6 @@ class RefreshOrchestrator {
     await this.startStreamingScope(domain, target.scope, target.streaming);
   }
 
-  getSelectedNamespace(): string | undefined {
-    return this.normalizeNamespaceScope(this.context.selectedNamespace) ?? undefined;
-  }
-
   getSelectedClusterId(): string | undefined {
     // Keep the active tab's cluster ID available for per-tab refresh scopes.
     const selected = (this.context.selectedClusterId ?? '').trim();
@@ -752,7 +723,7 @@ class RefreshOrchestrator {
   async fetchDomainForCluster(
     domain: RefreshDomain,
     clusterId: string,
-    scope?: string
+    selector: ScopeSelector = CLUSTER_SELECTOR
   ): Promise<void> {
     const config = this.configs.get(domain);
     if (!config) {
@@ -760,7 +731,7 @@ class RefreshOrchestrator {
     }
     // Route background work through the target cluster runtime, then perform a direct snapshot fetch.
     this.getClusterRuntime(clusterId);
-    const clusterScope = buildClusterScope(clusterId, scope ?? '');
+    const clusterScope = buildRefreshScope(domain, { clusterId, selector });
     await this.performFetch(domain, clusterScope, {
       isManual: false,
       allowDisabledRetainedScope: true,
@@ -778,11 +749,11 @@ class RefreshOrchestrator {
     if (!isResourceStreamDomain(domain) || !scope) {
       return false;
     }
-    return this.getRuntimeForScope(domain, scope).isStreamingBlocked(domain, scope);
+    return this.getRuntimeForScope(scope).isStreamingBlocked(domain, scope);
   }
 
   private isStreamingActive(domain: RefreshDomain, scope: string): boolean {
-    return this.getRuntimeForScope(domain, scope).isStreamingActive(domain, scope);
+    return this.getRuntimeForScope(scope).isStreamingActive(domain, scope);
   }
 
   // Resource stream health gates polling so snapshots stay active until delivery resumes.
@@ -814,10 +785,11 @@ class RefreshOrchestrator {
     if (!getAutoRefreshEnabled()) {
       return false;
     }
-    // One-shot typed-query scopes (`?` params) are never streaming targets, for
-    // ANY domain: event queries share the singleton named stream
-    // with the parameterless base scope and would churn it on every query.
-    if (trimmed.includes('?')) {
+    // One-shot query scopes are never streaming targets, for ANY domain: event
+    // queries share the singleton named stream with the parameterless base
+    // scope and would churn it on every query.
+    const parsed = tryParseRefreshScope(domain, trimmed);
+    if (!parsed || hasOneShotQuery(domain, parsed)) {
       return false;
     }
     // No stream can be established while the scope's cluster backend is still
@@ -830,13 +802,6 @@ class RefreshOrchestrator {
       return true;
     }
     if (!isResourceStreamViewActive(domain, this.context, trimmed)) {
-      return false;
-    }
-    const parsed = parseClusterScopeList(trimmed);
-    if (parsed.clusterIds.length === 0) {
-      return false;
-    }
-    if (parsed.isMultiCluster) {
       return false;
     }
     if (this.isStreamingBlocked(domain, trimmed)) {
@@ -887,7 +852,7 @@ class RefreshOrchestrator {
     if (!this.isScopedDomainEnabledInternal(domain, scope)) {
       return Promise.resolve();
     }
-    const runtime = this.getRuntimeForScope(domain, scope);
+    const runtime = this.getRuntimeForScope(scope);
     if (runtime.isStreamingStartingOrActive(domain, scope)) {
       return Promise.resolve();
     }
@@ -989,7 +954,7 @@ class RefreshOrchestrator {
     scope: string,
     streaming: StreamingRegistration
   ): void {
-    const runtime = this.getRuntimeForScope(domain, scope);
+    const runtime = this.getRuntimeForScope(scope);
     const leaseAllowsSnapshot =
       !runtime.hasScopedLease(domain, scope) || runtime.hasScopedDemand(domain, scope, 'snapshot');
     if (
@@ -1013,7 +978,7 @@ class RefreshOrchestrator {
     streaming: StreamingRegistration,
     reset: boolean
   ): void {
-    const runtime = this.getRuntimeForScope(domain, scope);
+    const runtime = this.getRuntimeForScope(scope);
     const pending = runtime.cancelStreamingStart(domain, scope);
 
     if (pending) {
@@ -1076,13 +1041,19 @@ class RefreshOrchestrator {
   // so manual refresh reaches it here.
   private activePodsTableScope(context: RefreshContext): string | null {
     if (isPodsTableNamespaceView(context)) {
-      return this.normalizeNamespaceScope(context.selectedNamespace);
+      // Prefer the cluster tied to the namespace selection.
+      const clusterId = (context.selectedNamespaceClusterId ?? context.selectedClusterId)?.trim();
+      const selection = context.selectedNamespace?.trim();
+      return clusterId && selection
+        ? buildRefreshScope('pods', {
+            clusterId,
+            selector: selectorForNamespaceSelection(selection),
+          })
+        : null;
     }
-    if (isNodesView(context)) {
-      return normalizeNamespaceScopeValue(
-        NODES_VIEW_PODS_SCOPE,
-        context.selectedClusterId ?? undefined
-      );
+    const clusterId = context.selectedClusterId?.trim();
+    if (isNodesView(context) && clusterId) {
+      return buildRefreshScope('pods', { clusterId, selector: NODES_VIEW_PODS_SELECTOR });
     }
     return null;
   }
@@ -1095,17 +1066,8 @@ class RefreshOrchestrator {
     return this.fetchScopedDomain('pods', scope, { isManual: true });
   }
 
-  private normalizeDomainScope(
-    domain: RefreshDomain,
-    value?: string | null,
-    allowEmpty = false
-  ): string | undefined {
-    return normalizeRefreshDomainScope({
-      domain,
-      value,
-      selectedClusterId: this.getSelectedClusterId(),
-      allowEmpty,
-    });
+  private normalizeDomainScope(domain: RefreshDomain, value?: string | null): string | undefined {
+    return normalizeRefreshDomainScope(domain, value);
   }
 
   private getClusterRuntime(clusterId: string): ClusterRefreshRuntime {
@@ -1118,18 +1080,12 @@ class RefreshOrchestrator {
     return runtime;
   }
 
-  private getRuntimeForScope(domain: RefreshDomain, scope?: string): ClusterRefreshRuntime {
+  private getRuntimeForScope(scope?: string): ClusterRefreshRuntime {
     if (!scope) {
       return this.coordinatorRuntime;
     }
-    const parsed = parseClusterScopeList(scope);
-    if (parsed.isMultiCluster) {
-      throw new Error(`Refresh domain "${domain}" requires a single cluster scope`);
-    }
-    if (!parsed.isMultiCluster && parsed.clusterIds.length === 1) {
-      return this.getClusterRuntime(parsed.clusterIds[0]);
-    }
-    return this.coordinatorRuntime;
+    const { clusterId } = parseClusterScope(scope);
+    return clusterId ? this.getClusterRuntime(clusterId) : this.coordinatorRuntime;
   }
 
   // Async work belongs to the runtime that started it, including across a
@@ -1206,17 +1162,14 @@ class RefreshOrchestrator {
   }
 
   // resetScopedStatesForRemovedClusters clears the global scoped-domain state of every scope
-  // whose cluster ids are all absent from the connected set. A scope with no cluster id
-  // belongs to the coordinator runtime (not a cluster) and is left untouched.
+  // whose cluster is absent from the connected set. A scope with no cluster id belongs to
+  // the coordinator runtime (not a cluster) and is left untouched.
   private resetScopedStatesForRemovedClusters(connected: Set<string>): void {
     const { scopedDomainEntries } = getRefreshState();
     (Object.keys(scopedDomainEntries) as RefreshDomain[]).forEach((domain) => {
       (scopedDomainEntries[domain] ?? []).forEach(([scope]) => {
-        const { clusterIds } = parseClusterScopeList(scope);
-        if (clusterIds.length === 0) {
-          return;
-        }
-        if (clusterIds.every((clusterId) => !connected.has(clusterId))) {
+        const { clusterId } = parseClusterScope(scope);
+        if (clusterId && !connected.has(clusterId)) {
           resetScopedDomainState(domain, scope);
         }
       });
@@ -1233,12 +1186,6 @@ class RefreshOrchestrator {
     }
     const active = (context.selectedClusterId ?? '').trim();
     return active ? [active] : [];
-  }
-
-  private normalizeNamespaceScope(value?: string | null): string | null {
-    // Prefer the cluster tied to the namespace selection for scoped refreshes.
-    const clusterId = this.context.selectedNamespaceClusterId ?? this.context.selectedClusterId;
-    return normalizeNamespaceScopeValue(value, clusterId);
   }
 
   private ensureRefresher(config: DomainRegistration<RefreshDomain>): void {
@@ -1368,10 +1315,6 @@ class RefreshOrchestrator {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope`);
     }
 
-    if (isResourceStreamDomain(domain) && parseClusterScopeList(normalizedScope).isMultiCluster) {
-      throw new Error(`Resource stream domain "${domain}" requires a single cluster scope`);
-    }
-
     // A cluster whose backend subsystem is still initializing cannot serve any
     // request yet (the backend answers ClusterNotReady). Hold the work and
     // re-dispatch on the lifecycle's became-serviceable edge — warm-up is
@@ -1386,7 +1329,7 @@ class RefreshOrchestrator {
       return;
     }
 
-    const runtime = this.getRuntimeForScope(domain, normalizedScope);
+    const runtime = this.getRuntimeForScope(normalizedScope);
     if (this.reconcileQueryOnlyDemand(domain, normalizedScope, options, config, runtime)) {
       return;
     }
@@ -1422,7 +1365,7 @@ class RefreshOrchestrator {
   ): boolean {
     if (
       !options.isManual &&
-      !this.getRuntimeForScope(domain, scope).canRetryReconciliation(domain, scope)
+      !this.getRuntimeForScope(scope).canRetryReconciliation(domain, scope)
     ) {
       return false;
     }
@@ -1640,7 +1583,7 @@ class RefreshOrchestrator {
       return;
     }
 
-    const runtime = this.getRuntimeForScope(domain, normalizedScope);
+    const runtime = this.getRuntimeForScope(normalizedScope);
     if (!this.claimFetchSlot(domain, normalizedScope, options, runtime)) {
       if (!options.coalesce) {
         return;
@@ -1712,7 +1655,7 @@ class RefreshOrchestrator {
     scope?: string,
     allowDisabledRetainedScope = false
   ): void {
-    const tracked = this.getRuntimeForScope(domain, scope).getInFlight(domain, scope);
+    const tracked = this.getRuntimeForScope(scope).getInFlight(domain, scope);
     if (tracked && tracked.contextVersion !== this.contextVersion) {
       return;
     }
@@ -1726,7 +1669,7 @@ class RefreshOrchestrator {
       ) {
         return;
       }
-      this.getRuntimeForScope(domain, resolvedScope).markPermissionAllowed(domain, resolvedScope);
+      this.getRuntimeForScope(resolvedScope).markPermissionAllowed(domain, resolvedScope);
       setScopedDomainState(domain, resolvedScope, (prev) => ({
         ...prev,
         status: 'ready',
@@ -1832,7 +1775,7 @@ class RefreshOrchestrator {
   }
 
   private isScopedDomainEnabledInternal(domain: RefreshDomain, scope: string): boolean {
-    return this.getRuntimeForScope(domain, scope).isScopedDomainEnabled(domain, scope);
+    return this.getRuntimeForScope(scope).isScopedDomainEnabled(domain, scope);
   }
 
   private teardownInFlight(
@@ -1848,7 +1791,7 @@ class RefreshOrchestrator {
   }
 
   private cancelInFlightForScopedDomain(domain: RefreshDomain, scope: string): void {
-    const runtime = this.getRuntimeForScope(domain, scope);
+    const runtime = this.getRuntimeForScope(scope);
     const key = makeInFlightKey(domain, scope);
     const details = runtime.getInFlight(domain, scope);
     if (details) {
@@ -1857,7 +1800,7 @@ class RefreshOrchestrator {
   }
 
   private blockStreamingScope(domain: RefreshDomain, scope: string): boolean {
-    if (!this.getRuntimeForScope(domain, scope).blockStreaming(domain, scope)) {
+    if (!this.getRuntimeForScope(scope).blockStreaming(domain, scope)) {
       return false;
     }
     const streaming = this.configs.get(domain)?.streaming;
@@ -1920,7 +1863,7 @@ class RefreshOrchestrator {
       return;
     }
     const domain = payload.domain;
-    const previous = this.getRuntimeForScope(domain, scope).setStreamHealth(domain, scope, payload);
+    const previous = this.getRuntimeForScope(scope).setStreamHealth(domain, scope, payload);
     if (payload.status === 'healthy' && previous?.status !== 'healthy') {
       setScopedDomainState(domain, scope, (state) => ({
         ...state,
@@ -2033,7 +1976,7 @@ class RefreshOrchestrator {
       runtimes.forEach((runtime) => {
         runtime.forEachEnabledScope(domain, (scope) => {
           const shouldStream = this.shouldStreamScope(domain, scope);
-          const scopeRuntime = this.getRuntimeForScope(domain, scope);
+          const scopeRuntime = this.getRuntimeForScope(scope);
           const alreadyStreaming = scopeRuntime.isStreamingStartingOrActive(domain, scope);
 
           if (shouldStream && !alreadyStreaming) {

@@ -554,14 +554,7 @@ func (s *session) writeMessage(msg ServerMessage) error {
 
 // resolveClusterID determines the cluster to use for the incoming message.
 func (s *session) resolveClusterID(msg ClientMessage) (string, error) {
-	scopeClusterIDs, _ := refresh.SplitClusterScopeList(msg.Scope)
-	if len(scopeClusterIDs) > 1 {
-		return "", errors.New("stream scope must target a single cluster")
-	}
-	scopeClusterID := ""
-	if len(scopeClusterIDs) == 1 {
-		scopeClusterID = scopeClusterIDs[0]
-	}
+	scopeClusterID, _ := refresh.SplitClusterScope(msg.Scope)
 
 	if !s.config.AllowClusterScopedRequests {
 		if (msg.ClusterID != "" && msg.ClusterID != s.config.ClusterID) ||

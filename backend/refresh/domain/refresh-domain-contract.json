@@ -4,11 +4,10 @@
     "namespaces": {
       "behaviorClass": "snapshot-table",
       "scopeContract": {
-        "kind": "optional-namespace",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/namespaces.go:NamespaceBuilder.Build",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
-        "acceptedEncodings": ["", "<namespace>"]
+        "selectors": ["cluster"],
+        "query": "none",
+        "valid": [""],
+        "invalid": ["cluster", "namespace:default", "?limit=50"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceBuilder",
@@ -21,11 +20,10 @@
     "namespace-metrics": {
       "behaviorClass": "snapshot-table",
       "scopeContract": {
-        "kind": "cluster",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
-        "acceptedEncodings": [""]
+        "selectors": ["cluster"],
+        "query": "none",
+        "valid": [""],
+        "invalid": ["cluster", "namespace:default", "?limit=50"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceMetricsBuilder",
@@ -38,11 +36,10 @@
     "cluster-overview": {
       "behaviorClass": "aggregate-snapshot",
       "scopeContract": {
-        "kind": "cluster",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/cluster_overview.go:ClusterOverviewBuilder.Build",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
-        "acceptedEncodings": [""]
+        "selectors": ["cluster"],
+        "query": "none",
+        "valid": [""],
+        "invalid": ["cluster", "namespace:default", "?limit=50"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot/cluster_overview.go:ClusterOverviewBuilder.Build",
@@ -55,13 +52,10 @@
     "cluster-identities": {
       "behaviorClass": "snapshot-table",
       "scopeContract": {
-        "kind": "cluster",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/cluster_identities.go:ClusterIdentitiesBuilder.Build",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
-        "acceptedEncodings": [
-          ""
-        ]
+        "selectors": ["cluster"],
+        "query": "typed-table",
+        "valid": ["", "?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["cluster", "namespace:default"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ClusterIdentitiesBuilder",
@@ -77,11 +71,10 @@
     "cluster-attention": {
       "behaviorClass": "snapshot-table",
       "scopeContract": {
-        "kind": "cluster",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/cluster_attention.go:ClusterAttentionBuilder.Build",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
-        "acceptedEncodings": [""]
+        "selectors": ["cluster"],
+        "query": "typed-table",
+        "valid": ["", "?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["cluster", "namespace:default"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ClusterAttentionBuilder",
@@ -94,11 +87,10 @@
     "catalog": {
       "behaviorClass": "catalog-stream",
       "scopeContract": {
-        "kind": "catalog-query",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/catalog.go:parseBrowseScope",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
-        "acceptedEncodings": ["", "limit=<n>&namespace=<namespace>&kind=<kind>&search=<query>&continue=<token>"]
+        "selectors": ["cluster"],
+        "query": "catalog",
+        "valid": ["", "limit=50&kinds=Pod&search=api"],
+        "invalid": ["?limit=50"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/objectcatalog.Service",
@@ -111,11 +103,10 @@
     "catalog-diff": {
       "behaviorClass": "catalog-snapshot",
       "scopeContract": {
-        "kind": "catalog-query",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/catalog.go:parseBrowseScope",
-        "frontendBuilder": "frontend/src/ui/modals/ObjectDiffModal.tsx:buildCatalogDiffScope",
-        "acceptedEncodings": ["limit=<n>&namespace=<namespace>&kind=<kind>&search=<query>"]
+        "selectors": ["cluster"],
+        "query": "catalog",
+        "valid": ["limit=50&namespaces=default&kinds=Pod&search=api"],
+        "invalid": ["?limit=50"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/objectcatalog.Service",
@@ -128,11 +119,10 @@
     "nodes": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": [""]
+        "selectors": ["cluster"],
+        "query": "typed-table",
+        "valid": ["", "?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["cluster", "namespace:default"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NodeBuilder",
@@ -145,11 +135,10 @@
     "cluster-config": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": [""]
+        "selectors": ["cluster"],
+        "query": "typed-table",
+        "valid": ["", "?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["cluster", "namespace:default"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ClusterConfigBuilder",
@@ -162,11 +151,10 @@
     "cluster-crds": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": [""]
+        "selectors": ["cluster"],
+        "query": "typed-table",
+        "valid": ["", "?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["cluster", "namespace:default"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ClusterCRDBuilder",
@@ -179,11 +167,10 @@
     "cluster-events": {
       "behaviorClass": "snapshot-table",
       "scopeContract": {
-        "kind": "cluster",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/cluster_events.go:ClusterEventsBuilder.Build",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
-        "acceptedEncodings": ["", "cluster"]
+        "selectors": ["cluster"],
+        "query": "typed-table",
+        "valid": ["", "?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["cluster", "namespace:default"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ClusterEventsBuilder",
@@ -196,11 +183,10 @@
     "cluster-rbac": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": [""]
+        "selectors": ["cluster"],
+        "query": "typed-table",
+        "valid": ["", "?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["cluster", "namespace:default"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ClusterRBACBuilder",
@@ -213,11 +199,10 @@
     "cluster-storage": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": [""]
+        "selectors": ["cluster"],
+        "query": "typed-table",
+        "valid": ["", "?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["cluster", "namespace:default"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ClusterStorageBuilder",
@@ -230,11 +215,10 @@
     "namespace-workloads": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all"]
+        "selectors": ["namespace", "all-namespaces"],
+        "query": "typed-table",
+        "valid": ["namespace:default", "namespace:all", "namespace:all?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["", "default", "namespace:", "namespace:*", "node:worker-1"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceWorkloadsBuilder",
@@ -247,11 +231,10 @@
     "namespace-autoscaling": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all"]
+        "selectors": ["namespace", "all-namespaces"],
+        "query": "typed-table",
+        "valid": ["namespace:default", "namespace:all", "namespace:all?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["", "default", "namespace:", "namespace:*", "node:worker-1"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceAutoscalingBuilder",
@@ -264,11 +247,10 @@
     "namespace-config": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all"]
+        "selectors": ["namespace", "all-namespaces"],
+        "query": "typed-table",
+        "valid": ["namespace:default", "namespace:all", "namespace:all?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["", "default", "namespace:", "namespace:*", "node:worker-1"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceConfigBuilder",
@@ -281,11 +263,10 @@
     "namespace-events": {
       "behaviorClass": "snapshot-table",
       "scopeContract": {
-        "kind": "namespace-scope",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/namespace_events.go:NamespaceEventsBuilder.Build",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all"]
+        "selectors": ["namespace", "all-namespaces"],
+        "query": "typed-table",
+        "valid": ["namespace:default", "namespace:all", "namespace:all?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["", "default", "namespace:", "namespace:*", "node:worker-1"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceEventsBuilder",
@@ -298,11 +279,10 @@
     "namespace-helm": {
       "behaviorClass": "complete-resync-stream",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all"]
+        "selectors": ["namespace", "all-namespaces"],
+        "query": "typed-table",
+        "valid": ["namespace:default", "namespace:all", "namespace:all?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["", "default", "namespace:", "namespace:*", "node:worker-1"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceHelmBuilder",
@@ -315,11 +295,10 @@
     "namespace-network": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all"]
+        "selectors": ["namespace", "all-namespaces"],
+        "query": "typed-table",
+        "valid": ["namespace:default", "namespace:all", "namespace:all?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["", "default", "namespace:", "namespace:*", "node:worker-1"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceNetworkBuilder",
@@ -332,11 +311,10 @@
     "namespace-quotas": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all"]
+        "selectors": ["namespace", "all-namespaces"],
+        "query": "typed-table",
+        "valid": ["namespace:default", "namespace:all", "namespace:all?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["", "default", "namespace:", "namespace:*", "node:worker-1"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceQuotasBuilder",
@@ -349,11 +327,10 @@
     "namespace-rbac": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all"]
+        "selectors": ["namespace", "all-namespaces"],
+        "query": "typed-table",
+        "valid": ["namespace:default", "namespace:all", "namespace:all?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["", "default", "namespace:", "namespace:*", "node:worker-1"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceRBACBuilder",
@@ -366,11 +343,10 @@
     "namespace-storage": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all"]
+        "selectors": ["namespace", "all-namespaces"],
+        "query": "typed-table",
+        "valid": ["namespace:default", "namespace:all", "namespace:all?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["", "default", "namespace:", "namespace:*", "node:worker-1"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceStorageBuilder",
@@ -383,11 +359,10 @@
     "pods": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all", "node:<node>", "workload:<namespace>:<group>:<version>:<kind>:<name>"]
+        "selectors": ["namespace", "all-namespaces", "node", "workload"],
+        "query": "typed-table",
+        "valid": ["namespace:default", "namespace:all", "node:worker-1", "workload:prod:apps:v1:Deployment:web", "namespace:all?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["", "default", "namespace:*", "node:", "workload:prod:apps", "workload:prod::v1:ReplicationController:legacy", "object:prod::v1:Pod:web", "service:api"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.PodBuilder",
@@ -400,11 +375,10 @@
     "object-details": {
       "behaviorClass": "detail-payload",
       "scopeContract": {
-        "kind": "object-ref",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/object_scope.go:ParseObjectScope",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildObjectScope",
-        "acceptedEncodings": ["<namespace>:<group>/<version>:<kind>:<name>", "__cluster__:<group>/<version>:<kind>:<name>"]
+        "selectors": ["object"],
+        "query": "none",
+        "valid": ["prod:apps/v1:Deployment:web", "__cluster__:/v1:Node:worker-1"],
+        "invalid": ["", "prod:Deployment:web", "prod:apps/v1:Deployment:", "prod:apps/v1:Deployment:web?maxNodes=200"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ObjectDetailsBuilder",
@@ -417,11 +391,10 @@
     "object-yaml": {
       "behaviorClass": "detail-payload",
       "scopeContract": {
-        "kind": "object-ref",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/object_scope.go:ParseObjectScope",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildObjectScope",
-        "acceptedEncodings": ["<namespace>:<group>/<version>:<kind>:<name>", "__cluster__:<group>/<version>:<kind>:<name>"]
+        "selectors": ["object"],
+        "query": "none",
+        "valid": ["prod:apps/v1:Deployment:web", "__cluster__:/v1:Node:worker-1"],
+        "invalid": ["", "prod:Deployment:web", "prod:apps/v1:Deployment:", "prod:apps/v1:Deployment:web?maxNodes=200"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ObjectYAMLBuilder",
@@ -434,11 +407,10 @@
     "object-helm-manifest": {
       "behaviorClass": "helm-content-payload",
       "scopeContract": {
-        "kind": "helm-release",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/object_content.go:parseHelmScope",
-        "frontendBuilder": "frontend/src/modules/object-panel/objectPanelRef.ts:getObjectPanelScopes",
-        "acceptedEncodings": ["<namespace>:<name>", "__cluster__:<name>"]
+        "selectors": ["helm-release"],
+        "query": "none",
+        "valid": ["prod:web", "__cluster__:web"],
+        "invalid": ["", "prod:", "web"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ObjectHelmManifestBuilder",
@@ -451,11 +423,10 @@
     "object-helm-values": {
       "behaviorClass": "helm-content-payload",
       "scopeContract": {
-        "kind": "helm-release",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/object_content.go:parseHelmScope",
-        "frontendBuilder": "frontend/src/modules/object-panel/objectPanelRef.ts:getObjectPanelScopes",
-        "acceptedEncodings": ["<namespace>:<name>", "__cluster__:<name>"]
+        "selectors": ["helm-release"],
+        "query": "none",
+        "valid": ["prod:web", "__cluster__:web"],
+        "invalid": ["", "prod:", "web"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ObjectHelmValuesBuilder",
@@ -468,11 +439,10 @@
     "object-events": {
       "behaviorClass": "event-snapshot",
       "scopeContract": {
-        "kind": "object-ref",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/object_scope.go:ParseObjectScope",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildObjectScope",
-        "acceptedEncodings": ["<namespace>:<group>/<version>:<kind>:<name>", "__cluster__:<group>/<version>:<kind>:<name>"]
+        "selectors": ["object"],
+        "query": "none",
+        "valid": ["prod:apps/v1:Deployment:web", "__cluster__:/v1:Node:worker-1"],
+        "invalid": ["", "prod:Deployment:web", "prod:apps/v1:Deployment:", "prod:apps/v1:Deployment:web?maxNodes=200"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ObjectEventsBuilder",
@@ -485,11 +455,10 @@
     "object-map": {
       "behaviorClass": "graph-payload",
       "scopeContract": {
-        "kind": "object-map",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/object_map.go:parseObjectMapScope",
-        "frontendBuilder": "frontend/src/modules/object-panel/objectPanelRef.ts:getObjectPanelScopes",
-        "acceptedEncodings": ["<namespace>:<group>/<version>:<kind>:<name>[?maxNodes=<n>]", "__cluster__:<group>/<version>:<kind>:<name>[?maxNodes=<n>]", "namespace:<namespace>[?maxNodes=<n>]"]
+        "selectors": ["object", "namespace"],
+        "query": "object-map",
+        "valid": ["prod:apps/v1:Deployment:web", "__cluster__:/v1:Node:worker-1", "prod:apps/v1:Deployment:web?maxNodes=200", "namespace:prod", "namespace:prod?maxNodes=200", "namespace:apps/v1:Deployment:web"],
+        "invalid": ["", "namespace:", "namespace:all", "prod:Deployment:web"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.objectMapBuilder",
@@ -502,11 +471,10 @@
     "object-maintenance": {
       "behaviorClass": "operation-state",
       "scopeContract": {
-        "kind": "node-maintenance",
-        "clusterPrefix": "required",
-        "parser": "backend/nodemaintenance/store.go:ParseScope",
-        "frontendBuilder": "frontend/src/shared/hooks/useNodeMaintenanceActions.tsx:useNodeMaintenanceActions",
-        "acceptedEncodings": ["", "node:<name>", "<name>"]
+        "selectors": ["cluster", "node"],
+        "query": "none",
+        "valid": ["", "node:worker-1"],
+        "invalid": ["worker-1", "node:", "aggregate"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NodeMaintenanceBuilder",
@@ -519,11 +487,10 @@
     "container-logs": {
       "behaviorClass": "log-stream",
       "scopeContract": {
-        "kind": "log-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/containerlogsstream/handler.go:parseRequest",
-        "frontendBuilder": "frontend/src/modules/object-panel/objectPanelRef.ts:getObjectPanelScopes",
-        "acceptedEncodings": ["<namespace>:<group>/<version>:<kind>:<name>"]
+        "selectors": ["object"],
+        "query": "none",
+        "valid": ["prod:apps/v1:Deployment:web", "__cluster__:/v1:Node:worker-1"],
+        "invalid": ["", "prod:Deployment:web", "prod:apps/v1:Deployment:", "prod:apps/v1:Deployment:web?maxNodes=200"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/containerlogsstream",
@@ -542,51 +509,13 @@
       "completeSemantics": "scope-level-resync",
       "completeIdentity": "diagnostic-only"
     },
-    "scopeExamples": {
-      "pod": {
-        "valid": [
-          {"scope": "namespace:default", "canonical": "namespace:default"},
-          {"scope": "namespace:*", "canonical": "namespace:all"},
-          {"scope": "node:worker-1", "canonical": "node:worker-1"},
-          {"scope": "workload:prod:apps:v1:Deployment:web", "canonical": "workload:prod:apps:v1:Deployment:web"}
-        ],
-        "invalid": [
-          {"scope": "", "errorContains": "scope is required"},
-          {"scope": "node:", "errorContains": "node scope is required"},
-          {"scope": "workload:prod:apps", "errorContains": "namespace:group:version:kind:name"},
-          {"scope": "service:api", "errorContains": "unsupported pods scope"}
-        ]
-      },
-      "namespace": {
-        "valid": [
-          {"scope": "default", "canonical": "namespace:default"},
-          {"scope": "namespace:default", "canonical": "namespace:default"},
-          {"scope": "namespace:*", "canonical": "namespace:all"}
-        ],
-        "invalid": [
-          {"scope": "", "errorContains": "scope is required"},
-          {"scope": "namespace:", "errorContains": "scope is required"}
-        ]
-      },
-      "cluster": {
-        "valid": [
-          {"scope": "", "canonical": ""},
-          {"scope": "cluster", "canonical": ""}
-        ],
-        "invalid": [
-          {"scope": "namespace:default", "errorContains": "does not accept scope"}
-        ]
-      }
-    },
     "domains": {
       "pods": {
-        "scopeKind": "pod",
         "completeIsScopeLevel": true,
         "primaryResources": [{"group": "", "version": "v1", "kind": "Pod", "resource": "pods"}],
         "relatedResources": [{"group": "apps", "version": "v1", "kind": "ReplicaSet", "resource": "replicasets"}]
       },
       "namespace-workloads": {
-        "scopeKind": "namespace",
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "apps", "version": "v1", "kind": "Deployment", "resource": "deployments"},
@@ -603,7 +532,6 @@
         ]
       },
       "namespace-config": {
-        "scopeKind": "namespace",
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "", "version": "v1", "kind": "ConfigMap", "resource": "configmaps"},
@@ -612,7 +540,6 @@
         "relatedResources": []
       },
       "namespace-network": {
-        "scopeKind": "namespace",
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "", "version": "v1", "kind": "Service", "resource": "services"},
@@ -630,7 +557,6 @@
         "relatedResources": [{"group": "discovery.k8s.io", "version": "v1", "kind": "EndpointSlice", "resource": "endpointslices"}]
       },
       "namespace-rbac": {
-        "scopeKind": "namespace",
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "rbac.authorization.k8s.io", "version": "v1", "kind": "Role", "resource": "roles"},
@@ -640,7 +566,6 @@
         "relatedResources": []
       },
       "namespace-helm": {
-        "scopeKind": "namespace",
         "completeIsScopeLevel": true,
         "rowProjection": "scope-level-complete-only",
         "primaryResources": [
@@ -654,13 +579,11 @@
         "syntheticRowKind": {"group": "helm.sh", "version": "v3", "kind": "HelmRelease", "resource": "releases"}
       },
       "namespace-autoscaling": {
-        "scopeKind": "namespace",
         "completeIsScopeLevel": true,
         "primaryResources": [{"group": "autoscaling", "version": "v1", "kind": "HorizontalPodAutoscaler", "resource": "horizontalpodautoscalers"}],
         "relatedResources": []
       },
       "namespace-quotas": {
-        "scopeKind": "namespace",
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "", "version": "v1", "kind": "ResourceQuota", "resource": "resourcequotas"},
@@ -670,13 +593,11 @@
         "relatedResources": []
       },
       "namespace-storage": {
-        "scopeKind": "namespace",
         "completeIsScopeLevel": true,
         "primaryResources": [{"group": "", "version": "v1", "kind": "PersistentVolumeClaim", "resource": "persistentvolumeclaims"}],
         "relatedResources": []
       },
       "cluster-rbac": {
-        "scopeKind": "cluster",
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "rbac.authorization.k8s.io", "version": "v1", "kind": "ClusterRole", "resource": "clusterroles"},
@@ -685,13 +606,11 @@
         "relatedResources": []
       },
       "cluster-storage": {
-        "scopeKind": "cluster",
         "completeIsScopeLevel": true,
         "primaryResources": [{"group": "", "version": "v1", "kind": "PersistentVolume", "resource": "persistentvolumes"}],
         "relatedResources": []
       },
       "cluster-config": {
-        "scopeKind": "cluster",
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "storage.k8s.io", "version": "v1", "kind": "StorageClass", "resource": "storageclasses"},
@@ -703,13 +622,11 @@
         "relatedResources": []
       },
       "cluster-crds": {
-        "scopeKind": "cluster",
         "completeIsScopeLevel": true,
         "primaryResources": [{"group": "apiextensions.k8s.io", "version": "v1", "kind": "CustomResourceDefinition", "resource": "customresourcedefinitions"}],
         "relatedResources": []
       },
       "nodes": {
-        "scopeKind": "cluster",
         "completeIsScopeLevel": true,
         "primaryResources": [{"group": "", "version": "v1", "kind": "Node", "resource": "nodes"}],
         "relatedResources": [{"group": "", "version": "v1", "kind": "Pod", "resource": "pods"}]

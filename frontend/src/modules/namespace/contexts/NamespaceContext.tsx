@@ -45,7 +45,6 @@ import {
   useRefreshScopedDomain,
   useRefreshScopedDomainStates,
 } from '@/core/refresh';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import {
@@ -53,6 +52,7 @@ import {
   failureMessage,
   type RefreshFailure,
 } from '@/core/refresh/refreshFailure';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { NamespaceSignalState } from '@/core/refresh/types';
 import { setActiveNamespaceContext } from '@/core/telemetry/sentry';
 import { joinNamespaceMetrics, type NamespaceSummaryWithMetrics } from './namespaceMetrics';
@@ -133,7 +133,7 @@ const buildNamespaceScopes = (clusterIds: string[]): string[] => {
   const scopes: string[] = [];
   clusterIds.forEach((rawClusterId) => {
     const clusterId = rawClusterId.trim();
-    const scope = clusterId ? buildClusterScope(clusterId, '') : '';
+    const scope = buildClusterRefreshScope('namespaces', clusterId);
     if (!scope || seen.has(scope)) {
       return;
     }
@@ -272,7 +272,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   // Namespace refresh state is per cluster. Cross-cluster namespace views should
   // derive from per-cluster scoped entries rather than one aggregate domain.
   const namespacesScope = useMemo(
-    () => (activeClusterId ? buildClusterScope(activeClusterId, '') : ''),
+    () => buildClusterRefreshScope('namespaces', activeClusterId),
     [activeClusterId]
   );
   const namespacesRefreshScope = activeClusterRefreshAvailable ? namespacesScope : '';
@@ -715,7 +715,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       if (!payload.clusterId.trim()) {
         return;
       }
-      const scope = buildClusterScope(payload.clusterId, '');
+      const scope = buildClusterRefreshScope('namespaces', payload.clusterId);
       if (!scope) {
         return;
       }

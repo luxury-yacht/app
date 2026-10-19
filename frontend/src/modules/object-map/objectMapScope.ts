@@ -6,7 +6,7 @@
  * backend parser is parseObjectMapScope in backend/refresh/snapshot/object_map.go.
  */
 
-import { buildClusterScope } from '@core/refresh/clusterScope';
+import { buildRefreshScope } from '@core/refresh/scopeSelector';
 
 export const OBJECT_MAP_MAX_NODES = 1000;
 
@@ -21,11 +21,11 @@ const clamp = (value: number, min: number, max: number): number => {
   return Math.min(Math.max(value, min), max);
 };
 
-const formatQueryString = (options: ObjectMapScopeOptions): string => {
+const formatQuery = (options: ObjectMapScopeOptions): string => {
   if (typeof options.maxNodes !== 'number') {
     return '';
   }
-  return `?maxNodes=${clamp(Math.floor(options.maxNodes), 1, OBJECT_MAP_MAX_NODES)}`;
+  return `maxNodes=${clamp(Math.floor(options.maxNodes), 1, OBJECT_MAP_MAX_NODES)}`;
 };
 
 export const buildNamespaceObjectMapScope = (
@@ -38,5 +38,9 @@ export const buildNamespaceObjectMapScope = (
   if (!id || !name) {
     return null;
   }
-  return buildClusterScope(id, `namespace:${name}${formatQueryString(options)}`);
+  return buildRefreshScope('object-map', {
+    clusterId: id,
+    selector: { kind: 'namespace', namespace: name },
+    query: formatQuery(options),
+  });
 };

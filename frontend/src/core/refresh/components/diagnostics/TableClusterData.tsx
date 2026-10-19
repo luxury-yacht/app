@@ -106,16 +106,14 @@ const ScopeRow: React.FC<{
       </td>
       {/* Scope truncates, so the full value must always be in the title. */}
       <td title={row.scopeTooltip ?? row.scope}>
-        {row.scopeEntries && row.scopeEntries.length > 0 ? (
+        {row.scopeEntry ? (
           <span className="diagnostics-scope-entries">
-            {row.scopeEntries.map((entry) => (
-              <div key={entry.clusterName}>
-                {entry.clusterName}
-                {entry.label === 'Active' && (
-                  <span className="diagnostics-scope-label"> (active)</span>
-                )}
-              </div>
-            ))}
+            <div>
+              {row.scopeEntry.clusterName}
+              {row.scopeEntry.label === 'Active' && (
+                <span className="diagnostics-scope-label"> (active)</span>
+              )}
+            </div>
           </span>
         ) : (
           <TableCellValue>{row.scope}</TableCellValue>

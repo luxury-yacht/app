@@ -407,8 +407,7 @@ type namespaceBuildInputs struct {
 // Build returns the namespace snapshot payload.
 func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	_, scopeValue := refresh.SplitClusterScope(scope)
-	namespaces, scopeStatuses, err := b.collectNamespaces(ctx, scopeValue)
+	namespaces, scopeStatuses, err := b.collectNamespaces(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -432,26 +431,20 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	return b.namespaceSnapshot(scope, inputs, items, version), nil
 }
 
-func (b *NamespaceBuilder) collectNamespaces(ctx context.Context, scopeValue string) ([]*corev1.Namespace, map[string]NamespaceScopeStatus, error) {
-	switch {
-	case len(b.scope) > 0:
-		return b.collectScopedNamespaces(ctx, scopeValue)
-	case strings.TrimSpace(scopeValue) != "":
-		return b.collectNamedNamespace(scopeValue)
-	default:
-		namespaces, err := b.namespaces.List(labels.Everything())
-		return namespaces, map[string]NamespaceScopeStatus{}, err
+// collectNamespaces lists the cluster's namespaces, or probes the configured
+// namespace scope when one restricts the cluster.
+func (b *NamespaceBuilder) collectNamespaces(ctx context.Context) ([]*corev1.Namespace, map[string]NamespaceScopeStatus, error) {
+	if len(b.scope) > 0 {
+		return b.collectScopedNamespaces(ctx)
 	}
+	namespaces, err := b.namespaces.List(labels.Everything())
+	return namespaces, map[string]NamespaceScopeStatus{}, err
 }
 
-func (b *NamespaceBuilder) collectScopedNamespaces(ctx context.Context, scopeValue string) ([]*corev1.Namespace, map[string]NamespaceScopeStatus, error) {
+func (b *NamespaceBuilder) collectScopedNamespaces(ctx context.Context) ([]*corev1.Namespace, map[string]NamespaceScopeStatus, error) {
 	var namespaces []*corev1.Namespace
 	statuses := make(map[string]NamespaceScopeStatus)
-	requested := strings.TrimSpace(scopeValue)
 	for _, name := range b.scope {
-		if requested != "" && name != requested {
-			continue
-		}
 		probed, status := b.probeScopedNamespace(ctx, name)
 		statuses[name] = status
 		if probed == nil {
@@ -460,17 +453,6 @@ func (b *NamespaceBuilder) collectScopedNamespaces(ctx context.Context, scopeVal
 		namespaces = append(namespaces, probed)
 	}
 	return namespaces, statuses, nil
-}
-
-func (b *NamespaceBuilder) collectNamedNamespace(name string) ([]*corev1.Namespace, map[string]NamespaceScopeStatus, error) {
-	namespace, err := b.namespaces.Get(name)
-	if apimachineryerrors.IsNotFound(err) {
-		return []*corev1.Namespace{}, map[string]NamespaceScopeStatus{}, nil
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-	return []*corev1.Namespace{namespace}, map[string]NamespaceScopeStatus{}, nil
 }
 
 func sortNamespaces(namespaces []*corev1.Namespace) {

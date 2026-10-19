@@ -18,6 +18,7 @@ import {
   type RefreshFailure,
   refreshFailureOf,
 } from '@/core/refresh/refreshFailure';
+import type { ScopeSelector } from '@/core/refresh/scopeSelector';
 import type {
   CanonicalResourceRef,
   RefreshDomain,
@@ -42,7 +43,8 @@ export interface UseTypedResourceQueryParams<TPayload extends TypedQueryPayload,
   clusterId?: string | null;
   domain: RefreshDomain;
   label: string;
-  baseScope?: string;
+  /** The query's selector; memoize it, since its identity keys the request. */
+  baseSelector: ScopeSelector;
   filters: GridTableFilterState;
   sortConfig: SortConfig | null;
   pageLimit?: number;
@@ -56,7 +58,7 @@ export interface FetchTypedResourceRowsOptions {
   sortConfig?: SortConfig | null;
   pageLimit?: number;
   predicates?: Record<string, string | null | undefined>;
-  baseScope?: string;
+  baseSelector?: ScopeSelector;
   label?: string;
 }
 
@@ -252,7 +254,7 @@ interface ResolvedFetchRowsOptions {
   sortConfig: SortConfig | null;
   pageLimit: number;
   predicates: Record<string, string | null | undefined> | undefined;
-  baseScope: string | undefined;
+  baseSelector: ScopeSelector;
   label: string;
 }
 
@@ -263,7 +265,7 @@ const resolveFetchRowsOptions = (
   filters: options.filters ?? defaults.filters,
   sortConfig: options.sortConfig === undefined ? defaults.sortConfig : options.sortConfig,
   predicates: options.predicates ?? defaults.predicates,
-  baseScope: options.baseScope ?? defaults.baseScope,
+  baseSelector: options.baseSelector ?? defaults.baseSelector,
   label: options.label ?? defaults.label,
   pageLimit: options.pageLimit ?? EXPORT_PAGE_LIMIT,
 });
@@ -283,7 +285,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   clusterId,
   domain,
   label,
-  baseScope,
+  baseSelector,
   filters,
   sortConfig,
   pageLimit = DEFAULT_TABLE_PAGE_SIZE,
@@ -344,7 +346,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         enabled,
         clusterId,
         domain,
-        baseScope,
+        baseSelector,
         filters: effectiveFilters,
         sortConfig,
         pageLimit,
@@ -352,7 +354,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         liveDataVersion,
       }),
     [
-      baseScope,
+      baseSelector,
       clusterId,
       domain,
       enabled,
@@ -369,13 +371,13 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         enabled,
         clusterId,
         domain,
-        baseScope,
+        baseSelector,
         filters: effectiveFilters,
         sortConfig,
         pageLimit,
         predicates,
       }),
-    [baseScope, clusterId, domain, enabled, effectiveFilters, pageLimit, predicates, sortConfig]
+    [baseSelector, clusterId, domain, enabled, effectiveFilters, pageLimit, predicates, sortConfig]
   );
   const queryHardResetIdentity = useMemo(
     () =>
@@ -383,7 +385,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         enabled,
         clusterId,
         domain,
-        baseScope,
+        baseSelector,
         filters: {
           search: '',
           kinds: ALL_MULTISELECT_FILTER,
@@ -395,7 +397,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         pageLimit: DEFAULT_TABLE_PAGE_SIZE,
         predicates,
       }),
-    [baseScope, clusterId, domain, enabled, predicates]
+    [baseSelector, clusterId, domain, enabled, predicates]
   );
   const queryIdentityRef = useRef(queryIdentity);
   const queryResetIdentityRef = useRef(queryResetIdentity);
@@ -452,8 +454,8 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     if (!enabled) {
       return null;
     }
-    return buildTypedResourceQueryScope(clusterId, {
-      baseScope,
+    return buildTypedResourceQueryScope(domain, clusterId, {
+      baseSelector,
       filters: effectiveFilters,
       sortConfig,
       pageLimit,
@@ -466,8 +468,9 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     anchorArmed,
     anchorIntent,
     startRankIntent,
-    baseScope,
+    baseSelector,
     clusterId,
+    domain,
     enabled,
     effectiveFilters,
     pageLimit,
@@ -690,7 +693,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         filters: effectiveFilters,
         sortConfig,
         predicates,
-        baseScope,
+        baseSelector,
         label,
         pageLimit: EXPORT_PAGE_LIMIT,
       });
@@ -698,8 +701,8 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       // page guard, failure semantics (failed/empty pages REJECT), and the
       // cross-page consistency guard.
       const walk = await walkQueryCursorPages<TRow>(resolvedOptions.label, async (cursor, page) => {
-        const exportScope = buildTypedResourceQueryScope(clusterId, {
-          baseScope: resolvedOptions.baseScope,
+        const exportScope = buildTypedResourceQueryScope(domain, clusterId, {
+          baseSelector: resolvedOptions.baseSelector,
           filters: resolvedOptions.filters,
           sortConfig: resolvedOptions.sortConfig,
           pageLimit: resolvedOptions.pageLimit,
@@ -742,7 +745,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       warnForChangedExportRows(walk.dataChangedDuringWalk, domain);
       return walk.items;
     },
-    [baseScope, clusterId, domain, enabled, effectiveFilters, label, predicates, sortConfig]
+    [baseSelector, clusterId, domain, enabled, effectiveFilters, label, predicates, sortConfig]
   );
 
   return {

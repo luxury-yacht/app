@@ -15,8 +15,6 @@ func TestProjectionDescriptorsStayAlignedWithSupportedDomains(t *testing.T) {
 	permissionRequirements := domainpermissions.StreamRequirementsByDomain()
 	for _, domain := range domainpermissions.StreamDomains() {
 		descriptor := descriptors[domain]
-		require.NotEmptyf(t, descriptor.ScopeKind, "domain %s must declare scope kind", domain)
-		require.NotEmptyf(t, descriptor.SelectorShape, "domain %s must declare selector shape", domain)
 		require.NotEmptyf(t, descriptor.RowIdentity, "domain %s must declare row identity", domain)
 		require.NotEmptyf(t, descriptor.UpdateIdentity, "domain %s must declare update identity", domain)
 		require.NotEmptyf(t, descriptor.Projection, "domain %s must declare projection function", domain)

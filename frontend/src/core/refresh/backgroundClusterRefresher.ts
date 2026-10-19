@@ -14,6 +14,7 @@ import {
   type NamespaceRefresherName,
   namespaceViewToRefresher,
 } from './refresherTypes';
+import { type ScopeSelector, selectorForNamespaceSelection } from './scopeSelector';
 import type { RefreshDomain } from './types';
 
 // Default interval between background refresh ticks (15 seconds).
@@ -143,7 +144,7 @@ export class BackgroundClusterRefresher {
     const { viewType, activeNamespaceView, activeClusterView } = navState;
 
     let domain: RefreshDomain | undefined;
-    let scope: string | undefined;
+    let selector: ScopeSelector | undefined;
 
     if (viewType === 'overview') {
       domain = 'cluster-overview';
@@ -161,12 +162,12 @@ export class BackgroundClusterRefresher {
         return;
       }
       if (ns) {
-        scope = ns.startsWith('namespace:') ? ns : `namespace:${ns}`;
+        selector = selectorForNamespaceSelection(ns);
       }
-      if (activeNamespaceView === 'workloads' && scope) {
+      if (activeNamespaceView === 'workloads' && selector) {
         await Promise.all([
-          refreshOrchestrator.fetchDomainForCluster('namespace-workloads', clusterId, scope),
-          refreshOrchestrator.fetchDomainForCluster('pods', clusterId, scope),
+          refreshOrchestrator.fetchDomainForCluster('namespace-workloads', clusterId, selector),
+          refreshOrchestrator.fetchDomainForCluster('pods', clusterId, selector),
         ]);
         return;
       }
@@ -176,6 +177,6 @@ export class BackgroundClusterRefresher {
       return;
     }
 
-    await refreshOrchestrator.fetchDomainForCluster(domain, clusterId, scope);
+    await refreshOrchestrator.fetchDomainForCluster(domain, clusterId, selector);
   }
 }

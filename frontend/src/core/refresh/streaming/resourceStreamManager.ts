@@ -50,8 +50,6 @@ import {
 import { StreamErrorNotifier } from './streamErrorNotifier';
 import { StreamVisibilityController } from './streamVisibilityController';
 
-export { normalizeResourceScope } from './resourceStreamDomains';
-
 const UPDATE_COALESCE_MS = 150;
 const RESYNC_COOLDOWN_MS = 1000;
 // Shown while a stream resynchronizes; the frontend raised it, so it is local.
@@ -191,30 +189,21 @@ export class ResourceStreamManager {
     if (typeof window === 'undefined') {
       return;
     }
-    const subscriptions = this.ensureSubscriptions(domain, scope);
-    subscriptions.forEach((subscription) => {
-      this.resyncSubscription(subscription, 'initial');
-    });
+    this.resyncSubscription(this.ensureSubscription(domain, scope), 'initial');
   }
 
   stop(domain: DoorbellDomain, scope: string, reset = false): void {
-    const subscriptions = this.releaseSubscriptions(domain, scope);
-    if (subscriptions.length === 0) {
-      return;
-    }
-    subscriptions.forEach((subscription) => {
+    const subscription = this.subscriptions.release(domain, scope);
+    if (subscription) {
       this.scheduleUnsubscribe(subscription, reset);
-    });
+    }
   }
 
   refreshOnce(domain: DoorbellDomain, scope: string): void {
     if (typeof window === 'undefined') {
       return;
     }
-    const subscriptions = this.ensureSubscriptions(domain, scope);
-    subscriptions.forEach((subscription) => {
-      this.resyncSubscription(subscription, 'manual refresh', true);
-    });
+    this.resyncSubscription(this.ensureSubscription(domain, scope), 'manual refresh', true);
   }
 
   private parseMessage(raw: unknown): ServerMessage | null {
@@ -371,16 +360,10 @@ export class ResourceStreamManager {
     this.visibility.resume();
   }
 
-  private ensureSubscriptions(domain: DoorbellDomain, scope: string): StreamSubscription[] {
-    const subscriptions = this.subscriptions.ensure(domain, scope);
-    subscriptions.forEach((subscription) => {
-      this.updateHealthForSubscription(subscription);
-    });
-    return subscriptions;
-  }
-
-  private releaseSubscriptions(domain: DoorbellDomain, scope: string): StreamSubscription[] {
-    return this.subscriptions.release(domain, scope);
+  private ensureSubscription(domain: DoorbellDomain, scope: string): StreamSubscription {
+    const subscription = this.subscriptions.ensure(domain, scope);
+    this.updateHealthForSubscription(subscription);
+    return subscription;
   }
 
   private getConnection(): ResourceStreamConnection {
@@ -617,12 +600,14 @@ export class ResourceStreamManager {
     const now = Date.now();
     // getForScope resolves without creating: a fallback is evidence about an
     // existing subscription, never a reason to open one.
-    this.subscriptions.getForScope(domain, scope).forEach((subscription) => {
-      const stats = this.ensureStreamTelemetry(subscription);
-      stats.fallbackCount += 1;
-      stats.lastFallbackAt = now;
-      stats.lastFallbackReason = reason;
-    });
+    const subscription = this.subscriptions.getForScope(domain, scope);
+    if (!subscription) {
+      return;
+    }
+    const stats = this.ensureStreamTelemetry(subscription);
+    stats.fallbackCount += 1;
+    stats.lastFallbackAt = now;
+    stats.lastFallbackReason = reason;
   }
 
   // Track resync activity so diagnostics can surface stream health.

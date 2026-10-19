@@ -127,18 +127,6 @@ const BEHAVIOR_CLASSES = new Set([
   'graph-payload',
   'operation-state',
 ]);
-const SCOPE_KINDS = new Set([
-  'cluster',
-  'optional-namespace',
-  'catalog-query',
-  'resource-stream-selector',
-  'namespace-scope',
-  'object-ref',
-  'helm-release',
-  'object-map',
-  'node-maintenance',
-  'log-stream-selector',
-]);
 const CACHE_POLICIES = new Set([
   'snapshot-cache',
   'snapshot-cache-with-merge',
@@ -433,15 +421,6 @@ describe('refresh domain contract', () => {
 
     for (const [domain, inventory] of Object.entries(refreshDomainContract.domainInventory)) {
       expect(BEHAVIOR_CLASSES.has(inventory.behaviorClass), `${domain} behaviorClass`).toBe(true);
-      expect(SCOPE_KINDS.has(inventory.scopeContract.kind), `${domain} scope kind`).toBe(true);
-      expect(inventory.scopeContract.clusterPrefix).toBe('required');
-      expect(inventory.scopeContract.parser, `${domain} parser`).toEqual(expect.any(String));
-      expect(inventory.scopeContract.parser).not.toHaveLength(0);
-      expect(inventory.scopeContract.frontendBuilder, `${domain} frontendBuilder`).toEqual(
-        expect.any(String)
-      );
-      expect(inventory.scopeContract.frontendBuilder).not.toHaveLength(0);
-      expect(inventory.scopeContract.acceptedEncodings.length).toBeGreaterThan(0);
       expect(inventory.singleCluster).toBe(true);
       expect(inventory.payloadOwner, `${domain} payloadOwner`).toEqual(expect.any(String));
       expect(inventory.payloadOwner).not.toHaveLength(0);
@@ -473,7 +452,6 @@ describe('refresh domain contract', () => {
         expect(['resource-stream-table', 'complete-resync-stream']).toContain(
           inventory.behaviorClass
         );
-        expect(inventory.scopeContract.kind).toBe('resource-stream-selector');
         const streamContract = refreshDomainContract.resourceStream.domains[entry.domain];
         if (inventory.behaviorClass === 'complete-resync-stream') {
           expect(streamContract.rowProjection).toBe('scope-level-complete-only');
@@ -501,7 +479,6 @@ describe('refresh domain contract', () => {
           expect(inventory.behaviorClass).toBe('catalog-stream');
           expect(entry.domain).toBe('catalog');
           expect(entry.frontend.diagnosticsStream).toBe('resources');
-          expect(inventory.scopeContract.kind).toBe('catalog-query');
           expect(inventory.payloadOwner).toBe('backend/objectcatalog.Service');
           expect(inventory.cachePolicy).toBe('external-catalog-cache');
           expect(inventory.streamSemantics).toEqual(
@@ -513,7 +490,6 @@ describe('refresh domain contract', () => {
           expect(inventory.behaviorClass).toBe('log-stream');
           expect(entry.domain).toBe('container-logs');
           expect(entry.frontend.diagnosticsStream).toBe('container-logs');
-          expect(inventory.scopeContract.kind).toBe('log-stream-selector');
           expect(inventory.payloadOwner).toBe('backend/refresh/containerlogsstream');
           expect(inventory.cachePolicy).toBe('stream-only');
           expect(inventory.streamSemantics).toEqual(['line-stream']);
@@ -556,7 +532,6 @@ describe('refresh domain contract', () => {
             expect(entry.domain).toBe('catalog-diff');
             expect(entry.frontend.orchestrator).toBe('snapshot');
             expect(entry.frontend.diagnosticsStream).toBeNull();
-            expect(inventory.scopeContract.kind).toBe('catalog-query');
             expect(inventory.payloadOwner).toBe('backend/objectcatalog.Service');
             expect(inventory.cachePolicy).toBe('external-catalog-cache-with-merge');
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
@@ -566,7 +541,6 @@ describe('refresh domain contract', () => {
             expect(entry.domain).toBe('object-events');
             expect(entry.frontend.orchestrator).toBe('snapshot');
             expect(entry.frontend.diagnosticsStream).toBeNull();
-            expect(inventory.scopeContract.kind).toBe('object-ref');
             expect(inventory.payloadOwner).toBe('backend/refresh/snapshot.ObjectEventsBuilder');
             expect(inventory.cachePolicy).toBe('snapshot-cache');
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
@@ -574,7 +548,6 @@ describe('refresh domain contract', () => {
           }
           if (inventory.behaviorClass === 'detail-payload') {
             expect(['object-details', 'object-yaml']).toContain(entry.domain);
-            expect(inventory.scopeContract.kind).toBe('object-ref');
             expect(inventory.cachePolicy).toBe(
               entry.domain === 'object-details'
                 ? 'provider-cache'
@@ -585,14 +558,12 @@ describe('refresh domain contract', () => {
           }
           if (inventory.behaviorClass === 'helm-content-payload') {
             expect(['object-helm-manifest', 'object-helm-values']).toContain(entry.domain);
-            expect(inventory.scopeContract.kind).toBe('helm-release');
             expect(inventory.cachePolicy).toBe('snapshot-cache-plus-provider-cache');
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
             expect(inventory.coverageContract).toBe('helm-content-shape');
           }
           if (inventory.behaviorClass === 'graph-payload') {
             expect(entry.domain).toBe('object-map');
-            expect(inventory.scopeContract.kind).toBe('object-map');
             expect(inventory.payloadOwner).toBe('backend/refresh/snapshot.objectMapBuilder');
             expect(inventory.cachePolicy).toBe('snapshot-cache');
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
@@ -600,7 +571,6 @@ describe('refresh domain contract', () => {
           }
           if (inventory.behaviorClass === 'operation-state') {
             expect(entry.domain).toBe('object-maintenance');
-            expect(inventory.scopeContract.kind).toBe('node-maintenance');
             expect(inventory.payloadOwner).toBe('backend/refresh/snapshot.NodeMaintenanceBuilder');
             expect(inventory.cachePolicy).toBe('snapshot-cache-bypass');
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchSnapshot } from '@/core/refresh/client';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { reportOperationalError } from '@/utils/errorHandler';
 
@@ -39,7 +39,13 @@ export function usePaletteCatalogSearch({ enabled, clusterId, query, tokens }: S
     }
     // Identity includes the full query and each cluster visit, even when the
     // server's primary search term is unchanged.
-    return { scope: buildClusterScope(activeClusterId, params.toString()) };
+    return {
+      scope: buildRefreshScope('catalog', {
+        clusterId: activeClusterId,
+        selector: CLUSTER_SELECTOR,
+        query: params.toString(),
+      }),
+    };
   }, [enabled, clusterId, query, tokens]);
   const [settled, setSettled] = useState<{ request: typeof request; result: SearchResult } | null>(
     null

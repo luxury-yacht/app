@@ -1103,7 +1103,7 @@ describe('query-backed leaf first load', () => {
   });
 
   it('uses the typed query result on first load for cluster events', async () => {
-    const scope = 'cluster-a|cluster?limit=50&sort=age&sortDirection=asc';
+    const scope = 'cluster-a|?limit=50&sort=age&sortDirection=asc';
     const observed = await renderQueryFirstLoad({
       element: <ClusterViewEvents />,
       payload: {

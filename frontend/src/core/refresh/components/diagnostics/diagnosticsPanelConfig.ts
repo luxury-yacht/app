@@ -22,7 +22,6 @@ import type { RefreshDomain } from '../../types';
 export { DOMAIN_REFRESHER_MAP, DOMAIN_STREAM_MAP } from '../../domainRegistry';
 
 export const STALE_THRESHOLD_MS = 45_000;
-export const CLUSTER_SCOPE = '__cluster__';
 
 export const STREAM_ONLY_DOMAINS = new Set<RefreshDomain>(
   Object.entries(refreshDomainContract.domainInventory)

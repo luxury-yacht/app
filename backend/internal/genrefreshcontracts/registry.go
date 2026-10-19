@@ -64,6 +64,8 @@ type domainSpec struct {
 	frontendHasPriority       bool
 	frontendRegistrationOrder int
 	frontendScheduled         bool
+	scopeSelectors            []string
+	scopeQuery                string
 }
 
 func typeOf[T any]() reflect.Type {

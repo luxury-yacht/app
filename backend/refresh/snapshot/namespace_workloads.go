@@ -237,7 +237,7 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	if err != nil {
 		return nil, err
 	}
-	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), errNamespaceScopeRequired)
+	parsedScope, err := parseNamespaceSnapshotScope(namespaceWorkloadsDomainName, clusterID, baseScope, errNamespaceScopeRequired)
 	if err != nil {
 		return nil, err
 	}

@@ -68,13 +68,11 @@ type ScopedDemandCounts = Record<RefreshDemand, number>;
 export type ScopedActivationState =
   | { status: 'untracked' }
   | { status: 'disabled' }
-  | { status: 'enabled'; demands: ScopedDemandCounts }
-  | { status: 'superseded'; demands: ScopedDemandCounts };
+  | { status: 'enabled'; demands: ScopedDemandCounts };
 
 export type ScopedActivationEvent =
   | { type: 'enabled' }
   | { type: 'disabled' }
-  | { type: 'superseded' }
   | { type: 'lease-acquired'; demand: RefreshDemand }
   | { type: 'lease-released'; demand: RefreshDemand };
 
@@ -83,7 +81,7 @@ const NO_SCOPED_DEMAND: ScopedDemandCounts = { query: 0, snapshot: 0 };
 const totalDemand = (demands: ScopedDemandCounts): number => demands.query + demands.snapshot;
 
 const demandsFor = (state: ScopedActivationState): ScopedDemandCounts =>
-  state.status === 'enabled' || state.status === 'superseded' ? state.demands : NO_SCOPED_DEMAND;
+  state.status === 'enabled' ? state.demands : NO_SCOPED_DEMAND;
 
 const enableScope = (state: ScopedActivationState): ScopedActivationState =>
   state.status === 'enabled' ? state : { status: 'enabled', demands: { ...demandsFor(state) } };
@@ -98,15 +96,6 @@ const disableScope = (state: ScopedActivationState): ScopedActivationState => {
   return { status: 'disabled' };
 };
 
-const supersedeScope = (state: ScopedActivationState): ScopedActivationState => {
-  if (state.status !== 'enabled') {
-    return state;
-  }
-  return totalDemand(state.demands) > 0
-    ? { status: 'superseded', demands: state.demands }
-    : { status: 'disabled' };
-};
-
 const acquireScopeLease = (
   state: ScopedActivationState,
   event: Extract<ScopedActivationEvent, { type: 'lease-acquired' }>
@@ -116,28 +105,20 @@ const acquireScopeLease = (
     ...demands,
     [event.demand]: demands[event.demand] + 1,
   };
-  return state.status === 'superseded'
-    ? { status: 'superseded', demands: nextDemands }
-    : { status: 'enabled', demands: nextDemands };
+  return { status: 'enabled', demands: nextDemands };
 };
 
 const releaseScopeLease = (
   state: ScopedActivationState,
   event: Extract<ScopedActivationEvent, { type: 'lease-released' }>
 ): ScopedActivationState => {
-  if (
-    (state.status !== 'enabled' && state.status !== 'superseded') ||
-    state.demands[event.demand] === 0
-  ) {
+  if (state.status !== 'enabled' || state.demands[event.demand] === 0) {
     return state;
   }
   const nextDemands = {
     ...state.demands,
     [event.demand]: state.demands[event.demand] - 1,
   };
-  if (state.status === 'superseded' && totalDemand(nextDemands) === 0) {
-    return { status: 'disabled' };
-  }
   return { ...state, demands: nextDemands };
 };
 
@@ -150,8 +131,6 @@ export const transitionScopedActivationState = (
       return enableScope(state);
     case 'disabled':
       return disableScope(state);
-    case 'superseded':
-      return supersedeScope(state);
     case 'lease-acquired':
       return acquireScopeLease(state, event);
     case 'lease-released':
@@ -516,44 +495,6 @@ export type RuntimeScopeStateChange = {
   changed: boolean;
 };
 
-export type RuntimeScopeEnableResult = RuntimeScopeStateChange & {
-  staleScopes: string[];
-};
-
-// Most domains should only keep one enabled scope per cluster runtime. Domains
-// listed here have real concurrent consumers, such as browse data plus
-// metadata, object-diff panes, or namespace table plus object-panel pod lists.
-const MULTI_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>([
-  'catalog',
-  'catalog-diff',
-  'cluster-attention',
-  'cluster-identities',
-  'cluster-config',
-  'cluster-crds',
-  'cluster-events',
-  'cluster-rbac',
-  'cluster-storage',
-  'container-logs',
-  'namespace-autoscaling',
-  'namespace-config',
-  'namespace-events',
-  'namespace-helm',
-  'namespace-network',
-  'namespace-quotas',
-  'namespace-rbac',
-  'namespace-storage',
-  'namespace-workloads',
-  'nodes',
-  'object-details',
-  'object-events',
-  'object-helm-manifest',
-  'object-helm-values',
-  'object-maintenance',
-  'object-map',
-  'object-yaml',
-  'pods',
-]);
-
 export class ClusterRefreshRuntime {
   readonly clusterId: string;
   private readonly scopedStates = new Map<string, ScopedRefreshState>();
@@ -662,37 +603,6 @@ export class ClusterRefreshRuntime {
       previous.status === 'untracked' ? undefined : previous.status === 'enabled';
     const nextEnabled = next.status === 'enabled';
     return { previous: previousEnabled, changed: previousEnabled !== nextEnabled };
-  }
-
-  applyScopedDomainEnabled(
-    domain: RefreshDomain,
-    scope: string,
-    enabled: boolean
-  ): RuntimeScopeEnableResult {
-    const staleScopes =
-      enabled && !MULTI_ACTIVE_SCOPE_DOMAINS.has(domain)
-        ? this.disableOtherEnabledScopes(domain, scope)
-        : [];
-    const change = this.setScopedDomainEnabled(domain, scope, enabled);
-    return { ...change, staleScopes };
-  }
-
-  private disableOtherEnabledScopes(domain: RefreshDomain, activeScope: string): string[] {
-    const staleScopes: string[] = [];
-    this.scopedStates.forEach((state) => {
-      if (
-        state.domain === domain &&
-        state.scope !== undefined &&
-        state.scope !== activeScope &&
-        state.activation.status === 'enabled'
-      ) {
-        staleScopes.push(state.scope);
-      }
-    });
-    staleScopes.forEach((scope) => {
-      this.applyActivationEvent(domain, scope, { type: 'superseded' });
-    });
-    return staleScopes;
   }
 
   getScopedLeaseCount(domain: RefreshDomain, scope: string, demand?: RefreshDemand): number {

@@ -99,8 +99,8 @@ describe('node maintenance panel lifecycle', () => {
       )
     );
     expect(mocks.enable.mock.calls).toEqual([
-      [{ domain: 'object-maintenance', scope: 'cluster-a|aggregate', enabled: true }],
-      [{ domain: 'object-maintenance', scope: 'cluster-b|aggregate', enabled: true }],
+      [{ domain: 'object-maintenance', scope: 'cluster-a|', enabled: true }],
+      [{ domain: 'object-maintenance', scope: 'cluster-b|', enabled: true }],
     ]);
     const drain: NodeMaintenanceDrainJob = {
       id: 'job',
@@ -121,7 +121,7 @@ describe('node maintenance panel lifecycle', () => {
       },
     };
     await act(async () =>
-      setScopedDomainState('object-maintenance', 'cluster-a|aggregate', (previous) => ({
+      setScopedDomainState('object-maintenance', 'cluster-a|', (previous) => ({
         ...previous,
         status: 'ready',
         data: { clusterId: 'cluster-a', clusterName: 'A', drains: [drain] },
@@ -132,8 +132,8 @@ describe('node maintenance panel lifecycle', () => {
     expect(actions.activeDrainFor('', 'worker-1')).toBeNull();
     await act(async () => root.render(null));
     expect(mocks.enable.mock.calls.slice(-2)).toEqual([
-      [{ domain: 'object-maintenance', scope: 'cluster-a|aggregate', enabled: false }],
-      [{ domain: 'object-maintenance', scope: 'cluster-b|aggregate', enabled: false }],
+      [{ domain: 'object-maintenance', scope: 'cluster-a|', enabled: false }],
+      [{ domain: 'object-maintenance', scope: 'cluster-b|', enabled: false }],
     ]);
   });
 

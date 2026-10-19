@@ -36,7 +36,7 @@ vi.mock('@/core/logging/appLogsClient', () => ({
   logAppLogsWarn: logAppLogsWarnMock,
 }));
 
-import { buildClusterScope } from '../clusterScope';
+import { testScope } from '@/test-utils/refreshScope';
 import {
   makeNamespaceAutoscalingSnapshotPayload,
   makeNamespaceConfigSnapshotPayload,
@@ -44,7 +44,7 @@ import {
   makePodSnapshotPayload,
 } from '../refreshContractTestBuilders';
 import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
-import { normalizeResourceScope, ResourceStreamManager } from './resourceStreamManager';
+import { ResourceStreamManager } from './resourceStreamManager';
 
 class FakeJSONSocket {
   static OPEN = 1;
@@ -168,79 +168,16 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('resourceStreamManager helpers', () => {
-  it('normalizes pod scopes', () => {
-    expect(normalizeResourceScope('pods', 'namespace:default')).toBe('namespace:default');
-    expect(normalizeResourceScope('pods', 'namespace:*')).toBe('namespace:all');
-    expect(normalizeResourceScope('pods', 'node:node-a')).toBe('node:node-a');
-    expect(normalizeResourceScope('pods', 'workload:default:apps:v1:Deployment:web')).toBe(
-      'workload:default:apps:v1:Deployment:web'
-    );
-  });
-
-  it('normalizes namespace workload scopes', () => {
-    expect(normalizeResourceScope('namespace-workloads', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-workloads', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace config scopes', () => {
-    expect(normalizeResourceScope('namespace-config', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-config', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace network scopes', () => {
-    expect(normalizeResourceScope('namespace-network', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-network', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace rbac scopes', () => {
-    expect(normalizeResourceScope('namespace-rbac', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-rbac', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace helm scopes', () => {
-    expect(normalizeResourceScope('namespace-helm', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-helm', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace autoscaling scopes', () => {
-    expect(normalizeResourceScope('namespace-autoscaling', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-autoscaling', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace quotas scopes', () => {
-    expect(normalizeResourceScope('namespace-quotas', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-quotas', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace storage scopes', () => {
-    expect(normalizeResourceScope('namespace-storage', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-storage', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes node scopes', () => {
-    expect(normalizeResourceScope('nodes', '')).toBe('');
-    expect(normalizeResourceScope('nodes', 'cluster')).toBe('');
-    expect(() => normalizeResourceScope('nodes', 'namespace:default')).toThrow();
-  });
-
-  it('normalizes cluster scopes', () => {
-    expect(normalizeResourceScope('cluster-rbac', '')).toBe('');
-    expect(normalizeResourceScope('cluster-storage', 'cluster')).toBe('');
-    expect(normalizeResourceScope('cluster-config', '')).toBe('');
-    expect(normalizeResourceScope('cluster-crds', 'cluster')).toBe('');
-  });
-});
-
 describe('ResourceStreamManager', () => {
   test('pod delta is signal-only: updates sourceVersion and leaves rows untouched', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('pods', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'pods',
+      storeScope
+    );
 
     const existing = makePodSnapshotEntry({
       cpuUsageMilli: 50,
@@ -307,7 +244,7 @@ describe('ResourceStreamManager', () => {
     'ignores $label on the shared connection while accepting the owning cluster ACK',
     async ({ label: _label, ...frame }) => {
       const manager = new ResourceStreamManager();
-      const scope = buildClusterScope('cluster-a', '');
+      const scope = testScope('cluster-a', '');
       manager.start('cluster-config', scope);
       await flushPromises();
       const socket = createdSockets[0];
@@ -344,7 +281,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -383,7 +320,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
     manager.start('namespaces', storeScope);
     await flushPromises();
 
@@ -418,7 +355,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
     const permissionDenied = vi.fn();
     const unsubscribe = eventBus.on('refresh:resource-stream-permission-denied', permissionDenied);
 
@@ -512,10 +449,11 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespaces', storeScope);
+    const storeScope = testScope('cluster-a', '');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespaces',
+      storeScope
+    );
 
     // The server's ACK carries the cluster DISPLAY NAME; the subscription
     // captures it so subscription-labeled logging matches the backend half
@@ -569,14 +507,16 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const podsScope = buildClusterScope('cluster-a', 'namespace:default');
-    const configScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('pods', podsScope);
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', configScope);
+    const podsScope = testScope('cluster-a', 'namespace:default');
+    const configScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'pods',
+      podsScope
+    );
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-config',
+      configScope
+    );
 
     const doorbell = (domain: string) =>
       JSON.stringify({
@@ -608,10 +548,11 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-workloads', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-workloads',
+      storeScope
+    );
 
     // namespace-workloads is signal-only: the backend ships the change signal
     // (Ref/ResourceVersion) without a row. The frontend advances sourceVersion
@@ -645,21 +586,20 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const pageScope = buildClusterScope(
+    const pageScope = testScope(
       'cluster-a',
       'limit=1000&customOnly=true&sort=name&sortDirection=asc&namespace=team-a'
     );
-    const metadataScope = buildClusterScope(
-      'cluster-a',
-      'limit=1&customOnly=true&namespace=team-a'
-    );
+    const metadataScope = testScope('cluster-a', 'limit=1&customOnly=true&namespace=team-a');
 
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('catalog', pageScope);
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('catalog', metadataScope);
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'catalog',
+      pageScope
+    );
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'catalog',
+      metadataScope
+    );
 
     manager.handleMessage(
       JSON.stringify({
@@ -686,11 +626,11 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const pageScope = buildClusterScope(
+    const pageScope = testScope(
       'cluster-a',
       'limit=500&resourceScope=namespace&namespace=team-a&scopeNamespace=team-a'
     );
-    const metadataScope = buildClusterScope(
+    const metadataScope = testScope(
       'cluster-a',
       'limit=1&resourceScope=namespace&namespace=team-a&scopeNamespace=team-a'
     );
@@ -717,10 +657,11 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('pods', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'pods',
+      storeScope
+    );
 
     setScopedDomainState('pods', storeScope, () => ({
       status: 'ready',
@@ -752,10 +693,11 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-config',
+      storeScope
+    );
 
     manager.handleMessage(
       JSON.stringify({
@@ -779,10 +721,11 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('pods', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'pods',
+      storeScope
+    );
 
     manager.handleMessage(
       JSON.stringify({
@@ -806,10 +749,11 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-config',
+      storeScope
+    );
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
@@ -870,10 +814,11 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-config',
+      storeScope
+    );
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
@@ -921,10 +866,11 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-config',
+      storeScope
+    );
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
@@ -971,10 +917,11 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-autoscaling', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-autoscaling',
+      storeScope
+    );
 
     const sharedRow = {
       ref: {
@@ -1044,10 +991,11 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('cluster-rbac', storeScope);
+    const storeScope = testScope('cluster-a', '');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'cluster-rbac',
+      storeScope
+    );
 
     manager.handleMessage(
       JSON.stringify({
@@ -1073,10 +1021,11 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('pods', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'pods',
+      storeScope
+    );
 
     manager.handleMessage(
       JSON.stringify({
@@ -1123,10 +1072,11 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('cluster-rbac', storeScope);
+    const storeScope = testScope('cluster-a', '');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'cluster-rbac',
+      storeScope
+    );
 
     // A resourceVersion past the safe-integer limit is parsed via BigInt, so the
     // signal-only delta is still accepted and bumps the refetch signal.
@@ -1151,10 +1101,11 @@ describe('ResourceStreamManager', () => {
 
   test('resyncs on reset messages', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-config',
+      storeScope
+    );
 
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
@@ -1189,10 +1140,11 @@ describe('ResourceStreamManager', () => {
 
   test('resyncs after connection errors', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-config',
+      storeScope
+    );
 
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
@@ -1219,10 +1171,11 @@ describe('ResourceStreamManager', () => {
 
   test('does not resync on connection error when resume sequence exists', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-config',
+      storeScope
+    );
 
     manager.handleMessage(
       JSON.stringify({
@@ -1254,7 +1207,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    const storeScope = testScope('cluster-a', 'namespace:default');
 
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
@@ -1311,7 +1264,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    const storeScope = testScope('cluster-a', 'namespace:default');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -1349,7 +1302,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
 
     setScopedDomainState('namespaces', storeScope, (previous) => ({
       ...previous,
@@ -1399,7 +1352,7 @@ describe('ResourceStreamManager', () => {
 
   test('invalidates the declared non-object clock when a retained doorbell snapshot cannot be replayed', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
 
     setScopedDomainState('namespace-metrics', storeScope, (previous) => ({
       ...previous,
@@ -1431,7 +1384,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    const storeScope = testScope('cluster-a', 'namespace:default');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -1490,7 +1443,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    const storeScope = testScope('cluster-a', 'namespace:default');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -1553,7 +1506,7 @@ describe('ResourceStreamManager', () => {
 
   test('stops subscriptions and closes the socket on kubeconfig change cleanup', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -1584,7 +1537,7 @@ describe('ResourceStreamManager', () => {
 
   test('counts a stream-down fallback only against a live subscription for that scope', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    const storeScope = testScope('cluster-a', 'namespace:default');
     manager.start('pods', storeScope);
     await flushPromises();
 
@@ -1592,7 +1545,7 @@ describe('ResourceStreamManager', () => {
     manager.recordStreamFallback('pods', storeScope, 'stream not delivering');
     // No subscription owns this scope, so there is nothing to attribute a
     // fallback to — the counter must not invent a row for it.
-    manager.recordStreamFallback('pods', buildClusterScope('cluster-a', 'namespace:other'), 'nope');
+    manager.recordStreamFallback('pods', testScope('cluster-a', 'namespace:other'), 'nope');
 
     const summary = manager.getTelemetrySummary();
     expect(summary.fallbackCount).toBe(2);
@@ -1629,7 +1582,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    const storeScope = testScope('cluster-a', 'namespace:default');
 
     // pods is signal-only: starting the subscription must NOT fetch a full-row
     // baseline (the query-backed table no longer waits on one — that's the
@@ -1683,7 +1636,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -1720,7 +1673,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -1756,31 +1709,10 @@ describe('ResourceStreamManager', () => {
     expect(cancelCount()).toBe(0);
   });
 
-  it('rejects node streaming for multi-cluster scopes', () => {
+  it('rejects streaming for a scope without a cluster prefix', () => {
     const manager = new ResourceStreamManager();
-    const storeScope = 'clusters=cluster-a,cluster-b|';
 
-    expect(() => manager.start('nodes', storeScope)).toThrow('single cluster');
-
-    expect(fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(createdSockets).toHaveLength(0);
-  });
-
-  test('rejects pod streaming for multi-cluster scopes', () => {
-    const manager = new ResourceStreamManager();
-    const storeScope = 'clusters=cluster-a,cluster-b|namespace:default';
-
-    expect(() => manager.start('pods', storeScope)).toThrow('single cluster');
-
-    expect(fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(createdSockets).toHaveLength(0);
-  });
-
-  test('rejects namespace workload streaming for multi-cluster scopes', () => {
-    const manager = new ResourceStreamManager();
-    const storeScope = 'clusters=cluster-a,cluster-b|namespace:default';
-
-    expect(() => manager.start('namespace-workloads', storeScope)).toThrow('single cluster');
+    expect(() => manager.start('pods', 'namespace:default')).toThrow('no cluster prefix');
 
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
     expect(createdSockets).toHaveLength(0);

@@ -1,10 +1,7 @@
 import { useRefreshScopedDomain } from '@core/refresh';
-import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
+import { buildRefreshScope } from '@core/refresh/scopeSelector';
 import type { CatalogItem } from '@core/refresh/types';
-import {
-  CLUSTER_SCOPE,
-  INACTIVE_SCOPE,
-} from '@modules/object-panel/components/ObjectPanel/constants';
+import { INACTIVE_SCOPE } from '@modules/object-panel/components/ObjectPanel/constants';
 import { buildVersionedNamespacedRowKey } from '@shared/utils/resourceRowIdentity';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -39,20 +36,22 @@ export const useObjectDiffYaml = (selection: CatalogItem | null, enabled: boolea
       return null;
     }
 
-    // Use the cluster-scope token when the object has no namespace.
-    const namespaceSegment = selection.ref.namespace?.trim() || CLUSTER_SCOPE;
-    // CatalogItem already carries group/version from the backend catalog,
-    // so the diff modal can always emit the GVK scope form. The backend
-    // object-yaml provider will resolve the GVR strictly and avoid the
-    // first-match-wins ambiguity that affects bare-kind scopes.
-    const rawScope = buildObjectScope({
-      namespace: namespaceSegment,
-      group: selection.ref.group,
-      version: selection.ref.version,
-      kind: selection.ref.kind.toLowerCase(),
-      name: selection.ref.name,
+    // CatalogItem carries the full GVK, so the backend object-yaml provider
+    // resolves the GVR strictly. The scope matches the object panel's, so both
+    // share one YAML cache entry.
+    return buildRefreshScope('object-yaml', {
+      clusterId: selection.ref.clusterId,
+      selector: {
+        kind: 'object',
+        object: {
+          namespace: selection.ref.namespace?.trim() ?? '',
+          group: selection.ref.group,
+          version: selection.ref.version,
+          kind: selection.ref.kind,
+          name: selection.ref.name,
+        },
+      },
     });
-    return buildClusterScope(selection.ref.clusterId, rawScope);
   }, [enabled, selection]);
 
   const effectiveScope = scope ?? INACTIVE_SCOPE;

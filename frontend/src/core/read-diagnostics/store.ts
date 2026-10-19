@@ -80,12 +80,9 @@ const notify = () => {
   }
 };
 
-// clusterIdForRead resolves the single cluster a read belongs to. A scope that
-// names several clusters has no single owner and stays an app-level row.
-const clusterIdForRead = (scope?: string): string => {
-  const parsed = parseClusterScope(scope);
-  return parsed.isMultiCluster ? '' : parsed.clusterId;
-};
+// clusterIdForRead resolves the cluster a read belongs to; an unprefixed scope
+// stays an app-level row.
+const clusterIdForRead = (scope?: string): string => parseClusterScope(scope).clusterId;
 
 // The key carries cluster identity so a per-cluster surface can group these
 // rows under the cluster they read from instead of folding clusters together.

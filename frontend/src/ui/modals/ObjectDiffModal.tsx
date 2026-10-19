@@ -9,7 +9,7 @@ import type React from 'react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import './ObjectDiffModal.css';
 import { useRefreshScopedDomain } from '@core/refresh';
-import { buildClusterScope } from '@core/refresh/clusterScope';
+import { buildRefreshScope, CLUSTER_SELECTOR } from '@core/refresh/scopeSelector';
 import type { DomainStatus } from '@core/refresh/store';
 import type { CatalogItem, CatalogSnapshotPayload } from '@core/refresh/types';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -107,7 +107,11 @@ const buildCatalogDiffScope = (params: {
     kind: params.kind,
     search: params.search,
   });
-  return buildClusterScope(trimmedCluster, query);
+  return buildRefreshScope('catalog-diff', {
+    clusterId: trimmedCluster,
+    selector: CLUSTER_SELECTOR,
+    query,
+  });
 };
 
 const buildNamespaceLabel = (namespace?: string) => {

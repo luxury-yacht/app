@@ -19,22 +19,18 @@ import { useEffect } from 'react';
 import { queryNamespacePermissions } from '@/core/capabilities';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import { refreshOrchestrator } from '@/core/refresh';
+import { selectorForNamespaceSelection } from '@/core/refresh/scopeSelector';
 
 // Extracts the concrete namespace name for capability checks; the
 // all-namespaces sentinel has no single namespace to query.
+// The single namespace a selection names for permission queries; null for all namespaces.
 const getCapabilityNamespace = (value?: string | null): string | null => {
-  if (!value) {
-    return null;
-  }
-  const trimmed = value.trim();
+  const trimmed = value?.trim();
   if (!trimmed) {
     return null;
   }
-  if (trimmed.startsWith('namespace:')) {
-    const actual = trimmed.slice('namespace:'.length);
-    return actual && actual !== 'all' ? actual : null;
-  }
-  return trimmed === 'all' ? null : trimmed;
+  const selector = selectorForNamespaceSelection(trimmed);
+  return selector.kind === 'namespace' ? selector.namespace : null;
 };
 
 interface NamespaceResourcesProviderProps {

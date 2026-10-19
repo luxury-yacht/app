@@ -162,7 +162,7 @@ func TestEventTableDoorbellsReachEveryViewedScopeAfterTheStoreApplies(t *testing
 	prod := h.subscribe(t, "namespace-events", "namespace:prod")
 	all := h.subscribe(t, "namespace-events", "namespace:all")
 	other := h.subscribe(t, "namespace-events", "namespace:other")
-	cluster := h.subscribe(t, "cluster-events", "cluster")
+	cluster := h.subscribe(t, "cluster-events", "")
 
 	// Prime the snapshot cache with the pre-change pages.
 	require.Empty(t, h.rowNames(t, "namespace-events", "namespace:all"))
@@ -208,7 +208,7 @@ func TestEventTableDoorbellsIgnoreInformerResyncEchoes(t *testing.T) {
 	h := newEventTableHarness(t, time.Second)
 	prod := h.subscribe(t, "namespace-events", "namespace:prod")
 	all := h.subscribe(t, "namespace-events", "namespace:all")
-	cluster := h.subscribe(t, "cluster-events", "cluster")
+	cluster := h.subscribe(t, "cluster-events", "")
 
 	ctx := context.Background()
 	_, err := h.client.CoreV1().Events("prod").Create(ctx, tableEvent("web.1", "prod", "Pod", "prod", "10"), metav1.CreateOptions{})
@@ -255,7 +255,7 @@ func TestEventTableDoorbellsRingWhenReconcileDropsRestoredRows(t *testing.T) {
 	})
 	prod := after.subscribe(t, "namespace-events", "namespace:prod")
 	all := after.subscribe(t, "namespace-events", "namespace:all")
-	cluster := after.subscribe(t, "cluster-events", "cluster")
+	cluster := after.subscribe(t, "cluster-events", "")
 	require.Equal(t, []string{"web.1"}, after.rowNames(t, "namespace-events", "namespace:all"),
 		"the restored row is served until Reconcile runs")
 

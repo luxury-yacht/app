@@ -568,9 +568,9 @@ func parseRequest(request Request) (Options, error) {
 	if err != nil {
 		return Options{}, err
 	}
-	clusterIDs, _ := refresh.SplitClusterScopeList(rawScope)
-	if len(clusterIDs) != 1 {
-		return Options{}, errors.New("log scope requires a single cluster scope")
+	clusterID, _ := refresh.SplitClusterScope(rawScope)
+	if clusterID == "" {
+		return Options{}, errors.New("log scope requires a cluster scope")
 	}
 	maxEntries := config.ContainerLogsStreamDefaultTailLines
 	if request.MaxEntries > 0 {
@@ -582,7 +582,7 @@ func parseRequest(request Request) (Options, error) {
 		maxBytes = min(max(request.MaxBytes, containerlogs.MaxLineBytes), config.ContainerLogsStreamMaxBytes)
 	}
 	return Options{
-		ClusterID:  clusterIDs[0],
+		ClusterID:  clusterID,
 		Namespace:  identity.Namespace,
 		Group:      identity.GVK.Group,
 		Version:    identity.GVK.Version,

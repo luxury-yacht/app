@@ -13,10 +13,10 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { resetScopedDomainState } from '@/core/refresh/store';
 import { containerLogsStreamManager } from '@/core/refresh/streaming/containerLogsStreamManager';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import { testScope } from '@/test-utils/refreshScope';
 import LogViewer from './LogViewer';
 import { resetLogViewerPrefsCacheForTesting, setLogViewerPrefs } from './logViewerPrefsCache';
 
@@ -58,7 +58,7 @@ vi.mock('@ui/shortcuts', () => ({
 }));
 vi.mock('@core/contexts/ZoomContext', () => ({ useZoom: () => ({ zoomLevel: 100 }) }));
 
-const SCOPE = buildClusterScope('alpha:ctx', 'team-a:apps/v1:deployment:api');
+const SCOPE = testScope('alpha:ctx', 'team-a:apps/v1:deployment:api');
 const PODS = ['web-1', 'web-2', 'web-3', 'web-4', 'web-5'];
 const BATCH = 64;
 const WARM_UP_BATCHES = 5;

@@ -184,17 +184,17 @@ func TestObjectHelmValuesBuilderPublishesEachViewOfTheReleaseRevision(t *testing
 }
 
 func TestParseHelmScopeHandlesClusterPrefixAndClusterScopedReleases(t *testing.T) {
-	namespace, name, err := parseHelmScope("cluster-a|apps:checkout")
+	namespace, name, err := parseHelmScope(objectHelmManifestDomain, "cluster-a|apps:checkout")
 	require.NoError(t, err)
 	require.Equal(t, "apps", namespace)
 	require.Equal(t, "checkout", name)
 
-	namespace, name, err = parseHelmScope("cluster-a|__cluster__:system-release")
+	namespace, name, err = parseHelmScope(objectHelmManifestDomain, "cluster-a|__cluster__:system-release")
 	require.NoError(t, err)
 	require.Empty(t, namespace)
 	require.Equal(t, "system-release", name)
 
-	_, _, err = parseHelmScope("cluster-a|apps:")
+	_, _, err = parseHelmScope(objectHelmManifestDomain, "cluster-a|apps:")
 	require.Error(t, err)
 }
 

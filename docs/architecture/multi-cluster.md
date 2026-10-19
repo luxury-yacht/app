@@ -34,8 +34,10 @@ operations, permissions, and object actions for one cluster never affect another
 `clusterId` is stable app identity for a selected kubeconfig context; the same
 context name in two kubeconfig files can be two clusters. Refresh scopes are
 cluster-prefixed (`clusterId|`, `clusterId|namespace:default`,
-`clusterId|<domain-specific-scope>`). Unsupported multi-cluster scope strings
-are parsed only to return validation errors; frontend code never produces them.
+`clusterId|<domain-specific-scope>`), built and decoded only by the scope
+codec ([refresh-system.md](refresh-system.md#scope-and-identity)). The prefix
+is one opaque `clusterId` (`<kubeconfig file>:<context>`, which may contain
+commas), never a list; unprefixed scope strings are rejected.
 
 ## Ownership
 

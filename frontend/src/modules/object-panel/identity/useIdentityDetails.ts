@@ -4,15 +4,18 @@ import { useTypedResourceQuery } from '@modules/resource-grid/useTypedResourceQu
 import { ALL_MULTISELECT_FILTER } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { useMemo } from 'react';
 import { useRefreshDomainHandle } from '@/core/data-access';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useQueryStreamSignal } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
 import type { ClusterIdentitiesSnapshot, ClusterIdentity } from '@/core/refresh/types';
 import type { IdentityPanelRef } from '../panelTarget';
 
 export function useIdentityDetails(ref: IdentityPanelRef, enabled: boolean) {
   const { state } = useRefreshDomainHandle({
     domain: 'cluster-identities',
-    scope: buildClusterScope(ref.clusterId, ''),
+    scope: buildRefreshScope('cluster-identities', {
+      clusterId: ref.clusterId,
+      selector: CLUSTER_SELECTOR,
+    }),
     enabled,
     preserveState: true,
     demand: 'query',
@@ -38,7 +41,7 @@ export function useIdentityDetails(ref: IdentityPanelRef, enabled: boolean) {
     clusterId: ref.clusterId,
     domain: 'cluster-identities',
     label: 'Identity details',
-    baseScope: '',
+    baseSelector: CLUSTER_SELECTOR,
     filters,
     sortConfig: null,
     pageLimit: 1,

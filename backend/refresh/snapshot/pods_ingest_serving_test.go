@@ -65,13 +65,13 @@ func TestPodBuilderRejectsInvalidScopesWithoutBlockingValidObjects(t *testing.T)
 	for _, scope := range []string{
 		"", "broken", "namespace:", "unsupported:value",
 		"workload:team-a::v1:Deployment:api",
-		"object:team-a:other:v1:Pod:api",
-		"object:team-a::v2:Pod:api",
+		// Retired form with no producer: a single pod is read through its namespace.
+		"object:team-a::v1:Pod:api",
 	} {
 		_, err := builder.Build(ctx, scope)
 		require.Error(t, err, scope)
 	}
-	snapshot, err := builder.Build(ctx, "cluster-a|object:team-a::v1:Pod:api")
+	snapshot, err := builder.Build(ctx, "cluster-a|namespace:team-a")
 	require.NoError(t, err)
 	rows := snapshot.Payload.(PodSnapshot).Rows
 	require.Len(t, rows, 1)

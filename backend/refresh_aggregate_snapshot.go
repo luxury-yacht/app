@@ -41,9 +41,8 @@ func newAggregateSnapshotService(subsystems map[string]*system.Subsystem) *aggre
 // Build routes one cluster-scoped snapshot request to the owning per-cluster service.
 func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
 	services := s.snapshotConfig()
-	clusterIDs, scopeValue := refresh.SplitClusterScopeList(scope)
-	target, err := s.resolveTarget(domain, clusterIDs, services)
-	if err != nil {
+	target, scopeValue := refresh.SplitClusterScope(scope)
+	if err := requireActiveTarget(domain, target, services); err != nil {
 		return nil, err
 	}
 
@@ -92,24 +91,17 @@ func namespaceSnapshotWorkloadReadiness(snap *refresh.Snapshot) snapshot.Namespa
 	return payload.WorkloadReadiness
 }
 
-// resolveTarget chooses which cluster should handle the requested domain/scope pair.
-func (s *aggregateSnapshotService) resolveTarget(
-	domain string,
-	clusterIDs []string,
-	services map[string]refresh.SnapshotBuilder,
-) (string, error) {
-	if len(clusterIDs) == 0 {
-		return "", errorstatus.BadRequest(fmt.Errorf("cluster scope is required for domain %s", domain))
+// requireActiveTarget checks that the scope names a cluster with an active
+// service. A missing cluster is the caller's mistake; an inactive one may
+// still be starting.
+func requireActiveTarget[T any](domain, target string, active map[string]T) error {
+	if target == "" {
+		return errorstatus.BadRequest(fmt.Errorf("cluster scope is required for domain %s", domain))
 	}
-	if len(clusterIDs) > 1 {
-		return "", errorstatus.BadRequest(fmt.Errorf("domain %s requires a single cluster scope (requested: %v)", domain, clusterIDs))
+	if _, ok := active[target]; !ok {
+		return errorstatus.ClusterNotReady(fmt.Errorf("cluster %s not active", target))
 	}
-
-	target := clusterIDs[0]
-	if _, ok := services[target]; !ok {
-		return "", errorstatus.ClusterNotReady(fmt.Errorf("no active clusters available (requested: %v)", clusterIDs))
-	}
-	return target, nil
+	return nil
 }
 
 func (s *aggregateSnapshotService) snapshotConfig() map[string]refresh.SnapshotBuilder {

@@ -48,7 +48,6 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(({ error }) => {
     clusterId: selectedClusterId,
     domain: 'cluster-events',
     label: 'Cluster Events',
-    baseScope: 'cluster',
     selectRows: selectPayloadRows,
     viewId: 'cluster-events',
     columns,

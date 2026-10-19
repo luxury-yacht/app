@@ -109,14 +109,14 @@ func TestParseRequestBoundsTheClientBufferLimits(t *testing.T) {
 	require.Equal(t, config.ContainerLogsStreamMaxBytes, options.MaxBytes)
 }
 
-func TestParseRequestRejectsMissingScopeAndMultipleClusters(t *testing.T) {
+func TestParseRequestRejectsMissingScopeAndCluster(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		scope   string
 		message string
 	}{
 		{name: "missing", message: "scope is required"},
-		{name: "multiple clusters", scope: "cluster-a,cluster-b|team-a:/v1:Pod:api", message: "log scope requires a single cluster scope"},
+		{name: "no cluster prefix", scope: "team-a:/v1:Pod:api", message: "log scope requires a cluster scope"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := parseRequest(Request{Scope: test.scope})
