@@ -2,8 +2,8 @@
  * The object map's one rule, on the frontend: an object belongs to another
  * object's lineage if links that all point the same way connect them, and the
  * lineage keeps every link between its objects. The backend builds each map by
- * this rule from the seed; selection highlight, focus mode, and the prune after
- * ReplicaSet collapse apply it to what is shown. Each direction has its own
+ * this rule from the seed; selection highlight and the prune after ReplicaSet
+ * collapse apply it to what is shown. Each direction has its own
  * visited set, so paths never switch direction.
  */
 

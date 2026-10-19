@@ -28,7 +28,7 @@ export const computeObjectMapSelectionState = (
   }
 
   // The active object's lineage, with every link between its objects, as on
-  // the map itself; focus mode keeps exactly these.
+  // the map itself.
   const { nodeIds, edgeIds } = collectLineage(
     activeNodeId,
     edges.map((edge) => ({ id: edge.id, source: edge.sourceId, target: edge.targetId }))

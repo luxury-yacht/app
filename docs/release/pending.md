@@ -10,6 +10,10 @@
   - The Values tab remembers whether you were on Defaults, Overrides, or Merged when you switch to another tab and back.
   - The Values and Manifest tabs read the release once per refresh instead of up to five times.
 
+### Removed
+
+- Object Maps: Focus mode. Clicking an object still highlights the objects and links related to it.
+
 ### Fixed
 
 - Helm releases: values copied from the Values tab keep strings such as `yes`, `on`, and `off` quoted, so Helm no longer reads them back as booleans.

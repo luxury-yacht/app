@@ -40,7 +40,6 @@ export interface ObjectMapDebugSnapshot {
   seedRef: ObjectMapReference;
   seedNodeId: string;
   activeNodeId: string | null;
-  focusMode: boolean;
   autoFit: boolean;
   selectedKinds: MultiSelectFilterSelection;
   enabledEdgeTypes: string[] | null;

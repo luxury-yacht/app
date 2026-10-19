@@ -589,23 +589,6 @@ const collapseRemnantPayload: ObjectMapSnapshotPayload = {
   ],
 };
 
-const focusModePayload: ObjectMapSnapshotPayload = {
-  ...payload,
-  nodes: [
-    { id: 'deploy', depth: 0, ref: ref('deploy', 'Deployment', 'web', 'apps') },
-    { id: 'pod-a', depth: 1, ref: ref('pod-a', 'Pod', 'web-a', '') },
-    { id: 'pod-b', depth: 1, ref: ref('pod-b', 'Pod', 'web-b', '') },
-    { id: 'config-a', depth: 2, ref: ref('config-a', 'ConfigMap', 'web-a-config', '') },
-    { id: 'secret-a', depth: 3, ref: ref('secret-a', 'Secret', 'web-a-secret', '') },
-  ],
-  edges: [
-    { id: 'edge-a', source: 'deploy', target: 'pod-a', type: 'owner', label: 'owns' },
-    { id: 'edge-b', source: 'deploy', target: 'pod-b', type: 'owner', label: 'owns' },
-    { id: 'edge-config', source: 'pod-a', target: 'config-a', type: 'uses', label: 'uses' },
-    { id: 'edge-secret', source: 'config-a', target: 'secret-a', type: 'uses', label: 'uses' },
-  ],
-};
-
 const renderObjectMap = async ({
   testPayload = payload,
   onOpenPanel,
@@ -1075,102 +1058,6 @@ describe('ObjectMap', () => {
         .preserveViewportNodeId
     ).toBe('deploy');
     expect(autoFitToggle?.getAttribute('aria-pressed')).toBe('false');
-
-    cleanup();
-  });
-
-  it('toggles focus mode to redraw all recursively related objects', async () => {
-    const { container, cleanup } = await renderObjectMap({ testPayload: focusModePayload });
-    const focusToggle = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Toggle focus mode"]'
-    );
-    const resetButton = container.querySelector<HTMLButtonElement>('[aria-label="Reset layout"]');
-    const podA = container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-a"]');
-    const podANode = container.querySelector<HTMLElement>('[data-testid="mock-node-pod-a"]');
-
-    expect(focusToggle).toBeTruthy();
-    expect(resetButton).toBeTruthy();
-    expect(resetButton?.disabled).toBe(true);
-    expect(podA).toBeTruthy();
-    expect(podANode).toBeTruthy();
-    const initialPodAX = requireValue(podANode, 'expected test value in ObjectMap.test.tsx').dataset
-      .x;
-    expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="ConfigMap: web-a-config"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Secret: web-a-secret"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-a"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-config"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-secret"]')).toBeTruthy();
-
-    await act(async () => {
-      requireValue(podA, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
-        mouseEvent('click')
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      requireValue(focusToggle, 'expected test value in ObjectMap.test.tsx').click();
-      await Promise.resolve();
-    });
-
-    expect(focusToggle?.getAttribute('aria-pressed')).toBe('true');
-    expect(resetButton?.disabled).toBe(false);
-    expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Pod: web-a"]')).toBeTruthy();
-    expect(container.querySelector<HTMLElement>('[data-testid="mock-node-pod-a"]')?.dataset.x).toBe(
-      initialPodAX
-    );
-    expect(container.querySelector('[aria-label="ConfigMap: web-a-config"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Secret: web-a-secret"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeNull();
-    expect(container.querySelector('[data-testid="mock-edge-edge-a"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-config"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-secret"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeNull();
-
-    await act(async () => {
-      requireValue(resetButton, 'expected test value in ObjectMap.test.tsx').click();
-      await Promise.resolve();
-    });
-
-    expect(focusToggle?.getAttribute('aria-pressed')).toBe('false');
-    expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeTruthy();
-    expect(resetButton?.disabled).toBe(true);
-
-    cleanup();
-  });
-
-  it('does not preserve a selected node viewport anchor while focus mode is active', async () => {
-    const { container, cleanup } = await renderObjectMap({ testPayload: focusModePayload });
-    const focusToggle = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Toggle focus mode"]'
-    );
-    const manualViewportChange = container.querySelector<HTMLButtonElement>(
-      '[data-testid="mock-user-viewport-change"]'
-    );
-    const podA = container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-a"]');
-
-    expect(focusToggle).toBeTruthy();
-    expect(manualViewportChange).toBeTruthy();
-    expect(podA).toBeTruthy();
-
-    await act(async () => {
-      requireValue(manualViewportChange, 'expected test value in ObjectMap.test.tsx').click();
-      requireValue(podA, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
-        mouseEvent('click')
-      );
-      requireValue(focusToggle, 'expected test value in ObjectMap.test.tsx').click();
-      await Promise.resolve();
-    });
-
-    expect(
-      container.querySelector<HTMLElement>('[data-testid="object-map-g6-mock"]')?.dataset
-        .preserveViewportNodeId
-    ).toBe('');
 
     cleanup();
   });
@@ -1690,11 +1577,11 @@ describe('ObjectMap', () => {
     expect(menu?.textContent).toContain('Reset zoom');
     expect(menu?.textContent).toContain('Fit');
     expect(menu?.textContent).toContain('Auto-fit off');
-    expect(menu?.textContent).toContain('Focus on');
     expect(menu?.textContent).toContain('Reset layout');
     expect(menu?.textContent).not.toContain('Refresh');
+    expect(menu?.textContent).not.toContain('Focus');
     expect(menu?.textContent).toContain('Hide legend');
-    expect(container.querySelectorAll('[data-testid="mock-context-menu-icon"]')).toHaveLength(8);
+    expect(container.querySelectorAll('[data-testid="mock-context-menu-icon"]')).toHaveLength(7);
 
     const autoFitItem = Array.from(
       requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelectorAll('button')

@@ -543,8 +543,6 @@ const ObjectMapDebugEntry = ({ map }: { map: ObjectMapDebugSnapshot }) => (
       <dl className="map-debug-grid">
         <dt>auto-fit</dt>
         <dd>{map.autoFit ? 'on' : 'off'}</dd>
-        <dt>focus</dt>
-        <dd>{map.focusMode ? 'on' : 'off'}</dd>
         <dt>active</dt>
         <dd>{map.activeNodeId ?? 'none'}</dd>
         <dt>preserve</dt>

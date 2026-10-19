@@ -1,7 +1,7 @@
 /**
  * frontend/src/modules/object-map/objectMapVisibleState.test.ts
  *
- * Tests visible object-map state derivation for filters, focus, search, and legend.
+ * Tests visible object-map state derivation for filters, pins, search, and legend.
  */
 
 import type { ObjectMapEdge, ObjectMapNode, ObjectMapReference } from '@core/refresh/types';
@@ -61,7 +61,6 @@ const derive = ({
   edges,
   seedId = nodes[0]?.id ?? '',
   activeNodeId = null,
-  focusMode = false,
   selectedKinds = ALL_MULTISELECT_FILTER,
   enabledEdgeTypes = null,
   searchQuery = '',
@@ -71,7 +70,6 @@ const derive = ({
   edges: ObjectMapEdge[];
   seedId?: string;
   activeNodeId?: string | null;
-  focusMode?: boolean;
   selectedKinds?: MultiSelectFilterSelection;
   enabledEdgeTypes?: Set<string> | null;
   searchQuery?: string;
@@ -81,7 +79,6 @@ const derive = ({
     layout: computeObjectMapLayout(nodes, edges, seedId),
     seedNodeId: seedId,
     activeNodeId,
-    focusMode,
     selectedKinds,
     enabledEdgeTypes,
     searchQuery,
@@ -175,101 +172,6 @@ describe('deriveObjectMapVisibleState', () => {
     expect(selected.visibleSelectionState.activeId).toBe('pod-b');
   });
 
-  it('focuses recursively related visible objects', () => {
-    const result = derive({
-      nodes: [
-        node('deploy', 'Deployment', 'web', 0),
-        node('pod-a', 'Pod', 'web-a', 1),
-        node('pod-b', 'Pod', 'web-b', 1),
-        node('config', 'ConfigMap', 'web-config', 2),
-        node('secret', 'Secret', 'web-secret', 3),
-      ],
-      edges: [
-        edge('deploy-pod-a', 'deploy', 'pod-a', 'owner'),
-        edge('deploy-pod-b', 'deploy', 'pod-b', 'owner'),
-        edge('pod-config', 'pod-a', 'config', 'uses'),
-        edge('config-secret', 'config', 'secret', 'uses'),
-      ],
-      activeNodeId: 'pod-a',
-      focusMode: true,
-    });
-
-    expect(result.visibleLayout.nodes.map((n) => n.id).sort(compareUtf16Strings)).toEqual([
-      'config',
-      'deploy',
-      'pod-a',
-      'secret',
-    ]);
-    expect(result.visibleLayout.edges.map((e) => e.id).sort(compareUtf16Strings)).toEqual([
-      'config-secret',
-      'deploy-pod-a',
-      'pod-config',
-    ]);
-  });
-
-  it('keeps every link between the focused objects, not only the links walked', () => {
-    // The Pod's lineage reaches the ConfigMap forward and the Deployment
-    // backward; the Deployment's template also uses the ConfigMap.
-    const result = derive({
-      nodes: [
-        node('deploy', 'Deployment', 'web', 0),
-        node('rs', 'ReplicaSet', 'web-rs', 1),
-        node('pod', 'Pod', 'web-pod', 2),
-        node('config', 'ConfigMap', 'web-config', 1),
-      ],
-      edges: [
-        edge('deploy-rs', 'deploy', 'rs', 'owner'),
-        edge('rs-pod', 'rs', 'pod', 'owner'),
-        edge('pod-config', 'pod', 'config', 'uses'),
-        edge('deploy-config', 'deploy', 'config', 'uses'),
-      ],
-      activeNodeId: 'pod',
-      focusMode: true,
-    });
-
-    expect(result.visibleLayout.nodes.map((n) => n.id).sort(compareUtf16Strings)).toEqual([
-      'config',
-      'deploy',
-      'pod',
-      'rs',
-    ]);
-    expect(result.visibleLayout.edges.map((e) => e.id).sort(compareUtf16Strings)).toEqual([
-      'deploy-config',
-      'deploy-rs',
-      'pod-config',
-      'rs-pod',
-    ]);
-  });
-
-  it('keeps the active object at the same map coordinate in focus mode', () => {
-    const nodes = [
-      node('deploy', 'Deployment', 'web', 0),
-      node('pod-a', 'Pod', 'web-a', 1),
-      node('pod-b', 'Pod', 'web-b', 1),
-      node('config', 'ConfigMap', 'web-config', 2),
-      node('secret', 'Secret', 'web-secret', 3),
-    ];
-    const edges = [
-      edge('deploy-pod-a', 'deploy', 'pod-a', 'owner'),
-      edge('deploy-pod-b', 'deploy', 'pod-b', 'owner'),
-      edge('pod-config', 'pod-a', 'config', 'uses'),
-      edge('config-secret', 'config', 'secret', 'uses'),
-    ];
-    const unselected = derive({ nodes, edges });
-    const focused = derive({
-      nodes,
-      edges,
-      activeNodeId: 'pod-a',
-      focusMode: true,
-    });
-    const unselectedActiveNode = unselected.visibleLayout.nodes.find((n) => n.id === 'pod-a');
-    const focusedActiveNode = focused.visibleLayout.nodes.find((n) => n.id === 'pod-a');
-
-    expect(focusedActiveNode).toBeTruthy();
-    expect(focusedActiveNode?.x).toBe(unselectedActiveNode?.x);
-    expect(focusedActiveNode?.y).toBe(unselectedActiveNode?.y);
-  });
-
   it('keeps pinned objects where the user dropped them in every view', () => {
     const nodes = [
       node('deploy', 'Deployment', 'web', 0),
@@ -296,7 +198,6 @@ describe('deriveObjectMapVisibleState', () => {
           values: ['Deployment', 'ReplicaSet', 'Pod'],
         } as MultiSelectFilterSelection,
       },
-      focus: { focusMode: true, activeNodeId: 'deploy' },
     };
 
     for (const [view, options] of Object.entries(views)) {
@@ -310,20 +211,6 @@ describe('deriveObjectMapVisibleState', () => {
         true
       );
     }
-
-    // A pinned focus anchor keeps the focused layout lined up around it.
-    const deployPin = { x: at(base, 'deploy').x - 200, y: at(base, 'deploy').y + 100 };
-    const focused = derive({
-      nodes,
-      edges,
-      focusMode: true,
-      activeNodeId: 'deploy',
-      pinnedPositions: new Map([['deploy', deployPin]]),
-    }).visibleLayout;
-    expect(at(focused, 'deploy')).toMatchObject(deployPin);
-    expect(at(focused, 'rs').x - at(focused, 'deploy').x).toBe(
-      at(base, 'rs').x - at(base, 'deploy').x
-    );
   });
 
   it('keeps a missing object marked missing when the kind filter re-lays out the map', () => {

@@ -28,7 +28,6 @@ import {
 import {
   AutoFitIcon,
   FitToViewIcon,
-  FocusModeIcon,
   LegendIcon,
   ObjectMapLegendSwatchIcon,
   ResetZoomIcon,
@@ -131,8 +130,6 @@ type ObjectMapToolbarProps = {
   viewportControls: ObjectMapViewportControls | null;
   autoFit: boolean;
   onToggleAutoFit: () => void;
-  focusMode: boolean;
-  onToggleFocusMode: () => void;
   resetLayoutDisabled: boolean;
   onResetLayout: () => void;
   showLegend: boolean;
@@ -154,8 +151,6 @@ const ObjectMapToolbar: React.FC<ObjectMapToolbarProps> = ({
   viewportControls,
   autoFit,
   onToggleAutoFit,
-  focusMode,
-  onToggleFocusMode,
   resetLayoutDisabled,
   onResetLayout,
   showLegend,
@@ -268,16 +263,6 @@ const ObjectMapToolbar: React.FC<ObjectMapToolbarProps> = ({
         <AutoFitIcon width={18} height={18} />
       </button>
       <span className="object-map__toolbar-separator" aria-hidden="true" />
-      <button
-        type="button"
-        className={objectMapToolbarButtonClass(focusMode)}
-        onClick={onToggleFocusMode}
-        title={focusMode ? 'Focus mode on' : 'Focus mode off'}
-        aria-label="Toggle focus mode"
-        aria-pressed={focusMode}
-      >
-        <FocusModeIcon width={18} height={18} />
-      </button>
       <button
         type="button"
         className="object-map__toolbar-button"
@@ -439,20 +424,18 @@ const ObjectMapMessages: React.FC<{
 
 const selectPreservedViewportNodeId = ({
   autoFit,
-  focusMode,
   activeNodeId,
   seedNodeId,
   visibleNodeIds,
   fallbackNodeId,
 }: {
   autoFit: boolean;
-  focusMode: boolean;
   activeNodeId: string | null;
   seedNodeId: string;
   visibleNodeIds: Set<string>;
   fallbackNodeId: string | null;
 }): string | null => {
-  if (autoFit || focusMode) {
+  if (autoFit) {
     return null;
   }
   if (activeNodeId && visibleNodeIds.has(activeNodeId)) {
@@ -499,7 +482,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const modelTimingMs = objectMapTimingNow() - modelTimingStartedAt;
   const useShortResourceNames = useShortNames();
   const [showLegend, setShowLegend] = useState(true);
-  const [focusMode, setFocusMode] = useState(false);
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<string> | null>(null);
   const [selectedKinds, setSelectedKinds] =
     useState<MultiSelectFilterSelection>(ALL_MULTISELECT_FILTER);
@@ -520,7 +502,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       layout: model.layout,
       seedNodeId: model.seedId,
       activeNodeId: model.activeNodeId,
-      focusMode,
       selectedKinds,
       enabledEdgeTypes,
       searchQuery,
@@ -530,7 +511,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     return { state, durationMs: objectMapTimingNow() - startedAt };
   }, [
     enabledEdgeTypes,
-    focusMode,
     model.activeNodeId,
     model.layout,
     model.pinnedPositions,
@@ -644,11 +624,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     model.setAutoFit(false);
   }, [model]);
 
-  const resetMapLayout = useCallback(() => {
-    model.resetLayout();
-    setFocusMode(false);
-  }, [model]);
-
   const viewportControlsReady = Boolean(g6ViewportControls);
   const visibleNodeIds = useMemo(
     () => new Set(visibleState.visibleLayout.nodes.map((node) => node.id)),
@@ -656,7 +631,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   );
   const preserveViewportNodeId = selectPreservedViewportNodeId({
     autoFit: model.autoFit,
-    focusMode,
     activeNodeId: model.activeNodeId,
     seedNodeId: model.seedId,
     visibleNodeIds,
@@ -677,7 +651,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       seedRef: payload.seed,
       seedNodeId: model.seedId,
       activeNodeId: model.activeNodeId,
-      focusMode,
       autoFit: model.autoFit,
       selectedKinds,
       enabledEdgeTypes: enabledEdgeTypes
@@ -715,7 +688,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   }, [
     debugMapId,
     enabledEdgeTypes,
-    focusMode,
     model.activeNodeId,
     model.autoFit,
     model.layout.bounds,
@@ -794,15 +766,10 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       },
       { divider: true },
       {
-        label: focusMode ? 'Focus off' : 'Focus on',
-        icon: <FocusModeIcon />,
-        onClick: () => setFocusMode((prev) => !prev),
-      },
-      {
         label: 'Reset layout',
         icon: <ResetFiltersIcon />,
-        onClick: resetMapLayout,
-        disabled: !model.hasNodePositionOverrides && !focusMode,
+        onClick: model.resetLayout,
+        disabled: !model.hasNodePositionOverrides,
       },
       { divider: true },
     ];
@@ -812,7 +779,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       onClick: () => setShowLegend((prev) => !prev),
     });
     return items;
-  }, [focusMode, g6ViewportControls, model, resetMapLayout, showLegend, viewportControlsReady]);
+  }, [g6ViewportControls, model, showLegend, viewportControlsReady]);
   const contextMenuItems = useMemo(() => {
     if (!contextMenu) {
       return [];
@@ -880,10 +847,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           viewportControls={g6ViewportControls}
           autoFit={model.autoFit}
           onToggleAutoFit={() => model.setAutoFit((previous) => !previous)}
-          focusMode={focusMode}
-          onToggleFocusMode={() => setFocusMode((previous) => !previous)}
-          resetLayoutDisabled={!model.hasNodePositionOverrides && !focusMode}
-          onResetLayout={resetMapLayout}
+          resetLayoutDisabled={!model.hasNodePositionOverrides}
+          onResetLayout={model.resetLayout}
           showLegend={showLegend}
           onToggleLegend={() => setShowLegend((previous) => !previous)}
         />
