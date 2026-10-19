@@ -867,6 +867,24 @@ describe('DiagnosticsPanel component', () => {
     await rendered.unmount();
   });
 
+  // A Helm Values/Manifest row names the release it loads, so a stuck tab can be
+  // traced to its release and namespace.
+  test('labels a helm release panel row with its release name and namespace', async () => {
+    seedBaseDomainStates();
+    setScopedEntries('object-helm-values', [
+      [testScope('cluster-a', 'team-a:web-release'), createReadyState()],
+    ]);
+
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectClusterDataTab(rendered.container);
+
+    const details = await expandScopeRow(rendered.container, 'ObjPanel - Values - web-release');
+    expect(details.Namespace).toBe('team-a');
+
+    await rendered.unmount();
+  });
+
   test('renders all active cluster scopes and marks the selected cluster as active', async () => {
     seedBaseDomainStates();
     setScopedEntries('cluster-config', [

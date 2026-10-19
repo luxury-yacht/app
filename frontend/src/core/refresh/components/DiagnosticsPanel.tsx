@@ -1003,17 +1003,24 @@ const buildPodDiagnosticsRow = (
   };
 };
 
+// Object and Helm-release selectors name the panel's object; other selectors do not.
+const scopeSelectorIdentity = (
+  selector: ScopeSelector | undefined
+): { namespace: string; name: string } => {
+  if (selector?.kind === 'object') {
+    return selector.object;
+  }
+  if (selector?.kind === 'helm-release') {
+    return selector;
+  }
+  return { namespace: '', name: '' };
+};
+
 const resolveObjectPanelScopeIdentity = (
   domain: RefreshDomain,
   scope: string
 ): { namespaceLabel: string; name: string } => {
-  const selector = tryParseRefreshScope(domain, scope)?.selector;
-  const identity =
-    selector?.kind === 'object'
-      ? selector.object
-      : selector?.kind === 'helm-release'
-        ? selector
-        : { namespace: '', name: '' };
+  const identity = scopeSelectorIdentity(tryParseRefreshScope(domain, scope)?.selector);
   return { namespaceLabel: identity.namespace || '-', name: identity.name };
 };
 
