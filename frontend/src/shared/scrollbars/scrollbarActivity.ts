@@ -24,9 +24,6 @@ const OVERLAY_SCROLLBAR_OWNER_SELECTOR = [
   '.dockable-panel',
   '.object-panel',
 ].join(',');
-const OVERLAY_PART_SELECTOR = '.scrollbar-overlay-thumb, .scrollbar-overlay-gutter';
-// Attribute changes that can reveal, resize, or restyle scroll content.
-const DISCOVERY_ATTRIBUTES = ['class', 'style', 'hidden', 'open'];
 
 interface OverlayScrollbarElements {
   container: HTMLElement;
@@ -45,20 +42,7 @@ const activeTimers = new WeakMap<Element, number>();
 const overlayElements = new WeakMap<Element, OverlayScrollbarElements>();
 const overlayGeometryTransitionsDisabled = new WeakSet<Element>();
 const overlayOwnerElements = new WeakMap<Element, HTMLElement>();
-// Every element that currently has overlays (shown, or fading out after idle).
-const overlayOwners = new Set<Element>();
-// Elements whose computed overflow can scroll, overflowing or not. They stay ResizeObserved so
-// a region that shrinks into overflow is noticed.
-const scrollCandidates = new Set<Element>();
-// Regions whose thumb has been shown at least once; discovery shows a thumb only for new ones.
-let shownScrollElements = new WeakSet<Element>();
-// The tracker writes class/style on these; their class/style mutations are its own.
-const trackerStyledElements = new WeakSet<Element>();
-const pendingDiscoveryStarts = new Set<Element>();
-const pendingDiscoveryRoots = new Set<Element>();
-let pendingDiscoveryPrune = false;
-let discoveryFrameId: number | undefined;
-let discoveryObserver: MutationObserver | undefined;
+const activeOverlayElements = new Set<Element>();
 const overlayHoverStates = new Map<Element, OverlayHoverState>();
 const opacityAnimations = new WeakMap<
   Element,
@@ -208,7 +192,7 @@ const scheduleOverlayGeometryUpdate = (element: Element): void => {
 };
 
 const scheduleDescendantOverlayGeometryUpdates = (scrolledElement: Element): void => {
-  overlayOwners.forEach((element) => {
+  activeOverlayElements.forEach((element) => {
     if (element === scrolledElement || !scrolledElement.contains(element)) {
       return;
     }
@@ -224,13 +208,7 @@ const getOverlayResizeObserver = (): ResizeObserver | undefined => {
 
   overlayResizeObserver ??= new ResizeObserver((entries) => {
     entries.forEach((entry) => {
-      if (overlayElements.has(entry.target)) {
-        scheduleOverlayGeometryUpdate(entry.target);
-      } else {
-        // A candidate without a thumb may have just started overflowing.
-        pendingDiscoveryStarts.add(entry.target);
-        scheduleScrollRegionDiscovery();
-      }
+      scheduleOverlayGeometryUpdate(entry.target);
     });
   });
   return overlayResizeObserver;
@@ -300,8 +278,6 @@ const ensureOverlayScrollbars = (element: Element) => {
     verticalThumb,
   };
   overlayElements.set(element, overlay);
-  overlayOwners.add(element);
-  trackerStyledElements.add(element);
   overlayOwnerElements.set(verticalGutter, element);
   overlayOwnerElements.set(verticalThumb, element);
   overlayOwnerElements.set(horizontalGutter, element);
@@ -313,7 +289,7 @@ const ensureOverlayScrollbars = (element: Element) => {
 const removeOverlayScrollbars = (element: Element): void => {
   const overlay = overlayElements.get(element);
   if (!overlay) {
-    overlayOwners.delete(element);
+    activeOverlayElements.delete(element);
     overlayHoverStates.delete(element);
     pendingOverlayGeometryUpdates.delete(element);
     overlayGeometryTransitionsDisabled.delete(element);
@@ -340,14 +316,11 @@ const removeOverlayScrollbars = (element: Element): void => {
   overlayOwnerElements.delete(overlay.verticalThumb);
   overlayOwnerElements.delete(overlay.horizontalGutter);
   overlayOwnerElements.delete(overlay.horizontalThumb);
-  // Candidates stay observed so a later shrink into overflow is noticed.
-  if (!scrollCandidates.has(element)) {
-    overlayResizeObserver?.unobserve(element);
-  }
+  overlayResizeObserver?.unobserve(element);
   pendingOverlayGeometryUpdates.delete(element);
   overlayGeometryTransitionsDisabled.delete(element);
   overlayElements.delete(element);
-  overlayOwners.delete(element);
+  activeOverlayElements.delete(element);
   overlayHoverStates.delete(element);
   if (element instanceof HTMLElement) {
     element.classList.remove(SCROLLBAR_ACTIVE_CLASS);
@@ -648,11 +621,11 @@ const clearOverlayHoverStates = (exceptElement?: Element): void => {
   });
 };
 
-const collectOverlayHoverCandidates = (elementsAtPoint: Element[]): HTMLElement[] => {
+const collectOverlayHoverCandidates = (clientX: number, clientY: number): HTMLElement[] => {
   const candidates: HTMLElement[] = [];
   const seen = new Set<Element>();
 
-  for (const elementAtPoint of elementsAtPoint) {
+  for (const elementAtPoint of document.elementsFromPoint(clientX, clientY)) {
     const overlayOwner = overlayOwnerElements.get(elementAtPoint);
     if (overlayOwner && !seen.has(overlayOwner)) {
       seen.add(overlayOwner);
@@ -671,7 +644,7 @@ const collectOverlayHoverCandidates = (elementsAtPoint: Element[]): HTMLElement[
     }
   }
 
-  overlayOwners.forEach((element) => {
+  activeOverlayElements.forEach((element) => {
     if (element instanceof HTMLElement && !seen.has(element)) {
       seen.add(element);
       candidates.push(element);
@@ -707,38 +680,12 @@ const resolveOverlayHover = (
   return { horizontal: horizontal && !vertical, vertical };
 };
 
-// Scrollable regions under the topmost element at the pointer, innermost first.
-const collectPointerRegions = (topElement: Element | undefined): Element[] => {
-  const regions: Element[] = [];
-  let element: Element | null = topElement
-    ? (overlayOwnerElements.get(topElement) ?? topElement)
-    : null;
-  for (; element; element = element.parentElement) {
-    if ((overlayElements.has(element) || scrollCandidates.has(element)) && canScroll(element)) {
-      regions.push(element);
-    }
-  }
-  return regions;
-};
-
-// A thumb that is shown and counting down only needs its idle timer restarted.
-const refreshScrollbarActivity = (element: Element): void => {
-  if (activeTimers.has(element)) {
-    scheduleScrollbarInactive(element);
-    return;
-  }
-  markScrollbarActive(element);
-};
-
 const updateOverlayHoverAtPoint = (clientX: number, clientY: number): void => {
   if (activeDrag) {
     return;
   }
-  const elementsAtPoint = document.elementsFromPoint(clientX, clientY);
-  // Pointer movement over a region is activity: it shows the thumb until the pointer idles.
-  collectPointerRegions(elementsAtPoint[0]).forEach(refreshScrollbarActivity);
   const hoverZoneSize = readScrollbarNumberToken('--scrollbar-hover-zone-size', 16);
-  for (const element of collectOverlayHoverCandidates(elementsAtPoint)) {
+  for (const element of collectOverlayHoverCandidates(clientX, clientY)) {
     const hover = resolveOverlayHover(element, clientX, clientY, hoverZoneSize);
     if (hover && (hover.vertical || hover.horizontal)) {
       setOverlayHoverState(element, hover);
@@ -757,7 +704,6 @@ const setScrollbarOpacity = (element: Element, opacity: number): void => {
   if (!(element instanceof HTMLElement)) {
     return;
   }
-  trackerStyledElements.add(element);
   element.style.setProperty('--scrollbar-thumb-current-opacity', String(opacity));
   const overlay = overlayElements.get(element);
   if (overlay) {
@@ -1048,8 +994,6 @@ const scheduleScrollbarInactive = (element: Element): void => {
   }
 
   const timer = window.setTimeout(() => {
-    // From here the thumb is fading out; new activity must re-show it, not just re-arm.
-    activeTimers.delete(element);
     if (isScrollbarHeldOpen(element)) {
       scheduleScrollbarInactive(element);
       return;
@@ -1078,7 +1022,7 @@ const markScrollbarActive = (element: Element): void => {
   const activeOpacity = readScrollbarNumberToken('--scrollbar-thumb-active-opacity', 1);
   if (isOverlayScrollbarElement(element)) {
     ensureOverlayScrollbars(element);
-    shownScrollElements.add(element);
+    activeOverlayElements.add(element);
     updateOverlayScrollbarGeometry(element);
   }
   setScrollbarOpacity(element, getCurrentScrollbarOpacity(element));
@@ -1093,172 +1037,6 @@ const markScrollbarActive = (element: Element): void => {
   scheduleScrollbarInactive(element);
 };
 
-// ---- Scroll-region discovery ----
-// A region shows its thumb when it first becomes scrollable, before any scroll or pointer
-// activity. The MutationObserver only records where the DOM changed; style and layout reads
-// wait for the next frame, where changed ancestors and inserted subtrees are checked.
-
-const isOverlayPart = (node: Node): boolean =>
-  node instanceof Element && node.matches(OVERLAY_PART_SELECTOR);
-
-const isScrollCandidate = (element: Element): element is HTMLElement => {
-  if (!(element instanceof HTMLElement)) {
-    return false;
-  }
-  const styles = getComputedStyle(element);
-  return (
-    (hasScrollableOverflow(styles.overflowX) || hasScrollableOverflow(styles.overflowY)) &&
-    !element.matches(OVERLAY_SCROLLBAR_EXCLUDED_SELECTOR)
-  );
-};
-
-const isTrackerAttributeWrite = (record: MutationRecord): boolean =>
-  (record.attributeName === 'class' || record.attributeName === 'style') &&
-  trackerStyledElements.has(record.target as Element);
-
-// Overlay geometry and the tracker's own class/style writes on owners are not content
-// changes; skipping them keeps scroll frames and fade steps from re-running discovery on the
-// region being animated.
-const isTrackerMutation = (record: MutationRecord): boolean => {
-  if (isOverlayPart(record.target)) {
-    return true;
-  }
-  if (record.type === 'attributes') {
-    return isTrackerAttributeWrite(record);
-  }
-  if (record.type !== 'childList') {
-    return false;
-  }
-  return [...record.addedNodes, ...record.removedNodes].every(isOverlayPart);
-};
-
-const queueDiscoveryRecord = (record: MutationRecord): void => {
-  if (isTrackerMutation(record)) {
-    return;
-  }
-  if (record.type === 'childList') {
-    record.addedNodes.forEach((node) => {
-      if (node instanceof Element) {
-        pendingDiscoveryRoots.add(node);
-      }
-    });
-    pendingDiscoveryPrune ||= record.removedNodes.length > 0;
-  }
-  const start = record.target instanceof Element ? record.target : record.target.parentElement;
-  if (start) {
-    pendingDiscoveryStarts.add(start);
-  }
-};
-
-const collectCandidateAncestors = (found: Set<HTMLElement>): void => {
-  const visited = new Set<Element>();
-  pendingDiscoveryStarts.forEach((start) => {
-    let element: Element | null = start;
-    while (element && element !== document.body && !visited.has(element)) {
-      visited.add(element);
-      if (isScrollCandidate(element)) {
-        found.add(element);
-      }
-      element = element.parentElement;
-    }
-  });
-  pendingDiscoveryStarts.clear();
-};
-
-const collectCandidateSubtrees = (found: Set<HTMLElement>): void => {
-  pendingDiscoveryRoots.forEach((root) => {
-    if (!root.isConnected) {
-      return;
-    }
-    if (isScrollCandidate(root)) {
-      found.add(root);
-    }
-    root.querySelectorAll('*').forEach((element) => {
-      if (isScrollCandidate(element)) {
-        found.add(element);
-      }
-    });
-  });
-  pendingDiscoveryRoots.clear();
-};
-
-const pruneDisconnectedScrollElements = (): void => {
-  pendingDiscoveryPrune = false;
-  scrollCandidates.forEach((element) => {
-    if (!element.isConnected) {
-      scrollCandidates.delete(element);
-      overlayResizeObserver?.unobserve(element);
-    }
-  });
-  overlayOwners.forEach((element) => {
-    if (!element.isConnected) {
-      removeOverlayScrollbars(element);
-    }
-  });
-};
-
-const registerScrollCandidate = (element: HTMLElement): void => {
-  if (!element.isConnected) {
-    return;
-  }
-  if (!scrollCandidates.has(element)) {
-    scrollCandidates.add(element);
-    getOverlayResizeObserver()?.observe(element);
-  }
-  if (overlayElements.has(element)) {
-    // A shown thumb follows content changes until it idles out.
-    overlayGeometryTransitionsDisabled.add(element);
-    updateOverlayScrollbarGeometry(element);
-    return;
-  }
-  // Show a region's thumb when it first becomes scrollable; content changes inside an
-  // already-shown region (data refreshes, live ages) must not show it again.
-  if (!shownScrollElements.has(element) && canScroll(element)) {
-    markScrollbarActive(element);
-  }
-};
-
-const runScrollRegionDiscovery = (): void => {
-  discoveryFrameId = undefined;
-  if (pendingDiscoveryPrune) {
-    pruneDisconnectedScrollElements();
-  }
-  const found = new Set<HTMLElement>();
-  collectCandidateAncestors(found);
-  collectCandidateSubtrees(found);
-  found.forEach(registerScrollCandidate);
-};
-
-const scheduleScrollRegionDiscovery = (): void => {
-  const hasPendingWork =
-    pendingDiscoveryPrune || pendingDiscoveryStarts.size > 0 || pendingDiscoveryRoots.size > 0;
-  if (discoveryFrameId !== undefined || !hasPendingWork) {
-    return;
-  }
-  discoveryFrameId = window.requestAnimationFrame(runScrollRegionDiscovery);
-};
-
-const handleDiscoveryMutations = (records: MutationRecord[]): void => {
-  records.forEach(queueDiscoveryRecord);
-  scheduleScrollRegionDiscovery();
-};
-
-const startScrollRegionDiscovery = (): void => {
-  if (typeof MutationObserver === 'undefined' || !document.body) {
-    return;
-  }
-  discoveryObserver = new MutationObserver(handleDiscoveryMutations);
-  discoveryObserver.observe(document.body, {
-    attributeFilter: DISCOVERY_ATTRIBUTES,
-    attributes: true,
-    characterData: true,
-    childList: true,
-    subtree: true,
-  });
-  pendingDiscoveryRoots.add(document.body);
-  scheduleScrollRegionDiscovery();
-};
-
 export const initializeScrollbarActivityTracking = (): void => {
   if (initialized || typeof document === 'undefined') {
     return;
@@ -1266,7 +1044,6 @@ export const initializeScrollbarActivityTracking = (): void => {
   initialized = true;
   scrollbarActivityAbortController = new AbortController();
   const signal = scrollbarActivityAbortController.signal;
-  startScrollRegionDiscovery();
 
   document.addEventListener(
     'scroll',
@@ -1333,7 +1110,7 @@ export const initializeScrollbarActivityTracking = (): void => {
   window.addEventListener(
     'resize',
     () => {
-      overlayOwners.forEach((element) => {
+      activeOverlayElements.forEach((element) => {
         overlayGeometryTransitionsDisabled.add(element);
         updateOverlayScrollbarGeometry(element);
       });
@@ -1411,21 +1188,10 @@ export const __resetScrollbarActivityTrackingForTest = (): void => {
     window.cancelAnimationFrame(overlayGeometryFrameId);
     overlayGeometryFrameId = undefined;
   }
-  discoveryObserver?.disconnect();
-  discoveryObserver = undefined;
-  if (discoveryFrameId !== undefined) {
-    window.cancelAnimationFrame(discoveryFrameId);
-    discoveryFrameId = undefined;
-  }
-  pendingDiscoveryStarts.clear();
-  pendingDiscoveryRoots.clear();
-  pendingDiscoveryPrune = false;
-  scrollCandidates.clear();
-  shownScrollElements = new WeakSet();
 
-  const elements = new Set<Element>([...overlayOwners, ...overlayHoverStates.keys()]);
+  const elements = new Set<Element>([...activeOverlayElements, ...overlayHoverStates.keys()]);
   elements.forEach(removeOverlayScrollbars);
-  overlayOwners.clear();
+  activeOverlayElements.clear();
   overlayHoverStates.clear();
   pendingOverlayGeometryUpdates.clear();
   overlayResizeObserver?.disconnect();

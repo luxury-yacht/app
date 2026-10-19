@@ -14,7 +14,7 @@ const defineMetric = (element: HTMLElement, name: keyof HTMLElement, value: numb
   });
 };
 
-const createScrollableElement = (parent: Node = document.body) => {
+const createScrollableElement = () => {
   const element = document.createElement('div');
   element.style.overflowX = 'auto';
   element.style.overflowY = 'auto';
@@ -38,7 +38,7 @@ const createScrollableElement = (parent: Node = document.body) => {
       y: 0,
       toJSON: () => undefined,
     }) as DOMRect;
-  parent.appendChild(element);
+  document.body.appendChild(element);
   return element;
 };
 
@@ -152,161 +152,6 @@ describe('scrollbar activity tracking', () => {
     vi.advanceTimersByTime(25);
 
     expect(document.body.querySelector('.scrollbar-overlay-thumb--vertical')).toBeNull();
-  });
-
-  describe('idle visibility', () => {
-    // The active timeout token is 20ms in this suite; production uses one second.
-    const verticalThumb = () =>
-      document.body.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
-    const waitPastIdle = () => vi.advanceTimersByTimeAsync(50);
-    // Runs every queued discovery frame, including ones scheduled by earlier frames.
-    const flushFrames = async () => {
-      for (let frame = 0; frame < 3; frame += 1) {
-        await vi.advanceTimersByTimeAsync(0);
-      }
-    };
-
-    it('shows the thumb when a scrollable region appears, then hides it after the idle timeout', async () => {
-      createScrollableElement();
-
-      await vi.advanceTimersByTimeAsync(0);
-      expect(verticalThumb()?.style.opacity).toBe('1');
-
-      await waitPastIdle();
-      expect(verticalThumb()).toBeNull();
-    });
-
-    it('hides the thumb after the idle timeout once scrolling stops', async () => {
-      const element = createScrollableElement();
-      await vi.advanceTimersByTimeAsync(0);
-      await waitPastIdle();
-
-      dispatchWheel(element);
-      expect(verticalThumb()?.style.opacity).toBe('1');
-
-      await waitPastIdle();
-      expect(verticalThumb()).toBeNull();
-    });
-
-    it('shows the thumb when added content makes a region scrollable', async () => {
-      const element = createScrollableElement();
-      defineMetric(element, 'scrollHeight', 100);
-      await flushFrames();
-      expect(verticalThumb()).toBeNull();
-
-      defineMetric(element, 'scrollHeight', 500);
-      element.appendChild(document.createElement('div'));
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(verticalThumb()?.style.opacity).toBe('1');
-    });
-
-    it('shows the thumb when edited text makes a region scrollable', async () => {
-      const element = createScrollableElement();
-      const text = document.createTextNode('short');
-      element.appendChild(text);
-      defineMetric(element, 'scrollHeight', 100);
-      await flushFrames();
-      expect(verticalThumb()).toBeNull();
-
-      defineMetric(element, 'scrollHeight', 500);
-      text.data = 'a much longer body of text';
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(verticalThumb()?.style.opacity).toBe('1');
-    });
-
-    it('shows the thumb for a scrollable region inside a newly inserted subtree', async () => {
-      const panel = document.createElement('section');
-      createScrollableElement(panel);
-
-      document.body.appendChild(panel);
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(verticalThumb()?.style.opacity).toBe('1');
-    });
-
-    it('shows the thumb when a region shrinks into overflow', async () => {
-      let resizeCallback: ResizeObserverCallback | undefined;
-      vi.stubGlobal(
-        'ResizeObserver',
-        class {
-          constructor(callback: ResizeObserverCallback) {
-            resizeCallback = callback;
-          }
-          observe = vi.fn();
-          unobserve = vi.fn();
-          disconnect = vi.fn();
-        }
-      );
-      const element = createScrollableElement();
-      defineMetric(element, 'scrollHeight', 100);
-      await flushFrames();
-      expect(verticalThumb()).toBeNull();
-
-      defineMetric(element, 'clientHeight', 60);
-      actResizeObserver(resizeCallback, element);
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(verticalThumb()?.style.opacity).toBe('1');
-    });
-
-    it('does not show the thumb again when content changes inside an already-shown region', async () => {
-      const element = createScrollableElement();
-      await vi.advanceTimersByTimeAsync(0);
-      await waitPastIdle();
-      expect(verticalThumb()).toBeNull();
-
-      element.appendChild(document.createElement('div'));
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(verticalThumb()).toBeNull();
-    });
-
-    it('removes the thumb when its region leaves the document', async () => {
-      const element = createScrollableElement();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(verticalThumb()).not.toBeNull();
-
-      element.remove();
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(
-        document.body.querySelector('.scrollbar-overlay-thumb, .scrollbar-overlay-gutter')
-      ).toBeNull();
-    });
-
-    it('shows the thumb while the pointer moves over the region and hides it once the pointer is idle', async () => {
-      const element = createScrollableElement();
-      vi.spyOn(document, 'elementsFromPoint').mockReturnValue([element]);
-      await vi.advanceTimersByTimeAsync(0);
-      await waitPastIdle();
-      expect(verticalThumb()).toBeNull();
-
-      dispatchPointerMove(40, 50);
-      await vi.advanceTimersByTimeAsync(15);
-      dispatchPointerMove(41, 50);
-      await vi.advanceTimersByTimeAsync(15);
-      expect(verticalThumb()?.style.opacity).toBe('1');
-      expect(verticalThumb()?.classList.contains('scrollbar-overlay-thumb--hovered')).toBe(false);
-
-      await waitPastIdle();
-      expect(verticalThumb()).toBeNull();
-    });
-
-    it('settles after discovery instead of reconciling every frame', async () => {
-      // A scrolling modal hosts its own overlays, so the tracker's writes land inside it.
-      const element = createScrollableElement();
-      element.classList.add('modal-container');
-      await vi.advanceTimersByTimeAsync(0);
-      await waitPastIdle();
-      const requestAnimationFrame = vi.mocked(window.requestAnimationFrame);
-      requestAnimationFrame.mockClear();
-
-      await vi.advanceTimersByTimeAsync(100);
-
-      expect(requestAnimationFrame).not.toHaveBeenCalled();
-    });
   });
 
   it('routes wheel scrolling from overlay thumbs back to the owning scroll container', () => {
