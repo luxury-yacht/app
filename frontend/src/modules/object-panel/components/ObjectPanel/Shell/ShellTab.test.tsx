@@ -1202,6 +1202,53 @@ describe('ShellTab', () => {
     expect(scrollbar?.classList.contains('scrollbar-virtual--hovered')).toBe(true);
   });
 
+  it('shows the shell scrollbar while the pointer moves over the terminal and hides it once idle', async () => {
+    await renderShellTab();
+    clickConnectButton();
+    await flushAsync();
+
+    const terminal = requireValue(getLatestTerminal(), 'expected terminal in ShellTab.test.tsx');
+    terminal.buffer.active.baseY = 160;
+    terminal.buffer.active.viewportY = 0;
+    terminal.rows = 40;
+    const terminalElement = container.querySelector('.shell-tab__terminal') as HTMLDivElement;
+    Object.defineProperty(terminalElement, 'clientHeight', { configurable: true, value: 200 });
+    terminalElement.getBoundingClientRect = () =>
+      ({
+        bottom: 200,
+        height: 200,
+        left: 0,
+        right: 200,
+        top: 0,
+        width: 200,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    act(() => {
+      terminal.triggerWriteParsed();
+    });
+    await flushAsync();
+    const scrollbar = container.querySelector<HTMLElement>('.scrollbar-virtual--vertical');
+    expect(scrollbar?.classList.contains('scrollbar-virtual--active')).toBe(false);
+
+    terminalElement.style.setProperty('--scrollbar-active-timeout', '10ms');
+    const wrapper = container.querySelector('.shell-tab__terminal-wrapper') as HTMLDivElement;
+    act(() => {
+      wrapper.dispatchEvent(
+        new MouseEvent('pointermove', { bubbles: true, clientX: 100, clientY: 100 })
+      );
+    });
+    await flushAsync();
+
+    expect(scrollbar?.classList.contains('scrollbar-virtual--active')).toBe(true);
+    expect(scrollbar?.classList.contains('scrollbar-virtual--hovered')).toBe(false);
+
+    // The pointer stays over the terminal but stops moving: that is idle.
+    await act(() => new Promise((resolve) => window.setTimeout(resolve, 30)));
+    expect(scrollbar?.classList.contains('scrollbar-virtual--active')).toBe(false);
+  });
+
   it('supports paging and dragging the custom shell scrollbar', async () => {
     await renderShellTab();
     clickConnectButton();

@@ -189,14 +189,15 @@ export const useVirtualScrollbar = ({
         return;
       }
 
+      // Pointer movement over the surface is activity: show the thumb and restart the idle
+      // timer. Hovering the thumb's edge zone holds it until the pointer leaves that zone.
       const hovered = isPointerInHoverZone(axis, host, event);
       setState((previous) => {
-        if (previous.hovered === hovered && previous.active === (hovered || previous.active)) {
+        if (previous.hovered === hovered && previous.active) {
           return previous;
         }
-        return { ...previous, active: hovered ? true : previous.active, hovered };
+        return { ...previous, active: true, hovered };
       });
-
       if (hovered) {
         clearHideTimer();
       } else {

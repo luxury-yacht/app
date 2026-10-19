@@ -9,6 +9,7 @@
   - `+` indicates a new override value that is not in the defaults.
   - `-` indicates a values that has been removed from the defaults.
   - Hovering over an override line shows the default value.
+- Scrollbars are easier to find. They are wider and higher-contrast, and appear when an area first becomes scrollable, while scrolling, and while the pointer moves over the area. They fade out after one second of inactivity and widen when hovered.
 
 ### Fixed
 

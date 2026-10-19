@@ -21,6 +21,9 @@
   --z-index-base: 10;
   --z-index-panel: 500;
   --z-index-app-menu: 1000;
+  /* Base-content overlay scrollbars also appear without direct interaction (when a region
+     first becomes scrollable), so any surface that covers live content must stack above
+     this layer. */
   --z-index-scrollbar-overlay: calc(var(--z-index-panel) - 1);
   --z-index-modal-backdrop: 1500;
   --z-index-modal: 3000;

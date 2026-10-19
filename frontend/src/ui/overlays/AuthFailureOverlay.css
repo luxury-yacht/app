@@ -13,7 +13,8 @@
   padding: 2rem;
   color: var(--color-text-secondary);
   background-color: color-mix(in srgb, var(--color-bg) 90%, transparent);
-  z-index: 10;
+  /* Covers live content, so it must also cover that content's overlay scrollbars. */
+  z-index: calc(var(--z-index-scrollbar-overlay) + 1);
   backdrop-filter: blur(2px);
 }
 

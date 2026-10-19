@@ -160,10 +160,10 @@
 
   /* Scrollbar colors */
   --scrollbar-track-bg: transparent;
-  --scrollbar-thumb-bg: var(--color-bg-tertiary);
-  --scrollbar-thumb-hover-bg: var(--color-bg-tertiary);
-  --scrollbar-gutter-hover-bg: var(--scrollbar-thumb-bg);
-  --scrollbar-gutter-hover-opacity: 0.12;
+  --scrollbar-thumb-bg: rgba(0, 0, 0, 0.45);
+  --scrollbar-thumb-hover-bg: rgba(0, 0, 0, 0.6);
+  --scrollbar-gutter-hover-bg: rgb(0, 0, 0);
+  --scrollbar-gutter-hover-opacity: 0.06;
   --scrollbar-corner-bg: transparent;
 
   /* Shadows */
