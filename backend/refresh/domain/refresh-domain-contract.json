@@ -377,8 +377,8 @@
       "scopeContract": {
         "selectors": ["object"],
         "query": "none",
-        "valid": ["prod:apps/v1:Deployment:web", "__cluster__:/v1:Node:worker-1"],
-        "invalid": ["", "prod:Deployment:web", "prod:apps/v1:Deployment:", "prod:apps/v1:Deployment:web?maxNodes=200"]
+        "valid": ["prod:apps/v1:Deployment:web", "__cluster__:/v1:Node:worker-1", "team-a:rbac.authorization.k8s.io/v1:Role:reader%3Fteam"],
+        "invalid": ["", "prod:Deployment:web", "prod:apps/v1:Deployment:", "prod:apps/v1:Deployment:web?maxNodes=200", "team-a:rbac.authorization.k8s.io/v1:Role:reader?team", "team-a:rbac.authorization.k8s.io/v1:Role:reader%team"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ObjectDetailsBuilder",
@@ -457,7 +457,7 @@
       "scopeContract": {
         "selectors": ["object", "namespace"],
         "query": "object-map",
-        "valid": ["prod:apps/v1:Deployment:web", "__cluster__:/v1:Node:worker-1", "prod:apps/v1:Deployment:web?maxNodes=200", "namespace:prod", "namespace:prod?maxNodes=200", "namespace:apps/v1:Deployment:web"],
+        "valid": ["prod:apps/v1:Deployment:web", "__cluster__:/v1:Node:worker-1", "prod:apps/v1:Deployment:web?maxNodes=200", "namespace:prod", "namespace:prod?maxNodes=200", "namespace:apps/v1:Deployment:web", "team-a:rbac.authorization.k8s.io/v1:Role:reader%3Fteam?maxNodes=200"],
         "invalid": ["", "namespace:", "namespace:all", "prod:Deployment:web"]
       },
       "singleCluster": true,

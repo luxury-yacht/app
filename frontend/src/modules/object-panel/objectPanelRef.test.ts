@@ -8,6 +8,8 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { parseRefreshScope } from '@/core/refresh/scopeSelector';
+
 import {
   getObjectPanelScopeEvictions,
   getObjectPanelScopes,
@@ -233,6 +235,38 @@ describe('getObjectPanelScopes', () => {
     expect(result.eventsScope).toBe(result.detailScope);
     expect(result.containerLogsScope).toBe(result.detailScope);
     expect(result.mapScope).toBe(result.detailScope);
+  });
+
+  // RBAC names may contain "?"; the panel must still build its scopes, and the
+  // map must address the real object rather than a truncated name and a query.
+  it('builds panel scopes for an object whose name contains "?"', () => {
+    const result = getObjectPanelScopes({
+      kind: 'Role',
+      name: 'reader?team',
+      namespace: 'team-a',
+      clusterId: 'cluster-1',
+      group: 'rbac.authorization.k8s.io',
+      version: 'v1',
+    });
+
+    expect(result.detailScope).toBe(
+      'cluster-1|team-a:rbac.authorization.k8s.io/v1:Role:reader%3Fteam'
+    );
+    expect(result.mapScope).toBe(result.detailScope);
+    expect(parseRefreshScope('object-map', result.mapScope ?? '')).toEqual({
+      clusterId: 'cluster-1',
+      selector: {
+        kind: 'object',
+        object: {
+          namespace: 'team-a',
+          group: 'rbac.authorization.k8s.io',
+          version: 'v1',
+          kind: 'Role',
+          name: 'reader?team',
+        },
+      },
+      query: '',
+    });
   });
 
   it('threads group/version into eventsScope when PanelObjectData carries them', () => {

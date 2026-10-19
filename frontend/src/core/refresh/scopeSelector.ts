@@ -101,6 +101,17 @@ const namespaceToken = (namespace: string): string => namespace || CLUSTER_SCOPE
 
 const namespaceFromToken = (token: string): string => (token === CLUSTER_SCOPE_TOKEN ? '' : token);
 
+// Object names are path segments, and RBAC names may contain "?", the query
+// delimiter. The name field escapes "%" and "?" so a name never reads as a
+// query; every other character, ":" included, stays literal.
+const escapeObjectName = (name: string): string => name.replace(/%/g, '%25').replace(/\?/g, '%3F');
+
+// Only the canonical escape (the one escapeObjectName produces) decodes.
+const unescapeObjectName = (value: string): string | null => {
+  const name = value.replace(/%25|%3F/g, (token) => (token === '%25' ? '%' : '?'));
+  return escapeObjectName(name) === value ? name : null;
+};
+
 /** The canonical scope tail for a selector, without cluster prefix or query. */
 export const encodeScopeSelector = (selector: ScopeSelector): string => {
   switch (selector.kind) {
@@ -118,7 +129,7 @@ export const encodeScopeSelector = (selector: ScopeSelector): string => {
     }
     case 'object': {
       const { namespace, group, version, kind, name } = selector.object;
-      return `${namespaceToken(namespace)}:${group}/${version}:${kind}:${name}`;
+      return `${namespaceToken(namespace)}:${group}/${version}:${kind}:${escapeObjectName(name)}`;
     }
     case 'helm-release':
       return `${namespaceToken(selector.namespace)}:${selector.name}`;
@@ -245,12 +256,13 @@ const decodeObject = (value: string): ScopeSelector | null => {
   if (parts.length !== 4) {
     return null;
   }
-  const [namespace, groupVersion, kind, name] = parts;
+  const [namespace, groupVersion, kind, encodedName] = parts;
   const groupVersionParts = groupVersion.split('/');
   if (!namespace || groupVersionParts.length !== 2) {
     return null;
   }
   const [group, version] = groupVersionParts;
+  const name = unescapeObjectName(encodedName);
   if (!version || !kind || !name) {
     return null;
   }

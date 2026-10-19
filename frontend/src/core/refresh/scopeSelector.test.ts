@@ -106,6 +106,54 @@ describe('refresh scope codec', () => {
     });
   });
 
+  // RBAC names only forbid "/" and "%", so "?" is a legal name character. It and
+  // the escape character are escaped so a name never reads as a query.
+  it('round-trips object names containing "?" and "%"', () => {
+    const role = (name: string): ScopeSelector => ({
+      kind: 'object',
+      object: {
+        namespace: 'team-a',
+        group: 'rbac.authorization.k8s.io',
+        version: 'v1',
+        kind: 'Role',
+        name,
+      },
+    });
+
+    const detail = buildRefreshScope('object-details', {
+      clusterId: 'c1',
+      selector: role('reader?team'),
+    });
+    expect(detail).toBe('c1|team-a:rbac.authorization.k8s.io/v1:Role:reader%3Fteam');
+    expect(parseRefreshScope('object-details', detail).selector).toEqual(role('reader?team'));
+
+    const map = buildRefreshScope('object-map', {
+      clusterId: 'c1',
+      selector: role('reader?team'),
+      query: 'maxNodes=5',
+    });
+    expect(parseRefreshScope('object-map', map)).toEqual({
+      clusterId: 'c1',
+      selector: role('reader?team'),
+      query: 'maxNodes=5',
+    });
+
+    const percent = buildRefreshScope('object-yaml', { clusterId: 'c1', selector: role('50%off') });
+    expect(parseRefreshScope('object-yaml', percent).selector).toEqual(role('50%off'));
+  });
+
+  it('rejects malformed escapes in object names', () => {
+    expect(() =>
+      parseRefreshScope('object-details', 'c1|team-a:rbac.authorization.k8s.io/v1:Role:reader%team')
+    ).toThrow();
+    expect(() =>
+      parseRefreshScope(
+        'object-details',
+        'c1|team-a:rbac.authorization.k8s.io/v1:Role:reader%3fteam'
+      )
+    ).toThrow();
+  });
+
   it('rejects unprefixed and out-of-grammar scopes', () => {
     expect(() => parseRefreshScope('pods', 'namespace:prod')).toThrow();
     expect(() => parseRefreshScope('namespace-config', 'c1|node:worker-1')).toThrow();

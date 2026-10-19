@@ -72,6 +72,9 @@ Scope tails are one executable contract:
   aliases, unprefixed scopes, or selected-cluster fallback. The refresh API
   answers anything else with `BadRequest` before a build or job runs, and the
   orchestrator throws on entry.
+- Object names stay literal except `%` and `?`, which the name field escapes as
+  `%25` and `%3F`: RBAC names may contain `?`, the query delimiter. Only that
+  canonical escape decodes.
 - Both codecs execute every domain's examples
   (`backend/refresh/domain/scope_contract_test.go`, `scopeSelector.test.ts`);
   doorbell producers encode with the same selectors subscribers key on.

@@ -16,6 +16,9 @@ func TestParseScopeDecodesSelectorIdentity(t *testing.T) {
 	deployment := ObjectScopeIdentity{Namespace: "prod", GVK: schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}, Name: "web"}
 	node := ObjectScopeIdentity{GVK: schema.GroupVersionKind{Version: "v1", Kind: "Node"}, Name: "worker-1"}
 	clusterRole := ObjectScopeIdentity{GVK: schema.GroupVersionKind{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}, Name: "system:node"}
+	// RBAC names only forbid "/" and "%", so "?" is a legal name character.
+	role := ObjectScopeIdentity{Namespace: "team-a", GVK: schema.GroupVersionKind{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"}, Name: "reader?team"}
+	objectMapGrammar := ScopeGrammar{Selectors: []ScopeSelectorKind{ScopeSelectorObject, ScopeSelectorNamespace}, Query: ScopeQueryObjectMap}
 
 	tests := []struct {
 		name    string
@@ -31,6 +34,9 @@ func TestParseScopeDecodesSelectorIdentity(t *testing.T) {
 		{"namespaced object", "c1|prod:apps/v1:Deployment:web", ScopeGrammar{Selectors: []ScopeSelectorKind{ScopeSelectorObject}, Query: ScopeQueryNone}, Scope{ClusterID: "c1", Selector: ObjectSelector(deployment), QueryMode: ScopeQueryNone}},
 		{"core cluster object", "c1|__cluster__:/v1:Node:worker-1", ScopeGrammar{Selectors: []ScopeSelectorKind{ScopeSelectorObject}, Query: ScopeQueryNone}, Scope{ClusterID: "c1", Selector: ObjectSelector(node), QueryMode: ScopeQueryNone}},
 		{"object name with colons", "c1|__cluster__:rbac.authorization.k8s.io/v1:ClusterRole:system:node", ScopeGrammar{Selectors: []ScopeSelectorKind{ScopeSelectorObject}, Query: ScopeQueryNone}, Scope{ClusterID: "c1", Selector: ObjectSelector(clusterRole), QueryMode: ScopeQueryNone}},
+		{"object name with a query delimiter", "c1|team-a:rbac.authorization.k8s.io/v1:Role:reader%3Fteam", ScopeGrammar{Selectors: []ScopeSelectorKind{ScopeSelectorObject}, Query: ScopeQueryNone}, Scope{ClusterID: "c1", Selector: ObjectSelector(role), QueryMode: ScopeQueryNone}},
+		{"object map query after an escaped name", "c1|team-a:rbac.authorization.k8s.io/v1:Role:reader%3Fteam?maxNodes=5", objectMapGrammar, Scope{ClusterID: "c1", Selector: ObjectSelector(role), Query: "maxNodes=5", QueryMode: ScopeQueryObjectMap}},
+		{"object name with the escape character", "c1|team-a:rbac.authorization.k8s.io/v1:Role:50%25off", ScopeGrammar{Selectors: []ScopeSelectorKind{ScopeSelectorObject}, Query: ScopeQueryNone}, Scope{ClusterID: "c1", Selector: ObjectSelector(ObjectScopeIdentity{Namespace: "team-a", GVK: role.GVK, Name: "50%off"}), QueryMode: ScopeQueryNone}},
 		{"helm release", "c1|prod:web", ScopeGrammar{Selectors: []ScopeSelectorKind{ScopeSelectorHelmRelease}, Query: ScopeQueryNone}, Scope{ClusterID: "c1", Selector: HelmReleaseSelector("prod", "web"), QueryMode: ScopeQueryNone}},
 		{"catalog query", "c1|limit=50&kinds=Pod", ScopeGrammar{Selectors: []ScopeSelectorKind{ScopeSelectorCluster}, Query: ScopeQueryCatalog}, Scope{ClusterID: "c1", Selector: ClusterSelector(), Query: "limit=50&kinds=Pod", QueryMode: ScopeQueryCatalog}},
 		// A namespace literally named "namespace" holds objects whose tail starts with
@@ -73,6 +79,8 @@ func TestParseScopeRejectsScopesOutsideTheGrammar(t *testing.T) {
 		{"query on a query-less domain", "c1|prod:apps/v1:Deployment:web?maxNodes=5", objectGrammar},
 		{"object without apiVersion", "c1|prod:Deployment:web", objectGrammar},
 		{"object without namespace token", "c1|:apps/v1:Deployment:web", objectGrammar},
+		{"unescaped percent in an object name", "c1|team-a:rbac.authorization.k8s.io/v1:Role:reader%team", objectGrammar},
+		{"lowercase escape in an object name", "c1|team-a:rbac.authorization.k8s.io/v1:Role:reader%3fteam", objectGrammar},
 		{"catalog query with a selector delimiter", "c1|?limit=50", ScopeGrammar{Selectors: []ScopeSelectorKind{ScopeSelectorCluster}, Query: ScopeQueryCatalog}},
 	}
 	for _, test := range tests {

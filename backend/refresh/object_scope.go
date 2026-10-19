@@ -9,6 +9,25 @@ import (
 
 const ObjectClusterScopeToken = "__cluster__"
 
+// Object names are path segments, and RBAC names may contain "?", the scope's
+// query delimiter. The name field escapes "%" and "?" so a name never reads as
+// a query; every other character, ":" included, stays literal.
+var (
+	objectScopeNameEscaper   = strings.NewReplacer("%", "%25", "?", "%3F")
+	objectScopeNameUnescaper = strings.NewReplacer("%25", "%", "%3F", "?")
+)
+
+func escapeObjectScopeName(name string) string {
+	return objectScopeNameEscaper.Replace(name)
+}
+
+// unescapeObjectScopeName decodes the name field; only its canonical escape
+// (the one escapeObjectScopeName produces) decodes.
+func unescapeObjectScopeName(value string) (string, bool) {
+	name := objectScopeNameUnescaper.Replace(value)
+	return name, escapeObjectScopeName(name) == value
+}
+
 // ObjectScopeIdentity is the parsed identity encoded in an object-scoped refresh key.
 type ObjectScopeIdentity struct {
 	Namespace string
@@ -48,7 +67,10 @@ func ParseObjectScope(scope string) (ObjectScopeIdentity, error) {
 		return ObjectScopeIdentity{}, fmt.Errorf("invalid group/version %q in scope %q: %w", groupVersion, scope, err)
 	}
 	gvk = gv.WithKind(strings.TrimSpace(peek[2]))
-	name = peek[3]
+	name, canonical := unescapeObjectScopeName(peek[3])
+	if !canonical {
+		return ObjectScopeIdentity{}, fmt.Errorf("object name in scope %q is not canonically escaped", scope)
+	}
 
 	if namespace == ObjectClusterScopeToken {
 		namespace = ""

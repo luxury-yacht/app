@@ -121,7 +121,7 @@ func (s ScopeSelector) String() string {
 		return workloadSelectorPrefix + strings.Join([]string{s.Object.Namespace, gvk.Group, gvk.Version, gvk.Kind, s.Object.Name}, ":")
 	case ScopeSelectorObject:
 		gvk := s.Object.GVK
-		return fmt.Sprintf("%s:%s/%s:%s:%s", scopeNamespaceToken(s.Object.Namespace), gvk.Group, gvk.Version, gvk.Kind, s.Object.Name)
+		return fmt.Sprintf("%s:%s/%s:%s:%s", scopeNamespaceToken(s.Object.Namespace), gvk.Group, gvk.Version, gvk.Kind, escapeObjectScopeName(s.Object.Name))
 	case ScopeSelectorHelmRelease:
 		return scopeNamespaceToken(s.Namespace) + ":" + s.Name
 	default:

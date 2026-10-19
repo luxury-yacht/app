@@ -33,6 +33,18 @@ func TestParseObjectScopeSupportsGVK(t *testing.T) {
 	}
 }
 
+// Object details, YAML, events, and logs decode their scope with
+// ParseObjectScope directly, so it must return the literal object name.
+func TestParseObjectScopeDecodesEscapedName(t *testing.T) {
+	identity, err := ParseObjectScope("cluster-a|team-a:rbac.authorization.k8s.io/v1:Role:reader%3Fteam")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if identity.Name != "reader?team" {
+		t.Fatalf("expected the literal name reader?team, got %q", identity.Name)
+	}
+}
+
 func TestParseObjectScopeHandlesClusterToken(t *testing.T) {
 	identity, err := ParseObjectScope("__cluster__:/v1:Node:n1")
 	if err != nil {
