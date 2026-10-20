@@ -281,12 +281,13 @@ func (a *RefreshCoordinator) stopRefreshGenerationProducers(clusterID string, su
 	if runtime.permissionCancel != nil {
 		runtime.permissionCancel()
 	}
-	subsystem.StopDoorbellNotifiers()
-	if subsystem.ContainerLogs != nil {
-		subsystem.ContainerLogs.Stop()
-	}
+	// The resource stream is the generation's doorbell: Stop waits for running
+	// producer callbacks, so nothing rings or invalidates after it returns.
 	if subsystem.ResourceStream != nil {
 		subsystem.ResourceStream.Stop()
+	}
+	if subsystem.ContainerLogs != nil {
+		subsystem.ContainerLogs.Stop()
 	}
 	if runtime.managerCancel != nil {
 		runtime.managerCancel()

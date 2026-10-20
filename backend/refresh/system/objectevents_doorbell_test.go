@@ -15,31 +15,12 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 )
 
-// Pins the object-events doorbell wiring: the notifier's broadcast — wired
-// through the SAME helper production uses — invalidates the object-events
-// snapshot cache FIRST and then fans a SourceEvent doorbell to the involved
+// Pins the object-events doorbell: the notifier rings the resource stream,
+// which invalidates the object-events snapshot cache FIRST and then fans a SourceEvent doorbell to the involved
 // object's subscribed events scope (a sibling object's subscription stays
 // silent). The invalidate-then-broadcast ordering is what keeps the Events
 // tab's push refetch from being served the pre-change cached snapshot.
 func TestObjectEventsNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T) {
-	manager := resourcestream.NewManager(
-		nil,
-		nil,
-		nil,
-		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-
-		nil,
-	)
-	selector, err := resourcestream.ParseStreamSelector("c1", "object-events", "team-a:/v1:Pod:web-1")
-	require.NoError(t, err)
-	sub, err := manager.SubscribeSelector(selector)
-	require.NoError(t, err)
-
-	otherSelector, err := resourcestream.ParseStreamSelector("c1", "object-events", "team-a:/v1:Pod:other")
-	require.NoError(t, err)
-	otherSub, err := manager.SubscribeSelector(otherSelector)
-	require.NoError(t, err)
-
 	// A real snapshot service with a counting object-events builder, its cache
 	// primed with the pre-change build.
 	reg := domain.New()
@@ -56,16 +37,25 @@ func TestObjectEventsNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T
 		},
 	}))
 	service := snapshot.NewServiceWithPermissions(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"}, nil)
-	manager.SetSnapshotDomainInvalidator(service.InvalidateDomainCache)
+	manager := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, service.InvalidateDomainCache)
+	defer manager.Stop()
+	selector, err := resourcestream.ParseStreamSelector("c1", "object-events", "team-a:/v1:Pod:web-1")
+	require.NoError(t, err)
+	sub, err := manager.SubscribeSelector(selector)
+	require.NoError(t, err)
+
+	otherSelector, err := resourcestream.ParseStreamSelector("c1", "object-events", "team-a:/v1:Pod:other")
+	require.NoError(t, err)
+	otherSub, err := manager.SubscribeSelector(otherSelector)
+	require.NoError(t, err)
+
 	_, err = service.Build(context.Background(), "object-events", "c1|team-a:/v1:Pod:web-1")
 	require.NoError(t, err)
 	_, err = service.Build(context.Background(), "object-events", "c1|team-a:/v1:Pod:web-1")
 	require.NoError(t, err)
 	require.Equal(t, 1, builds, "cache must serve the second pre-change build")
 
-	notifier := snapshot.NewObjectEventsChangeNotifier()
-	defer notifier.Stop()
-	wireObjectEventsDoorbell(notifier, manager)
+	notifier := snapshot.NewObjectEventsChangeNotifier(manager)
 
 	notifier.EventChanged(&corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "web-1.evt"},

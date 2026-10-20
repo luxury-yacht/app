@@ -18,6 +18,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
@@ -198,13 +199,32 @@ func requireNoMoreBroadcasts(t *testing.T, r *broadcastRecorder, have int) {
 	require.Equal(t, have, r.count(), "no further broadcasts expected")
 }
 
+// reasonBell is a real generation that hands each namespaces ring's version
+// and reason to the test.
+type reasonBell struct {
+	doorbell.Generation
+	record func(version, reason string)
+}
+
+func (b *reasonBell) Ring(change doorbell.Change) {
+	b.Run(func() { b.record(change.Version, change.Reason) })
+}
+
 func newNotifierForTest(ingest *fakeNamespaceIngest, recorder *broadcastRecorder) *NamespaceChangeNotifier {
-	notifier := NewNamespaceChangeNotifier(ingest, NewNamespaceWorkloadTracker(ingest))
+	return newNotifierRingingForTest(ingest, recorder.record)
+}
+
+func newNotifierRingingForTest(ingest *fakeNamespaceIngest, record func(version, reason string)) *NamespaceChangeNotifier {
+	notifier := NewNamespaceChangeNotifier(ingest, NewNamespaceWorkloadTracker(ingest), &reasonBell{record: record}, nil)
 	notifier.debounce = 20 * time.Millisecond
-	if recorder != nil {
-		notifier.SetBroadcast(recorder.record)
-	}
 	return notifier
+}
+
+// stopForTest stops the notifier's test generation, cancelling its timer.
+func (n *NamespaceChangeNotifier) stopForTest() {
+	if bell, ok := n.bell.(*reasonBell); ok {
+		bell.Stop()
+	}
 }
 
 // A namespace-object event must broadcast even when the presence signature is
@@ -214,7 +234,7 @@ func TestNamespaceNotifierBroadcastsOnNamespaceEvent(t *testing.T) {
 	ingest.set(true)
 	recorder := &broadcastRecorder{}
 	notifier := newNotifierForTest(ingest, recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
 	notifier.NamespaceChanged()
 	waitForBroadcasts(t, recorder, 1)
@@ -230,7 +250,7 @@ func TestNamespaceNotifierGatesWorkloadEventsOnPresenceSignature(t *testing.T) {
 	ingest.set(true, "team-a")
 	recorder := &broadcastRecorder{}
 	notifier := newNotifierForTest(ingest, recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
 	// First workload event establishes the presence baseline -> one broadcast.
 	notifier.WorkloadChanged()
@@ -256,7 +276,7 @@ func TestNamespaceNotifierBroadcastsWhenWorkloadHealthChanges(t *testing.T) {
 	ingest.setPresentation("ready")
 	recorder := &broadcastRecorder{}
 	notifier := newNotifierForTest(ingest, recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
 	notifier.WorkloadChanged()
 	waitForBroadcasts(t, recorder, 1)
@@ -278,7 +298,7 @@ func TestNamespaceNotifierBroadcastsWhenPodReservationsChange(t *testing.T) {
 	})
 	recorder := &broadcastRecorder{}
 	notifier := newNotifierForTest(ingest, recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
 	notifier.WorkloadChanged()
 	waitForBroadcasts(t, recorder, 1)
@@ -300,7 +320,7 @@ func TestNamespaceNotifierGatesQuotaEventsOnPressureRollup(t *testing.T) {
 	ingest.setQuotaRows(streamrows.ResourceQuotaAggregate{Namespace: "team-a", HighestUsedPercentage: 75})
 	recorder := &broadcastRecorder{}
 	notifier := newNotifierForTest(ingest, recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
 	notifier.QuotaChanged()
 	waitForBroadcasts(t, recorder, 1)
@@ -318,7 +338,7 @@ func TestNamespaceNotifierSkipsQuotaRollupWhenQuotaStateIsClean(t *testing.T) {
 	ingest.set(true)
 	recorder := &broadcastRecorder{}
 	notifier := newNotifierForTest(ingest, recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
 	notifier.NamespaceChanged()
 	waitForBroadcasts(t, recorder, 1)
@@ -339,7 +359,7 @@ func TestNamespaceNotifierBroadcastsOnlyWhenWarningEventRollupChanges(t *testing
 	notifier.eventLister = corelisters.NewEventLister(indexer)
 	notifier.eventsExpected = true
 	notifier.eventsSynced = func() bool { return true }
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
 	notifier.EventChanged()
 	waitForBroadcasts(t, recorder, 1)
@@ -368,7 +388,7 @@ func TestNamespaceNotifierCoalescesBursts(t *testing.T) {
 	ingest.set(true)
 	recorder := &broadcastRecorder{}
 	notifier := newNotifierForTest(ingest, recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
 	for range 10 {
 		notifier.NamespaceChanged()
@@ -386,7 +406,7 @@ func TestNamespaceNotifierSignalsTrackerReadinessFlip(t *testing.T) {
 	ingest.set(false, "team-a")
 	recorder := &broadcastRecorder{}
 	notifier := newNotifierForTest(ingest, recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
 	// Not-ready baseline: the first workload event broadcasts (signature includes
 	// the not-ready bit).
@@ -396,60 +416,6 @@ func TestNamespaceNotifierSignalsTrackerReadinessFlip(t *testing.T) {
 	// Readiness flips with NO further events: the self-rearm must catch it.
 	ingest.set(true, "team-a")
 	waitForBroadcasts(t, recorder, 2)
-}
-
-// A stopped notifier must go fully silent — torn-down subsystems previously
-// kept broadcasting through their rearm/debounce timers ("-> 0 scope(s)" spam).
-func TestNamespaceNotifierStopSilencesBroadcasts(t *testing.T) {
-	ingest := &fakeNamespaceIngest{}
-	ingest.set(true)
-	recorder := &broadcastRecorder{}
-	notifier := newNotifierForTest(ingest, recorder)
-
-	notifier.Stop()
-	notifier.NamespaceChanged()
-	notifier.WorkloadChanged()
-	requireNoMoreBroadcasts(t, recorder, 0)
-}
-
-func TestNamespaceNotifierStopWaitsForActiveBroadcastAndRejectsLateEvents(t *testing.T) {
-	ingest := &fakeNamespaceIngest{}
-	ingest.set(true)
-	notifier := newNotifierForTest(ingest, nil)
-
-	started := make(chan struct{})
-	release := make(chan struct{})
-	notifier.SetBroadcast(func(_, _ string) {
-		close(started)
-		<-release
-	})
-	notifier.NamespaceChanged()
-	select {
-	case <-started:
-	case <-time.After(2 * time.Second):
-		t.Fatal("broadcast did not start")
-	}
-
-	stopped := make(chan struct{})
-	go func() {
-		notifier.Stop()
-		close(stopped)
-	}()
-	select {
-	case <-stopped:
-		close(release)
-		t.Fatal("Stop returned while a broadcast callback was still active")
-	case <-time.After(50 * time.Millisecond):
-	}
-	close(release)
-	select {
-	case <-stopped:
-	case <-time.After(2 * time.Second):
-		t.Fatal("Stop did not return after the active callback completed")
-	}
-
-	notifier.NamespaceChanged()
-	time.Sleep(2 * notifier.debounce)
 }
 
 // Informer resyncs re-deliver every object with an UNCHANGED ResourceVersion;
@@ -484,7 +450,7 @@ func TestNamespaceNotifierThrottlesPresenceBroadcastsWhileSettling(t *testing.T)
 	recorder := &broadcastRecorder{}
 	notifier := newNotifierForTest(ingest, recorder)
 	notifier.notReadyMinInterval = 250 * time.Millisecond
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
 	// Baseline broadcast.
 	notifier.WorkloadChanged()
@@ -510,13 +476,12 @@ func TestNamespaceNotifierIdlePendingRearmChecksReadinessWithoutRescanningWorklo
 	ingest := &fakeNamespaceIngest{}
 	ingest.set(false, "ns-1")
 	recorder := &broadcastRecorder{}
-	notifier := newNotifierForTest(ingest, recorder)
-	defer notifier.Stop()
 	var broadcastRollupReads atomic.Int64
-	notifier.SetBroadcast(func(version, reason string) {
+	notifier := newNotifierRingingForTest(ingest, func(version, reason string) {
 		broadcastRollupReads.Store(int64(ingest.workloadReadCount()))
 		recorder.record(version, reason)
 	})
+	defer notifier.stopForTest()
 
 	notifier.WorkloadChanged()
 	waitForBroadcasts(t, recorder, 1)
@@ -544,21 +509,4 @@ func TestNamespaceNotifierIdlePendingRearmChecksReadinessWithoutRescanningWorklo
 		return broadcastRollupReads.Load() > int64(readsAfterDegraded)
 	}, 2*time.Second, 5*time.Millisecond)
 	require.Greater(t, ingest.workloadReadCount(), readsAfterDegraded)
-}
-
-// Events arriving before the broadcast sink is wired are retained, not lost.
-func TestNamespaceNotifierRetainsEventsUntilBroadcastWired(t *testing.T) {
-	ingest := &fakeNamespaceIngest{}
-	ingest.set(true)
-	recorder := &broadcastRecorder{}
-	notifier := NewNamespaceChangeNotifier(ingest, NewNamespaceWorkloadTracker(ingest))
-	notifier.debounce = 20 * time.Millisecond
-	defer notifier.Stop()
-
-	notifier.NamespaceChanged()
-	time.Sleep(80 * time.Millisecond)
-	require.Equal(t, 0, recorder.count())
-
-	notifier.SetBroadcast(recorder.record)
-	waitForBroadcasts(t, recorder, 1)
 }

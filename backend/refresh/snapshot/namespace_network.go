@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
@@ -118,6 +119,7 @@ func RegisterNamespaceNetworkDomainWithGatewayAPI(
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
@@ -145,10 +147,11 @@ func RegisterNamespaceNetworkDomainWithGatewayAPI(
 			{IngressGVR, ingress.Identity.Kind},
 			{NetworkPolicyGVR, networkpolicy.Identity.Kind},
 		} {
-			ingestManager.AddBundleSink(nk.GVR, maintained.bundleSinkForKind(nk.Kind))
+			ingestManager.AddBundleSink(nk.GVR, maintained.sinkFor(nk.Kind, namespacedRowPublication(maintained, namespaceNetworkDomainName, bell)))
 		}
 	}
-	if err := registerMaintainedHandlers(maintained, namespaceNetworkDomainName, collectIndexer, factory, gatewayFactory); err != nil {
+	publication := storePublication{bell: bell, domain: namespaceNetworkDomainName, meta: clusterMeta}
+	if err := registerMaintainedHandlers(maintained, namespaceNetworkDomainName, collectIndexer, factory, gatewayFactory, publication); err != nil {
 		return err
 	}
 	reg.RegisterMaintainedStore(namespaceNetworkDomainName, maintained) // spill/restore/reconcile across Cold/re-warm

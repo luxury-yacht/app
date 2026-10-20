@@ -42,10 +42,11 @@ permission gate, or streamed table registration. Contract rules live in
 ## Streamed tables
 
 - Registry-driven kinds declare a `Stream` descriptor in their per-kind
-  descriptor; `backend/refresh/resourcestream/stream_descriptor_dispatch.go`
-  registers them generically. Helpers own permissions and event mapping;
-  direct/network/related registration files hold only bespoke informer or
-  relationship behavior.
+  descriptor. The domain's maintained store publishes its own changes: give
+  the store a publication (`backend/refresh/snapshot/store_doorbell.go`) with
+  its row scopes and any derived domains whose serve-time join reads it. Never
+  register a separate informer handler or ingest sink that rings; it can ring
+  before the store holds the change.
 - Projection descriptors (`backend/refresh/resourcestream/projection_descriptors.go`)
   define row projection, source clocks, and permissions; never assign ad-hoc
   rows inside stream handlers.

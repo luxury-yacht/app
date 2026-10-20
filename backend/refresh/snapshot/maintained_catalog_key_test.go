@@ -290,7 +290,7 @@ func TestMaintainedStoreNoGhostOnDeleteWithTableHalfDropped(t *testing.T) {
 	maintained := newTypedMaintainedStore(meta, clusterConfigQuerypageSchema(), clusterConfigTableQueryAdapter())
 
 	src := ingest.NewProjectingStore(scClusterConfigProjection(t, meta))
-	src.AddBundleSink(maintained.BundleSink()) // the production wiring
+	src.AddBundleSink(unpublishedSink(maintained, "")) // the production wiring
 
 	sc := storageClassObj("standard", "1", "ebs.csi.aws.com")
 

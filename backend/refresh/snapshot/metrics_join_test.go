@@ -146,7 +146,7 @@ func TestPodSnapshotOverlaysLiveUsageAtServe(t *testing.T) {
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
 	maintained := newTypedMaintainedStore(ClusterMeta{}, podQuerypageSchema(), podTableQueryAdapter())
-	maintained.Sink().Upsert(podres.BuildStreamSummaryFromRSMap(ClusterMeta{}, pod, nil))
+	unpublishedSink(maintained, "").Upsert(podres.BuildStreamSummaryFromRSMap(ClusterMeta{}, pod, nil))
 	builder := &PodBuilder{
 		maintained: maintained,
 		metrics: fakeMetricsProvider{
@@ -199,7 +199,7 @@ func TestPodSnapshotRejectsStaleSampleForRecreatedPod(t *testing.T) {
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
 	maintained := newTypedMaintainedStore(ClusterMeta{}, podQuerypageSchema(), podTableQueryAdapter())
-	maintained.Sink().Upsert(podres.BuildStreamSummaryFromRSMap(ClusterMeta{}, pod, nil))
+	unpublishedSink(maintained, "").Upsert(podres.BuildStreamSummaryFromRSMap(ClusterMeta{}, pod, nil))
 	builder := &PodBuilder{
 		maintained: maintained,
 		metrics: fakeMetricsProvider{
@@ -254,7 +254,7 @@ func TestPodQuerySortsServedUsageByExactBytes(t *testing.T) {
 			},
 			Status: corev1.PodStatus{Phase: corev1.PodRunning},
 		}
-		maintained.Sink().Upsert(podres.BuildStreamSummaryFromRSMap(ClusterMeta{}, pod, nil))
+		unpublishedSink(maintained, "").Upsert(podres.BuildStreamSummaryFromRSMap(ClusterMeta{}, pod, nil))
 	}
 	builder := &PodBuilder{
 		maintained: maintained,

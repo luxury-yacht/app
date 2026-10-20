@@ -1,6 +1,10 @@
 package snapshot
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
+)
 
 // EventTableChangeNotifier rings one event table's doorbell (cluster-events or
 // namespace-events) after that table's maintained store has applied an Event
@@ -16,48 +20,37 @@ type EventTableChangeNotifier struct {
 	domain string
 }
 
-func newEventTableChangeNotifier(domain, versionPrefix string) *EventTableChangeNotifier {
-	return &EventTableChangeNotifier{
-		changeKeyDebouncer: newChangeKeyDebouncer(versionPrefix, eventDoorbellDebounce),
-		domain:             domain,
-	}
+func newEventTableChangeNotifier(bell doorbell.Bell, domain, versionPrefix string) *EventTableChangeNotifier {
+	n := &EventTableChangeNotifier{domain: domain}
+	n.changeKeyDebouncer = newChangeKeyDebouncer(bell, versionPrefix, eventDoorbellDebounce,
+		func(version string, keys map[string]struct{}) {
+			bell.Ring(doorbell.Change{
+				Domain:  domain,
+				Source:  doorbell.SourceEvent,
+				Target:  doorbell.Scopes(eventTableDoorbellScopes(domain, keys)...),
+				Version: version,
+			})
+		})
+	return n
 }
 
-// Domain names the refresh domain whose doorbell this notifier rings.
-func (n *EventTableChangeNotifier) Domain() string {
-	if n == nil {
-		return ""
+// eventTableDoorbellScopes maps changed involved-object namespaces to the
+// scopes the table is viewed at: Cluster Events has the one cluster scope;
+// Namespace Events rings each changed namespace and All Namespaces.
+func eventTableDoorbellScopes(domain string, namespaces map[string]struct{}) []string {
+	if domain == clusterEventsDomainName {
+		return clusterDoorbellScopes()
 	}
-	return n.domain
-}
-
-// SetBroadcast wires the doorbell sink with the sorted set of changed
-// involved-object namespaces. Changes recorded before wiring are flushed on the
-// next debounce tick.
-func (n *EventTableChangeNotifier) SetBroadcast(broadcast func(version string, namespaces []string)) {
-	if n == nil {
-		return
+	sorted := make([]string, 0, len(namespaces))
+	for namespace := range namespaces {
+		sorted = append(sorted, namespace)
 	}
-	if broadcast == nil {
-		n.setSink(nil)
-		return
+	sort.Strings(sorted)
+	scopes := make([]string, 0, 2*len(sorted))
+	for _, namespace := range sorted {
+		scopes = append(scopes, namespaceDoorbellScopes(namespace)...)
 	}
-	n.setSink(func(version string, keys map[string]struct{}) {
-		namespaces := make([]string, 0, len(keys))
-		for namespace := range keys {
-			namespaces = append(namespaces, namespace)
-		}
-		sort.Strings(namespaces)
-		broadcast(version, namespaces)
-	})
-}
-
-// Stop cancels any pending flush; the notifier is discarded with its subsystem.
-func (n *EventTableChangeNotifier) Stop() {
-	if n == nil {
-		return
-	}
-	n.stop()
+	return scopes
 }
 
 func (n *EventTableChangeNotifier) changed(objectNamespace string) {

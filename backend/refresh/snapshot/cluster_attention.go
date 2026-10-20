@@ -21,6 +21,7 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -306,21 +307,22 @@ type clusterAttentionIndex struct {
 	maintained *typedMaintainedStore[AttentionFinding]
 	now        func() time.Time
 
-	mu                  sync.Mutex
-	sources             map[string]attentionSourceState
-	owners              map[string]map[string]struct{}
-	ownerKinds          map[string]map[string]struct{}
-	unavailableOwners   map[string]struct{}
-	healthFindings      map[string]AttentionFinding
-	finalizerFindings   map[string]AttentionFinding
-	findings            map[string]AttentionFinding
-	deadlines           attentionDeadlineHeap
-	timer               *time.Timer
-	notify              *time.Timer
-	broadcast           func(version string)
+	mu                sync.Mutex
+	sources           map[string]attentionSourceState
+	owners            map[string]map[string]struct{}
+	ownerKinds        map[string]map[string]struct{}
+	unavailableOwners map[string]struct{}
+	healthFindings    map[string]AttentionFinding
+	finalizerFindings map[string]AttentionFinding
+	findings          map[string]AttentionFinding
+	deadlines         attentionDeadlineHeap
+	// bell rings the Attention doorbell and owns the index's timers, so
+	// stopping the cluster generation cancels or joins them.
+	bell                doorbell.Bell
+	timer               doorbell.Timer
+	notify              doorbell.Timer
 	dirty               bool
 	revision            uint64
-	stopped             bool
 	eventRows           func() []attentionSourceRecord
 	eventRowsSynced     func() bool
 	ignoreRules         AttentionIgnoreRules
@@ -331,13 +333,14 @@ type clusterAttentionIndex struct {
 // cluster Attention domain.
 type ClusterAttentionIndex = clusterAttentionIndex
 
-func newClusterAttentionIndex(meta ClusterMeta, now func() time.Time) *clusterAttentionIndex {
+func newClusterAttentionIndex(meta ClusterMeta, now func() time.Time, bell doorbell.Bell) *clusterAttentionIndex {
 	if now == nil {
 		now = time.Now
 	}
 	index := &clusterAttentionIndex{
 		meta:              meta,
 		now:               now,
+		bell:              bell,
 		sources:           make(map[string]attentionSourceState),
 		owners:            make(map[string]map[string]struct{}),
 		ownerKinds:        make(map[string]map[string]struct{}),
@@ -364,9 +367,6 @@ func (i *clusterAttentionIndex) SetIgnoreRules(rules AttentionIgnoreRules) {
 	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	if i.stopped {
-		return
-	}
 	rules = normalizeAttentionIgnoreRules(rules)
 	rulesChanged := !reflect.DeepEqual(i.ignoreRules, rules)
 	i.ignoreRules = rules
@@ -558,10 +558,6 @@ func (i *clusterAttentionIndex) UpsertSource(owner string, record attentionSourc
 		return
 	}
 	i.mu.Lock()
-	if i.stopped {
-		i.mu.Unlock()
-		return
-	}
 	pruned := i.upsertSourceLocked(owner, record, i.now())
 	pruner := i.ignoredObjectPruner
 	i.armTimerLocked()
@@ -578,10 +574,6 @@ func (i *clusterAttentionIndex) replaceSource(owner string, records []attentionS
 		return
 	}
 	i.mu.Lock()
-	if i.stopped {
-		i.mu.Unlock()
-		return
-	}
 	replacement := newAttentionSourceReplacement(records, i.now(), pruneMissingIgnores)
 	i.upsertReplacementRecords(owner, records, replacement)
 	i.removeMissingReplacementSources(owner, replacement)
@@ -778,10 +770,6 @@ func (i *clusterAttentionIndex) DeleteSource(owner string, ref resourcemodel.Res
 		return
 	}
 	i.mu.Lock()
-	if i.stopped {
-		i.mu.Unlock()
-		return
-	}
 	i.deleteSourceLocked(owner, attentionRefKey(ref))
 	pruned := !i.finalizerConfirmsObjectLocked(ref) && i.pruneIgnoredObjectLocked(ref)
 	pruner := i.ignoredObjectPruner
@@ -799,21 +787,9 @@ func (i *clusterAttentionIndex) ReplaceFinalizerBlockers(blockers []objectcatalo
 	if i == nil {
 		return
 	}
-	next := make(map[string]AttentionFinding, len(blockers))
-	clusterID := strings.TrimSpace(i.meta.ClusterID)
-	for _, blocker := range blockers {
-		key, finding, valid := finalizerFindingForCluster(clusterID, blocker)
-		if !valid {
-			continue
-		}
-		next[key] = finding
-	}
+	next := finalizerFindingsForCluster(strings.TrimSpace(i.meta.ClusterID), blockers)
 
 	i.mu.Lock()
-	if i.stopped {
-		i.mu.Unlock()
-		return
-	}
 	keys := make(map[string]struct{}, len(i.finalizerFindings)+len(next))
 	pruned := make([]resourcemodel.ResourceRef, 0)
 	for key, previous := range i.finalizerFindings {
@@ -855,6 +831,19 @@ func (i *clusterAttentionIndex) ReplaceReportedStatuses(statuses []objectcatalog
 
 func attentionRefBelongsToCluster(ref resourcemodel.ResourceRef, clusterID string) bool {
 	return completeAttentionRef(ref) && ref.ClusterID == strings.TrimSpace(clusterID)
+}
+
+// finalizerFindingsForCluster keys the cluster's valid blockers by finding key.
+func finalizerFindingsForCluster(clusterID string, blockers []objectcatalog.FinalizerBlocker) map[string]AttentionFinding {
+	next := make(map[string]AttentionFinding, len(blockers))
+	for _, blocker := range blockers {
+		key, finding, valid := finalizerFindingForCluster(clusterID, blocker)
+		if !valid {
+			continue
+		}
+		next[key] = finding
+	}
+	return next
 }
 
 func finalizerFindingForCluster(clusterID string, blocker objectcatalog.FinalizerBlocker) (string, AttentionFinding, bool) {
@@ -1036,9 +1025,6 @@ func (i *clusterAttentionIndex) EvaluateDue(now time.Time) {
 	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	if i.stopped {
-		return
-	}
 	for {
 		i.pruneDeadlinesLocked()
 		if len(i.deadlines) == 0 || i.deadlines[0].at.After(now) {
@@ -1076,61 +1062,34 @@ func (i *clusterAttentionIndex) Revision() uint64 {
 	return i.revision
 }
 
-func (i *clusterAttentionIndex) Stop() {
-	if i == nil {
-		return
-	}
-	i.mu.Lock()
-	i.stopped = true
-	timer := i.timer
-	notify := i.notify
-	i.timer = nil
-	i.notify = nil
-	i.mu.Unlock()
-	if timer != nil {
-		timer.Stop()
-	}
-	if notify != nil {
-		notify.Stop()
-	}
-}
-
-func (i *clusterAttentionIndex) SetBroadcast(broadcast func(version string)) {
-	if i == nil {
-		return
-	}
-	i.mu.Lock()
-	i.broadcast = broadcast
-	if i.dirty {
-		i.armNotifyLocked()
-	}
-	i.mu.Unlock()
-}
-
 func (i *clusterAttentionIndex) markDirtyLocked() {
 	i.dirty = true
 	i.armNotifyLocked()
 }
 
 func (i *clusterAttentionIndex) armNotifyLocked() {
-	if i.stopped || i.notify != nil || i.broadcast == nil {
+	if i.notify != nil {
 		return
 	}
-	i.notify = time.AfterFunc(attentionNotifyDebounce, i.flushNotify)
+	i.notify = i.bell.AfterFunc(attentionNotifyDebounce, i.flushNotify)
 }
 
 func (i *clusterAttentionIndex) flushNotify() {
 	i.mu.Lock()
 	i.notify = nil
-	if i.stopped || !i.dirty || i.broadcast == nil {
+	if !i.dirty {
 		i.mu.Unlock()
 		return
 	}
 	i.dirty = false
 	version := fmt.Sprintf("attention-%d", i.revision)
-	broadcast := i.broadcast
 	i.mu.Unlock()
-	broadcast(version)
+	i.bell.Ring(doorbell.Change{
+		Domain:  clusterAttentionDomainName,
+		Source:  doorbell.SourceAttention,
+		Target:  doorbell.Subscribed(),
+		Version: version,
+	})
 }
 
 func (i *clusterAttentionIndex) pruneDeadlinesLocked() {
@@ -1149,9 +1108,6 @@ func (i *clusterAttentionIndex) armTimerLocked() {
 		i.timer.Stop()
 		i.timer = nil
 	}
-	if i.stopped {
-		return
-	}
 	i.pruneDeadlinesLocked()
 	if len(i.deadlines) == 0 {
 		return
@@ -1160,7 +1116,7 @@ func (i *clusterAttentionIndex) armTimerLocked() {
 	if delay < 0 {
 		delay = 0
 	}
-	i.timer = time.AfterFunc(delay, func() { i.EvaluateDue(i.now()) })
+	i.timer = i.bell.AfterFunc(delay, func() { i.EvaluateDue(i.now()) })
 }
 
 func attentionRefKey(ref resourcemodel.ResourceRef) string {
@@ -1306,11 +1262,12 @@ func RegisterClusterAttentionDomain(
 	meta ClusterMeta,
 	ingestManager *ingest.IngestManager,
 	options ClusterAttentionOptions,
+	bell doorbell.Bell,
 ) (*ClusterAttentionIndex, error) {
 	if reg == nil {
 		return nil, fmt.Errorf("%s registry is nil", clusterAttentionDomainName)
 	}
-	index := newClusterAttentionIndex(meta, time.Now)
+	index := newClusterAttentionIndex(meta, time.Now, bell)
 	index.SetIgnoreRules(options.IgnoreRules)
 	index.SetIgnoredObjectPruner(options.IgnoredObjectPruner)
 	sources := clusterAttentionSources(permissions)
@@ -1324,7 +1281,6 @@ func RegisterClusterAttentionDomain(
 		{NodeGVR, attentionSourceNode, permissions.IncludeNodes},
 	})
 	if err := registerAttentionEventSource(index, factory, permissions.IncludeEvents, meta); err != nil {
-		index.Stop()
 		return nil, err
 	}
 	reg.RegisterMaintainedStore(clusterAttentionDomainName, index)
@@ -1333,7 +1289,6 @@ func RegisterClusterAttentionDomain(
 			index: index, sources: sources, catalogService: options.CatalogService,
 		}).Build,
 	}); err != nil {
-		index.Stop()
 		return nil, err
 	}
 	return index, nil

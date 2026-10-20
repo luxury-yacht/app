@@ -4,7 +4,14 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 
@@ -13,6 +20,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/hpa"
 )
@@ -71,6 +79,42 @@ func namespaceAutoscalingDomainSpec() typedTableDomainSpec[AutoscalingSummary] {
 		schema:           autoscalingQuerypageSchema(),
 		capabilities:     namespaceAutoscalingQueryCapabilities(),
 		sortRows:         sortAutoscalingSummaries,
+		derived:          hpaWorkloadChanges,
+	}
+}
+
+// hpaWorkloadChanges rings the namespace's workload rows when an HPA targets a
+// workload: the workloads table joins each row's HPA from the lister at serve
+// (namespace_workloads.go), so the HPA change can change its target's row.
+func hpaWorkloadChanges(obj metav1.Object) []doorbell.Change {
+	hpaObject, ok := obj.(*autoscalingv1.HorizontalPodAutoscaler)
+	if !ok || !hpaTargetsWorkload(hpaObject.Spec.ScaleTargetRef) {
+		return nil
+	}
+	return []doorbell.Change{{
+		Domain:          namespaceWorkloadsDomainName,
+		Source:          doorbell.SourceObject,
+		Target:          doorbell.Scopes(namespaceDoorbellScopes(hpaObject.Namespace)...),
+		ResourceVersion: hpaObject.ResourceVersion,
+	}}
+}
+
+// hpaTargetsWorkload reports whether the scale target is a kind the workloads
+// table lists.
+func hpaTargetsWorkload(ref autoscalingv1.CrossVersionObjectReference) bool {
+	gvk := schema.FromAPIVersionAndKind(ref.APIVersion, ref.Kind)
+	if strings.TrimSpace(ref.Name) == "" {
+		return false
+	}
+	switch gvk.GroupVersion() {
+	case appsv1.SchemeGroupVersion:
+		return gvk.Kind == "Deployment" || gvk.Kind == "StatefulSet" || gvk.Kind == "DaemonSet"
+	case batchv1.SchemeGroupVersion:
+		return gvk.Kind == "Job" || gvk.Kind == "CronJob"
+	case corev1.SchemeGroupVersion:
+		return gvk.Kind == "Pod"
+	default:
+		return false
 	}
 }
 
@@ -88,15 +132,16 @@ func RegisterNamespaceAutoscalingDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	clusterMeta ClusterMeta,
+	bell doorbell.Bell,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	// namespace-autoscaling has no IngestOwned kinds (HPA is CustomStreamHandler, not
+	// namespace-autoscaling has no IngestOwned kinds (HPA stays a typed informer, not
 	// cut), so the ingest manager is nil here — the cut-kind availability branch is never
 	// taken and the ingest feed is a no-op.
 	collectIndexer := unconditionalSharedIndexers(factory, namespaceAutoscalingDomainName, nil)
-	maintained, err := newRegisteredTypedTableStore(reg, namespaceAutoscalingDomainSpec(), clusterMeta, collectIndexer, factory, nil, nil)
+	maintained, err := newRegisteredTypedTableStore(reg, namespaceAutoscalingDomainSpec(), clusterMeta, collectIndexer, factory, nil, nil, bell)
 	if err != nil {
 		return err
 	}

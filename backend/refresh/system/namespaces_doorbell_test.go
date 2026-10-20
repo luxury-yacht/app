@@ -12,26 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Pins the namespaces doorbell wiring: the notifier's broadcast — wired
-// through the SAME helper production uses — invalidates the namespaces
-// snapshot cache FIRST and then fans a SourceObject doorbell to the
-// subscribers. Without the invalidation the doorbell-triggered refetch is
+// Pins the namespaces doorbell: the notifier rings the resource stream, which
+// invalidates the namespaces snapshot cache FIRST and then fans a SourceObject
+// doorbell to the subscribers. Without the invalidation the doorbell-triggered refetch is
 // served the PRE-change cached snapshot (5s TTL) and the UI never updates —
 // the exact field failure: perfect doorbell logs, frozen namespace list.
 func TestNamespaceNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T) {
-	manager := resourcestream.NewManager(
-		nil,
-		nil,
-		nil,
-		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-
-		nil,
-	)
-	selector, err := resourcestream.ParseStreamSelector("c1", "namespaces", "")
-	require.NoError(t, err)
-	sub, err := manager.SubscribeSelector(selector)
-	require.NoError(t, err)
-
 	// A real snapshot service with a counting namespaces builder, its cache
 	// primed with the pre-change build.
 	reg := domain.New()
@@ -48,16 +34,19 @@ func TestNamespaceNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T) {
 		},
 	}))
 	service := snapshot.NewServiceWithPermissions(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"}, nil)
-	manager.SetSnapshotDomainInvalidator(service.InvalidateDomainCache)
+	manager := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, service.InvalidateDomainCache)
+	defer manager.Stop()
+	selector, err := resourcestream.ParseStreamSelector("c1", "namespaces", "")
+	require.NoError(t, err)
+	sub, err := manager.SubscribeSelector(selector)
+	require.NoError(t, err)
 	_, err = service.Build(context.Background(), "namespaces", "c1|")
 	require.NoError(t, err)
 	_, err = service.Build(context.Background(), "namespaces", "c1|")
 	require.NoError(t, err)
 	require.Equal(t, 1, builds, "cache must serve the second pre-change build")
 
-	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil))
-	defer notifier.Stop()
-	wireNamespacesDoorbell(notifier, manager, nil)
+	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil), manager, nil)
 
 	notifier.NamespaceChanged()
 
@@ -84,19 +73,6 @@ func TestNamespaceNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T) {
 // each pre-Ready doorbell. The observer fires AFTER invalidate+broadcast so a
 // self-build always sees post-change data.
 func TestNamespacesDoorbellInvokesObserverAfterBroadcast(t *testing.T) {
-	manager := resourcestream.NewManager(
-		nil,
-		nil,
-		nil,
-		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-
-		nil,
-	)
-	selector, err := resourcestream.ParseStreamSelector("c1", "namespaces", "")
-	require.NoError(t, err)
-	sub, err := manager.SubscribeSelector(selector)
-	require.NoError(t, err)
-
 	reg := domain.New()
 	builds := 0
 	require.NoError(t, reg.Register(refresh.DomainConfig{
@@ -111,17 +87,19 @@ func TestNamespacesDoorbellInvokesObserverAfterBroadcast(t *testing.T) {
 		},
 	}))
 	service := snapshot.NewServiceWithPermissions(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"}, nil)
-	manager.SetSnapshotDomainInvalidator(service.InvalidateDomainCache)
-
-	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil))
-	defer notifier.Stop()
+	manager := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, service.InvalidateDomainCache)
+	defer manager.Stop()
+	selector, err := resourcestream.ParseStreamSelector("c1", "namespaces", "")
+	require.NoError(t, err)
+	sub, err := manager.SubscribeSelector(selector)
+	require.NoError(t, err)
 
 	observer := &NamespacesDoorbellObserver{}
 	observed := make(chan string, 4)
-	// Attached AFTER wiring — mirroring the app, which can only build the
+	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil), manager, observer.Invoke)
+	// Attached AFTER construction — mirroring the app, which can only build the
 	// aggregate service (and thus the readiness hook) once every subsystem
 	// exists.
-	wireNamespacesDoorbell(notifier, manager, observer)
 	observer.Set(func(version, reason string) {
 		observed <- version
 	})

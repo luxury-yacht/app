@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 )
@@ -825,13 +826,15 @@ func streamDescriptorIngestOwned(d streamspec.Descriptor) bool {
 // unavailable (descriptorInformer returns nil), or that is ingest-owned (fed by the
 // ingest Sink instead — see feedMaintainedFromIngest). Handlers are registered BEFORE
 // the factory starts, so the snapshot sync gate guarantees the store is populated
-// before the first Build serves from it.
+// before the first Build serves from it. Each handler rings the domain's doorbell
+// after the store applies a change; it is the only ringer for these kinds.
 func registerMaintainedHandlers[T any](
 	maintained *typedMaintainedStore[T],
 	domainName string,
 	collectIndexer func(streamspec.Descriptor) cache.Indexer,
 	factory informers.SharedInformerFactory,
 	gatewayFactory gatewayinformers.SharedInformerFactory,
+	publication storePublication,
 ) error {
 	for _, d := range kindregistry.StreamDescriptorsForDomain(domainName) {
 		if streamDescriptorIngestOwned(d) {
@@ -845,18 +848,25 @@ func registerMaintainedHandlers[T any](
 			continue
 		}
 		desc := d
-		if _, err := inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc:    func(obj interface{}) { maintained.ingest(desc, obj) },
-			UpdateFunc: func(_, newObj interface{}) { maintained.ingest(desc, newObj) },
-			DeleteFunc: func(obj interface{}) { maintained.evict(desc, obj) },
-		}); err != nil {
+		publish := publication.forDescriptor(desc)
+		if _, err := inf.AddEventHandler(storeHandlerFuncs(
+			func(before, after interface{}) {
+				if after != nil {
+					maintained.ingest(desc, after)
+					return
+				}
+				maintained.evict(desc, before)
+			},
+			publish.objectChanged,
+		)); err != nil {
 			return fmt.Errorf("%s: register %s handler: %w", domainName, d.Resource, err)
 		}
 		// This shared-informer kind gets no Delete on a fresh informer for an object removed
 		// while the cluster was Cold, so a row restored from a stale spill would ghost. Record
 		// the informer's live-list so reconcile() can diff-sync this kind on re-warm. inf is a
 		// per-iteration block-local, so the closure captures this descriptor's informer.
-		maintained.addReconcileSource(desc, func() []interface{} { return inf.GetIndexer().List() })
+		maintained.addReconcileSource(desc, func() []interface{} { return inf.GetIndexer().List() },
+			func(row T) { publish.rowRemoved(maintained.adapter.Namespace(row)) })
 	}
 	return nil
 }
@@ -869,10 +879,11 @@ func registerMaintainedHandlers[T any](
 // (ok=false skips it). Handlers must be registered before the informer's factory starts so
 // the sync gate guarantees the store is populated before the first Build serves from it.
 //
-// changed, when non-nil, runs after the store has applied a real change: an add,
-// an update with a new resourceVersion, or a delete. It runs on this handler's
-// own listener, so a doorbell rung from it can never reach a reader before the
-// store holds the change. Resync echoes still re-upsert but report no change.
+// changed runs after the store has applied a real change: an add, an update with
+// a new resourceVersion, or a delete. It runs on this handler's own listener, so a
+// doorbell rung from it can never reach a reader before the store holds the
+// change. Resync echoes still re-upsert but report no change. Reconcile reports
+// each restored row it drops as a delete.
 //
 // The returned synced reports when this handler has applied the informer's
 // initial list. The informer's own HasSynced turns true before its handlers
@@ -881,16 +892,10 @@ func registerMaintainedInformerHandler[T any](
 	maintained *typedMaintainedStore[T],
 	informer cache.SharedIndexInformer,
 	project func(obj interface{}) (row T, source metav1.Object, ok bool),
-	changed func(row T),
+	changed func(row T, kind doorbell.MessageType),
 ) (cache.InformerSynced, error) {
 	handler := maintainedInformerHandler[T]{maintained: maintained, project: project, changed: changed}
-	registration, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) { handler.upsert(obj, true) },
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			handler.upsert(newObj, !InformerUpdateIsEcho(oldObj, newObj))
-		},
-		DeleteFunc: handler.remove,
-	})
+	registration, err := informer.AddEventHandler(storeHandlerFuncs(handler.apply, handler.report))
 	if err != nil {
 		return nil, err
 	}
@@ -901,7 +906,7 @@ func registerMaintainedInformerHandler[T any](
 	maintained.addReconcileSourceRows(
 		func() []T { return handler.rows(informer.GetIndexer().List()) },
 		func(T) bool { return true },
-		handler.report,
+		func(row T) { handler.changed(row, doorbell.MessageTypeDeleted) },
 	)
 	return registration.HasSynced, nil
 }
@@ -911,32 +916,33 @@ func registerMaintainedInformerHandler[T any](
 type maintainedInformerHandler[T any] struct {
 	maintained *typedMaintainedStore[T]
 	project    func(obj interface{}) (row T, source metav1.Object, ok bool)
-	changed    func(row T)
+	changed    func(row T, kind doorbell.MessageType)
 }
 
-func (h maintainedInformerHandler[T]) upsert(obj interface{}, report bool) {
-	row, src, ok := h.project(obj)
-	if !ok {
+func (h maintainedInformerHandler[T]) apply(before, after interface{}) {
+	if after != nil {
+		if row, src, ok := h.project(after); ok {
+			h.maintained.upsertRow(row, src)
+		}
 		return
 	}
-	h.maintained.upsertRow(row, src)
-	if report {
-		h.report(row)
+	if row, _, ok := h.project(maintainedUnwrap(before)); ok {
+		h.maintained.deleteRow(row)
 	}
 }
 
-func (h maintainedInformerHandler[T]) remove(obj interface{}) {
-	row, _, ok := h.project(maintainedUnwrap(obj))
-	if !ok {
+// report hands the applied change's current row (the deleted one for a delete)
+// to the changed hook.
+func (h maintainedInformerHandler[T]) report(before, after metav1.Object, kind doorbell.MessageType) {
+	current := after
+	if current == nil {
+		current = before
+	}
+	if current == nil {
 		return
 	}
-	h.maintained.deleteRow(row)
-	h.report(row)
-}
-
-func (h maintainedInformerHandler[T]) report(row T) {
-	if h.changed != nil {
-		h.changed(row)
+	if row, _, ok := h.project(current); ok {
+		h.changed(row, kind)
 	}
 }
 
@@ -952,15 +958,17 @@ func (h maintainedInformerHandler[T]) rows(objs []interface{}) []T {
 
 // feedMaintainedFromIngest wires each ingest-owned kind in the domain to feed the
 // maintained store from the owned-reflector path: the kind's ingest store delivers its
-// whole projected bundle to the store's BundleSink (Table half on upsert, Catalog-half key
+// whole projected bundle to the store's sink (Table half on upsert, Catalog-half key
 // on delete), replacing the shared-informer event handler entirely. It is the per-kind
 // equivalent of the quotas all-cut feed, so a domain with a mix of cut and uncut kinds feeds
-// the cut ones here and the uncut ones through registerMaintainedHandlers. ingestManager may
-// be nil (no cut kinds wired, e.g. a unit test), in which case it is a no-op.
+// the cut ones here and the uncut ones through registerMaintainedHandlers. Each sink rings
+// the domain's doorbell after the store applies a change. ingestManager may be nil (no cut
+// kinds wired, e.g. a unit test), in which case it is a no-op.
 func feedMaintainedFromIngest[T any](
 	maintained *typedMaintainedStore[T],
 	domainName string,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) {
 	if ingestManager == nil {
 		return
@@ -969,83 +977,59 @@ func feedMaintainedFromIngest[T any](
 		if !streamDescriptorIngestOwned(d) {
 			continue
 		}
-		ingestManager.AddBundleSink(d.GVR(), maintained.bundleSinkFor(d))
+		ingestManager.AddBundleSink(d.GVR(), maintained.sinkFor(d.Kind, descriptorRowPublication(maintained, domainName, d, bell)))
 	}
 }
 
-// BundleSink returns an ingest.BundleSink that feeds this maintained store from the owned
-// reflector path with the WHOLE projected bundle. UpsertBundle upserts the bundle's Table
-// half (present at upsert) by the adapter's own key; DeleteBundle evicts by the key derived
-// from the bundle's RETAINED Catalog half (keyFromCatalog) — the store no longer keeps the
-// Table half on its stored bundles, so the delete cannot read it from there. This is the
-// live cutover path used in production via AddBundleSink. Mutating advances the snapshot
-// version monotonically so refetch identity changes whenever the served set changes.
-func (m *typedMaintainedStore[T]) BundleSink() ingest.BundleSink {
-	return maintainedStoreSink[T]{store: m}
-}
-
-// bundleSinkFor returns the production ingest sink for one descriptor source. Its
-// bulk ReplaceBundles path sweeps only rows whose adapter kind belongs to that
-// descriptor, so one GVR relist cannot remove another kind's rows in a multi-kind
-// maintained store.
-func (m *typedMaintainedStore[T]) bundleSinkFor(desc streamspec.Descriptor) ingest.BundleSink {
-	return m.bundleSinkForKind(desc.Kind)
-}
-
-// bundleSinkForKind is the kind-string analogue of bundleSinkFor for a source whose kind has no
-// streamspec.Descriptor (the workload kinds, the network cut kinds). Its bulk ReplaceBundles path
-// sweeps only rows whose adapter kind matches, so one GVR's relist cannot remove another kind's
-// rows from a multi-kind maintained store fed by several GVRs.
-func (m *typedMaintainedStore[T]) bundleSinkForKind(kind string) ingest.BundleSink {
-	return maintainedStoreSink[T]{
-		store: m,
-		owns:  func(row T) bool { return m.adapter.Kind(row) == kind },
+// sinkFor returns a new sink feeding this store from one source registration.
+// kind, when set, scopes a bulk relist to that kind's rows, so one GVR's relist
+// cannot remove another kind's rows from a multi-kind store. The sink holds its
+// own relist batch: sources feeding one store relist independently.
+func (m *typedMaintainedStore[T]) sinkFor(kind string, publication rowPublication[T]) *maintainedStoreSink[T] {
+	sink := &maintainedStoreSink[T]{store: m, publish: publication}
+	if kind != "" {
+		sink.owns = func(row T) bool { return m.adapter.Kind(row) == kind }
 	}
+	return sink
 }
 
-// Sink returns the Table-half ingest.Sink view of the same maintained-store feed. It is the
-// delivery path used by the equivalence/maintained-store gate tests, which feed projected
-// Table rows directly. Production registers BundleSink() instead, because a dropped-Table
-// store's incremental delete must key off the Catalog half, not the (absent) Table row.
-func (m *typedMaintainedStore[T]) Sink() ingest.Sink {
-	return maintainedStoreSink[T]{store: m}
-}
-
-// maintainedStoreSink adapts a typedMaintainedStore to BOTH ingest.Sink (Table-half view,
-// used by gate tests) and ingest.BundleSink (whole-bundle view, used in production). The
-// reflector store delivers a row/bundle as interface{}; a row of the wrong type is ignored
-// (it cannot belong to this store), mirroring the type guard in ingest.
+// maintainedStoreSink adapts a typedMaintainedStore to ingest.Sink (Table half) and
+// ingest.BundleSink (whole bundle). The reflector store delivers a row/bundle as
+// interface{}; a row of the wrong type is ignored (it cannot belong to this store),
+// mirroring the type guard in ingest. After each mutation it publishes the change;
+// inside a relist it collects the scopes and rings them once when the relist ends.
+// Only the source store's write lock reaches a sink, so batch needs no lock.
 type maintainedStoreSink[T any] struct {
-	store *typedMaintainedStore[T]
-	owns  func(T) bool
+	store   *typedMaintainedStore[T]
+	owns    func(T) bool
+	publish rowPublication[T]
+	batch   *relistBatch
 }
 
-func (s maintainedStoreSink[T]) Upsert(tableRow interface{}) {
-	row, ok := tableRow.(T)
-	if !ok {
-		return
+var (
+	_ ingest.BundleReplacer = (*maintainedStoreSink[NodeSummary])(nil)
+	_ ingest.Replacer       = (*maintainedStoreSink[NodeSummary])(nil)
+	_ ingest.RelistBoundary = (*maintainedStoreSink[NodeSummary])(nil)
+)
+
+func (s *maintainedStoreSink[T]) Upsert(tableRow interface{}) {
+	if row, ok := tableRow.(T); ok {
+		s.upsert(row, nil)
 	}
-	s.store.store.Upsert(row)
-	s.store.bumpSinkVersion()
 }
 
-func (s maintainedStoreSink[T]) Delete(tableRow interface{}) {
-	row, ok := tableRow.(T)
-	if !ok {
-		return
+func (s *maintainedStoreSink[T]) Delete(tableRow interface{}) {
+	if row, ok := tableRow.(T); ok {
+		s.remove(s.store.adapter.Key(row), nil)
 	}
-	s.store.store.Delete(s.store.adapter.Key(row))
-	s.store.bumpSinkVersion()
 }
 
-func (s maintainedStoreSink[T]) Replace(tableRows []interface{}) {
+func (s *maintainedStoreSink[T]) Replace(tableRows []interface{}) {
 	rows := make([]T, 0, len(tableRows))
 	for _, tableRow := range tableRows {
-		row, ok := tableRow.(T)
-		if !ok {
-			continue
+		if row, ok := tableRow.(T); ok {
+			rows = append(rows, row)
 		}
-		rows = append(rows, row)
 	}
 	s.replaceRows(rows)
 }
@@ -1053,18 +1037,18 @@ func (s maintainedStoreSink[T]) Replace(tableRows []interface{}) {
 // UpsertBundle upserts the bundle's Table half by the adapter key. The Table half is present
 // at upsert (it is dropped from the STORED bundle only AFTER fanning to sinks), so a missing
 // or wrong-typed Table half means this bundle does not belong to this store and is ignored.
-func (s maintainedStoreSink[T]) UpsertBundle(bundle ingest.Bundle) {
-	s.Upsert(bundle.Table)
+func (s *maintainedStoreSink[T]) UpsertBundle(bundle ingest.Bundle) {
+	if row, ok := bundle.Table.(T); ok {
+		s.upsert(row, catalogOf(bundle))
+	}
 }
 
-func (s maintainedStoreSink[T]) ReplaceBundles(bundles []ingest.Bundle) {
+func (s *maintainedStoreSink[T]) ReplaceBundles(bundles []ingest.Bundle) {
 	rows := make([]T, 0, len(bundles))
 	for _, bundle := range bundles {
-		row, ok := bundle.Table.(T)
-		if !ok {
-			continue
+		if row, ok := bundle.Table.(T); ok {
+			rows = append(rows, row)
 		}
-		rows = append(rows, row)
 	}
 	s.replaceRows(rows)
 }
@@ -1074,22 +1058,75 @@ func (s maintainedStoreSink[T]) ReplaceBundles(bundles []ingest.Bundle) {
 // ignored — but every ingest-owned maintained-store kind registers a catalog projector, so in
 // production the Catalog half is always present (proven for all of them by
 // TestKeyFromCatalogMatchesAdapterKeyForEveryMaintainedKind).
-func (s maintainedStoreSink[T]) DeleteBundle(bundle ingest.Bundle) {
-	summary, ok := bundle.Catalog.(objectcatalog.Summary)
-	if !ok {
-		return
+func (s *maintainedStoreSink[T]) DeleteBundle(bundle ingest.Bundle) {
+	if summary := catalogOf(bundle); summary != nil {
+		s.remove(keyFromCatalog(*summary), summary)
 	}
-	s.store.store.Delete(keyFromCatalog(summary))
-	s.store.bumpSinkVersion()
 }
 
-func (s maintainedStoreSink[T]) replaceRows(rows []T) {
+func (s *maintainedStoreSink[T]) BeginRelist(string) {
+	s.batch = &relistBatch{}
+}
+
+func (s *maintainedStoreSink[T]) EndRelist(string) {
+	batch := s.batch
+	s.batch = nil
+	switch {
+	case batch == nil:
+	case batch.redefined:
+		s.publish.ring(s.publish.redefined())
+	default:
+		s.publish.ring(mergeByDomain(batch.pending))
+	}
+}
+
+func (s *maintainedStoreSink[T]) upsert(row T, catalog *objectcatalog.Summary) {
+	previous, replaced := s.store.store.UpsertReplacing(row)
+	s.store.bumpSinkVersion()
+	kind := doorbell.MessageTypeAdded
+	var before *T
+	if replaced {
+		kind, before = doorbell.MessageTypeModified, &previous
+	}
+	s.published(s.publish.changes(before, &row, catalog, kind))
+}
+
+func (s *maintainedStoreSink[T]) remove(key string, catalog *objectcatalog.Summary) {
+	removed, existed := s.store.store.DeleteReturning(key)
+	s.store.bumpSinkVersion()
+	if existed {
+		s.published(s.publish.changes(&removed, nil, catalog, doorbell.MessageTypeDeleted))
+	}
+}
+
+func (s *maintainedStoreSink[T]) replaceRows(rows []T) {
 	owns := s.owns
 	if owns == nil {
 		owns = func(T) bool { return true }
 	}
 	s.store.store.ReplaceWhere(rows, owns)
 	s.store.bumpSinkVersion()
+	if s.batch != nil {
+		s.batch.redefined = true
+		return
+	}
+	s.publish.ring(s.publish.redefined())
+}
+
+// published rings the changes now, or adds them to the open relist batch.
+func (s *maintainedStoreSink[T]) published(changes []doorbell.Change) {
+	if s.batch != nil {
+		s.batch.add(changes)
+		return
+	}
+	s.publish.ring(changes)
+}
+
+func catalogOf(bundle ingest.Bundle) *objectcatalog.Summary {
+	if summary, ok := bundle.Catalog.(objectcatalog.Summary); ok {
+		return &summary
+	}
+	return nil
 }
 
 // bumpSinkVersion advances the snapshot version by one on every sink mutation.
@@ -1159,7 +1196,8 @@ func (m *typedMaintainedStore[T]) RestoreFrom(path string) error {
 // Reconcile to diff-sync: list yields the kind's currently-live objects (the informer's
 // indexer List), which it projects via the descriptor's StreamRow; the source owns only
 // rows whose adapter kind equals the descriptor's, so it never sweeps another kind's rows.
-func (m *typedMaintainedStore[T]) addReconcileSource(desc streamspec.Descriptor, list func() []interface{}) {
+// removed is told about each row the sweep deletes.
+func (m *typedMaintainedStore[T]) addReconcileSource(desc streamspec.Descriptor, list func() []interface{}, removed func(T)) {
 	m.reconcileSources = append(m.reconcileSources, maintainedReconcileSource[T]{
 		listRows: func() []T {
 			objs := list()
@@ -1175,7 +1213,8 @@ func (m *typedMaintainedStore[T]) addReconcileSource(desc streamspec.Descriptor,
 			}
 			return rows
 		},
-		owns: func(r T) bool { return m.adapter.Kind(r) == desc.Kind },
+		owns:    func(r T) bool { return m.adapter.Kind(r) == desc.Kind },
+		removed: removed,
 	})
 }
 

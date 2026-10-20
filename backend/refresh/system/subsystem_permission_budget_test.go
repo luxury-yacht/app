@@ -72,7 +72,6 @@ func TestSlowButHealthyPermissionReviewsStillBuildSubsystem(t *testing.T) {
 		require.NoError(t, err, "slow but successful reviews must not fail construction")
 		require.NotNil(t, subsystem)
 		t.Cleanup(func() {
-			subsystem.StopDoorbellNotifiers()
 			subsystem.ResourceStream.Stop()
 			subsystem.IngestManager.Stop()
 			_ = subsystem.InformerFactory.Shutdown()

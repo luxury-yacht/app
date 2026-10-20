@@ -6,6 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 )
 
 // ObjectDetailsChangeNotifier turns response-cache evictions into per-object
@@ -23,37 +24,31 @@ type ObjectDetailsChangeNotifier struct {
 	changeKeyDebouncer
 }
 
-// NewObjectDetailsChangeNotifier builds an unwired notifier; SetBroadcast
-// attaches the doorbell sink once the stream manager exists.
-func NewObjectDetailsChangeNotifier() *ObjectDetailsChangeNotifier {
-	return &ObjectDetailsChangeNotifier{
-		changeKeyDebouncer: newChangeKeyDebouncer("od", eventDoorbellDebounce),
-	}
+// NewObjectDetailsChangeNotifier builds a notifier that rings bell.
+func NewObjectDetailsChangeNotifier(bell doorbell.Bell) *ObjectDetailsChangeNotifier {
+	n := &ObjectDetailsChangeNotifier{}
+	n.changeKeyDebouncer = newChangeKeyDebouncer(bell, "od", eventDoorbellDebounce,
+		func(version string, keys map[string]struct{}) {
+			bell.Ring(doorbell.Change{
+				Domain:  objectDetailsDomain,
+				Source:  doorbell.SourceObject,
+				Target:  doorbell.Matching(objectDetailsScopeMatcher(keys)),
+				Version: version,
+			})
+		})
+	return n
 }
 
-// SetBroadcast wires the doorbell sink. Keys recorded before wiring are
-// flushed on the next debounce tick.
-func (n *ObjectDetailsChangeNotifier) SetBroadcast(
-	broadcast func(version string, matches func(scope string) bool),
-) {
-	if n == nil {
-		return
+func objectDetailsScopeMatcher(keys map[string]struct{}) func(scope string) bool {
+	return func(scope string) bool {
+		identity, err := refresh.ParseObjectScope(scope)
+		if err != nil {
+			return false
+		}
+		_, object := keys[objectDetailsKey(identity.GVK, identity.Namespace, identity.Name)]
+		_, kind := keys[objectDetailsKindKey(identity.GVK, identity.Namespace)]
+		return object || kind
 	}
-	if broadcast == nil {
-		n.setSink(nil)
-		return
-	}
-	n.setSink(func(version string, keys map[string]struct{}) {
-		broadcast(version, func(scope string) bool {
-			identity, err := refresh.ParseObjectScope(scope)
-			if err != nil {
-				return false
-			}
-			_, object := keys[objectDetailsKey(identity.GVK, identity.Namespace, identity.Name)]
-			_, kind := keys[objectDetailsKindKey(identity.GVK, identity.Namespace)]
-			return object || kind
-		})
-	})
 }
 
 // ObjectChanged records a real change to one object's cached details.
@@ -72,14 +67,6 @@ func (n *ObjectDetailsChangeNotifier) KindChangedInNamespace(gvk schema.GroupVer
 		return
 	}
 	n.record(objectDetailsKindKey(gvk, namespace))
-}
-
-// Stop cancels any pending flush; the notifier is discarded with its subsystem.
-func (n *ObjectDetailsChangeNotifier) Stop() {
-	if n == nil {
-		return
-	}
-	n.stop()
 }
 
 func objectDetailsGVKKey(gvk schema.GroupVersionKind) string {

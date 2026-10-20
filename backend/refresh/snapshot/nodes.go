@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
@@ -127,11 +128,14 @@ type NodeTaint = streamrows.NodeTaint
 // store is populated before the first Build serves from it. The per-node pod aggregation still
 // comes from the ingest manager. ingestManager may be nil in a unit test, in which case the
 // store has no feed and no pods are read.
-func RegisterNodeDomain(reg *domain.Registry, provider metrics.Provider, clusterMeta ClusterMeta, ingestManager *ingest.IngestManager) error {
+// nodeDomainName is the Nodes table's refresh domain.
+const nodeDomainName = "nodes"
+
+func RegisterNodeDomain(reg *domain.Registry, provider metrics.Provider, clusterMeta ClusterMeta, ingestManager *ingest.IngestManager, bell doorbell.Bell) error {
 	maintained := newTypedMaintainedStore(clusterMeta, nodesQuerypageSchema(), nodeTableQueryAdapter())
-	reg.RegisterMaintainedStore("nodes", maintained) // spill/restore/reconcile across Cold/re-warm
+	reg.RegisterMaintainedStore(nodeDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	if ingestManager != nil {
-		ingestManager.AddBundleSink(NodeGVR, maintained.BundleSink())
+		ingestManager.AddBundleSink(NodeGVR, maintained.sinkFor("", clusterRowPublication(maintained, nodeDomainName, bell)))
 	}
 
 	builder := &NodeBuilder{

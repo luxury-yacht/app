@@ -320,8 +320,8 @@ func TestClusterSubsystemRebuildRoutesReplacementBeforeStoppingPrevious(t *testi
 	require.NotNil(t, app.Refresh.ensureRefreshRuntimeContext())
 	setRefreshServiceReadyForTest(app.Refresh)
 
-	oldStream := resourcestream.NewManager(nil, nil, nil, snapshot.ClusterMeta{ClusterID: clusterID}, nil)
-	newStream := resourcestream.NewManager(nil, nil, nil, snapshot.ClusterMeta{ClusterID: clusterID}, nil)
+	oldStream := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: clusterID}, nil)
+	newStream := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: clusterID}, nil)
 	resources, err := newAggregateResourceStreamHandler(map[string]*system.Subsystem{
 		clusterID: {ResourceStream: oldStream},
 	}, nil, nil)

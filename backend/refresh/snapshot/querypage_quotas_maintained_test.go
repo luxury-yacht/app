@@ -46,7 +46,7 @@ func TestQuotasMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	limitIdx := newNamespaceIndexer()
 	pdbIdx := newNamespaceIndexer()
 	store := newTypedMaintainedStore(meta, quotasQuerypageSchema(), quotaTableQueryAdapter())
-	sink := store.Sink()
+	sink := unpublishedSink(store, "")
 	// Feed via the sink with the StreamRow output — exactly what the bundle's Table
 	// half delivers from the reflector. Each kind's descriptor projects its object.
 	for _, q := range quotas {

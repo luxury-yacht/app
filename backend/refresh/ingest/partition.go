@@ -41,7 +41,8 @@ func (s *ProjectingStore) PartitionView(namespace string) *StorePartitionView {
 // untouched. Sinks receive the partition's vanished keys as deletes and its
 // new set as per-row upserts — never a bulk kind-wide Replace, because the
 // bulk sink contract ("full state for the kind") would make the consumer drop
-// sibling namespaces' rows. namespace "" delegates to the classic Replace.
+// sibling namespaces' rows — bracketed by the relist boundary. namespace ""
+// delegates to the classic Replace.
 func (s *ProjectingStore) ReplacePartition(namespace string, list []interface{}, resourceVersion string) error {
 	if namespace == "" {
 		return s.replaceUnpartitioned(list, resourceVersion)
@@ -54,11 +55,13 @@ func (s *ProjectingStore) ReplacePartition(namespace string, list []interface{},
 		return err
 	}
 	prefix := namespace + "/"
+	s.emitRelistBoundary(true, namespace)
 	s.emitPartitionChanges(prefix, next)
 	s.replacePartitionRows(prefix, next)
 	s.recordPartitionVersion(namespace, resourceVersion)
 	s.markPartitionSyncedLocked(namespace)
 	s.rebuildIndexesLocked()
+	s.emitRelistBoundary(false, namespace)
 	return nil
 }
 

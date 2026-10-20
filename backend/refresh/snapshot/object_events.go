@@ -20,6 +20,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
@@ -64,20 +65,20 @@ type ObjectEventsSnapshotPayload struct {
 //
 // It returns the change notifier that replaces the Object Panel Events tab's
 // poll: the SAME shared events informer the builder reads feeds it (handler
-// registered HERE, before the informer factory starts), and the subsystem
-// wires its broadcast to the resource-stream doorbell once the stream manager
-// exists. The notifier is nil when no informer factory is available (the
+// registered HERE, before the informer factory starts), and it rings bell.
+// The notifier is nil when no informer factory is available (the
 // API-list fallback path has no push source; the poll covers it).
 func RegisterObjectEventsDomain(
 	reg *domain.Registry,
 	client kubernetes.Interface,
 	factory informers.SharedInformerFactory,
+	bell doorbell.Bell,
 ) (*ObjectEventsChangeNotifier, error) {
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client is required for object events domain")
 	}
 	builder := &ObjectEventsBuilder{client: client}
-	notifier, err := configureObjectEventsInformer(factory, builder)
+	notifier, err := configureObjectEventsInformer(factory, builder, bell)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +91,7 @@ func RegisterObjectEventsDomain(
 	return notifier, nil
 }
 
-func configureObjectEventsInformer(factory informers.SharedInformerFactory, builder *ObjectEventsBuilder) (*ObjectEventsChangeNotifier, error) {
+func configureObjectEventsInformer(factory informers.SharedInformerFactory, builder *ObjectEventsBuilder, bell doorbell.Bell) (*ObjectEventsChangeNotifier, error) {
 	if factory == nil {
 		return nil, nil
 	}
@@ -105,7 +106,7 @@ func configureObjectEventsInformer(factory informers.SharedInformerFactory, buil
 	builder.eventIndexer = eventInformer.Informer().GetIndexer()
 	builder.eventSynced = eventInformer.Informer().HasSynced
 
-	notifier := NewObjectEventsChangeNotifier()
+	notifier := NewObjectEventsChangeNotifier(bell)
 	record := func(obj interface{}) {
 		if evt, ok := maintainedUnwrap(obj).(*corev1.Event); ok {
 			notifier.EventChanged(evt)

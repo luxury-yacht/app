@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 )
 
@@ -83,16 +84,15 @@ func namespaceEventsQuerypageSchema() querypage.Schema[EventSummary] {
 // projectNamespaceEventSummary the list path uses); the handler is registered before the
 // factory starts so the sync gate guarantees the store is populated before serve.
 //
-// The returned notifier rings the table's doorbell for each changed involved-object
-// namespace after the store applies the change; the subsystem wires its broadcast once
-// the resource-stream manager exists.
-func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.SharedInformerFactory, clusterMeta ClusterMeta) (*EventTableChangeNotifier, error) {
+// The returned notifier rings the table's doorbell on bell for each changed
+// involved-object namespace after the store applies the change.
+func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.SharedInformerFactory, clusterMeta ClusterMeta, bell doorbell.Bell) (*EventTableChangeNotifier, error) {
 	if factory == nil {
 		return nil, fmt.Errorf("shared informer factory is nil")
 	}
 	eventInformer := factory.Core().V1().Events()
 
-	notifier := newEventTableChangeNotifier(namespaceEventsDomainName, "ne")
+	notifier := newEventTableChangeNotifier(bell, namespaceEventsDomainName, "ne")
 	maintained := newTypedMaintainedStore(clusterMeta, namespaceEventsQuerypageSchema(), namespacedEventTableQueryAdapter())
 	reg.RegisterMaintainedStore(namespaceEventsDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	storeSynced, err := registerMaintainedInformerHandler(maintained, eventInformer.Informer(),
@@ -104,7 +104,7 @@ func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.Share
 			summary, keep := projectNamespaceEventSummary(clusterMeta, evt)
 			return summary, evt, keep
 		},
-		func(summary EventSummary) { notifier.changed(summary.ObjectNamespace) },
+		func(summary EventSummary, _ doorbell.MessageType) { notifier.changed(summary.ObjectNamespace) },
 	)
 	if err != nil {
 		return nil, err

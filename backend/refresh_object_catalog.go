@@ -14,7 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
-	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -288,8 +288,8 @@ func runCatalogSubsetBridge[T any](
 	}
 }
 
-func runCatalogDoorbellBridge(ctx context.Context, updates <-chan objectcatalog.StreamingUpdate, manager *resourcestream.Manager) {
-	if manager == nil {
+func runCatalogDoorbellBridge(ctx context.Context, updates <-chan objectcatalog.StreamingUpdate, bell doorbell.Bell) {
+	if bell == nil {
 		return
 	}
 	var sequence uint64
@@ -302,7 +302,12 @@ func runCatalogDoorbellBridge(ctx context.Context, updates <-chan objectcatalog.
 				return
 			}
 			sequence++
-			manager.BroadcastCatalogRefresh(fmt.Sprintf("%d", sequence))
+			bell.Ring(doorbell.Change{
+				Domain:  "catalog",
+				Source:  doorbell.SourceCatalog,
+				Target:  doorbell.Subscribed(),
+				Version: fmt.Sprintf("%d", sequence),
+			})
 		}
 	}
 }

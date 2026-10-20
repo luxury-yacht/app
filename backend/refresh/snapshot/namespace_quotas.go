@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/limitrange"
@@ -103,12 +104,13 @@ func RegisterNamespaceQuotasDomain(
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceQuotasDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, namespaceQuotasDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager)
+	maintained, err := newRegisteredTypedTableStore(reg, namespaceQuotasDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager, bell)
 	if err != nil {
 		return err
 	}

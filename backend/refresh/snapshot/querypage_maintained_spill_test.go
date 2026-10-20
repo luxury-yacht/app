@@ -51,7 +51,7 @@ func TestMaintainedStoreReconcileDropsGhosts(t *testing.T) {
 	// The fresh informer's live set contains only cm-a.
 	store.addReconcileSource(cmDesc, func() []interface{} {
 		return []interface{}{cmObj("default", "cm-a", "20", map[string]string{"k": "v2"})}
-	})
+	}, func(ConfigSummary) {})
 	store.Reconcile()
 
 	rows := store.rows("", available)
@@ -77,7 +77,7 @@ func TestMaintainedStoreReconcileScopedByKind(t *testing.T) {
 
 	// Only ConfigMap has a reconcile source (Secret is "ingest-fed" in this scenario, so it
 	// has none). The live ConfigMap set is empty → cm-ghost is a ghost.
-	store.addReconcileSource(cmDesc, func() []interface{} { return nil })
+	store.addReconcileSource(cmDesc, func() []interface{} { return nil }, func(ConfigSummary) {})
 	store.Reconcile()
 
 	rows := store.rows("", available)

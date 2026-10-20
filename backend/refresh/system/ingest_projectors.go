@@ -87,9 +87,9 @@ func registerPodReflector(
 		return
 	}
 	rsLister := shared.Apps().V1().ReplicaSets().Lister()
-	// retainTable=true: the pod standalone-synthesis (pod_aggregate_source) and live-notify
-	// (ingest_notify_pods) paths read the STORED Table half (PodSummary), so it must not be
-	// dropped. Every other reflector below passes false — its Table half lives only in the
+	// retainTable=true: the pod standalone-synthesis (pod_aggregate_source) and the owner
+	// heals (resourcestream/owner_heals.go) read the STORED Table half (PodSummary), so it
+	// must not be dropped. Every other reflector below passes false — its Table half lives only in the
 	// columnar maintained store after being fanned to the BundleSink.
 	mgr.RegisterReflector(snapshot.PodGVR, snapshot.PodGVK, snapshot.NewPodIngestProjector(meta, snapshot.PodOwnerSources{
 		ReplicaSets:        rsLister,

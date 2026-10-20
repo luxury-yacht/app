@@ -402,7 +402,7 @@ func TestColdPreparationRequiresCurrentSubsystemWorkloadReadiness(t *testing.T) 
 	subsystem := &system.Subsystem{
 		Registry:          domain.New(),
 		SnapshotService:   service,
-		NamespaceNotifier: snapshot.NewNamespaceChangeNotifier(source, snapshot.NewNamespaceWorkloadTracker(source)),
+		NamespaceNotifier: snapshot.NewNamespaceChangeNotifier(source, snapshot.NewNamespaceWorkloadTracker(source), nil, nil),
 	}
 	app.Refresh.setRefreshSubsystem("cluster-a", subsystem)
 

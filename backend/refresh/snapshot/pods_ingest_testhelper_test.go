@@ -21,7 +21,7 @@ func newTestPodBuilder(t testing.TB, meta ClusterMeta, pods corelisters.PodListe
 	maintained := newTypedMaintainedStore(meta, podQuerypageSchema(), podTableQueryAdapter())
 	source := ingest.NewProjectingStore(NewPodIngestProjector(meta, PodOwnerSources{ReplicaSets: replicaSets}))
 	source.SetRetainTable(true)
-	source.AddSink(maintained.Sink())
+	source.AddSink(unpublishedSink(maintained, ""))
 	for _, pod := range objects {
 		require.NoError(t, source.Add(pod))
 	}

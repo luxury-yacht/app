@@ -27,6 +27,7 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	namespacepkg "github.com/luxury-yacht/app/backend/resources/namespaces"
@@ -239,12 +240,21 @@ const namespaceQuotaWarningPercentage = 80
 //
 // It returns the change notifier that replaces the frontend's namespaces poll: namespace
 // informer events and workload/pod ingest events feed it (handlers/sinks registered HERE,
-// before the informer factory and ingest manager start), and the subsystem wires its
-// broadcast to the resource-stream doorbell once the stream manager exists.
-func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInformerFactory, ingestManager namespacePodIngestSource, allowedNamespaces []string, client kubernetes.Interface, eventsExpected bool) (*NamespaceChangeNotifier, error) {
+// before the informer factory and ingest manager start). It rings bell, then calls
+// afterRing.
+func RegisterNamespaceDomain(
+	reg *domain.Registry,
+	factory informers.SharedInformerFactory,
+	ingestManager namespacePodIngestSource,
+	allowedNamespaces []string,
+	client kubernetes.Interface,
+	eventsExpected bool,
+	bell doorbell.Bell,
+	afterRing func(version, reason string),
+) (*NamespaceChangeNotifier, error) {
 	tracker := NewNamespaceWorkloadTracker(ingestManager)
 	builder := newNamespaceDomainBuilder(ingestManager, tracker, allowedNamespaces, client)
-	notifier := NewNamespaceChangeNotifier(ingestManager, tracker)
+	notifier := NewNamespaceChangeNotifier(ingestManager, tracker, bell, afterRing)
 	if err := wireNamespaceEventInformer(factory, builder, notifier, eventsExpected); err != nil {
 		return nil, err
 	}

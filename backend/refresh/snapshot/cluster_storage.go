@@ -13,6 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
@@ -92,12 +93,13 @@ func RegisterClusterStorageDomain(
 	factory informers.SharedInformerFactory,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := unconditionalSharedIndexers(factory, clusterStorageDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, clusterStorageDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager)
+	maintained, err := newRegisteredTypedTableStore(reg, clusterStorageDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager, bell)
 	if err != nil {
 		return err
 	}

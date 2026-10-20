@@ -75,8 +75,8 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		// query path); stream row pushes stay object-clocked.
 		SourceClocks:         []Source{SourceObject, SourceMetric},
 		Projection:           "pods.BuildStreamSummaryFromRSMap (ingest projection)",
-		AffectedRowResolver:  "ingest pod bundle sink -> pod row, workload row, node row",
-		StaleScopeResolver:   "ingest DeleteBundle rings the old bundle's scopes (scopesForPod)",
+		AffectedRowResolver:  "pods store publication -> pod scopes, namespace workloads, node",
+		StaleScopeResolver:   "pods store publication rings the previous row's scopes (podDoorbellScopes)",
 		CompleteIsScopeLevel: true,
 	},
 	domainWorkloads: {
@@ -98,8 +98,8 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		},
 		SourceClocks:         []Source{SourceObject, SourceMetric},
 		Projection:           "snapshot namespace-workloads builder (row-less stream signal)",
-		AffectedRowResolver:  "workload, pod, HPA, ReplicaSet event resolvers",
-		StaleScopeResolver:   "ReplicaSet heal + ingest bundle delete fan-out",
+		AffectedRowResolver:  "workloads store publication + pod and HPA derived changes",
+		StaleScopeResolver:   "store publication rings the previous row's namespace",
 		CompleteIsScopeLevel: true,
 	},
 	domainNamespaceConfig: namespaceDescriptor(
@@ -116,8 +116,8 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		RelatedResources:     []ResourceDescriptor{fromIdentity(endpointslicepkg.Identity)},
 		SourceClocks:         []Source{SourceObject},
 		Projection:           "service/ingress/networkpolicy/endpointslice/gatewayapi BuildStreamSummary",
-		AffectedRowResolver:  "ingest network bundle sink",
-		StaleScopeResolver:   "ingest bundle delete fan-out",
+		AffectedRowResolver:  "network store publication",
+		StaleScopeResolver:   "store publication rings the previous row's namespace",
 		CompleteIsScopeLevel: true,
 	},
 	domainNamespaceRBAC: namespaceDescriptor(
@@ -184,8 +184,8 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		RelatedResources:     []ResourceDescriptor{fromIdentity(podspkg.Identity)},
 		SourceClocks:         []Source{SourceObject, SourceMetric},
 		Projection:           "snapshot nodes builder (row-less stream signal)",
-		AffectedRowResolver:  "node and pod->node resolvers",
-		StaleScopeResolver:   "ingest bundle delete fan-out",
+		AffectedRowResolver:  "nodes store publication + pod derived changes",
+		StaleScopeResolver:   "cluster scope",
 		CompleteIsScopeLevel: true,
 	},
 }
@@ -199,8 +199,8 @@ func namespaceDescriptor(domain, projection string, primary, related []ResourceD
 		RelatedResources:     related,
 		SourceClocks:         []Source{SourceObject},
 		Projection:           projection,
-		AffectedRowResolver:  "direct object event resolver",
-		StaleScopeResolver:   "none",
+		AffectedRowResolver:  "store publication",
+		StaleScopeResolver:   "store publication rings the previous object's scope",
 		CompleteIsScopeLevel: true,
 	}
 }
@@ -213,8 +213,8 @@ func clusterDescriptor(domain, projection string, primary []ResourceDescriptor) 
 		PrimaryResources:     primary,
 		SourceClocks:         []Source{SourceObject},
 		Projection:           projection,
-		AffectedRowResolver:  "direct object event resolver",
-		StaleScopeResolver:   "none",
+		AffectedRowResolver:  "store publication",
+		StaleScopeResolver:   "store publication rings the previous object's scope",
 		CompleteIsScopeLevel: true,
 	}
 }

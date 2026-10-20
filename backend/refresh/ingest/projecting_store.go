@@ -106,6 +106,16 @@ type BundleSink interface {
 	DeleteBundle(bundle Bundle)
 }
 
+// RelistBoundary is an optional extension for any sink: the store brackets
+// every relist (Replace and ReplacePartition) so a sink can treat the rows it
+// receives in between as one change. EndRelist runs after the relisted rows
+// and indexes are committed, still under the store's write lock. A store's
+// relists are serialized by that lock, so a sink sees at most one open relist.
+type RelistBoundary interface {
+	BeginRelist(partition string)
+	EndRelist(partition string)
+}
+
 // BundleReplacer is an optional BundleSink extension for relist/Replace delivery.
 // The rows argument is the complete Bundle set for this store's source after the relist.
 type BundleReplacer interface {
@@ -745,6 +755,7 @@ func (s *ProjectingStore) Replace(list []interface{}, resourceVersion string) er
 	prev := s.rows
 	s.rv = resourceVersion
 	s.markSyncedLocked()
+	s.emitRelistBoundary(true, "")
 	// Fan the FULL projected values (Table half present) to the sinks first, then store the
 	// (possibly Table-dropped) copies — the same emit-then-drop ordering Add/Update use. A
 	// relist-delete fans each vanished key's PREVIOUS stored bundle, whose Catalog half is
@@ -757,7 +768,33 @@ func (s *ProjectingStore) Replace(list []interface{}, resourceVersion string) er
 	}
 	s.rows = next
 	s.rebuildIndexesLocked()
+	s.emitRelistBoundary(false, "")
 	return nil
+}
+
+// emitRelistBoundary tells every RelistBoundary sink that a relist of the
+// partition begins or ends. The caller holds the write lock.
+func (s *ProjectingStore) emitRelistBoundary(begin bool, partition string) {
+	notify := func(sink interface{}) {
+		boundary, ok := sink.(RelistBoundary)
+		if !ok {
+			return
+		}
+		if begin {
+			boundary.BeginRelist(partition)
+			return
+		}
+		boundary.EndRelist(partition)
+	}
+	for _, sink := range s.sinks {
+		notify(sink)
+	}
+	for _, sink := range s.catalogSinks {
+		notify(sink)
+	}
+	for _, sink := range s.bundleSinks {
+		notify(sink)
+	}
 }
 
 // Full and namespace relists share projection/error handling; their publication

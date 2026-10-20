@@ -9,8 +9,11 @@ Contracts: `docs/architecture/refresh-system.md` "Construction, publication,
 and teardown" and "Backend subscription lifetime".
 
 - Cancel informer contexts before `Shutdown()` clears references.
-- Every teardown, cooling, replacement, and stop path calls
-  `Subsystem.StopDoorbellNotifiers()` (`backend/refresh/system/manager.go`).
+- `ResourceStream.Stop()` is the producer barrier
+  (`backend/refresh_generation.go`): it waits for running rings and
+  `Bell.AfterFunc` callbacks. Producers schedule timers only through
+  `Bell.AfterFunc`, never `time.AfterFunc`, and never call `Stop` from a ring or
+  callback.
 
 ## Doorbell-backed snapshot domains
 

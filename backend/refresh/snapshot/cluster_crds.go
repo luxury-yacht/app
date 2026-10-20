@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 )
@@ -73,11 +74,13 @@ type ClusterCRDEntry = streamrows.ClusterCRDEntry
 // maintained store fed by the apiext CRD informer (projected at intake by the same
 // BuildStreamSummary the list path uses), so Build reads rows from RAM instead of listing
 // + re-projecting every request. The handler is registered before the apiext factory
-// starts, so the sync gate guarantees the store is populated before the first serve.
+// starts, so the sync gate guarantees the store is populated before the first serve,
+// and it rings the CRD table's doorbell after the store applies each change.
 func RegisterClusterCRDDomain(
 	reg *domain.Registry,
 	factory apiextinformers.SharedInformerFactory,
 	clusterMeta ClusterMeta,
+	bell doorbell.Bell,
 ) error {
 	if factory == nil {
 		return errors.New("apiextensions informer factory is nil")
@@ -94,7 +97,13 @@ func RegisterClusterCRDDomain(
 			}
 			return apiextensions.BuildStreamSummary(clusterMeta, crd), crd, true
 		},
-		nil,
+		func(row ClusterCRDEntry, kind doorbell.MessageType) {
+			ref := row.Ref
+			bell.Ring(doorbell.Change{
+				Domain: clusterCRDDomainName, Source: doorbell.SourceObject,
+				Target: doorbell.Scopes(clusterDoorbellScopes()...), Type: kind, Ref: &ref,
+			})
+		},
 	); err != nil {
 		return err
 	}

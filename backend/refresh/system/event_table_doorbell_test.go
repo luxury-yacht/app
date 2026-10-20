@@ -53,17 +53,12 @@ func newEventTableHarnessWith(
 	client := fake.NewClientset(objects...)
 	factory := informers.NewSharedInformerFactory(client, resync)
 	reg := domain.New()
-	clusterNotifier, err := snapshot.RegisterClusterEventsDomain(reg, factory, meta)
-	require.NoError(t, err)
-	namespaceNotifier, err := snapshot.RegisterNamespaceEventsDomain(reg, factory, meta)
-	require.NoError(t, err)
 	service := snapshot.NewServiceWithPermissions(reg, nil, meta, nil)
-	manager := resourcestream.NewManager(nil, nil, nil, meta, nil)
-	wireStreamObservers(streamObserverDeps{
-		resourceManager:     manager,
-		snapshotService:     service,
-		eventTableNotifiers: []*snapshot.EventTableChangeNotifier{clusterNotifier, namespaceNotifier},
-	})
+	manager := resourcestream.NewManager(nil, nil, meta, service.InvalidateDomainCache)
+	_, err := snapshot.RegisterClusterEventsDomain(reg, factory, meta, manager)
+	require.NoError(t, err)
+	_, err = snapshot.RegisterNamespaceEventsDomain(reg, factory, meta, manager)
+	require.NoError(t, err)
 
 	if beforeStart != nil {
 		beforeStart(reg)
@@ -71,8 +66,7 @@ func newEventTableHarnessWith(
 
 	stop := make(chan struct{})
 	t.Cleanup(func() {
-		clusterNotifier.Stop()
-		namespaceNotifier.Stop()
+		manager.Stop()
 		close(stop)
 	})
 	factory.Start(stop)
@@ -271,9 +265,10 @@ func TestEventTableDoorbellsRingWhenReconcileDropsRestoredRows(t *testing.T) {
 	require.Empty(t, after.rowNames(t, "cluster-events", ""))
 }
 
-// The production constructor must hand both event table notifiers to the
-// subsystem, wire them to its resource stream, and silence them on teardown;
-// otherwise the tables lose their doorbell, or a torn-down cluster keeps ringing.
+// The production constructor must give both event tables the subsystem's
+// doorbell, and stopping it must end their subscriptions; otherwise the tables
+// lose their doorbell. Silence after teardown is pinned by
+// TestGenerationStopWaitsForRunningProducerCallbacks.
 func TestSubsystemWiresAndStopsEventTableDoorbells(t *testing.T) {
 	kube := fake.NewClientset()
 	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
@@ -292,17 +287,10 @@ func TestSubsystemWiresAndStopsEventTableDoorbells(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(func() {
 		cancel()
-		subsystem.StopDoorbellNotifiers()
 		subsystem.ResourceStream.Stop()
 		subsystem.IngestManager.Stop()
 		_ = subsystem.InformerFactory.Shutdown()
 	})
-
-	domains := make([]string, 0, len(subsystem.EventTableNotifiers))
-	for _, notifier := range subsystem.EventTableNotifiers {
-		domains = append(domains, notifier.Domain())
-	}
-	require.ElementsMatch(t, []string{"cluster-events", "namespace-events"}, domains)
 
 	require.NoError(t, subsystem.InformerFactory.Start(ctx))
 	selector, err := resourcestream.ParseStreamSelector("c1", "namespace-events", "namespace:all")
@@ -315,8 +303,20 @@ func TestSubsystemWiresAndStopsEventTableDoorbells(t *testing.T) {
 	require.NoError(t, err)
 	requireEventDoorbell(t, all, "namespace-events", "namespace:all")
 
-	subsystem.StopDoorbellNotifiers()
-	_, err = kube.CoreV1().Events("prod").Create(context.Background(), tableEvent("web.2", "prod", "Pod", "prod", "11"), metav1.CreateOptions{})
+	clusterSelector, err := resourcestream.ParseStreamSelector("c1", "cluster-events", "")
 	require.NoError(t, err)
-	requireQuiet(t, 750*time.Millisecond, map[string]*resourcestream.Subscription{"after teardown": all})
+	cluster, err := subsystem.ResourceStream.SubscribeSelector(clusterSelector)
+	require.NoError(t, err)
+	defer cluster.Cancel()
+	_, err = kube.CoreV1().Events("default").Create(context.Background(), tableEvent("node-a.1", "default", "Node", "", "11"), metav1.CreateOptions{})
+	require.NoError(t, err)
+	requireEventDoorbell(t, cluster, "cluster-events", "")
+
+	subsystem.ResourceStream.Stop()
+	select {
+	case reason := <-all.Drops:
+		require.Equal(t, resourcestream.DropReasonClosed, reason)
+	case <-time.After(time.Second):
+		t.Fatal("stopping the generation left the event table subscription open")
+	}
 }

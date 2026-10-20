@@ -63,7 +63,6 @@ func TestIdentitiesProductionIngestInvalidatesBeforeSignaling(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(func() {
 		cancel()
-		subsystem.StopDoorbellNotifiers()
 		subsystem.ResourceStream.Stop()
 		subsystem.IngestManager.Stop()
 		_ = subsystem.InformerFactory.Shutdown()
@@ -88,57 +87,81 @@ func TestIdentitiesProductionIngestInvalidatesBeforeSignaling(t *testing.T) {
 	require.Empty(t, initial.Rows)
 	require.Empty(t, build().Rows) // Prime the cache before the external mutation.
 
-	awaitChange := func(name, rv string, total int) snapshot.ClusterIdentitiesSnapshot {
-		t.Helper()
-		timer := time.NewTimer(3 * time.Second)
-		defer timer.Stop()
+	// Identities rings are derived from the binding sources, so they carry no
+	// object Ref (the doorbell rings the view, not one row). Earlier rings are
+	// drained before each mutation; the next ring must follow its commit and
+	// cache invalidation.
+	drain := func() {
 		for {
 			select {
-			case update := <-subscription.Updates:
-				if update.Ref == nil || update.Ref.Name != name || update.ResourceVersion != rv {
-					continue
-				}
-				require.Equal(t, "identity-cluster", update.ClusterID)
-				require.Equal(t, "", update.Scope)
-				payload := build()
-				require.Equal(t, total, payload.Total, "signal must follow source commit and cache invalidation")
-				require.Len(t, payload.Rows, total)
-				return payload
-			case <-timer.C:
-				t.Fatal("production ingestion did not signal the identities subscriber")
-				return snapshot.ClusterIdentitiesSnapshot{}
+			case <-subscription.Updates:
+			default:
+				return
 			}
 		}
 	}
-	binding, err := kube.RbacV1().RoleBindings("team-a").Create(ctx, &rbacv1.RoleBinding{
+	mutate := func(apply func() error) {
+		t.Helper()
+		drain()
+		require.NoError(t, apply())
+	}
+	awaitChange := func(total int) snapshot.ClusterIdentitiesSnapshot {
+		t.Helper()
+		select {
+		case update := <-subscription.Updates:
+			require.Equal(t, "identity-cluster", update.ClusterID)
+			require.Equal(t, "", update.Scope)
+			payload := build()
+			require.Equal(t, total, payload.Total, "signal must follow source commit and cache invalidation")
+			require.Len(t, payload.Rows, total)
+			return payload
+		case <-time.After(3 * time.Second):
+			t.Fatal("production ingestion did not signal the identities subscriber")
+			return snapshot.ClusterIdentitiesSnapshot{}
+		}
+	}
+	binding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{Name: "readers", Namespace: "team-a", ResourceVersion: "2", UID: "binding-1", Finalizers: []string{"test.example/hold"}},
 		Subjects:   []rbacv1.Subject{{Kind: "User", APIGroup: rbacv1.GroupName, Name: "alice"}},
-	}, metav1.CreateOptions{})
-	require.NoError(t, err)
-	require.Contains(t, awaitChange("readers", "2", 1).Kinds, "User")
+	}
+	mutate(func() (err error) {
+		binding, err = kube.RbacV1().RoleBindings("team-a").Create(ctx, binding, metav1.CreateOptions{})
+		return err
+	})
+	require.Contains(t, awaitChange(1).Kinds, "User")
 	binding.Subjects[0].Name = "bob"
 	binding.ResourceVersion = "3"
-	binding, err = kube.RbacV1().RoleBindings("team-a").Update(ctx, binding, metav1.UpdateOptions{})
-	require.NoError(t, err)
-	changed := awaitChange("readers", "3", 1)
+	mutate(func() (err error) {
+		binding, err = kube.RbacV1().RoleBindings("team-a").Update(ctx, binding, metav1.UpdateOptions{})
+		return err
+	})
+	changed := awaitChange(1)
 	require.Equal(t, "bob", changed.Rows[0].Name)
 	now := metav1.Now()
 	binding.DeletionTimestamp = &now
 	binding.ResourceVersion = "4"
-	_, err = kube.RbacV1().RoleBindings("team-a").Update(ctx, binding, metav1.UpdateOptions{})
-	require.NoError(t, err)
-	awaitChange("readers", "4", 1) // Deletion requested is still a present binding.
-	require.NoError(t, kube.RbacV1().RoleBindings("team-a").Delete(ctx, "readers", metav1.DeleteOptions{}))
-	require.NotContains(t, awaitChange("readers", "4", 0).Kinds, "User")
+	mutate(func() error {
+		_, err := kube.RbacV1().RoleBindings("team-a").Update(ctx, binding, metav1.UpdateOptions{})
+		return err
+	})
+	awaitChange(1) // Deletion requested is still a present binding.
+	mutate(func() error {
+		return kube.RbacV1().RoleBindings("team-a").Delete(ctx, "readers", metav1.DeleteOptions{})
+	})
+	require.NotContains(t, awaitChange(0).Kinds, "User")
 
-	_, err = kube.RbacV1().ClusterRoleBindings().Create(ctx, &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: "auditors", ResourceVersion: "5", UID: "binding-2"},
-		Subjects:   []rbacv1.Subject{{Kind: "Group", APIGroup: rbacv1.GroupName, Name: "auditors"}},
-	}, metav1.CreateOptions{})
-	require.NoError(t, err)
-	require.Contains(t, awaitChange("auditors", "5", 1).Kinds, "Group")
-	require.NoError(t, kube.RbacV1().ClusterRoleBindings().Delete(ctx, "auditors", metav1.DeleteOptions{}))
-	awaitChange("auditors", "5", 0)
+	mutate(func() error {
+		_, err := kube.RbacV1().ClusterRoleBindings().Create(ctx, &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: "auditors", ResourceVersion: "5", UID: "binding-2"},
+			Subjects:   []rbacv1.Subject{{Kind: "Group", APIGroup: rbacv1.GroupName, Name: "auditors"}},
+		}, metav1.CreateOptions{})
+		return err
+	})
+	require.Contains(t, awaitChange(1).Kinds, "Group")
+	mutate(func() error {
+		return kube.RbacV1().ClusterRoleBindings().Delete(ctx, "auditors", metav1.DeleteOptions{})
+	})
+	awaitChange(0)
 }
 
 // The production owned-ingest reflectors need a real REST client. This API keeps

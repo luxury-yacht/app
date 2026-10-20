@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
@@ -100,15 +101,15 @@ type ClusterEventEntry EventSummary
 // projectClusterEventEntry the list path uses); the handler is registered before the
 // factory starts so the sync gate guarantees the store is populated before serve.
 //
-// The returned notifier rings the table's doorbell after the store applies each change;
-// the subsystem wires its broadcast once the resource-stream manager exists.
-func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedInformerFactory, clusterMeta ClusterMeta) (*EventTableChangeNotifier, error) {
+// The returned notifier rings the table's doorbell on bell after the store applies each
+// change.
+func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedInformerFactory, clusterMeta ClusterMeta, bell doorbell.Bell) (*EventTableChangeNotifier, error) {
 	if factory == nil {
 		return nil, fmt.Errorf("shared informer factory is nil")
 	}
 	eventInformer := factory.Core().V1().Events()
 
-	notifier := newEventTableChangeNotifier(clusterEventsDomainName, "ce")
+	notifier := newEventTableChangeNotifier(bell, clusterEventsDomainName, "ce")
 	maintained := newTypedMaintainedStore(clusterMeta, clusterEventsQuerypageSchema(), clusterEventTableQueryAdapter())
 	reg.RegisterMaintainedStore(clusterEventsDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	storeSynced, err := registerMaintainedInformerHandler(maintained, eventInformer.Informer(),
@@ -120,7 +121,7 @@ func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedI
 			entry, keep := projectClusterEventEntry(clusterMeta, evt)
 			return entry, evt, keep
 		},
-		func(entry ClusterEventEntry) { notifier.changed(entry.ObjectNamespace) },
+		func(entry ClusterEventEntry, _ doorbell.MessageType) { notifier.changed(entry.ObjectNamespace) },
 	)
 	if err != nil {
 		return nil, err

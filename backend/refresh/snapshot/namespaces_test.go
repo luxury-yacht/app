@@ -679,7 +679,7 @@ func TestRegisterNamespaceDomainScopedDoesNotTouchNamespaceInformer(t *testing.T
 	// the scoped registration must never instantiate the namespaces informer.
 	// Passing a nil factory proves it: any touch would panic.
 	reg := domain.New()
-	notifier, err := RegisterNamespaceDomain(reg, nil, nil, []string{"prod"}, nil, false)
+	notifier, err := RegisterNamespaceDomain(reg, nil, nil, []string{"prod"}, nil, false, newRecordingBell(), nil)
 	require.NoError(t, err)
 	require.NotNil(t, notifier)
 }
@@ -694,7 +694,7 @@ func TestRegisterNamespaceDomainReportsStoppedEventInformer(t *testing.T) {
 	require.Eventually(t, eventInformer.IsStopped, time.Second, 10*time.Millisecond)
 
 	notifier, err := RegisterNamespaceDomain(
-		domain.New(), factory, nil, []string{"prod"}, client, true,
+		domain.New(), factory, nil, []string{"prod"}, client, true, newRecordingBell(), nil,
 	)
 
 	require.Nil(t, notifier)
@@ -703,12 +703,12 @@ func TestRegisterNamespaceDomainReportsStoppedEventInformer(t *testing.T) {
 
 func TestRegisterNamespaceDomainReportsDuplicateRegistration(t *testing.T) {
 	reg := domain.New()
-	notifier, err := RegisterNamespaceDomain(reg, nil, nil, []string{"prod"}, nil, false)
+	notifier, err := RegisterNamespaceDomain(reg, nil, nil, []string{"prod"}, nil, false, newRecordingBell(), nil)
 	require.NoError(t, err)
 	require.NotNil(t, notifier)
-	defer notifier.Stop()
+	defer notifier.bell.(*recordingBell).Stop()
 
-	duplicateNotifier, err := RegisterNamespaceDomain(reg, nil, nil, []string{"prod"}, nil, false)
+	duplicateNotifier, err := RegisterNamespaceDomain(reg, nil, nil, []string{"prod"}, nil, false, newRecordingBell(), nil)
 
 	require.Nil(t, duplicateNotifier)
 	require.ErrorContains(t, err, "domain already registered")
@@ -720,14 +720,14 @@ func TestRegisterNamespaceDomainUnscopedWiresNamespaceAndEventInformers(t *testi
 	reg := domain.New()
 	ingestSource := &namespaceRegistrationIngest{fakeNamespaceIngest: &fakeNamespaceIngest{}}
 
-	notifier, err := RegisterNamespaceDomain(reg, factory, ingestSource, nil, client, true)
+	notifier, err := RegisterNamespaceDomain(reg, factory, ingestSource, nil, client, true, newRecordingBell(), nil)
 	require.NoError(t, err)
 	require.NotNil(t, notifier)
 	require.True(t, notifier.eventsExpected)
 	require.NotNil(t, notifier.eventLister)
 	require.NotNil(t, notifier.eventsSynced)
 	require.Len(t, ingestSource.sinks, 7)
-	defer notifier.Stop()
+	defer notifier.bell.(*recordingBell).Stop()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

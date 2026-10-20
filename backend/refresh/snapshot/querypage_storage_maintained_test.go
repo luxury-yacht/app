@@ -106,7 +106,7 @@ func TestStorageMaintainedStoreSinkMatchesListPath(t *testing.T) {
 
 	pvcIdx := newNamespaceIndexer()
 	store := newTypedMaintainedStore(meta, storageQuerypageSchema(), storageTableQueryAdapter())
-	sink := store.Sink()
+	sink := unpublishedSink(store, "")
 	for _, pvc := range pvcs {
 		require.NoError(t, pvcIdx.Add(pvc))
 		sink.Upsert(pvcDesc.StreamRow(meta, pvc))

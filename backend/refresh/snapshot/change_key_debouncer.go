@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 )
 
 // eventDoorbellDebounce coalesces event bursts (a crash-looping pod, a
@@ -11,86 +13,47 @@ import (
 const eventDoorbellDebounce = 500 * time.Millisecond
 
 // changeKeyDebouncer coalesces change keys recorded from informer goroutines
-// into one flush per debounce window. The doorbell notifiers built on it are
-// created during domain registration, before the resource-stream manager
-// exists, so keys recorded before the sink is wired are kept and flushed once
-// it arrives.
+// into one ring per debounce window. Its timer is a generation callback, so
+// stopping the cluster generation cancels a pending flush and waits for a
+// running one.
 type changeKeyDebouncer struct {
+	bell     doorbell.Bell
+	ring     func(version string, keys map[string]struct{})
 	mu       sync.Mutex
-	sink     func(version string, keys map[string]struct{})
-	timer    *time.Timer
+	timer    doorbell.Timer
 	debounce time.Duration
 	dirty    map[string]struct{}
 	prefix   string
 	counter  uint64
-	stopped  bool
 }
 
-func newChangeKeyDebouncer(prefix string, debounce time.Duration) changeKeyDebouncer {
+func newChangeKeyDebouncer(
+	bell doorbell.Bell,
+	prefix string,
+	debounce time.Duration,
+	ring func(version string, keys map[string]struct{}),
+) changeKeyDebouncer {
 	return changeKeyDebouncer{
+		bell:     bell,
+		ring:     ring,
 		debounce: debounce,
 		dirty:    map[string]struct{}{},
 		prefix:   prefix,
 	}
 }
 
-// setSink wires the flush target. Keys recorded before wiring are flushed on
-// the next debounce tick.
-func (d *changeKeyDebouncer) setSink(sink func(version string, keys map[string]struct{})) {
-	d.mu.Lock()
-	d.sink = sink
-	pending := len(d.dirty) > 0
-	d.mu.Unlock()
-	if pending {
-		d.arm()
-	}
-}
-
 func (d *changeKeyDebouncer) record(key string) {
 	d.mu.Lock()
-	if d.stopped {
-		d.mu.Unlock()
-		return
-	}
-	d.dirty[key] = struct{}{}
-	d.mu.Unlock()
-	d.arm()
-}
-
-// stop cancels any pending flush; the notifier is discarded with its subsystem.
-func (d *changeKeyDebouncer) stop() {
-	d.mu.Lock()
-	d.stopped = true
-	timer := d.timer
-	d.timer = nil
-	d.mu.Unlock()
-	if timer != nil {
-		timer.Stop()
-	}
-}
-
-func (d *changeKeyDebouncer) arm() {
-	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.stopped || d.timer != nil {
-		return
+	d.dirty[key] = struct{}{}
+	if d.timer == nil {
+		d.timer = d.bell.AfterFunc(d.debounce, d.flush)
 	}
-	d.timer = time.AfterFunc(d.debounce, d.flush)
 }
 
 func (d *changeKeyDebouncer) flush() {
 	d.mu.Lock()
 	d.timer = nil
-	if d.stopped {
-		d.mu.Unlock()
-		return
-	}
-	sink := d.sink
-	if sink == nil {
-		// Not wired yet: keep the dirty keys; setSink re-arms.
-		d.mu.Unlock()
-		return
-	}
 	keys := d.dirty
 	d.dirty = map[string]struct{}{}
 	if len(keys) == 0 {
@@ -101,7 +64,6 @@ func (d *changeKeyDebouncer) flush() {
 	version := fmt.Sprintf("%s-%d", d.prefix, d.counter)
 	d.mu.Unlock()
 
-	// keys is read-only from here on; the sink may read it on the broadcast
-	// goroutine.
-	sink(version, keys)
+	// keys is read-only from here on; the ring may read it while delivering.
+	d.ring(version, keys)
 }

@@ -194,8 +194,10 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
 - **Push:** the `refresh-resources` stream carries only a change signal. A
   delta/resync advances the scoped doorbell clocks (`signalVersions`, plus the
   folded `sourceVersion`) and the query-backed view refetches its page. No live
-  row crosses the wire: `streammux.ServerMessage` has no row field. Signal
-  rules: [data-freshness.md](data-freshness.md#signals-and-source-clocks).
+  row crosses the wire: `streammux.ServerMessage` has no row field. The
+  maintained store rings after it applies a change, from its own handler or
+  ingest sink; nothing else rings its domain. Signal rules:
+  [data-freshness.md](data-freshness.md#signals-and-source-clocks).
 - **Metrics** reach a view only by serve-time overlay.
 
 ## Boundaries (deliberately NOT this path)

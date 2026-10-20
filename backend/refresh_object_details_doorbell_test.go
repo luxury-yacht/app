@@ -92,7 +92,6 @@ func TestObjectDetailsSignalFollowsEvictionThroughProductionWiring(t *testing.T)
 	app.Refresh.registerResponseCacheInvalidation(subsystem, clusterID)
 	t.Cleanup(func() {
 		cancel()
-		subsystem.StopDoorbellNotifiers()
 		subsystem.ResourceStream.Stop()
 		subsystem.IngestManager.Stop()
 		_ = subsystem.InformerFactory.Shutdown()

@@ -14,8 +14,8 @@ func TestClusterAttentionRuntimeRevocationFiltersRetainedRowsAndCounts(t *testin
 	for _, query := range []string{"", "?limit=10", "?limit=10&search=allowed"} {
 		t.Run(query, func(t *testing.T) {
 			meta := ClusterMeta{ClusterID: "cluster-a"}
-			index := newClusterAttentionIndex(meta, time.Now)
-			t.Cleanup(index.Stop)
+			index := newTestAttentionIndex(meta, time.Now)
+			t.Cleanup(index.stopForTest)
 			pod := attentionTestRef("Pod", "denied-namespace", "denied-pod")
 			node := attentionTestRef("Node", "", "allowed-node")
 			custom := attentionTestRef("Pod", "allowed-namespace", "allowed-custom")
@@ -32,8 +32,8 @@ func TestClusterAttentionRuntimeRevocationFiltersRetainedRowsAndCounts(t *testin
 			// Cold restoration must rebuild the authorization facet too.
 			path := t.TempDir() + "/attention.spill"
 			require.NoError(t, index.SpillTo(path))
-			restored := newClusterAttentionIndex(meta, time.Now)
-			t.Cleanup(restored.Stop)
+			restored := newTestAttentionIndex(meta, time.Now)
+			t.Cleanup(restored.stopForTest)
 			require.NoError(t, restored.RestoreFrom(path))
 			index = restored
 			builder := &ClusterAttentionBuilder{index: index, sources: []typedTableResourceSource{
@@ -71,8 +71,8 @@ func TestClusterAttentionReadinessFiltersUnavailableSourcesAndRecovers(t *testin
 	for _, query := range []string{"", "?limit=10"} {
 		t.Run(query, func(t *testing.T) {
 			meta := ClusterMeta{ClusterID: "cluster-a"}
-			index := newClusterAttentionIndex(meta, time.Now)
-			t.Cleanup(index.Stop)
+			index := newTestAttentionIndex(meta, time.Now)
+			t.Cleanup(index.stopForTest)
 			pod := attentionTestRef("Pod", "denied-namespace", "denied-pod")
 			index.maintained.store.Upsert(AttentionFinding{Ref: pod, Namespace: pod.Namespace, Severity: AttentionSeverityError})
 			builder := &ClusterAttentionBuilder{index: index, sources: []typedTableResourceSource{{Kind: "Pod", Resource: "pods"}}}

@@ -67,8 +67,8 @@ func TestDeletingPodBlockedByFinalizerProjectsIntoAttentionCategory(t *testing.T
 	require.True(t, ok)
 	blocker, blocked := catalog.FinalizerBlocker()
 	require.True(t, blocked)
-	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
-	t.Cleanup(index.Stop)
+	index := newTestAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.stopForTest)
 	index.ReplaceFinalizerBlockers([]objectcatalog.FinalizerBlocker{blocker})
 	rows := index.Snapshot()
 	require.Len(t, rows, 1)
@@ -142,10 +142,10 @@ func TestAttentionRecordFromEventUsesEventIdentityNotInvolvedObjectIdentity(t *t
 	require.Equal(t, "event-uid", record.Ref.UID)
 	require.Equal(t, observedAt.UnixMilli(), record.AgeTimestamp)
 
-	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time {
+	index := newTestAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time {
 		return observedAt.Add(time.Hour)
 	})
-	t.Cleanup(index.Stop)
+	t.Cleanup(index.stopForTest)
 	index.UpsertSource("events", record)
 	rows := index.Snapshot()
 	require.Len(t, rows, 1)
@@ -165,10 +165,10 @@ func TestAttentionFindingForClusterScopedEventHasNoDisplayNamespace(t *testing.T
 	require.True(t, ok)
 	require.Equal(t, "default", record.Ref.Namespace, "event identity must retain the Event object's namespace")
 
-	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time {
+	index := newTestAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time {
 		return observedAt.Add(time.Hour)
 	})
-	t.Cleanup(index.Stop)
+	t.Cleanup(index.stopForTest)
 	index.UpsertSource("events", record)
 
 	rows := index.Snapshot()
@@ -202,9 +202,10 @@ func TestClusterAttentionDomainDelegatesOpenKindPermissionsToCatalog(t *testing.
 	registry := domain.New()
 	index, err := RegisterClusterAttentionDomain(
 		registry, nil, ClusterAttentionPermissions{}, ClusterMeta{ClusterID: "cluster-a"}, nil, ClusterAttentionOptions{},
+		newRecordingBell(),
 	)
 	require.NoError(t, err)
-	t.Cleanup(index.Stop)
+	t.Cleanup(index.stopForTest)
 	config, exists := registry.Get(clusterAttentionDomainName)
 	require.True(t, exists)
 	require.False(t, config.RuntimePolicyExempt)

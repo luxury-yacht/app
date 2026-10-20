@@ -117,8 +117,7 @@ func TestUnconditionalSharedIndexersResolvesIngestOwnedFromIngestStore(t *testin
 // IngestOwned kinds, the production indexer source resolves every cut kind from the
 // ingest store with a NIL shared informer factory — i.e. no typed informer is created.
 // A nil factory cannot serve d.Informer(shared); if any cut kind still routed through it
-// the gate would report nil and this fails. This is the gate-side twin of the notify
-// proof (registerDescriptorStreams skips IngestOwned kinds).
+// the gate would report nil and this fails.
 func TestEveryIngestOwnedDomainAvailabilityFromIngestNotInformer(t *testing.T) {
 	ingestManager := ingestManagerForTest(t)
 

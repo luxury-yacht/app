@@ -40,7 +40,7 @@ import (
 // carry their own ClusterMeta from the projector / StreamRow).
 func seedNetworkMaintained(b *NamespaceNetworkBuilder, meta ClusterMeta) {
 	b.maintained = newTypedMaintainedStore(meta, networkQuerypageSchema(), networkTableQueryAdapter())
-	sink := b.maintained.Sink()
+	sink := unpublishedSink(b.maintained, "")
 	if src, ok := b.networkIngest.(fakeNetworkIngestSource); ok {
 		for _, gvr := range []schema.GroupVersionResource{ServiceGVR, EndpointSliceGVR, IngressGVR, NetworkPolicyGVR} {
 			for _, raw := range src.Rows(gvr) {
@@ -246,7 +246,7 @@ func TestNetworkMaintainedStoreSpillRestoreRoundTrip(t *testing.T) {
 	src := newFakeNetworkIngestSource(meta, svc, ing, policy)
 
 	orig := newTypedMaintainedStore(meta, networkQuerypageSchema(), networkTableQueryAdapter())
-	sink := orig.Sink()
+	sink := unpublishedSink(orig, "")
 	for _, gvr := range []schema.GroupVersionResource{ServiceGVR, EndpointSliceGVR, IngressGVR, NetworkPolicyGVR} {
 		for _, raw := range src.Rows(gvr) {
 			if bundle, ok := raw.(ingest.Bundle); ok {

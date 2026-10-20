@@ -53,7 +53,6 @@ func TestSubsystemOwnsOneBelowThresholdCustomResourceWatch(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(func() {
 		cancel()
-		subsystem.StopDoorbellNotifiers()
 		subsystem.ResourceStream.Stop()
 		subsystem.IngestManager.Stop()
 		_ = subsystem.InformerFactory.Shutdown()

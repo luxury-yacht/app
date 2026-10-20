@@ -91,7 +91,9 @@ Scope tails are one executable contract:
 - Backend: `backend/refresh/system` (registry, permission gates, manual jobs;
   `ManualQueue` in `backend/refresh/types.go`), `backend/refresh/snapshot`
   (list/table payloads, never `backend/resources`),
-  `backend/refresh/resourcestream` (query-backed signals).
+  `backend/refresh/resourcestream` (the generation's doorbell hub:
+  subscriptions, resume buffers, fan-out). Stores and producers ring it and
+  own their row-to-scope translation in `backend/refresh/snapshot`.
 - Frontend (`frontend/src/core/refresh`): `orchestrator.ts` owns leases, poll
   scheduling, stream starts, signal refetch, and fetch execution;
   `refreshRuntime.ts` holds per-cluster runtimes; `store.ts` and `hooks/`.
@@ -102,9 +104,10 @@ Scope tails are one executable contract:
 - `buildRefreshSubsystemForSelection` is the one construction chokepoint for
   startup, selector open, auth recovery, and governor re-warm; per-cluster
   readiness, invalidation, and lifecycle wiring belong there.
-- Per-cluster order: informer factory and permission checker, permission
-  preflight, ordered domain registration, snapshots/queues/streams, manager
-  start, then revalidation.
+- Per-cluster order: informer factory and permission checker, snapshot
+  service and resource stream (the doorbell every producer receives at
+  construction), permission preflight and ordered domain registration, the
+  stream's owner-heal sources, queue, manager start, then revalidation.
 - Construction uses the caller's context and has no total deadline (a slow
   reachable cluster still connects); only caller cancellation aborts, and a
   cancelled build publishes no permission-denied fallback domains. The context
@@ -114,7 +117,9 @@ Scope tails are one executable contract:
   review.
 - Replacement publishes the new handler/stream generation before stopping old
   producers. Teardown, including Factory Reset before clearing spill/cache,
-  unpublishes first, then stops producers.
+  unpublishes first, then stops producers. Stopping the resource stream is the
+  producer barrier: it waits for running rings and timed producer callbacks
+  ([data-freshness.md](data-freshness.md#signals-and-source-clocks)).
 - Replacement moves queued or running manual jobs to the new queue; succeeded,
   failed, and cancelled jobs stay terminal.
 - Preferences effects arrive through two write-only sinks

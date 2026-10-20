@@ -26,6 +26,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
@@ -169,12 +170,12 @@ var workloadStoreGVRKinds = []struct {
 // Table half (upserted by key) and a Catalog half (the delete key), so they all land in this store;
 // a relist of one GVR replaces only that kind's rows. Shared by the workloads domain and its
 // metrics twin. nil ingestManager (a unit test) leaves the store with no feed.
-func feedWorkloadStoreFromIngest(ingestManager *ingest.IngestManager, maintained *typedMaintainedStore[WorkloadSummary]) {
+func feedWorkloadStoreFromIngest(ingestManager *ingest.IngestManager, maintained *typedMaintainedStore[WorkloadSummary], bell doorbell.Bell) {
 	if ingestManager == nil {
 		return
 	}
 	for _, wk := range workloadStoreGVRKinds {
-		ingestManager.AddBundleSink(wk.GVR, maintained.bundleSinkForKind(wk.Kind))
+		ingestManager.AddBundleSink(wk.GVR, maintained.sinkFor(wk.Kind, namespacedRowPublication(maintained, namespaceWorkloadsDomainName, bell)))
 	}
 }
 
@@ -185,12 +186,13 @@ func RegisterNamespaceWorkloadsDomain(
 	perms NamespaceWorkloadsPermissions,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	maintained := newTypedMaintainedStore(clusterMeta, workloadsQuerypageSchema(), workloadTableQueryAdapter())
-	feedWorkloadStoreFromIngest(ingestManager, maintained)
+	feedWorkloadStoreFromIngest(ingestManager, maintained, bell)
 	builder := &NamespaceWorkloadsBuilder{
 		// HPA lister is always wired — it's informational and doesn't block on missing perms.
 		hpaLister: factory.Autoscaling().V1().HorizontalPodAutoscalers().Lister(),

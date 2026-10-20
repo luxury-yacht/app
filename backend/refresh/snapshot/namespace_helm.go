@@ -19,10 +19,12 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/helm"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -110,6 +112,7 @@ func RegisterNamespaceHelmDomain(
 	reg *domain.Registry,
 	helmStorage HelmStorageSource,
 	clusterMeta ClusterMeta,
+	bell doorbell.Bell,
 ) error {
 	if helmStorage == nil {
 		return fmt.Errorf("helm storage source is nil")
@@ -125,22 +128,9 @@ func RegisterNamespaceHelmDomain(
 	// as before the maintained-store cutover, rather than registering a handler on nil.
 	if informer := helmStorage.SecretInformer(); informer != nil {
 		builder.maintained = newTypedMaintainedStore(clusterMeta, helmQuerypageSchema(), helmTableQueryAdapter())
-		reaggregate := func(obj interface{}) {
-			secret, ok := maintainedUnwrap(obj).(*corev1.Secret)
-			if !ok || secret.Type != helmReleaseSecretType {
-				return
-			}
-			name := secret.Labels["name"]
-			if name == "" {
-				return
-			}
-			builder.reaggregateRelease(secret.Namespace, name, secret)
-		}
-		if _, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc:    reaggregate,
-			UpdateFunc: func(_, newObj interface{}) { reaggregate(newObj) },
-			DeleteFunc: reaggregate,
-		}); err != nil {
+		if _, err := informer.AddEventHandler(storeHandlerFuncs(builder.applyReleaseSecret, func(before, after metav1.Object, kind doorbell.MessageType) {
+			builder.publishReleaseSecret(bell, before, after)
+		})); err != nil {
 			return err
 		}
 	}
@@ -153,6 +143,59 @@ func RegisterNamespaceHelmDomain(
 		Name:          namespaceHelmDomainName,
 		BuildSnapshot: builder.Build,
 	})
+}
+
+// applyReleaseSecret re-aggregates the release a revision secret belongs to, and
+// the release it belonged to before when an update moved it to another release.
+func (b *NamespaceHelmBuilder) applyReleaseSecret(before, after interface{}) {
+	previous, hadPrevious := helmReleaseSecretKey(before)
+	current, hasCurrent := helmReleaseSecretKey(after)
+	if hasCurrent {
+		b.reaggregateRelease(current.namespace, current.name, current.secret)
+	}
+	if hadPrevious && (!hasCurrent || previous.namespace != current.namespace || previous.name != current.name) {
+		b.reaggregateRelease(previous.namespace, previous.name, previous.secret)
+	}
+}
+
+// publishReleaseSecret rings the Helm table after its store applied a revision
+// secret change: a complete-resync signal for the releases' namespaces.
+func (b *NamespaceHelmBuilder) publishReleaseSecret(bell doorbell.Bell, before, after metav1.Object) {
+	var scopes []string
+	var ref *resourcemodel.ResourceRef
+	for _, obj := range []metav1.Object{before, after} {
+		key, ok := helmReleaseSecretKey(obj)
+		if !ok {
+			continue
+		}
+		scopes = append(scopes, namespaceDoorbellScopes(key.namespace)...)
+		releaseRef := resourcemodel.NewResourceRef(helm.ReleaseRef(b.meta.ClusterID, key.namespace, key.name))
+		ref = &releaseRef
+	}
+	if len(scopes) == 0 {
+		return
+	}
+	bell.Ring(doorbell.Change{
+		Domain: namespaceHelmDomainName,
+		Source: doorbell.SourceObject,
+		Target: doorbell.Scopes(scopes...),
+		Type:   doorbell.MessageTypeComplete,
+		Ref:    ref,
+	})
+}
+
+type helmReleaseKey struct {
+	namespace, name string
+	secret          *corev1.Secret
+}
+
+// helmReleaseSecretKey identifies the release a Helm revision secret stores.
+func helmReleaseSecretKey(obj interface{}) (helmReleaseKey, bool) {
+	secret, ok := maintainedUnwrap(obj).(*corev1.Secret)
+	if !ok || secret == nil || secret.Type != helmReleaseSecretType || secret.Labels["name"] == "" {
+		return helmReleaseKey{}, false
+	}
+	return helmReleaseKey{namespace: secret.Namespace, name: secret.Labels["name"], secret: secret}, true
 }
 
 // reaggregateRelease recomputes the synthesized HelmRelease row for one release from its

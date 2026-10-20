@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
@@ -27,14 +28,14 @@ func TestSwapRefreshSubsystemStopsPrevious(t *testing.T) {
 
 	var mu sync.Mutex
 	broadcasts := 0
-	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil))
-	notifier.SetBroadcast(func(string, string) {
+	stream := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: "cluster-1"}, nil)
+	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil), stream, func(string, string) {
 		mu.Lock()
 		broadcasts++
 		mu.Unlock()
 	})
 
-	previous := &system.Subsystem{NamespaceNotifier: notifier}
+	previous := &system.Subsystem{NamespaceNotifier: notifier, ResourceStream: stream}
 	next := &system.Subsystem{}
 
 	app.Refresh.setRefreshSubsystem("cluster-1", previous)

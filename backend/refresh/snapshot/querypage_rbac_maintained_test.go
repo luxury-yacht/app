@@ -174,7 +174,7 @@ func TestRBACMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	bindingIdx := newNamespaceIndexer()
 	saIdx := newNamespaceIndexer()
 	store := newTypedMaintainedStore(meta, rbacQuerypageSchema(), rbacTableQueryAdapter())
-	sink := store.Sink()
+	sink := unpublishedSink(store, "")
 	for _, r := range roles {
 		require.NoError(t, roleIdx.Add(r))
 		sink.Upsert(roleDesc.StreamRow(meta, r))

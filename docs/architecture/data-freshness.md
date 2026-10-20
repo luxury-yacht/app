@@ -115,9 +115,14 @@ The authored domain contract declares which clocks can change a payload:
 - Stream messages never carry table rows, query state, positions, or cursors.
 - A source advances only the payload it owns: a metric tick never advances an
   object clock or makes an object snapshot appear changed.
-- A producer invalidates the affected snapshot/query cache before broadcasting
-  the new clock; otherwise the signal-triggered read can consume the
-  pre-change cached page and no later signal arrives.
+- Every producer rings the cluster generation's doorbell (`doorbell.Bell`,
+  implemented by `resourcestream.Manager`). `Ring` invalidates the domain's
+  snapshot/query cache before delivering the new clock; otherwise the
+  signal-triggered read can consume the pre-change cached page and no later
+  signal arrives. The bell exists before any producer is built and accepts
+  rings from construction; rings during initial sync reach only existing
+  subscribers. `Ring` takes only leaf locks and never calls back into a store,
+  so stores may ring under their own write lock.
 - Signals that collide with an in-flight read latch exactly one trailing
   `stream-signal` read (`latchTrailingStreamSignal`); never drop them or
   repeatedly abort-and-replace.
@@ -125,13 +130,39 @@ The authored domain contract declares which clocks can change a payload:
   table's declared source must carry Kubernetes changes through the actual
   snapshot owner to the signal that table consumes, at any object count; prove
   it with real state owners, not separate mocked producer and consumer tests.
-- An informer-fed maintained store rings from its own handler after applying
-  the change. client-go runs each handler on its own goroutine, so a second
-  handler on the same informer can ring before the store holds the change.
-  Adds, real updates, and deletes ring; resync echoes (unchanged
-  `resourceVersion`, `backend/refresh/snapshot/informer_echo.go`) do not. Events
-  tables use the `changed` hook of `registerMaintainedInformerHandler`;
-  namespaced tables ring both `namespace:<name>` and `namespace:all`.
+- A store's own mutation path is the only place its domain rings. A
+  maintained store rings from its informer handler or ingest sink after its
+  querypage mutation returns (`backend/refresh/snapshot/store_doorbell.go`).
+  client-go runs each informer handler on its own goroutine, so a second
+  handler on the same informer could ring before the store holds the change;
+  `resourcestream` registers no ringing handler or sink. Its ReplicaSet and Job
+  owner heals only rewrite pod bundles, which the pods store then publishes.
+- A domain that joins an ingest store at serve time (pod aggregates for
+  workloads and nodes, Identities' bindings) rings from inside that store's
+  sink fan-out, under its write lock, so a read that starts after the ring
+  waits for the commit.
+- A change rings the union of the row's scopes before and after it, for its
+  domain and every derived domain, so a row that leaves a scope (a pod whose
+  owner changes) refreshes the window it left. Object rings carry a complete
+  `Ref`; derived rings carry none. Namespaced tables ring both
+  `namespace:<name>` and `namespace:all`; Events tables use the `changed` hook
+  of `registerMaintainedInformerHandler`.
+- Only real changes ring. Adds, real updates, and deletes ring; informer
+  resync echoes (unchanged `resourceVersion`,
+  `backend/refresh/snapshot/informer_echo.go`) still apply but do not ring.
+  Reconcile on re-warm rings every row it removes.
+- A relist rings each affected scope once, after its commit. `ProjectingStore`
+  brackets `Replace` and `ReplacePartition` with `RelistBoundary`, and each
+  source registration's sink collects its own relist's scopes: a namespace
+  partition never rings a sibling namespace, and an unscoped bulk relist rings
+  every subscribed scope of the domain and its derived domains. One source's
+  relist never delays, flushes, or clears another source's rings.
+- Timed producer callbacks (debounce flushes, re-arms, attention deadlines)
+  run through `Bell.AfterFunc`. `Manager.Stop` is a barrier: it rejects new
+  rings and callbacks, cancels pending timers, and waits for running ones
+  before closing subscriptions. After it returns nothing invalidates or
+  delivers for that generation, and a cooled generation keeps serving its
+  cached snapshots.
 - `namespaces` advances its `object` clock when a Namespace add, update, or
   delete can change the list, invalidating its cache first; every leased
   consumer performs one `stream-signal` reconciliation.

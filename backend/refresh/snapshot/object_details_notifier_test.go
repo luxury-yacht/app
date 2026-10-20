@@ -11,9 +11,8 @@ import (
 var detailsDeploymentGVK = schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
 
 func newObjectDetailsNotifierForTest(recorder *objectEventsBroadcastRecorder) *ObjectDetailsChangeNotifier {
-	notifier := NewObjectDetailsChangeNotifier()
+	notifier := NewObjectDetailsChangeNotifier(&matcherBell{record: recorder.record})
 	notifier.debounce = 20 * time.Millisecond
-	notifier.SetBroadcast(recorder.record)
 	return notifier
 }
 
@@ -23,7 +22,7 @@ func newObjectDetailsNotifierForTest(recorder *objectEventsBroadcastRecorder) *O
 func TestObjectDetailsNotifierRingsOnlyTheChangedObject(t *testing.T) {
 	recorder := &objectEventsBroadcastRecorder{}
 	notifier := newObjectDetailsNotifierForTest(recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
 	notifier.ObjectChanged(detailsDeploymentGVK, "team-a", "web")
 	waitForObjectEventsBroadcasts(t, recorder, 1)
@@ -43,7 +42,7 @@ func TestObjectDetailsNotifierRingsOnlyTheChangedObject(t *testing.T) {
 func TestObjectDetailsNotifierRingsEveryObjectOfAKindInANamespace(t *testing.T) {
 	recorder := &objectEventsBroadcastRecorder{}
 	notifier := newObjectDetailsNotifierForTest(recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
 	notifier.KindChangedInNamespace(detailsDeploymentGVK, "team-a")
 	waitForObjectEventsBroadcasts(t, recorder, 1)
@@ -58,7 +57,7 @@ func TestObjectDetailsNotifierRingsEveryObjectOfAKindInANamespace(t *testing.T) 
 func TestObjectDetailsNotifierMatchesClusterScopedObjects(t *testing.T) {
 	recorder := &objectEventsBroadcastRecorder{}
 	notifier := newObjectDetailsNotifierForTest(recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
 	notifier.ObjectChanged(schema.GroupVersionKind{Version: "v1", Kind: "Node"}, "", "worker-1")
 	waitForObjectEventsBroadcasts(t, recorder, 1)

@@ -22,7 +22,7 @@ func TestPodBuilderReusesIngestedRowsAcrossBuildsAndPublishesUpdates(t *testing.
 	})
 	source.SetRetainTable(true)
 	maintained := newTypedMaintainedStore(meta, podQuerypageSchema(), podTableQueryAdapter())
-	source.AddSink(maintained.Sink())
+	source.AddSink(unpublishedSink(maintained, ""))
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "api", ResourceVersion: "17"},
 		Spec:       corev1.PodSpec{NodeName: "node-1"},

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 
 	corev1 "k8s.io/api/core/v1"
@@ -20,6 +21,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
@@ -158,6 +160,74 @@ func podQuerypageSchema() querypage.Schema[PodSummary] {
 // alias keeps the snapshot-side name and wire JSON unchanged.
 type PodSummary = streamrows.PodSummary
 
+// podRowPublication rings the scopes a pod row is viewed at, plus the workload
+// and node rows that join pod aggregates at serve.
+func podRowPublication(m *typedMaintainedStore[PodSummary], bell doorbell.Bell) rowPublication[PodSummary] {
+	return rowPublication[PodSummary]{
+		bell: bell, domain: podDomainName, meta: m.meta,
+		scopes:         podDoorbellScopes,
+		derived:        podDerivedChanges,
+		derivedDomains: []string{namespaceWorkloadsDomainName, nodeDomainName},
+		ref: func(row PodSummary) *resourcemodel.ResourceRef {
+			ref := row.Ref
+			return &ref
+		},
+	}
+}
+
+// podDoorbellScopes are the scopes a pod row is viewed at: its namespace and All
+// Namespaces, its node, and the workload scopes of its collapsed owner and of its
+// direct owner (a ReplicaSet-scoped Pods tab subscribes to the direct owner).
+func podDoorbellScopes(row PodSummary) []string {
+	var scopes []string
+	if row.Ref.Namespace != "" {
+		scopes = append(scopes, namespaceDoorbellScopes(row.Ref.Namespace)...)
+	}
+	if row.Node != "" {
+		scopes = append(scopes, refresh.NodeSelector(row.Node).String())
+	}
+	if row.OwnerKind != "" && row.OwnerKind != "None" && row.OwnerName != "" && row.OwnerName != "None" {
+		if scope := workloadDoorbellScope(row.Ref.Namespace, row.OwnerAPIVersion, row.OwnerKind, row.OwnerName); scope != "" {
+			scopes = append(scopes, scope)
+		}
+	}
+	if row.DirectOwnerKind != "" && row.DirectOwnerName != "" {
+		if scope := workloadDoorbellScope(row.Ref.Namespace, row.DirectOwnerAPIVersion, row.DirectOwnerKind, row.DirectOwnerName); scope != "" {
+			scopes = append(scopes, scope)
+		}
+	}
+	return scopes
+}
+
+func workloadDoorbellScope(namespace, apiVersion, kind, name string) string {
+	if namespace == "" || apiVersion == "" || kind == "" || name == "" {
+		return ""
+	}
+	gv, err := schema.ParseGroupVersion(apiVersion)
+	if err != nil || gv.Version == "" {
+		return ""
+	}
+	return refresh.WorkloadSelector(refresh.ObjectScopeIdentity{Namespace: namespace, GVK: gv.WithKind(kind), Name: name}).String()
+}
+
+// podDerivedChanges rings the workload rows of the pod's namespace (a pod changes
+// its owner's aggregates, or is a standalone workload row itself) and its node's row.
+func podDerivedChanges(row PodSummary) []doorbell.Change {
+	changes := []doorbell.Change{{
+		Domain: namespaceWorkloadsDomainName,
+		Source: doorbell.SourceObject,
+		Target: doorbell.Scopes(namespaceDoorbellScopes(row.Ref.Namespace)...),
+	}}
+	if row.Node != "" {
+		changes = append(changes, doorbell.Change{
+			Domain: nodeDomainName,
+			Source: doorbell.SourceObject,
+			Target: doorbell.Scopes(clusterDoorbellScopes()...),
+		})
+	}
+	return changes
+}
+
 // PodMetricsInfo mirrors metrics poller metadata for pods.
 type PodMetricsInfo struct {
 	CollectedAt int64 `json:"collectedAt,omitempty"`
@@ -184,7 +254,7 @@ const podDomainName = "pods"
 // scope (namespace/node/workload) from the store rows, which carry the resolved Node
 // and owner the scope filters need. ingestManager may be nil in a unit test, in which
 // case the store has no feed.
-func RegisterPodDomain(reg *domain.Registry, provider metrics.Provider, clusterMeta ClusterMeta, ingestManager *ingest.IngestManager) error {
+func RegisterPodDomain(reg *domain.Registry, provider metrics.Provider, clusterMeta ClusterMeta, ingestManager *ingest.IngestManager, bell doorbell.Bell) error {
 	// Maintain a per-cluster store of pod rows, fed by the pod
 	// reflector's Table-half Sink. The sink is registered BEFORE the ingest manager
 	// starts (this runs during registration), so the snapshot sync gate guarantees the
@@ -192,7 +262,7 @@ func RegisterPodDomain(reg *domain.Registry, provider metrics.Provider, clusterM
 	maintained := newTypedMaintainedStore(clusterMeta, podQuerypageSchema(), podTableQueryAdapter())
 	reg.RegisterMaintainedStore(podDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	if ingestManager != nil {
-		ingestManager.AddSink(PodGVR, maintained.Sink())
+		ingestManager.AddSink(PodGVR, maintained.sinkFor("", podRowPublication(maintained, bell)))
 	}
 
 	builder := &PodBuilder{

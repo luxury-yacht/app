@@ -27,10 +27,10 @@ refresh-subsystem skill for lifecycle, doorbell, or stream-health changes.
 ## Resource streams
 
 - Declare `Stream *streamspec.Descriptor` on the kind descriptor with its row DTO
-  in `backend/kind/streamrows`; `registerDescriptorStreams` in
-  `backend/refresh/resourcestream/stream_descriptor_dispatch.go` registers it.
-- Use a bespoke direct/network handler only for related-object invalidation or
-  a non-shared informer factory.
+  in `backend/kind/streamrows`. The domain's maintained store rings after it
+  applies the kind's changes (`backend/refresh/snapshot/store_doorbell.go`);
+  add a derived change only when another domain's serve-time join reads the
+  kind. Never register a ringing handler outside the store.
 - Snapshot and stream projections share row helpers and parity tests.
 - Streams carry only change signals; the query-backed view refetches its page
   and no live row crosses the wire

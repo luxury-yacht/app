@@ -220,18 +220,25 @@ func newStoreWithCapacity[R any](schema Schema[R], expectedRows int) *Store[R] {
 // Upsert inserts or replaces a row, maintaining every index + facet incrementally. A
 // read-only (mmap-aliased) store ignores writes — see Store.readOnly.
 func (s *Store[R]) Upsert(row R) {
+	s.UpsertReplacing(row)
+}
+
+// UpsertReplacing is Upsert that also returns the row it replaced, read under
+// the same lock, so a caller can tell which row the store held before.
+func (s *Store[R]) UpsertReplacing(row R) (previous R, replaced bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.readOnly {
-		return
+		return previous, false
 	}
-	s.upsertLocked(row)
+	return s.upsertLocked(row)
 }
 
-func (s *Store[R]) upsertLocked(row R) {
+func (s *Store[R]) upsertLocked(row R) (previous R, replaced bool) {
 	uid := s.schema.UID(row)
 	if old, ok := s.rows.get(uid); ok {
 		s.deindex(uid, old)
+		previous, replaced = old, true
 	}
 	rowID := s.rows.put(uid, row)
 	mv := extractMatchValues(s.schema, row)
@@ -243,6 +250,7 @@ func (s *Store[R]) upsertLocked(row R) {
 		s.tri.update(rowID, mv.searchText)
 	}
 	s.reindex(uid, row)
+	return previous, replaced
 }
 
 // ReplaceWhere replaces the rows owned by one source with rows from that source,
@@ -294,20 +302,28 @@ func (s *Store[R]) replaceDataLocked(next *Store[R]) {
 // Delete removes a row by UID, maintaining every index + facet incrementally. A read-only
 // (mmap-aliased) store ignores deletes — see Store.readOnly.
 func (s *Store[R]) Delete(uid string) {
+	s.DeleteReturning(uid)
+}
+
+// DeleteReturning is Delete that also returns the row it removed, if any.
+func (s *Store[R]) DeleteReturning(uid string) (removed R, existed bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.readOnly {
-		return
+		return removed, false
 	}
-	if old, ok := s.rows.get(uid); ok {
-		s.deindex(uid, old)
-		rowID, _ := s.rows.delete(uid)
-		delete(s.match, rowID)
-		// Drop the freed rowID's trigrams so a recycled rowID never carries them.
-		if s.tri != nil {
-			s.tri.remove(rowID)
-		}
+	old, ok := s.rows.get(uid)
+	if !ok {
+		return removed, false
 	}
+	s.deindex(uid, old)
+	rowID, _ := s.rows.delete(uid)
+	delete(s.match, rowID)
+	// Drop the freed rowID's trigrams so a recycled rowID never carries them.
+	if s.tri != nil {
+		s.tri.remove(rowID)
+	}
+	return old, true
 }
 
 // Len reports the number of stored rows.

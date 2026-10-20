@@ -12,7 +12,6 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -441,10 +440,7 @@ func TestStreamOnlyDomainsHaveEndpointWiring(t *testing.T) {
 	require.NotEmpty(t, streamOnlyDomains)
 
 	kubeClient := fake.NewClientset()
-	runtimePerms := permissions.NewChecker(kubeClient, "cluster-a", 0)
-	informerFactory := informer.New(context.Background(), kubeClient, nil, 0, runtimePerms)
 	containerLogsHandler, resourceManager, err := registerStreamHandlers(streamDeps{
-		informerFactory: informerFactory,
 		cfg: Config{
 			KubernetesClient: kubeClient,
 			ClusterID:        "cluster-a",

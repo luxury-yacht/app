@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
@@ -12,6 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 )
@@ -38,6 +40,9 @@ type typedTableDomainSpec[T any] struct {
 	schema          querypage.Schema[T]
 	capabilities    ResourceQueryCapabilities
 	sortRows        func([]T)
+	// derived, when set, maps one source object to the changes of other domains
+	// whose serve-time joins read it.
+	derived func(obj metav1.Object) []doorbell.Change
 }
 
 // typedTableSources computes per-descriptor availability for THIS request (indexer
@@ -170,11 +175,13 @@ func newRegisteredTypedTableStore[T any](
 	factory informers.SharedInformerFactory,
 	gatewayFactory gatewayinformers.SharedInformerFactory,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) (*typedMaintainedStore[T], error) {
 	maintained := newTypedMaintainedStore(clusterMeta, spec.schema, spec.adapter)
 	reg.RegisterMaintainedStore(spec.domain, maintained)
-	feedMaintainedFromIngest(maintained, spec.domain, ingestManager)
-	if err := registerMaintainedHandlers(maintained, spec.domain, collectIndexer, factory, gatewayFactory); err != nil {
+	feedMaintainedFromIngest(maintained, spec.domain, ingestManager, bell)
+	publication := storePublication{bell: bell, domain: spec.domain, meta: clusterMeta, derived: spec.derived}
+	if err := registerMaintainedHandlers(maintained, spec.domain, collectIndexer, factory, gatewayFactory, publication); err != nil {
 		return nil, err
 	}
 	return maintained, nil

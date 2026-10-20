@@ -90,7 +90,7 @@ func TestNodeSnapshotVersionAdvancesOnPodStoreChanges(t *testing.T) {
 // identity, and the typed pods come from the caller through ingest.
 func newNodeBuilderForTest(meta ClusterMeta, ingest nodeDomainIngestSource, nodes ...*corev1.Node) *NodeBuilder {
 	maintained := newTypedMaintainedStore(meta, nodesQuerypageSchema(), nodeTableQueryAdapter())
-	sink := maintained.Sink()
+	sink := unpublishedSink(maintained, "")
 	for _, node := range nodes {
 		if node == nil {
 			continue
@@ -393,7 +393,7 @@ func TestNodeMaintainedStoreSpillRestoreRoundTrip(t *testing.T) {
 	}
 
 	orig := newTypedMaintainedStore(meta, nodesQuerypageSchema(), nodeTableQueryAdapter())
-	sink := orig.Sink()
+	sink := unpublishedSink(orig, "")
 	sink.Upsert(buildNodeOwnSummary(meta, nodeFor("node-a")))
 	sink.Upsert(buildNodeOwnSummary(meta, nodeFor("node-b")))
 	sink.Upsert(buildNodeOwnSummary(meta, nodeFor("node-c")))

@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/admission"
@@ -100,12 +101,13 @@ func RegisterClusterConfigDomainWithGatewayAPI(
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := factoryIndexers(factory, gatewayFactory, allowed, clusterConfigDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, clusterConfigDomainSpec(), clusterMeta, collectIndexer, factory, gatewayFactory, ingestManager)
+	maintained, err := newRegisteredTypedTableStore(reg, clusterConfigDomainSpec(), clusterMeta, collectIndexer, factory, gatewayFactory, ingestManager, bell)
 	if err != nil {
 		return err
 	}

@@ -73,7 +73,6 @@ func TestCatalogFlagsArgoCDApplicationProblems(t *testing.T) {
 	t.Cleanup(func() {
 		app.Refresh.stopObjectCatalogForCluster(target.meta.ID)
 		cancel()
-		subsystem.StopDoorbellNotifiers()
 		subsystem.ResourceStream.Stop()
 		subsystem.IngestManager.Stop()
 		_ = subsystem.InformerFactory.Shutdown()

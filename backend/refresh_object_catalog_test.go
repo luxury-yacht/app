@@ -37,13 +37,14 @@ import (
 
 func TestCatalogFinalizerBridgeProjectsArbitraryKindsIntoAttention(t *testing.T) {
 	registry := domain.New()
+	stream := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, nil)
+	t.Cleanup(stream.Stop)
 	index, err := snapshot.RegisterClusterAttentionDomain(
 		registry, nil, snapshot.ClusterAttentionPermissions{},
 		snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, nil,
-		snapshot.ClusterAttentionOptions{},
+		snapshot.ClusterAttentionOptions{}, stream,
 	)
 	require.NoError(t, err)
-	t.Cleanup(index.Stop)
 
 	updates := make(chan objectcatalog.SubsetUpdate, 1)
 	blockers := []objectcatalog.FinalizerBlocker{{
@@ -77,13 +78,14 @@ func TestCatalogFinalizerBridgeProjectsArbitraryKindsIntoAttention(t *testing.T)
 
 func TestCatalogFinalizerBridgeStopsForUnavailableInputs(t *testing.T) {
 	registry := domain.New()
+	stream := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: "cluster-a"}, nil)
+	t.Cleanup(stream.Stop)
 	index, err := snapshot.RegisterClusterAttentionDomain(
 		registry, nil, snapshot.ClusterAttentionPermissions{},
 		snapshot.ClusterMeta{ClusterID: "cluster-a"}, nil,
-		snapshot.ClusterAttentionOptions{},
+		snapshot.ClusterAttentionOptions{}, stream,
 	)
 	require.NoError(t, err)
-	t.Cleanup(index.Stop)
 
 	closedUpdates := make(chan objectcatalog.SubsetUpdate)
 	close(closedUpdates)
@@ -258,7 +260,6 @@ func TestCatalogStartsForNamespaceScopedIdentityDeniedClusterWideInformers(t *te
 	t.Cleanup(func() {
 		app.Refresh.stopObjectCatalogForCluster(target.meta.ID)
 		cancel()
-		subsystem.StopDoorbellNotifiers()
 		subsystem.ResourceStream.Stop()
 		subsystem.IngestManager.Stop()
 		_ = subsystem.InformerFactory.Shutdown()
@@ -426,14 +427,7 @@ func TestStopObjectCatalogDoesNotBlockForeverWaitingForDone(t *testing.T) {
 }
 
 func TestCatalogDoorbellBridgeBroadcastsCatalogSource(t *testing.T) {
-	manager := resourcestream.NewManager(
-		nil,
-		nil,
-		nil,
-		snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"},
-
-		nil,
-	)
+	manager := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}, nil)
 	selector, err := resourcestream.ParseStreamSelector("cluster-a", "catalog", "")
 	require.NoError(t, err)
 	sub, err := manager.SubscribeSelector(selector)

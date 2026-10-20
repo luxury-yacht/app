@@ -1,11 +1,9 @@
 /*
  * backend/resources/hpa/streamdescriptor.go
  *
- * HorizontalPodAutoscaler's resource-stream registry entry. Live streaming is
- * handled by a bespoke handler in resourcestream (registerAutoscalingStreams →
- * handleHPAEvent, which also refreshes the scale target's workload), so
- * CustomStreamHandler is set and registerDescriptorStreams skips it; this
- * descriptor exists so the namespace-autoscaling snapshot can loop the registry.
+ * HorizontalPodAutoscaler's resource-stream registry entry. The
+ * namespace-autoscaling maintained store loops the registry to feed and ring
+ * from it; an HPA change also rings its target's workload rows.
  */
 
 package hpa
@@ -22,13 +20,12 @@ import (
 // StreamDescriptor registers HPA for the namespace-autoscaling snapshot domain.
 // The autoscaling/v1 informer feeds the summary builder (which takes a v1 HPA).
 var StreamDescriptor = streamspec.Descriptor{
-	Group:               IdentityV1.Group,
-	Version:             IdentityV1.Version,
-	Kind:                IdentityV1.Kind,
-	Resource:            IdentityV1.Resource,
-	Domain:              "namespace-autoscaling",
-	ClusterScoped:       !IdentityV1.Namespaced,
-	CustomStreamHandler: true,
+	Group:         IdentityV1.Group,
+	Version:       IdentityV1.Version,
+	Kind:          IdentityV1.Kind,
+	Resource:      IdentityV1.Resource,
+	Domain:        "namespace-autoscaling",
+	ClusterScoped: !IdentityV1.Namespaced,
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*autoscalingv1.HorizontalPodAutoscaler))
 	},

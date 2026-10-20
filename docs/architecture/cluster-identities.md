@@ -77,8 +77,9 @@ or effective access.
 - `backend/refresh/system/cluster_identities_test.go`: production registration
   and real REST LIST/watch intake through projection, invalidation, and
   subscriber delivery for both sources.
-- `backend/refresh/resourcestream/ingest_notify_test.go`: binding changes notify
-  Identities; ServiceAccount changes notify RBAC only.
+- `backend/refresh/system/ingest_fed_doorbell_test.go`: binding changes ring
+  Identities after the store applies them; ServiceAccount changes ring RBAC
+  only.
 - `ClusterViewIdentities.test.tsx` (query hook replaced by fixture rows):
   subjects open identity targets; bindings open complete object refs.
 - Sidebar and background-refresh tests cover route placement and cluster

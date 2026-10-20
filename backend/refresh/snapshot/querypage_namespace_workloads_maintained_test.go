@@ -46,7 +46,7 @@ func wlPod(name, namespace, rv string, ownerRSName string, restarts int32) *core
 // re-joins pods/metrics/HPA + synthesizes standalone pods at serve.
 func seedWorkloadsMaintained(b *NamespaceWorkloadsBuilder, meta ClusterMeta, src fakeWorkloadIngestSource) {
 	b.workloadsMaintained = newTypedMaintainedStore(meta, workloadsQuerypageSchema(), workloadTableQueryAdapter())
-	sink := b.workloadsMaintained.Sink()
+	sink := unpublishedSink(b.workloadsMaintained, "")
 	for _, gvr := range []schema.GroupVersionResource{DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR} {
 		for _, raw := range src.Rows(gvr) {
 			bundle, ok := raw.(ingest.Bundle)
@@ -219,8 +219,8 @@ func TestWorkloadsStoreRelistPreservesOtherKinds(t *testing.T) {
 		},
 	})
 
-	depSink := store.bundleSinkForKind("Deployment")
-	stsSink := store.bundleSinkForKind("StatefulSet")
+	depSink := unpublishedSink(store, "Deployment")
+	stsSink := unpublishedSink(store, "StatefulSet")
 
 	// Both kinds present after their reflectors' initial upserts.
 	depSink.UpsertBundle(depBundle)
@@ -228,7 +228,7 @@ func TestWorkloadsStoreRelistPreservesOtherKinds(t *testing.T) {
 	require.ElementsMatch(t, []string{"Deployment", "StatefulSet"}, workloadStoreKinds(store))
 
 	// The Deployment GVR's reflector relists with only its own kind's bundles.
-	depSink.(ingest.BundleReplacer).ReplaceBundles([]ingest.Bundle{depBundle})
+	depSink.ReplaceBundles([]ingest.Bundle{depBundle})
 
 	// The StatefulSet row must survive a Deployment relist.
 	require.ElementsMatch(t, []string{"Deployment", "StatefulSet"}, workloadStoreKinds(store))
@@ -272,7 +272,7 @@ func TestWorkloadsMaintainedStoreSpillRestoreRoundTrip(t *testing.T) {
 	)
 
 	orig := newTypedMaintainedStore(meta, workloadsQuerypageSchema(), workloadTableQueryAdapter())
-	sink := orig.Sink()
+	sink := unpublishedSink(orig, "")
 	for _, gvr := range []schema.GroupVersionResource{DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR} {
 		for _, raw := range src.Rows(gvr) {
 			if bundle, ok := raw.(ingest.Bundle); ok {

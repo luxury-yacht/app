@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
+
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,7 +32,7 @@ func TestMaintainedInformerHandlerSyncedWaitsForTheHandlerToApplyTheInitialList(
 			summary, keep := projectNamespaceEventSummary(meta, evt)
 			return summary, evt, keep
 		},
-		nil,
+		func(EventSummary, doorbell.MessageType) {},
 	)
 	require.NoError(t, err)
 

@@ -233,7 +233,7 @@ func TestClusterConfigMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	vwhIdx := newNamespaceIndexer()
 	mwhIdx := newNamespaceIndexer()
 	store := newTypedMaintainedStore(meta, clusterConfigQuerypageSchema(), clusterConfigTableQueryAdapter())
-	sink := store.Sink()
+	sink := unpublishedSink(store, "")
 	// Cut kinds feed through the ingest Sink (the projected Table-half row).
 	for _, sc := range scs {
 		require.NoError(t, scIdx.Add(sc))

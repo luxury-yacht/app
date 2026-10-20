@@ -145,7 +145,7 @@ func TestClusterRBACMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	roleIdx := newNamespaceIndexer()
 	bindingIdx := newNamespaceIndexer()
 	store := newTypedMaintainedStore(meta, clusterRBACQuerypageSchema(), clusterRBACTableQueryAdapter())
-	sink := store.Sink()
+	sink := unpublishedSink(store, "")
 	for _, r := range roles {
 		require.NoError(t, roleIdx.Add(r))
 		sink.Upsert(roleDesc.StreamRow(meta, r))

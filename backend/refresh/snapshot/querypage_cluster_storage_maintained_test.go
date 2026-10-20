@@ -131,7 +131,7 @@ func TestClusterStorageMaintainedStoreSinkMatchesListPath(t *testing.T) {
 
 	pvIdx := newNamespaceIndexer()
 	store := newTypedMaintainedStore(meta, clusterStorageQuerypageSchema(), clusterStorageTableQueryAdapter())
-	sink := store.Sink()
+	sink := unpublishedSink(store, "")
 	for _, pv := range pvs {
 		require.NoError(t, pvIdx.Add(pv))
 		sink.Upsert(pvDesc.StreamRow(meta, pv))

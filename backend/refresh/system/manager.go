@@ -34,6 +34,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
@@ -99,18 +100,15 @@ type Subsystem struct {
 	ResourceStream   *resourcestream.Manager // Manager for resource streams.
 	ContainerLogs    *containerlogsstream.Handler
 	ClusterMeta      snapshot.ClusterMeta // Metadata about the cluster.
-	// NamespaceNotifier, ObjectEventsNotifier, ObjectDetailsNotifier, and
-	// EventTableNotifiers drive the namespaces, object-events, object-details,
-	// cluster-events, and namespace-events doorbells. Teardown/cooling MUST
-	// Stop() them (via StopDoorbellNotifiers) or their debounce/rearm timers
-	// keep broadcasting into the torn-down stream manager. Refresh's
-	// response-cache eviction handlers record into ObjectDetailsNotifier.
+	// Every doorbell producer rings ResourceStream and schedules its timers
+	// through it, so ResourceStream.Stop is the generation's one shutdown
+	// barrier. NamespaceNotifier gates cooling on workload readiness, Refresh's
+	// response-cache eviction handlers record into ObjectDetailsNotifier, and
+	// the attention service targets AttentionIndex.
 	NamespaceNotifier     *snapshot.NamespaceChangeNotifier
-	ObjectEventsNotifier  *snapshot.ObjectEventsChangeNotifier
 	ObjectDetailsNotifier *snapshot.ObjectDetailsChangeNotifier
-	EventTableNotifiers   []*snapshot.EventTableChangeNotifier
 	AttentionIndex        *snapshot.ClusterAttentionIndex
-	// NamespacesDoorbell is the post-broadcast observer slot on the namespaces
+	// NamespacesDoorbell is the post-ring observer slot on the namespaces
 	// doorbell; the app attaches the cluster-Ready self-build hook here (see
 	// app_refresh_setup) once the aggregate service exists.
 	NamespacesDoorbell *NamespacesDoorbellObserver
@@ -295,7 +293,7 @@ func logPermissionSkip(domainName, group, resource string) {
 	klog.V(2).Infof("Skipping registration for domain %s: insufficient permission to list %s/%s", domainName, group, resource)
 }
 
-func newMetricsServices(ctx context.Context, cfg Config, gate *permissionGate, recorder *telemetry.Recorder, issues *permissionIssueRecorder) (refresh.MetricsPoller, metrics.Provider) {
+func newMetricsServices(ctx context.Context, cfg Config, gate *permissionGate, recorder *telemetry.Recorder, issues *permissionIssueRecorder, bell doorbell.Bell) (refresh.MetricsPoller, metrics.Provider) {
 	checks := []listCheck{
 		{group: metricsAPIGroup, resource: "nodes"},
 		{group: metricsAPIGroup, resource: "pods"},
@@ -304,16 +302,17 @@ func newMetricsServices(ctx context.Context, cfg Config, gate *permissionGate, r
 	metricErrors := gate.listErrors(results)
 	issues.append("metrics-poller", metricsAPIGroup+"/nodes,pods", metricErrors...)
 	if len(metricErrors) == 0 && gate.allListAllowed(results) {
-		return newEnabledMetricsServices(cfg, recorder)
+		return newEnabledMetricsServices(cfg, recorder, bell)
 	}
 	logPermissionSkip("metrics-poller", metricsAPIGroup, "nodes/pods")
 	return newDisabledMetricsServices(cfg, gate, results)
 }
 
-func newEnabledMetricsServices(cfg Config, recorder *telemetry.Recorder) (refresh.MetricsPoller, metrics.Provider) {
+func newEnabledMetricsServices(cfg Config, recorder *telemetry.Recorder, bell doorbell.Bell) (refresh.MetricsPoller, metrics.Provider) {
 	poller := metrics.NewPoller(cfg.MetricsClient, cfg.RestConfig, cfg.MetricsInterval, recorder)
 	poller.SetLogger(applog.ClusterScoped(cfg.Logger, cfg.ClusterID, cfg.ClusterName))
 	poller.SetAllowedNamespaces(cfg.AllowedNamespaces)
+	poller.SetCollectionObserver(metricsSignalObserver(bell))
 	demandPoller := metrics.NewDemandPoller(poller, poller, cfg.MetricsInterval*3)
 	return demandPoller, demandPoller
 }
@@ -366,56 +365,10 @@ func registerSubsystemDomains(ctx context.Context, factory *informer.Factory, ga
 	return registerDomains(ctx, gate, runtimePerms, registrations)
 }
 
-// streamObserverDeps bundles the stream manager with the snapshot-side change
-// sources whose doorbells it rings. Nil sources are skipped.
-type streamObserverDeps struct {
-	resourceManager       *resourcestream.Manager
-	metricsPoller         refresh.MetricsPoller
-	snapshotService       *snapshot.Service
-	namespaceNotifier     *snapshot.NamespaceChangeNotifier
-	objectEventsNotifier  *snapshot.ObjectEventsChangeNotifier
-	objectDetailsNotifier *snapshot.ObjectDetailsChangeNotifier
-	eventTableNotifiers   []*snapshot.EventTableChangeNotifier
-	attentionIndex        *snapshot.ClusterAttentionIndex
-}
-
-func wireStreamObservers(deps streamObserverDeps) *NamespacesDoorbellObserver {
-	resourceManager := deps.resourceManager
-	if resourceManager != nil {
-		resourceManager.SetSnapshotDomainInvalidator(deps.snapshotService.InvalidateDomainCache)
-		wireMetricsObserver(deps.metricsPoller, resourceManager)
-	}
-	observer := &NamespacesDoorbellObserver{}
-	if resourceManager == nil {
-		return observer
-	}
-	if deps.namespaceNotifier != nil {
-		wireNamespacesDoorbell(deps.namespaceNotifier, resourceManager, observer)
-	}
-	if deps.objectEventsNotifier != nil {
-		wireObjectEventsDoorbell(deps.objectEventsNotifier, resourceManager)
-	}
-	if deps.objectDetailsNotifier != nil {
-		deps.objectDetailsNotifier.SetBroadcast(resourceManager.BroadcastObjectDetailsRefresh)
-	}
-	for _, notifier := range deps.eventTableNotifiers {
-		wireEventTableDoorbell(notifier, resourceManager)
-	}
-	if deps.attentionIndex != nil {
-		wireClusterAttentionDoorbell(deps.attentionIndex, resourceManager)
-	}
-	return observer
-}
-
-func wireMetricsObserver(metricsPoller refresh.MetricsPoller, resourceManager *resourcestream.Manager) {
-	if observable, ok := metricsPoller.(interface {
-		SetCollectionObserver(func(metrics.Metadata))
-	}); ok {
-		observable.SetCollectionObserver(metricsSignalObserver(resourceManager))
-	}
-}
-
-// NewSubsystemWithServices returns a fully wired refresh subsystem.
+// NewSubsystemWithServices returns a fully wired refresh subsystem. The
+// snapshot service and the resource stream (the generation's doorbell) are
+// built before any domain registers, so every producer receives its doorbell
+// at construction.
 func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, error) {
 	registry := domain.New()
 	runtimePerms, informerFactory, err := newInformerInfrastructure(ctx, cfg)
@@ -434,27 +387,45 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 	telemetryRecorder.SetClusterMeta(cfg.ClusterID, cfg.ClusterName)
 
 	clusterMeta := snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName}
-	metricsPoller, metricsProvider := newMetricsServices(ctx, cfg, gate, telemetryRecorder, issues)
+	snapshotService := snapshot.NewServiceWithPermissions(
+		registry,
+		telemetryRecorder,
+		clusterMeta,
+		runtimePerms,
+	).WithLogger(applog.ClusterScoped(cfg.Logger, cfg.ClusterID, cfg.ClusterName)).
+		WithInformerHub(informerHub)
+	containerLogsHandler, resourceManager, err := registerStreamHandlers(streamDeps{
+		cfg:         cfg,
+		telemetry:   telemetryRecorder,
+		clusterMeta: clusterMeta,
+		invalidator: snapshotService.InvalidateDomainCache,
+	})
+	if err != nil {
+		return nil, err
+	}
+	built := false
+	defer func() {
+		if !built {
+			resourceManager.Stop()
+			containerLogsHandler.Stop()
+		}
+	}()
+	metricsPoller, metricsProvider := newMetricsServices(ctx, cfg, gate, telemetryRecorder, issues, resourceManager)
 
 	var namespaceNotifier *snapshot.NamespaceChangeNotifier
-	var objectEventsNotifier *snapshot.ObjectEventsChangeNotifier
-	var eventTableNotifiers []*snapshot.EventTableChangeNotifier
 	var attentionIndex *snapshot.ClusterAttentionIndex
+	namespacesDoorbell := &NamespacesDoorbellObserver{}
 	deps := registrationDeps{
-		registry:        registry,
-		informerFactory: informerFactory,
-		ingestManager:   ingestManager,
-		metricsProvider: metricsProvider,
-		cfg:             cfg,
-		serverHost:      restServerHost(cfg.RestConfig),
+		registry:            registry,
+		informerFactory:     informerFactory,
+		ingestManager:       ingestManager,
+		metricsProvider:     metricsProvider,
+		cfg:                 cfg,
+		serverHost:          restServerHost(cfg.RestConfig),
+		bell:                resourceManager,
+		afterNamespacesRing: namespacesDoorbell.Invoke,
 		noteNamespaceNotifier: func(notifier *snapshot.NamespaceChangeNotifier) {
 			namespaceNotifier = notifier
-		},
-		noteObjectEventsNotifier: func(notifier *snapshot.ObjectEventsChangeNotifier) {
-			objectEventsNotifier = notifier
-		},
-		noteEventTableNotifier: func(notifier *snapshot.EventTableChangeNotifier) {
-			eventTableNotifiers = append(eventTableNotifiers, notifier)
 		},
 		noteAttentionIndex: func(index *snapshot.ClusterAttentionIndex) {
 			attentionIndex = index
@@ -462,18 +433,11 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 	}
 
 	registrations := domainRegistrations(ctx, deps)
+	snapshotService.WithDomainReadiness(domainReadinessResources(registrations))
 	if err := registerSubsystemDomains(ctx, informerFactory, gate, runtimePerms, registrations); err != nil {
 		return nil, err
 	}
-
-	snapshotService := snapshot.NewServiceWithPermissions(
-		registry,
-		telemetryRecorder,
-		clusterMeta,
-		runtimePerms,
-	).WithLogger(applog.ClusterScoped(cfg.Logger, cfg.ClusterID, cfg.ClusterName)).
-		WithInformerHub(informerHub).
-		WithDomainReadiness(domainReadinessResources(registrations))
+	resourceManager.RegisterSources(informerFactory, ingestManager)
 	queue := refresh.NewInMemoryQueue()
 
 	manager := refresh.NewManager(registry, informerHub, snapshotService, metricsPoller, queue)
@@ -490,28 +454,7 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 		HealthHub: informerHub,
 	})
 
-	containerLogsHandler, resourceManager, err := registerStreamHandlers(streamDeps{
-		informerFactory: informerFactory,
-		ingestManager:   ingestManager,
-		cfg:             cfg,
-		telemetry:       telemetryRecorder,
-		clusterMeta:     clusterMeta,
-	})
-	if err != nil {
-		return nil, err
-	}
-	objectDetailsNotifier := snapshot.NewObjectDetailsChangeNotifier()
-	namespacesDoorbellObserver := wireStreamObservers(streamObserverDeps{
-		resourceManager:       resourceManager,
-		metricsPoller:         metricsPoller,
-		snapshotService:       snapshotService,
-		namespaceNotifier:     namespaceNotifier,
-		objectEventsNotifier:  objectEventsNotifier,
-		objectDetailsNotifier: objectDetailsNotifier,
-		eventTableNotifiers:   eventTableNotifiers,
-		attentionIndex:        attentionIndex,
-	})
-
+	built = true
 	return &Subsystem{
 		Manager:               manager,
 		Handler:               mux,
@@ -527,37 +470,10 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 		ContainerLogs:         containerLogsHandler,
 		ClusterMeta:           clusterMeta,
 		NamespaceNotifier:     namespaceNotifier,
-		ObjectEventsNotifier:  objectEventsNotifier,
-		ObjectDetailsNotifier: objectDetailsNotifier,
-		EventTableNotifiers:   eventTableNotifiers,
+		ObjectDetailsNotifier: snapshot.NewObjectDetailsChangeNotifier(resourceManager),
 		AttentionIndex:        attentionIndex,
-		NamespacesDoorbell:    namespacesDoorbellObserver,
+		NamespacesDoorbell:    namespacesDoorbell,
 	}, nil
-}
-
-// StopDoorbellNotifiers silences every doorbell notifier (namespaces,
-// object-events, cluster/namespace events, cluster-attention); nil-safe for subsystems built without them (tests, failed
-// registration). Every teardown/cool path must call this or the notifiers'
-// debounce/rearm timers keep broadcasting into the dead stream manager.
-func (s *Subsystem) StopDoorbellNotifiers() {
-	if s == nil {
-		return
-	}
-	if s.NamespaceNotifier != nil {
-		s.NamespaceNotifier.Stop()
-	}
-	if s.ObjectEventsNotifier != nil {
-		s.ObjectEventsNotifier.Stop()
-	}
-	if s.ObjectDetailsNotifier != nil {
-		s.ObjectDetailsNotifier.Stop()
-	}
-	for _, notifier := range s.EventTableNotifiers {
-		notifier.Stop()
-	}
-	if s.AttentionIndex != nil {
-		s.AttentionIndex.Stop()
-	}
 }
 
 // CancelInFlightSnapshots stops work tied to the current live generation
@@ -572,21 +488,7 @@ func (s *Subsystem) CancelInFlightSnapshots() {
 	}
 }
 
-// metricsSignalObserver sends every completed attempt to the namespace health
-// notifier, while only successful samples ring the shared SourceMetric
-// doorbell. This preserves polling for poll-augmented domains while allowing a
-// first failure to move Namespaces out of loading. An empty revision means no
-// attempt has completed yet.
-// Resource-stream Manager.broadcast owns the ordering contract every doorbell
-// must honor: invalidate the domain's snapshot cache first, then deliver the
-// signal. The doorbell-triggered
-// refetch arrives ~500ms after the change — inside the snapshot cache TTL —
-// and served from cache it would apply the PRE-change snapshot permanently,
-// because doorbells fire once per change and polling skips while the stream
-// is healthy (observed live: created namespaces missing, deleted namespaces
-// lingering, while every doorbell log line was perfect). The doorbell tests
-// wire through these same helpers so the contract is pinned, not copied.
-// NamespacesDoorbellObserver lets the app attach a post-broadcast hook to the
+// NamespacesDoorbellObserver lets the app attach a post-ring hook to the
 // namespaces doorbell AFTER the subsystem is constructed — the aggregate
 // snapshot service and cluster lifecycle (which the hook needs) exist only
 // once every subsystem does. The doorbell path reads it lock-free; unset is
@@ -611,62 +513,29 @@ func (o *NamespacesDoorbellObserver) Invoke(version, reason string) {
 	}
 }
 
-func wireNamespacesDoorbell(
-	notifier *snapshot.NamespaceChangeNotifier,
-	resourceManager *resourcestream.Manager,
-	observer *NamespacesDoorbellObserver,
-) {
-	notifier.SetBroadcast(func(version, reason string) {
-		resourceManager.BroadcastNamespacesRefresh(version, reason)
-		// After invalidate+broadcast: a self-build triggered here always sees
-		// post-change data (the cluster-Ready hook rides this).
-		observer.Invoke(version, reason)
-	})
-}
-
-func wireObjectEventsDoorbell(
-	notifier *snapshot.ObjectEventsChangeNotifier,
-	resourceManager *resourcestream.Manager,
-) {
-	notifier.SetBroadcast(func(version string, matches func(scope string) bool) {
-		resourceManager.BroadcastObjectEventsRefresh(version, matches)
-	})
-}
-
-func wireEventTableDoorbell(
-	notifier *snapshot.EventTableChangeNotifier,
-	resourceManager *resourcestream.Manager,
-) {
-	domain := notifier.Domain()
-	notifier.SetBroadcast(func(version string, namespaces []string) {
-		resourceManager.BroadcastEventTableRefresh(domain, version, namespaces)
-	})
-}
-
-type attentionDoorbellNotifier interface {
-	SetBroadcast(func(version string))
-}
-
-func wireClusterAttentionDoorbell(
-	notifier attentionDoorbellNotifier,
-	resourceManager *resourcestream.Manager,
-) {
-	notifier.SetBroadcast(func(version string) {
-		resourceManager.BroadcastClusterAttentionRefresh(version)
-	})
-}
-
-func metricsSignalObserver(resourceManager *resourcestream.Manager) func(metrics.Metadata) {
+// metricsSignalObserver sends every completed attempt to the namespace health
+// doorbell, while only successful samples ring every metric-clock domain.
+// This preserves polling for poll-augmented domains while allowing a first
+// failure to move Namespaces out of loading. An empty revision means no
+// attempt has completed yet.
+func metricsSignalObserver(bell doorbell.Bell) func(metrics.Metadata) {
 	return func(metadata metrics.Metadata) {
 		revision := metrics.Revision(metadata)
-		if revision == "" || resourceManager == nil {
+		if revision == "" {
 			return
 		}
+		domains := resourcestream.MetricDoorbellDomains()
 		if metadata.CollectedAt.IsZero() || metadata.ConsecutiveFailures > 0 || metadata.LastError != "" {
-			resourceManager.BroadcastNamespaceMetricsRefresh(revision)
-			return
+			domains = []string{resourcestream.NamespaceMetricsDomain}
 		}
-		resourceManager.BroadcastMetricsRefresh(revision)
+		for _, domainName := range domains {
+			bell.Ring(doorbell.Change{
+				Domain:  domainName,
+				Source:  doorbell.SourceMetric,
+				Target:  doorbell.Subscribed(),
+				Version: revision,
+			})
+		}
 	}
 }
 
