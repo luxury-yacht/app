@@ -16,7 +16,7 @@ vi.mock('@/utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
 import { ALL_NAMESPACES_DISPLAY_NAME } from '@modules/namespace/constants';
 import { eventBus } from '@/core/events';
 import { localFailure } from '@/core/refresh/refreshFailure';
-import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
+import { resetAllScopedDomainStates } from '@/core/refresh/store';
 import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { NamespaceProvider, useNamespace } from './NamespaceContext';
 
@@ -103,12 +103,10 @@ const {
   return {
     mockRefreshOrchestrator: {
       setDomainEnabled: vi.fn(),
-      resetDomain: vi.fn(),
       fetchScopedDomain: vi.fn(() => Promise.resolve()),
       setScopedDomainEnabled: vi.fn(),
       acquireScopedDomainLease: vi.fn(),
       releaseScopedDomainLease: vi.fn(),
-      updateContext: vi.fn(),
     },
     namespaceDomainRef: { current: createNamespaceDomain('ready', ['alpha', 'beta']) },
     namespaceMetricsDomainRef: {
@@ -543,12 +541,12 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
+      expect.objectContaining({ intent: 'startup' })
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
+      expect.objectContaining({ intent: 'startup' })
     );
 
     cleanup();
@@ -573,7 +571,7 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
+      expect.objectContaining({ intent: 'startup' })
     );
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
       'namespaces',
@@ -584,7 +582,7 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
+      expect.anything()
     );
 
     mockClusterLifecycleStates = new Map([
@@ -605,7 +603,7 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
+      expect.objectContaining({ intent: 'startup' })
     );
 
     cleanup();
@@ -709,11 +707,17 @@ describe('NamespaceProvider selection behaviour', () => {
         enabled.delete(scope);
       }
     });
-    mockRefreshOrchestrator.acquireScopedDomainLease.mockImplementation((_domain, scope) => {
+    mockRefreshOrchestrator.acquireScopedDomainLease.mockImplementation((domain, scope) => {
+      if (domain !== 'namespace-metrics') {
+        return;
+      }
       leases.set(scope, (leases.get(scope) ?? 0) + 1);
       enabled.add(scope);
     });
-    mockRefreshOrchestrator.releaseScopedDomainLease.mockImplementation((_domain, scope) => {
+    mockRefreshOrchestrator.releaseScopedDomainLease.mockImplementation((domain, scope) => {
+      if (domain !== 'namespace-metrics') {
+        return;
+      }
       const remaining = Math.max(0, (leases.get(scope) ?? 0) - 1);
       leases.set(scope, remaining);
       if (!remaining) {
@@ -774,7 +778,7 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
+      expect.objectContaining({ intent: 'foreground' })
     );
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'namespace-metrics',
@@ -791,7 +795,7 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespace-metrics',
       'cluster-b|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
+      expect.objectContaining({ intent: 'foreground' })
     );
     // Switching the ACTIVE tab must not disable any still-open cluster's scope
     // — both leases stay live so both stay warm (no disable/re-enable churn).
@@ -884,7 +888,7 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
+      expect.objectContaining({ intent: 'startup' })
     );
 
     cleanup();
@@ -997,12 +1001,12 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      expect.objectContaining({ isManual: true, streamSignal: false })
+      expect.objectContaining({ intent: 'user' })
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      expect.objectContaining({ isManual: true, streamSignal: false })
+      expect.objectContaining({ intent: 'user' })
     );
     cleanup();
   });
@@ -1022,57 +1026,10 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
+      expect.objectContaining({ intent: 'foreground' })
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledTimes(1);
     cleanup();
-  });
-
-  it('refetches a scope when its doorbell signal advances the sourceVersion, exactly once per signal', () => {
-    // The stream-signal hook reads the REAL scoped store. Initial state carries
-    // the initial fetch's validator (applySnapshot always sets sourceVersion
-    // after a 200) — the hook consumes it without fetching.
-    setScopedDomainState('namespaces', 'cluster-a|', (previous) => ({
-      ...previous,
-      status: 'ready',
-      data: { clusterId: 'cluster-a', namespaces: [] } as never,
-      sourceVersion: 'validator-1',
-      scope: 'cluster-a|',
-    }));
-
-    const { cleanup, rerender } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-
-    // Doorbell: the stream signal advances the scoped signal clock
-    // (signalVersions is written only by the stream manager's doorbell path).
-    act(() => {
-      setScopedDomainState('namespaces', 'cluster-a|', (previous) => ({
-        ...previous,
-        sourceVersion: 'ns-1',
-        signalVersions: { object: 'ns-1' },
-      }));
-    });
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-a|',
-      expect.objectContaining({ isManual: false, streamSignal: true })
-    );
-
-    // The same signal version must not refetch again.
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-    cleanup();
-    resetAllScopedDomainStates('namespaces');
   });
 
   it('leaves existing clusters untouched when another cluster tab opens', () => {
@@ -1087,7 +1044,6 @@ describe('NamespaceProvider selection behaviour', () => {
       vi.runAllTimers();
     });
     mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
-    mockRefreshOrchestrator.resetDomain.mockClear();
 
     // Open a second cluster tab.
     mockClusterIds = ['cluster-a', 'cluster-b'];
@@ -1106,7 +1062,6 @@ describe('NamespaceProvider selection behaviour', () => {
       (call) => call[1] === 'cluster-a|' && call[2] === false
     );
     expect(clusterADisables).toEqual([]);
-    expect(mockRefreshOrchestrator.resetDomain).not.toHaveBeenCalled();
 
     // Closing the second tab disables ONLY cluster-b's scope.
     mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
@@ -1120,10 +1075,13 @@ describe('NamespaceProvider selection behaviour', () => {
         (call) => call[1] === 'cluster-a|' && call[2] === false
       );
     expect(clusterADisablesAfterClose).toEqual([]);
+    // The lease release keeps rows; the orchestrator's pruning of the closed
+    // cluster clears them.
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      false
+      false,
+      { preserveState: true }
     );
     cleanup();
   });
@@ -1143,7 +1101,7 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
+      expect.objectContaining({ intent: 'startup' })
     );
     cleanup();
   });

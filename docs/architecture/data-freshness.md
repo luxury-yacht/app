@@ -11,23 +11,29 @@ causes Kubernetes API work. Mechanics and transport live in
 1. **Paint retained data immediately.** Selecting a tab or view reads that
    cluster and scope's retained snapshot in the same render; never clear it,
    wait for readiness, or show a loading screen before requesting fresh data.
-2. **Reconcile immediately after activation.** Foreground activation starts one
-   non-manual refresh for the newly visible scopes; its result replaces the
-   retained data. While a cooled backend re-establishes producers, every domain
-   and dispatch path (scheduled, stream-triggered, stream-only) waits on the
+2. **Reconcile immediately after activation.** A newly leased scope starts one
+   non-manual read, from its stream start or its `fetchOnEnable` request; the
+   result replaces the retained data. While a cooled backend re-establishes
+   producers, every domain and dispatch path (polled, stream-triggered,
+   stream-only) waits on the
    activation boundary instead of surfacing transient service-unavailable
    errors. Backend cool/re-warm transitions are serialized so the boundary
    cannot complete against a half-cooled subsystem.
-3. **Keep background work passive.** An open inactive cluster keeps snapshots
-   and object-change subscriptions, but does not poll snapshots, start metrics
-   collection, or produce manual-refresh errors because its tab is open.
+3. **Keep background work passive.** Only leases create demand. An open
+   inactive cluster keeps its retained snapshots and its `namespaces` lease,
+   which reads on that list's doorbell and polls only while its stream is
+   down. Nothing else reads the cluster, starts metrics collection, or
+   produces manual-refresh errors because its tab is open.
 4. **Push represents change.** A healthy stream rings a doorbell only when its
    declared source changes. The signal names cluster, domain, scope, source
    clock, and version; the snapshot/query path owns rows.
-5. **Polling is recovery.** A domain with a reliable push source pauses its
-   timer while the stream is healthy; its authored interval is the stream-down
-   fallback. A domain whose producer may stay silent must explicitly keep
-   polling (`pollingContinuesWhileStreaming`).
+5. **Polling is recovery.** Every leased scope polls at its contract interval,
+   scheduled after the previous poll settles. While the scope's stream is
+   healthy the poll skips its read, so the interval is the stream-down
+   fallback. A domain whose producer may stay silent reads on every poll
+   (`pollingContinuesWhileStreaming`: `cluster-overview` and
+   `object-details`). Polls stop while auto-refresh is off or the window is
+   hidden.
 6. **Manual means the user asked.** Buttons and commands use manual jobs.
    Startup, foreground, stream signals, and fallback polling are non-manual and
    never surface manual-job timeout errors.
@@ -38,17 +44,21 @@ causes Kubernetes API work. Mechanics and transport live in
 | --- | --- | --- |
 | `startup` | First passive acquisition of a scope | No |
 | `foreground` | A retained scope became visible | Yes |
-| `background` | Scheduler/fallback upkeep | No |
-| `stream-signal` | A declared source clock changed | Yes |
+| `background` | Poll or fallback upkeep | No |
+| `stream-signal` | A declared source clock changed | No; the scope stays pending and reconciles on the first allowed read |
 | `user` | Explicit user action/manual refresh | Yes |
 
-- Foreground is not manual: it bypasses passive pauses and cooldowns but uses
-  the ordinary snapshot/stream reconciliation path, never a ManualQueue job.
-  Navigation updates orchestrator context and lets the scheduler issue it.
-- Doorbell refetches must use `stream-signal`, which bypasses the
+- Foreground is not manual: it bypasses the passive pause but uses the
+  ordinary snapshot/stream reconciliation path, never a ManualQueue job.
+  Activation reads come from the lease (a stream start or `fetchOnEnable`),
+  never from navigation; the orchestrator holds no navigation context.
+- The orchestrator refetches every scope with snapshot demand when its
+  doorbell advances a declared clock (`refresh:stream-signal`). Doorbell
+  refetches must use `stream-signal`, which bypasses the
   skip-while-stream-healthy gate; that gate silently swallows a `background`
-  refetch.
-- Context-wide manual refresh accepts only `user`.
+  refetch. Query-only demand reconciles through `useQueryStreamSignal`.
+- Manual refresh (`refreshCluster`) reads every leased scope of one cluster
+  and accepts only `user`.
 
 ## Retention and leases
 
@@ -156,6 +166,10 @@ Payload shape and presentation: [resource-metrics.md](resource-metrics.md).
 
 - Retained data stays visible through refresh and transient failure with the
   refresh/error state attached; never replace it with an empty payload.
+- Retries are per scope. A failed read keeps that scope pending and its next
+  poll retries after a backoff (immediate, then 1 s doubling to 60 s); a failed
+  stream start retries on its own timer (1 s doubling to 30 s). One scope's
+  failures never delay another's reads.
 - Foreground activation is a per-cluster dispatch boundary. Beginning it stops
   that cluster's streams and aborts its in-flight snapshots before the backend
   replaces or re-warms producers. Visible leased work is replayed afterwards

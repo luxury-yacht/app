@@ -99,14 +99,17 @@ type Subsystem struct {
 	ResourceStream   *resourcestream.Manager // Manager for resource streams.
 	ContainerLogs    *containerlogsstream.Handler
 	ClusterMeta      snapshot.ClusterMeta // Metadata about the cluster.
-	// NamespaceNotifier, ObjectEventsNotifier, and EventTableNotifiers drive the
-	// namespaces, object-events, cluster-events, and namespace-events doorbells.
-	// Teardown/cooling MUST Stop() them (via StopDoorbellNotifiers) or their
-	// debounce/rearm timers keep broadcasting into the torn-down stream manager.
-	NamespaceNotifier    *snapshot.NamespaceChangeNotifier
-	ObjectEventsNotifier *snapshot.ObjectEventsChangeNotifier
-	EventTableNotifiers  []*snapshot.EventTableChangeNotifier
-	AttentionIndex       *snapshot.ClusterAttentionIndex
+	// NamespaceNotifier, ObjectEventsNotifier, ObjectDetailsNotifier, and
+	// EventTableNotifiers drive the namespaces, object-events, object-details,
+	// cluster-events, and namespace-events doorbells. Teardown/cooling MUST
+	// Stop() them (via StopDoorbellNotifiers) or their debounce/rearm timers
+	// keep broadcasting into the torn-down stream manager. Refresh's
+	// response-cache eviction handlers record into ObjectDetailsNotifier.
+	NamespaceNotifier     *snapshot.NamespaceChangeNotifier
+	ObjectEventsNotifier  *snapshot.ObjectEventsChangeNotifier
+	ObjectDetailsNotifier *snapshot.ObjectDetailsChangeNotifier
+	EventTableNotifiers   []*snapshot.EventTableChangeNotifier
+	AttentionIndex        *snapshot.ClusterAttentionIndex
 	// NamespacesDoorbell is the post-broadcast observer slot on the namespaces
 	// doorbell; the app attaches the cluster-Ready self-build hook here (see
 	// app_refresh_setup) once the aggregate service exists.
@@ -369,6 +372,7 @@ func wireStreamObservers(
 	snapshotService *snapshot.Service,
 	namespaceNotifier *snapshot.NamespaceChangeNotifier,
 	objectEventsNotifier *snapshot.ObjectEventsChangeNotifier,
+	objectDetailsNotifier *snapshot.ObjectDetailsChangeNotifier,
 	eventTableNotifiers []*snapshot.EventTableChangeNotifier,
 	attentionIndex *snapshot.ClusterAttentionIndex,
 ) *NamespacesDoorbellObserver {
@@ -385,6 +389,9 @@ func wireStreamObservers(
 	}
 	if objectEventsNotifier != nil {
 		wireObjectEventsDoorbell(objectEventsNotifier, resourceManager)
+	}
+	if objectDetailsNotifier != nil {
+		objectDetailsNotifier.SetBroadcast(resourceManager.BroadcastObjectDetailsRefresh)
 	}
 	for _, notifier := range eventTableNotifiers {
 		wireEventTableDoorbell(notifier, resourceManager)
@@ -488,35 +495,38 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 	if err != nil {
 		return nil, err
 	}
+	objectDetailsNotifier := snapshot.NewObjectDetailsChangeNotifier()
 	namespacesDoorbellObserver := wireStreamObservers(
 		resourceManager,
 		metricsPoller,
 		snapshotService,
 		namespaceNotifier,
 		objectEventsNotifier,
+		objectDetailsNotifier,
 		eventTableNotifiers,
 		attentionIndex,
 	)
 
 	return &Subsystem{
-		Manager:              manager,
-		Handler:              mux,
-		Telemetry:            telemetryRecorder,
-		PermissionIssues:     issues.issues,
-		InformerFactory:      informerFactory,
-		IngestManager:        ingestManager,
-		RuntimePerms:         runtimePerms,
-		Registry:             registry,
-		SnapshotService:      snapshotService,
-		ManualQueue:          queue,
-		ResourceStream:       resourceManager,
-		ContainerLogs:        containerLogsHandler,
-		ClusterMeta:          clusterMeta,
-		NamespaceNotifier:    namespaceNotifier,
-		ObjectEventsNotifier: objectEventsNotifier,
-		EventTableNotifiers:  eventTableNotifiers,
-		AttentionIndex:       attentionIndex,
-		NamespacesDoorbell:   namespacesDoorbellObserver,
+		Manager:               manager,
+		Handler:               mux,
+		Telemetry:             telemetryRecorder,
+		PermissionIssues:      issues.issues,
+		InformerFactory:       informerFactory,
+		IngestManager:         ingestManager,
+		RuntimePerms:          runtimePerms,
+		Registry:              registry,
+		SnapshotService:       snapshotService,
+		ManualQueue:           queue,
+		ResourceStream:        resourceManager,
+		ContainerLogs:         containerLogsHandler,
+		ClusterMeta:           clusterMeta,
+		NamespaceNotifier:     namespaceNotifier,
+		ObjectEventsNotifier:  objectEventsNotifier,
+		ObjectDetailsNotifier: objectDetailsNotifier,
+		EventTableNotifiers:   eventTableNotifiers,
+		AttentionIndex:        attentionIndex,
+		NamespacesDoorbell:    namespacesDoorbellObserver,
 	}, nil
 }
 
@@ -533,6 +543,9 @@ func (s *Subsystem) StopDoorbellNotifiers() {
 	}
 	if s.ObjectEventsNotifier != nil {
 		s.ObjectEventsNotifier.Stop()
+	}
+	if s.ObjectDetailsNotifier != nil {
+		s.ObjectDetailsNotifier.Stop()
 	}
 	for _, notifier := range s.EventTableNotifiers {
 		notifier.Stop()

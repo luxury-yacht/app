@@ -1,17 +1,13 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelContent.tsx
  *
- * Routes the active object-panel tab to its concrete tab component and owns
- * tab-level cleanup for scoped refresh domains that should pause and preserve
- * cached state when panel content is torn down.
+ * Routes the active object-panel tab to its concrete tab component. Each tab
+ * leases its own refresh scopes while the panel is the active dock tab; panel
+ * removal evicts their retained state (ObjectPanelStateContext).
  */
 
 import type { types } from '@core/backend-api/models';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
-import {
-  type ObjectPanelScopedDomainRef,
-  useObjectPanelScopedDomainCleanups,
-} from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelScopedDomainLifecycle';
 import type { NodeLogSource } from '@modules/object-panel/components/ObjectPanel/NodeLogs/nodeLogsApi';
 import type {
   CapabilityReasons,
@@ -24,7 +20,7 @@ import { loadObjectPanelDetails } from '@modules/object-panel/objectPanelDetails
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
-import React, { lazy, type ReactNode, useMemo } from 'react';
+import React, { lazy, type ReactNode } from 'react';
 
 const DetailsTab = lazy(loadObjectPanelDetails);
 const EventsTab = lazy(
@@ -285,7 +281,7 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
   ],
   [
     'events',
-    ({ objectData, isPanelOpen, eventsScope, panelId }) => {
+    ({ objectData, isPanelOpen, eventsScope }) => {
       return (
         <PanelTabBoundary
           scope="panel-events"
@@ -293,12 +289,7 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
           tabName="Events"
           loadingName="events"
         >
-          <EventsTab
-            objectData={objectData}
-            isActive={isPanelOpen}
-            eventsScope={eventsScope}
-            panelId={panelId}
-          />
+          <EventsTab objectData={objectData} isActive={isPanelOpen} eventsScope={eventsScope} />
         </PanelTabBoundary>
       );
     },
@@ -398,10 +389,7 @@ export function ObjectPanelContent(props: Readonly<ObjectPanelContentProps>) {
     nodeLogsState,
     nodeLogSources,
     detailScope,
-    eventsScope,
     containerLogsScope,
-    mapScope,
-    helmScope,
     objectData,
     objectKind,
     resourceDeleted,
@@ -414,19 +402,6 @@ export function ObjectPanelContent(props: Readonly<ObjectPanelContentProps>) {
   const yamlShown = useShownOnce(showYaml);
   const showMetrics = activeTab === 'metrics';
   const metricsShown = useShownOnce(showMetrics);
-  const scopedDomainCleanups = useMemo<readonly ObjectPanelScopedDomainRef[]>(
-    () => [
-      { domain: 'object-events', scope: eventsScope },
-      { domain: 'object-yaml', scope: detailScope },
-      { domain: 'object-helm-manifest', scope: helmScope },
-      { domain: 'object-helm-values', scope: helmScope },
-      { domain: 'container-logs', scope: containerLogsScope },
-      { domain: 'object-map', scope: mapScope },
-    ],
-    [containerLogsScope, detailScope, eventsScope, helmScope, mapScope]
-  );
-  // Transient unmounts retain snapshots; committed panel removal owns full eviction.
-  useObjectPanelScopedDomainCleanups(scopedDomainCleanups, isPanelOpen);
   if (resourceDeleted) {
     return <DeletedObjectContent name={deletedResourceName} onClose={onClosePanel} />;
   }

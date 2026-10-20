@@ -30,7 +30,7 @@ vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: () => () => undefined,
 }));
-vi.mock('@/core/refresh', () => ({ refreshOrchestrator: { updateContext: vi.fn() } }));
+vi.mock('@/core/refresh', () => ({ refreshOrchestrator: {} }));
 vi.mock('@/core/telemetry/sentry', () => ({ setActiveViewContext: vi.fn() }));
 vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
   ObjectPanelStateProvider: ({ children }: { children: ReactNode }) => children,
@@ -41,9 +41,6 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
   useAutoRefreshLoadingState: () => ({ suppressPassiveLoading: false }),
-}));
-vi.mock('@/core/refresh/hooks/useStreamSignalRefetch', () => ({
-  useStreamSignalRefetch: vi.fn(),
 }));
 vi.mock('@/core/data-access', () => ({
   useRefreshDomainHandle: ({ domain }: { domain: string }) => ({

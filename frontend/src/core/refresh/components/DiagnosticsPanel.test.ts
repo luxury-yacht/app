@@ -133,28 +133,6 @@ vi.mock('@ui/dockable', () => ({
 const scopedEntriesMap: Record<string, Array<[string, DomainSnapshotState<unknown>]>> = {};
 let refreshState: { pendingRequests: number } = { pendingRequests: 0 };
 
-const mockRefreshManager = vi.hoisted(() => ({
-  register: vi.fn(),
-  unregister: vi.fn(),
-  getRefresherInterval: vi.fn(() => 5000),
-  subscribe: vi.fn(() => () => undefined),
-  disable: vi.fn(),
-  enableDomain: vi.fn(),
-  disableDomain: vi.fn(),
-  fetchDomain: vi.fn(),
-  registerScoped: vi.fn(),
-  unregisterScoped: vi.fn(),
-  enableScopedDomain: vi.fn(),
-  disableScopedDomain: vi.fn(),
-  fetchScopedDomain: vi.fn(),
-  getRegisteredDomains: vi.fn(() => new Set<string>()),
-  getState: vi.fn(() => ({ status: 'enabled' })),
-}));
-
-vi.mock('../RefreshManager', () => ({
-  refreshManager: mockRefreshManager,
-}));
-
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: vi.fn(() => () => undefined),
@@ -424,11 +402,6 @@ beforeEach(() => {
   handleInlineMock.mockImplementation((error: unknown) => ({
     message: error instanceof Error ? error.message : String(error),
   }));
-  Object.values(mockRefreshManager).forEach((value) => {
-    if (typeof value === 'function') {
-      value.mockClear?.();
-    }
-  });
 });
 
 afterEach(() => {

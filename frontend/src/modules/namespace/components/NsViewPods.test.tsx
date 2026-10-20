@@ -283,7 +283,6 @@ vi.mock('@/core/refresh', () => ({
           lastUpdated: 1,
           droppedAutoRefreshes: 0,
         },
-  refreshManager: { triggerManualRefresh: vi.fn() },
 }));
 
 vi.mock('@core/backend-api', () => ({

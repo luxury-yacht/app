@@ -12,9 +12,9 @@ import {
   type NodeDrainOperationPermissions,
   resolveDrainStartPermissionStatus,
 } from '@shared/hooks/nodeActionPermissions';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { CancelDrainNodeJob } from '@/core/backend-api';
-import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import { requestRefreshDomain, useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -99,20 +99,12 @@ const DrainNodeModal = ({
     scope ?? ''
   ) as NodeMaintenanceSnapshotPayloadState;
 
-  useEffect(() => {
-    if (!scope || !isOpen) {
-      return;
-    }
-    setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: true });
-    void requestRefreshDomain({
-      domain: 'object-maintenance',
-      scope,
-      reason: 'startup',
-    });
-    return () => {
-      setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: false });
-    };
-  }, [scope, isOpen]);
+  useScopedRefreshDomainLifecycle({
+    domain: 'object-maintenance',
+    scope,
+    enabled: Boolean(scope && isOpen),
+    fetchOnEnable: 'startup',
+  });
 
   const refreshMaintenance = useCallback(async () => {
     if (!scope) {

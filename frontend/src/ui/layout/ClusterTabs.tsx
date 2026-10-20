@@ -163,11 +163,10 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
 
   const handleTabClick = useCallback(
     (selection: string) => {
-      const clusterId = getClusterMeta(selection).id;
-      activateClusterWorkspace(clusterId);
+      activateClusterWorkspace();
       setActiveKubeconfig(selection);
     },
-    [activateClusterWorkspace, getClusterMeta, setActiveKubeconfig]
+    [activateClusterWorkspace, setActiveKubeconfig]
   );
 
   const closeClusterSelection = useCallback(

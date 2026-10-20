@@ -11,11 +11,11 @@ const { probedObjectDataRef, mockUseCapabilities, mockRefreshOrchestrator } = vi
     getState: () => ({ allowed: true, pending: false }),
   })),
   mockRefreshOrchestrator: {
-    setScopedDomainEnabled: vi.fn(),
+    acquireScopedDomainLease: vi.fn(),
+    releaseScopedDomainLease: vi.fn(),
     resetScopedDomain: vi.fn(),
     stopStreamingDomain: vi.fn(),
     fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
-    updateContext: vi.fn(),
   },
 }));
 
@@ -108,9 +108,6 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Helm/ValuesTab', () => ({
 vi.mock('@modules/object-panel/components/ObjectPanel/Metrics/usePanelMetricsCollector', () => ({
   usePanelMetricsCollector: () => undefined,
 }));
-vi.mock('@/core/refresh/hooks/useRefreshWatcher', () => ({
-  useRefreshWatcher: vi.fn(),
-}));
 vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: () => ({ data: null, status: 'idle', error: null }),
   resetScopedDomainState: vi.fn(),
@@ -119,7 +116,6 @@ vi.mock('@/core/refresh/orchestrator', () => ({
   refreshOrchestrator: mockRefreshOrchestrator,
 }));
 vi.mock('@/core/refresh', () => ({
-  refreshManager: { register: vi.fn(), unregister: vi.fn() },
   refreshOrchestrator: mockRefreshOrchestrator,
 }));
 

@@ -15,7 +15,6 @@ interface ViewDescriptor<Scope extends ViewScope, Id extends string> {
   readonly label: string;
   readonly description: string;
   readonly keywords: readonly string[];
-  readonly refresher: string | null;
   readonly supportsAllNamespaces?: boolean;
   readonly resourceFamily?: ResourceFamily;
 }
@@ -29,7 +28,6 @@ export const GLOBAL_VIEW_DESCRIPTORS = [
     label: 'Clusters',
     description: 'Compare health, capacity, and metrics across open clusters',
     keywords: ['fleet', 'clusters', 'global', 'compare', 'health', 'capacity', 'metrics'],
-    refresher: null,
   },
   {
     scope: 'global',
@@ -38,7 +36,6 @@ export const GLOBAL_VIEW_DESCRIPTORS = [
     description:
       'Compare namespace health, workloads, events, utilization, and quotas across open clusters',
     keywords: ['global-namespaces', 'namespaces', 'global', 'clusters', 'compare', 'health'],
-    refresher: null,
   },
 ] as const satisfies readonly ViewDescriptor<'global', string>[];
 
@@ -62,7 +59,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'Attention',
     description: 'Review cluster objects that currently need operator attention',
     keywords: ['attention', 'cluster', 'health', 'failures', 'warnings', 'restarts', 'unready'],
-    refresher: 'cluster-attention',
   },
   {
     scope: 'cluster',
@@ -71,7 +67,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'Browse',
     description: 'Inspect the inventory of all catalogued Kubernetes objects',
     keywords: ['browse', 'inventory', 'cluster', 'catalog', 'objects'],
-    refresher: 'catalog',
   },
   {
     scope: 'cluster',
@@ -80,7 +75,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'Events',
     description: 'Review cluster events associated with recent changes and operations',
     keywords: ['events', 'change', 'changes', 'cluster', 'logs', 'history'],
-    refresher: 'cluster-events',
   },
   {
     scope: 'cluster',
@@ -89,7 +83,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'Identities',
     description: 'View users and groups referenced by RBAC bindings',
     keywords: ['identities', 'users', 'groups', 'access', 'subjects'],
-    refresher: 'cluster-identities',
   },
   {
     scope: 'cluster',
@@ -98,7 +91,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'Config',
     description: 'View cluster configuration resources',
     keywords: ['config', 'cluster', 'ingress', 'classes'],
-    refresher: 'cluster-config',
   },
   {
     scope: 'cluster',
@@ -107,7 +99,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'Namespaces',
     description: 'Compare health, workloads, events, utilization, and quotas across namespaces',
     keywords: ['namespaces', 'cluster', 'health', 'workloads', 'events', 'utilization', 'quotas'],
-    refresher: null,
   },
   {
     scope: 'cluster',
@@ -116,7 +107,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'Nodes',
     description: 'Inspect node health, scheduling, and capacity',
     keywords: ['nodes', 'capacity', 'cluster', 'servers', 'machines'],
-    refresher: 'cluster-nodes',
   },
   {
     scope: 'cluster',
@@ -125,7 +115,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'RBAC',
     description: 'View cluster RBAC resources',
     keywords: ['rbac', 'cluster', 'security', 'roles', 'bindings', 'admission'],
-    refresher: 'cluster-rbac',
   },
   {
     scope: 'cluster',
@@ -134,7 +123,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'Storage',
     description: 'View persistent volumes and storage classes',
     keywords: ['storage', 'cluster', 'volumes', 'pvs', 'persistent', 'classes'],
-    refresher: 'cluster-storage',
   },
   {
     scope: 'cluster',
@@ -143,7 +131,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'CRDs',
     description: 'View custom resource definitions',
     keywords: ['crds', 'cluster', 'custom', 'resources', 'definitions'],
-    refresher: 'cluster-crds',
   },
   {
     scope: 'cluster',
@@ -152,7 +139,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'Custom Resources',
     description: 'View cluster-scoped custom resources',
     keywords: ['custom', 'cluster', 'custom resources', 'crs'],
-    refresher: null,
   },
   {
     scope: 'cluster',
@@ -162,7 +148,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'Cert Manager',
     description: 'View cert-manager resources',
     keywords: ['cert-manager', 'certificates', 'issuers'],
-    refresher: null,
   },
   {
     scope: 'cluster',
@@ -172,7 +157,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'External Secrets',
     description: 'View External Secrets resources',
     keywords: ['external-secrets', 'external secrets', 'secret stores'],
-    refresher: null,
   },
   {
     scope: 'cluster',
@@ -189,7 +173,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
       'provisioners',
       'nodeoverlays',
     ],
-    refresher: null,
   },
 ] as const satisfies readonly GroupedViewDefinition<'cluster'>[];
 
@@ -202,7 +185,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'Browse',
     description: 'Inspect the inventory of catalogued Kubernetes objects in this namespace',
     keywords: ['browse', 'inventory', 'namespace', 'catalog', 'objects'],
-    refresher: null,
   },
   {
     scope: 'namespace',
@@ -212,7 +194,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'Events',
     description: 'Review namespace events associated with recent changes and operations',
     keywords: ['events', 'change', 'changes', 'namespace', 'logs', 'history'],
-    refresher: 'events',
   },
   {
     scope: 'namespace',
@@ -222,7 +203,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'Map',
     description: 'Map relationships between objects in this namespace',
     keywords: ['map', 'namespace', 'topology', 'relationships', 'objects'],
-    refresher: null,
   },
   {
     scope: 'namespace',
@@ -241,7 +221,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
       'jobs',
       'pods',
     ],
-    refresher: 'workloads',
   },
   {
     scope: 'namespace',
@@ -253,7 +232,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     keywords: ['pods', 'namespace', 'containers', 'owner', 'node'],
     // The pods table holds its own query lease; manual refresh reaches it
     // through the orchestrator's pods-table views.
-    refresher: null,
   },
   {
     scope: 'namespace',
@@ -263,7 +241,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'Autoscaling',
     description: 'View horizontal pod autoscalers',
     keywords: ['autoscaling', 'namespace', 'hpa', 'scaling'],
-    refresher: 'autoscaling',
   },
   {
     scope: 'namespace',
@@ -273,7 +250,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'Config',
     description: 'View configmaps and secrets',
     keywords: ['config', 'namespace', 'configmaps', 'secrets'],
-    refresher: 'config',
   },
   {
     scope: 'namespace',
@@ -283,7 +259,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'Network',
     description: 'View services and ingresses',
     keywords: ['network', 'namespace', 'services', 'ingress'],
-    refresher: 'network',
   },
   {
     scope: 'namespace',
@@ -293,7 +268,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'Quotas',
     description: 'View resource quotas and limits',
     keywords: ['quotas', 'namespace', 'limits', 'resources'],
-    refresher: 'quotas',
   },
   {
     scope: 'namespace',
@@ -303,7 +277,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'RBAC',
     description: 'View roles and bindings',
     keywords: ['rbac', 'namespace', 'security', 'roles', 'bindings'],
-    refresher: 'rbac',
   },
   {
     scope: 'namespace',
@@ -313,7 +286,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'Storage',
     description: 'View persistent volume claims',
     keywords: ['storage', 'namespace', 'pvcs', 'claims'],
-    refresher: 'storage',
   },
   {
     scope: 'namespace',
@@ -323,7 +295,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'Custom Resources',
     description: 'View custom resources',
     keywords: ['custom', 'namespace', 'resources', 'crs'],
-    refresher: null,
   },
   {
     scope: 'namespace',
@@ -334,7 +305,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'Argo CD',
     description: 'View Argo CD applications, application sets, and projects',
     keywords: ['argocd', 'argo cd', 'gitops', 'applications', 'applicationsets', 'appprojects'],
-    refresher: null,
   },
   {
     scope: 'namespace',
@@ -344,7 +314,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'Cert Manager',
     description: 'View cert-manager resources',
     keywords: ['cert-manager', 'certificates', 'issuers'],
-    refresher: null,
     supportsAllNamespaces: true,
   },
   {
@@ -355,7 +324,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'External Secrets',
     description: 'View External Secrets resources',
     keywords: ['external-secrets', 'external secrets', 'secret stores'],
-    refresher: null,
     supportsAllNamespaces: true,
   },
   {
@@ -366,7 +334,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'Helm',
     description: 'View Helm releases',
     keywords: ['helm', 'namespace', 'charts', 'releases'],
-    refresher: 'helm',
   },
   {
     scope: 'namespace',
@@ -376,7 +343,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     label: 'Prometheus Operator',
     description: 'View Prometheus Operator resources',
     keywords: ['prometheus', 'prometheus operator', 'monitors', 'rules', 'alertmanager'],
-    refresher: null,
     supportsAllNamespaces: true,
   },
 ] as const satisfies readonly GroupedViewDefinition<'namespace'>[];

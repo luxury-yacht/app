@@ -184,8 +184,7 @@ describe('useScopedRefreshDomainLifecycle', () => {
       'object-map',
       'cluster:test|namespace:team-a|deployment:api',
       expect.objectContaining({
-        isManual: false,
-        streamSignal: false,
+        intent: 'startup',
         correlationId: expect.any(String),
       })
     );

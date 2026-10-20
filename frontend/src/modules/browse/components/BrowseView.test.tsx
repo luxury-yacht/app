@@ -169,12 +169,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 const refreshMocks = vi.hoisted(() => ({
-  manager: {
-    disable: vi.fn(),
-  },
   orchestrator: {
-    setDomainEnabled: vi.fn(),
-    setScopedDomainEnabled: vi.fn(),
     acquireScopedDomainLease: vi.fn(),
     releaseScopedDomainLease: vi.fn(),
     fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
@@ -202,7 +197,6 @@ const persistenceMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/core/refresh', () => ({
-  refreshManager: refreshMocks.manager,
   refreshOrchestrator: refreshMocks.orchestrator,
   useRefreshScopedDomain: (...args: unknown[]) => refreshMocks.useRefreshScopedDomain(...args),
 }));
@@ -324,12 +318,9 @@ describe('BrowseView', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
-    refreshMocks.orchestrator.setDomainEnabled.mockReset();
-    refreshMocks.orchestrator.setScopedDomainEnabled.mockReset();
     refreshMocks.orchestrator.acquireScopedDomainLease.mockReset();
     refreshMocks.orchestrator.releaseScopedDomainLease.mockReset();
     refreshMocks.orchestrator.fetchScopedDomain.mockReset().mockResolvedValue(undefined);
-    refreshMocks.manager.disable.mockReset();
     refreshMocks.useRefreshScopedDomain.mockReset();
     refreshMocks.catalogDomain.status = 'idle';
     refreshMocks.catalogDomain.data = null;
@@ -413,7 +404,7 @@ describe('BrowseView', () => {
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
         'catalog',
         'cluster-1|limit=50&resourceScope=cluster&namespace=cluster',
-        expect.objectContaining({ isManual: false })
+        expect.objectContaining({ intent: 'startup' })
       );
     });
 
@@ -974,13 +965,13 @@ describe('BrowseView', () => {
         1,
         'catalog',
         'cluster-1|limit=50&resourceScope=cluster&namespace=cluster',
-        expect.objectContaining({ isManual: false })
+        expect.objectContaining({ intent: 'startup' })
       );
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
         2,
         'catalog',
         'cluster-1|limit=1&resourceScope=cluster&namespace=cluster',
-        expect.objectContaining({ isManual: false })
+        expect.objectContaining({ intent: 'startup' })
       );
     });
 

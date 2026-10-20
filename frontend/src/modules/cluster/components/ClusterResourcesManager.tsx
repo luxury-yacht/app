@@ -8,51 +8,19 @@
 import ClusterResourcesViews from '@modules/cluster/components/ClusterResourcesViews';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import type { ClusterViewType } from '@ui/navigation/types';
-import { useEffect } from 'react';
 import type { PermissionStatus } from '@/core/capabilities';
 import { useUserPermission } from '@/core/capabilities';
-import { eventBus } from '@/core/events';
-import { refreshOrchestrator } from '@/core/refresh';
 import { deniedFailure, type RefreshFailure } from '@/core/refresh/refreshFailure';
-import type { RefreshDomain } from '@/core/refresh/types';
-
-// The managed cluster domains, reset together on kubeconfig switches so no
-// stale per-cluster rows survive into the next selection. (Catalog is
-// excluded — browse owns its own lifecycle.)
-const CLUSTER_DOMAIN_SET = new Set<RefreshDomain>([
-  'cluster-attention',
-  'cluster-identities',
-  'nodes',
-  'cluster-rbac',
-  'cluster-storage',
-  'cluster-config',
-  'cluster-crds',
-  'cluster-events',
-]);
 
 export interface ClusterResourceManagerProps {
   activeTab?: ClusterViewType | null;
 }
 
 // ClusterResourcesManager component
-// Supplies the per-view permission-denial messages and resets the managed
-// cluster domains when the kubeconfig changes. Each tab's table owns its own
-// data via the query-backed grid.
+// Supplies the per-view permission-denial messages. Each tab's table owns its
+// own data via the query-backed grid; the refresh orchestrator clears every
+// domain when the kubeconfig selection empties.
 export function ClusterResourcesManager({ activeTab }: Readonly<ClusterResourceManagerProps>) {
-  useEffect(() => {
-    const handleKubeconfigChanging = () => {
-      CLUSTER_DOMAIN_SET.forEach((domain) => {
-        // resetDomain already delegates to resetAllScopedDomainStates for scoped domains.
-        refreshOrchestrator.resetDomain(domain);
-      });
-    };
-
-    const unsubChanging = eventBus.on('kubeconfig:changing', handleKubeconfigChanging);
-    return () => {
-      unsubChanging();
-    };
-  }, []);
-
   const { selectedClusterId } = useKubeconfig();
   // Scope permission lookups to the active cluster to avoid cache collisions.
   const permissionClusterId = selectedClusterId || null;

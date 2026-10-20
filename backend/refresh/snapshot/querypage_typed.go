@@ -887,7 +887,7 @@ func registerMaintainedInformerHandler[T any](
 	registration, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) { handler.upsert(obj, true) },
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			handler.upsert(newObj, !informerUpdateIsEcho(oldObj, newObj))
+			handler.upsert(newObj, !InformerUpdateIsEcho(oldObj, newObj))
 		},
 		DeleteFunc: handler.remove,
 	})

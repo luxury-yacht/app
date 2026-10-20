@@ -43,8 +43,7 @@ stay out of the required gate. Re-evaluated 2026-10-05 on Biome 2.5.15
   spread copies (`[...xs].sort()`). `noUnnecessaryConditions` 178 (121
   production): 81 `??`, 68 `?.`, 29 constant or unreachable conditions. False
   positives include mutable class fields read as their literal initializer
-  (`RefreshManager.isGloballyPaused`,
-  `ResourceStreamConnection.closed`/`paused`) and `switch` cases over
+  (`ResourceStreamConnection.closed`/`paused`) and `switch` cases over
   `Extract<RefreshDomain, …>` reported unreachable; acting on them deletes
   live logic. Many `??`/`?.` findings guard wire or
   persisted data whose TypeScript types overstate the runtime guarantee.

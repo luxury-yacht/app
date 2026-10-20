@@ -12,10 +12,9 @@ import {
 
 const hoisted = vi.hoisted(() => ({
   fetchScopedDomain: vi.fn(),
-  setScopedDomainEnabled: vi.fn(),
   acquireScopedDomainLease: vi.fn(),
   releaseScopedDomainLease: vi.fn(),
-  triggerManualRefreshForContext: vi.fn(),
+  refreshCluster: vi.fn(),
   getScopedDomainState: vi.fn(),
   getAutoRefreshEnabled: vi.fn(),
 }));
@@ -25,9 +24,7 @@ vi.mock('@/core/refresh', () => ({
     fetchScopedDomain: (...args: unknown[]) => hoisted.fetchScopedDomain(...args),
     acquireScopedDomainLease: (...args: unknown[]) => hoisted.acquireScopedDomainLease(...args),
     releaseScopedDomainLease: (...args: unknown[]) => hoisted.releaseScopedDomainLease(...args),
-    setScopedDomainEnabled: (...args: unknown[]) => hoisted.setScopedDomainEnabled(...args),
-    triggerManualRefreshForContext: (...args: unknown[]) =>
-      hoisted.triggerManualRefreshForContext(...args),
+    refreshCluster: (...args: unknown[]) => hoisted.refreshCluster(...args),
   },
 }));
 
@@ -55,7 +52,7 @@ describe('dataAccess', () => {
     resetBrokerReadDiagnosticsForTesting();
     hoisted.fetchScopedDomain.mockResolvedValue(undefined);
     hoisted.getScopedDomainState.mockReturnValue({ status: 'ready', data: null });
-    hoisted.triggerManualRefreshForContext.mockResolvedValue(undefined);
+    hoisted.refreshCluster.mockResolvedValue(undefined);
     hoisted.getAutoRefreshEnabled.mockReturnValue(true);
   });
 
@@ -142,8 +139,7 @@ describe('dataAccess', () => {
       status: 'executed',
     });
     expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('namespaces', 'cluster:alpha', {
-      isManual: true,
-      streamSignal: false,
+      intent: 'user',
       correlationId: 'broker-read-1',
     });
   });
@@ -161,8 +157,7 @@ describe('dataAccess', () => {
       status: 'executed',
     });
     expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('namespaces', 'cluster:alpha', {
-      isManual: false,
-      streamSignal: false,
+      intent: 'foreground',
       correlationId: 'broker-read-1',
     });
   });
@@ -178,8 +173,7 @@ describe('dataAccess', () => {
       status: 'executed',
     });
     expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('cluster-overview', 'cluster:alpha', {
-      isManual: false,
-      streamSignal: false,
+      intent: 'startup',
       correlationId: 'broker-read-1',
     });
   });
@@ -211,8 +205,7 @@ describe('dataAccess', () => {
     );
     expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('catalog', 'cluster:alpha|limit=2', {
       coalesce: true,
-      isManual: true,
-      streamSignal: false,
+      intent: 'user',
       correlationId: 'broker-read-1',
     });
     expect(hoisted.getScopedDomainState).toHaveBeenCalledWith('catalog', 'cluster:alpha|limit=2');
@@ -301,13 +294,15 @@ describe('dataAccess', () => {
     );
   });
 
-  it('routes user context refreshes through the shared refresh wrapper', async () => {
-    await expect(requestContextRefresh({ reason: 'user' })).resolves.toEqual({
+  it('routes user context refreshes to the named cluster through the shared refresh wrapper', async () => {
+    await expect(
+      requestContextRefresh({ reason: 'user', clusterId: 'cluster-a' })
+    ).resolves.toEqual({
       status: 'executed',
       blockedReason: undefined,
     });
 
-    expect(hoisted.triggerManualRefreshForContext).toHaveBeenCalledTimes(1);
+    expect(hoisted.refreshCluster).toHaveBeenCalledWith('cluster-a');
   });
 
   it('never creates a manual job for an automatic context refresh intent', async () => {
@@ -320,7 +315,7 @@ describe('dataAccess', () => {
       blockedReason: undefined,
     });
 
-    expect(hoisted.triggerManualRefreshForContext).not.toHaveBeenCalled();
+    expect(hoisted.refreshCluster).not.toHaveBeenCalled();
   });
   it.each(['throw', 'reject'] as const)(
     'settles failed reads before rethrowing the original %s',

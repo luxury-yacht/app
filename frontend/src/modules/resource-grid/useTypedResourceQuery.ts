@@ -574,7 +574,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       setLoaded(true);
     };
     void executeQueryPageRequest(
-      { domain, scope, label, reason: 'user', cleanup: true, preserveState: false },
+      { domain, scope, label, reason: 'user', preserveState: false },
       {
         isCurrent: () => !cancelled && queryIdentityRef.current === identityAtRequest,
         onResult: (result) =>
@@ -717,7 +717,6 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
           scope: exportScope,
           reason: 'user',
           label: resolvedOptions.label,
-          cleanup: true,
           preserveState: false,
         });
         if (result.status !== 'executed') {

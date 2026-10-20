@@ -32,7 +32,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 }));
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomain: vi.fn().mockResolvedValue(undefined),
-  setRefreshDomainEnabled: vi.fn(),
+  useScopedRefreshDomainLifecycle: vi.fn(),
   readObjectYAMLForRef: vi.fn(),
   requestData: vi.fn(),
 }));

@@ -775,7 +775,7 @@ describe('useTypedResourceQuery', () => {
     await renderQuery();
 
     expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
-      expect.objectContaining({ reason: 'user', cleanup: true, preserveState: false })
+      expect.objectContaining({ reason: 'user', preserveState: false })
     );
   });
 

@@ -30,7 +30,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/core/data-access/dataAccess', () => ({
   requestRefreshDomain: mocks.requestRefreshDomain,
-  setRefreshDomainEnabled: mocks.setRefreshDomainEnabled,
   acquireRefreshDomainLease: ({
     domain,
     scope,
@@ -575,7 +574,7 @@ describe('GlobalViewNamespaces', () => {
       value: 'payments',
     });
     expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
-    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith('cluster-b');
+    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith();
     expect(mocks.setSelectedNamespace.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
     );
@@ -625,7 +624,7 @@ describe('GlobalViewNamespaces', () => {
       type: 'cluster',
       value: 'cluster',
     });
-    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith('cluster-b');
+    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith();
     expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
     expect(mocks.requestGridTableFilters.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]
@@ -711,7 +710,7 @@ describe('GlobalViewNamespaces', () => {
       value: 'overview',
     });
     expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
-    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith('cluster-b');
+    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith();
     expect(mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
     );

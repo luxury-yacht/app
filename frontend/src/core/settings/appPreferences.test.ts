@@ -15,7 +15,6 @@ import {
   getAccentColor,
   getAppearanceModePreference,
   getAutoRefreshEnabled,
-  getBackgroundRefreshEnabled,
   getDefaultObjectPanelPosition,
   getDefaultTablePageSize,
   getDimInactiveNamespaces,
@@ -59,7 +58,6 @@ import {
   setAccentColor,
   setAppearanceModePreference,
   setAutoRefreshEnabled,
-  setBackgroundRefreshEnabled,
   setDefaultTablePageSize,
   setDimInactiveNamespaces,
   setErrorReportingEnabled,
@@ -163,13 +161,6 @@ const preferenceSchema = (overrides: Record<string, Partial<Record<string, unkno
     },
     {
       key: 'autoRefreshEnabled',
-      type: 'boolean',
-      defaultValue: true,
-      currentValue: true,
-      runtimeSideEffect: true,
-    },
-    {
-      key: 'refreshBackgroundClustersEnabled',
       type: 'boolean',
       defaultValue: true,
       currentValue: true,
@@ -454,7 +445,6 @@ describe('appPreferences', () => {
       dimInactiveNamespaces: false,
       exclusiveNamespaces: false,
       autoRefreshEnabled: false,
-      refreshBackgroundClustersEnabled: false,
       metricsRefreshIntervalMs: 7000,
       kubernetesClientQPS: 250,
       kubernetesClientBurst: 500,
@@ -481,7 +471,6 @@ describe('appPreferences', () => {
     expect(getDimInactiveNamespaces()).toBe(false);
     expect(getExclusiveNamespaces()).toBe(false);
     expect(getAutoRefreshEnabled()).toBe(false);
-    expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getKubernetesClientQPS()).toBe(250);
     expect(getKubernetesClientBurst()).toBe(500);
     expect(getPermissionSSRRFetchConcurrency()).toBe(16);
@@ -504,7 +493,6 @@ describe('appPreferences', () => {
       eventBus.on('settings:dim-inactive-namespaces', () => events.push('dim')),
       eventBus.on('settings:exclusive-namespaces', () => events.push('exclusive')),
       eventBus.on('settings:auto-refresh', () => events.push('auto-refresh')),
-      eventBus.on('settings:refresh-background', () => events.push('background')),
     ];
     appMocks.GetAppSettings.mockResolvedValue({
       appearanceMode: 'dark',
@@ -512,7 +500,6 @@ describe('appPreferences', () => {
       dimInactiveNamespaces: false,
       exclusiveNamespaces: false,
       autoRefreshEnabled: false,
-      refreshBackgroundClustersEnabled: false,
     });
 
     await hydrateAppPreferences({ force: true });
@@ -523,7 +510,6 @@ describe('appPreferences', () => {
       'dim',
       'exclusive',
       'auto-refresh',
-      'background',
     ]);
     unsubscribers.forEach((unsubscribe) => {
       unsubscribe();
@@ -721,7 +707,6 @@ describe('appPreferences', () => {
       dimInactiveNamespaces: true,
       exclusiveNamespaces: true,
       autoRefreshEnabled: true,
-      refreshBackgroundClustersEnabled: true,
       metricsRefreshIntervalMs: 6000,
       gridTablePersistenceMode: 'shared',
     });
@@ -738,7 +723,6 @@ describe('appPreferences', () => {
     setKubernetesClientBurst(500);
     setPermissionSSRRFetchConcurrency(16);
     setAutoRefreshEnabled(false);
-    setBackgroundRefreshEnabled(false);
     setGridTablePersistenceMode('namespaced');
     await flushPromises();
 
@@ -773,9 +757,6 @@ describe('appPreferences', () => {
       changes: [{ key: 'autoRefreshEnabled', value: false }],
     });
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
-      changes: [{ key: 'refreshBackgroundClustersEnabled', value: false }],
-    });
-    expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'gridTablePersistenceMode', value: 'namespaced' }],
     });
 
@@ -789,7 +770,6 @@ describe('appPreferences', () => {
     expect(getKubernetesClientBurst()).toBe(500);
     expect(getPermissionSSRRFetchConcurrency()).toBe(16);
     expect(getAutoRefreshEnabled()).toBe(false);
-    expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getGridTablePersistenceMode()).toBe('namespaced');
   });
 

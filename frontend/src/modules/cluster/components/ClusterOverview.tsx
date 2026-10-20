@@ -9,11 +9,10 @@
 import { calculateResourceMetrics } from '@shared/utils/resourceCalculations';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { setRefreshDomainEnabled } from '@/core/data-access';
+import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { canActivateClusterOverviewRefresh } from '@/core/refresh/clusterOverviewLifecycle';
-import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { ClusterOverviewPayload } from '@/core/refresh/types';
 import './ClusterOverview.css';
@@ -114,15 +113,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const overviewDomain = useRefreshScopedDomain('cluster-overview', overviewScope);
   const health = getActiveClusterHealth();
   const canActivateOverviewRefresh = canActivateClusterOverviewRefresh(lifecycleState);
-  // Metric doorbell: each successful collection refetches the overview so
-  // live usage appears within one collection instead of a full poll cycle
-  // (resolves the "Collecting metrics…" card promptly). Polls stay on for
-  // this domain — the doorbell never rings on metrics-less clusters.
-  const overviewSignalScopes = useMemo(
-    () => (overviewScope && canActivateOverviewRefresh ? [overviewScope] : []),
-    [overviewScope, canActivateOverviewRefresh]
-  );
-  useStreamSignalRefetch('cluster-overview', overviewSignalScopes);
   const overviewStatus = useMemo(
     () =>
       buildConnectivityPresentation({
@@ -238,49 +228,32 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     lifecycleState,
   });
 
+  // preserveState is load-bearing for a STREAMING-registered domain: the
+  // orchestrator's streaming enable path RESETS the scoped state when it is
+  // absent, which blanked the overview on every cluster tab switch. The
+  // foreground read reconciles the newly shown cluster even while auto-refresh
+  // is paused, when no stream runs to do it.
+  useScopedRefreshDomainLifecycle({
+    domain: 'cluster-overview',
+    scope: overviewScope || null,
+    enabled: canActivateOverviewRefresh,
+    preserveState: true,
+    fetchOnEnable: 'foreground',
+  });
+
   useEffect(() => {
-    // Skip scoped calls when no clusters are connected (scope is empty).
-    if (!overviewScope) {
-      return;
-    }
-
-    const enableOverview = () => {
-      // preserveState is load-bearing for a STREAMING-registered domain: the
-      // orchestrator's streaming enable path RESETS the scoped state when it
-      // is absent, which blanked the overview on every cluster tab switch.
-      setRefreshDomainEnabled({
-        domain: 'cluster-overview',
-        scope: overviewScope,
-        enabled: canActivateOverviewRefresh,
-        preserveState: true,
-      });
-    };
-
     // Clear local component state without touching the domain lifecycle.
-    // The domain is kept running by useClusterMetricsAvailability so it
-    // remains active across view switches.
     const clearLocalState = () => {
       setOverviewSnapshot((previous) => ({ ...previous, data: null }));
       setIsSwitching(true);
     };
-
-    enableOverview();
-
-    if (typeof window !== 'undefined') {
-      const handleKubeconfigChanged = () => {
-        setIsSwitching(true);
-        enableOverview();
-      };
-
-      const unsubChanging = eventBus.on('kubeconfig:changing', clearLocalState);
-      const unsubChanged = eventBus.on('kubeconfig:changed', handleKubeconfigChanged);
-
-      return () => {
-        unsubChanging();
-        unsubChanged();
-      };
-    }
-  }, [canActivateOverviewRefresh, overviewScope]);
+    const unsubChanging = eventBus.on('kubeconfig:changing', clearLocalState);
+    const unsubChanged = eventBus.on('kubeconfig:changed', () => setIsSwitching(true));
+    return () => {
+      unsubChanging();
+      unsubChanged();
+    };
+  }, []);
 
   const { handlePodStatusNavigate, handleClusterViewNavigate } = useClusterOverviewNavigation({
     selectedClusterId,

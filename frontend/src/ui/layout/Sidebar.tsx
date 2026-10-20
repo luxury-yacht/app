@@ -39,7 +39,6 @@ import {
   SIDEBAR_VIEW_GROUPS,
 } from '@/core/navigation/viewRegistry';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
-import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { AttentionSeverity } from '@/core/refresh/types';
 import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
@@ -869,7 +868,6 @@ function Sidebar() {
     enabled: attentionBadgesEnabled,
     preserveState: true,
   });
-  useStreamSignalRefetch('cluster-attention', attentionBadgesEnabled ? [attentionScope] : []);
   const sidebarSelection = viewState.sidebarSelection;
   const selectedNamespaceRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -983,8 +981,6 @@ function Sidebar() {
 
   const handleClusterViewSelect = (view: ClusterViewType) => {
     setPendingSelection({ kind: 'cluster-view', view });
-    // Set activeClusterView BEFORE setViewType so the orchestrator context
-    // has the correct view when triggerManualRefreshForContext() fires.
     viewState.setActiveClusterView(view);
     viewState.setViewType('cluster');
     viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });

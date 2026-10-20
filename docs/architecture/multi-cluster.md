@@ -11,7 +11,7 @@ operations, permissions, and object actions for one cluster never affect another
   after data crosses a boundary. Missing, ambiguous, or stale cluster identity is
   an error, never a fallback to the current cluster.
 - Open inactive tabs are retained workspaces, not disposed views. Activation and
-  background refresh follow [data freshness](data-freshness.md); selection adds
+  inactive-tab demand follow [data freshness](data-freshness.md); selection adds
   no readiness delay and never turns inactive tabs into producer demand.
 - Refresh domains are single-cluster; cross-cluster views fan out over
   per-cluster state, never aggregate scopes.

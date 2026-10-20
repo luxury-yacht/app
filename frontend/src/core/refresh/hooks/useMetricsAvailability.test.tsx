@@ -6,9 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useClusterMetricsAvailability } from './useMetricsAvailability';
 
 const hoisted = vi.hoisted(() => ({
-  refreshOrchestrator: {
-    setScopedDomainEnabled: vi.fn(),
-  },
+  leaseCalls: [] as Array<{ domain: unknown; scope: unknown; enabled: boolean }>,
   requestRefreshDomain: vi.fn().mockResolvedValue({ status: 'executed' }),
   kubeconfigStateRef: {
     current: {
@@ -36,10 +34,16 @@ const hoisted = vi.hoisted(() => ({
 
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomain: (...args: unknown[]) => hoisted.requestRefreshDomain(...args),
+  useScopedRefreshDomainLifecycle: (options: {
+    domain: unknown;
+    scope: unknown;
+    enabled: boolean;
+  }) => {
+    hoisted.leaseCalls.push(options);
+  },
 }));
 
 vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: hoisted.refreshOrchestrator,
   useRefreshScopedDomain: (domain: string, scope: string) => {
     hoisted.scopedDomainCalls.push([domain, scope]);
     return hoisted.domainStateRef.current;
@@ -72,7 +76,7 @@ describe('useClusterMetricsAvailability', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     resultRef.current = null;
-    hoisted.refreshOrchestrator.setScopedDomainEnabled.mockReset();
+    hoisted.leaseCalls.length = 0;
     hoisted.requestRefreshDomain.mockClear();
     hoisted.kubeconfigStateRef.current = {
       selectedClusterId: 'cluster-1',
@@ -114,11 +118,12 @@ describe('useClusterMetricsAvailability', () => {
     });
 
     expect(hoisted.scopedDomainCalls).toContainEqual(['cluster-overview', 'cluster-1|']);
-    expect(hoisted.refreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'cluster-overview',
-      'cluster-1|',
-      true
-    );
+    expect(hoisted.leaseCalls[hoisted.leaseCalls.length - 1]).toMatchObject({
+      domain: 'cluster-overview',
+      scope: 'cluster-1|',
+      enabled: true,
+      preserveState: true,
+    });
     expect(hoisted.requestRefreshDomain).toHaveBeenCalledWith({
       domain: 'cluster-overview',
       scope: 'cluster-1|',
@@ -139,11 +144,11 @@ describe('useClusterMetricsAvailability', () => {
       await Promise.resolve();
     });
 
-    expect(hoisted.refreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'cluster-overview',
-      'cluster-1|',
-      false
-    );
+    expect(hoisted.leaseCalls[hoisted.leaseCalls.length - 1]).toMatchObject({
+      domain: 'cluster-overview',
+      scope: 'cluster-1|',
+      enabled: false,
+    });
     expect(hoisted.requestRefreshDomain).not.toHaveBeenCalled();
   });
 });

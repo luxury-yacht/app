@@ -18,7 +18,7 @@ import { clearLinkColor } from '@utils/linkColor';
 import { clearTintedPalette } from '@utils/paletteTint';
 import { useEffect, useId, useState } from 'react';
 import { ClearAppState } from '@/core/backend-api';
-import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
+import { useAutoRefresh } from '@/core/refresh';
 import {
   type AppPreferenceKey,
   commitIntegerPreferenceInput,
@@ -35,7 +35,6 @@ import { PreferenceNumberInput, SettingRow } from './SettingsControls';
 function AdvancedSection() {
   const elementIdPrefix = useId();
   const { enabled: refreshEnabled, setAutoRefresh } = useAutoRefresh();
-  const { enabled: backgroundRefreshEnabled, setBackgroundRefresh } = useBackgroundRefresh();
   const [kubernetesClientQPSInput, setKubernetesClientQPSInput] = useState<string>(() =>
     String(getKubernetesClientQPS())
   );
@@ -155,18 +154,6 @@ function AdvancedSection() {
           checked={refreshEnabled}
           onChange={setAutoRefresh}
           ariaLabel="Auto-refresh"
-        />
-      </SettingRow>
-
-      <SettingRow
-        title="Refresh background clusters"
-        help="When enabled, open cluster tabs that are not active will be refreshed in the background."
-      >
-        <ToggleSwitch
-          id={`${elementIdPrefix}-refresh-background`}
-          checked={backgroundRefreshEnabled}
-          onChange={setBackgroundRefresh}
-          ariaLabel="Background clusters refresh"
         />
       </SettingRow>
 

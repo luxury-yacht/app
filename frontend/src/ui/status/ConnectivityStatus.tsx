@@ -65,7 +65,9 @@ const ConnectivityStatus: React.FC = () => {
       void handleRetry(selectedClusterId);
       return;
     }
-    void requestContextRefresh({ reason: 'user' });
+    if (selectedClusterId) {
+      void requestContextRefresh({ reason: 'user', clusterId: selectedClusterId });
+    }
   }, [authState, selectedClusterId, handleRetry]);
 
   const handleToggleAutoRefresh = useCallback(() => {

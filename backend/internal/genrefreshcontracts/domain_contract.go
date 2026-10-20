@@ -42,18 +42,15 @@ type authoredBackendPolicy struct {
 
 type authoredFrontendTiming struct {
 	Interval int `json:"interval"`
-	Cooldown int `json:"cooldown"`
 	Timeout  int `json:"timeout"`
 }
 
 type authoredFrontendPolicy struct {
-	RefresherName     string                 `json:"refresherName"`
 	Orchestrator      string                 `json:"orchestrator"`
 	DiagnosticsStream json.RawMessage        `json:"diagnosticsStream"`
 	Timing            authoredFrontendTiming `json:"timing"`
 	Priority          *int                   `json:"priority,omitempty"`
 	RegistrationOrder *int                   `json:"registrationOrder"`
-	Scheduled         *bool                  `json:"scheduled,omitempty"`
 }
 
 type authoredDomainRegistration struct {
@@ -176,7 +173,6 @@ type parsedFrontendDomainPolicy struct {
 	priority          int
 	hasPriority       bool
 	registrationOrder int
-	scheduled         bool
 }
 
 func registeredDomainInventory(
@@ -221,10 +217,7 @@ func parseFrontendDomainPolicy(
 	inventorySize int,
 	seenFrontendOrder map[int]string,
 ) (parsedFrontendDomainPolicy, error) {
-	if registration.Frontend.RefresherName == "" {
-		return parsedFrontendDomainPolicy{}, fmt.Errorf("refresh domain %q has an empty frontend.refresherName", registration.Domain)
-	}
-	if registration.Frontend.Timing.Interval <= 0 || registration.Frontend.Timing.Cooldown <= 0 || registration.Frontend.Timing.Timeout <= 0 {
+	if registration.Frontend.Timing.Interval <= 0 || registration.Frontend.Timing.Timeout <= 0 {
 		return parsedFrontendDomainPolicy{}, fmt.Errorf("refresh domain %q has non-positive frontend timing", registration.Domain)
 	}
 	if registration.Frontend.Priority != nil && *registration.Frontend.Priority < 0 {
@@ -254,10 +247,6 @@ func parseFrontendDomainPolicy(
 		diagnosticsStream: diagnosticsStream,
 		hasPriority:       registration.Frontend.Priority != nil,
 		registrationOrder: registrationOrder,
-		scheduled:         true,
-	}
-	if registration.Frontend.Scheduled != nil {
-		policy.scheduled = *registration.Frontend.Scheduled
 	}
 	if policy.hasPriority {
 		policy.priority = *registration.Frontend.Priority
@@ -321,16 +310,13 @@ func contractDomainSpec(
 		backendPermission:         registration.Backend.Permission,
 		backendResourceStream:     registration.Backend.ResourceStream,
 		backendBypassSingleflight: registration.Backend.BypassSingleflight,
-		frontendRefresherName:     registration.Frontend.RefresherName,
 		frontendOrchestrator:      registration.Frontend.Orchestrator,
 		frontendDiagnosticsStream: frontend.diagnosticsStream,
 		frontendTimingInterval:    registration.Frontend.Timing.Interval,
-		frontendTimingCooldown:    registration.Frontend.Timing.Cooldown,
 		frontendTimingTimeout:     registration.Frontend.Timing.Timeout,
 		frontendPriority:          frontend.priority,
 		frontendHasPriority:       frontend.hasPriority,
 		frontendRegistrationOrder: frontend.registrationOrder,
-		frontendScheduled:         frontend.scheduled,
 		scopeSelectors:            append([]string(nil), inventory.ScopeContract.Selectors...),
 		scopeQuery:                inventory.ScopeContract.Query,
 	}, nil

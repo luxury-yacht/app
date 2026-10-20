@@ -196,12 +196,15 @@ function AppContent() {
 
   // Handle manual refresh (Cmd+R)
   const handleManualRefresh = useCallback(() => {
-    requestContextRefresh({ reason: 'user' }).catch((error) => {
+    if (!selectedClusterId) {
+      return;
+    }
+    requestContextRefresh({ reason: 'user', clusterId: selectedClusterId }).catch((error) => {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
         source: 'manual-refresh',
       });
     });
-  }, []);
+  }, [selectedClusterId]);
 
   return (
     <ApplicationMenuCommandProvider execute={executeApplicationMenuCommand}>

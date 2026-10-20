@@ -54,16 +54,13 @@ type domainSpec struct {
 	backendPermission         string
 	backendResourceStream     bool
 	backendBypassSingleflight bool
-	frontendRefresherName     string
 	frontendOrchestrator      string
 	frontendDiagnosticsStream string
 	frontendTimingInterval    int
-	frontendTimingCooldown    int
 	frontendTimingTimeout     int
 	frontendPriority          int
 	frontendHasPriority       bool
 	frontendRegistrationOrder int
-	frontendScheduled         bool
 	scopeSelectors            []string
 	scopeQuery                string
 }

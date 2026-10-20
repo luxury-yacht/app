@@ -1,8 +1,8 @@
 /**
  * frontend/src/core/data-access/useRefreshDomainHandle.ts
  *
- * React hook that bundles scoped refresh-domain state, lifecycle enablement,
- * manual refresh, reset, and latest-state reads behind one typed handle.
+ * React hook that bundles scoped refresh-domain state, its lease, and manual
+ * refresh behind one typed handle.
  */
 
 import { useCallback } from 'react';
@@ -10,12 +10,7 @@ import { useCallback } from 'react';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import type { RefreshDemand } from '@/core/refresh/refreshRuntime';
 import type { RefreshDomain } from '@/core/refresh/types';
-import {
-  readRefreshDomainState,
-  requestRefreshDomain,
-  resetRefreshDomain,
-  setRefreshDomainEnabled,
-} from './dataAccess';
+import { requestRefreshDomain } from './dataAccess';
 import type { DataRequestReason } from './types';
 import { useScopedRefreshDomainLifecycle } from './useScopedRefreshDomainLifecycle';
 
@@ -52,21 +47,6 @@ export function useRefreshDomainHandle<K extends RefreshDomain = RefreshDomain>(
     onFetchError,
   });
 
-  const setEnabled = useCallback(
-    (nextEnabled: boolean, nextScope = scope ?? '') => {
-      if (!domain || !nextScope) {
-        return;
-      }
-      setRefreshDomainEnabled({
-        domain,
-        scope: nextScope,
-        enabled: nextEnabled,
-        preserveState,
-      });
-    },
-    [domain, preserveState, scope]
-  );
-
   const refresh = useCallback(
     async (reason: DataRequestReason = 'user', nextScope = scope ?? '') => {
       if (!domain || !nextScope) {
@@ -77,32 +57,9 @@ export function useRefreshDomainHandle<K extends RefreshDomain = RefreshDomain>(
     [domain, scope]
   );
 
-  const reset = useCallback(
-    (nextScope = scope ?? '') => {
-      if (!domain || !nextScope) {
-        return;
-      }
-      resetRefreshDomain(domain, nextScope);
-    },
-    [domain, scope]
-  );
-
-  const readLatest = useCallback(
-    (nextScope = scope ?? '') => {
-      if (!domain || !nextScope) {
-        return null;
-      }
-      return readRefreshDomainState(domain, nextScope);
-    },
-    [domain, scope]
-  );
-
   return {
     state,
     data: state.data,
-    setEnabled,
     refresh,
-    reset,
-    readLatest,
   };
 }

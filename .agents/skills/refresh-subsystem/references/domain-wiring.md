@@ -19,7 +19,7 @@ permission gate, or streamed table registration. Contract rules live in
 | Manual refresh | `/api/v2/refresh/{domain}` in `backend/refresh/api/server.go`, `ManualQueue` in `backend/refresh/types.go` |
 | Telemetry; catalog lifecycle | `backend/refresh/telemetry/recorder.go`; `backend/refresh_object_catalog.go` |
 
-1. Add the authored entry (category, refresher, timing, orchestrator,
+1. Add the authored entry (category, timing, orchestrator,
    diagnostics, source clocks, stream, `refreshPayloadType`, and a
    `scopeContract` with selectors, query mode, and canonical valid/invalid
    example tails) to `backend/refresh/domain/refresh-domain-contract.json`.
@@ -59,16 +59,16 @@ permission gate, or streamed table registration. Contract rules live in
 
 | Concern | Code landmarks (under `frontend/src/core/refresh`) |
 | --- | --- |
-| Refresher names and manual targets | `refresherTypes.ts` (selected by `RefreshManager.ts`) |
-| Timing | `refresherConfig.ts` |
+| Timing | the contract's `frontend.timing`, read through `domainRegistry.ts` |
 | Domain registration and orchestration | `domainRegistrations.ts`, `orchestrator.ts` |
+| Leases, polls, signal refetch, manual refresh | `orchestrator.ts`, per-scope state in `refreshRuntime.ts` |
 | Streams (keep each concern in its module) | `streaming/resourceStreamDomains.ts`; connection lifecycle `resourceStreamConnection.ts`; subscription state `resourceStreamSubscriptions.ts`; wire reducer `resourceStreamProtocol.ts`; resync and effects `resourceStreamManager.ts` |
 | Diagnostics config | `components/diagnostics/diagnosticsPanelConfig.ts` |
 
-- Any consumer of stream-domain `state.data` needs
-  `useStreamSignalRefetch(domain, scopes)` or a query-table `liveDataVersion`;
-  `streamConsumerDrift.test.ts` enforces it. Contexts do not copy domain rows;
-  query-backed tables own their data and base-scope lease.
+- Snapshot leases refetch on their doorbell in the orchestrator; consumers add
+  no signal hook. Query-backed consumers pass `useQueryStreamSignal` as their
+  `liveDataVersion`. Contexts do not copy domain rows; query-backed tables own
+  their data and base-scope lease.
 - Browse keeps its catalog snapshot/manual-refresh flow; do not add
   stream-driven renders for Browse.
 - Validate the changed domain's state in the Diagnostics panel.

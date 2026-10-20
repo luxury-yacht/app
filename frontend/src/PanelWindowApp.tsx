@@ -3,7 +3,7 @@ import { AuthErrorProvider } from '@core/contexts/AuthErrorContext';
 import { ClusterLifecycleProvider } from '@core/contexts/ClusterLifecycleContext';
 import { ErrorProvider } from '@core/contexts/ErrorContext';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
-import { RefreshManagerProvider } from '@core/refresh';
+import { useDocumentVisibilityEvents } from '@core/refresh/hooks/useDocumentVisibilityEvents';
 import { FixedClusterProvider } from '@modules/kubernetes/config/KubeconfigContext';
 import { NamespaceProvider } from '@modules/namespace/contexts/NamespaceContext';
 import ObjectPanel from '@modules/object-panel/components/PanelContent';
@@ -293,6 +293,7 @@ function PanelWindowSurface({
 export default function PanelWindowApp({
   descriptor,
 }: Readonly<{ descriptor: PanelWindowDescriptor }>) {
+  useDocumentVisibilityEvents();
   const clusterWorkspace = useClusterWorkspaceSnapshot();
   const clusterName = resolvePanelWindowClusterName(
     clusterWorkspace.clusters,
@@ -310,25 +311,23 @@ export default function PanelWindowApp({
               >
                 <PanelWindowRoleProvider descriptor={descriptor}>
                   <AppearanceModeProvider>
-                    <RefreshManagerProvider>
-                      <FixedClusterProvider
-                        clusterId={descriptor.clusterId}
-                        clusterName={clusterName}
-                      >
-                        <ObjectPanelStateProvider initialGroupSnapshot={descriptor.snapshot}>
-                          <ClusterLifecycleProvider>
-                            <NamespaceProvider>
-                              <PanelLifecycleGuardProvider>
-                                <PanelWindowSurface
-                                  descriptor={descriptor}
-                                  clusterName={clusterName}
-                                />
-                              </PanelLifecycleGuardProvider>
-                            </NamespaceProvider>
-                          </ClusterLifecycleProvider>
-                        </ObjectPanelStateProvider>
-                      </FixedClusterProvider>
-                    </RefreshManagerProvider>
+                    <FixedClusterProvider
+                      clusterId={descriptor.clusterId}
+                      clusterName={clusterName}
+                    >
+                      <ObjectPanelStateProvider initialGroupSnapshot={descriptor.snapshot}>
+                        <ClusterLifecycleProvider>
+                          <NamespaceProvider>
+                            <PanelLifecycleGuardProvider>
+                              <PanelWindowSurface
+                                descriptor={descriptor}
+                                clusterName={clusterName}
+                              />
+                            </PanelLifecycleGuardProvider>
+                          </NamespaceProvider>
+                        </ClusterLifecycleProvider>
+                      </ObjectPanelStateProvider>
+                    </FixedClusterProvider>
                   </AppearanceModeProvider>
                 </PanelWindowRoleProvider>
               </div>

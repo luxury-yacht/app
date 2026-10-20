@@ -26,13 +26,11 @@ vi.mock('@core/backend-api', () => ({
 }));
 vi.mock('@/core/refresh/orchestrator', () => ({
   refreshOrchestrator: {
-    stopStreamingDomain: vi.fn(),
-    setScopedDomainEnabled: vi.fn(),
-    startStreamingDomain: vi.fn(),
+    acquireScopedDomainLease: vi.fn(),
+    releaseScopedDomainLease: vi.fn(),
     restartStreamingDomain: vi.fn(),
     refreshStreamingDomainOnce: vi.fn(),
     fetchScopedDomain: vi.fn(),
-    updateContext: vi.fn(),
   },
 }));
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({

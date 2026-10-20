@@ -4,34 +4,26 @@ import { describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import { useAutoRefresh } from './useAutoRefresh';
 import { useAutoRefreshLoadingState } from './useAutoRefreshLoadingState';
-import { useBackgroundRefresh } from './useBackgroundRefresh';
 
-const preferences = vi.hoisted(() => ({ auto: true, background: true }));
+const preferences = vi.hoisted(() => ({ auto: true }));
 vi.mock('@/core/settings/appPreferences', () => ({
   getAutoRefreshEnabled: () => preferences.auto,
-  getBackgroundRefreshEnabled: () => preferences.background,
   setAutoRefreshEnabled: vi.fn(),
-  setBackgroundRefreshEnabled: vi.fn(),
 }));
-vi.mock('../RefreshManager', () => ({ refreshManager: { pause: vi.fn(), resume: vi.fn() } }));
 
 describe('refresh preference subscriptions', () => {
   it('observes preference hydration between render and subscription and later rollback', () => {
     preferences.auto = true;
-    preferences.background = true;
-    let current!: { auto: boolean; background: boolean; paused: boolean };
+    let current!: { auto: boolean; paused: boolean };
     function Consumer() {
       const { enabled: auto } = useAutoRefresh();
-      const { enabled: background } = useBackgroundRefresh();
       const { isPaused: paused } = useAutoRefreshLoadingState();
-      current = { auto, background, paused };
+      current = { auto, paused };
       return null;
     }
     const publish = (enabled: boolean) => {
       preferences.auto = enabled;
-      preferences.background = enabled;
       eventBus.emit('settings:auto-refresh', enabled);
-      eventBus.emit('settings:refresh-background', enabled);
     };
     function Hydration() {
       useLayoutEffect(() => publish(false), []);
@@ -49,9 +41,9 @@ describe('refresh preference subscriptions', () => {
           </>
         )
       );
-      expect(current).toEqual({ auto: false, background: false, paused: true });
+      expect(current).toEqual({ auto: false, paused: true });
       act(() => publish(true));
-      expect(current).toEqual({ auto: true, background: true, paused: false });
+      expect(current).toEqual({ auto: true, paused: false });
     } finally {
       act(() => root.unmount());
       container.remove();

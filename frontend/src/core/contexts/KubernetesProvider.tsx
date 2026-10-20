@@ -6,35 +6,17 @@
  */
 
 import { KubeconfigProvider } from '@modules/kubernetes/config/KubeconfigContext';
-import { NamespaceProvider, useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { NamespaceProvider } from '@modules/namespace/contexts/NamespaceContext';
 import type React from 'react';
 import type { ReactNode } from 'react';
-import { RefreshManagerProvider } from '@/core/refresh/contexts/RefreshManagerContext';
-import { useBackgroundClusterRefresh } from '@/core/refresh/hooks/useBackgroundClusterRefresh';
+import { useDocumentVisibilityEvents } from '@/core/refresh/hooks/useDocumentVisibilityEvents';
 import { AppearanceModeProvider } from './AppearanceModeContext';
 import { ClusterLifecycleProvider } from './ClusterLifecycleContext';
-import { useViewState, ViewStateProvider } from './ViewStateContext';
+import { ViewStateProvider } from './ViewStateContext';
 
 interface KubernetesProviderProps {
   children: ReactNode;
 }
-
-/**
- * Bridge component that wires up background cluster refresh.
- * Must be mounted inside both ViewStateProvider and NamespaceProvider
- * so it can access per-cluster navigation state and namespace selections.
- */
-const BackgroundClusterRefreshBridge: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { getClusterNavigationState } = useViewState();
-  const { getClusterNamespace } = useNamespace();
-
-  useBackgroundClusterRefresh({
-    getClusterNavigationState,
-    getClusterNamespace,
-  });
-
-  return <>{children}</>;
-};
 
 /**
  * Composite provider that wraps all Kubernetes-related contexts.
@@ -47,19 +29,16 @@ const BackgroundClusterRefreshBridge: React.FC<{ children: ReactNode }> = ({ chi
  * - Easier testing: Smaller contexts are easier to mock
  */
 export const KubernetesProvider: React.FC<KubernetesProviderProps> = ({ children }) => {
+  useDocumentVisibilityEvents();
   return (
     <AppearanceModeProvider>
-      <RefreshManagerProvider>
-        <KubeconfigProvider>
-          <ViewStateProvider>
-            <ClusterLifecycleProvider>
-              <NamespaceProvider>
-                <BackgroundClusterRefreshBridge>{children}</BackgroundClusterRefreshBridge>
-              </NamespaceProvider>
-            </ClusterLifecycleProvider>
-          </ViewStateProvider>
-        </KubeconfigProvider>
-      </RefreshManagerProvider>
+      <KubeconfigProvider>
+        <ViewStateProvider>
+          <ClusterLifecycleProvider>
+            <NamespaceProvider>{children}</NamespaceProvider>
+          </ClusterLifecycleProvider>
+        </ViewStateProvider>
+      </KubeconfigProvider>
     </AppearanceModeProvider>
   );
 };

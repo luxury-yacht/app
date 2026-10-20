@@ -12,7 +12,6 @@ import type { ObjectDiffOpenRequest } from '@shared/components/diff/objectDiffSe
 import type { GridTableFilterRequest } from '@shared/components/tables/hooks/gridTableFilterRequest';
 import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
 import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
-import type { RefresherState } from '@/core/refresh/RefreshManager';
 
 import type {
   DoorbellDomain as DoorbellStreamDomain,
@@ -74,8 +73,6 @@ export interface AppEvents {
   // Refresh events
   /** A cluster's refresh runtime was torn down (cluster closed/deselected). */
   'refresh:cluster-pruned': { clusterId: string };
-  'refresh:state-change': { name: string; state: RefresherState };
-  'refresh:registered': { name: string };
   'refresh:start': { name: string; isManual: boolean };
   'refresh:complete': { name: string; isManual: boolean; success: boolean; error?: unknown };
   /** A stream scope got a permission-denied error frame: streaming for it is
@@ -94,6 +91,11 @@ export interface AppEvents {
     missingKeys: number;
     extraKeys: number;
   };
+  // A doorbell advanced a declared signal clock for one stored scope.
+  'refresh:stream-signal': {
+    domain: DoorbellStreamDomain;
+    scope: string;
+  };
   'refresh:resource-stream-health': {
     domain: DoorbellStreamDomain;
     scope: string;
@@ -106,7 +108,6 @@ export interface AppEvents {
 
   // Settings events
   'settings:auto-refresh': boolean;
-  'settings:refresh-background': boolean;
   'settings:short-names': boolean;
   'settings:dim-inactive-namespaces': boolean;
   'settings:exclusive-namespaces': boolean;

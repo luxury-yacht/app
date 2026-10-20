@@ -14,7 +14,6 @@ const preferenceMocks = vi.hoisted(() => ({
 
 const refreshMocks = vi.hoisted(() => ({
   setAutoRefresh: vi.fn(),
-  setBackgroundRefresh: vi.fn(),
 }));
 
 const persistenceMocks = vi.hoisted(() => ({
@@ -35,10 +34,6 @@ const resetMocks = vi.hoisted(() => ({
 
 vi.mock('@/core/refresh', () => ({
   useAutoRefresh: () => ({ enabled: true, setAutoRefresh: refreshMocks.setAutoRefresh }),
-  useBackgroundRefresh: () => ({
-    enabled: true,
-    setBackgroundRefresh: refreshMocks.setBackgroundRefresh,
-  }),
 }));
 
 vi.mock('@/core/settings/appPreferences', () => ({
@@ -147,14 +142,9 @@ describe('AdvancedSection', () => {
       container.querySelector<HTMLButtonElement>('[aria-label="Per-namespace views"]'),
       'expected persistence switch'
     );
-    const backgroundRefreshSwitch = requireValue(
-      container.querySelector<HTMLButtonElement>('[aria-label="Background clusters refresh"]'),
-      'expected background refresh switch'
-    );
 
     await act(async () => {
       refreshSwitch.click();
-      backgroundRefreshSwitch.click();
       persistenceSwitch.click();
       findButton(container, 'Reset Views').click();
     });
@@ -164,7 +154,6 @@ describe('AdvancedSection', () => {
     });
 
     expect(refreshMocks.setAutoRefresh).toHaveBeenCalledWith(false);
-    expect(refreshMocks.setBackgroundRefresh).toHaveBeenCalledWith(false);
     expect(persistenceMocks.setGridTablePersistenceMode).toHaveBeenCalledWith('namespaced');
     expect(persistenceMocks.clearAllGridTableState).toHaveBeenCalledOnce();
     expect(

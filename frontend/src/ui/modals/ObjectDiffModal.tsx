@@ -42,9 +42,7 @@ import { useModalPresence } from '@shared/components/modals/useModalPresence';
 import {
   readCatalogObjectMatchForRef,
   requestData,
-  requestRefreshDomain,
-  resetRefreshDomain,
-  setRefreshDomainEnabled,
+  useScopedRefreshDomainLifecycle,
 } from '@/core/data-access';
 import { failureMessage, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -457,24 +455,13 @@ const useCatalogDiffSnapshot = (
   const effectiveScope = scope ?? INACTIVE_SCOPE;
   const state = useRefreshScopedDomain('catalog-diff', effectiveScope);
 
-  useEffect(() => {
-    if (!scope || !enabled) {
-      return;
-    }
-
-    setRefreshDomainEnabled({ domain: 'catalog-diff', scope, enabled: true });
-    void requestRefreshDomain({
-      domain: 'catalog-diff',
-      scope,
-      reason: 'user',
-    });
-
-    return () => {
-      // Clean up the previous scope to prevent background refreshes.
-      setRefreshDomainEnabled({ domain: 'catalog-diff', scope, enabled: false });
-      resetRefreshDomain('catalog-diff', scope);
-    };
-  }, [enabled, scope]);
+  // Releasing without preserving state clears the previous scope's rows.
+  useScopedRefreshDomainLifecycle({
+    domain: 'catalog-diff',
+    scope,
+    enabled: Boolean(scope && enabled),
+    fetchOnEnable: 'user',
+  });
 
   return { scope, state };
 };

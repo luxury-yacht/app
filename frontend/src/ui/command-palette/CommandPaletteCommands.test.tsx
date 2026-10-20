@@ -63,9 +63,7 @@ const { mocks } = vi.hoisted(() => ({
     desktopRuntime: {
       closeWindow: vi.fn(),
     },
-    refreshOrchestrator: {
-      triggerManualRefreshForContext: vi.fn(),
-    },
+    refreshOrchestrator: {},
   },
 }));
 
@@ -78,7 +76,6 @@ vi.mock('@/core/data-access', async (importOriginal) => ({
     data: { clusterId: mocks.kubeconfig.selectedClusterId, resourceFamilies: familyState.families },
   }),
 }));
-vi.mock('@/core/refresh/hooks/useStreamSignalRefetch', () => ({ useStreamSignalRefetch: vi.fn() }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => mocks.kubeconfig,

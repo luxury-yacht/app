@@ -142,7 +142,7 @@ func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testi
 			UseShortResourceNames:    true,
 			DimInactiveNamespaces:    boolPtr(false),
 			ExclusiveNamespaces:      boolPtr(false),
-			Refresh:                  &settingsRefresh{Auto: false, Background: false, MetricsIntervalMs: 9000},
+			Refresh:                  &settingsRefresh{Auto: false, MetricsIntervalMs: 9000},
 			GridTablePersistenceMode: "namespaced",
 			DefaultTablePageSize:     100,
 		},

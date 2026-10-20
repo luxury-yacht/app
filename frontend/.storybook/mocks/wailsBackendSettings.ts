@@ -29,7 +29,6 @@ export function setMockSettingsBackend(options: SettingsMockOptions = {}): void 
       appearanceMode: merged.appearanceMode,
       useShortResourceNames: false,
       autoRefreshEnabled: false,
-      refreshBackgroundClustersEnabled: false,
       metricsRefreshIntervalMs: 30000,
       gridTablePersistenceMode: 'shared',
       defaultObjectPanelPosition: 'right',

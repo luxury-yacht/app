@@ -80,20 +80,14 @@ const mockUseCapabilities = vi.fn();
 const mockUseUserPermission = vi.fn();
 const mockQueryNamespacePermissions = vi.fn();
 const mockUseRefreshScopedDomain = vi.fn();
-const mockUseRefreshWatcher = vi.fn();
 const mockUseShortcut = vi.fn();
 
 const mockRefreshOrchestrator = {
-  setScopedDomainEnabled: vi.fn(),
+  acquireScopedDomainLease: vi.fn(),
+  releaseScopedDomainLease: vi.fn(),
   resetScopedDomain: vi.fn(),
   stopStreamingDomain: vi.fn(),
   fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
-  updateContext: vi.fn(),
-};
-
-const mockRefreshManager = {
-  register: vi.fn(),
-  unregister: vi.fn(),
 };
 
 const mockErrorHandler = {
@@ -250,12 +244,6 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Helm/ValuesTab', () => ({
   },
 }));
 
-vi.mock('@/core/refresh/hooks/useRefreshWatcher', () => ({
-  useRefreshWatcher: (config: unknown) => {
-    mockUseRefreshWatcher(config);
-  },
-}));
-
 vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: (...args: unknown[]) => mockUseRefreshScopedDomain(...args),
   resetScopedDomainState: vi.fn(),
@@ -266,7 +254,6 @@ vi.mock('@/core/refresh/orchestrator', () => ({
 }));
 
 vi.mock('@/core/refresh', () => ({
-  refreshManager: mockRefreshManager,
   refreshOrchestrator: mockRefreshOrchestrator,
 }));
 
@@ -334,7 +321,6 @@ describe('ObjectPanel tab availability', () => {
 
     mockRefreshOrchestrator.fetchScopedDomain.mockResolvedValue(undefined);
 
-    mockUseRefreshWatcher.mockClear();
     mockClosePanel.mockReset();
     tabStore.reset();
     dockGroup.activeTab = null;
@@ -462,7 +448,7 @@ describe('ObjectPanel tab availability', () => {
     expect(labels).not.toContain('YAML');
   });
 
-  it('registers refreshers and wires refresh watcher for active detail scope', async () => {
+  it('leases and reads the details of the active panel', async () => {
     await renderObjectPanel({
       kind: 'Pod',
       name: 'api',
@@ -471,28 +457,14 @@ describe('ObjectPanel tab availability', () => {
     });
 
     const detailScope = testScope(defaultClusterId, 'team-a:/v1:Pod:api');
-    // Refresher names are panel-scoped (kind + panelId) so simultaneously-open
-    // same-kind panels register distinct refreshers.
-    const refresherName = `object-pod:${buildPanelId(defaultClusterId, 'Pod', 'team-a', 'api')}`;
-
-    expect(mockRefreshManager.register).toHaveBeenCalledWith(
-      expect.objectContaining({ name: refresherName, interval: 2000 })
-    );
-    expect(mockUseRefreshWatcher).toHaveBeenCalledWith(
-      expect.objectContaining({
-        refresherName,
-        enabled: true,
-      })
-    );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',
       detailScope,
-      expect.objectContaining({ isManual: false })
+      expect.objectContaining({ intent: 'startup' })
     );
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(mockRefreshOrchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
       'object-details',
       detailScope,
-      true,
       { preserveState: true }
     );
 
@@ -500,15 +472,13 @@ describe('ObjectPanel tab availability', () => {
       ctx.root.unmount();
     });
 
-    expect(mockRefreshManager.unregister).toHaveBeenCalledWith(refresherName);
     // Tier 1 responsiveness: unmount disables refreshing but preserves
     // the cached snapshot so a remount (cluster switch round-trip)
     // renders instantly. Eviction now lives in
     // ObjectPanelStateContext.closePanel, not in the unmount destructor.
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(mockRefreshOrchestrator.releaseScopedDomainLease).toHaveBeenCalledWith(
       'object-details',
       detailScope,
-      false,
       { preserveState: true }
     );
     expect(mockRefreshOrchestrator.resetScopedDomain).not.toHaveBeenCalledWith(
@@ -557,7 +527,7 @@ describe('ObjectPanel tab availability', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',
       testScope(defaultClusterId, 'team-a:apps/v1:Deployment:api'),
-      expect.objectContaining({ isManual: true })
+      expect.objectContaining({ intent: 'user' })
     );
   });
 

@@ -56,7 +56,8 @@ const searchShortcutMocks = vi.hoisted(() => ({
 }));
 
 const refreshMocks = vi.hoisted(() => ({
-  setScopedDomainEnabled: vi.fn(),
+  acquireScopedDomainLease: vi.fn(),
+  releaseScopedDomainLease: vi.fn(),
   fetchScopedDomain: vi.fn(() => Promise.resolve()),
   resetScopedDomain: vi.fn(),
 }));
@@ -524,7 +525,8 @@ describe('YamlTab', () => {
     codeMirrorState.editorView.dispatch.mockClear();
     codeMirrorState.editorView.focus.mockClear();
     vi.mocked(Clipboard.SetText).mockReset().mockResolvedValue(undefined);
-    refreshMocks.setScopedDomainEnabled.mockClear();
+    refreshMocks.acquireScopedDomainLease.mockClear();
+    refreshMocks.releaseScopedDomainLease.mockClear();
     refreshMocks.fetchScopedDomain.mockClear();
     refreshMocks.resetScopedDomain.mockClear();
     shortcutMocks.useShortcut.mockClear();
@@ -810,6 +812,7 @@ describe('YamlTab', () => {
 
     const saveButton = getIconButton(container, 'Save YAML');
     expect(saveButton).toBeTruthy();
+    refreshMocks.fetchScopedDomain.mockClear();
 
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -837,7 +840,7 @@ describe('YamlTab', () => {
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',
       'default:pod:demo',
-      expect.objectContaining({ isManual: false })
+      expect.objectContaining({ intent: 'user' })
     );
 
     const editButtonAfterSave = getIconButton(container, 'Edit YAML');
@@ -1446,18 +1449,19 @@ describe('YamlTab', () => {
   it('pauses YAML auto-refresh while editing and resumes it after cancel', async () => {
     const { container, unmount } = await renderYamlTab();
 
-    expect(refreshMocks.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(refreshMocks.acquireScopedDomainLease).toHaveBeenCalledWith(
       'object-yaml',
       'default:pod:demo',
-      true
+      { preserveState: true }
     );
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',
       'default:pod:demo',
-      expect.objectContaining({ isManual: false })
+      expect.objectContaining({ intent: 'startup' })
     );
 
-    refreshMocks.setScopedDomainEnabled.mockClear();
+    refreshMocks.acquireScopedDomainLease.mockClear();
+    refreshMocks.releaseScopedDomainLease.mockClear();
     refreshMocks.fetchScopedDomain.mockClear();
 
     const editButton = getIconButton(container, 'Edit YAML');
@@ -1465,14 +1469,15 @@ describe('YamlTab', () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(refreshMocks.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(refreshMocks.releaseScopedDomainLease).toHaveBeenCalledWith(
       'object-yaml',
       'default:pod:demo',
-      false
+      { preserveState: true }
     );
     expect(refreshMocks.fetchScopedDomain).not.toHaveBeenCalled();
 
-    refreshMocks.setScopedDomainEnabled.mockClear();
+    refreshMocks.acquireScopedDomainLease.mockClear();
+    refreshMocks.releaseScopedDomainLease.mockClear();
     refreshMocks.fetchScopedDomain.mockClear();
 
     const cancelButton = getIconButton(container, 'Cancel edit');
@@ -1480,15 +1485,15 @@ describe('YamlTab', () => {
       cancelButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(refreshMocks.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(refreshMocks.acquireScopedDomainLease).toHaveBeenCalledWith(
       'object-yaml',
       'default:pod:demo',
-      true
+      { preserveState: true }
     );
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',
       'default:pod:demo',
-      expect.objectContaining({ isManual: false })
+      expect.objectContaining({ intent: 'startup' })
     );
 
     await unmount();

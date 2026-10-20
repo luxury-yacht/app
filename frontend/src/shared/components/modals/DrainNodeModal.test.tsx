@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   handleError: vi.fn(),
   requestRefresh: vi.fn(),
   runStartDrain: vi.fn(),
-  setRefreshEnabled: vi.fn(),
+  lease: vi.fn(),
   snapshot: {
     status: 'ready',
     data: { drains: [] as NodeMaintenanceDrainJob[] },
@@ -30,7 +30,7 @@ vi.mock('@/core/backend-api', () => ({
 
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomain: (...args: unknown[]) => mocks.requestRefresh(...args),
-  setRefreshDomainEnabled: (...args: unknown[]) => mocks.setRefreshEnabled(...args),
+  useScopedRefreshDomainLifecycle: (...args: unknown[]) => mocks.lease(...args),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -93,7 +93,7 @@ describe('DrainNodeModal', () => {
     mocks.requestRefresh.mockResolvedValue(undefined);
     mocks.runStartDrain.mockReset();
     mocks.runStartDrain.mockResolvedValue(undefined);
-    mocks.setRefreshEnabled.mockReset();
+    mocks.lease.mockReset();
     defaultProps.onClose.mockReset();
   });
 
@@ -113,22 +113,18 @@ describe('DrainNodeModal', () => {
     await renderModal({ isOpen: false });
 
     expect(document.querySelector('.drain-node-modal')).toBeNull();
-    expect(mocks.setRefreshEnabled).not.toHaveBeenCalled();
+    expect(mocks.lease).not.toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     expect(mocks.requestRefresh).not.toHaveBeenCalled();
   });
 
   it('acquires the cluster-scoped node maintenance domain and renders initial options', async () => {
     await renderModal();
 
-    expect(mocks.setRefreshEnabled).toHaveBeenCalledWith({
+    expect(mocks.lease).toHaveBeenCalledWith({
       domain: 'object-maintenance',
       scope: 'cluster-1|node:node-a',
       enabled: true,
-    });
-    expect(mocks.requestRefresh).toHaveBeenCalledWith({
-      domain: 'object-maintenance',
-      scope: 'cluster-1|node:node-a',
-      reason: 'startup',
+      fetchOnEnable: 'startup',
     });
     expect(document.querySelector('[data-test="drain-modal-start"]')).not.toBeNull();
     expect(document.querySelector('.drain-node-modal-advanced')).not.toBeNull();

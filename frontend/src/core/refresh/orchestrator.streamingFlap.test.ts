@@ -28,29 +28,12 @@ vi.mock('./client', () => ({
   setMetricsActive: () => undefined,
 }));
 
-vi.mock('./RefreshManager', () => ({
-  refreshManager: {
-    subscribe: () => () => undefined,
-    enable: () => undefined,
-    disable: () => undefined,
-    register: () => undefined,
-    updateContext: () => undefined,
-    triggerManualRefreshForContext: () => Promise.resolve(),
-  },
-}));
-
 // Keep the singleton lean: no default domains, no stream-manager wiring.
 vi.mock('./domainRegistrations', () => ({
   registerDefaultRefreshDomains: () => undefined,
 }));
 
-// The flap contract is view-independent: bypass the view-activity and
-// auto-refresh gates so shouldStreamScope answers on scope shape alone.
-vi.mock('./resourceStreamViews', () => ({
-  isResourceStreamDomain: () => false,
-  isResourceStreamViewActive: () => true,
-}));
-
+// Bypass the auto-refresh gate so shouldStreamScope answers on scope shape alone.
 vi.mock('@/core/settings/appPreferences', () => ({
   getAutoRefreshEnabled: () => true,
 }));
@@ -95,7 +78,6 @@ describe('streaming start under the mount-time lease flap', () => {
     });
     refreshOrchestrator.registerDomain({
       domain: DOMAIN,
-      refresherName: 'test-flap-refresher',
       category: 'namespace',
       streaming: {
         start: (scope: string) => {
@@ -112,18 +94,18 @@ describe('streaming start under the mount-time lease flap', () => {
   });
 
   afterEach(() => {
-    refreshOrchestrator.setScopedDomainEnabled(DOMAIN, SCOPE, false);
+    refreshOrchestrator.releaseScopedDomainLease(DOMAIN, SCOPE);
   });
 
   it('restarts a cancelled in-flight start when the scope was re-enabled', async () => {
-    refreshOrchestrator.setScopedDomainEnabled(DOMAIN, SCOPE, true);
+    refreshOrchestrator.acquireScopedDomainLease(DOMAIN, SCOPE);
     await flush();
     expect(startCalls).toHaveLength(1);
 
     // The flap: disable cancels the in-flight start; the immediate re-enable's
     // start attempt early-returns on the still-pending doomed start.
-    refreshOrchestrator.setScopedDomainEnabled(DOMAIN, SCOPE, false);
-    refreshOrchestrator.setScopedDomainEnabled(DOMAIN, SCOPE, true);
+    refreshOrchestrator.releaseScopedDomainLease(DOMAIN, SCOPE);
+    refreshOrchestrator.acquireScopedDomainLease(DOMAIN, SCOPE);
     await flush();
     expect(startCalls).toHaveLength(1);
 
@@ -155,7 +137,6 @@ describe('streaming start under the mount-time lease flap', () => {
     // with "unknown domain", surfaced to the user as an error toast.
     refreshOrchestrator.registerDomain({
       domain: DOMAIN,
-      refresherName: 'test-flap-refresher',
       category: 'namespace',
       streaming: {
         snapshotless: true,
@@ -171,7 +152,7 @@ describe('streaming start under the mount-time lease flap', () => {
       },
     } as never);
 
-    refreshOrchestrator.setScopedDomainEnabled(DOMAIN, SCOPE, true);
+    refreshOrchestrator.acquireScopedDomainLease(DOMAIN, SCOPE);
     await flush();
     expect(startCalls).toHaveLength(1);
     resolvers[0](() => undefined);
@@ -246,11 +227,11 @@ describe('streaming start under the mount-time lease flap', () => {
   });
 
   it('tears a cancelled start down exactly once when the scope stays disabled', async () => {
-    refreshOrchestrator.setScopedDomainEnabled(DOMAIN, SCOPE, true);
+    refreshOrchestrator.acquireScopedDomainLease(DOMAIN, SCOPE);
     await flush();
     expect(startCalls).toHaveLength(1);
 
-    refreshOrchestrator.setScopedDomainEnabled(DOMAIN, SCOPE, false);
+    refreshOrchestrator.releaseScopedDomainLease(DOMAIN, SCOPE);
     const doomedCleanup = vi.fn();
     resolvers[0](doomedCleanup);
     await flush();

@@ -53,6 +53,7 @@ const EXPECTED_DOORBELL_DOMAINS: DoorbellDomain[] = [
   'namespace-metrics',
   'object-events',
   'cluster-overview',
+  'object-details',
   'cluster-attention',
   'cluster-identities',
 ];

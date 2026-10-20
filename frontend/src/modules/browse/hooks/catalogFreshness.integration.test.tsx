@@ -2,7 +2,6 @@ import { act, createContext, useContext } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
-import { refreshOrchestrator } from '@/core/refresh';
 import { clusterReadiness } from '@/core/refresh/clusterReadiness';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import { getScopedDomainStates, resetAllScopedDomainStates } from '@/core/refresh/store';
@@ -200,14 +199,6 @@ it.each([
       close: vi.fn(),
     };
     Object.assign(globalThis, { __wailsJSONStreamFactory: () => socket });
-    refreshOrchestrator.updateContext({
-      currentView: 'namespace',
-      activeNamespaceView: tab,
-      selectedNamespace: 'argocd',
-      selectedClusterIds: ['cluster-a', 'cluster-b'],
-      selectedClusterId: 'cluster-a',
-      backgroundRefreshEnabled: true,
-    });
     for (const clusterId of backendRows.keys()) {
       eventBus.emit('cluster:lifecycle', { clusterId, state: 'ready' });
     }

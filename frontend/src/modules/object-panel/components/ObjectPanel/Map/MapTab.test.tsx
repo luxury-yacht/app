@@ -11,7 +11,6 @@ import { localFailure, type RefreshFailure } from '@/core/refresh/refreshFailure
 import type { PanelObjectData } from '../types';
 
 const refreshMocks = vi.hoisted(() => ({
-  setScopedDomainEnabled: vi.fn(),
   acquireScopedDomainLease: vi.fn(),
   releaseScopedDomainLease: vi.fn(),
   fetchScopedDomain: vi.fn(() => Promise.resolve()),
@@ -165,7 +164,6 @@ beforeEach(() => {
     data: null,
     error: null,
   };
-  refreshMocks.setScopedDomainEnabled.mockClear();
   refreshMocks.fetchScopedDomain.mockClear();
   objectPanelMocks.openWithObject.mockClear();
   navigateMocks.available = true;

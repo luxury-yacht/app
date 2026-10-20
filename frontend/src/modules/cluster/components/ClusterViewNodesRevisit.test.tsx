@@ -65,7 +65,6 @@ vi.mock('@/core/refresh', () => ({
     status: 'idle',
     isManual: false,
   }),
-  refreshManager: { triggerManualRefresh: vi.fn() },
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({

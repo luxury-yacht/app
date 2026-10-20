@@ -116,7 +116,7 @@ func configureObjectEventsInformer(factory informers.SharedInformerFactory, buil
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			// Informer resyncs re-deliver every event with an unchanged
 			// ResourceVersion; only real changes ring the doorbell.
-			if informerUpdateIsEcho(oldObj, newObj) {
+			if InformerUpdateIsEcho(oldObj, newObj) {
 				return
 			}
 			record(newObj)

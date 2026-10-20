@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access/useScopedRefreshDomainLifecycle';
-import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { failureMessage, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import { type DomainStatus, useRefreshScopedDomain } from '@/core/refresh/store';
 import type {
@@ -75,15 +74,6 @@ export const useResourceMetrics = (
     preserveState: true,
     fetchOnEnable: 'startup',
   });
-
-  // Doorbells (object changes, metric collections) only advance the scoped
-  // sourceVersion; the poll that used to refresh this scope's data skips while
-  // the stream is healthy. Without this, panel usage freezes at its first load.
-  const signalScopes = useMemo(
-    () => (enabled && resolution.kind === 'domain' ? [resolution.scope] : []),
-    [enabled, resolution]
-  );
-  useStreamSignalRefetch(domain, signalScopes);
 
   return useMemo((): ResourceMetricsResult => {
     if (resolution.kind !== 'domain') {

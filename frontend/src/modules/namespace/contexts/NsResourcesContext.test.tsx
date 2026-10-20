@@ -13,16 +13,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NamespaceResourcesProvider } from './NsResourcesContext';
 
-const { orchestrator, capabilityMocks, viewState } = vi.hoisted(() => ({
+const { orchestrator, capabilityMocks } = vi.hoisted(() => ({
   orchestrator: {
-    updateContext: vi.fn(),
-    setScopedDomainEnabled: vi.fn(),
     acquireScopedDomainLease: vi.fn(),
     releaseScopedDomainLease: vi.fn(),
     fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
   },
   capabilityMocks: { queryNamespacePermissions: vi.fn() },
-  viewState: { value: 'namespace' as string },
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -36,10 +33,6 @@ vi.mock('@/core/capabilities', async () => {
     queryNamespacePermissions: capabilityMocks.queryNamespacePermissions,
   };
 });
-
-vi.mock('@/core/contexts/ViewStateContext', () => ({
-  useViewState: () => ({ viewType: viewState.value }),
-}));
 
 const testClusterId = 'test-cluster';
 
@@ -66,7 +59,6 @@ describe('NamespaceResourcesProvider', () => {
       }
     });
     capabilityMocks.queryNamespacePermissions.mockClear();
-    viewState.value = 'namespace';
   });
 
   afterEach(() => {
@@ -96,25 +88,9 @@ describe('NamespaceResourcesProvider', () => {
     expect(container.querySelector('[data-testid="child"]')).toBeTruthy();
     expect(orchestrator.acquireScopedDomainLease).not.toHaveBeenCalled();
     expect(orchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-    expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalled();
 
-    // The load-bearing responsibilities stay: the orchestrator knows the
-    // active namespace, and single-namespace permissions are primed.
-    expect(orchestrator.updateContext).toHaveBeenCalledWith({
-      selectedNamespace: 'team-a',
-      selectedNamespaceClusterId: testClusterId,
-    });
+    // The load-bearing responsibility stays: single-namespace permissions are primed.
     expect(capabilityMocks.queryNamespacePermissions).toHaveBeenCalledWith('team-a', testClusterId);
-  });
-
-  it('clears the orchestrator namespace context outside the namespace view', async () => {
-    viewState.value = 'cluster';
-    await render('team-a');
-
-    expect(orchestrator.updateContext).toHaveBeenCalledWith({
-      selectedNamespace: undefined,
-      selectedNamespaceClusterId: undefined,
-    });
   });
 
   it('does not prime permissions for the all-namespaces sentinel', async () => {
@@ -127,9 +103,9 @@ describe('NamespaceResourcesProvider', () => {
     await render('team-a');
     await render('team-b');
 
-    expect(orchestrator.updateContext).toHaveBeenCalledWith({
-      selectedNamespace: 'team-b',
-      selectedNamespaceClusterId: testClusterId,
-    });
+    expect(capabilityMocks.queryNamespacePermissions).toHaveBeenLastCalledWith(
+      'team-b',
+      testClusterId
+    );
   });
 });

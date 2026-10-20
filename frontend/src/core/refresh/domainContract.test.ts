@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 
 import {
-  DOMAIN_REFRESHER_MAP,
   DOMAIN_STREAM_MAP,
   frontendRefreshDomainPolicies,
   getRefreshDomainDescriptor,
@@ -14,32 +13,12 @@ import { refreshOrchestrator } from './orchestrator';
 import { RESOURCE_STREAM_DOMAINS } from './streaming/resourceStreamDomains';
 import type { RefreshDomain } from './types';
 
-const refreshManagerMocks = vi.hoisted(() => ({
-  subscribeMock: vi.fn(() => vi.fn()),
-  disableMock: vi.fn(),
-  enableMock: vi.fn(),
-  registerMock: vi.fn(),
-  updateContextMock: vi.fn(),
-  triggerManualRefreshForContextMock: vi.fn(),
-}));
-
 const streamManagerMocks = vi.hoisted(() => ({
   resourceStart: vi.fn(),
   resourceStop: vi.fn(),
   resourceRefreshOnce: vi.fn(),
   containerStart: vi.fn(),
   containerStop: vi.fn(),
-}));
-
-vi.mock('./RefreshManager', () => ({
-  refreshManager: {
-    subscribe: refreshManagerMocks.subscribeMock,
-    disable: refreshManagerMocks.disableMock,
-    enable: refreshManagerMocks.enableMock,
-    register: refreshManagerMocks.registerMock,
-    updateContext: refreshManagerMocks.updateContextMock,
-    triggerManualRefreshForContext: refreshManagerMocks.triggerManualRefreshForContextMock,
-  },
 }));
 
 vi.mock('./client', () => ({
@@ -80,17 +59,14 @@ type ContractDomain = {
     resourceStream: boolean;
   };
   frontend: {
-    refresherName: string;
     orchestrator: OrchestratorKind;
     diagnosticsStream: DiagnosticsStream | null;
     timing: {
       interval: number;
-      cooldown: number;
       timeout: number;
     };
     priority?: number;
     registrationOrder: number;
-    scheduled?: boolean;
   };
 };
 
@@ -219,6 +195,13 @@ const enforcedCoverageProofs = (): Record<string, Set<RefreshDomain>> => {
   return proofs;
 };
 
+// Doorbell-snapshot domains whose payload is not a snapshot table.
+const DOORBELL_BEHAVIOR_CLASSES: Partial<Record<string, string>> = {
+  'object-events': 'event-snapshot',
+  'object-details': 'detail-payload',
+  'cluster-overview': 'aggregate-snapshot',
+};
+
 describe('refresh domain contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -251,9 +234,7 @@ describe('refresh domain contract', () => {
       if (entry.frontend.diagnosticsStream !== null) {
         expect(diagnosticsStreams.has(entry.frontend.diagnosticsStream)).toBe(true);
       }
-      expect(entry.frontend.refresherName).toEqual(expect.any(String));
       expect(entry.frontend.timing.interval).toBeGreaterThan(0);
-      expect(entry.frontend.timing.cooldown).toBeGreaterThan(0);
       expect(entry.frontend.timing.timeout).toBeGreaterThan(0);
     }
   });
@@ -299,14 +280,10 @@ describe('refresh domain contract', () => {
       expect(registration).toBeDefined();
       expect(descriptor.category).toBe(entry.category);
       expect(registration?.category).toBe(entry.category);
-      expect(descriptor.refresherName).toBe(entry.frontend.refresherName);
-      expect(registration?.refresherName).toBe(entry.frontend.refresherName);
-      expect(DOMAIN_REFRESHER_MAP[entry.domain]).toBe(entry.frontend.refresherName);
       expect(DOMAIN_STREAM_MAP[entry.domain]).toBe(entry.frontend.diagnosticsStream ?? undefined);
       expect(descriptor.diagnosticsStream).toBe(entry.frontend.diagnosticsStream ?? undefined);
       expect(descriptor.timing).toEqual(entry.frontend.timing);
       expect(descriptor.priority).toBe(entry.frontend.priority);
-      expect(registration?.scheduled).toBe(entry.frontend.scheduled === false ? false : undefined);
 
       switch (entry.frontend.orchestrator) {
         case 'snapshot':
@@ -501,12 +478,15 @@ describe('refresh domain contract', () => {
           // namespace-metrics (snapshot-table, metric doorbell),
           // object-events (event-snapshot, per-object event doorbell),
           // cluster/namespace events (snapshot-table, event doorbell rung by
-          // the table's maintained store), and cluster-overview
-          // (aggregate-snapshot, metric doorbell with polls kept on).
+          // the table's maintained store), cluster-overview
+          // (aggregate-snapshot, metric doorbell with polls kept on), and
+          // object-details (detail-payload, per-object doorbell rung after
+          // eviction, polls kept on).
           expect([
             'namespaces',
             'namespace-metrics',
             'object-events',
+            'object-details',
             'cluster-events',
             'namespace-events',
             'cluster-overview',
@@ -514,11 +494,7 @@ describe('refresh domain contract', () => {
             'cluster-identities',
           ]).toContain(entry.domain);
           expect(inventory.behaviorClass).toBe(
-            entry.domain === 'object-events'
-              ? 'event-snapshot'
-              : entry.domain === 'cluster-overview'
-                ? 'aggregate-snapshot'
-                : 'snapshot-table'
+            DOORBELL_BEHAVIOR_CLASSES[entry.domain] ?? 'snapshot-table'
           );
           expect(inventory.streamSemantics).toEqual(
             expect.arrayContaining(['snapshot-replace', 'change-signal'])
@@ -547,12 +523,8 @@ describe('refresh domain contract', () => {
             expect(inventory.coverageContract).toBe('event-snapshot-payload');
           }
           if (inventory.behaviorClass === 'detail-payload') {
-            expect(['object-details', 'object-yaml']).toContain(entry.domain);
-            expect(inventory.cachePolicy).toBe(
-              entry.domain === 'object-details'
-                ? 'provider-cache'
-                : 'snapshot-cache-plus-provider-cache'
-            );
+            expect(entry.domain).toBe('object-yaml');
+            expect(inventory.cachePolicy).toBe('snapshot-cache-plus-provider-cache');
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
             expect(inventory.coverageContract).toBe('detail-payload-shape');
           }

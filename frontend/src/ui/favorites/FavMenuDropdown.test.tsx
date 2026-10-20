@@ -133,7 +133,7 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
 }));
 
 vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: { updateContext: vi.fn(), triggerManualRefreshForContext: vi.fn() },
+  refreshOrchestrator: {},
 }));
 
 // Import the component after all mocks are established.

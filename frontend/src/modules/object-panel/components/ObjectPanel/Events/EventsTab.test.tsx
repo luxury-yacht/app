@@ -21,12 +21,8 @@ interface CapturedGridTableProps
 }
 
 interface RefreshOrchestratorMock {
-  setScopedDomainEnabled: ReturnType<typeof vi.fn>;
-}
-
-interface RefreshManagerMock {
-  register: ReturnType<typeof vi.fn>;
-  unregister: ReturnType<typeof vi.fn>;
+  acquireScopedDomainLease: ReturnType<typeof vi.fn>;
+  releaseScopedDomainLease: ReturnType<typeof vi.fn>;
 }
 
 // Capture the openWithObject calls so we can inspect clusterId.
@@ -80,9 +76,6 @@ const appPreferencesMocks = vi.hoisted(() => ({
 
 vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: () => hoistedSnapshot,
-  // Consumed by useStreamSignalRefetch (the object-events doorbell refetch);
-  // no doorbell clocks in these tests, so an empty state map keeps it inert.
-  useRefreshScopedDomainStates: () => ({}),
 }));
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
@@ -96,18 +89,10 @@ vi.mock('@/core/settings/appPreferences', () => ({
 const mockFetchScopedDomain = vi.fn(() => Promise.resolve());
 
 vi.mock('@/core/refresh', () => ({
-  refreshManager: { register: vi.fn(), unregister: vi.fn() },
   refreshOrchestrator: {
-    setScopedDomainEnabled: vi.fn(),
+    acquireScopedDomainLease: vi.fn(),
+    releaseScopedDomainLease: vi.fn(),
     fetchScopedDomain: mockFetchScopedDomain,
-  },
-}));
-
-// Capture the onRefresh callback registered by EventsTab so we can invoke it.
-const refreshWatcherState = { onRefresh: null as ((isManual: boolean) => Promise<void>) | null };
-vi.mock('@/core/refresh/hooks/useRefreshWatcher', () => ({
-  useRefreshWatcher: (opts: { onRefresh: (isManual: boolean) => Promise<void> }) => {
-    refreshWatcherState.onRefresh = opts.onRefresh;
   },
 }));
 
@@ -199,13 +184,11 @@ describe('EventsTab', () => {
   let root: ReactDOM.Root;
   let EventsTab: typeof import('./EventsTab').default;
   let refreshOrchestrator: RefreshOrchestratorMock;
-  let refreshManagerMock: RefreshManagerMock;
 
   beforeAll(async () => {
     ({ default: EventsTab } = await import('./EventsTab'));
     const refreshModule = await import('@/core/refresh');
     refreshOrchestrator = refreshModule.refreshOrchestrator as unknown as RefreshOrchestratorMock;
-    refreshManagerMock = refreshModule.refreshManager as unknown as RefreshManagerMock;
   });
 
   beforeEach(() => {
@@ -214,10 +197,8 @@ describe('EventsTab', () => {
     navigationMocks.navigateToView.mockClear();
     mockFindCatalogObjectByUID.mockReset();
     mockFetchScopedDomain.mockClear();
-    refreshOrchestrator.setScopedDomainEnabled.mockClear();
-    refreshManagerMock.register.mockClear();
-    refreshManagerMock.unregister.mockClear();
-    refreshWatcherState.onRefresh = null;
+    refreshOrchestrator.acquireScopedDomainLease.mockClear();
+    refreshOrchestrator.releaseScopedDomainLease.mockClear();
     autoRefreshLoadingState.isPaused = false;
     autoRefreshLoadingState.isManualRefreshActive = false;
     autoRefreshLoadingState.suppressPassiveLoading = false;
@@ -246,8 +227,6 @@ describe('EventsTab', () => {
     clusterName: PARENT_CLUSTER_NAME,
   };
 
-  const PANEL_ID = `obj:${PARENT_CLUSTER_ID}:apps/v1/deployment:default:my-deploy`;
-
   // The Object Name link opens the involved object; Enter on the focused row
   // opens the Event.
   const clickObjectName = async (index = 0) => {
@@ -271,28 +250,6 @@ describe('EventsTab', () => {
     });
   };
 
-  it('registers the events refresher under the panel-scoped name', async () => {
-    // Same-kind panels must not share an events refresher: a kind-only name
-    // let one panel's unmount unregister the other's refresher + subscribers.
-    hoistedSnapshot.data = { events: [] };
-    hoistedSnapshot.status = 'ready';
-
-    act(() => {
-      root.render(
-        <EventsTab
-          objectData={parentObjectData}
-          panelId={PANEL_ID}
-          isActive={true}
-          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
-        />
-      );
-    });
-
-    expect(refreshManagerMock.register).toHaveBeenCalledWith(
-      expect.objectContaining({ name: `object-deployment:${PANEL_ID}-events` })
-    );
-  });
-
   it.each([true, false])(
     'preserves Object Name Alt+click with workspace navigation available=%s',
     async (available) => {
@@ -300,12 +257,7 @@ describe('EventsTab', () => {
       hoistedSnapshot.data = { events: [makeEvent()] };
       act(() => {
         root.render(
-          <EventsTab
-            objectData={parentObjectData}
-            panelId={PANEL_ID}
-            eventsScope="cluster-a:events"
-            isActive
-          />
+          <EventsTab objectData={parentObjectData} eventsScope="cluster-a:events" isActive />
         );
       });
 
@@ -358,7 +310,6 @@ describe('EventsTab', () => {
       root.render(
         <EventsTab
           objectData={parentObjectData}
-          panelId={PANEL_ID}
           isActive={true}
           eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
@@ -380,7 +331,6 @@ describe('EventsTab', () => {
       root.render(
         <EventsTab
           objectData={parentObjectData}
-          panelId={PANEL_ID}
           isActive={true}
           eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
@@ -425,7 +375,6 @@ describe('EventsTab', () => {
       root.render(
         <EventsTab
           objectData={parentObjectData}
-          panelId={PANEL_ID}
           isActive={true}
           eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
@@ -470,7 +419,6 @@ describe('EventsTab', () => {
       root.render(
         <EventsTab
           objectData={parentObjectData}
-          panelId={PANEL_ID}
           isActive={true}
           eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
@@ -506,7 +454,6 @@ describe('EventsTab', () => {
       root.render(
         <EventsTab
           objectData={parentObjectData}
-          panelId={PANEL_ID}
           isActive={true}
           eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
@@ -553,7 +500,6 @@ describe('EventsTab', () => {
       root.render(
         <EventsTab
           objectData={parentObjectData}
-          panelId={PANEL_ID}
           isActive={true}
           eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
@@ -568,99 +514,34 @@ describe('EventsTab', () => {
     expect(call.clusterName).toBe(EVENT_CLUSTER_NAME);
   });
 
-  it('passes isManual flag through to fetchScopedDomain without inversion', async () => {
-    hoistedSnapshot.data = { events: [] };
-    hoistedSnapshot.status = 'ready';
-
-    act(() => {
-      root.render(
-        <EventsTab
-          objectData={parentObjectData}
-          panelId={PANEL_ID}
-          isActive={true}
-          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
-        />
-      );
-    });
-
-    expect(refreshWatcherState.onRefresh).toBeTruthy();
-
-    // Manual refresh — orchestrator should see isManual: true.
-    mockFetchScopedDomain.mockClear();
-    await act(async () => {
-      await requireValue(
-        refreshWatcherState.onRefresh,
-        'expected test value in EventsTab.test.tsx'
-      )(true);
-    });
-    expect(mockFetchScopedDomain).toHaveBeenCalledWith(
-      'object-events',
-      expect.any(String),
-      expect.objectContaining({
-        isManual: true,
-        streamSignal: false,
-        correlationId: expect.any(String),
-      })
-    );
-
-    // Scheduled refresh — orchestrator should see isManual: false.
-    mockFetchScopedDomain.mockClear();
-    await act(async () => {
-      await requireValue(
-        refreshWatcherState.onRefresh,
-        'expected test value in EventsTab.test.tsx'
-      )(false);
-    });
-    expect(mockFetchScopedDomain).toHaveBeenCalledWith(
-      'object-events',
-      expect.any(String),
-      expect.objectContaining({
-        isManual: false,
-        streamSignal: false,
-        correlationId: expect.any(String),
-      })
-    );
-  });
-
   it('enables the exact events scope and preserves state on cleanup', async () => {
     const eventsScope = 'parent-cluster|default:apps/v1:Deployment:my-deploy';
 
     act(() => {
       root.render(
-        <EventsTab
-          objectData={parentObjectData}
-          panelId={PANEL_ID}
-          isActive={true}
-          eventsScope={eventsScope}
-        />
+        <EventsTab objectData={parentObjectData} isActive={true} eventsScope={eventsScope} />
       );
     });
 
-    expect(refreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    // preserveState repaints the retained events when the tab is shown again.
+    expect(refreshOrchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
       'object-events',
       eventsScope,
-      true
+      { preserveState: true }
     );
 
-    refreshOrchestrator.setScopedDomainEnabled.mockClear();
-    refreshManagerMock.register.mockClear();
-    refreshManagerMock.unregister.mockClear();
+    refreshOrchestrator.acquireScopedDomainLease.mockClear();
+    refreshOrchestrator.releaseScopedDomainLease.mockClear();
 
     act(() => {
       root.render(
-        <EventsTab
-          objectData={parentObjectData}
-          panelId={PANEL_ID}
-          isActive={false}
-          eventsScope={eventsScope}
-        />
+        <EventsTab objectData={parentObjectData} isActive={false} eventsScope={eventsScope} />
       );
     });
 
-    expect(refreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(refreshOrchestrator.releaseScopedDomainLease).toHaveBeenCalledWith(
       'object-events',
       eventsScope,
-      false,
       { preserveState: true }
     );
   });
@@ -676,7 +557,6 @@ describe('EventsTab', () => {
       root.render(
         <EventsTab
           objectData={parentObjectData}
-          panelId={PANEL_ID}
           isActive={true}
           eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
@@ -717,7 +597,6 @@ describe('EventsTab', () => {
       root.render(
         <EventsTab
           objectData={parentObjectData}
-          panelId={PANEL_ID}
           isActive={true}
           eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
@@ -781,7 +660,6 @@ describe('EventsTab', () => {
       root.render(
         <EventsTab
           objectData={parentObjectData}
-          panelId={PANEL_ID}
           isActive={true}
           eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />

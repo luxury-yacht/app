@@ -17,8 +17,6 @@ import type React from 'react';
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 import { queryNamespacePermissions } from '@/core/capabilities';
-import { useViewState } from '@/core/contexts/ViewStateContext';
-import { refreshOrchestrator } from '@/core/refresh';
 import { selectorForNamespaceSelection } from '@/core/refresh/scopeSelector';
 
 // Extracts the concrete namespace name for capability checks; the
@@ -42,29 +40,11 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   children,
   namespace,
 }) => {
-  const { viewType } = useViewState();
   const { selectedClusterId } = useKubeconfig();
   const { selectedNamespaceClusterId } = useNamespace();
   // Prefer the cluster tied to the namespace selection; fall back to the kubeconfig selection.
   const namespaceClusterId = selectedNamespaceClusterId ?? selectedClusterId;
-  const isNamespaceView = viewType === 'namespace';
   const currentNamespace = namespace ?? null;
-
-  // Publish the active namespace selection to the orchestrator: scope routing
-  // and streaming gating across the refresh subsystem read it from context.
-  useEffect(() => {
-    if (!isNamespaceView) {
-      refreshOrchestrator.updateContext({
-        selectedNamespace: undefined,
-        selectedNamespaceClusterId: undefined,
-      });
-      return;
-    }
-    refreshOrchestrator.updateContext({
-      selectedNamespace: currentNamespace ?? undefined,
-      selectedNamespaceClusterId: currentNamespace ? (namespaceClusterId ?? undefined) : undefined,
-    });
-  }, [currentNamespace, isNamespaceView, namespaceClusterId]);
 
   // Single-namespace permission query.
   useEffect(() => {

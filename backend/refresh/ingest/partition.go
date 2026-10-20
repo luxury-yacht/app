@@ -86,8 +86,8 @@ func (s *ProjectingStore) emitPartitionChanges(prefix string, next map[string]in
 			}
 		}
 	}
-	for _, projected := range next {
-		s.emitUpsert(projected)
+	for key, projected := range next {
+		s.emitUpsert(s.rows[key], projected)
 	}
 }
 

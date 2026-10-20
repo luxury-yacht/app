@@ -47,7 +47,6 @@ type AppSettings struct {
 	ExclusiveNamespaces                      bool     `json:"exclusiveNamespaces"`                      // Allow only one expanded namespace in the sidebar
 	ErrorReportingEnabled                    bool     `json:"errorReportingEnabled"`                    // Send production error reports
 	AutoRefreshEnabled                       bool     `json:"autoRefreshEnabled"`                       // Enable automatic refresh cycles
-	RefreshBackgroundClustersEnabled         bool     `json:"refreshBackgroundClustersEnabled"`         // Refresh inactive clusters in the background
 	MetricsRefreshIntervalMs                 int      `json:"metricsRefreshIntervalMs"`                 // Metrics refresh interval (ms)
 	KubernetesClientQPS                      int      `json:"kubernetesClientQPS"`                      // Per-cluster Kubernetes REST client QPS
 	KubernetesClientBurst                    int      `json:"kubernetesClientBurst"`                    // Per-cluster Kubernetes REST client burst allowance

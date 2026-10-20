@@ -114,6 +114,17 @@ const accumulateStreamTelemetry = (
   }
 };
 
+// Whether a doorbell moved one of the domain's declared signal clocks. A
+// resync flushes an empty advance that moves none, and must not refetch.
+const advancesDeclaredClock = (
+  domain: DoorbellDomain,
+  previous: Partial<Record<ResourceStreamSourceClock, string>> | undefined,
+  next: Partial<Record<ResourceStreamSourceClock, string>>
+): boolean =>
+  doorbellSourceClocks(domain).some(
+    (clock) => next[clock] !== undefined && next[clock] !== previous?.[clock]
+  );
+
 export class ResourceStreamManager {
   private readonly subscriptions = new ResourceStreamSubscriptionStore(
     STREAM_UNSUBSCRIBE_DEBOUNCE_MS,
@@ -569,6 +580,11 @@ export class ResourceStreamManager {
       );
     }
     this.forEachReportScope(subscription, (reportScope) => {
+      const advanced = advancesDeclaredClock(
+        subscription.domain,
+        getScopedDomainState(subscription.domain, reportScope).signalVersions,
+        sourceVersions
+      );
       setScopedDomainState(subscription.domain, reportScope, (previous) => ({
         ...previous,
         status: 'ready',
@@ -589,6 +605,9 @@ export class ResourceStreamManager {
         isManual: false,
         scope: reportScope,
       }));
+      if (advanced) {
+        eventBus.emit('refresh:stream-signal', { domain: subscription.domain, scope: reportScope });
+      }
     });
     this.clearStreamError(subscription.clusterId);
   }

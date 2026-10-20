@@ -294,7 +294,7 @@ func wireNamespaceEventInformer(
 		AddFunc: func(interface{}) { notifier.EventChanged() },
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			// Resync echoes cannot change a warning count; skip the rollup rescan.
-			if !informerUpdateIsEcho(oldObj, newObj) {
+			if !InformerUpdateIsEcho(oldObj, newObj) {
 				notifier.EventChanged()
 			}
 		},
@@ -331,7 +331,7 @@ func namespaceEventHandler(notifier *NamespaceChangeNotifier) cache.ResourceEven
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			// Informer resyncs re-deliver every namespace with an unchanged
 			// ResourceVersion; only real updates ring the doorbell.
-			if informerUpdateIsEcho(oldObj, newObj) {
+			if InformerUpdateIsEcho(oldObj, newObj) {
 				return
 			}
 			notifier.NamespaceChanged()

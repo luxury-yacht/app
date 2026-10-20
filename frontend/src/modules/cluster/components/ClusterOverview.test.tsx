@@ -45,9 +45,9 @@ const {
 } = vi.hoisted(() => {
   return {
     mockRefreshOrchestrator: {
-      setScopedDomainEnabled: vi.fn(),
+      acquireScopedDomainLease: vi.fn(),
+      releaseScopedDomainLease: vi.fn(),
       fetchScopedDomain: vi.fn(() => Promise.resolve()),
-      resetDomain: vi.fn(),
     },
     domainStateRef: {
       current: createDomainState('loading'),
@@ -303,15 +303,19 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(mockRefreshOrchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
       'cluster-overview',
       'cluster-1|',
-      true,
       // preserveState pins the tab-switch fix: the streaming enable path
       // resets scoped state without it, blanking the overview per switch.
       { preserveState: true }
     );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+    // The activation read reconciles the shown cluster, even while paused.
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'cluster-overview',
+      'cluster-1|',
+      expect.objectContaining({ intent: 'foreground' })
+    );
     expect(container.querySelector('.cluster-overview')?.classList.contains('selectable')).toBe(
       true
     );
@@ -478,7 +482,9 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+    // Showing the view reconciles it once even while paused (a foreground
+    // read); nothing polls afterwards.
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Auto-refresh paused');
     expect(container.textContent).not.toContain('Ready');
@@ -497,18 +503,22 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(mockRefreshOrchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
       'cluster-overview',
       'cluster-1|',
-      true,
       // preserveState pins the tab-switch fix: the streaming enable path
       // resets scoped state without it, blanking the overview per switch.
       { preserveState: true }
     );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+    // The activation read reconciles the shown cluster, even while paused.
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'cluster-overview',
+      'cluster-1|',
+      expect.objectContaining({ intent: 'foreground' })
+    );
   });
 
-  it('repaints cached overview data on a cluster-tab switch without requesting a reload', async () => {
+  it('repaints cached overview data on a cluster-tab switch, then reconciles it once', async () => {
     domainStateRef.current = createDomainState('ready', {
       clusterId: 'cluster-1',
       overview: {
@@ -541,7 +551,12 @@ describe('ClusterOverview', () => {
     await flushEffects();
 
     expect(statValueFor(container, 'total')).toBe('9');
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledTimes(1);
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'cluster-overview',
+      'cluster-2|',
+      expect.objectContaining({ intent: 'foreground' })
+    );
   });
 
   it('stays empty and paused on a new cluster tab even if overview data exists for another cluster', async () => {
@@ -1325,14 +1340,7 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'cluster-overview',
-      'cluster-1|',
-      false,
-      // preserveState pins the tab-switch fix: the streaming enable path
-      // resets scoped state without it, blanking the overview per switch.
-      { preserveState: true }
-    );
+    expect(mockRefreshOrchestrator.acquireScopedDomainLease).not.toHaveBeenCalled();
     expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
     expect(container.textContent).not.toContain('Failed to load Cluster Overview data');
     expect(statValueFor(container, 'total')).toBe('—');

@@ -21,6 +21,7 @@ describe('transitionScopedStreamState', () => {
         initialization: { status: 'idle' },
         connection: { status: 'inactive' },
         health: { status: 'unknown' },
+        startRetry: { status: 'idle', failures: 0 },
       },
       { type: 'start-began', task: firstTask }
     );
@@ -48,6 +49,7 @@ describe('transitionScopedStreamState', () => {
       initialization: { status: 'idle' },
       connection: { status: 'active', cleanup, cancellationRequested: false },
       health: { status: 'unknown' },
+      startRetry: { status: 'idle', failures: 0 },
     });
   });
 });
@@ -57,8 +59,7 @@ describe('scoped readiness, permission, and cluster auth transitions', () => {
     const first = {
       domain: 'cluster-config' as const,
       scope: 'cluster-a|',
-      isManual: false,
-      streamSignal: true,
+      intents: ['stream-signal'] as const,
       queryReconcile: false,
     };
     let readiness = transitionScopedReadinessState(
@@ -69,19 +70,18 @@ describe('scoped readiness, permission, and cluster auth transitions', () => {
       type: 'request-deferred',
       request: {
         ...first,
-        isManual: true,
-        streamSignal: false,
+        intents: ['user'],
         queryReconcile: true,
         coalesce: true,
       },
     });
 
+    // Merged deferrals keep every intent, so the replay can apply the pause rule.
     expect(readiness).toEqual({
       status: 'waiting',
       request: {
         ...first,
-        isManual: true,
-        streamSignal: true,
+        intents: ['stream-signal', 'user'],
         queryReconcile: true,
         coalesce: true,
       },
@@ -114,7 +114,7 @@ describe('scoped readiness, permission, and cluster auth transitions', () => {
 });
 
 describe('transitionScopedActivationState', () => {
-  it('keeps enablement and query/snapshot demand in one valid state', () => {
+  it('keeps leases, query/snapshot demand, and a deferred reset in one valid state', () => {
     let state = transitionScopedActivationState(
       { status: 'untracked' },
       { type: 'lease-acquired', demand: 'query' }
@@ -123,9 +123,12 @@ describe('transitionScopedActivationState', () => {
     expect(state).toEqual({
       status: 'enabled',
       demands: { query: 1, snapshot: 0 },
+      resetOnRelease: false,
     });
     expect(transitionScopedActivationState(state, { type: 'disabled' })).toBe(state);
 
+    // A reset requested while a holder remains waits for the last release.
+    state = transitionScopedActivationState(state, { type: 'reset-requested' });
     state = transitionScopedActivationState(state, {
       type: 'lease-acquired',
       demand: 'snapshot',
@@ -138,6 +141,7 @@ describe('transitionScopedActivationState', () => {
     expect(state).toEqual({
       status: 'enabled',
       demands: { query: 0, snapshot: 1 },
+      resetOnRelease: true,
     });
 
     state = transitionScopedActivationState(state, {
@@ -147,7 +151,9 @@ describe('transitionScopedActivationState', () => {
     expect(state).toEqual({
       status: 'enabled',
       demands: { query: 0, snapshot: 0 },
+      resetOnRelease: true,
     });
+    expect(transitionScopedActivationState(state, { type: 'reset-requested' })).toBe(state);
     expect(transitionScopedActivationState(state, { type: 'disabled' })).toEqual({
       status: 'disabled',
     });
@@ -158,7 +164,7 @@ describe('transitionScopedFetchState', () => {
   it('keeps replacement ownership and coalesces repeated stream signals', () => {
     const firstRequest = {
       controller: new AbortController(),
-      isManual: false,
+      intent: 'background' as const,
       requestId: 1,
       contextVersion: 0,
       domain: 'cluster-config' as const,
@@ -167,7 +173,7 @@ describe('transitionScopedFetchState', () => {
     const replacementRequest = {
       ...firstRequest,
       controller: new AbortController(),
-      isManual: true,
+      intent: 'user' as const,
       requestId: 2,
     };
 
@@ -209,74 +215,57 @@ describe('transitionScopedFetchState', () => {
 });
 
 describe('ClusterRefreshRuntime', () => {
-  it('keeps enabled scoped domain state behind runtime operations', () => {
+  it('lists exactly the leased scopes as enabled', () => {
     const runtime = new ClusterRefreshRuntime('cluster-a');
 
-    expect(runtime.isScopedDomainEnabled('pods', 'cluster-a|namespace:default')).toBe(true);
-    expect(runtime.setScopedDomainEnabled('pods', 'cluster-a|namespace:default', true)).toEqual({
-      previous: undefined,
-      changed: true,
-    });
-    expect(runtime.setScopedDomainEnabled('pods', 'cluster-a|namespace:kube-system', true)).toEqual(
-      {
-        previous: undefined,
-        changed: true,
-      }
-    );
-
+    runtime.acquireScopedLease('pods', 'cluster-a|namespace:default');
+    runtime.acquireScopedLease('pods', 'cluster-a|namespace:kube-system');
     expect(runtime.hasEnabledScopedSources('pods')).toBe(true);
     expect(runtime.getEnabledScopes('pods')).toEqual([
       'cluster-a|namespace:default',
       'cluster-a|namespace:kube-system',
     ]);
 
-    expect(runtime.setScopedDomainEnabled('pods', 'cluster-a|namespace:prod', true)).toEqual({
-      previous: undefined,
-      changed: true,
-    });
-    expect(runtime.getEnabledScopes('pods')).toEqual([
-      'cluster-a|namespace:default',
-      'cluster-a|namespace:kube-system',
-      'cluster-a|namespace:prod',
-    ]);
-  });
-
-  it('keeps live resource-stream table scopes enabled while typed query scopes run', () => {
-    const runtime = new ClusterRefreshRuntime('cluster-a');
-
-    expect(runtime.setScopedDomainEnabled('nodes', 'cluster-a|', true)).toEqual({
-      previous: undefined,
-      changed: true,
-    });
-    expect(
-      runtime.setScopedDomainEnabled(
-        'nodes',
-        'cluster-a|?limit=50&sort=name&sortDirection=asc',
-        true
-      )
-    ).toEqual({
-      previous: undefined,
-      changed: true,
-    });
-
-    expect(runtime.getEnabledScopes('nodes')).toEqual([
-      'cluster-a|',
-      'cluster-a|?limit=50&sort=name&sortDirection=asc',
-    ]);
-    expect(runtime.isScopedDomainEnabled('nodes', 'cluster-a|')).toBe(true);
-
-    expect(
-      runtime.setScopedDomainEnabled(
-        'nodes',
-        'cluster-a|?limit=50&sort=name&sortDirection=asc',
-        false
-      )
-    ).toEqual({
+    runtime.releaseScopedLease('pods', 'cluster-a|namespace:default');
+    expect(runtime.disableScopedDomain('pods', 'cluster-a|namespace:default')).toEqual({
       previous: true,
       changed: true,
     });
+    expect(runtime.getEnabledScopes('pods')).toEqual(['cluster-a|namespace:kube-system']);
+    expect(runtime.isScopedDomainEnabled('pods', 'cluster-a|namespace:default')).toBe(false);
+  });
 
+  it('keeps a held scope enabled when asked to disable it', () => {
+    const runtime = new ClusterRefreshRuntime('cluster-a');
+
+    runtime.acquireScopedLease('nodes', 'cluster-a|');
+    runtime.acquireScopedLease('nodes', 'cluster-a|?limit=50&sort=name&sortDirection=asc');
+    runtime.releaseScopedLease('nodes', 'cluster-a|?limit=50&sort=name&sortDirection=asc');
+    runtime.disableScopedDomain('nodes', 'cluster-a|?limit=50&sort=name&sortDirection=asc');
+
+    expect(runtime.disableScopedDomain('nodes', 'cluster-a|')).toEqual({
+      previous: true,
+      changed: false,
+    });
     expect(runtime.getEnabledScopes('nodes')).toEqual(['cluster-a|']);
+  });
+
+  it('defers a reset of a held scope to its last release', () => {
+    const runtime = new ClusterRefreshRuntime('cluster-a');
+
+    expect(runtime.deferResetUntilReleased('object-details', 'cluster-a|ns:/v1:Pod:a')).toBe(false);
+    runtime.acquireScopedLease('object-details', 'cluster-a|ns:/v1:Pod:a');
+    runtime.acquireScopedLease('object-details', 'cluster-a|ns:/v1:Pod:a');
+    expect(runtime.deferResetUntilReleased('object-details', 'cluster-a|ns:/v1:Pod:a')).toBe(true);
+
+    expect(runtime.releaseScopedLease('object-details', 'cluster-a|ns:/v1:Pod:a')).toMatchObject({
+      lastLease: false,
+      resetOnRelease: false,
+    });
+    expect(runtime.releaseScopedLease('object-details', 'cluster-a|ns:/v1:Pod:a')).toMatchObject({
+      lastLease: true,
+      resetOnRelease: true,
+    });
   });
 
   it('owns async streaming lifecycle bookkeeping', async () => {
@@ -314,7 +303,7 @@ describe('ClusterRefreshRuntime', () => {
     const request = {
       controller,
       cleanup,
-      isManual: false,
+      intent: 'background' as const,
       requestId: 1,
       contextVersion: 0,
       domain: 'cluster-config' as const,
@@ -322,7 +311,7 @@ describe('ClusterRefreshRuntime', () => {
     };
 
     const key = runtime.setInFlight(request);
-    runtime.setScopedDomainEnabled('cluster-config', 'cluster-a|', true);
+    runtime.acquireScopedLease('cluster-config', 'cluster-a|');
     runtime.blockStreaming('cluster-config', 'cluster-a|');
     runtime.setStreamHealth('cluster-config', 'cluster-a|', {
       domain: 'cluster-config',
@@ -349,7 +338,7 @@ describe('ClusterRefreshRuntime', () => {
     const scope = 'cluster-a|';
     const firstRequest = {
       controller: new AbortController(),
-      isManual: false,
+      intent: 'background' as const,
       requestId: 1,
       contextVersion: 0,
       domain: 'cluster-config' as const,
@@ -358,7 +347,7 @@ describe('ClusterRefreshRuntime', () => {
     const replacementRequest = {
       ...firstRequest,
       controller: new AbortController(),
-      isManual: true,
+      intent: 'user' as const,
       requestId: 2,
     };
 
@@ -404,6 +393,7 @@ describe('ClusterRefreshRuntime', () => {
       count: 1,
       lastLease: false,
       hadLease: true,
+      resetOnRelease: false,
     });
     expect(runtime.hasScopedLease('nodes', 'cluster-a|')).toBe(true);
 
@@ -412,6 +402,7 @@ describe('ClusterRefreshRuntime', () => {
       count: 0,
       lastLease: true,
       hadLease: true,
+      resetOnRelease: false,
     });
     expect(runtime.hasScopedLease('nodes', 'cluster-a|')).toBe(false);
 
@@ -420,6 +411,7 @@ describe('ClusterRefreshRuntime', () => {
       count: 0,
       lastLease: false,
       hadLease: false,
+      resetOnRelease: false,
     });
     expect(runtime.getScopedLeaseCount('nodes', 'cluster-a|')).toBe(0);
   });
@@ -448,6 +440,7 @@ describe('ClusterRefreshRuntime', () => {
       count: 1,
       lastLease: false,
       hadLease: true,
+      resetOnRelease: false,
     });
     expect(runtime.hasScopedDemand('nodes', scope, 'query')).toBe(false);
     expect(runtime.hasScopedDemand('nodes', scope, 'snapshot')).toBe(true);
@@ -456,6 +449,7 @@ describe('ClusterRefreshRuntime', () => {
       count: 0,
       lastLease: true,
       hadLease: true,
+      resetOnRelease: false,
     });
   });
 

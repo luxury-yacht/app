@@ -7,15 +7,11 @@ import { useObjectDiffYaml } from './useObjectDiffYaml';
 
 const mocks = vi.hoisted(() => ({
   state: {} as Record<string, unknown>,
-  request: vi.fn(),
-  enable: vi.fn(),
-  reset: vi.fn(),
+  lease: vi.fn(),
 }));
 vi.mock('@core/refresh', () => ({ useRefreshScopedDomain: () => mocks.state }));
 vi.mock('@/core/data-access', () => ({
-  requestRefreshDomain: mocks.request,
-  setRefreshDomainEnabled: mocks.enable,
-  resetRefreshDomain: mocks.reset,
+  useScopedRefreshDomainLifecycle: mocks.lease,
 }));
 
 it('owns retained YAML and change tracking by complete identity in every render', () => {

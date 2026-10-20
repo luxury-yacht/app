@@ -168,13 +168,11 @@ export interface GeneratedRefreshDomainPolicy {
     bypassSingleflight: boolean;
   };
   frontend: {
-    refresherName: string;
     orchestrator: GeneratedRefreshOrchestratorKind;
     diagnosticsStream: GeneratedRefreshDiagnosticsStream | null;
-    timing: { interval: number; cooldown: number; timeout: number };
+    timing: { interval: number; timeout: number };
     priority: number | null;
     registrationOrder: number;
-    scheduled: boolean;
   };
   scope: {
     selectors: ReadonlyArray<GeneratedRefreshScopeSelector>;
@@ -203,16 +201,14 @@ export const REFRESH_DOMAIN_POLICIES = [
 			domain.backendBypassSingleflight,
 		)
 		out.WriteString("    frontend: {\n")
-		fmt.Fprintf(out, "      refresherName: %s,\n", quoteString(domain.frontendRefresherName))
 		fmt.Fprintf(out, "      orchestrator: %s,\n", quoteString(domain.frontendOrchestrator))
 		if domain.frontendDiagnosticsStream == "" {
 			out.WriteString("      diagnosticsStream: null,\n")
 		} else {
 			fmt.Fprintf(out, "      diagnosticsStream: %s,\n", quoteString(domain.frontendDiagnosticsStream))
 		}
-		fmt.Fprintf(out, "      timing: { interval: %d, cooldown: %d, timeout: %d },\n",
+		fmt.Fprintf(out, "      timing: { interval: %d, timeout: %d },\n",
 			domain.frontendTimingInterval,
-			domain.frontendTimingCooldown,
 			domain.frontendTimingTimeout,
 		)
 		if domain.frontendHasPriority {
@@ -221,7 +217,6 @@ export const REFRESH_DOMAIN_POLICIES = [
 			out.WriteString("      priority: null,\n")
 		}
 		fmt.Fprintf(out, "      registrationOrder: %d,\n", domain.frontendRegistrationOrder)
-		fmt.Fprintf(out, "      scheduled: %t,\n", domain.frontendScheduled)
 		out.WriteString("    },\n")
 		renderTSScopeGrammar(out, domain)
 		out.WriteString("  },\n")

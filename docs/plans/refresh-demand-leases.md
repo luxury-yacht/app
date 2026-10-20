@@ -482,7 +482,7 @@ its own reviewable change. Phases are ordered by dependency.
 
 ### Phase 0: real-orchestrator test harness
 
-- [ ] Add a harness that uses the real orchestrator, runtime, store, and
+- [x] Add a harness that uses the real orchestrator, runtime, store, and
   default domain registrations.
   - Mock only `client.fetchSnapshot` and the stream managers' connection
     layer. Use fake timers.
@@ -490,7 +490,7 @@ its own reviewable change. Phases are ordered by dependency.
     `(scope, intent)`, and armed timers.
   - Do not mock RefreshManager, `resourceStreamViews`, or domain
     registrations.
-- [ ] Add characterization tests, green now, for behavior that must survive:
+- [x] Add characterization tests, green now, for behavior that must survive:
   - retained data paints on remount;
   - fallback polls when a stream is unhealthy, none while it is healthy;
   - `cluster-overview` polls while healthy;
@@ -506,17 +506,22 @@ its own reviewable change. Phases are ordered by dependency.
   - a failed `stream-signal` read on a scope whose stream stays healthy and
     quiet is retried at its `retryAt` (today through `needsReconciliation`,
     `orchestrator.ts:1288`).
-- [ ] Characterize `kubeconfig:changing` → `kubeconfig:changed` with leases
-  still mounted. Today the handler deletes every runtime record, lease counts
-  included (`orchestrator.ts:1952-1966`), and only effects whose dependencies
-  change acquire again. Phase 1 must keep or fix this on purpose, not by
-  accident.
+- [x] Characterize `kubeconfig:changing` → `kubeconfig:changed`. The app emits
+  `changing` only when the selection becomes empty
+  (`kubeconfigSelection.ts:161`), so every cluster view unmounts with it and
+  mounted leases are never orphaned. The test closes every cluster, releases,
+  and reopens.
+
+Done 2026-10-19: `frontend/src/test-utils/refreshHarness.ts` and
+`frontend/src/core/refresh/orchestrator.demand.test.ts` (16 tests, green). A
+mutation check confirmed that the stream-health and Overview foreground
+assertions fail when their cause is removed.
 
 ### Phase 1: leases are the only way to enable a scope
 
 Depends on Phase 0.
 
-- [ ] Red tests:
+- [x] Red tests:
   - Two consumers of one `cluster-overview` scope (ClusterOverview and
     `useClusterMetricsAvailability`): disabling one keeps the scope enabled
     and polling.
@@ -525,7 +530,7 @@ Depends on Phase 0.
   - Switching clusters into Overview while paused reads the new scope once
     with `foreground`, both with retained data and without. When not paused,
     the stream may add one trailing read, and no more.
-- [ ] Move each direct enabler to `useScopedRefreshDomainLifecycle` or the
+- [x] Move each direct enabler to `useScopedRefreshDomainLifecycle` or the
   lease functions.
   - ClusterOverview declares `fetchOnEnable: 'foreground'`
     ([Activation reads](#activation-reads)).
@@ -536,9 +541,9 @@ Depends on Phase 0.
   - The object-panel lifecycle helpers keep their contract: a transient unmount
     keeps snapshots, and removing the panel evicts them
     (`ObjectPanelStateContext.tsx:50-56`).
-- [ ] Container logs: the lease replaces the enable and the explicit
+- [x] Container logs: the lease replaces the enable and the explicit
   `stopStreamingDomain`. `restartStreamingDomain` stays as a manual command.
-- [ ] Delete the direct-enable APIs and paths:
+- [x] Delete the direct-enable APIs and paths:
   - `setRefreshDomainEnabled` and `useRefreshDomainHandle.setEnabled`;
   - public `setScopedDomainEnabled` and `setDomainEnabled`;
   - the `enabled` activation event, which activates a scope without a lease
@@ -546,16 +551,45 @@ Depends on Phase 0.
 
   The internal disable after the last release stays. The kubeconfig-changing
   handler uses internal teardown instead.
-- [ ] Check each `resetDomain` caller that clears a domain in every cluster
+- [x] Check each `resetDomain` caller that clears a domain in every cluster
   (`NamespaceContext.tsx:510`, `682`, `693`;
   `ClusterResourcesManager.tsx:41-53`). Remove each one that
   kubeconfig-changing teardown already covers.
+
+Done 2026-10-19:
+
+- **Red test.** `ui/modals/objectYamlScopeSharing.test.tsx` failed at the
+  data check after the diff modal closed, and passes now.
+- **Not a real conflict.** The ClusterOverview /
+  `useClusterMetricsAvailability` pair always passed the same `enabled`
+  flag, so that test was not written. Both now lease the scope, with
+  `preserveState`.
+- **New: resets wait for the last release.**
+  - A reset of a scope another holder still leases waits until that holder
+    releases (`resetOnRelease` on the activation state).
+  - Covered by `orchestrator.demand.test.ts` and `refreshRuntime.test.ts`.
+- **Also found:**
+  - The nodes view and a node panel both watched the same
+    `object-maintenance` aggregate scope, so closing the panel disabled the
+    view's scope. They now share it through leases.
+  - `useObjectPanelScopedDomainCleanups` was redundant once every tab held
+    its own lease, and is deleted.
+  - The redundant global `resetDomain` calls in NamespaceContext and
+    ClusterResourcesManager are removed; the orchestrator's own handlers
+    already reset every domain.
+- **Behavior changes:**
+  - Opening Overview, including while paused, issues one `foreground`
+    read.
+  - The Events tab and `useClusterMetricsAvailability` no longer blank
+    retained data when they activate.
+- **Gates:** full frontend suite 5,460 passed; typecheck, Biome, and
+  complexity (12 or less) clean.
 
 ### Phase 2: leases own cadence
 
 Depends on Phase 1, because the scheduler walks only leases.
 
-- [ ] Red tests:
+- [x] Red tests:
   - (a) A leased snapshot scope without a stream polls at its contract
     interval and stops on release.
   - (b) The same domain leased in two clusters polls in each independently;
@@ -590,7 +624,7 @@ Depends on Phase 1, because the scheduler walks only leases.
     `startup`, and `stream-signal` reads with their intent, and drops
     in-flight `background` polls (`data-freshness.md`, "Errors and
     readiness").
-- [ ] Add the scheduler:
+- [x] Add the scheduler:
   - a polling sub-state and its events in `ScopedRefreshState`;
   - one orchestrator timer for the earliest due record;
   - the contract's `timeout` on each poll fetch;
@@ -626,13 +660,13 @@ Depends on Phase 1, because the scheduler walks only leases.
     `app:visibility-hidden`/`app:visibility-visible` events
     (`RefreshManagerContext.tsx:42-47`). The object-panel timers still use
     RefreshManager's pause until Phase 5.
-- [ ] Remove the RefreshManager path from the orchestrator:
+- [x] Remove the RefreshManager path from the orchestrator:
   - `registerDomain` subscriptions;
   - `ensureRefresher`, `resolveTiming`, `shouldAllowRefresher`,
     `reconcileRefresherActivity`;
   - `DEFAULT_AUTO_START`;
   - the refresher call in `triggerManualRefreshForContext`.
-- [ ] Manual refresh by `clusterId`, through `requestContextRefresh` and its
+- [x] Manual refresh by `clusterId`, through `requestContextRefresh` and its
   three callers (`App.tsx:199`, `CommandPaletteCommands.tsx:468`,
   `ConnectivityStatus.tsx:68`).
   - Snapshot leases fetch with `user`.
@@ -644,21 +678,41 @@ Depends on Phase 1, because the scheduler walks only leases.
     - The orchestrator's fallback would restart the log stream
       (`orchestrator.ts:688-695`).
     - The Logs tab keeps its own restart control (`LogViewer.tsx:705`).
-- [ ] Emit `refresh:start` and `refresh:complete` from the manual command
+- [x] Emit `refresh:start` and `refresh:complete` from the manual command
   ([question 8](#decisions)). This keeps `useAutoRefreshLoadingState` and
   ConnectivityStatus working.
-- [ ] Diagnostics: the polling column reads each scope's polling state.
-- [ ] Characterization: switching views while paused still paints a fresh
+- [x] Diagnostics: the polling column reads each scope's polling state.
+- [x] Characterization: switching views while paused still paints a fresh
   first page. Query tables read with `user` (`useTypedResourceQuery.ts:577`).
   This replaces RefreshManager's foreground targets
   (`RefreshManager.ts:620-647`).
+
+Done 2026-10-19. Differences from the plan above:
+
+- Each scope's poll timer lives on its record (`ScopedPollingState`), not in
+  one orchestrator timer for the earliest due record. Release, pause, prune,
+  and kubeconfig changes cancel it directly.
+- The retry at `retryAt` rides the scope's poll: non-`user` reads skip until
+  `retryAt`, so a retry lands on the first poll at or after it (at most one
+  interval late). Polls check reconciliation even under a healthy stream.
+  `orchestrator.demand.test.ts` pins the backoff, the 60 s cap, the pause wait,
+  and the stop on release; a mutation of the cap fails it.
+- RefreshManager lost its context machinery (`updateContext`, foreground and
+  context targets, `triggerManualRefreshMany`, `triggerManualRefreshForContext`,
+  `updateInterval`) and, with it,
+  the `foreground` invocation and `interval-replaced` runtime event. The rest
+  goes in Phase 8.
+- Left for later phases: `Sidebar.tsx`'s comment about view ordering for
+  `triggerManualRefreshForContext` (Phase 6); `RefreshManager.statusFor`'s
+  pre-existing complexity of 13 (deleted in Phase 8); test mocks of the still
+  exported `refreshManager` (Phase 8).
 
 ### Phase 3: leases own streaming; delete the view gate
 
 Depends on Phase 2. Its tests rely on Phase 2's lease-owned fallback polling
 while a stream is down or retrying.
 
-- [ ] Red tests:
+- [x] Red tests:
   - (a) A leased resource-stream scope streams with no navigation published
     (the native-window case).
   - (b) The last release stops it, in both demand modes.
@@ -673,21 +727,39 @@ while a stream is down or retrying.
     leased scopes.
   - (g) The panel metrics collector's `namespace-workloads` lease streams
     instead of polling ([question 5](#decisions)).
-- [ ] Remove the stream starts in `reconcileQueryOnlyDemand` and
+- [x] Remove the stream starts in `reconcileQueryOnlyDemand` and
   `reconcileStreamingFetch` (`orchestrator.ts:1236-1238`, `:1279-1281`). Add a
   start-retry event to the stream sub-state.
-- [ ] Delete:
+- [x] Delete:
   - the view tables and `isResourceStreamViewActive` (and move
     `isResourceStreamDomain`);
   - `disableNamespaceDomains`;
   - `activePodsTableScope` and `triggerActivePodsTableRefresh`;
   - the context branch of `handleStreamingScopeChanges`.
-- [ ] Re-evaluate streams after the blocks are cleared on
+- [x] Re-evaluate streams after the blocks are cleared on
   `kubeconfig:changed` and `kubeconfig:selection-changed`
   (`orchestrator.ts:1995-2008`). Today the next poll restarts them; after this
   phase nothing else does.
-- [ ] Red test for the behavior change: returning to a namespace view repaints
+- [x] Red test for the behavior change: returning to a namespace view repaints
   that scope's retained snapshot. Today `disableNamespaceDomains` clears it.
+
+Done 2026-10-19. Notes:
+
+- A failed start retries with `streamReconnectDelay` (1 s, doubling, 30 s
+  cap), the backoff the stream managers use for reconnects. The retry lives in
+  the stream sub-state (`startRetry`); any stop or a successful start clears
+  it, and its timer re-checks the lease, runtime, and stream gates.
+- `isResourceStreamDomain` moved to `streaming/resourceStreamDomains.ts`;
+  `resourceStreamViews.ts` and its test are deleted.
+- An unleased scope stays readable by an explicit consumer read
+  (`requestRefreshDomain` does not lease). Nothing in the orchestrator starts
+  a stream or a poll for it; test (c) pins the stream half.
+- Streams now start on readiness and auth edges in every view. Two
+  `orchestrator.test.ts` permission tests counted reads that the view gate
+  used to hide; they now keep the stream out of the snapshot path they test.
+- Tests in `orchestrator.test.ts` that still pass navigation fields to
+  `updateContext` are inert there now; Phase 6 removes them with
+  `RefreshContext`.
 
 ### Phase 4: object-details change signal
 
@@ -711,7 +783,7 @@ This phase rings a signal at those evictions, so open panels refetch right
 after a change. A 10 s poll remains as the backstop for kinds without
 eviction.
 
-- [ ] Red tests. They follow `data-freshness.md`, "Required evidence for
+- [x] Red tests. They follow `data-freshness.md`, "Required evidence for
   resource-source changes", and each one must fail with the signal wiring
   removed.
   - With a panel open and a healthy stream, a change reaches the Details tab
@@ -733,7 +805,7 @@ eviction.
     - Tests must set `resourceVersion` explicitly. The fake clientset leaves
       it empty, and an empty old version counts as a real change
       (`backend/refresh/snapshot/informer_echo.go:16`).
-- [ ] Backend:
+- [x] Backend:
   - Add a details change notifier modeled on `ObjectEventsChangeNotifier`
     (`backend/refresh/snapshot/object_events_notifier.go`), with a matching
     broadcast like `BroadcastObjectEventsRefresh`
@@ -756,7 +828,7 @@ eviction.
       the last version per watched key. The notifier must not grow a map
       covering every object.
   - Existing eviction tests must pass unchanged.
-- [ ] Contract and frontend:
+- [x] Contract and frontend:
   - In the contract, give `object-details` `sourceClocks: ["object"]` and the
     `doorbell-snapshot` orchestrator.
   - Keep its `interval` at 10 s as the backstop.
@@ -764,42 +836,80 @@ eviction.
     `pollingContinuesWhileStreaming: true`, like `cluster-overview`
     (`streaming/resourceStreamDomains.ts:71-74`).
   - Regenerate the contract artifacts.
-- [ ] Check stream permissions. `object-details` is permission-exempt in the
+- [x] Check stream permissions. `object-details` is permission-exempt in the
   contract, but the stream subscription must not reveal more than a snapshot
   read would.
-- [ ] Until Phase 9, the Details tab refetches through
+- [x] Until Phase 9, the Details tab refetches through
   `useStreamSignalRefetch`. `streamConsumerDrift.test.ts` will require it once
   the domain streams.
+
+Done 2026-10-19. Notes:
+
+- Tests: `backend/refresh_object_details_doorbell_test.go` drives the real
+  subsystem, eviction handlers, and stream. ReplicaSets take the informer path
+  through the fake clientset. Ingest-owned kinds are written to their real
+  ingest stores directly, because ingest reflectors list through a REST
+  client the fake clientset lacks. Removing either echo guard fails it.
+  `objectDetailsDoorbell.test.tsx` covers the frontend half with the real
+  panel hook, orchestrator, and store.
+- Relist echoes: the projecting store passes the row it replaces to an
+  optional `ingest.ChangeSink` (`UpsertChange(previous, row)`) on every upsert
+  path, so no sink keeps a per-object version map.
+  `snapshot.ResourceVersionUnchanged` is the one echo rule for informer
+  objects and catalog rows.
+- The gateway keeps the cache and its invalidators, which now return what
+  they evicted. Registration lives in
+  `backend/refresh_response_cache_invalidation.go`.
+- Stream permissions: the signal rings only from sources already gated by
+  list/watch. The informer loop checks `CanListWatch`, and ingest launches
+  only permitted partitions (`refresh/ingest/manager.go:609`). The update
+  carries domain, scope, source, and version, never object data.
+- `scheduled: false` stays until Phase 5 removes the panel timers. The test
+  for a kind without eviction refreshing on the 10 s backstop moves to
+  Phase 5, because that backstop is the scheduler's poll.
 
 ### Phase 5: object panel uses its leases' cadence
 
 Depends on Phases 2 and 4.
 
-- [ ] Red tests:
+- [x] Red tests:
   - Two open panels refresh their own details on their own signals, with the
     10 s backstop. Closing one leaves the other refreshing.
   - A hidden dock tab does not poll details.
   - The Events tab refreshes on its doorbell, and polls every 3 s only while
     its stream is unhealthy.
-- [ ] Set the `object-events` contract `interval` to 3000 ms
+- [x] Set the `object-events` contract `interval` to 3000 ms
   ([question 2](#decisions)), and regenerate.
-- [ ] Delete:
+- [x] Delete:
   - the register and `useRefreshWatcher` blocks in `useObjectPanelRefresh.ts`
     and `EventsTab.tsx`;
   - `getObjectDetailsRefresherName` and `getObjectEventsRefresherName`
     (`ObjectPanel/constants.ts:68-95`);
   - the `ObjectRefresherName` types.
 
+Done 2026-10-19. Notes:
+
+- `object-details` dropped `scheduled: false`, so its lease polls on the 10 s
+  backstop. The Phase 4 backstop test is the two-panel test in
+  `objectDetailsDoorbell.test.tsx`.
+- The details hook lost `objectKind`, `objectData`, and `panelId`, and the
+  Events tab lost `panelId`; they only named the removed refreshers.
+  `constants.test.ts` tested only the deleted name helpers and is gone.
+- A hidden dock tab already released its details lease
+  (`isOpen: isActiveTab`, `ObjectPanel.tsx:183`); the hidden-tab test pins it.
+- Nothing registers a RefreshManager refresher any more; it remains only for
+  pause/resume until Phase 8.
+
 ### Phase 6: delete RefreshContext
 
 Depends on Phases 2 and 3.
 
-- [ ] Red test: closing a cluster prunes its runtime, leases, streams, and
+- [x] Red test: closing a cluster prunes its runtime, leases, streams, and
   retained scopes, and leaves other clusters alone. Existing pruning tests move
   to the new input.
-- [ ] Replace `updateContext` with `setConnectedClusters(clusterIds)`, called
+- [x] Replace `updateContext` with `setConnectedClusters(clusterIds)`, called
   from `KubeconfigContext.tsx:275-300`.
-- [ ] Delete:
+- [x] Delete:
   - the other 11 writers;
   - `RefreshSyncProvider`'s refresh effect (`ViewStateContext.tsx:438-455`);
   - NsResourcesContext's publishing effect;
@@ -807,12 +917,27 @@ Depends on Phases 2 and 3.
   - the unused getters;
   - `ContextRefreshRequest.context` (`core/data-access/types.ts:63`).
 
+Done 2026-10-19. Notes:
+
+- `ContextRefreshRequest.context` was already gone after Phase 2.
+- Dead code the removal exposed was deleted too:
+  - KubeconfigContext's `committedSelectedKubeconfig` state;
+  - `activateClusterWorkspace`'s cluster argument;
+  - `shouldSyncClusterNavigationTarget`;
+  - the Sidebar comment about ordering for the old context.
+- `RefreshSyncProvider` is now `ActiveViewSyncProvider`; it keeps publishing
+  the active view for diagnostics.
+- A tab switch among open clusters leaves `setConnectedClusters` uncalled;
+  `KubeconfigContext.test.tsx` asserts it.
+- Pre-existing, out of scope: `GlobalViewClusters.tsx` has two functions over
+  the complexity target (16 and 18, the same at HEAD).
+
 ### Phase 7: remove background cluster refresh
 
 Decided by John on 2026-10-19 ([question 4](#decisions)). Depends on
 Phase 6.
 
-- [ ] Gate before deleting anything. In the dev app with two clusters open,
+- [x] Gate before deleting anything. In the dev app with two clusters open,
   compare tab return with the setting on and off. Check each table view
   (Workloads, Pods, Nodes, Events) and Overview.
   - Expect the same table behavior: last rows from the replay cache, then a
@@ -820,14 +945,14 @@ Phase 6.
   - Overview should show retained data, then refresh on mount.
   - If any surface renders the background-fetched base snapshot, stop and
     bring it to John.
-- [ ] Red test: with two clusters open, the inactive cluster makes no polls.
+- [x] Red test: with two clusters open, the inactive cluster makes no polls.
   It keeps only its `namespaces` subscription and fetches only when that
   doorbell rings.
-- [ ] Delete the poller:
+- [x] Delete the poller:
   - `backgroundClusterRefresher.ts` and `useBackgroundClusterRefresh.ts`;
   - the mount at `KubernetesProvider.tsx:31`;
   - their tests.
-- [ ] Delete the preference end to end:
+- [x] Delete the preference end to end:
   - frontend:
     - `appPreferences.ts` (field, default, metadata, normalizer, getter,
       setter);
@@ -841,16 +966,30 @@ Phase 6.
     - `backend/preferences_settings.go:39`, `:742`;
     - `backend/preferences_settings_data.go:226-227`;
     - their tests, including `application_runtime_contract_test.go`.
-- [ ] Before removing the field, confirm that existing `settings.json` files
+- [x] Before removing the field, confirm that existing `settings.json` files
   that still contain it load cleanly: either unknown JSON fields are ignored,
   or a migration drops the field.
-- [ ] Add a `docs/release/pending.md` note that the setting was removed.
+- [x] Add a `docs/release/pending.md` note that the setting was removed.
+
+Done 2026-10-19. Notes:
+
+- Gate: John accepted a one-second stale Overview on tab return in place of
+  the in-app comparison. Tables render only query rows
+  (`useQueryBackedResourceGridTable.ts:101-111`, pinned by
+  `deriveQueryBackedData.test.ts:37`), and Overview reads on mount.
+- `inactiveClusterDemand.test.tsx` renders `KubernetesProvider` with two
+  clusters and asserts no read of the inactive one in 60 s; it saw 4 reads
+  before the deletion. Its namespaces lease is mocked there; that lease polls
+  but skips the read while its stream is healthy.
+- `KubeconfigContext.tsx` lost its `useBackgroundRefresh` read in Phase 6.
+- Old `settings.json` files and exports that carry `refresh.background` load
+  cleanly (`TestSettingsFileWithRemovedBackgroundRefreshKeyStillLoads`).
 
 ### Phase 8: delete RefreshManager and refresher names
 
 Depends on Phases 2, 5, 6, and 7.
 
-- [ ] Delete, with their tests:
+- [x] Delete, with their tests:
   - `RefreshManager.ts`, `refresherRuntimeState.ts`, `refresherTypes.ts`,
     `refresherConfig.ts`, `useRefreshWatcher.ts`;
   - `REFRESHER_TIMING_BY_NAME` and `DOMAIN_REFRESHER_MAP`;
@@ -860,11 +999,11 @@ Depends on Phases 2, 5, 6, and 7.
   - `fetchDomainForCluster`, and the `allowDisabledRetainedScope` path in
     `canFetchScope`, `applyFetchResult`, and `applySnapshot`;
   - the `refresh:registered` and `refresh:state-change` events.
-- [ ] Move the `visibilitychange` listener, the only work left in
+- [x] Move the `visibilitychange` listener, the only work left in
   `RefreshManagerProvider`, to the app root, and remove the provider from
   `KubernetesProvider.tsx:52` and `PanelWindowApp.tsx:313`. `useAutoRefresh`
   keeps only the preference.
-- [ ] Delete fields:
+- [x] Delete fields:
   - `refresherName`, `scheduled`, and `pauseRefresherWhenStreaming` from
     `DomainRegistration` and `StreamingRegistration`
     (`refreshRegistration.ts:5-25`);
@@ -874,12 +1013,31 @@ Depends on Phases 2, 5, 6, and 7.
 
   Run `go generate ./backend`. The stale-artifact and parity tests must pass.
 
+Done 2026-10-19. Notes:
+
+- Done:
+  - deleted `RefreshManager.ts`, `refresherRuntimeState.ts`,
+    `useRefreshWatcher.ts`, and `RefreshManagerContext.tsx`, with their tests;
+  - deleted the `refresh:registered` and `refresh:state-change` events,
+    `initializeAutoRefresh` and its `main.ts` calls;
+  - removed the contract fields and their generator code.
+
+  Preference hydration already emits `settings:auto-refresh`
+  (`appPreferences.ts:742`, `:1298`), so nothing replaces
+  `initializeAutoRefresh`.
+- `useDocumentVisibilityEvents` publishes window visibility. It is mounted in
+  `KubernetesProvider` and `PanelWindowApp` in place of the provider.
+- After Phase 7: deleted `refresherTypes.ts` (no importers), the view
+  registry's `refresher` fields (no readers), `fetchDomainForCluster`, and the
+  `allowDisabledRetainedScope` option. Its three tests covered only the
+  background path; the comma-in-cluster-id test now uses a leased user fetch.
+
 ### Phase 9: snapshot leases own signal refetch
 
 Decided by John on 2026-10-19 ([question 6](#decisions)). Depends on
 Phase 2.
 
-- [ ] Red tests:
+- [x] Red tests:
   - A snapshot lease refetches once with `stream-signal` when a declared clock
     advances, with no consumer hook.
   - Two consumers of one scope cause one fetch.
@@ -891,12 +1049,28 @@ Phase 2.
   - A query-only lease never fetches the base snapshot on a signal.
   - While auto-refresh is off, a signal does not refetch. The scope stays
     pending and reconciles after resume ([decision 10](#decisions)).
-- [ ] Move doorbell → refetch into the orchestrator for snapshot demand. Delete:
+- [x] Move doorbell → refetch into the orchestrator for snapshot demand. Delete:
   - the snapshot path of `useStreamSignalRefetch` and `sharedScopeSignals`;
   - the 9 calls in 8 files;
   - `streamConsumerDrift.test.ts`.
 
   `useQueryStreamSignal` stays, because query pages belong to their consumers.
+
+Done 2026-10-19, before Phases 7 and 8, since it depends only on Phase 2.
+Notes:
+
+- The stream manager emits `refresh:stream-signal` when a doorbell moves one
+  of the domain's declared clocks. A resync flushes an empty advance that
+  moves none, and that must not refetch. The orchestrator refetches scopes
+  with snapshot demand using `stream-signal`; query-only demand is left to
+  `useQueryStreamSignal`.
+- Decision 10's paused case: a `stream-signal` read refused while paused
+  marks the scope pending (`markReconciliationPending`, no backoff), and the
+  first allowed read after resume reconciles it. The demand test drives it
+  through a signal latched behind an in-flight read before the pause.
+- Ten call sites lost the hook, including Phase 4's Details tab.
+  `useStreamSignalRefetch.test.tsx` covered only the deleted hook; its
+  contracts are in `orchestrator.demand.test.ts`.
 
 ### Phase 10: docs and plan removal
 

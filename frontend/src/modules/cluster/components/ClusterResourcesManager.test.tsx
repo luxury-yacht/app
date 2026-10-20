@@ -39,9 +39,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterId: 'cluster-a' }),
 }));
 
-const orchestratorMocks = vi.hoisted(() => ({
-  resetDomain: vi.fn(),
-}));
+const orchestratorMocks = vi.hoisted(() => ({}));
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: orchestratorMocks,
@@ -65,7 +63,6 @@ describe('ClusterResourcesManager', () => {
 
     viewPropsRef.current = null;
     permissionState.clear();
-    orchestratorMocks.resetDomain.mockClear();
   });
 
   afterEach(() => {
@@ -81,32 +78,6 @@ describe('ClusterResourcesManager', () => {
       await Promise.resolve();
     });
   };
-
-  it('resets every managed cluster domain when the kubeconfig starts changing', async () => {
-    // This teardown-hygiene effect lived in the (deleted) ClusterResourcesContext
-    // provider, which wrapped exactly this manager — same mount lifetime, so the
-    // manager is its new home.
-    const { eventBus } = await import('@/core/events');
-    orchestratorMocks.resetDomain.mockClear();
-    await renderManager('nodes');
-
-    await act(async () => {
-      eventBus.emit('kubeconfig:changing', undefined as never);
-      await Promise.resolve();
-    });
-
-    const resetDomains = orchestratorMocks.resetDomain.mock.calls.map((call) => call[0]).sort();
-    expect(resetDomains).toEqual([
-      'cluster-attention',
-      'cluster-config',
-      'cluster-crds',
-      'cluster-events',
-      'cluster-identities',
-      'cluster-rbac',
-      'cluster-storage',
-      'nodes',
-    ]);
-  });
 
   it('forwards per-view permission-derived errors downstream', async () => {
     permissionState.set('Node:list', {

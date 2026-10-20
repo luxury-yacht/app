@@ -7,10 +7,6 @@ const telemetryMocks = vi.hoisted(() => ({
   setActiveViewContext: vi.fn(),
 }));
 
-const refreshMocks = vi.hoisted(() => ({
-  updateContext: vi.fn(),
-}));
-
 const contextMocks = vi.hoisted(() => ({
   kubeconfig: {
     selectedClusterId: 'cluster-a',
@@ -41,10 +37,6 @@ vi.mock('./ModalStateContext', () => ({
   useModalState: () => contextMocks.modal,
 }));
 
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: refreshMocks,
-}));
-
 vi.mock('@/core/telemetry/sentry', () => telemetryMocks);
 
 import { useViewState, ViewStateProvider } from './ViewStateContext';
@@ -67,7 +59,6 @@ describe('ViewStateProvider navigation synchronization', () => {
     contextMocks.kubeconfig.managedClusterIds = ['cluster-a'];
     contextMocks.kubeconfig.selectedClusterId = 'cluster-a';
     telemetryMocks.setActiveViewContext.mockReset();
-    refreshMocks.updateContext.mockReset();
     contextMocks.sidebar.setSidebarSelection.mockReset();
     container = document.createElement('div');
     document.body.appendChild(container);

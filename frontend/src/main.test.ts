@@ -78,10 +78,6 @@ vi.mock('@shared/scrollbars/scrollbarActivity', () => ({
   initializeScrollbarActivityTracking: vi.fn(),
 }));
 
-vi.mock('@/core/refresh', () => ({
-  initializeAutoRefresh: vi.fn(),
-}));
-
 vi.mock('@/core/settings/appPreferences', () => ({
   hydrateAppPreferences: vi.fn(async () => ({ errorReportingEnabled: true })),
 }));
@@ -150,14 +146,12 @@ describe('application bootstrap', () => {
       },
     };
 
-    const { initializeAutoRefresh } = await import('@/core/refresh');
     await import('@/main');
     await vi.waitFor(() => {
       expect(order).toContain('panel-module-evaluated');
     });
 
     expect(order).toEqual(['error-reporting-configured', 'panel-module-evaluated']);
-    expect(initializeAutoRefresh).toHaveBeenCalledOnce();
     expect(desktopRuntimeMocks.onBroadcastEvent).toHaveBeenCalledWith(
       'settings:preferences-changed',
       expect.any(Function)

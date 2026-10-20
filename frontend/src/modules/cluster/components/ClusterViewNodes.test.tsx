@@ -205,9 +205,7 @@ vi.mock('@/core/refresh', () => ({
     scopedDomainCallsRef.current.push([domain, scope]);
     return scopedDomainStateRef.current;
   },
-  refreshManager: { triggerManualRefresh: vi.fn() },
   refreshOrchestrator: {
-    setScopedDomainEnabled: vi.fn(),
     acquireScopedDomainLease: vi.fn(),
     releaseScopedDomainLease: vi.fn(),
     resetScopedDomain: vi.fn(),

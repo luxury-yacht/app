@@ -315,7 +315,12 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 	require.ElementsMatch(t, []string{"snapshot-replace", "change-signal"}, objectEvents.StreamSemantics)
 	require.Equal(t, "event-snapshot-payload", objectEvents.CoverageContract)
 
-	for _, domainID := range []string{"object-details", "object-yaml"} {
+	// object-details also rings a change signal after its cached details are
+	// evicted; object-yaml only replaces snapshots.
+	for domainID, semantics := range map[string][]string{
+		"object-details": {"snapshot-replace", "change-signal"},
+		"object-yaml":    {"snapshot-replace"},
+	} {
 		detail := contract.DomainInventory[domainID]
 		require.Equal(t, "detail-payload", detail.BehaviorClass)
 		if domainID == "object-details" {
@@ -323,7 +328,7 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 		} else {
 			require.Equal(t, "snapshot-cache-plus-provider-cache", detail.CachePolicy)
 		}
-		require.Equal(t, []string{"snapshot-replace"}, detail.StreamSemantics)
+		require.Equal(t, semantics, detail.StreamSemantics, domainID)
 		require.Equal(t, "detail-payload-shape", detail.CoverageContract)
 	}
 

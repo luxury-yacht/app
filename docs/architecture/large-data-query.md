@@ -122,11 +122,11 @@ displayed rows in place.
   blocked-result/error policies.
 - `useQueryStreamSignal` (core refresh hooks) owns query signal identity; typed
   tables invalidate their declarative query with it, and Browse supplies a
-  current-page reconciliation callback. Snapshot readers use
-  `useStreamSignalRefetch`, which requests each doorbell once per scope however
-  many consumers mount (the shared record lives only while one is mounted).
-  Both read declared doorbell clocks from one helper; query consumers add
-  subscription acknowledgements and fallback reconciliation ticks.
+  current-page reconciliation callback. Snapshot leases need no hook: the
+  orchestrator refetches each scope with snapshot demand once per declared
+  clock advance, however many consumers hold it. Both read the domain's
+  declared clocks (`doorbellSourceClocks`); query consumers add subscription
+  acknowledgements and fallback reconciliation ticks.
 
 ### Guarantees
 

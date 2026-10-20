@@ -41,9 +41,9 @@ import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import type { DockPosition } from '@ui/dockable';
 import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
 import type { GroupKey } from '@ui/dockable/tabGroupTypes';
+import { resetRefreshDomain } from '@/core/data-access';
 import { failureMessage, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import { buildObjectDetailModel } from './Details/objectDetailModel';
-import { resetObjectPanelScopedDomain } from './hooks/useObjectPanelScopedDomainLifecycle';
 
 // ============================================================================
 // COMPONENT PROPS
@@ -177,9 +177,6 @@ function ObjectPanel({
     fetchResourceDetails,
   } = useObjectPanelRefresh({
     detailScope,
-    objectKind,
-    objectData,
-    panelId,
     isOpen: isActiveTab,
     resourceDeleted,
   });
@@ -216,7 +213,8 @@ function ObjectPanel({
     setResourceDeleted(true);
     setDeletedResourceName(objectData?.name ?? '');
     if (detailScope) {
-      resetObjectPanelScopedDomain({ domain: 'object-details', scope: detailScope });
+      // Lands once the details lease releases (the deleted panel stops leasing).
+      resetRefreshDomain('object-details', detailScope);
     }
   }, [detailScope, isNotFoundError, objectData?.name, resourceDeleted]);
 

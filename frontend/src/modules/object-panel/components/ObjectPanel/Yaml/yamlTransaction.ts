@@ -16,7 +16,7 @@ import {
   readObjectYAMLForRef,
   requestData,
   requestRefreshDomain,
-  setRefreshDomainEnabled,
+  useScopedRefreshDomainLifecycle,
 } from '@/core/data-access';
 import { LINT_DEBOUNCE_MS } from './yamlTabConfig';
 import {
@@ -546,30 +546,15 @@ export const useYamlTransaction = ({
   const baselineMergeYaml = editBaseline?.yaml ?? '';
   const effectiveIdentity = baselineIdentity ?? latestObjectIdentity ?? objectIdentity ?? null;
 
-  useEffect(() => {
-    if (!scope) {
-      return undefined;
-    }
-
-    const enabled = isActive && !isEditing;
-    setRefreshDomainEnabled({ domain: 'object-yaml', scope, enabled });
-    if (enabled) {
-      void requestRefreshDomain({
-        domain: 'object-yaml',
-        scope,
-        reason: 'startup',
-      });
-    }
-
-    return () => {
-      setRefreshDomainEnabled({
-        domain: 'object-yaml',
-        scope,
-        enabled: false,
-        preserveState: true,
-      });
-    };
-  }, [scope, isActive, isEditing]);
+  // Refresh pauses while editing so a remote update cannot replace the draft's
+  // baseline; the retained YAML stays visible.
+  useScopedRefreshDomainLifecycle({
+    domain: 'object-yaml',
+    scope,
+    enabled: isActive && !isEditing,
+    preserveState: true,
+    fetchOnEnable: 'startup',
+  });
 
   useEffect(() => {
     if (!objectIdentity) {

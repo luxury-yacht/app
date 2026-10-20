@@ -18,7 +18,6 @@ import { requestGridTableFilters } from '@shared/components/tables/hooks/useGrid
 import type { ClusterObjectReference } from '@shared/utils/objectIdentity';
 import React, { useCallback, useMemo } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
-import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { localFailure } from '@/core/refresh/refreshFailure';
 import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type {
@@ -84,7 +83,6 @@ const GlobalViewNamespaces: React.FC = () => {
         .map((target) => buildClusterRefreshScope('namespace-metrics', target.clusterId)),
     [getClusterState, namespaceStatesByScope, targets]
   );
-  useStreamSignalRefetch('namespace-metrics', metricScopes);
 
   const resolvedTargets = useMemo(
     () =>
@@ -134,7 +132,7 @@ const GlobalViewNamespaces: React.FC = () => {
         type: 'namespace',
         value: namespace.name,
       });
-      activateClusterWorkspace(namespace.clusterId);
+      activateClusterWorkspace();
       setActiveKubeconfig(target.selection);
     },
     [
@@ -160,7 +158,7 @@ const GlobalViewNamespaces: React.FC = () => {
         type: 'overview',
         value: 'overview',
       });
-      activateClusterWorkspace(row.ref.clusterId);
+      activateClusterWorkspace();
       setActiveKubeconfig(target.selection);
     },
     [
@@ -197,7 +195,7 @@ const GlobalViewNamespaces: React.FC = () => {
         type: 'cluster',
         value: 'cluster',
       });
-      activateClusterWorkspace(row.ref.clusterId);
+      activateClusterWorkspace();
       setActiveKubeconfig(target.selection);
     },
     [

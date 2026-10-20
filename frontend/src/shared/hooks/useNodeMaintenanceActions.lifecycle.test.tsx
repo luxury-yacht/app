@@ -14,13 +14,15 @@ import { useNodeMaintenanceActions } from './useNodeMaintenanceActions';
 const mocks = vi.hoisted(() => ({
   cordon: vi.fn(),
   uncordon: vi.fn(),
-  enable: vi.fn(),
+  acquire: vi.fn(),
+  release: vi.fn(),
   refresh: vi.fn(),
   confirmation: null as null | { onConfirm: () => Promise<void> },
   drain: null as null | { onMutationChange: (inFlight: boolean) => void },
 }));
 vi.mock('@/core/data-access', () => ({
-  setRefreshDomainEnabled: mocks.enable,
+  acquireRefreshDomainLease: mocks.acquire,
+  releaseRefreshDomainLease: mocks.release,
   requestRefreshDomain: mocks.refresh,
 }));
 vi.mock('@shared/actions/objectActionClient', async (importOriginal) => ({
@@ -98,9 +100,9 @@ describe('node maintenance panel lifecycle', () => {
         </PanelLifecycleGuardProvider>
       )
     );
-    expect(mocks.enable.mock.calls).toEqual([
-      [{ domain: 'object-maintenance', scope: 'cluster-a|', enabled: true }],
-      [{ domain: 'object-maintenance', scope: 'cluster-b|', enabled: true }],
+    expect(mocks.acquire.mock.calls).toEqual([
+      [{ domain: 'object-maintenance', scope: 'cluster-a|' }],
+      [{ domain: 'object-maintenance', scope: 'cluster-b|' }],
     ]);
     const drain: NodeMaintenanceDrainJob = {
       id: 'job',
@@ -131,9 +133,9 @@ describe('node maintenance panel lifecycle', () => {
     expect(actions.activeDrainFor('cluster-b', 'worker-1')).toBeNull();
     expect(actions.activeDrainFor('', 'worker-1')).toBeNull();
     await act(async () => root.render(null));
-    expect(mocks.enable.mock.calls.slice(-2)).toEqual([
-      [{ domain: 'object-maintenance', scope: 'cluster-a|', enabled: false }],
-      [{ domain: 'object-maintenance', scope: 'cluster-b|', enabled: false }],
+    expect(mocks.release.mock.calls).toEqual([
+      [{ domain: 'object-maintenance', scope: 'cluster-a|' }],
+      [{ domain: 'object-maintenance', scope: 'cluster-b|' }],
     ]);
   });
 

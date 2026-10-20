@@ -132,7 +132,7 @@ func TestRegisterHelmCacheInvalidationEvictsViaHelmStorageInformer(t *testing.T)
 	})
 	client := cgofake.NewClientset()
 	factory := informer.New(context.Background(), client, nil, time.Minute, checker)
-	gateway.registerHelmCacheInvalidation(factory.HelmStorage(), selectionKey)
+	registerHelmCacheInvalidation(factory.HelmStorage(), responseCacheEvictionTargets{gateway: gateway, selectionKey: selectionKey})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -270,7 +270,7 @@ func TestIngestResponseCacheSinkEvictsOnUpsertAndDelete(t *testing.T) {
 	gateway.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
-	sink := gateway.ingestResponseCacheSink(selectionKey)
+	sink := newResponseCacheSink(responseCacheEvictionTargets{gateway: gateway, selectionKey: selectionKey})
 
 	upsertKey := liveDetailCacheKey("ResourceQuota", "default", "rq-a")
 	gateway.seedResponseCache(selectionKey, upsertKey, "detail")
@@ -294,7 +294,7 @@ func TestPodChangeClearsCachedDetailsThatListPods(t *testing.T) {
 	gateway := newResourceGatewayFixture().gateway
 	gateway.responseCache = newResponseCache(time.Minute, 50)
 	selectionKey := "cluster-a"
-	sink := gateway.ingestResponseCacheSink(selectionKey)
+	sink := newResponseCacheSink(responseCacheEvictionTargets{gateway: gateway, selectionKey: selectionKey})
 	deployment := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
 	cleared := []string{
 		objectDetailCacheKeyForGVK(deployment, "team-a", "web"),

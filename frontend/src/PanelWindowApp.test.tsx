@@ -35,7 +35,6 @@ vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
   ClusterLifecycleProvider: PassThrough,
 }));
 vi.mock('@core/contexts/ZoomContext', () => ({ ZoomProvider: PassThrough }));
-vi.mock('@core/refresh', () => ({ RefreshManagerProvider: PassThrough }));
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   FixedClusterProvider: ({ children, ...props }: { children: ReactNode }) => {
     mocks.fixedClusterProps = props;

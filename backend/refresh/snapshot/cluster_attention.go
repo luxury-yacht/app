@@ -1381,7 +1381,7 @@ func registerAttentionEventSource(index *ClusterAttentionIndex, factory informer
 	_, err := events.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) { index.upsertEvent(meta, obj) },
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			if !informerUpdateIsEcho(oldObj, newObj) {
+			if !InformerUpdateIsEcho(oldObj, newObj) {
 				index.upsertEvent(meta, newObj)
 			}
 		},

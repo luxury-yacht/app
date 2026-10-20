@@ -36,7 +36,6 @@ const (
 	appPreferenceExclusiveNamespaces                      = "exclusiveNamespaces"
 	appPreferenceErrorReportingEnabled                    = "errorReportingEnabled"
 	appPreferenceAutoRefreshEnabled                       = "autoRefreshEnabled"
-	appPreferenceRefreshBackgroundClustersEnabled         = "refreshBackgroundClustersEnabled"
 	appPreferenceMetricsRefreshIntervalMs                 = "metricsRefreshIntervalMs"
 	appPreferenceKubernetesClientQPS                      = "kubernetesClientQPS"
 	appPreferenceKubernetesClientBurst                    = "kubernetesClientBurst"
@@ -175,7 +174,6 @@ func (p *settingsPreferences) UnmarshalJSON(data []byte) error {
 // settingsRefresh captures user-configurable refresh settings.
 type settingsRefresh struct {
 	Auto              bool `json:"auto"`
-	Background        bool `json:"background"`
 	MetricsIntervalMs int  `json:"metricsIntervalMs"`
 }
 
@@ -292,7 +290,7 @@ func defaultSettingsFile() *settingsFile {
 			DimInactiveNamespaces:             boolPtr(true),
 			ExclusiveNamespaces:               boolPtr(true),
 			ErrorReportingEnabled:             boolPtr(true),
-			Refresh:                           &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
+			Refresh:                           &settingsRefresh{Auto: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
 			KubernetesAPI: &settingsKubernetesAPI{
 				ClientQPS:                      defaultKubernetesClientQPS,
 				ClientBurst:                    defaultKubernetesClientBurst,
@@ -372,7 +370,7 @@ func normalizeCorePreferences(preferences *settingsPreferences) {
 
 func normalizeRefreshPreferences(preferences *settingsPreferences) {
 	if preferences.Refresh == nil {
-		preferences.Refresh = &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()}
+		preferences.Refresh = &settingsRefresh{Auto: true, MetricsIntervalMs: defaultMetricsIntervalMs()}
 	}
 	if preferences.Refresh.MetricsIntervalMs <= 0 {
 		preferences.Refresh.MetricsIntervalMs = defaultMetricsIntervalMs()
@@ -739,7 +737,6 @@ func appSettingsFromFile(settings *settingsFile) *AppSettings {
 		ExclusiveNamespaces:                      *settings.Preferences.ExclusiveNamespaces,
 		ErrorReportingEnabled:                    *settings.Preferences.ErrorReportingEnabled,
 		AutoRefreshEnabled:                       settings.Preferences.Refresh.Auto,
-		RefreshBackgroundClustersEnabled:         settings.Preferences.Refresh.Background,
 		MetricsRefreshIntervalMs:                 settings.Preferences.Refresh.MetricsIntervalMs,
 		KubernetesClientQPS:                      kubernetesAPISettings.ClientQPS,
 		KubernetesClientBurst:                    kubernetesAPISettings.ClientBurst,
@@ -793,7 +790,6 @@ func (p *PreferencesService) saveAppSettings() error {
 		settings.Preferences.Refresh = &settingsRefresh{}
 	}
 	settings.Preferences.Refresh.Auto = p.appSettings.AutoRefreshEnabled
-	settings.Preferences.Refresh.Background = p.appSettings.RefreshBackgroundClustersEnabled
 	settings.Preferences.Refresh.MetricsIntervalMs = p.appSettings.MetricsRefreshIntervalMs
 	if settings.Preferences.KubernetesAPI == nil {
 		settings.Preferences.KubernetesAPI = &settingsKubernetesAPI{}

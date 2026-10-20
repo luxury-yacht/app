@@ -93,7 +93,7 @@ func testCatalogCustomResourceWatchReconcilesTableMembership(t *testing.T, stora
 	require.NoError(t, err)
 	app.Refresh.setRefreshSubsystem(target.meta.ID, subsystem)
 	app.Resources.responseCache = newResponseCache(time.Minute, 10)
-	app.Resources.registerResponseCacheInvalidation(subsystem, target.meta.ID)
+	app.Refresh.registerResponseCacheInvalidation(subsystem, target.meta.ID)
 	t.Cleanup(func() {
 		app.Refresh.stopObjectCatalogForCluster(target.meta.ID)
 		cancel()

@@ -4,11 +4,7 @@ import type { CatalogItem } from '@core/refresh/types';
 import { INACTIVE_SCOPE } from '@modules/object-panel/components/ObjectPanel/constants';
 import { buildVersionedNamespacedRowKey } from '@shared/utils/resourceRowIdentity';
 import { useEffect, useMemo, useState } from 'react';
-import {
-  requestRefreshDomain,
-  resetRefreshDomain,
-  setRefreshDomainEnabled,
-} from '@/core/data-access';
+import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { failureMessage } from '@/core/refresh/refreshFailure';
 import {
   buildIgnoredMetadataLineSet,
@@ -57,23 +53,14 @@ export const useObjectDiffYaml = (selection: CatalogItem | null, enabled: boolea
   const effectiveScope = scope ?? INACTIVE_SCOPE;
   const state = useRefreshScopedDomain('object-yaml', effectiveScope);
 
-  useEffect(() => {
-    if (!scope || !enabled) {
-      return;
-    }
-
-    setRefreshDomainEnabled({ domain: 'object-yaml', scope, enabled: true });
-    void requestRefreshDomain({
-      domain: 'object-yaml',
-      scope,
-      reason: 'user',
-    });
-
-    return () => {
-      setRefreshDomainEnabled({ domain: 'object-yaml', scope, enabled: false });
-      resetRefreshDomain('object-yaml', scope);
-    };
-  }, [enabled, scope]);
+  // The lease releases without preserving state: the YAML clears once no other
+  // holder, such as an open YAML tab on the same object, still shows it.
+  useScopedRefreshDomainLifecycle({
+    domain: 'object-yaml',
+    scope,
+    enabled: Boolean(scope && enabled),
+    fetchOnEnable: 'user',
+  });
 
   const selectionKey = selection
     ? `${buildVersionedNamespacedRowKey(

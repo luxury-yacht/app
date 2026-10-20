@@ -29,7 +29,6 @@ const searchShortcutMocks = vi.hoisted(() => ({
 }));
 
 const refreshMocks = vi.hoisted(() => ({
-  setScopedDomainEnabled: vi.fn(),
   acquireScopedDomainLease: vi.fn(),
   releaseScopedDomainLease: vi.fn(),
   fetchScopedDomain: vi.fn(() => Promise.resolve()),
@@ -276,7 +275,6 @@ describe('ValuesTab', () => {
     codeMirrorState.latestProps.current = { value: '' };
     codeMirrorState.editorView.dispatch.mockClear();
     codeMirrorState.editorView.focus.mockClear();
-    refreshMocks.setScopedDomainEnabled.mockClear();
     refreshMocks.fetchScopedDomain.mockClear();
     autoRefreshLoadingState.isPaused = false;
     autoRefreshLoadingState.isManualRefreshActive = false;
@@ -454,8 +452,7 @@ describe('ValuesTab', () => {
       'object-helm-values',
       'ns:helmrelease:chart',
       expect.objectContaining({
-        isManual: false,
-        streamSignal: false,
+        intent: 'startup',
         correlationId: expect.any(String),
       })
     );

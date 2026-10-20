@@ -5,7 +5,6 @@ import { useSidebarState } from '@core/contexts/SidebarStateContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useScopedRefreshDomainLifecycle } from '@core/data-access/useScopedRefreshDomainLifecycle';
 import { canActivateClusterOverviewRefresh } from '@core/refresh/clusterOverviewLifecycle';
-import { useStreamSignalRefetch } from '@core/refresh/hooks/useStreamSignalRefetch';
 import { clusterOverviewCpuValue, clusterOverviewMemoryValue } from '@core/resource-metrics';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
@@ -229,14 +228,6 @@ const GlobalViewClusters: React.FC = () => {
       }),
     [getClusterAuthState, getClusterMeta, getClusterState, selectedKubeconfigs]
   );
-  const refreshScopes = useMemo(
-    () =>
-      refreshTargets.map(({ clusterId }) =>
-        buildClusterRefreshScope('cluster-overview', clusterId)
-      ),
-    [refreshTargets]
-  );
-  useStreamSignalRefetch('cluster-overview', refreshScopes);
 
   const navigateToOverview = useCallback(
     (row: GlobalClusterRow) => {
@@ -245,7 +236,7 @@ const GlobalViewClusters: React.FC = () => {
         activeClusterView: null,
       });
       setSidebarSelectionForCluster(row.clusterId, { type: 'overview', value: 'overview' });
-      activateClusterWorkspace(row.clusterId);
+      activateClusterWorkspace();
       setActiveKubeconfig(row.selection);
     },
     [

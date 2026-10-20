@@ -59,7 +59,7 @@ func newEventTableHarnessWith(
 	require.NoError(t, err)
 	service := snapshot.NewServiceWithPermissions(reg, nil, meta, nil)
 	manager := resourcestream.NewManager(nil, nil, nil, meta, nil)
-	wireStreamObservers(manager, nil, service, nil, nil,
+	wireStreamObservers(manager, nil, service, nil, nil, nil,
 		[]*snapshot.EventTableChangeNotifier{clusterNotifier, namespaceNotifier}, nil)
 
 	if beforeStart != nil {

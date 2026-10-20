@@ -81,14 +81,14 @@ describe('liveDomainVersion', () => {
   });
 
   it('keeps the folded token for domains without doorbell clocks', () => {
-    expect(liveDomainVersion('object-details', { sourceVersion: 'v1' })).not.toBe(
-      liveDomainVersion('object-details', { sourceVersion: 'v2' })
+    expect(liveDomainVersion('object-yaml', { sourceVersion: 'v1' })).not.toBe(
+      liveDomainVersion('object-yaml', { sourceVersion: 'v2' })
     );
-    expect(liveDomainVersion('object-details', { etag: 'e1' })).not.toBe(
-      liveDomainVersion('object-details', { etag: 'e2' })
+    expect(liveDomainVersion('object-yaml', { etag: 'e1' })).not.toBe(
+      liveDomainVersion('object-yaml', { etag: 'e2' })
     );
-    expect(liveDomainVersion('object-details', { sourceVersion: 'v1', etag: 'e1' })).toBe(
-      liveDomainVersion('object-details', { sourceVersion: 'v1', etag: 'e2' })
+    expect(liveDomainVersion('object-yaml', { sourceVersion: 'v1', etag: 'e1' })).toBe(
+      liveDomainVersion('object-yaml', { sourceVersion: 'v1', etag: 'e2' })
     );
   });
 });

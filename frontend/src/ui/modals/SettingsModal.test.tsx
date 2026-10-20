@@ -73,18 +73,6 @@ vi.mock('@/utils/appearanceMode', () => ({
   changeAppearanceMode: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/core/refresh/RefreshManager', () => ({
-  refreshManager: {
-    register: vi.fn(),
-    unregister: vi.fn(),
-    subscribe: vi.fn(() => () => undefined),
-    enable: vi.fn(),
-    disable: vi.fn(),
-    pause: vi.fn(),
-    resume: vi.fn(),
-  },
-}));
-
 describe('SettingsModal', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;

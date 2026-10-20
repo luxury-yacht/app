@@ -11,8 +11,6 @@ const mocks = vi.hoisted(() => ({
   requestRefreshDomain: vi.fn(() => Promise.resolve({ status: 'executed' })),
   acquireRefreshDomainLease: vi.fn(),
   releaseRefreshDomainLease: vi.fn(),
-  setRefreshDomainEnabled: vi.fn(),
-  useStreamSignalRefetch: vi.fn(),
   selectedKubeconfigs: [
     '/kube/config:alpha',
     '/kube/config:beta',
@@ -118,14 +116,12 @@ vi.mock('@/core/data-access', () => ({
   requestRefreshDomain: mocks.requestRefreshDomain,
   acquireRefreshDomainLease: mocks.acquireRefreshDomainLease,
   releaseRefreshDomainLease: mocks.releaseRefreshDomainLease,
-  setRefreshDomainEnabled: mocks.setRefreshDomainEnabled,
 }));
 
 vi.mock('@/core/data-access/dataAccess', () => ({
   requestRefreshDomain: mocks.requestRefreshDomain,
   acquireRefreshDomainLease: mocks.acquireRefreshDomainLease,
   releaseRefreshDomainLease: mocks.releaseRefreshDomainLease,
-  setRefreshDomainEnabled: mocks.setRefreshDomainEnabled,
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -138,10 +134,6 @@ vi.mock('@/core/refresh', () => ({
       droppedAutoRefreshes: 0,
     },
   }),
-}));
-
-vi.mock('@/core/refresh/hooks/useStreamSignalRefetch', () => ({
-  useStreamSignalRefetch: mocks.useStreamSignalRefetch,
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
@@ -279,7 +271,6 @@ describe('GlobalViewClusters', () => {
     mocks.acquireRefreshDomainLease.mockClear();
     mocks.releaseRefreshDomainLease.mockClear();
     mocks.requestRefreshDomain.mockClear();
-    mocks.setRefreshDomainEnabled.mockClear();
     mocks.selectedKubeconfigs = ['/kube/config:alpha', '/kube/config:gamma'];
     await rerender();
 
@@ -292,7 +283,6 @@ describe('GlobalViewClusters', () => {
     });
     expect(mocks.acquireRefreshDomainLease).not.toHaveBeenCalled();
     expect(mocks.requestRefreshDomain).not.toHaveBeenCalled();
-    expect(mocks.setRefreshDomainEnabled).not.toHaveBeenCalled();
     expect(getPersistenceParams().clusterIdentity).toBe(initialPersistenceIdentity);
     expect((getTableProps().source as { cacheKey?: string }).cacheKey).toBe(initialCacheKey);
 
@@ -463,7 +453,7 @@ describe('GlobalViewClusters', () => {
       value: 'overview',
     });
     expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
-    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith('cluster-b');
+    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith();
     expect(mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.activateClusterWorkspace.mock.invocationCallOrder[0]
     );

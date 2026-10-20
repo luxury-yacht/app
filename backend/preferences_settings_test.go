@@ -343,7 +343,6 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		DimInactiveNamespaces:                    false,
 		ExclusiveNamespaces:                      false,
 		AutoRefreshEnabled:                       false,
-		RefreshBackgroundClustersEnabled:         false,
 		MetricsRefreshIntervalMs:                 7000,
 		KubernetesClientQPS:                      250,
 		KubernetesClientBurst:                    500,
@@ -382,7 +381,6 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.False(t, app.Preferences.appSettings.ExclusiveNamespaces)
 	require.Equal(t, []string{"/tmp/config:ctx"}, app.Preferences.appSettings.SelectedKubeconfigs)
 	require.False(t, app.Preferences.appSettings.AutoRefreshEnabled)
-	require.False(t, app.Preferences.appSettings.RefreshBackgroundClustersEnabled)
 	require.Equal(t, 7000, app.Preferences.appSettings.MetricsRefreshIntervalMs)
 	require.Equal(t, 250, app.Preferences.appSettings.KubernetesClientQPS)
 	require.Equal(t, 500, app.Preferences.appSettings.KubernetesClientBurst)
@@ -583,24 +581,6 @@ func TestAppSetAutoRefreshEnabledPersists(t *testing.T) {
 	last := entries[len(entries)-1]
 	require.Equal(t, "INFO", last.Level)
 	require.Contains(t, last.Message, "Auto refresh enabled changed to: false")
-}
-
-func TestAppSetBackgroundRefreshEnabledPersists(t *testing.T) {
-	setTestConfigEnv(t)
-	app := newSettingsEffectsTestFixture(t)
-
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceRefreshBackgroundClustersEnabled, false))
-	require.False(t, app.Preferences.appSettings.RefreshBackgroundClustersEnabled)
-
-	app.Preferences.appSettings = nil
-	ensurePreferencesLoaded(t, app.Preferences)
-	require.False(t, app.Preferences.appSettings.RefreshBackgroundClustersEnabled)
-
-	entries := app.AppLogs.logger.GetEntries()
-	require.NotEmpty(t, entries)
-	last := entries[len(entries)-1]
-	require.Equal(t, "INFO", last.Level)
-	require.Contains(t, last.Message, "Background refresh enabled changed to: false")
 }
 
 func TestAppSetObjPanelLogsBufferMaxSizePersistsAndClamps(t *testing.T) {
@@ -934,7 +914,6 @@ func TestLoadSettingsFileNormalizesDefaults(t *testing.T) {
 	require.Equal(t, "system", settings.Preferences.AppearanceMode)
 	require.NotNil(t, settings.Preferences.Refresh)
 	require.True(t, settings.Preferences.Refresh.Auto)
-	require.True(t, settings.Preferences.Refresh.Background)
 	require.Equal(t, "shared", settings.Preferences.GridTablePersistenceMode)
 	require.Equal(t, defaultObjectPanelPosition, settings.Preferences.DefaultObjectPanelPosition)
 	require.Equal(t, defaultObjectPanelDockedRightWidth, settings.Preferences.ObjectPanelDockedRightWidth)
@@ -1022,7 +1001,7 @@ func TestNormalizeSettingsFileCompletesZeroValueDefaults(t *testing.T) {
 	require.True(t, *settings.Preferences.DimInactiveNamespaces)
 	require.True(t, *settings.Preferences.ExclusiveNamespaces)
 	require.True(t, *settings.Preferences.ErrorReportingEnabled)
-	require.Equal(t, &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()}, settings.Preferences.Refresh)
+	require.Equal(t, &settingsRefresh{Auto: true, MetricsIntervalMs: defaultMetricsIntervalMs()}, settings.Preferences.Refresh)
 	require.Equal(t, &settingsKubernetesAPI{
 		ClientQPS:                      defaultKubernetesClientQPS,
 		ClientBurst:                    defaultKubernetesClientBurst,
@@ -1467,7 +1446,7 @@ func TestAppPaletteTintMigration(t *testing.T) {
 			PaletteHue:               180,
 			PaletteSaturation:        65,
 			PaletteBrightness:        -10,
-			Refresh:                  &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
+			Refresh:                  &settingsRefresh{Auto: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
 		},
 	}
 	bytes, err := json.Marshal(oldSettings)
@@ -1597,4 +1576,25 @@ func TestGetAppSettingsDoesNotDeadlockWhenSettingsNotLoaded(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("GetAppSettings deadlocked: the limiter accessor re-locked settingsMu")
 	}
+}
+
+// Settings files and exports written while the "Refresh background clusters"
+// preference existed still carry preferences.refresh.background. They must load
+// with every other preference intact, and the next save drops the key.
+func TestSettingsFileWithRemovedBackgroundRefreshKeyStillLoads(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newSettingsEffectsTestFixture(t)
+	configPath, err := app.Preferences.getSettingsFilePath()
+	require.NoError(t, err)
+	legacy := []byte(`{"schemaVersion":1,"preferences":{"appearanceMode":"dark","refresh":{"auto":false,"background":true,"metricsIntervalMs":7000}}}`)
+	writeTestFileWithParents(t, configPath, legacy, 0o644)
+
+	ensurePreferencesLoaded(t, app.Preferences)
+	require.False(t, app.Preferences.appSettings.AutoRefreshEnabled)
+	require.Equal(t, "dark", app.Preferences.appSettings.AppearanceMode)
+
+	require.NoError(t, updatePreference(app.Preferences, appPreferenceAutoRefreshEnabled, true))
+	saved, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	require.NotContains(t, string(saved), `"background"`)
 }

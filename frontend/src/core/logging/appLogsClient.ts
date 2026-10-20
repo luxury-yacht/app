@@ -15,7 +15,6 @@ export interface AppLogsClusterMeta {
 }
 
 export const APP_LOG_SOURCES = {
-  BackgroundClusterRefresher: 'BackgroundClusterRefresher',
   CatalogDiagnostics: 'CatalogDiagnostics',
   CatalogStream: 'CatalogStream',
   Frontend: 'Frontend',

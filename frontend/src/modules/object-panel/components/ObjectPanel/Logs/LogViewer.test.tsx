@@ -112,13 +112,12 @@ const getLatestKeyboardSurfaceConfig = (
 
 const mockModules = vi.hoisted(() => {
   const orchestrator = {
-    stopStreamingDomain: vi.fn(),
-    setScopedDomainEnabled: vi.fn(),
-    startStreamingDomain: vi.fn(),
+    acquireScopedDomainLease: vi.fn(),
+    releaseScopedDomainLease: vi.fn(),
+    resetScopedDomain: vi.fn(),
     restartStreamingDomain: vi.fn(),
     refreshStreamingDomainOnce: vi.fn(),
     fetchScopedDomain: vi.fn(),
-    updateContext: vi.fn(),
   };
 
   return { orchestrator };
@@ -996,16 +995,15 @@ describe('LogViewer active pod synchronisation', () => {
       );
       expect(getLogViewerPrefs(panelId)?.autoRefresh).toBe(false);
 
-      mockModules.orchestrator.setScopedDomainEnabled.mockClear();
+      mockModules.orchestrator.acquireScopedDomainLease.mockClear();
       act(() => {
         getLatestShortcut('r')?.handler();
       });
       await flushAsync();
       expect(getLogViewerPrefs(panelId)?.autoRefresh).toBe(true);
-      expect(mockModules.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      expect(mockModules.orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
         'container-logs',
         defaultScope,
-        true,
         expect.anything()
       );
     } finally {
@@ -1017,39 +1015,27 @@ describe('LogViewer active pod synchronisation', () => {
   // clearing the buffer and starts again when the toggle is turned back on.
   it('freezes and resumes the stream with the tab auto-refresh toggle', async () => {
     await renderViewer({ activePodNames: ['web-1', 'web-2'] });
-    mockModules.orchestrator.stopStreamingDomain.mockClear();
-    mockModules.orchestrator.setScopedDomainEnabled.mockClear();
+    mockModules.orchestrator.acquireScopedDomainLease.mockClear();
+    mockModules.orchestrator.releaseScopedDomainLease.mockClear();
 
     act(() => {
       getLatestShortcut('r')?.handler();
     });
-    expect(mockModules.orchestrator.stopStreamingDomain).toHaveBeenCalledWith(
+    // Releasing with preserveState stops the stream without clearing the buffer.
+    expect(mockModules.orchestrator.releaseScopedDomainLease).toHaveBeenLastCalledWith(
       'container-logs',
       defaultScope,
-      {
-        reset: false,
-      }
-    );
-    expect(mockModules.orchestrator.setScopedDomainEnabled).toHaveBeenLastCalledWith(
-      'container-logs',
-      defaultScope,
-      false,
-      {
-        preserveState: true,
-      }
+      { preserveState: true }
     );
     expect(container.textContent).toContain('first');
 
     act(() => {
       getLatestShortcut('r')?.handler();
     });
-    expect(mockModules.orchestrator.setScopedDomainEnabled).toHaveBeenLastCalledWith(
+    expect(mockModules.orchestrator.acquireScopedDomainLease).toHaveBeenLastCalledWith(
       'container-logs',
       defaultScope,
-      true,
-      {
-        preserveState: true,
-      }
+      { preserveState: true }
     );
   });
 
@@ -1059,12 +1045,10 @@ describe('LogViewer active pod synchronisation', () => {
     act(() => {
       root.unmount();
     });
-    expect(mockModules.orchestrator.stopStreamingDomain).toHaveBeenLastCalledWith(
+    expect(mockModules.orchestrator.releaseScopedDomainLease).toHaveBeenLastCalledWith(
       'container-logs',
       defaultScope,
-      {
-        reset: false,
-      }
+      { preserveState: true }
     );
 
     root = ReactDOM.createRoot(container);

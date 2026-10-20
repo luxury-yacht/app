@@ -8,22 +8,16 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { localFailure } from '@/core/refresh/refreshFailure';
 import { requireValue } from '@/test-utils/requireValue';
-import type { PanelObjectData } from '../types';
 import { useObjectPanelRefresh } from './useObjectPanelRefresh';
 
 const hoistedMocks = vi.hoisted(() => ({
-  refreshManager: {
-    register: vi.fn(),
-    unregister: vi.fn(),
-  },
   refreshOrchestrator: {
-    setScopedDomainEnabled: vi.fn(),
+    acquireScopedDomainLease: vi.fn(),
+    releaseScopedDomainLease: vi.fn(),
     resetScopedDomain: vi.fn(),
     fetchScopedDomain: vi.fn(),
-    updateContext: vi.fn(),
   },
   useRefreshScopedDomain: vi.fn(),
-  useRefreshWatcher: vi.fn(),
   autoRefreshLoadingState: {
     isPaused: false,
     isManualRefreshActive: false,
@@ -32,16 +26,11 @@ const hoistedMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/core/refresh', () => ({
-  refreshManager: hoistedMocks.refreshManager,
   refreshOrchestrator: hoistedMocks.refreshOrchestrator,
 }));
 
 vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: (...args: unknown[]) => hoistedMocks.useRefreshScopedDomain(...args),
-}));
-
-vi.mock('@/core/refresh/hooks/useRefreshWatcher', () => ({
-  useRefreshWatcher: (...args: unknown[]) => hoistedMocks.useRefreshWatcher(...args),
 }));
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
@@ -52,10 +41,8 @@ vi.mock('@/core/settings/appPreferences', () => ({
   getAutoRefreshEnabled: () => !hoistedMocks.autoRefreshLoadingState.isPaused,
 }));
 
-const mockRefreshManager = hoistedMocks.refreshManager;
 const mockRefreshOrchestrator = hoistedMocks.refreshOrchestrator;
 const mockUseRefreshScopedDomain = hoistedMocks.useRefreshScopedDomain;
-const mockUseRefreshWatcher = hoistedMocks.useRefreshWatcher;
 const autoRefreshLoadingState = hoistedMocks.autoRefreshLoadingState;
 
 describe('useObjectPanelRefresh', () => {
@@ -63,24 +50,12 @@ describe('useObjectPanelRefresh', () => {
   let root: ReactDOM.Root;
   const resultRef: { current: ReturnType<typeof useObjectPanelRefresh> | null } = { current: null };
 
-  const baseObjectData: PanelObjectData = {
-    kind: 'Deployment',
-    name: 'api',
-    namespace: 'team-a',
-  };
-
-  const basePanelId = 'obj:cluster-a:apps/v1/deployment:team-a:api';
-  const expectedRefresherName = `object-deployment:${basePanelId}`;
-
   const renderHook = async (
     override: Partial<Parameters<typeof useObjectPanelRefresh>[0]> = {}
   ) => {
     const propsRef = {
       current: {
-        detailScope: 'cluster-a|team-a:apps/v1:deployment:api',
-        objectKind: 'deployment',
-        objectData: baseObjectData,
-        panelId: basePanelId,
+        detailScope: 'cluster-a|team-a:apps/v1:deployment:api' as string | null,
         isOpen: true,
         resourceDeleted: false,
         ...override,
@@ -115,14 +90,11 @@ describe('useObjectPanelRefresh', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     resultRef.current = null;
-    mockRefreshManager.register.mockClear();
-    mockRefreshManager.unregister.mockClear();
-    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
+    mockRefreshOrchestrator.acquireScopedDomainLease.mockClear();
+    mockRefreshOrchestrator.releaseScopedDomainLease.mockClear();
     mockRefreshOrchestrator.resetScopedDomain.mockClear();
     mockRefreshOrchestrator.fetchScopedDomain.mockClear();
     mockRefreshOrchestrator.fetchScopedDomain.mockResolvedValue(undefined);
-    mockRefreshOrchestrator.updateContext.mockClear();
-    mockUseRefreshWatcher.mockClear();
     mockUseRefreshScopedDomain.mockReset();
     autoRefreshLoadingState.isPaused = false;
     autoRefreshLoadingState.isManualRefreshActive = false;
@@ -141,27 +113,19 @@ describe('useObjectPanelRefresh', () => {
     container.remove();
   });
 
-  it('registers refreshers, enables scoped domains, and fetches on mount', async () => {
+  it('leases the details scope and fetches on mount', async () => {
     await renderHook();
 
-    expect(mockRefreshManager.register).toHaveBeenCalledWith(
-      expect.objectContaining({ name: expectedRefresherName, interval: 5000 })
-    );
-    expect(mockUseRefreshWatcher).toHaveBeenCalledWith(
-      expect.objectContaining({ refresherName: expectedRefresherName, enabled: true })
-    );
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(mockRefreshOrchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
       'object-details',
       'cluster-a|team-a:apps/v1:deployment:api',
-      true,
       { preserveState: true }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',
       'cluster-a|team-a:apps/v1:deployment:api',
-      expect.objectContaining({ isManual: false })
+      expect.objectContaining({ intent: 'startup' })
     );
-    expect(mockRefreshOrchestrator.updateContext).not.toHaveBeenCalled();
   });
 
   it('cleans up refresh subscriptions on unmount but preserves cached state', async () => {
@@ -171,16 +135,14 @@ describe('useObjectPanelRefresh', () => {
       root.unmount();
     });
 
-    expect(mockRefreshManager.unregister).toHaveBeenCalledWith(expectedRefresherName);
     // Tier 1 responsiveness: stop refreshing this scope but keep the
     // cached snapshot in place. The cache is only freed via
     // ObjectPanelStateContext.closePanel when the user actually closes
     // the panel — this lets cluster-switch round-trips render instantly
     // from cache.
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+    expect(mockRefreshOrchestrator.releaseScopedDomainLease).toHaveBeenCalledWith(
       'object-details',
       'cluster-a|team-a:apps/v1:deployment:api',
-      false,
       { preserveState: true }
     );
     expect(mockRefreshOrchestrator.resetScopedDomain).not.toHaveBeenCalledWith(
@@ -201,7 +163,7 @@ describe('useObjectPanelRefresh', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',
       'cluster-a|team-a:apps/v1:deployment:api',
-      expect.objectContaining({ isManual: true })
+      expect.objectContaining({ intent: 'user' })
     );
   });
 
@@ -231,42 +193,14 @@ describe('useObjectPanelRefresh', () => {
     expect(getResult().detailsError).toEqual(localFailure('fetch failed'));
   });
 
-  it('runs watcher refreshes and ignores an aborted watcher signal', async () => {
-    await renderHook();
-    const watcherCall =
-      mockUseRefreshWatcher.mock.calls[mockUseRefreshWatcher.mock.calls.length - 1];
-    const watcher = watcherCall?.[0] as {
-      onRefresh: (isManual: boolean, signal: AbortSignal) => Promise<void>;
-    };
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-
-    await watcher.onRefresh(false, new AbortController().signal);
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'object-details',
-      'cluster-a|team-a:apps/v1:deployment:api',
-      expect.objectContaining({ isManual: false })
-    );
-
-    const controller = new AbortController();
-    controller.abort();
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-    await watcher.onRefresh(true, controller.signal);
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-  });
-
   it('keeps the fetch helper inert without an object scope', async () => {
-    const { getResult } = await renderHook({
-      detailScope: null,
-      objectKind: null,
-      objectData: null,
-      panelId: null,
-    });
+    const { getResult } = await renderHook({ detailScope: null });
     mockRefreshOrchestrator.fetchScopedDomain.mockClear();
 
     await getResult().fetchResourceDetails('user');
 
     expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-    expect(mockRefreshManager.register).not.toHaveBeenCalled();
+    expect(mockRefreshOrchestrator.acquireScopedDomainLease).not.toHaveBeenCalled();
   });
 
   it('suppresses passive detail loading while auto-refresh is paused', async () => {
@@ -282,57 +216,5 @@ describe('useObjectPanelRefresh', () => {
 
     expect(getResult().detailsLoading).toBe(false);
     expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-  });
-
-  it('registers a distinct refresher per panel so same-kind panels never clobber each other', async () => {
-    // Two simultaneously-open Deployment panels (the dockable multi-panel
-    // model mounts one ObjectPanel per open object). With a kind-only
-    // refresher name the second registration replaced the first and either
-    // panel's unmount unregistered the survivor's refresher + subscribers.
-    const otherPanelId = 'obj:cluster-a:apps/v1/deployment:team-a:web';
-    // Stable per-panel objectData, mirroring production where the panel ref
-    // identity does not change across renders.
-    const panelObjects: Record<string, PanelObjectData> = {
-      api: { ...baseObjectData, name: 'api' },
-      web: { ...baseObjectData, name: 'web' },
-    };
-    const PanelHarness: React.FC<{ panelId: string; name: string }> = ({ panelId, name }) => {
-      useObjectPanelRefresh({
-        detailScope: `cluster-a|team-a:apps/v1:deployment:${name}`,
-        objectKind: 'deployment',
-        objectData: panelObjects[name],
-        panelId,
-        isOpen: true,
-        resourceDeleted: false,
-      });
-      return null;
-    };
-
-    await act(async () => {
-      root.render(
-        <>
-          <PanelHarness key="api" panelId={basePanelId} name="api" />
-          <PanelHarness key="web" panelId={otherPanelId} name="web" />
-        </>
-      );
-      await Promise.resolve();
-    });
-
-    const registeredNames = mockRefreshManager.register.mock.calls.map(
-      (call) => (call[0] as { name: string }).name
-    );
-    expect(registeredNames).toContain(`object-deployment:${basePanelId}`);
-    expect(registeredNames).toContain(`object-deployment:${otherPanelId}`);
-    expect(new Set(registeredNames).size).toBe(registeredNames.length);
-
-    // Unmounting one panel must only unregister ITS refresher.
-    await act(async () => {
-      root.render(<PanelHarness key="api" panelId={basePanelId} name="api" />);
-      await Promise.resolve();
-    });
-    expect(mockRefreshManager.unregister).toHaveBeenCalledWith(`object-deployment:${otherPanelId}`);
-    expect(mockRefreshManager.unregister).not.toHaveBeenCalledWith(
-      `object-deployment:${basePanelId}`
-    );
   });
 });

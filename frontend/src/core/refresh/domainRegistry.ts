@@ -1,5 +1,4 @@
 import refreshDomainContractJson from '../../../../backend/refresh/domain/refresh-domain-contract.json';
-import type { StaticRefresherName } from './refresherTypes';
 import {
   type GeneratedRefreshCachePolicy,
   type GeneratedRefreshDiagnosticsStream,
@@ -16,17 +15,17 @@ export type DomainCategory = GeneratedRefreshDomainCategory;
 
 export type StreamTelemetryName = GeneratedRefreshDiagnosticsStream;
 
-export interface RefresherTiming {
+// A domain's poll cadence: one read every `interval` ms after the last one
+// settles, each read bounded by `timeout` seconds.
+export interface RefreshTiming {
   interval: number;
-  cooldown: number;
   timeout: number;
 }
 
 export interface RefreshDomainDescriptor<D extends RefreshDomain = RefreshDomain> {
   domain: D;
-  refresherName: StaticRefresherName;
   category: DomainCategory;
-  timing: RefresherTiming;
+  timing: RefreshTiming;
   diagnosticsStream?: StreamTelemetryName;
   priority?: number;
 }
@@ -100,13 +99,11 @@ export interface RefreshDomainContractEntry<D extends RefreshDomain = RefreshDom
     resourceStream: boolean;
   };
   frontend: {
-    refresherName: StaticRefresherName;
     orchestrator: RefreshOrchestratorKind;
     diagnosticsStream: StreamTelemetryName | null;
-    timing: RefresherTiming;
+    timing: RefreshTiming;
     priority?: number;
     registrationOrder: number;
-    scheduled?: boolean;
   };
 }
 
@@ -162,7 +159,6 @@ export const REFRESH_DOMAIN_DESCRIPTORS = Object.fromEntries(
   REFRESH_DOMAIN_POLICIES.map((policy) => {
     const descriptor: RefreshDomainDescriptor = {
       domain: policy.domain,
-      refresherName: policy.frontend.refresherName,
       category: policy.category,
       timing: { ...policy.frontend.timing },
     };
@@ -184,10 +180,6 @@ export const getRefreshDomainDescriptor = <D extends RefreshDomain>(
   domain: D
 ): RefreshDomainDescriptor<D> => REFRESH_DOMAIN_DESCRIPTORS[domain] as RefreshDomainDescriptor<D>;
 
-export const DOMAIN_REFRESHER_MAP = Object.fromEntries(
-  refreshDomainDescriptors.map((descriptor) => [descriptor.domain, descriptor.refresherName])
-) as Record<RefreshDomain, StaticRefresherName>;
-
 export const DOMAIN_STREAM_MAP = Object.fromEntries(
   refreshDomainDescriptors
     .filter((descriptor) => descriptor.diagnosticsStream)
@@ -201,7 +193,3 @@ export const PRIORITY_DOMAINS = refreshDomainDescriptors
   )
   .sort((left, right) => left.priority - right.priority)
   .map((descriptor) => descriptor.domain);
-
-export const REFRESHER_TIMING_BY_NAME = Object.fromEntries(
-  refreshDomainDescriptors.map((descriptor) => [descriptor.refresherName, descriptor.timing])
-) as Partial<Record<StaticRefresherName, RefresherTiming>>;

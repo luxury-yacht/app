@@ -224,7 +224,7 @@ describe('ClusterTabs', () => {
       expect(viewState.navigateToGlobal).not.toHaveBeenCalled();
       await pressKey(activationKey);
       expect(mockState.setActiveKubeconfig).toHaveBeenCalledExactlyOnceWith('c');
-      expect(viewState.activateClusterWorkspace).toHaveBeenCalledExactlyOnceWith('c');
+      expect(viewState.activateClusterWorkspace).toHaveBeenCalledExactlyOnceWith();
     }
   );
 

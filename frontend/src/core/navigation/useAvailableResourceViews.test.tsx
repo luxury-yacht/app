@@ -9,7 +9,6 @@ const state = vi.hoisted(() => ({
   },
 }));
 vi.mock('@core/data-access', () => ({ useRefreshDomainHandle: () => ({ data: state.data }) }));
-vi.mock('@core/refresh/hooks/useStreamSignalRefetch', () => ({ useStreamSignalRefetch: vi.fn() }));
 
 describe('discovered resource view availability', () => {
   it('uses discovered scope and drops retained availability when switching clusters', () => {

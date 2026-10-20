@@ -314,8 +314,9 @@ func (a *RefreshCoordinator) buildRefreshSubsystemForSelection(
 		return nil, err
 	}
 
-	// Watch informer updates to invalidate cached detail/YAML/helm responses.
-	a.resources.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
+	// Evict cached detail/YAML/helm responses on informer and ingest changes,
+	// then ring the object-details doorbell.
+	a.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
 
 	// Cluster-Ready self-build rides the namespaces doorbell; wired here so
 	// selector-opened and auth-recovery subsystems get it too.

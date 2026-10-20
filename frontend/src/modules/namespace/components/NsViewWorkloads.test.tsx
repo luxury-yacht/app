@@ -272,7 +272,6 @@ vi.mock('@/core/refresh', () => ({
       isManual: false,
     };
   },
-  refreshManager: { triggerManualRefresh: vi.fn() },
 }));
 
 vi.mock('@/core/data-access', () => ({

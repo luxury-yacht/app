@@ -111,19 +111,16 @@ type BackendPolicy struct {
 
 type FrontendTimingPolicy struct {
 	Interval int
-	Cooldown int
 	Timeout  int
 }
 
 type FrontendPolicy struct {
-	RefresherName     string
 	Orchestrator      FrontendOrchestratorKind
 	DiagnosticsStream DiagnosticsStream
 	Timing            FrontendTimingPolicy
 	Priority          int
 	HasPriority       bool
 	RegistrationOrder int
-	Scheduled         bool
 }
 
 type DomainPolicy struct {
@@ -161,21 +158,18 @@ func renderGoPolicyTable(out *bytes.Buffer, domains []domainSpec) {
 			domain.backendResourceStream,
 			domain.backendBypassSingleflight,
 		)
-		fmt.Fprintf(out, "Frontend: FrontendPolicy{RefresherName: %s, Orchestrator: FrontendOrchestratorKind(%s), DiagnosticsStream: DiagnosticsStream(%s), ",
-			strconv.Quote(domain.frontendRefresherName),
+		fmt.Fprintf(out, "Frontend: FrontendPolicy{Orchestrator: FrontendOrchestratorKind(%s), DiagnosticsStream: DiagnosticsStream(%s), ",
 			strconv.Quote(domain.frontendOrchestrator),
 			strconv.Quote(domain.frontendDiagnosticsStream),
 		)
-		fmt.Fprintf(out, "Timing: FrontendTimingPolicy{Interval: %d, Cooldown: %d, Timeout: %d}, ",
+		fmt.Fprintf(out, "Timing: FrontendTimingPolicy{Interval: %d, Timeout: %d}, ",
 			domain.frontendTimingInterval,
-			domain.frontendTimingCooldown,
 			domain.frontendTimingTimeout,
 		)
-		fmt.Fprintf(out, "Priority: %d, HasPriority: %t, RegistrationOrder: %d, Scheduled: %t}, ",
+		fmt.Fprintf(out, "Priority: %d, HasPriority: %t, RegistrationOrder: %d}, ",
 			domain.frontendPriority,
 			domain.frontendHasPriority,
 			domain.frontendRegistrationOrder,
-			domain.frontendScheduled,
 		)
 		renderGoScopeGrammar(out, domain)
 		out.WriteString("},\n")

@@ -197,7 +197,7 @@ describe('ConnectivityStatus', () => {
     expect(indicator?.getAttribute('data-actions')).toBe('Refresh Now|Disable Auto-Refresh');
     expect(indicator?.getAttribute('aria-label')).toContain('Connectivity: Ready.');
     act(() => requireValue(container.querySelector('button'), 'Refresh action').click());
-    expect(requestRefreshMock).toHaveBeenCalledWith({ reason: 'user' });
+    expect(requestRefreshMock).toHaveBeenCalledWith({ reason: 'user', clusterId: 'cluster-a' });
     expect(retryAuthMock).not.toHaveBeenCalled();
   });
 

@@ -11,13 +11,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dataAccessMocks = vi.hoisted(() => ({
   requestRefreshDomain: vi.fn(() => Promise.resolve()),
-  setRefreshDomainEnabled: vi.fn(),
   leases: new Map<string, number>(),
   enabled: new Set<string>(),
 }));
 
 const refreshMocks = vi.hoisted(() => ({
-  setScopedDomainEnabled: vi.fn(),
   useRefreshScopedDomain: vi.fn(),
 }));
 
@@ -31,7 +29,6 @@ const namespaceMocks = vi.hoisted(() => ({
 
 vi.mock('@/core/data-access/dataAccess', () => ({
   requestRefreshDomain: dataAccessMocks.requestRefreshDomain,
-  setRefreshDomainEnabled: dataAccessMocks.setRefreshDomainEnabled,
   acquireRefreshDomainLease: ({ scope }: { scope: string }) => {
     dataAccessMocks.leases.set(scope, (dataAccessMocks.leases.get(scope) ?? 0) + 1);
     dataAccessMocks.enabled.add(scope);
@@ -46,9 +43,7 @@ vi.mock('@/core/data-access/dataAccess', () => ({
 }));
 
 vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: {
-    setScopedDomainEnabled: refreshMocks.setScopedDomainEnabled,
-  },
+  refreshOrchestrator: {},
   useRefreshScopedDomain: refreshMocks.useRefreshScopedDomain,
 }));
 
@@ -112,16 +107,7 @@ beforeEach(() => {
   };
   dataAccessMocks.leases.clear();
   dataAccessMocks.enabled.clear();
-  dataAccessMocks.setRefreshDomainEnabled.mockImplementation(({ scope, enabled }) => {
-    if (enabled) {
-      dataAccessMocks.enabled.add(scope);
-    } else {
-      dataAccessMocks.enabled.delete(scope);
-    }
-  });
   dataAccessMocks.requestRefreshDomain.mockClear();
-  dataAccessMocks.setRefreshDomainEnabled.mockClear();
-  refreshMocks.setScopedDomainEnabled.mockClear();
   refreshMocks.useRefreshScopedDomain.mockClear();
 });
 

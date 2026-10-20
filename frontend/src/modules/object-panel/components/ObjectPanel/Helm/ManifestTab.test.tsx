@@ -14,7 +14,6 @@ const searchShortcutMocks = vi.hoisted(() => ({
 }));
 
 const refreshMocks = vi.hoisted(() => ({
-  setScopedDomainEnabled: vi.fn(),
   acquireScopedDomainLease: vi.fn(),
   releaseScopedDomainLease: vi.fn(),
   fetchScopedDomain: vi.fn(() => Promise.resolve()),
@@ -212,7 +211,6 @@ describe('ManifestTab', () => {
       data: { manifest: 'kind: ConfigMap\nmetadata:\n  name: demo\n' },
       error: null,
     };
-    refreshMocks.setScopedDomainEnabled.mockClear();
     refreshMocks.fetchScopedDomain.mockClear();
     autoRefreshLoadingState.isPaused = false;
     autoRefreshLoadingState.isManualRefreshActive = false;
@@ -235,8 +233,7 @@ describe('ManifestTab', () => {
       'object-helm-manifest',
       'ns:helmrelease:demo',
       expect.objectContaining({
-        isManual: false,
-        streamSignal: false,
+        intent: 'startup',
         correlationId: expect.any(String),
       })
     );

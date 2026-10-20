@@ -83,8 +83,9 @@ Dependencies point toward capabilities, never back to the composition root:
   owner-local queue whose single consumer is Workspace; it never calls
   Workspace.
 - `RefreshCoordinator` reads Cluster Runtime, registers Attention targets, and
-  invokes `ResourceGateway` cache invalidators. Resource requests never call
-  Refresh or take refresh/subsystem locks.
+  owns the response-cache eviction handlers, which invoke `ResourceGateway`
+  cache invalidators and then ring the `object-details` doorbell. Resource
+  requests never call Refresh or take refresh/subsystem locks.
 - Refresh publishes catalog and retry-telemetry state into leaf projections that
   `ResourceGateway` and `OperationsCoordinator` read instead of depending on
   Refresh.

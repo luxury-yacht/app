@@ -45,8 +45,7 @@ or effective access.
   commits retained projections before notifying the snapshot invalidator and
   cluster-scoped subscribers. Completed deletions remove rows and references; a
   binding with only a deletion timestamp stays. The frontend refetches on change
-  signals, falls back to polling without a stream, and background refreshes
-  keep the inactive cluster's ID.
+  signals and falls back to polling without a stream.
 
 ## Identity panels
 

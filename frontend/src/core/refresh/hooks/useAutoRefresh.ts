@@ -1,32 +1,16 @@
 /**
  * frontend/src/core/refresh/hooks/useAutoRefresh.ts
  *
- * React hook for useAutoRefresh.
- * Encapsulates state and side effects for the core layer.
+ * React hook for the auto-refresh preference. The refresh layer reacts to the
+ * preference's change event; this hook only reads and writes the preference.
  */
 
-import { useCallback, useEffect } from 'react';
-import { getAutoRefreshEnabled, setAutoRefreshEnabled } from '@/core/settings/appPreferences';
-import { refreshManager } from '../RefreshManager';
+import { useCallback } from 'react';
+import { setAutoRefreshEnabled } from '@/core/settings/appPreferences';
 import { useAutoRefreshEnabled } from './useRefreshPreferences';
 
-/**
- * Hook for managing auto-refresh state.
- * Provides a single source of truth for the auto-refresh setting,
- * syncing the backend preference cache, refreshManager, and eventBus.
- */
 export function useAutoRefresh() {
   const enabled = useAutoRefreshEnabled();
-
-  // Sync refreshManager when enabled changes without overriding the window's
-  // visibility pause.
-  useEffect(() => {
-    if (enabled) {
-      resumeAutoRefreshWhenVisible();
-    } else {
-      refreshManager.pause();
-    }
-  }, [enabled]);
 
   const setAutoRefresh = useCallback((value: boolean) => {
     setAutoRefreshEnabled(value);
@@ -37,24 +21,4 @@ export function useAutoRefresh() {
   }, [enabled, setAutoRefresh]);
 
   return { enabled, setAutoRefresh, toggle };
-}
-
-/**
- * Initialize auto-refresh state from persisted preferences on app startup.
- * Call this once in App.tsx to ensure refreshManager is paused if disabled.
- */
-function resumeAutoRefreshWhenVisible() {
-  if (typeof document !== 'undefined' && document.hidden) {
-    refreshManager.pause();
-    return;
-  }
-  refreshManager.resume();
-}
-
-export function initializeAutoRefresh() {
-  if (getAutoRefreshEnabled()) {
-    resumeAutoRefreshWhenVisible();
-  } else {
-    refreshManager.pause();
-  }
 }

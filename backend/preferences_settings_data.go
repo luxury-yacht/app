@@ -223,8 +223,6 @@ func appPreferenceDescriptors() []preferenceDescriptor {
 		errorReporting,
 		boolPreference(appPreferenceAutoRefreshEnabled, true, true,
 			"Auto refresh enabled changed to", func(s *AppSettings) *bool { return &s.AutoRefreshEnabled }),
-		boolPreference(appPreferenceRefreshBackgroundClustersEnabled, true, true,
-			"Background refresh enabled changed to", func(s *AppSettings) *bool { return &s.RefreshBackgroundClustersEnabled }),
 		metricsInterval,
 		intPreference(appPreferenceKubernetesClientQPS, intPreferenceLimits{defaultValue: defaultKubernetesClientQPS, minValue: intPtr(minKubernetesClientQPS), maxValue: intPtr(maxKubernetesClientQPS)}, true,
 			"Kubernetes client QPS changed to", clampKubernetesClientQPS, rateLimitEffect,

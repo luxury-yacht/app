@@ -6,12 +6,13 @@
  */
 
 export {
+  acquireRefreshDomainLease,
+  releaseRefreshDomainLease,
   requestContextRefresh,
   requestData,
   requestRefreshDomain,
   requestRefreshDomainState,
   resetRefreshDomain,
-  setRefreshDomainEnabled,
 } from './dataAccess';
 export * from './readers';
 export type {

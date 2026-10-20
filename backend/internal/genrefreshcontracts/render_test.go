@@ -50,7 +50,6 @@ func TestRenderEmitsBackendOwnedRefreshContract(t *testing.T) {
 	require.Contains(t, contract, "export const RESOURCE_STREAM_SIGNALS = [")
 	require.Contains(t, contract, "export const REFRESH_DOMAIN_POLICIES = [")
 	require.Contains(t, contract, "registrationOrder: 0,")
-	require.Contains(t, contract, "scheduled: false,")
 	require.Contains(t, contract, "export type GeneratedRefreshScopeSelector =")
 	require.Contains(t, contract, "export type GeneratedRefreshScopeQuery =")
 	require.Contains(t, contract, "    scope: { selectors: ['namespace', 'all-namespaces', 'node', 'workload'], query: 'typed-table' },\n")
@@ -113,10 +112,9 @@ func TestAuthoredPolicySchemaRejectsUnknownAndDuplicateValues(t *testing.T) {
     "sourceClocks": ["object"],
     "backend": {"registration": "direct", "permission": "exempt", "resourceStream": false},
     "frontend": {
-      "refresherName": "demo",
       "orchestrator": "snapshot",
       "diagnosticsStream": null,
-      "timing": {"interval": 1000, "cooldown": 500, "timeout": 10},
+      "timing": {"interval": 1000, "timeout": 10},
       "registrationOrder": 0
     }
   }]
@@ -171,11 +169,6 @@ func TestAuthoredPolicySchemaRejectsUnknownAndDuplicateValues(t *testing.T) {
 				1,
 			),
 			errorPhrase: `unsupported frontend.diagnosticsStream "catalog"`,
-		},
-		{
-			name:        "empty refresher name",
-			contract:    strings.Replace(valid, `"refresherName": "demo"`, `"refresherName": ""`, 1),
-			errorPhrase: `empty frontend.refresherName`,
 		},
 		{
 			name:        "non-positive timing",
@@ -268,8 +261,8 @@ func TestAuthoredPolicySchemaRejectsDuplicateDomainAndFrontendOrder(t *testing.T
   "domainInventory": {"demo": {"refreshPayloadType": "DemoPayload", "cachePolicy": "snapshot-cache", "scopeContract": {"selectors": ["cluster"], "query": "none", "valid": [""]}}},
   "resourceStream": {},
   "domains": [
-    {"domain":"demo","category":"system","backend":{"registration":"direct","permission":"exempt","resourceStream":false},"frontend":{"refresherName":"demo","orchestrator":"snapshot","diagnosticsStream":null,"timing":{"interval":1,"cooldown":1,"timeout":1},"registrationOrder":0}},
-    {"domain":"demo","category":"system","backend":{"registration":"direct","permission":"exempt","resourceStream":false},"frontend":{"refresherName":"demo","orchestrator":"snapshot","diagnosticsStream":null,"timing":{"interval":1,"cooldown":1,"timeout":1},"registrationOrder":0}}
+    {"domain":"demo","category":"system","backend":{"registration":"direct","permission":"exempt","resourceStream":false},"frontend":{"orchestrator":"snapshot","diagnosticsStream":null,"timing":{"interval":1,"timeout":1},"registrationOrder":0}},
+    {"domain":"demo","category":"system","backend":{"registration":"direct","permission":"exempt","resourceStream":false},"frontend":{"orchestrator":"snapshot","diagnosticsStream":null,"timing":{"interval":1,"timeout":1},"registrationOrder":0}}
   ]
 }`
 	_, err := parseContractDomains([]byte(duplicateDomain))

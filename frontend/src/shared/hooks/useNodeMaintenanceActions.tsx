@@ -21,7 +21,11 @@ import DrainNodeModal from '@shared/components/modals/DrainNodeModal';
 import { resolveNodeDrainOperationPermissions } from '@shared/hooks/nodeActionPermissions';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
-import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import {
+  acquireRefreshDomainLease,
+  releaseRefreshDomainLease,
+  requestRefreshDomain,
+} from '@/core/data-access';
 import { usePanelMutationGuard } from '@/core/panel-windows/usePanelMutationGuard';
 import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
 import { type DomainSnapshotState, useRefreshScopedDomainEntries } from '@/core/refresh/store';
@@ -106,12 +110,14 @@ export const useNodeMaintenanceActions = ({
     [string, NodeMaintenanceSnapshotState]
   >;
 
+  // Leased, so the nodes view and a node panel watching the same cluster each
+  // keep the aggregate scope alive until both are gone.
   useEffect(() => {
     if (watchedAggregateScopes.length === 0) {
       return;
     }
     watchedAggregateScopes.forEach((scope) => {
-      setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: true });
+      acquireRefreshDomainLease({ domain: 'object-maintenance', scope });
       void requestRefreshDomain({
         domain: 'object-maintenance',
         scope,
@@ -120,7 +126,7 @@ export const useNodeMaintenanceActions = ({
     });
     return () => {
       watchedAggregateScopes.forEach((scope) => {
-        setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: false });
+        releaseRefreshDomainLease({ domain: 'object-maintenance', scope });
       });
     };
   }, [watchedAggregateScopes]);

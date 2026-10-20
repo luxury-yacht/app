@@ -73,14 +73,20 @@ const DockablePanelInner: React.FC<DockablePanelProps> = ({
   const { registerPanel, unregisterPanel, syncPanelGroup, removePanelFromGroups } =
     useDockablePanelContext();
   const [contentHost, setContentHost] = useState<HTMLDivElement | null>(null);
-  const previousIsOpen = useRef(isOpen);
+  // The owner's isOpen wins whenever it changes, and when a cluster tab switch
+  // brings another cluster's layout store: an app-wide panel such as
+  // Diagnostics stays open or closed on every tab. Mounting alone never
+  // overrides a store that already holds the panel, so an evicted tab stays closed.
+  const applied = useRef({ isOpen, layoutStore: panel.layoutStore });
   useEffect(() => {
+    const ownerChanged =
+      applied.current.isOpen !== isOpen || applied.current.layoutStore !== panel.layoutStore;
     if (!panel.isInitialized) {
       panel.initialize({ isOpen });
-    } else if (previousIsOpen.current !== isOpen) {
+    } else if (ownerChanged && panel.isOpen !== isOpen) {
       panel.setOpen(isOpen);
     }
-    previousIsOpen.current = isOpen;
+    applied.current = { isOpen, layoutStore: panel.layoutStore };
   }, [panel, isOpen]);
   const callbacks = useRef({ onClose, onMaximizeChange });
   useLayoutEffect(() => {

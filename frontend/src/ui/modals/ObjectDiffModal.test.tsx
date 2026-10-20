@@ -16,7 +16,8 @@ import ObjectDiffModal from './ObjectDiffModal';
 const refreshMocks = vi.hoisted(() => ({
   useRefreshScopedDomain: vi.fn(),
   refreshOrchestrator: {
-    setScopedDomainEnabled: vi.fn(),
+    acquireScopedDomainLease: vi.fn(),
+    releaseScopedDomainLease: vi.fn(),
     resetScopedDomain: vi.fn(),
     fetchScopedDomain: vi.fn(),
   },
@@ -551,8 +552,7 @@ describe('ObjectDiffModal', () => {
     for (const call of [...catalogCalls, ...yamlCalls]) {
       expect(call[2]).toEqual(
         expect.objectContaining({
-          isManual: true,
-          streamSignal: false,
+          intent: 'user',
           correlationId: expect.any(String),
         })
       );

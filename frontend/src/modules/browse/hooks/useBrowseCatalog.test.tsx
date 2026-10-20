@@ -24,7 +24,6 @@ import { requireValue } from '@/test-utils/requireValue';
 import { type UseBrowseCatalogResult, useBrowseCatalog } from './useBrowseCatalog';
 
 const mocks = vi.hoisted(() => ({
-  setScopedDomainEnabled: vi.fn(),
   readRefreshScopedDomain: vi.fn(),
   requestRefreshDomain: vi.fn(),
   requestRefreshDomainState: vi.fn(),
@@ -37,9 +36,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: {
-    setScopedDomainEnabled: (...args: unknown[]) => mocks.setScopedDomainEnabled(...args),
-  },
+  refreshOrchestrator: {},
   useRefreshScopedDomain: (...args: unknown[]) => mocks.readRefreshScopedDomain(...args),
 }));
 
@@ -691,8 +688,6 @@ describe('useBrowseCatalog', () => {
       reason: 'user',
     });
     expect(mocks.getScopedDomainState).not.toHaveBeenCalledWith('catalog', pageScope);
-    expect(mocks.setScopedDomainEnabled).not.toHaveBeenCalledWith('catalog', pageScope, true);
-    expect(mocks.setScopedDomainEnabled).not.toHaveBeenCalledWith('catalog', pageScope, false);
     expect(mocks.setScopedDomainState).not.toHaveBeenCalled();
     expect(result?.items.map((item) => item.ref.name)).toEqual(['pod-b']);
     expect(result?.continueToken).toBeNull();

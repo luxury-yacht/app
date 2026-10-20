@@ -63,9 +63,8 @@ const {
       ),
     },
     refreshOrchestrator: {
-      updateContext: vi.fn(),
+      setConnectedClusters: vi.fn(),
     },
-    backgroundRefreshState: { enabled: true },
   },
 }));
 
@@ -129,7 +128,6 @@ vi.mock('@/core/contexts/ViewStateContext', () => ({
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: mocks.refreshOrchestrator,
-  useBackgroundRefresh: () => mocks.backgroundRefreshState,
 }));
 
 vi.mock('@core/telemetry/sentry', async (importOriginal) => ({
@@ -1111,11 +1109,7 @@ describe('KubeconfigContext', () => {
     const release = vi.fn(() => {
       expect(workspaceState.selections).toEqual(['/kube/beta:dev']);
       expect(clusterWorkspaceStore.getSnapshot().selectedKubeconfigs).toEqual(['/kube/beta:dev']);
-      expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          allConnectedClusterIds: ['beta:dev'],
-        })
-      );
+      expect(mocks.refreshOrchestrator.setConnectedClusters).toHaveBeenLastCalledWith(['beta:dev']);
     });
     mocks.panelSync.quiesceCluster.mockResolvedValueOnce(release);
     mocks.nativeClose.mockImplementation(async (_window: string, clusterId: string) => {
@@ -1179,7 +1173,7 @@ describe('KubeconfigContext', () => {
     mocks.nativeClose.mockReset();
     mocks.panelSync.quiesceCluster.mockReset();
     mocks.panelSync.quiesceCluster.mockResolvedValue(() => undefined);
-    mocks.refreshOrchestrator.updateContext.mockReset();
+    mocks.refreshOrchestrator.setConnectedClusters.mockReset();
     getKubeconfigsMock.mockReset();
     getSelectedKubeconfigsMock.mockReset();
     setSelectedKubeconfigsMock.mockReset();
@@ -1193,7 +1187,6 @@ describe('KubeconfigContext', () => {
     workspaceState.visibleClusterId = '';
     workspaceState.clusters = {};
     workspaceState.rejectSelection = null;
-    mocks.backgroundRefreshState.enabled = true;
     clusterReadiness.resetForTests();
     resetClusterTabOrderCacheForTesting();
   });
@@ -1370,51 +1363,10 @@ describe('KubeconfigContext', () => {
 
     const { unmount } = await renderProvider();
 
-    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith({
-      selectedClusterId: 'alpha:dev',
-      selectedClusterName: 'dev',
-      selectedClusterIds: ['alpha:dev'],
-      allConnectedClusterIds: ['alpha:dev', 'beta:prod'],
-      backgroundRefreshEnabled: true,
-    });
-
-    unmount();
-  });
-
-  it('keeps open cluster IDs in refresh context when background refresh is disabled', async () => {
-    mocks.backgroundRefreshState.enabled = false;
-    const kubeconfigs: types.KubeconfigInfo[] = [
-      {
-        name: 'alpha',
-        path: '/kube/alpha',
-        context: 'dev',
-        isDefault: false,
-        isCurrentContext: false,
-        invalid: false,
-        invalidReason: '',
-      },
-      {
-        name: 'beta',
-        path: '/kube/beta',
-        context: 'prod',
-        isDefault: false,
-        isCurrentContext: false,
-        invalid: false,
-        invalidReason: '',
-      },
-    ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
-    getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
-
-    const { unmount } = await renderProvider();
-
-    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith({
-      selectedClusterId: 'alpha:dev',
-      selectedClusterName: 'dev',
-      selectedClusterIds: ['alpha:dev'],
-      allConnectedClusterIds: ['alpha:dev', 'beta:prod'],
-      backgroundRefreshEnabled: false,
-    });
+    expect(mocks.refreshOrchestrator.setConnectedClusters).toHaveBeenLastCalledWith([
+      'alpha:dev',
+      'beta:prod',
+    ]);
 
     unmount();
   });
@@ -1485,7 +1437,7 @@ describe('KubeconfigContext', () => {
     getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
 
     const { getContext, unmount } = await renderProvider();
-    mocks.refreshOrchestrator.updateContext.mockClear();
+    mocks.refreshOrchestrator.setConnectedClusters.mockClear();
     setVisibleClusterMock.mockClear();
     let resolveActivation!: () => void;
     setVisibleClusterMock.mockReturnValueOnce(
@@ -1508,13 +1460,6 @@ describe('KubeconfigContext', () => {
     expect(clusterReadiness.isServiceable('beta:prod')).toBe(false);
     expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
     expect(getContext().selectedClusterId).toBe('beta:prod');
-    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        selectedClusterId: 'beta:prod',
-        selectedClusterIds: ['beta:prod'],
-        allConnectedClusterIds: ['alpha:dev', 'beta:prod'],
-      })
-    );
 
     await act(async () => {
       resolveActivation();
@@ -1522,13 +1467,8 @@ describe('KubeconfigContext', () => {
     });
 
     expect(clusterReadiness.isServiceable('beta:prod')).toBe(true);
-    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        selectedClusterId: 'beta:prod',
-        selectedClusterIds: ['beta:prod'],
-        allConnectedClusterIds: ['alpha:dev', 'beta:prod'],
-      })
-    );
+    // A switch among open tabs never changes the set refresh prunes against.
+    expect(mocks.refreshOrchestrator.setConnectedClusters).not.toHaveBeenCalled();
 
     unmount();
   });
@@ -1558,7 +1498,7 @@ describe('KubeconfigContext', () => {
     getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
 
     const { getContext, unmount } = await renderProvider();
-    mocks.refreshOrchestrator.updateContext.mockClear();
+    mocks.refreshOrchestrator.setConnectedClusters.mockClear();
     setVisibleClusterMock.mockRejectedValueOnce(new Error('binding unavailable'));
     eventBus.emit('cluster:lifecycle', { clusterId: 'beta:prod', state: 'ready' });
 
@@ -1572,12 +1512,6 @@ describe('KubeconfigContext', () => {
     expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
     expect(getContext().selectedClusterId).toBe('beta:prod');
     expect(clusterReadiness.isServiceable('beta:prod')).toBe(true);
-    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        selectedClusterId: 'beta:prod',
-        selectedClusterIds: ['beta:prod'],
-      })
-    );
 
     unmount();
   });
@@ -1816,13 +1750,7 @@ describe('KubeconfigContext', () => {
     expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev', '/kube/beta:prod']);
     expect(getContext().selectedClusterId).toBe('beta:prod');
     expect(getContext().selectedClusterIds).toEqual(['alpha:dev', 'beta:prod']);
-    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith({
-      selectedClusterId: 'alpha:dev',
-      selectedClusterName: 'dev',
-      selectedClusterIds: ['alpha:dev'],
-      allConnectedClusterIds: ['alpha:dev'],
-      backgroundRefreshEnabled: true,
-    });
+    expect(mocks.refreshOrchestrator.setConnectedClusters).toHaveBeenLastCalledWith(['alpha:dev']);
 
     await act(async () => {
       resolveSelection();
@@ -1832,13 +1760,10 @@ describe('KubeconfigContext', () => {
 
     expect(getContext().selectedClusterId).toBe('beta:prod');
     expect(getContext().selectedClusterIds).toEqual(['alpha:dev', 'beta:prod']);
-    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith({
-      selectedClusterId: 'beta:prod',
-      selectedClusterName: 'prod',
-      selectedClusterIds: ['beta:prod'],
-      allConnectedClusterIds: ['alpha:dev', 'beta:prod'],
-      backgroundRefreshEnabled: true,
-    });
+    expect(mocks.refreshOrchestrator.setConnectedClusters).toHaveBeenLastCalledWith([
+      'alpha:dev',
+      'beta:prod',
+    ]);
 
     unmount();
   });
@@ -2199,13 +2124,9 @@ describe('KubeconfigContext', () => {
     const { getContext, unmount } = await renderProvider();
 
     expect(getContext().selectedClusterId).toBe('default:minikube');
-    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith({
-      selectedClusterId: 'default:minikube',
-      selectedClusterName: 'minikube',
-      selectedClusterIds: ['default:minikube'],
-      allConnectedClusterIds: ['default:minikube'],
-      backgroundRefreshEnabled: true,
-    });
+    expect(mocks.refreshOrchestrator.setConnectedClusters).toHaveBeenLastCalledWith([
+      'default:minikube',
+    ]);
 
     unmount();
   });

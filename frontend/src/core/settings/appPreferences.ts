@@ -68,7 +68,6 @@ export interface AppPreferences {
   exclusiveNamespaces: boolean;
   errorReportingEnabled: boolean;
   autoRefreshEnabled: boolean;
-  refreshBackgroundClustersEnabled: boolean;
   metricsRefreshIntervalMs: number;
   kubernetesClientQPS: number;
   kubernetesClientBurst: number;
@@ -200,7 +199,6 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   exclusiveNamespaces: true,
   errorReportingEnabled: true,
   autoRefreshEnabled: true,
-  refreshBackgroundClustersEnabled: true,
   metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
   kubernetesClientQPS: KUBERNETES_CLIENT_QPS_DEFAULT,
   kubernetesClientBurst: KUBERNETES_CLIENT_BURST_DEFAULT,
@@ -292,11 +290,6 @@ const FALLBACK_PREFERENCE_METADATA: {
   autoRefreshEnabled: createPreferenceMetadata('autoRefreshEnabled', 'boolean', {
     runtimeSideEffect: true,
   }),
-  refreshBackgroundClustersEnabled: createPreferenceMetadata(
-    'refreshBackgroundClustersEnabled',
-    'boolean',
-    { runtimeSideEffect: true }
-  ),
   metricsRefreshIntervalMs: createPreferenceMetadata('metricsRefreshIntervalMs', 'integer', {
     min: 1,
     runtimeSideEffect: true,
@@ -744,12 +737,6 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   emitSelectedPreferenceChange(
     previous,
     next,
-    (value) => value.refreshBackgroundClustersEnabled,
-    (value) => eventBus.emit('settings:refresh-background', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
     (value) => value.kubernetesClientQPS,
     (value) => eventBus.emit('settings:kubernetes-client-qps', value)
   );
@@ -1174,10 +1161,6 @@ const normalizePreferences = (
       'autoRefreshEnabled',
       backendSettings?.autoRefreshEnabled
     ),
-    refreshBackgroundClustersEnabled: normalizeBooleanPreferenceValue(
-      'refreshBackgroundClustersEnabled',
-      backendSettings?.refreshBackgroundClustersEnabled
-    ),
     metricsRefreshIntervalMs: normalizeMetricsIntervalMs(backendSettings?.metricsRefreshIntervalMs),
     kubernetesClientQPS: normalizeKubernetesClientQPS(backendSettings?.kubernetesClientQPS),
     kubernetesClientBurst: normalizeKubernetesClientBurst(backendSettings?.kubernetesClientBurst),
@@ -1355,10 +1338,6 @@ export const getAutoRefreshEnabled = (): boolean => {
   return preferenceCache.autoRefreshEnabled;
 };
 
-export const getBackgroundRefreshEnabled = (): boolean => {
-  return preferenceCache.refreshBackgroundClustersEnabled;
-};
-
 export const getKubernetesClientQPS = (): number => {
   return preferenceCache.kubernetesClientQPS;
 };
@@ -1518,13 +1497,6 @@ export const setAutoRefreshEnabled = (enabled: boolean): void => {
   commitPreferenceMutation(
     'Failed to persist auto-refresh preference:',
     singlePreferenceMutation('autoRefreshEnabled', enabled)
-  );
-};
-
-export const setBackgroundRefreshEnabled = (enabled: boolean): void => {
-  commitPreferenceMutation(
-    'Failed to persist background refresh preference:',
-    singlePreferenceMutation('refreshBackgroundClustersEnabled', enabled)
   );
 };
 

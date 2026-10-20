@@ -465,7 +465,9 @@ export function useCommandPaletteCommands() {
         description: 'Manually refresh the current view',
         category: 'Settings',
         action: () => {
-          void requestContextRefresh({ reason: 'user' });
+          if (selectedClusterId) {
+            void requestContextRefresh({ reason: 'user', clusterId: selectedClusterId });
+          }
         },
         keywords: ['refresh', 'reload', 'update'],
         shortcut: ['⌘', 'R'],
@@ -556,6 +558,7 @@ export function useCommandPaletteCommands() {
       resetZoom,
       zoomLevel,
       selectedKubeconfigs.length,
+      selectedClusterId,
     ]
   );
 

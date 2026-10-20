@@ -30,6 +30,13 @@ export const RESOURCE_STREAM_DOMAINS = Object.keys(
   refreshDomainContract.resourceStream.domains
 ) as ResourceDomain[];
 
+const resourceStreamDomainSet = new Set<RefreshDomain>(RESOURCE_STREAM_DOMAINS);
+
+// Resource tables: the stream domains whose rows the stream itself keeps
+// current, as opposed to signal-only doorbells.
+export const isResourceStreamDomain = (domain: RefreshDomain): domain is ResourceDomain =>
+  resourceStreamDomainSet.has(domain);
+
 export const resourceStreamDomainDescriptors = RESOURCE_STREAM_DOMAINS.map((domain) => ({
   domain,
 }));
@@ -70,6 +77,13 @@ const doorbellDomainDescriptors = [
   // skip-while-stream-healthy gate.
   {
     domain: 'cluster-overview',
+    pollingContinuesWhileStreaming: true,
+  },
+  // Signal-only per-object doorbell for the object-details snapshot domain:
+  // the backend rings it after evicting the object's cached details. POLLS
+  // STAY ON: kinds without an eviction source change only on the 10 s poll.
+  {
+    domain: 'object-details',
     pollingContinuesWhileStreaming: true,
   },
   {

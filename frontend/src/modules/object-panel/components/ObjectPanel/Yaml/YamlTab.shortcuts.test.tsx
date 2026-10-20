@@ -34,9 +34,9 @@ vi.mock('@/core/refresh/store', () => ({
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: {
-    setScopedDomainEnabled: vi.fn(),
+    acquireScopedDomainLease: vi.fn(),
+    releaseScopedDomainLease: vi.fn(),
     resetScopedDomain: vi.fn(),
-    updateContext: vi.fn(),
     fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
   },
 }));

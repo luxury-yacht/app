@@ -79,7 +79,6 @@ const attentionState = vi.hoisted(() => ({
     },
   } as Record<string, { severityCounts: { info: number; warning: number; error: number } }>,
   recordRefreshHandle: vi.fn(),
-  useStreamSignalRefetch: vi.fn(),
 }));
 
 const kubeconfigState = vi.hoisted(() => ({
@@ -115,10 +114,6 @@ vi.mock('@/core/data-access', () => ({
     attentionState.recordRefreshHandle(options);
     return { data: options.scope ? attentionState.byScope[options.scope] : null };
   },
-}));
-
-vi.mock('@/core/refresh/hooks/useStreamSignalRefetch', () => ({
-  useStreamSignalRefetch: (...args: unknown[]) => attentionState.useStreamSignalRefetch(...args),
 }));
 
 type NamespaceEntry = {
@@ -538,9 +533,6 @@ describe('Sidebar', () => {
         preserveState: true,
       })
     );
-    expect(attentionState.useStreamSignalRefetch).toHaveBeenCalledWith('cluster-attention', [
-      'cluster-a|',
-    ]);
 
     attentionState.byScope['cluster-b|'] = {
       severityCounts: { info: 0, warning: 4, error: 2 },

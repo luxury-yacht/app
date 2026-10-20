@@ -85,11 +85,6 @@ export interface AppSettings {
     "autoRefreshEnabled": boolean;
 
     /**
-     * Refresh inactive clusters in the background
-     */
-    "refreshBackgroundClustersEnabled": boolean;
-
-    /**
      * Metrics refresh interval (ms)
      */
     "metricsRefreshIntervalMs": number;

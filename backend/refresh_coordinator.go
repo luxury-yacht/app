@@ -114,9 +114,9 @@ type RefreshCoordinator struct {
 }
 
 type refreshResourceGateway interface {
+	responseCacheInvalidator
 	clearCaches()
 	objectDetailProvider() snapshot.ObjectDetailProvider
-	registerResponseCacheInvalidation(*system.Subsystem, string)
 }
 
 type RefreshCoordinatorDependencies struct {

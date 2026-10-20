@@ -25,10 +25,9 @@ import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
 import type { NormalizedTelemetrySummary } from '../client';
 import { refreshOrchestrator } from '../orchestrator';
-import { refreshManager } from '../RefreshManager';
 import { failureMessage, isPermissionDenied, type RefreshFailure } from '../refreshFailure';
-import { isResourceStreamDomain as isResourceTableDomain } from '../resourceStreamViews';
 import { type DomainSnapshotState, useRefreshState } from '../store';
+import { isResourceStreamDomain as isResourceTableDomain } from '../streaming/resourceStreamDomains';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
 import type {
   ContainerLogsSnapshotPayload,
@@ -52,7 +51,6 @@ import {
   type CapabilityBatchRow,
   type DiagnosticsPanelProps,
   type DiagnosticsRow,
-  DOMAIN_REFRESHER_MAP,
   DOMAIN_STREAM_MAP,
   dedupeDiagnosticsRows,
   formatInterval,
@@ -514,27 +512,22 @@ const resolveDisabledPollingDetails = (
   return { label: 'disabled', tooltip: 'Polling disabled for this domain', enabled: false };
 };
 
+// Each leased scope polls on its own schedule; a scope nobody leases does not.
 const resolvePollingDetails = (params: {
   domain: RefreshDomain;
-  refresherName?: (typeof DOMAIN_REFRESHER_MAP)[RefreshDomain];
+  scope: string | undefined;
   streamActive: boolean;
   streamHealthy: boolean;
 }): PollingDetails => {
-  const { domain, refresherName, streamActive, streamHealthy } = params;
-  if (!refresherName) {
-    return { label: '—', tooltip: 'No polling refresher', enabled: false };
-  }
-  const refresherState = refreshManager.getState(refresherName);
-  if (!refresherState) {
-    return { label: '—', tooltip: 'Polling not registered', enabled: false };
-  }
-  if (refresherState.status === 'paused') {
+  const { domain, scope, streamActive, streamHealthy } = params;
+  const polling = refreshOrchestrator.getPollingStatus(domain, scope);
+  if (polling.state === 'paused') {
     return { label: 'paused', tooltip: 'Polling paused by auto-refresh', enabled: false };
   }
-  if (refresherState.status === 'disabled') {
+  if (polling.state === 'off') {
     return resolveDisabledPollingDetails(domain, streamActive, streamHealthy);
   }
-  return { label: 'enabled', tooltip: `State: ${refresherState.status}`, enabled: true };
+  return { label: 'enabled', tooltip: 'Polling while leased', enabled: true };
 };
 
 const ROW_COUNT_DOMAINS = new Set<RefreshDomain>([
@@ -932,7 +925,6 @@ const buildPodDiagnosticsRow = (
   const payload = state.data as PodSnapshotPayload | null;
   const lastUpdated = stateLastUpdated(state);
   const lastUpdatedInfo = formatLastUpdated(lastUpdated);
-  const refresherName = DOMAIN_REFRESHER_MAP.pods;
   const streamHealth = toStreamHealthSummary(
     resourceStreamManager.getHealthSnapshot('pods', scope)
   );
@@ -940,7 +932,7 @@ const buildPodDiagnosticsRow = (
   const streamHealthy = streamHealth?.status === 'healthy';
   const pollingDetails = resolvePollingDetails({
     domain: 'pods',
-    refresherName,
+    scope,
     streamActive,
     streamHealthy,
   });
@@ -974,9 +966,7 @@ const buildPodDiagnosticsRow = (
     label: resolvePodLabel(scope),
     status: state.status,
     version: stateVersion(state),
-    interval: formatInterval(
-      refresherName ? refreshManager.getRefresherInterval(refresherName) : null
-    ),
+    interval: formatInterval(refreshOrchestrator.getPollingStatus('pods', scope).intervalMs),
     lastUpdated: lastUpdatedInfo.display,
     lastUpdatedTooltip: lastUpdatedInfo.tooltip,
     duration: '—',
@@ -1045,7 +1035,7 @@ const resolveContainerLogsRowContext = (
   const streamHealthy = streamHealth?.status === 'healthy';
   const pollingDetails = resolvePollingDetails({
     domain: 'container-logs',
-    refresherName: DOMAIN_REFRESHER_MAP['container-logs'],
+    scope,
     streamActive,
     streamHealthy,
   });
@@ -1338,15 +1328,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const data = asRecord(state.data);
         const countDetails = resolveDiagnosticsCountDetails(domain, state, data);
         const lastUpdatedInfo = formatLastUpdated(telemetryDetails.lastUpdated);
-        const refresherName = DOMAIN_REFRESHER_MAP[domain];
         const intervalLabel = formatInterval(
-          refresherName ? refreshManager.getRefresherInterval(refresherName) : null
+          refreshOrchestrator.getPollingStatus(domain, effectiveScope).intervalMs
         );
         const namespaceLabel = resolveDomainNamespace(domain, effectiveScope);
 
         const pollingDetails = resolvePollingDetails({
           domain,
-          refresherName,
+          scope: effectiveScope,
           streamActive: telemetryDetails.streamActive,
           streamHealthy: telemetryDetails.streamHealthy,
         });

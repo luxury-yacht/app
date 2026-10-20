@@ -76,6 +76,11 @@ const (
 	// no projected rows — an event for a panel's object tells the frontend to
 	// refetch that object's events snapshot.
 	domainObjectEvents = "object-events"
+	// domainObjectDetails is the per-object details doorbell domain:
+	// signal-only, no projected rows — rung after Refresh evicts an object's
+	// cached details, so an open panel refetches them. Its polls stay on as the
+	// backstop for kinds no eviction covers.
+	domainObjectDetails = "object-details"
 	// domainClusterOverview is the overview's metric doorbell domain:
 	// signal-only, no projected rows — a successful metrics collection tells
 	// the frontend to refetch the overview snapshot so live usage appears
@@ -639,7 +644,24 @@ func (m *Manager) BroadcastObjectEventsRefresh(version string, matches func(scop
 	if m == nil || matches == nil {
 		return
 	}
-	scopes := m.subscribedScopes(domainObjectEvents)
+	m.broadcastMatchingDoorbellRefresh(domainObjectEvents, SourceEvent, version, matches)
+}
+
+// BroadcastObjectDetailsRefresh fans a SourceObject doorbell to the subscribed
+// object-details scopes the matcher selects. The details notifier calls this
+// after each debounced flush of the objects whose cached details Refresh
+// evicted; matches keeps scope semantics in the snapshot package.
+func (m *Manager) BroadcastObjectDetailsRefresh(version string, matches func(scope string) bool) {
+	if m == nil || matches == nil {
+		return
+	}
+	m.broadcastMatchingDoorbellRefresh(domainObjectDetails, SourceObject, version, matches)
+}
+
+// broadcastMatchingDoorbellRefresh rings the subscribed scopes of a per-object
+// doorbell domain that the matcher selects.
+func (m *Manager) broadcastMatchingDoorbellRefresh(domain string, source Source, version string, matches func(scope string) bool) {
+	scopes := m.subscribedScopes(domain)
 	targets := make([]string, 0, len(scopes))
 	for _, scope := range scopes {
 		if matches(scope) {
@@ -649,7 +671,7 @@ func (m *Manager) BroadcastObjectEventsRefresh(version string, matches func(scop
 	if len(targets) == 0 {
 		return
 	}
-	m.broadcastDoorbellRefresh(domainObjectEvents, targets, SourceEvent, version)
+	m.broadcastDoorbellRefresh(domain, targets, source, version)
 }
 
 func (m *Manager) broadcastDoorbellRefresh(domain string, scopes []string, source Source, version string) {

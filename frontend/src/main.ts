@@ -10,7 +10,6 @@ import React from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { initializeWindowIdentity, onBroadcastEvent } from '@/core/desktop-runtime';
 import { failPanelWindowTransfer, resolveNativeWindowDescriptor } from '@/core/panel-windows';
-import { initializeAutoRefresh } from '@/core/refresh';
 import { hydrateAppPreferences } from '@/core/settings/appPreferences';
 import {
   configureErrorReportingFromPreferences,
@@ -52,17 +51,15 @@ if (appElement) {
         }
       }
       initializeScrollbarActivityTracking();
-      initializeAutoRefresh();
 
       onBroadcastEvent('settings:preferences-changed', () => {
-        void hydrateAppPreferences({ force: true })
-          .then(() => initializeAutoRefresh())
-          .catch((error) => {
-            reportOperationalError(error, {
-              source: 'ApplicationBootstrap',
-              action: 'hydrate-peer-preferences',
-            });
+        // Hydration publishes changed preferences, auto-refresh included.
+        void hydrateAppPreferences({ force: true }).catch((error) => {
+          reportOperationalError(error, {
+            source: 'ApplicationBootstrap',
+            action: 'hydrate-peer-preferences',
           });
+        });
       });
 
       // Imported here rather than at module scope so the application module graph

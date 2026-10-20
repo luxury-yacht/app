@@ -1,5 +1,4 @@
 import { useRefreshDomainHandle } from '@core/data-access';
-import { useStreamSignalRefetch } from '@core/refresh/hooks/useStreamSignalRefetch';
 import { buildRefreshScope, CLUSTER_SELECTOR } from '@core/refresh/scopeSelector';
 import { CLUSTER_VIEW_DESCRIPTORS, NAMESPACE_VIEW_DESCRIPTORS } from './viewRegistry';
 
@@ -16,7 +15,6 @@ function useDiscoveredResourceFamilies(clusterId: string | null | undefined) {
     enabled,
     preserveState: true,
   });
-  useStreamSignalRefetch('catalog', enabled ? [scope] : []);
   return enabled && data?.clusterId === clusterId ? data?.resourceFamilies : undefined;
 }
 
