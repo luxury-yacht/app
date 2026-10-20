@@ -107,7 +107,8 @@ func RegisterClusterConfigDomainWithGatewayAPI(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := factoryIndexers(factory, gatewayFactory, allowed, clusterConfigDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, clusterConfigDomainSpec(), clusterMeta, collectIndexer, factory, gatewayFactory, ingestManager, bell)
+	maintained, err := newRegisteredTypedTableStore(reg, clusterConfigDomainSpec(), clusterMeta,
+		typedTableStoreInputs{indexers: collectIndexer, shared: factory, gateway: gatewayFactory, ingest: ingestManager}, bell)
 	if err != nil {
 		return err
 	}

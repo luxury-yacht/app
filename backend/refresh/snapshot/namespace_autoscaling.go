@@ -141,7 +141,8 @@ func RegisterNamespaceAutoscalingDomain(
 	// cut), so the ingest manager is nil here — the cut-kind availability branch is never
 	// taken and the ingest feed is a no-op.
 	collectIndexer := unconditionalSharedIndexers(factory, namespaceAutoscalingDomainName, nil)
-	maintained, err := newRegisteredTypedTableStore(reg, namespaceAutoscalingDomainSpec(), clusterMeta, collectIndexer, factory, nil, nil, bell)
+	maintained, err := newRegisteredTypedTableStore(reg, namespaceAutoscalingDomainSpec(), clusterMeta,
+		typedTableStoreInputs{indexers: collectIndexer, shared: factory}, bell)
 	if err != nil {
 		return err
 	}

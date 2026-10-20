@@ -233,6 +233,18 @@ const (
 
 const namespaceQuotaWarningPercentage = 80
 
+// NamespaceDomainOptions configures the namespaces domain for the cluster's access.
+type NamespaceDomainOptions struct {
+	// AllowedNamespaces, when set, scopes the list to configured namespaces
+	// instead of the cluster-wide namespaces LIST.
+	AllowedNamespaces []string
+	// Client probes configured namespaces by name; used only when scoped.
+	Client kubernetes.Interface
+	// EventsExpected is true only when the identity may list and watch the
+	// cluster-wide Events informer.
+	EventsExpected bool
+}
+
 // RegisterNamespaceDomain registers the namespace domain with the registry. The cut workload +
 // pod kinds' projected rows come from the ingest manager (read per build for workload presence);
 // the tracker only gates the read on those stores having synced. ingestManager may be nil in a
@@ -246,16 +258,14 @@ func RegisterNamespaceDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	ingestManager namespacePodIngestSource,
-	allowedNamespaces []string,
-	client kubernetes.Interface,
-	eventsExpected bool,
+	options NamespaceDomainOptions,
 	bell doorbell.Bell,
 	afterRing func(version, reason string),
 ) (*NamespaceChangeNotifier, error) {
 	tracker := NewNamespaceWorkloadTracker(ingestManager)
-	builder := newNamespaceDomainBuilder(ingestManager, tracker, allowedNamespaces, client)
+	builder := newNamespaceDomainBuilder(ingestManager, tracker, options.AllowedNamespaces, options.Client)
 	notifier := NewNamespaceChangeNotifier(ingestManager, tracker, bell, afterRing)
-	if err := wireNamespaceEventInformer(factory, builder, notifier, eventsExpected); err != nil {
+	if err := wireNamespaceEventInformer(factory, builder, notifier, options.EventsExpected); err != nil {
 		return nil, err
 	}
 	if err := wireNamespaceObjectInformer(factory, builder, notifier); err != nil {

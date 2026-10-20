@@ -781,9 +781,11 @@ func namespacesRegistration(ctx context.Context, deps registrationDeps) domainRe
 			deps.registry,
 			deps.informerFactory.SharedInformerFactory(),
 			deps.ingestManager,
-			deps.cfg.AllowedNamespaces,
-			deps.cfg.KubernetesClient,
-			eventsExpected,
+			snapshot.NamespaceDomainOptions{
+				AllowedNamespaces: deps.cfg.AllowedNamespaces,
+				Client:            deps.cfg.KubernetesClient,
+				EventsExpected:    eventsExpected,
+			},
 			deps.bell,
 			deps.afterNamespacesRing,
 		)

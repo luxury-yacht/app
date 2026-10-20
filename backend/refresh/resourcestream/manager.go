@@ -140,7 +140,7 @@ type Manager struct {
 	telemetry   *telemetry.Recorder
 	permissions permissions.ListWatchChecker
 
-	podIngest podBundleSource
+	podIngest podBundleRewriter
 
 	// Stop is terminal for this generation and rejects new subscriptions.
 	stopped atomic.Bool

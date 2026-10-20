@@ -110,7 +110,8 @@ func RegisterNamespaceQuotasDomain(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceQuotasDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, namespaceQuotasDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager, bell)
+	maintained, err := newRegisteredTypedTableStore(reg, namespaceQuotasDomainSpec(), clusterMeta,
+		typedTableStoreInputs{indexers: collectIndexer, shared: factory, ingest: ingestManager}, bell)
 	if err != nil {
 		return err
 	}

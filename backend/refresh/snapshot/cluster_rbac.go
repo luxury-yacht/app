@@ -105,7 +105,8 @@ func RegisterClusterRBACDomain(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := sharedFactoryIndexers(factory, allowed, clusterRBACDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, clusterRBACDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager, bell)
+	maintained, err := newRegisteredTypedTableStore(reg, clusterRBACDomainSpec(), clusterMeta,
+		typedTableStoreInputs{indexers: collectIndexer, shared: factory, ingest: ingestManager}, bell)
 	if err != nil {
 		return err
 	}

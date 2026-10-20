@@ -23,9 +23,9 @@ import (
 // podGVR is the pod kind's GVR, the key the pod reflector's store is registered under.
 var podGVR = schema.GroupVersionResource{Group: podres.Identity.Group, Version: podres.Identity.Version, Resource: podres.Identity.Resource}
 
-// podBundleSource rewrites stored pod bundles by owner key.
+// podBundleRewriter rewrites stored pod bundles by owner key.
 // *ingest.IngestManager satisfies it.
-type podBundleSource interface {
+type podBundleRewriter interface {
 	RewriteBundlesByIndex(
 		gvr schema.GroupVersionResource,
 		indexName string,

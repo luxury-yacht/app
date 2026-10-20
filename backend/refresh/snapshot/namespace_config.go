@@ -92,7 +92,8 @@ func RegisterNamespaceConfigDomain(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceConfigDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, namespaceConfigDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager, bell)
+	maintained, err := newRegisteredTypedTableStore(reg, namespaceConfigDomainSpec(), clusterMeta,
+		typedTableStoreInputs{indexers: collectIndexer, shared: factory, ingest: ingestManager}, bell)
 	if err != nil {
 		return err
 	}

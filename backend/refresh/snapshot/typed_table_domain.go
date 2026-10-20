@@ -161,27 +161,36 @@ func buildTypedTableSnapshot[T any](
 	}, nil
 }
 
+// typedTableStoreInputs are the indexers and feeds a typed-table domain's
+// maintained store is wired from.
+type typedTableStoreInputs struct {
+	// indexers gates the uncut kinds: one without an indexer (denied or
+	// unavailable) gets no informer handler.
+	indexers func(streamspec.Descriptor) cache.Indexer
+	shared   informers.SharedInformerFactory
+	// gateway is set only for domains with Gateway-API kinds.
+	gateway gatewayinformers.SharedInformerFactory
+	// ingest feeds the cut kinds; nil in unit tests, where they have no feed.
+	ingest *ingest.IngestManager
+}
+
 // newRegisteredTypedTableStore wires the shared maintained-store scaffolding every
 // typed-table domain's Register performs: build the store, register it with the
 // governor for spill/restore/reconcile across Cold/re-warm, feed it from the
 // ingest reflectors' Table-half Sinks for the cut kinds, and register informer
-// handlers for any uncut kind (gatewayFactory only for domains with Gateway-API
-// kinds; ingestManager may be nil in unit tests — the cut kinds then have no feed).
+// handlers for any uncut kind.
 func newRegisteredTypedTableStore[T any](
 	reg *domain.Registry,
 	spec typedTableDomainSpec[T],
 	clusterMeta ClusterMeta,
-	collectIndexer func(streamspec.Descriptor) cache.Indexer,
-	factory informers.SharedInformerFactory,
-	gatewayFactory gatewayinformers.SharedInformerFactory,
-	ingestManager *ingest.IngestManager,
+	inputs typedTableStoreInputs,
 	bell doorbell.Bell,
 ) (*typedMaintainedStore[T], error) {
 	maintained := newTypedMaintainedStore(clusterMeta, spec.schema, spec.adapter)
 	reg.RegisterMaintainedStore(spec.domain, maintained)
-	feedMaintainedFromIngest(maintained, spec.domain, ingestManager, bell)
+	feedMaintainedFromIngest(maintained, spec.domain, inputs.ingest, bell)
 	publication := storePublication{bell: bell, domain: spec.domain, meta: clusterMeta, derived: spec.derived}
-	if err := registerMaintainedHandlers(maintained, spec.domain, collectIndexer, factory, gatewayFactory, publication); err != nil {
+	if err := registerMaintainedHandlers(maintained, spec.domain, inputs.indexers, inputs.shared, inputs.gateway, publication); err != nil {
 		return nil, err
 	}
 	return maintained, nil
