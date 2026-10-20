@@ -48,15 +48,13 @@ import { CheckForUpdates } from '@/core/backend-api';
 import { requestContextRefresh } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import { GLOBAL_VIEW_DESCRIPTORS } from '@/core/navigation/viewRegistry';
-import { useAutoRefresh } from '@/core/refresh';
 import {
+  setAutoRefreshEnabled,
   setDimInactiveNamespaces,
   setExclusiveNamespaces,
   setUseShortResourceNames,
 } from '@/core/settings/appPreferences';
-import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
-import { useExclusiveNamespaces } from '@/hooks/useExclusiveNamespaces';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
 import { reportOperationalError } from '@/utils/errorHandler';
@@ -194,12 +192,12 @@ export function useCommandPaletteCommands() {
   const { favorites, setPendingFavorite } = useFavorites();
   const { mode } = useAppearanceMode();
   const { zoomIn, zoomOut, resetZoom, zoomLevel } = useZoom();
-  const { enabled: autoRefreshEnabled, toggle: toggleAutoRefresh } = useAutoRefresh();
+  const autoRefreshEnabled = usePreference('autoRefreshEnabled');
   const availableClusterViews = useAvailableClusterViews(selectedClusterId);
   const availableNamespaceViews = useAvailableNamespaceViews(selectedClusterId);
-  const useShortResourceNames = useShortNames();
-  const dimInactiveNamespaces = useDimInactiveNamespaces();
-  const exclusiveNamespaces = useExclusiveNamespaces();
+  const useShortResourceNames = usePreference('useShortResourceNames');
+  const dimInactiveNamespaces = usePreference('dimInactiveNamespaces');
+  const exclusiveNamespaces = usePreference('exclusiveNamespaces');
 
   const openClusterTab = useCallback(
     (tab: ClusterViewType) => {
@@ -455,7 +453,7 @@ export function useCommandPaletteCommands() {
         icon: <RefreshIcon width={16} height={16} />,
         description: 'Enable or disable automatic refresh',
         category: 'Settings',
-        action: toggleAutoRefresh,
+        action: () => setAutoRefreshEnabled(!autoRefreshEnabled),
         keywords: ['auto', 'refresh', 'toggle', 'pause', 'resume', 'automatic'],
       },
       {
@@ -547,7 +545,6 @@ export function useCommandPaletteCommands() {
       closeTabShortcut,
       selectNamespaceShortcut,
       selectKubeconfigShortcut,
-      toggleAutoRefresh,
       diffObjectsShortcut,
       autoRefreshEnabled,
       useShortResourceNames,

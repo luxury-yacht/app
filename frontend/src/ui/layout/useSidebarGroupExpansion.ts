@@ -1,26 +1,21 @@
 import { useViewState } from '@core/contexts/ViewStateContext';
-import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { eventBus } from '@/core/events';
+import { useEffect, useRef } from 'react';
 import type { SidebarViewGroupId } from '@/core/navigation/viewRegistry';
 import {
   getSidebarGroupExpanded,
   type SidebarGroupScope,
   setSidebarGroupExpanded,
+  sidebarGroupPreferenceKey,
 } from '@/core/settings/appPreferences';
-
-const subscribe = (onChange: () => void) => eventBus.on('settings:sidebar-expansion', onChange);
+import { usePreference } from '@/core/settings/usePreference';
 
 export const useSidebarGroupExpansion = (
   scope: SidebarGroupScope,
   selectedView: { readonly sidebarGroup: 'primary' | SidebarViewGroupId } | undefined
 ) => {
   const { sidebarSelection } = useViewState();
-  const resources = useSyncExternalStore(subscribe, () =>
-    getSidebarGroupExpanded(scope, 'resources')
-  );
-  const extensions = useSyncExternalStore(subscribe, () =>
-    getSidebarGroupExpanded(scope, 'extensions')
-  );
+  const resources = usePreference(sidebarGroupPreferenceKey(scope, 'resources'));
+  const extensions = usePreference(sidebarGroupPreferenceKey(scope, 'extensions'));
 
   const previousSelection = useRef(sidebarSelection);
 

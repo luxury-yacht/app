@@ -35,10 +35,6 @@ vi.mock('@/core/refresh', () => ({
   },
 }));
 
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => true,
-}));
-
 interface HookProps {
   objectData: ObjectPanelRef;
   detail: ObjectDetail | null | undefined;

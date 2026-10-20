@@ -5,8 +5,11 @@ import { Clipboard } from '@wailsio/runtime';
 import { act, useRef } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
-import { OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE } from '@/core/settings/appPreferences';
+import {
+  OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 import { requireValue } from '@/test-utils/requireValue';
 import { useKeyboardContext } from '@/ui/shortcuts/context';
@@ -69,6 +72,7 @@ describe('NodeLogsTab', () => {
       message: error instanceof Error ? error.message : String(error),
     }));
     resetLogViewerPrefsCacheForTesting();
+    resetAppPreferencesCacheForTesting();
     vi.mocked(Clipboard.SetText).mockReset().mockResolvedValue(undefined);
   });
 
@@ -1257,7 +1261,7 @@ describe('NodeLogsTab', () => {
       expect(await bufferFullMessage()).toBeNull();
 
       await act(async () => {
-        eventBus.emit('settings:obj-panel-logs-buffer-size', 100);
+        setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 100 });
       });
 
       const rows = Array.from(

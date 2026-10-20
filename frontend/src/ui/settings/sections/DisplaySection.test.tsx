@@ -7,17 +7,14 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
 import DisplaySection from './DisplaySection';
 
 const appPreferenceMocks = vi.hoisted(() => ({
-  values: {
-    useShortResourceNames: false,
-    dimInactiveNamespaces: true,
-    exclusiveNamespaces: true,
-    defaultTablePageSize: 50,
-  },
   hydrateAppPreferences: vi.fn(),
   setUseShortResourceNames: vi.fn(),
   setDimInactiveNamespaces: vi.fn(),
@@ -25,11 +22,9 @@ const appPreferenceMocks = vi.hoisted(() => ({
   setDefaultTablePageSize: vi.fn(),
 }));
 
-vi.mock('@/core/settings/appPreferences', () => ({
-  getUseShortResourceNames: () => appPreferenceMocks.values.useShortResourceNames,
-  getDimInactiveNamespaces: () => appPreferenceMocks.values.dimInactiveNamespaces,
-  getExclusiveNamespaces: () => appPreferenceMocks.values.exclusiveNamespaces,
-  getDefaultTablePageSize: () => appPreferenceMocks.values.defaultTablePageSize,
+// Real preference store; only the backend-facing commands are stubbed.
+vi.mock('@/core/settings/appPreferences', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/core/settings/appPreferences')>()),
   hydrateAppPreferences: (...args: unknown[]) => appPreferenceMocks.hydrateAppPreferences(...args),
   setUseShortResourceNames: (...args: unknown[]) =>
     appPreferenceMocks.setUseShortResourceNames(...args),
@@ -80,12 +75,13 @@ describe('DisplaySection', () => {
   let root: ReactDOM.Root;
 
   beforeEach(async () => {
-    appPreferenceMocks.values = {
+    resetAppPreferencesCacheForTesting();
+    setAppPreferencesForTesting({
       useShortResourceNames: false,
       dimInactiveNamespaces: true,
       exclusiveNamespaces: true,
       defaultTablePageSize: 50,
-    };
+    });
     appPreferenceMocks.hydrateAppPreferences.mockReset();
     appPreferenceMocks.setUseShortResourceNames.mockReset();
     appPreferenceMocks.setDimInactiveNamespaces.mockReset();
@@ -97,16 +93,13 @@ describe('DisplaySection', () => {
       defaultTablePageSize: 50,
     });
     appPreferenceMocks.setUseShortResourceNames.mockImplementation(async (value: boolean) => {
-      appPreferenceMocks.values.useShortResourceNames = value;
-      eventBus.emit('settings:short-names', value);
+      setAppPreferencesForTesting({ useShortResourceNames: value });
     });
     appPreferenceMocks.setDimInactiveNamespaces.mockImplementation(async (value: boolean) => {
-      appPreferenceMocks.values.dimInactiveNamespaces = value;
-      eventBus.emit('settings:dim-inactive-namespaces', value);
+      setAppPreferencesForTesting({ dimInactiveNamespaces: value });
     });
     appPreferenceMocks.setExclusiveNamespaces.mockImplementation(async (value: boolean) => {
-      appPreferenceMocks.values.exclusiveNamespaces = value;
-      eventBus.emit('settings:exclusive-namespaces', value);
+      setAppPreferencesForTesting({ exclusiveNamespaces: value });
     });
 
     container = document.createElement('div');

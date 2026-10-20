@@ -21,7 +21,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEventBus } from '@/core/events';
 import type { CatalogItem } from '@/core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import { aliasToKindMap, canonicalKinds, getDisplayKind } from '@/utils/kindAliasMap';
 import { isMacPlatform } from '@/utils/platform';
 import type { Command } from './CommandPaletteCommands';
@@ -487,7 +487,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   const { hasActiveBlockingSurface } = useKeyboardContext();
   const { openWithObject } = useObjectPanel();
   const { selectedClusterId } = useKubeconfig();
-  const useShortResourceNames = useShortNames();
+  const useShortResourceNames = usePreference('useShortResourceNames');
   const parsedTokens = useMemo(() => parseQueryTokens(searchQuery), [searchQuery]);
   const macPlatform = isMacPlatform();
   const focusSearchInput = useCallback(() => {

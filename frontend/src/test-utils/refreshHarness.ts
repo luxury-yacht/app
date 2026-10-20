@@ -129,10 +129,9 @@ export const markClusterReady = (clusterId: string): void => {
   eventBus.emit('cluster:lifecycle', { clusterId, state: 'ready' });
 };
 
-/** Mirrors the app's auto-refresh toggle: the preference and its change event. */
+/** Mirrors the app's auto-refresh toggle; preference subscribers are notified. */
 export const setAutoRefresh = (enabled: boolean): void => {
   setAppPreferencesForTesting({ autoRefreshEnabled: enabled });
-  eventBus.emit('settings:auto-refresh', enabled);
 };
 
 /**

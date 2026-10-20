@@ -28,7 +28,7 @@ import type { panelwindow } from '@/core/backend-api/models';
 import { usePanelWindowRole } from '@/core/panel-windows/PanelWindowRoleContext';
 import { objectPanelTabSnapshot } from '@/core/panel-windows/tabTransfer';
 import { usePanelWorkspaceOpen } from '@/core/panel-windows/WorkspacePanelSync';
-import { getDefaultObjectPanelPosition } from '@/core/settings/appPreferences';
+import { getPreference } from '@/core/settings/appPreferences';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { reportOperationalError } from '@/utils/errorHandler';
 
@@ -190,7 +190,9 @@ export function useObjectPanel() {
       const ownedPanel = getOwnedPanel(enriched.clusterId, panelId);
       const requestedView = options?.initialTab;
       const shouldAutoFloat =
-        !panelWindowRole && ownedPanel === null && getDefaultObjectPanelPosition() === 'floating';
+        !panelWindowRole &&
+        ownedPanel === null &&
+        getPreference('defaultObjectPanelPosition') === 'floating';
 
       void openSharedPanel(
         objectPanelTabSnapshot(panelId, enriched, options?.initialTab ?? 'details')

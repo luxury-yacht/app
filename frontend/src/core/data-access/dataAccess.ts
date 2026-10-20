@@ -11,7 +11,7 @@ import { runsWhilePaused } from '@/core/refresh/refreshIntent';
 import type { RefreshDemand } from '@/core/refresh/refreshRuntime';
 import { getScopedDomainState } from '@/core/refresh/store';
 import type { RefreshDomain } from '@/core/refresh/types';
-import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { getPreference } from '@/core/settings/appPreferences';
 import type {
   ContextRefreshRequest,
   DataReadRequest,
@@ -25,7 +25,7 @@ import type {
 
 export const isDataAccessBlocked = (
   reason: DataRequestReason,
-  autoRefreshEnabled: boolean = getAutoRefreshEnabled()
+  autoRefreshEnabled: boolean = getPreference('autoRefreshEnabled')
 ): boolean => {
   return !autoRefreshEnabled && !runsWhilePaused(reason);
 };

@@ -13,7 +13,7 @@ import {
   logAppLogsInfo,
   logAppLogsWarn,
 } from '@/core/logging/appLogsClient';
-import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { getPreference, subscribePreference } from '@/core/settings/appPreferences';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import { reportOperationalError } from '@/utils/errorHandler';
 import { fetchSnapshot, type Snapshot, setMetricsActive } from './client';
@@ -140,7 +140,7 @@ class RefreshOrchestrator {
     eventBus.on('kubeconfig:changing', this.handleKubeconfigChanging);
     eventBus.on('kubeconfig:changed', this.handleKubeconfigChanged);
     eventBus.on('kubeconfig:selection-changed', this.handleKubeconfigSelectionChanged);
-    eventBus.on('settings:auto-refresh', this.handleAutoRefreshChanged);
+    subscribePreference('autoRefreshEnabled', this.handleAutoRefreshChanged);
     eventBus.on('app:visibility-hidden', this.handleDocumentHidden);
     eventBus.on('app:visibility-visible', this.handleDocumentVisible);
     eventBus.on('refresh:resource-stream-drift', this.handleResourceStreamDrift);
@@ -653,7 +653,7 @@ class RefreshOrchestrator {
     if (!trimmed) {
       return false;
     }
-    if (!getAutoRefreshEnabled()) {
+    if (!getPreference('autoRefreshEnabled')) {
       return false;
     }
     // One-shot query scopes are never streaming targets, for ANY domain: event
@@ -1045,12 +1045,12 @@ class RefreshOrchestrator {
   }
 
   private isPassiveWorkPaused(): boolean {
-    return !getAutoRefreshEnabled() || this.documentHidden;
+    return !getPreference('autoRefreshEnabled') || this.documentHidden;
   }
 
   // Auto-refresh off pauses passive reads; foreground and user reads still run.
   private intentRuns(intent: RefreshIntent): boolean {
-    return getAutoRefreshEnabled() || runsWhilePaused(intent);
+    return getPreference('autoRefreshEnabled') || runsWhilePaused(intent);
   }
 
   // Every leased scope polls at its contract interval, except stream-only

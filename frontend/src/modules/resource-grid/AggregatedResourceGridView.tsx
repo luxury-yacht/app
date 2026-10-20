@@ -38,7 +38,7 @@ import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { useCallback, useMemo } from 'react';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { CanonicalResourceRef, RefreshDomain } from '@/core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import type { NamespaceViewType } from '@/types/navigation/views';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
@@ -137,7 +137,7 @@ function useAggregatedGridCore<D extends AggregatedRowBase>(
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
-  const useShortResourceNames = useShortNames();
+  const useShortResourceNames = usePreference('useShortResourceNames');
   const getObject = useCallback(
     (row: D) => ({ ...getAggregatedRowRef(row), clusterName: selectedClusterName }),
     [selectedClusterName]

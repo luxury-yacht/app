@@ -7,6 +7,7 @@
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
 
 const searchShortcutMocks = vi.hoisted(() => ({
   useSearchShortcutTarget: vi.fn(),
@@ -112,10 +113,6 @@ vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
   useAutoRefreshLoadingState: () => autoRefreshLoadingState,
 }));
 
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => !autoRefreshLoadingState.isPaused,
-}));
-
 vi.mock('@uiw/react-codemirror', () => ({
   __esModule: true,
   default: CodeMirrorMock,
@@ -213,6 +210,7 @@ describe('ManifestTab', () => {
     };
     refreshMocks.fetchScopedDomain.mockClear();
     autoRefreshLoadingState.isPaused = false;
+    setAppPreferencesForTesting({ autoRefreshEnabled: true });
     autoRefreshLoadingState.isManualRefreshActive = false;
     autoRefreshLoadingState.suppressPassiveLoading = false;
   });
@@ -243,6 +241,7 @@ describe('ManifestTab', () => {
 
   it('suppresses passive loading while paused and blocks startup fetches', async () => {
     autoRefreshLoadingState.isPaused = true;
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
     autoRefreshLoadingState.suppressPassiveLoading = true;
     snapshotState.current = { status: 'loading', data: null, error: null };
 

@@ -33,14 +33,10 @@ import {
   saveSharedNamespaceFilter,
 } from '@shared/components/tables/persistence/gridTablePersistence';
 import { subscribeGridTableResetAll } from '@shared/components/tables/persistence/gridTablePersistenceReset';
-import {
-  type GridTablePersistenceMode,
-  getGridTablePersistenceMode,
-  subscribeGridTablePersistenceMode,
-} from '@shared/components/tables/persistence/gridTablePersistenceSettings';
 import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { usePreference } from '@/core/settings/usePreference';
 
 export interface UseGridTablePersistenceParams<T> {
   viewId: string;
@@ -192,9 +188,7 @@ export function useGridTablePersistence<T>({
   const filterOptions = useStableSelectedValue(requestedFilterOptions);
   const [clusterHash, setClusterHash] = useState<string>('');
   const [storageKey, setStorageKey] = useState<string | null>(null);
-  const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(
-    getGridTablePersistenceMode()
-  );
+  const persistenceMode = usePreference('gridTablePersistenceMode');
   const [persistenceState, dispatchPersistence] = useReducer(
     gridTablePersistenceReducer,
     transient,
@@ -248,13 +242,6 @@ export function useGridTablePersistence<T>({
       cancelled = true;
     };
   }, [clusterIdentity]);
-
-  useEffect(() => {
-    const unsubscribe = subscribeGridTablePersistenceMode((mode) => {
-      setPersistenceMode(mode);
-    });
-    return unsubscribe;
-  }, []);
 
   useEffect(() => {
     let persistenceNamespace: string | null | undefined = namespace ?? null;

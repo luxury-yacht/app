@@ -32,7 +32,7 @@ import {
   selectorForNamespaceSelection,
 } from '@/core/refresh/scopeSelector';
 import type { RefreshDomain } from '@/core/refresh/types';
-import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
+import { usePreference } from '@/core/settings/usePreference';
 import type { SortConfig } from '@/hooks/useTableSort';
 import { backendQuerySource } from './backendQuerySource';
 import type { QueryBackedTableState } from './queryBackedTableState';
@@ -244,7 +244,7 @@ function useTypedQueryLifecycle<
 }): TypedQueryLifecycle<TPayload, TRow> {
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
-  const defaultPageSize = useDefaultTablePageSize();
+  const defaultPageSize = usePreference('defaultTablePageSize');
   const pageLimit = typedQueryPageLimitOrDefault(persistence.pageSize, defaultPageSize);
   useEffect(() => {
     const sanitized = removeHiddenFilters(

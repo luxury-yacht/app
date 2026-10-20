@@ -12,18 +12,15 @@ import {
 import { errorHandler } from '@utils/errorHandler';
 import { useEffect, useId } from 'react';
 import {
-  getDefaultTablePageSize,
-  getDimInactiveNamespaces,
-  getExclusiveNamespaces,
-  getUseShortResourceNames,
   hydrateAppPreferences,
   setDefaultTablePageSize as persistDefaultTablePageSize,
   setDimInactiveNamespaces as persistDimInactiveNamespaces,
   setExclusiveNamespaces as persistExclusiveNamespaces,
   setUseShortResourceNames as persistUseShortResourceNames,
 } from '@/core/settings/appPreferences';
+import { usePreference } from '@/core/settings/usePreference';
 import ToggleSwitch from '@/shared/components/ToggleSwitch';
-import { SettingRow, usePreferenceToggle, usePreferenceValue } from './SettingsControls';
+import { SettingRow, usePreferenceToggle } from './SettingsControls';
 
 // The same list every pagination footer renders — one source for both.
 const PAGE_SIZE_DROPDOWN_OPTIONS = TABLE_PAGE_SIZE_OPTIONS.map((value) => ({
@@ -33,22 +30,10 @@ const PAGE_SIZE_DROPDOWN_OPTIONS = TABLE_PAGE_SIZE_OPTIONS.map((value) => ({
 
 function DisplaySection() {
   const elementIdPrefix = useId();
-  const useShortResourceNames = usePreferenceValue(
-    getUseShortResourceNames,
-    'settings:short-names'
-  );
-  const dimInactiveNamespaces = usePreferenceValue(
-    getDimInactiveNamespaces,
-    'settings:dim-inactive-namespaces'
-  );
-  const exclusiveNamespaces = usePreferenceValue(
-    getExclusiveNamespaces,
-    'settings:exclusive-namespaces'
-  );
-  const defaultTablePageSize = usePreferenceValue(
-    getDefaultTablePageSize,
-    'settings:default-table-page-size'
-  );
+  const useShortResourceNames = usePreference('useShortResourceNames');
+  const dimInactiveNamespaces = usePreference('dimInactiveNamespaces');
+  const exclusiveNamespaces = usePreference('exclusiveNamespaces');
+  const defaultTablePageSize = usePreference('defaultTablePageSize');
 
   useEffect(() => {
     void hydrateAppPreferences({ force: true }).catch((error) => {

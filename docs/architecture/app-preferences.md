@@ -29,9 +29,17 @@ effects. App-state reads use `appStateAccess`
 ## Frontend metadata and rollback
 
 - Hydrate with `readAppSettingsSchema` via `appStateAccess`; mutate through the
-  common `UpdateAppPreferences` optimistic path. Typed getters/setters live in
-  `frontend/src/core/settings`; UI never imports preference-specific generated
+  common `UpdateAppPreferences` optimistic path. The typed store and setters live
+  in `frontend/src/core/settings`; UI never imports preference-specific generated
   setters.
+- Read a preference by key through the store: `usePreference(key)` in
+  components, `getPreference(key)` for reads at action time, and
+  `subscribePreference(key, listener)` for non-React reactions. A subscriber
+  hears only its own key's changes, with the new value, in declaration order;
+  a throwing subscriber is reported and does not stop the others or the save.
+  Mode- or scope-keyed selectors (`getPaletteTint`, `getAccentColor`,
+  `getLinkColor`, `getSidebarGroupExpanded`, `getObjectPanelLayoutDefaults`)
+  read the same store. No per-preference event-bus events or one-off hooks.
 - `frontend/src/core/settings/appPreferences.ts` owns metadata caching, fallback
   metadata, and typed helpers. Settings sections read defaults, bounds, options,
   hints, and runtime flags only through them, never fetching schema or copying
@@ -40,7 +48,7 @@ effects. App-state reads use `appStateAccess`
 - One confirmed base plus ordered pending edits owns optimistic state. Writes
   and success notifications run in edit order. Failure removes only the failed
   edit; later edits stay visible, even for the same key. Cache values,
-  preference events, and the appearance-mode and appearance-bootstrap
+  subscriber notifications, and the appearance-mode and appearance-bootstrap
   localStorage follow that projection; restore the exact prior startup mirror
   when its owning edit fails.
 - Hydration waits for pending writes and publishes schema/settings only if no
@@ -95,8 +103,8 @@ back into Preferences.
   means collapsed. Saved values, which earlier versions always wrote, are kept.
 - Manual disclosure and explicit navigation reveal both update the shared
   state; namespace row expansion is separate.
-- The shared sidebar hook subscribes to preference changes, so hydration,
-  sibling toggles, and rollback update mounted groups.
+- The shared sidebar hook reads each group's preference with `usePreference`,
+  so hydration, sibling toggles, and rollback update mounted groups.
 
 ## Validation
 

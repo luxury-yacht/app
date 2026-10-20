@@ -13,6 +13,7 @@ import type { TabGroupState } from '@ui/dockable/tabGroupTypes';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
 
 // Mock dockable panel context (replaces the old useDockablePanelState mock).
@@ -25,7 +26,6 @@ vi.mock('@/core/panel-windows', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/core/panel-windows')>()),
   openPanelWorkspaceObject: (...args: unknown[]) => sharedPanelMocks.open(...args),
 }));
-let mockDefaultObjectPanelPosition: 'right' | 'bottom' | 'floating' = 'right';
 let mockTabGroups: TabGroupState = {
   right: { tabs: [], activeTab: null },
   bottom: { tabs: [], activeTab: null },
@@ -37,11 +37,6 @@ vi.mock('@ui/dockable', () => ({
     focusPanel: mockFocusPanel,
     requestGroupMove: mockRequestGroupMove,
   }),
-}));
-
-vi.mock('@/core/settings/appPreferences', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/core/settings/appPreferences')>()),
-  getDefaultObjectPanelPosition: () => mockDefaultObjectPanelPosition,
 }));
 
 const kubeconfigMocks = vi.hoisted(() => ({
@@ -124,7 +119,7 @@ describe('useObjectPanel', () => {
     };
     mockFocusPanel.mockClear();
     mockRequestGroupMove.mockClear();
-    mockDefaultObjectPanelPosition = 'right';
+    setAppPreferencesForTesting({ defaultObjectPanelPosition: 'right' });
     mockReportError.mockClear();
     sharedPanelMocks.open.mockReset();
     sharedPanelMocks.open.mockImplementation(async (_windowName, tab) => ({
@@ -390,7 +385,7 @@ describe('useObjectPanel', () => {
   });
 
   it('floats only the new panel group when floating is the default', async () => {
-    mockDefaultObjectPanelPosition = 'floating';
+    setAppPreferencesForTesting({ defaultObjectPanelPosition: 'floating' });
     const pod = {
       kind: 'Pod',
       group: '',

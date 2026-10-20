@@ -7,6 +7,7 @@
  */
 
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { usePreference } from '@/core/settings/usePreference';
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import { hasCompleteObjectMapReference } from '@modules/object-panel/objectPanelRef';
@@ -39,7 +40,6 @@ import Tooltip from '@shared/components/Tooltip';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
-import { useShortNames } from '@/hooks/useShortNames';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import {
   createObjectMapDebugId,
@@ -480,7 +480,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const modelTimingStartedAt = objectMapTimingNow();
   const model = useObjectMapModel(payload);
   const modelTimingMs = objectMapTimingNow() - modelTimingStartedAt;
-  const useShortResourceNames = useShortNames();
+  const useShortResourceNames = usePreference('useShortResourceNames');
   const [showLegend, setShowLegend] = useState(true);
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<string> | null>(null);
   const [selectedKinds, setSelectedKinds] =

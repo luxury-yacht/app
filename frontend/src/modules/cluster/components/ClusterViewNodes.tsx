@@ -46,7 +46,7 @@ import type {
   NodeMetricsInfo,
 } from '@/core/refresh/types';
 import { nodeRowCpuValue, nodeRowMemoryValue } from '@/core/resource-metrics';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import { parseCompactAgeToSeconds } from '@/utils/ageFormatter';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -103,7 +103,7 @@ export const NodesTable: React.FC<NodesTableProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId, selectedClusterName } = useKubeconfig();
-    const useShortResourceNames = useShortNames();
+    const useShortResourceNames = usePreference('useShortResourceNames');
     const [metricsInfo, setMetricsInfo] = useState<NodeMetricsInfo | null>(null);
 
     const watchClusterIds = useMemo(

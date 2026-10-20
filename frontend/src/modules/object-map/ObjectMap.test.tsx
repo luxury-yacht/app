@@ -11,16 +11,15 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOMClient from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
 import ObjectMap from './ObjectMap';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
 
-const useShortNamesMock = vi.hoisted(() => vi.fn(() => false));
 Element.prototype.scrollIntoView ??= vi.fn();
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => useShortNamesMock(),
-}));
 
 vi.mock('@/utils/platform', () => ({
   isMacPlatform: () => true,
@@ -665,7 +664,7 @@ const pointerEvent = (
 };
 
 afterEach(() => {
-  useShortNamesMock.mockReturnValue(false);
+  resetAppPreferencesCacheForTesting();
   document.body.innerHTML = '';
   vi.useRealTimers();
 });
@@ -1220,7 +1219,7 @@ describe('ObjectMap', () => {
   });
 
   it('uses short resource names in map controls when the setting is enabled', async () => {
-    useShortNamesMock.mockReturnValue(true);
+    setAppPreferencesForTesting({ useShortResourceNames: true });
     const { container, cleanup } = await renderObjectMap({ testPayload: shortNamesPayload });
     const renderer = container.querySelector<HTMLElement>('[data-testid="object-map-g6-mock"]');
     const kindTrigger = container.querySelector<HTMLElement>('[aria-label="Filter map kinds"]');

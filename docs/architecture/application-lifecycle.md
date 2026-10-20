@@ -147,8 +147,8 @@ close sequences: [dockable-panels.md](../frontend/dockable-panels.md).
   resets the macOS menu after runtime-ready state changes such as sidebar or
   panel visibility. Windows/Linux use neutral labels.
 - `AppearanceModeContext` subscribes to the dark-scheme `matchMedia` query and
-  the settings event bus after mount, applies system changes only while the
-  preference is `system`, and unsubscribes on unmount.
+  the `appearanceMode` preference after mount, applies system changes only while
+  the preference is `system`, and unsubscribes on unmount.
 
 ## Frontend runtime boundary
 

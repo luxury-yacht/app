@@ -44,13 +44,13 @@ import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshL
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import type { CanonicalResourceRef, ObjectEventSummary, ResourceLink } from '@/core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
 import { errorHandler } from '@/utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
 import type { PanelObjectData } from '../types';
 import './EventsTab.css';
 import { failureMessage } from '@/core/refresh/refreshFailure';
+import { usePreference } from '@/core/settings/usePreference';
 
 interface EventsTabProps {
   objectData?: PanelObjectData | null;
@@ -120,7 +120,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const { openWithObject } = useObjectPanel();
   const { available: navigationAvailable, navigateToView } = useNavigateToView();
-  const useShortResourceNames = useShortNames();
+  const useShortResourceNames = usePreference('useShortResourceNames');
   const resolveClusterName = useClusterNameResolver();
   const openWithObjectRef = useRef(openWithObject);
   useEffect(() => {

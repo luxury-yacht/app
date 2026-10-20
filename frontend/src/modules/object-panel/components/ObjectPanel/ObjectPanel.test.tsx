@@ -179,17 +179,12 @@ vi.mock('@ui/dockable/tabGroupState', () => ({
 
 const metricsCollector = vi.hoisted(() => ({
   calls: [] as Array<{ panelId: string; objectRef: unknown; enabled: boolean }>,
-  autoRefresh: true,
 }));
 vi.mock('@modules/object-panel/components/ObjectPanel/Metrics/usePanelMetricsCollector', () => ({
   usePanelMetricsCollector: (panelId: string, objectRef: unknown, enabled: boolean) => {
     metricsCollector.calls.push({ panelId, objectRef, enabled });
   },
 }));
-vi.mock('@/core/refresh/hooks/useRefreshPreferences', () => ({
-  useAutoRefreshEnabled: () => metricsCollector.autoRefresh,
-}));
-
 // Mock CurrentObjectPanelContext from useObjectPanel
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   CurrentObjectPanelContext: createContext({ objectData: null, panelId: null }),
@@ -287,6 +282,8 @@ let capabilityStateMap: Record<string, CapabilityState>;
 let currentLogPermission: { allowed: boolean; pending: boolean };
 let currentScopedDomain: { data: unknown; status: string; error: RefreshFailure | null };
 let ObjectPanel: typeof import('./ObjectPanel').default;
+// Loaded with the panel, after the backend mock above is initialized.
+let setAppPreferencesForTesting: typeof import('@/core/settings/appPreferences').setAppPreferencesForTesting;
 
 mockUseCapabilities.mockImplementation(() => ({
   getState: (id: string) => capabilityStateMap[id] ?? { allowed: true, pending: false },
@@ -295,10 +292,9 @@ mockUseCapabilities.mockImplementation(() => ({
 mockUseUserPermission.mockImplementation(() => currentLogPermission);
 mockUseRefreshScopedDomain.mockImplementation(() => currentScopedDomain);
 
-beforeAll(() => {
-  return import('./ObjectPanel').then((module) => {
-    ObjectPanel = module.default;
-  });
+beforeAll(async () => {
+  ObjectPanel = (await import('./ObjectPanel')).default;
+  ({ setAppPreferencesForTesting } = await import('@/core/settings/appPreferences'));
 });
 
 describe('ObjectPanel tab availability', () => {
@@ -325,7 +321,7 @@ describe('ObjectPanel tab availability', () => {
     tabStore.reset();
     dockGroup.activeTab = null;
     metricsCollector.calls = [];
-    metricsCollector.autoRefresh = true;
+    setAppPreferencesForTesting({ autoRefreshEnabled: true });
 
     ctx = {} as RenderContext;
     ctx.container = document.createElement('div');
@@ -406,7 +402,7 @@ describe('ObjectPanel tab availability', () => {
     await renderObjectPanel({ kind: 'Pod', name: 'api-1', namespace: 'team-a' });
     expect(metricsCollector.calls[metricsCollector.calls.length - 1]?.enabled).toBe(true);
 
-    metricsCollector.autoRefresh = false;
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
     await renderObjectPanel({ kind: 'Pod', name: 'api-1', namespace: 'team-a' });
     expect(metricsCollector.calls[metricsCollector.calls.length - 1]?.enabled).toBe(false);
   });

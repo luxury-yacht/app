@@ -20,7 +20,7 @@ import React, { useCallback, useMemo } from 'react';
 import { useClusterNameResolver } from '@/core/cluster-workspace/useClusterWorkspace';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { NamespaceSignalState } from '@/core/refresh/types';
-import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
+import { usePreference } from '@/core/settings/usePreference';
 
 export interface NamespaceTableRow extends NamespaceSummaryWithMetrics {
   ageTimestamp?: number;
@@ -146,7 +146,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   cacheKey,
   emptyMessage,
 }) => {
-  const defaultPageSize = useDefaultTablePageSize();
+  const defaultPageSize = usePreference('defaultTablePageSize');
   const resolveClusterName = useClusterNameResolver();
   const { openWithObject } = useObjectPanel();
   // A configured namespace that is missing or inaccessible has no object to open.

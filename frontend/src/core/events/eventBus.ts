@@ -106,35 +106,9 @@ export interface AppEvents {
     lastDeliveryAt?: number;
   };
 
-  // Settings events
-  'settings:auto-refresh': boolean;
-  'settings:short-names': boolean;
-  'settings:dim-inactive-namespaces': boolean;
-  'settings:exclusive-namespaces': boolean;
-  'settings:sidebar-expansion': undefined;
-  'settings:error-reporting': boolean;
-  'settings:appearance-mode': 'light' | 'dark' | 'system';
-  'settings:kubernetes-client-qps': number;
-  'settings:default-table-page-size': number;
-  'settings:kubernetes-client-burst': number;
-  'settings:permission-ssrr-fetch-concurrency': number;
-  'settings:obj-panel-logs-buffer-size': number;
-  'settings:obj-panel-logs-api-timestamp-format': string;
-  'settings:obj-panel-logs-api-timestamp-use-local-time-zone': boolean;
-  'settings:obj-panel-logs-target-per-scope-limit': number;
-  'settings:obj-panel-logs-target-global-limit': number;
-  'settings:palette-tint': {
-    mode: 'light' | 'dark';
-    hue: number;
-    saturation: number;
-    brightness: number;
-  };
-  'settings:accent-color': { mode: 'light' | 'dark'; color: string };
-  'settings:link-color': { mode: 'light' | 'dark'; color: string };
+  // Settings events. Preference changes are not bus events: subscribe through
+  // subscribePreference / usePreference in core/settings.
   'settings:appearance-mode-resolved': 'light' | 'dark';
-
-  // Feature events
-  'gridtable:persistence-mode': 'namespaced' | 'shared';
 
   // Grid table external focus — emitted to request that a visible GridTable
   // finds and focuses a specific row matching the given resource fields.

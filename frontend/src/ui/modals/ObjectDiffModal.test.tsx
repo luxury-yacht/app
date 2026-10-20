@@ -56,10 +56,6 @@ vi.mock('@core/refresh', () => ({
   refreshOrchestrator: refreshMocks.refreshOrchestrator,
 }));
 
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => true,
-}));
-
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => kubeconfigMocks,
 }));
@@ -70,10 +66,6 @@ vi.mock('@shared/components/diff/diffBudgets', () => ({
     maxComputeWork: 3_000_000,
     maxRenderableRows: 2,
   },
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
 }));
 
 vi.mock('@shared/components/dropdowns/Dropdown/Dropdown', async (importOriginal) => {

@@ -50,10 +50,6 @@ const { mocks } = vi.hoisted(() => ({
       namespaces: [] as Array<{ name: string; scope: string }>,
       setSelectedNamespace: vi.fn(),
     },
-    autoRefresh: {
-      enabled: true,
-      toggle: vi.fn(),
-    },
     appSettings: {
       UpdateAppPreferences: vi.fn(),
     },
@@ -113,7 +109,6 @@ vi.mock('@core/contexts/AppearanceModeContext', () => ({
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: mocks.refreshOrchestrator,
-  useAutoRefresh: () => mocks.autoRefresh,
 }));
 
 vi.mock('@core/backend-api', () => ({
@@ -210,8 +205,6 @@ describe('CommandPaletteCommands', () => {
     mocks.viewState.onNamespaceSelect.mockReset();
     mocks.kubeconfig.loadKubeconfigs.mockReset();
     mocks.kubeconfig.loadKubeconfigs.mockResolvedValue(undefined);
-    mocks.autoRefresh.enabled = true;
-    mocks.autoRefresh.toggle.mockReset();
     mocks.appSettings.UpdateAppPreferences.mockReset();
     mocks.appSettings.UpdateAppPreferences.mockResolvedValue({ settings: {}, changedKeys: [] });
     mocks.desktopRuntime.closeWindow.mockReset();
@@ -643,7 +636,7 @@ describe('CommandPaletteCommands', () => {
   });
 
   it('disables auto-refresh and short names through their commands', async () => {
-    setAppPreferencesForTesting({ useShortResourceNames: true });
+    setAppPreferencesForTesting({ autoRefreshEnabled: true, useShortResourceNames: true });
 
     const { getCommands, unmount } = renderHook();
     const commands = getCommands();
@@ -656,7 +649,9 @@ describe('CommandPaletteCommands', () => {
       await Promise.resolve();
     });
 
-    expect(mocks.autoRefresh.toggle).toHaveBeenCalledTimes(1);
+    expect(mocks.appSettings.UpdateAppPreferences).toHaveBeenCalledWith({
+      changes: [{ key: 'autoRefreshEnabled', value: false }],
+    });
     expect(mocks.appSettings.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'useShortResourceNames', value: false }],
     });

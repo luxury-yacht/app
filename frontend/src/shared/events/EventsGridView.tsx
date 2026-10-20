@@ -27,7 +27,7 @@ import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useCallback, useMemo } from 'react';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
 /** The event row shape both scope views select from their snapshots. */
@@ -58,7 +58,7 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
-  const useShortResourceNames = useShortNames();
+  const useShortResourceNames = usePreference('useShortResourceNames');
 
   const getSearchText = useCallback(
     (event: EventGridRow): string[] => eventGridSearchText(event),

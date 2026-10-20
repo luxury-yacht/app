@@ -167,10 +167,6 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterId }),
 }));
 
-vi.mock('@hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
 vi.mock('@/core/refresh/client', () => ({
   fetchSnapshot: (...args: unknown[]) => fetchSnapshotMock(...args),
 }));

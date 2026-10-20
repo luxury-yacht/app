@@ -27,7 +27,6 @@ import {
   ValidateThemeClusterPattern,
 } from '@/core/backend-api';
 import { desktopRuntimeAvailable, emitBroadcastEvent } from '@/core/desktop-runtime';
-import { type AppEvents, eventBus } from '@/core/events';
 import type { SidebarViewGroupId, ViewScope } from '@/core/navigation/viewRegistry';
 import { captureBootstrapError } from '@/core/telemetry/sentry';
 import {
@@ -632,22 +631,6 @@ const normalizeObjPanelLogsTargetGlobalLimit = (value?: number): number =>
     defaultOnNonPositive: true,
   });
 
-const emitSelectedPreferenceChange = <T>(
-  previous: AppPreferences,
-  next: AppPreferences,
-  select: (preferences: AppPreferences) => T,
-  emit: (value: T) => void,
-  areEqual: (previousValue: T, nextValue: T) => boolean = Object.is
-): void => {
-  const previousValue = select(previous);
-  const nextValue = select(next);
-  if (!areEqual(previousValue, nextValue)) {
-    emit(nextValue);
-  }
-};
-
-type PaletteTint = AppEvents['settings:palette-tint'];
-
 export const palettePreferenceKeys = {
   light: {
     hue: 'paletteHueLight',
@@ -670,172 +653,67 @@ const selectPaletteValues = (preferences: AppPreferences, mode: 'light' | 'dark'
   };
 };
 
-const selectPaletteTint = (preferences: AppPreferences, mode: 'light' | 'dark'): PaletteTint => ({
-  mode,
-  ...selectPaletteValues(preferences, mode),
-});
+type PreferenceListener<K extends AppPreferenceKey> = (value: AppPreferences[K]) => void;
 
-const paletteTintsEqual = (previous: PaletteTint, next: PaletteTint): boolean =>
-  previous.hue === next.hue &&
-  previous.saturation === next.saturation &&
-  previous.brightness === next.brightness;
+// A wrapper per call keeps two subscriptions of the same function independent.
+interface PreferenceSubscription {
+  listener: PreferenceListener<AppPreferenceKey>;
+}
 
-type ModeColor = AppEvents['settings:accent-color'];
+// Subscribers hear about keys in declaration order.
+const preferenceKeys = Object.keys(FALLBACK_PREFERENCE_METADATA) as AppPreferenceKey[];
+const preferenceSubscriptions = new Map<AppPreferenceKey, Set<PreferenceSubscription>>();
 
-const selectModeColor = (mode: 'light' | 'dark', color: string): ModeColor => ({ mode, color });
-
-const modeColorsEqual = (previous: ModeColor, next: ModeColor): boolean =>
-  previous.color === next.color;
-
-const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): void => {
-  for (const keys of Object.values(sidebarGroupPreferenceKeys)) {
-    for (const key of Object.values(keys)) {
-      emitSelectedPreferenceChange(
-        previous,
-        next,
-        (value) => value[key],
-        () => eventBus.emit('settings:sidebar-expansion')
-      );
+const notifySubscribers = <K extends AppPreferenceKey>(
+  key: K,
+  subscriptions: ReadonlySet<PreferenceSubscription>,
+  value: AppPreferences[K]
+): void => {
+  for (const { listener } of subscriptions) {
+    // One failing subscriber must not stop the others or the save that published.
+    try {
+      listener(value);
+    } catch (error) {
+      reportOperationalError(error, {
+        source: 'AppPreferences',
+        action: 'notify-preference-subscriber',
+        key,
+      });
     }
   }
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.appearanceMode,
-    (value) => eventBus.emit('settings:appearance-mode', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.useShortResourceNames,
-    (value) => eventBus.emit('settings:short-names', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.dimInactiveNamespaces,
-    (value) => eventBus.emit('settings:dim-inactive-namespaces', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.exclusiveNamespaces,
-    (value) => eventBus.emit('settings:exclusive-namespaces', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.errorReportingEnabled,
-    (value) => eventBus.emit('settings:error-reporting', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.autoRefreshEnabled,
-    (value) => eventBus.emit('settings:auto-refresh', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.kubernetesClientQPS,
-    (value) => eventBus.emit('settings:kubernetes-client-qps', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.kubernetesClientBurst,
-    (value) => eventBus.emit('settings:kubernetes-client-burst', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.permissionSSRRFetchConcurrency,
-    (value) => eventBus.emit('settings:permission-ssrr-fetch-concurrency', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.objPanelLogsBufferMaxSize,
-    (value) => eventBus.emit('settings:obj-panel-logs-buffer-size', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.objPanelLogsApiTimestampFormat,
-    (value) => eventBus.emit('settings:obj-panel-logs-api-timestamp-format', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.objPanelLogsApiTimestampUseLocalTimeZone,
-    (value) => eventBus.emit('settings:obj-panel-logs-api-timestamp-use-local-time-zone', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.objPanelLogsTargetPerScopeLimit,
-    (value) => eventBus.emit('settings:obj-panel-logs-target-per-scope-limit', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.objPanelLogsTargetGlobalLimit,
-    (value) => eventBus.emit('settings:obj-panel-logs-target-global-limit', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.gridTablePersistenceMode,
-    (value) => eventBus.emit('gridtable:persistence-mode', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => value.defaultTablePageSize,
-    (value) => eventBus.emit('settings:default-table-page-size', value)
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => selectPaletteTint(value, 'light'),
-    (value) => eventBus.emit('settings:palette-tint', value),
-    paletteTintsEqual
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => selectPaletteTint(value, 'dark'),
-    (value) => eventBus.emit('settings:palette-tint', value),
-    paletteTintsEqual
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => selectModeColor('light', value.accentColorLight),
-    (value) => eventBus.emit('settings:accent-color', value),
-    modeColorsEqual
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => selectModeColor('dark', value.accentColorDark),
-    (value) => eventBus.emit('settings:accent-color', value),
-    modeColorsEqual
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => selectModeColor('light', value.linkColorLight),
-    (value) => eventBus.emit('settings:link-color', value),
-    modeColorsEqual
-  );
-  emitSelectedPreferenceChange(
-    previous,
-    next,
-    (value) => selectModeColor('dark', value.linkColorDark),
-    (value) => eventBus.emit('settings:link-color', value),
-    modeColorsEqual
-  );
+};
+
+const notifyPreferenceChanges = (previous: AppPreferences, next: AppPreferences): void => {
+  for (const key of preferenceKeys) {
+    const subscriptions = preferenceSubscriptions.get(key);
+    if (subscriptions?.size && !Object.is(previous[key], next[key])) {
+      notifySubscribers(key, subscriptions, next[key]);
+    }
+  }
+};
+
+// Current value of one preference, including optimistic edits not yet saved.
+export const getPreference = <K extends AppPreferenceKey>(key: K): AppPreferences[K] =>
+  preferenceCache[key];
+
+// Calls the listener with the new value whenever this preference changes, including
+// hydration, optimistic edits, and a failed save's rollback.
+export const subscribePreference = <K extends AppPreferenceKey>(
+  key: K,
+  listener: PreferenceListener<K>
+): (() => void) => {
+  const subscription: PreferenceSubscription = {
+    listener: listener as PreferenceListener<AppPreferenceKey>,
+  };
+  let subscriptions = preferenceSubscriptions.get(key);
+  if (!subscriptions) {
+    subscriptions = new Set();
+    preferenceSubscriptions.set(key, subscriptions);
+  }
+  subscriptions.add(subscription);
+  return () => {
+    subscriptions.delete(subscription);
+  };
 };
 
 interface LocalStorageSnapshot {
@@ -917,7 +795,7 @@ const publishPreferences = (): void => {
   const previous = preferenceCache;
   preferenceCache = next;
   restoreLocalStorageSnapshot(storage);
-  emitPreferenceChanges(previous, next);
+  notifyPreferenceChanges(previous, next);
 };
 
 const persistNextPreferenceMutation = async (queue: PendingPreferenceMutation[]): Promise<void> => {
@@ -1297,10 +1175,6 @@ export const hydrateAppPreferences = async (options?: {
   return hydrationPromise;
 };
 
-export const getAppearanceModePreference = (): AppearanceMode => {
-  return preferenceCache.appearanceMode;
-};
-
 export const applyBroadcastAppearanceModePreference = (mode: string): void => {
   if (!isAppearanceMode(mode)) {
     return;
@@ -1313,74 +1187,14 @@ export const applyBroadcastAppearanceModePreference = (mode: string): void => {
   publishPreferences();
 };
 
-export const getUseShortResourceNames = (): boolean => {
-  return preferenceCache.useShortResourceNames;
-};
-
-export const getDimInactiveNamespaces = (): boolean => {
-  return preferenceCache.dimInactiveNamespaces;
-};
-
-export const getExclusiveNamespaces = (): boolean => {
-  return preferenceCache.exclusiveNamespaces;
-};
+// The preference behind one sidebar group's disclosure in one scope.
+export const sidebarGroupPreferenceKey = (scope: SidebarGroupScope, group: SidebarViewGroupId) =>
+  sidebarGroupPreferenceKeys[scope][group];
 
 export const getSidebarGroupExpanded = (
   scope: SidebarGroupScope,
   group: SidebarViewGroupId
-): boolean => preferenceCache[sidebarGroupPreferenceKeys[scope][group]];
-
-export const getErrorReportingEnabled = (): boolean => {
-  return preferenceCache.errorReportingEnabled;
-};
-
-export const getAutoRefreshEnabled = (): boolean => {
-  return preferenceCache.autoRefreshEnabled;
-};
-
-export const getKubernetesClientQPS = (): number => {
-  return preferenceCache.kubernetesClientQPS;
-};
-
-export const getKubernetesClientBurst = (): number => {
-  return preferenceCache.kubernetesClientBurst;
-};
-
-export const getPermissionSSRRFetchConcurrency = (): number => {
-  return preferenceCache.permissionSSRRFetchConcurrency;
-};
-
-export const getObjPanelLogsBufferMaxSize = (): number => {
-  return preferenceCache.objPanelLogsBufferMaxSize;
-};
-
-export const getObjPanelLogsApiTimestampFormat = (): string => {
-  return preferenceCache.objPanelLogsApiTimestampFormat;
-};
-
-export const getObjPanelLogsApiTimestampUseLocalTimeZone = (): boolean => {
-  return preferenceCache.objPanelLogsApiTimestampUseLocalTimeZone;
-};
-
-export const getObjPanelLogsTargetPerScopeLimit = (): number => {
-  return preferenceCache.objPanelLogsTargetPerScopeLimit;
-};
-
-export const getObjPanelLogsTargetGlobalLimit = (): number => {
-  return preferenceCache.objPanelLogsTargetGlobalLimit;
-};
-
-export const getGridTablePersistenceMode = (): GridTablePersistenceMode => {
-  return preferenceCache.gridTablePersistenceMode;
-};
-
-export const getDefaultObjectPanelPosition = (): ObjectPanelPosition => {
-  return preferenceCache.defaultObjectPanelPosition;
-};
-
-export const getDefaultTablePageSize = (): TablePageSize => {
-  return normalizeTablePageSize(preferenceCache.defaultTablePageSize);
-};
+): boolean => getPreference(sidebarGroupPreferenceKey(scope, group));
 
 export interface ObjectPanelLayoutDefaults {
   dockedRightWidth: number;
@@ -1484,7 +1298,7 @@ export const setSidebarGroupExpanded = (
 ): void => {
   commitPreferenceMutation(
     'Failed to persist sidebar group expansion:',
-    singlePreferenceMutation(sidebarGroupPreferenceKeys[scope][group], expanded)
+    singlePreferenceMutation(sidebarGroupPreferenceKey(scope, group), expanded)
   );
 };
 
@@ -1722,9 +1536,11 @@ export const resetAppPreferencesCacheForTesting = (): void => {
   hydrated = false;
 };
 
-// Test helper to set preferences directly for testing.
+// Test helper to set confirmed preferences directly; subscribers of changed keys are notified.
 export const setAppPreferencesForTesting = (prefs: Partial<AppPreferences>): void => {
+  const previous = preferenceCache;
   preferenceCache = { ...preferenceCache, ...prefs };
   confirmedPreferences = preferenceCache;
   hydrated = true;
+  notifyPreferenceChanges(previous, preferenceCache);
 };

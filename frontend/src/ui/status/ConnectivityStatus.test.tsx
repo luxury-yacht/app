@@ -4,6 +4,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClusterAuthState } from '@/core/contexts/AuthErrorContext';
+import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
 
 let mockLifecycleState = 'ready';
@@ -11,7 +12,6 @@ let mockNamespaceReady = true;
 let mockHealth: 'healthy' | 'degraded' | 'unknown' = 'healthy';
 let mockSelectedClusterId = 'cluster-a';
 let mockSelectedClusterName = 'alpha';
-let mockAutoRefreshEnabled = true;
 const { setAutoRefreshEnabledMock, retryAuthMock, requestRefreshMock } = vi.hoisted(() => ({
   setAutoRefreshEnabledMock: vi.fn(),
   retryAuthMock: vi.fn(),
@@ -98,8 +98,9 @@ vi.mock('@/core/events', () => ({
   },
 }));
 
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => mockAutoRefreshEnabled,
+// Real preference store; the toggle command is stubbed.
+vi.mock('@/core/settings/appPreferences', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/core/settings/appPreferences')>()),
   setAutoRefreshEnabled: setAutoRefreshEnabledMock,
 }));
 
@@ -119,7 +120,7 @@ describe('ConnectivityStatus', () => {
     'offers no data-refresh action for a disconnected cluster when auto-refresh is %s',
     async (enabled) => {
       mockLifecycleState = 'disconnected';
-      mockAutoRefreshEnabled = enabled;
+      setAppPreferencesForTesting({ autoRefreshEnabled: enabled });
       await act(async () => {
         root.render(<ConnectivityStatus />);
       });
@@ -148,7 +149,7 @@ describe('ConnectivityStatus', () => {
     mockHealth = 'healthy';
     mockSelectedClusterId = 'cluster-a';
     mockSelectedClusterName = 'alpha';
-    mockAutoRefreshEnabled = true;
+    setAppPreferencesForTesting({ autoRefreshEnabled: true });
     mockAuthState = {
       hasError: false,
       isRecovering: false,
@@ -229,7 +230,7 @@ describe('ConnectivityStatus', () => {
   });
 
   it('shows enable auto-refresh when auto-refresh is paused', () => {
-    mockAutoRefreshEnabled = false;
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
 
     const indicator = renderStatus();
 

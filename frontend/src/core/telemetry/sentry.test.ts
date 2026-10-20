@@ -42,6 +42,16 @@ import {
   setActiveViewContext,
 } from './sentry';
 
+// Stands in for the preference store's error-reporting subscription.
+let preferenceListener: ((enabled: boolean) => void) | null = null;
+const subscribeToPreference = (listener: (enabled: boolean) => void) => {
+  preferenceListener = listener;
+  return () => {
+    preferenceListener = null;
+  };
+};
+const publishPreference = (enabled: boolean) => preferenceListener?.(enabled);
+
 describe('Sentry error reporting', () => {
   beforeEach(() => {
     resetErrorReportingForTesting();
@@ -72,19 +82,20 @@ describe('Sentry error reporting', () => {
         environment: 'production',
         release: 'luxury-yacht@v1.2.3',
       },
-      false
+      false,
+      subscribeToPreference
     );
 
     expect(available).toBe(true);
     expect(sentryMocks.init).not.toHaveBeenCalled();
 
-    eventBus.emit('settings:error-reporting', true);
+    publishPreference(true);
     expect(sentryMocks.init).toHaveBeenCalledOnce();
 
-    eventBus.emit('settings:error-reporting', false);
+    publishPreference(false);
     await vi.waitFor(() => expect(sentryMocks.close).toHaveBeenCalledWith(0));
 
-    eventBus.emit('settings:error-reporting', true);
+    publishPreference(true);
     expect(sentryMocks.init).toHaveBeenCalledTimes(2);
   });
 
@@ -105,7 +116,8 @@ describe('Sentry error reporting', () => {
         environment: 'production',
         release: 'luxury-yacht@v1.2.3',
       },
-      () => preference
+      () => preference,
+      subscribeToPreference
     );
 
     expect(sentryMocks.init).not.toHaveBeenCalled();
@@ -134,7 +146,8 @@ describe('Sentry error reporting', () => {
       async () => ({
         errorReportingEnabled: true,
         anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
-      })
+      }),
+      subscribeToPreference
     );
 
     expect(scopeMocks.setTag).toHaveBeenCalledWith('error.surface', 'bootstrap');
@@ -159,7 +172,8 @@ describe('Sentry error reporting', () => {
       async () => ({
         errorReportingEnabled: false,
         anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
-      })
+      }),
+      subscribeToPreference
     );
 
     expect(sentryMocks.init).not.toHaveBeenCalled();
@@ -492,12 +506,13 @@ describe('Sentry error reporting', () => {
       async () => ({
         errorReportingEnabled: true,
         anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
-      })
+      }),
+      subscribeToPreference
     );
 
-    eventBus.emit('settings:error-reporting', false);
+    publishPreference(false);
     await vi.waitFor(() => expect(sentryMocks.close).toHaveBeenCalledWith(0));
-    eventBus.emit('settings:error-reporting', true);
+    publishPreference(true);
 
     expect(sentryMocks.init).toHaveBeenCalledTimes(2);
     expect(sentryMocks.init.mock.calls[1]?.[0]).toEqual(
@@ -716,7 +731,8 @@ describe('Sentry error reporting', () => {
         dsn: 'https://public@example.com/1',
         environment: 'production',
       },
-      true
+      true,
+      subscribeToPreference
     );
     const failure = new Error('subscriber failed');
     const unsubscribe = eventBus.on('app:visibility-hidden', () => {

@@ -9,13 +9,13 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RefreshDomain } from '@/core/refresh/types';
+import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
 import { useScopedRefreshDomainLifecycle } from './useScopedRefreshDomainLifecycle';
 
 const mocks = vi.hoisted(() => ({
   acquireScopedDomainLease: vi.fn(),
   releaseScopedDomainLease: vi.fn(),
   fetchScopedDomain: vi.fn((..._args: unknown[]) => Promise.resolve()),
-  getAutoRefreshEnabled: vi.fn(() => true),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -24,10 +24,6 @@ vi.mock('@/core/refresh', () => ({
     releaseScopedDomainLease: (...args: unknown[]) => mocks.releaseScopedDomainLease(...args),
     fetchScopedDomain: (...args: unknown[]) => mocks.fetchScopedDomain(...args),
   },
-}));
-
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => mocks.getAutoRefreshEnabled(),
 }));
 
 interface HookProps {
@@ -76,7 +72,7 @@ describe('useScopedRefreshDomainLifecycle', () => {
     mocks.releaseScopedDomainLease.mockClear();
     mocks.fetchScopedDomain.mockClear();
     mocks.fetchScopedDomain.mockResolvedValue(undefined);
-    mocks.getAutoRefreshEnabled.mockReturnValue(true);
+    setAppPreferencesForTesting({ autoRefreshEnabled: true });
   });
 
   it('acquires a lease for the current scope and releases it on unmount', () => {
@@ -193,7 +189,7 @@ describe('useScopedRefreshDomainLifecycle', () => {
   });
 
   it('blocks startup fetches while auto-refresh is paused but still releases on unmount', async () => {
-    mocks.getAutoRefreshEnabled.mockReturnValue(false);
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
 
     const hook = renderHook({
       domain: 'object-helm-values',

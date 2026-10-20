@@ -270,10 +270,6 @@ vi.mock('@core/backend-api', () => ({
   MergeObjectYamlWithLatest: wailsMocks.MergeObjectYamlWithLatest,
 }));
 
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => true,
-}));
-
 const YAML = `
 apiVersion: v1
 kind: Pod

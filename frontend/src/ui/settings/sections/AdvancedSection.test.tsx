@@ -1,24 +1,25 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 import { controlName } from '@/test-utils/controlName';
 import { requireValue } from '@/test-utils/requireValue';
 import AdvancedSection from './AdvancedSection';
 
 const preferenceMocks = vi.hoisted(() => ({
   hydrateAppPreferences: vi.fn(),
+  setAutoRefreshEnabled: vi.fn(),
+  setGridTablePersistenceMode: vi.fn(),
   setKubernetesClientBurst: vi.fn(),
   setKubernetesClientQPS: vi.fn(),
   setPermissionSSRRFetchConcurrency: vi.fn(),
 }));
 
-const refreshMocks = vi.hoisted(() => ({
-  setAutoRefresh: vi.fn(),
-}));
-
 const persistenceMocks = vi.hoisted(() => ({
   clearAllGridTableState: vi.fn(),
-  setGridTablePersistenceMode: vi.fn(),
 }));
 
 const errorHandlerMocks = vi.hoisted(() => ({
@@ -32,21 +33,19 @@ const resetMocks = vi.hoisted(() => ({
   clearAppState: vi.fn(),
 }));
 
-vi.mock('@/core/refresh', () => ({
-  useAutoRefresh: () => ({ enabled: true, setAutoRefresh: refreshMocks.setAutoRefresh }),
-}));
-
-vi.mock('@/core/settings/appPreferences', () => ({
+// Real preference store; only the backend-facing commands are stubbed.
+vi.mock('@/core/settings/appPreferences', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/core/settings/appPreferences')>()),
   commitIntegerPreferenceInput: (_key: string, raw: string, persist: (value: number) => void) => {
     const value = Number(raw);
     persist(value);
     return value;
   },
   getIntegerPreferenceMetadata: () => ({ min: 1, max: 10000 }),
-  getKubernetesClientBurst: () => 200,
-  getKubernetesClientQPS: () => 100,
-  getPermissionSSRRFetchConcurrency: () => 8,
   hydrateAppPreferences: (...args: unknown[]) => preferenceMocks.hydrateAppPreferences(...args),
+  setAutoRefreshEnabled: (...args: unknown[]) => preferenceMocks.setAutoRefreshEnabled(...args),
+  setGridTablePersistenceMode: (...args: unknown[]) =>
+    preferenceMocks.setGridTablePersistenceMode(...args),
   setKubernetesClientBurst: (...args: unknown[]) =>
     preferenceMocks.setKubernetesClientBurst(...args),
   setKubernetesClientQPS: (...args: unknown[]) => preferenceMocks.setKubernetesClientQPS(...args),
@@ -56,12 +55,6 @@ vi.mock('@/core/settings/appPreferences', () => ({
 
 vi.mock('@shared/components/tables/persistence/gridTablePersistenceReset', () => ({
   clearAllGridTableState: (...args: unknown[]) => persistenceMocks.clearAllGridTableState(...args),
-}));
-
-vi.mock('@shared/components/tables/persistence/gridTablePersistenceSettings', () => ({
-  getGridTablePersistenceMode: () => 'shared',
-  setGridTablePersistenceMode: (...args: unknown[]) =>
-    persistenceMocks.setGridTablePersistenceMode(...args),
 }));
 
 vi.mock('@utils/accentColor', () => ({ clearAccentColor: resetMocks.clearAccentColor }));
@@ -105,6 +98,14 @@ describe('AdvancedSection', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    resetAppPreferencesCacheForTesting();
+    setAppPreferencesForTesting({
+      autoRefreshEnabled: true,
+      gridTablePersistenceMode: 'shared',
+      kubernetesClientQPS: 100,
+      kubernetesClientBurst: 200,
+      permissionSSRRFetchConcurrency: 8,
+    });
     preferenceMocks.hydrateAppPreferences.mockReset();
     preferenceMocks.hydrateAppPreferences.mockResolvedValue({
       kubernetesClientQPS: 100,
@@ -153,8 +154,8 @@ describe('AdvancedSection', () => {
       await Promise.resolve();
     });
 
-    expect(refreshMocks.setAutoRefresh).toHaveBeenCalledWith(false);
-    expect(persistenceMocks.setGridTablePersistenceMode).toHaveBeenCalledWith('namespaced');
+    expect(preferenceMocks.setAutoRefreshEnabled).toHaveBeenCalledWith(false);
+    expect(preferenceMocks.setGridTablePersistenceMode).toHaveBeenCalledWith('namespaced');
     expect(persistenceMocks.clearAllGridTableState).toHaveBeenCalledOnce();
     expect(
       Array.from(container.querySelectorAll('button')).some(

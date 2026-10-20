@@ -10,7 +10,7 @@ import React from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { initializeWindowIdentity, onBroadcastEvent } from '@/core/desktop-runtime';
 import { failPanelWindowTransfer, resolveNativeWindowDescriptor } from '@/core/panel-windows';
-import { hydrateAppPreferences } from '@/core/settings/appPreferences';
+import { hydrateAppPreferences, subscribePreference } from '@/core/settings/appPreferences';
 import {
   configureErrorReportingFromPreferences,
   createReactRootErrorHandlers,
@@ -38,7 +38,8 @@ if (appElement) {
       // from the persisted settings instead of a temporary default state.
       const { available: errorReportingAvailable } = await configureErrorReportingFromPreferences(
         sentryRuntimeConfig,
-        hydrateAppPreferences
+        hydrateAppPreferences,
+        (listener) => subscribePreference('errorReportingEnabled', listener)
       );
       const windowName = await initializeWindowIdentity();
       const descriptor = await resolveNativeWindowDescriptor(windowName);

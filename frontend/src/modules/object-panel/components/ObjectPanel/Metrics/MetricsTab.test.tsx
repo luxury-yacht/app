@@ -6,6 +6,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResourceMetricsResult, ResourceMetricValues } from '@/core/resource-metrics';
+import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
 import { objectDetailOf } from '@/test-utils/objectDetail';
 import { requireValue } from '@/test-utils/requireValue';
 import MetricsTab from './MetricsTab';
@@ -13,7 +14,6 @@ import type { LiveMetricSample, MetricGraph } from './metricsTabModel';
 import type { UtilizationData } from './useUtilizationData';
 
 const hoisted = vi.hoisted(() => ({
-  autoRefresh: true,
   utilization: null as UtilizationData | null,
   utilizationCalls: [] as Array<{ objectData: unknown; detail: unknown }>,
   liveEnabled: [] as Array<boolean | undefined>,
@@ -35,10 +35,6 @@ vi.mock('@/core/resource-metrics', () => ({
     hoisted.liveEnabled.push(enabled);
     return hoisted.live;
   },
-}));
-
-vi.mock('@/core/refresh/hooks/useRefreshPreferences', () => ({
-  useAutoRefreshEnabled: () => hoisted.autoRefresh,
 }));
 
 // Its own tests cover the live and detail sources; the tab's contract is what it feeds the hook
@@ -94,7 +90,7 @@ describe('MetricsTab', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    hoisted.autoRefresh = true;
+    setAppPreferencesForTesting({ autoRefreshEnabled: true });
     hoisted.utilization = null;
     hoisted.utilizationCalls = [];
     hoisted.liveEnabled = [];
@@ -155,7 +151,7 @@ describe('MetricsTab', () => {
 
   it('keeps the charts while auto-refresh is paused and says collection is paused', async () => {
     collected(T0, { usage: 10 });
-    hoisted.autoRefresh = false;
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
 
     await render();
 
@@ -196,7 +192,7 @@ describe('MetricsTab', () => {
 
   it('keeps the resource bars while auto-refresh is paused', async () => {
     hoisted.utilization = { cpu: { usage: 250 } };
-    hoisted.autoRefresh = false;
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
     await render();
 
     // The bars are the current values, not history, so pausing does not hide them.

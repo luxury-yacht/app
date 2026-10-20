@@ -14,7 +14,6 @@ import { act, type ComponentProps, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
@@ -889,7 +888,7 @@ describe('AppLogsPanel', () => {
     expect(drawnMessages(container)).not.toContain('line 10');
 
     await act(async () => {
-      eventBus.emit('settings:obj-panel-logs-buffer-size', 100);
+      setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 200 });
       await Promise.resolve();
     });
     expect(lineCount(container)).toBe('(10000)');

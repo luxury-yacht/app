@@ -5,37 +5,21 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
 import { requireValue } from '@/test-utils/requireValue';
 import {
   type AppPreferenceKey,
+  type AppPreferences,
   applyBroadcastAppearanceModePreference,
   commitIntegerPreferenceInput,
   createPaletteTintPreferenceWorkflow,
   getAccentColor,
-  getAppearanceModePreference,
-  getAutoRefreshEnabled,
-  getDefaultObjectPanelPosition,
-  getDefaultTablePageSize,
-  getDimInactiveNamespaces,
-  getErrorReportingEnabled,
-  getExclusiveNamespaces,
-  getGridTablePersistenceMode,
   getIntegerPreferenceMetadata,
-  getKubernetesClientBurst,
-  getKubernetesClientQPS,
   getLinkColor,
   getObjectPanelLayoutDefaults,
-  getObjPanelLogsApiTimestampFormat,
-  getObjPanelLogsApiTimestampUseLocalTimeZone,
-  getObjPanelLogsBufferMaxSize,
-  getObjPanelLogsTargetGlobalLimit,
-  getObjPanelLogsTargetPerScopeLimit,
   getPaletteTint,
-  getPermissionSSRRFetchConcurrency,
+  getPreference,
   getPreferenceMetadata,
   getSidebarGroupExpanded,
-  getUseShortResourceNames,
   hydrateAppPreferences,
   KUBERNETES_CLIENT_BURST_DEFAULT,
   KUBERNETES_CLIENT_BURST_MAX,
@@ -76,6 +60,7 @@ import {
   setPermissionSSRRFetchConcurrency,
   setSidebarGroupExpanded,
   setUseShortResourceNames,
+  subscribePreference,
   validateThemeClusterPattern,
 } from './appPreferences';
 
@@ -466,33 +451,33 @@ describe('appPreferences', () => {
 
     await hydrateAppPreferences({ force: true });
 
-    expect(getAppearanceModePreference()).toBe('light');
-    expect(getUseShortResourceNames()).toBe(true);
-    expect(getDimInactiveNamespaces()).toBe(false);
-    expect(getExclusiveNamespaces()).toBe(false);
-    expect(getAutoRefreshEnabled()).toBe(false);
-    expect(getKubernetesClientQPS()).toBe(250);
-    expect(getKubernetesClientBurst()).toBe(500);
-    expect(getPermissionSSRRFetchConcurrency()).toBe(16);
-    expect(getObjPanelLogsApiTimestampFormat()).toBe('HH:mm:ss.SSS');
-    expect(getObjPanelLogsApiTimestampUseLocalTimeZone()).toBe(true);
-    expect(getObjPanelLogsTargetPerScopeLimit()).toBe(144);
-    expect(getObjPanelLogsTargetGlobalLimit()).toBe(180);
-    expect(getGridTablePersistenceMode()).toBe('namespaced');
+    expect(getPreference('appearanceMode')).toBe('light');
+    expect(getPreference('useShortResourceNames')).toBe(true);
+    expect(getPreference('dimInactiveNamespaces')).toBe(false);
+    expect(getPreference('exclusiveNamespaces')).toBe(false);
+    expect(getPreference('autoRefreshEnabled')).toBe(false);
+    expect(getPreference('kubernetesClientQPS')).toBe(250);
+    expect(getPreference('kubernetesClientBurst')).toBe(500);
+    expect(getPreference('permissionSSRRFetchConcurrency')).toBe(16);
+    expect(getPreference('objPanelLogsApiTimestampFormat')).toBe('HH:mm:ss.SSS');
+    expect(getPreference('objPanelLogsApiTimestampUseLocalTimeZone')).toBe(true);
+    expect(getPreference('objPanelLogsTargetPerScopeLimit')).toBe(144);
+    expect(getPreference('objPanelLogsTargetGlobalLimit')).toBe(180);
+    expect(getPreference('gridTablePersistenceMode')).toBe('namespaced');
     expect(getPaletteTint('light')).toEqual({ hue: 220, saturation: 50, brightness: -15 });
     expect(getPaletteTint('dark')).toEqual({ hue: 120, saturation: 40, brightness: 10 });
     expect(getAccentColor('light')).toBe('#326ce5');
     expect(getAccentColor('dark')).toBe('#f59e0b');
   });
 
-  it('emits hydrated preference changes in the established event order', async () => {
+  it('notifies hydrated preference changes in the established order', async () => {
     const events: string[] = [];
     const unsubscribers = [
-      eventBus.on('settings:appearance-mode', () => events.push('appearance')),
-      eventBus.on('settings:short-names', () => events.push('short-names')),
-      eventBus.on('settings:dim-inactive-namespaces', () => events.push('dim')),
-      eventBus.on('settings:exclusive-namespaces', () => events.push('exclusive')),
-      eventBus.on('settings:auto-refresh', () => events.push('auto-refresh')),
+      subscribePreference('autoRefreshEnabled', () => events.push('auto-refresh')),
+      subscribePreference('exclusiveNamespaces', () => events.push('exclusive')),
+      subscribePreference('dimInactiveNamespaces', () => events.push('dim')),
+      subscribePreference('useShortResourceNames', () => events.push('short-names')),
+      subscribePreference('appearanceMode', () => events.push('appearance')),
     ];
     appMocks.GetAppSettings.mockResolvedValue({
       appearanceMode: 'dark',
@@ -535,8 +520,8 @@ describe('appPreferences', () => {
 
     expect(appMocks.GetAppSettings).not.toHaveBeenCalled();
     expect(preferences.anonymizedId).toBe('123e4567-e89b-42d3-a456-426614174000');
-    expect(getAppearanceModePreference()).toBe('dark');
-    expect(getDefaultObjectPanelPosition()).toBe('bottom');
+    expect(getPreference('appearanceMode')).toBe('dark');
+    expect(getPreference('defaultObjectPanelPosition')).toBe('bottom');
   });
 
   it('defaults error reporting on when the backend schema omits the preference', async () => {
@@ -547,7 +532,7 @@ describe('appPreferences', () => {
 
     await hydrateAppPreferences({ force: true });
 
-    expect(getErrorReportingEnabled()).toBe(true);
+    expect(getPreference('errorReportingEnabled')).toBe(true);
   });
 
   it('hydrates anonymizedId from legacy settings fallback', async () => {
@@ -571,7 +556,7 @@ describe('appPreferences', () => {
     expect(telemetryMocks.captureBootstrapError).toHaveBeenCalledWith(failure, {
       action: 'loadAppSettingsSchema',
     });
-    expect(getErrorReportingEnabled()).toBe(false);
+    expect(getPreference('errorReportingEnabled')).toBe(false);
   });
 
   it('fails error reporting closed when persisted settings cannot be read', async () => {
@@ -588,7 +573,7 @@ describe('appPreferences', () => {
     expect(telemetryMocks.captureBootstrapError).toHaveBeenNthCalledWith(2, settingsFailure, {
       action: 'loadAppSettings',
     });
-    expect(getErrorReportingEnabled()).toBe(false);
+    expect(getPreference('errorReportingEnabled')).toBe(false);
   });
 
   it('exposes typed preference metadata from the backend schema', async () => {
@@ -648,8 +633,8 @@ describe('appPreferences', () => {
     expect(getPaletteTint('dark')).toEqual({ hue: 0, saturation: 0, brightness: 0 });
     expect(getAccentColor('light')).toBe('');
     expect(getAccentColor('dark')).toBe('');
-    expect(getDimInactiveNamespaces()).toBe(true);
-    expect(getExclusiveNamespaces()).toBe(true);
+    expect(getPreference('dimInactiveNamespaces')).toBe(true);
+    expect(getPreference('exclusiveNamespaces')).toBe(true);
   });
 
   it('normalizes an invalid persisted Object Panel Logs Tab API timestamp format back to the default', async () => {
@@ -660,35 +645,33 @@ describe('appPreferences', () => {
 
     await hydrateAppPreferences({ force: true });
 
-    expect(getObjPanelLogsApiTimestampFormat()).toBe('YYYY-MM-DDTHH:mm:ss.SSS[Z]');
+    expect(getPreference('objPanelLogsApiTimestampFormat')).toBe('YYYY-MM-DDTHH:mm:ss.SSS[Z]');
   });
 
   it('hydrates the default table page size and snaps off-list values to the default', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ defaultTablePageSize: 250 });
     await hydrateAppPreferences({ force: true });
-    expect(getDefaultTablePageSize()).toBe(250);
+    expect(getPreference('defaultTablePageSize')).toBe(250);
 
     resetAppPreferencesCacheForTesting();
     appMocks.GetAppSettings.mockResolvedValue({ defaultTablePageSize: 333 });
     await hydrateAppPreferences({ force: true });
-    expect(getDefaultTablePageSize()).toBe(50);
+    expect(getPreference('defaultTablePageSize')).toBe(50);
   });
 
-  it('persists the default table page size and emits its change event', async () => {
+  it('persists the default table page size and notifies its subscribers', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ defaultTablePageSize: 50 });
     await hydrateAppPreferences({ force: true });
 
     const events: number[] = [];
-    const unsubscribe = eventBus.on('settings:default-table-page-size', (value) =>
-      events.push(value)
-    );
+    const unsubscribe = subscribePreference('defaultTablePageSize', (value) => events.push(value));
 
     setDefaultTablePageSize(100);
 
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'defaultTablePageSize', value: 100 }],
     });
-    expect(getDefaultTablePageSize()).toBe(100);
+    expect(getPreference('defaultTablePageSize')).toBe(100);
     expect(events).toEqual([100]);
 
     unsubscribe();
@@ -754,17 +737,17 @@ describe('appPreferences', () => {
       changes: [{ key: 'gridTablePersistenceMode', value: 'namespaced' }],
     });
 
-    expect(getAppearanceModePreference()).toBe('dark');
-    expect(getUseShortResourceNames()).toBe(true);
-    expect(getDimInactiveNamespaces()).toBe(false);
-    expect(getExclusiveNamespaces()).toBe(false);
-    expect(getObjPanelLogsApiTimestampFormat()).toBe('HH:mm:ss.SSS');
-    expect(getObjPanelLogsApiTimestampUseLocalTimeZone()).toBe(true);
-    expect(getKubernetesClientQPS()).toBe(250);
-    expect(getKubernetesClientBurst()).toBe(500);
-    expect(getPermissionSSRRFetchConcurrency()).toBe(16);
-    expect(getAutoRefreshEnabled()).toBe(false);
-    expect(getGridTablePersistenceMode()).toBe('namespaced');
+    expect(getPreference('appearanceMode')).toBe('dark');
+    expect(getPreference('useShortResourceNames')).toBe(true);
+    expect(getPreference('dimInactiveNamespaces')).toBe(false);
+    expect(getPreference('exclusiveNamespaces')).toBe(false);
+    expect(getPreference('objPanelLogsApiTimestampFormat')).toBe('HH:mm:ss.SSS');
+    expect(getPreference('objPanelLogsApiTimestampUseLocalTimeZone')).toBe(true);
+    expect(getPreference('kubernetesClientQPS')).toBe(250);
+    expect(getPreference('kubernetesClientBurst')).toBe(500);
+    expect(getPreference('permissionSSRRFetchConcurrency')).toBe(16);
+    expect(getPreference('autoRefreshEnabled')).toBe(false);
+    expect(getPreference('gridTablePersistenceMode')).toBe('namespaced');
   });
 
   it('broadcasts an appearance mode only after persistence succeeds', async () => {
@@ -799,32 +782,34 @@ describe('appPreferences', () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'light' });
     await hydrateAppPreferences({ force: true });
     const modes: string[] = [];
-    const unsubscribe = eventBus.on('settings:appearance-mode', (mode) => modes.push(mode));
+    const unsubscribe = subscribePreference('appearanceMode', (mode) => modes.push(mode));
 
     applyBroadcastAppearanceModePreference('dark');
     applyBroadcastAppearanceModePreference('invalid');
 
-    expect(getAppearanceModePreference()).toBe('dark');
+    expect(getPreference('appearanceMode')).toBe('dark');
     expect(localStorage.getItem('app-appearance-mode-preference')).toBe('dark');
     expect(modes).toEqual(['dark']);
     expect(appMocks.UpdateAppPreferences).not.toHaveBeenCalled();
     unsubscribe();
   });
 
-  it('hydrates, persists, and emits the error reporting preference', async () => {
+  it('hydrates, persists, and notifies the error reporting preference', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ errorReportingEnabled: false });
     await hydrateAppPreferences({ force: true });
-    expect(getErrorReportingEnabled()).toBe(false);
+    expect(getPreference('errorReportingEnabled')).toBe(false);
 
     const events: boolean[] = [];
-    const unsubscribe = eventBus.on('settings:error-reporting', (enabled) => events.push(enabled));
+    const unsubscribe = subscribePreference('errorReportingEnabled', (enabled) =>
+      events.push(enabled)
+    );
 
     await setErrorReportingEnabled(true);
 
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'errorReportingEnabled', value: true }],
     });
-    expect(getErrorReportingEnabled()).toBe(true);
+    expect(getPreference('errorReportingEnabled')).toBe(true);
     expect(events).toEqual([true]);
     unsubscribe();
   });
@@ -873,7 +858,7 @@ describe('appPreferences', () => {
     });
   });
 
-  it('rolls back optimistic runtime preference state and events when persistence fails', async () => {
+  it('rolls back optimistic runtime preference state and subscribers when persistence fails', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const events: boolean[] = [];
     appMocks.GetAppSettings.mockResolvedValue({
@@ -881,14 +866,16 @@ describe('appPreferences', () => {
       autoRefreshEnabled: true,
     });
     await hydrateAppPreferences({ force: true });
-    const unsubscribe = eventBus.on('settings:auto-refresh', (enabled) => events.push(enabled));
+    const unsubscribe = subscribePreference('autoRefreshEnabled', (enabled) =>
+      events.push(enabled)
+    );
     appMocks.UpdateAppPreferences.mockRejectedValueOnce(new Error('forced failure'));
 
     setAutoRefreshEnabled(false);
-    expect(getAutoRefreshEnabled()).toBe(false);
+    expect(getPreference('autoRefreshEnabled')).toBe(false);
     await flushPromises();
 
-    expect(getAutoRefreshEnabled()).toBe(true);
+    expect(getPreference('autoRefreshEnabled')).toBe(true);
     expect(events).toEqual([false, true]);
     unsubscribe();
     consoleError.mockRestore();
@@ -918,8 +905,8 @@ describe('appPreferences', () => {
     expect(getSidebarGroupExpanded('namespace', 'resources')).toBe(true);
     expect(getSidebarGroupExpanded('namespace', 'extensions')).toBe(true);
     const observed: boolean[] = [];
-    const unsubscribe = eventBus.on('settings:sidebar-expansion', () => {
-      observed.push(getSidebarGroupExpanded('namespace', 'extensions'));
+    const unsubscribe = subscribePreference('sidebarNamespaceExtensionsExpanded', (expanded) => {
+      observed.push(expanded);
     });
     try {
       setSidebarGroupExpanded('namespace', 'extensions', false);
@@ -963,13 +950,13 @@ describe('appPreferences', () => {
     const callsBeforeSettlement = appMocks.UpdateAppPreferences.mock.calls.length;
     first.reject(new Error('first save failed'));
     await failed;
-    const valueAfterFailure = getDimInactiveNamespaces();
+    const valueAfterFailure = getPreference('dimInactiveNamespaces');
     second.resolve({});
     await saved;
 
     expect(valueAfterFailure).toBe(false);
-    expect(getUseShortResourceNames()).toBe(false);
-    expect(getDimInactiveNamespaces()).toBe(false);
+    expect(getPreference('useShortResourceNames')).toBe(false);
+    expect(getPreference('dimInactiveNamespaces')).toBe(false);
     expect(callsBeforeSettlement).toBe(1);
     expect(
       appMocks.UpdateAppPreferences.mock.calls.map(([request]) => request.changes[0].key)
@@ -990,7 +977,7 @@ describe('appPreferences', () => {
     await failedFirst;
     second.reject(new Error('second save failed'));
     await failedSecond;
-    expect(getUseShortResourceNames()).toBe(false);
+    expect(getPreference('useShortResourceNames')).toBe(false);
   });
 
   it('preserves a later color edit and its startup mirror when a mode save fails', async () => {
@@ -1003,7 +990,7 @@ describe('appPreferences', () => {
     first.reject(new Error('mode save failed'));
     await failed;
     await flushPromises();
-    expect(getAppearanceModePreference()).toBe('system');
+    expect(getPreference('appearanceMode')).toBe('system');
     expect(getLinkColor('light')).toBe('#326ce5');
     expect(
       JSON.parse(
@@ -1025,7 +1012,7 @@ describe('appPreferences', () => {
     const refreshed = hydrateAppPreferences({ force: true });
     await flushPromises();
     const readsBeforeSave = appMocks.GetAppSettingsSchema.mock.calls.length;
-    const visibleBeforeSave = getUseShortResourceNames();
+    const visibleBeforeSave = getPreference('useShortResourceNames');
     appMocks.GetAppSettings.mockResolvedValue({ useShortResourceNames: true });
     write.resolve({});
     await saved;
@@ -1046,7 +1033,7 @@ describe('appPreferences', () => {
     stale.resolve({ useShortResourceNames: false });
     const result = await loading;
     expect(result.useShortResourceNames).toBe(true);
-    expect(getUseShortResourceNames()).toBe(true);
+    expect(getPreference('useShortResourceNames')).toBe(true);
     expect(appMocks.GetAppSettings).toHaveBeenCalledTimes(2);
   });
 
@@ -1062,7 +1049,7 @@ describe('appPreferences', () => {
     stale.resolve({ appearanceMode: 'light' });
     const results = await Promise.all([first, second]);
     expect(results.map((result) => result.appearanceMode)).toEqual(['dark', 'dark']);
-    expect(getAppearanceModePreference()).toBe('dark');
+    expect(getPreference('appearanceMode')).toBe('dark');
     expect(localStorage.getItem('app-appearance-mode-preference')).toBe('dark');
   });
 
@@ -1096,9 +1083,9 @@ describe('appPreferences', () => {
         return false;
       });
       await Promise.all([setAppearanceModePreference('dark'), setUseShortResourceNames(true)]);
-      expect(getAppearanceModePreference()).toBe('dark');
+      expect(getPreference('appearanceMode')).toBe('dark');
       expect(localStorage.getItem('app-appearance-mode-preference')).toBe('dark');
-      expect(getUseShortResourceNames()).toBe(true);
+      expect(getPreference('useShortResourceNames')).toBe(true);
       expect(appMocks.UpdateAppPreferences).toHaveBeenCalledTimes(2);
     }
   );
@@ -1117,13 +1104,13 @@ describe('appPreferences', () => {
     });
     await setUseShortResourceNames(true);
     expect((await refresh)?.useShortResourceNames).toBe(true);
-    expect(getUseShortResourceNames()).toBe(true);
+    expect(getPreference('useShortResourceNames')).toBe(true);
   });
 
   it('keeps startup appearance mirrors in sync when a preference subscriber makes another edit', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system', linkColorLight: '' });
     await hydrateAppPreferences({ force: true });
-    const unsubscribe = eventBus.on('settings:appearance-mode', () =>
+    const unsubscribe = subscribePreference('appearanceMode', () =>
       setLinkColor('light', '#326ce5')
     );
     try {
@@ -1155,7 +1142,7 @@ describe('appPreferences', () => {
 
     await expect(setAppearanceModePreference('dark')).rejects.toThrow('forced failure');
 
-    expect(getAppearanceModePreference()).toBe('system');
+    expect(getPreference('appearanceMode')).toBe('system');
     expect(localStorage.getItem('app-appearance-mode-preference')).toBe('system');
     expect(localStorage.getItem('app-appearance-bootstrap-v1')).toBe('previous-bootstrap');
     expect(desktopRuntimeMocks.emitBroadcastEvent).not.toHaveBeenCalled();
@@ -1171,8 +1158,15 @@ describe('appPreferences', () => {
     });
     await hydrateAppPreferences({ force: true });
     const bootstrap = localStorage.getItem('app-appearance-bootstrap-v1');
-    const observed: unknown[] = [];
-    const unsubscribe = eventBus.on('settings:palette-tint', (value) => observed.push(value));
+    const observed: string[] = [];
+    const unsubscribers = (
+      [
+        'paletteHueLight',
+        'paletteSaturationLight',
+        'paletteBrightnessLight',
+        'paletteHueDark',
+      ] as const
+    ).map((key) => subscribePreference(key, (value) => observed.push(`${key}=${value}`)));
     try {
       appMocks.UpdateAppPreferences.mockRejectedValueOnce(new Error('forced failure'));
       setPaletteTint('light', 120, 60, 15);
@@ -1182,12 +1176,18 @@ describe('appPreferences', () => {
       expect(getPaletteTint('dark')).toEqual({ hue: 210, saturation: 0, brightness: 0 });
       expect(localStorage.getItem('app-appearance-bootstrap-v1')).toBe(bootstrap);
       expect(observed).toEqual([
-        { mode: 'light', hue: 120, saturation: 60, brightness: 15 },
-        { mode: 'light', hue: 20, saturation: 30, brightness: -5 },
+        'paletteHueLight=120',
+        'paletteSaturationLight=60',
+        'paletteBrightnessLight=15',
+        'paletteHueLight=20',
+        'paletteSaturationLight=30',
+        'paletteBrightnessLight=-5',
       ]);
       expect(desktopRuntimeMocks.emitBroadcastEvent).not.toHaveBeenCalled();
     } finally {
-      unsubscribe();
+      unsubscribers.forEach((unsubscribe) => {
+        unsubscribe();
+      });
     }
   });
 
@@ -1348,15 +1348,17 @@ describe('appPreferences', () => {
       objPanelLogsBufferMaxSize: 2500,
     });
     await hydrateAppPreferences({ force: true });
-    expect(getObjPanelLogsBufferMaxSize()).toBe(2500);
+    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(2500);
   });
 
   it('defaults Kubernetes API settings when backend payload is missing the fields', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
-    expect(getKubernetesClientQPS()).toBe(KUBERNETES_CLIENT_QPS_DEFAULT);
-    expect(getKubernetesClientBurst()).toBe(KUBERNETES_CLIENT_BURST_DEFAULT);
-    expect(getPermissionSSRRFetchConcurrency()).toBe(PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT);
+    expect(getPreference('kubernetesClientQPS')).toBe(KUBERNETES_CLIENT_QPS_DEFAULT);
+    expect(getPreference('kubernetesClientBurst')).toBe(KUBERNETES_CLIENT_BURST_DEFAULT);
+    expect(getPreference('permissionSSRRFetchConcurrency')).toBe(
+      PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT
+    );
   });
 
   it('setKubernetesClientQPS round-trips an in-range value through the cache and backend', async () => {
@@ -1364,7 +1366,7 @@ describe('appPreferences', () => {
     await hydrateAppPreferences({ force: true });
 
     setKubernetesClientQPS(250);
-    expect(getKubernetesClientQPS()).toBe(250);
+    expect(getPreference('kubernetesClientQPS')).toBe(250);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'kubernetesClientQPS', value: 250 }],
@@ -1376,16 +1378,16 @@ describe('appPreferences', () => {
     await hydrateAppPreferences({ force: true });
 
     setKubernetesClientQPS(0);
-    expect(getKubernetesClientQPS()).toBe(KUBERNETES_CLIENT_QPS_DEFAULT);
+    expect(getPreference('kubernetesClientQPS')).toBe(KUBERNETES_CLIENT_QPS_DEFAULT);
 
     setKubernetesClientQPS(-1);
-    expect(getKubernetesClientQPS()).toBe(KUBERNETES_CLIENT_QPS_DEFAULT);
+    expect(getPreference('kubernetesClientQPS')).toBe(KUBERNETES_CLIENT_QPS_DEFAULT);
 
     setKubernetesClientQPS(999_999);
-    expect(getKubernetesClientQPS()).toBe(KUBERNETES_CLIENT_QPS_MAX);
+    expect(getPreference('kubernetesClientQPS')).toBe(KUBERNETES_CLIENT_QPS_MAX);
 
     setKubernetesClientQPS(KUBERNETES_CLIENT_QPS_MIN - 0.1);
-    expect(getKubernetesClientQPS()).toBe(KUBERNETES_CLIENT_QPS_MIN);
+    expect(getPreference('kubernetesClientQPS')).toBe(KUBERNETES_CLIENT_QPS_MIN);
   });
 
   it('setKubernetesClientBurst round-trips and clamps values', async () => {
@@ -1393,20 +1395,20 @@ describe('appPreferences', () => {
     await hydrateAppPreferences({ force: true });
 
     setKubernetesClientBurst(500);
-    expect(getKubernetesClientBurst()).toBe(500);
+    expect(getPreference('kubernetesClientBurst')).toBe(500);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'kubernetesClientBurst', value: 500 }],
     });
 
     setKubernetesClientBurst(0);
-    expect(getKubernetesClientBurst()).toBe(KUBERNETES_CLIENT_BURST_DEFAULT);
+    expect(getPreference('kubernetesClientBurst')).toBe(KUBERNETES_CLIENT_BURST_DEFAULT);
 
     setKubernetesClientBurst(999_999);
-    expect(getKubernetesClientBurst()).toBe(KUBERNETES_CLIENT_BURST_MAX);
+    expect(getPreference('kubernetesClientBurst')).toBe(KUBERNETES_CLIENT_BURST_MAX);
 
     setKubernetesClientBurst(KUBERNETES_CLIENT_BURST_MIN - 0.1);
-    expect(getKubernetesClientBurst()).toBe(KUBERNETES_CLIENT_BURST_MIN);
+    expect(getPreference('kubernetesClientBurst')).toBe(KUBERNETES_CLIENT_BURST_MIN);
   });
 
   it('setPermissionSSRRFetchConcurrency round-trips and clamps values', async () => {
@@ -1414,20 +1416,26 @@ describe('appPreferences', () => {
     await hydrateAppPreferences({ force: true });
 
     setPermissionSSRRFetchConcurrency(16);
-    expect(getPermissionSSRRFetchConcurrency()).toBe(16);
+    expect(getPreference('permissionSSRRFetchConcurrency')).toBe(16);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'permissionSSRRFetchConcurrency', value: 16 }],
     });
 
     setPermissionSSRRFetchConcurrency(0);
-    expect(getPermissionSSRRFetchConcurrency()).toBe(PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT);
+    expect(getPreference('permissionSSRRFetchConcurrency')).toBe(
+      PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT
+    );
 
     setPermissionSSRRFetchConcurrency(999_999);
-    expect(getPermissionSSRRFetchConcurrency()).toBe(PERMISSION_SSRR_FETCH_CONCURRENCY_MAX);
+    expect(getPreference('permissionSSRRFetchConcurrency')).toBe(
+      PERMISSION_SSRR_FETCH_CONCURRENCY_MAX
+    );
 
     setPermissionSSRRFetchConcurrency(PERMISSION_SSRR_FETCH_CONCURRENCY_MIN - 0.1);
-    expect(getPermissionSSRRFetchConcurrency()).toBe(PERMISSION_SSRR_FETCH_CONCURRENCY_MIN);
+    expect(getPreference('permissionSSRRFetchConcurrency')).toBe(
+      PERMISSION_SSRR_FETCH_CONCURRENCY_MIN
+    );
   });
 
   it('defaults Object Panel Logs Tab buffer size when the backend payload is missing the field', async () => {
@@ -1435,7 +1443,7 @@ describe('appPreferences', () => {
     await hydrateAppPreferences({ force: true });
     // A new install keeps 5,000 lines per Logs tab.
     expect(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE).toBe(5000);
-    expect(getObjPanelLogsBufferMaxSize()).toBe(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
+    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
   });
 
   it('defaults Object Panel Logs Tab buffer size when the backend payload reports zero (unset)', async () => {
@@ -1444,7 +1452,7 @@ describe('appPreferences', () => {
       objPanelLogsBufferMaxSize: 0,
     });
     await hydrateAppPreferences({ force: true });
-    expect(getObjPanelLogsBufferMaxSize()).toBe(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
+    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
   });
 
   it('setObjPanelLogsBufferMaxSize round-trips an in-range value through the cache and backend', async () => {
@@ -1455,7 +1463,7 @@ describe('appPreferences', () => {
     await hydrateAppPreferences({ force: true });
 
     setObjPanelLogsBufferMaxSize(3500);
-    expect(getObjPanelLogsBufferMaxSize()).toBe(3500);
+    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(3500);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'objPanelLogsBufferMaxSize', value: 3500 }],
@@ -1466,14 +1474,14 @@ describe('appPreferences', () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
     setObjPanelLogsBufferMaxSize(1);
-    expect(getObjPanelLogsBufferMaxSize()).toBe(OBJ_PANEL_LOGS_BUFFER_MIN_SIZE);
+    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(OBJ_PANEL_LOGS_BUFFER_MIN_SIZE);
   });
 
   it('setObjPanelLogsBufferMaxSize clamps values above the maximum', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
     setObjPanelLogsBufferMaxSize(999_999);
-    expect(getObjPanelLogsBufferMaxSize()).toBe(OBJ_PANEL_LOGS_BUFFER_MAX_SIZE);
+    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(OBJ_PANEL_LOGS_BUFFER_MAX_SIZE);
   });
 
   it('hydrates Object Panel Logs Tab target limits from backend settings', async () => {
@@ -1483,15 +1491,19 @@ describe('appPreferences', () => {
       objPanelLogsTargetGlobalLimit: 180,
     });
     await hydrateAppPreferences({ force: true });
-    expect(getObjPanelLogsTargetPerScopeLimit()).toBe(144);
-    expect(getObjPanelLogsTargetGlobalLimit()).toBe(180);
+    expect(getPreference('objPanelLogsTargetPerScopeLimit')).toBe(144);
+    expect(getPreference('objPanelLogsTargetGlobalLimit')).toBe(180);
   });
 
   it('defaults Object Panel Logs Tab target limits when the backend payload is missing the fields', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
-    expect(getObjPanelLogsTargetPerScopeLimit()).toBe(OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT);
-    expect(getObjPanelLogsTargetGlobalLimit()).toBe(OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT);
+    expect(getPreference('objPanelLogsTargetPerScopeLimit')).toBe(
+      OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT
+    );
+    expect(getPreference('objPanelLogsTargetGlobalLimit')).toBe(
+      OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT
+    );
   });
 
   it('setObjPanelLogsTargetPerScopeLimit round-trips an in-range value through the cache and backend', async () => {
@@ -1499,7 +1511,7 @@ describe('appPreferences', () => {
     await hydrateAppPreferences({ force: true });
 
     setObjPanelLogsTargetPerScopeLimit(144);
-    expect(getObjPanelLogsTargetPerScopeLimit()).toBe(144);
+    expect(getPreference('objPanelLogsTargetPerScopeLimit')).toBe(144);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'objPanelLogsTargetPerScopeLimit', value: 144 }],
@@ -1511,10 +1523,14 @@ describe('appPreferences', () => {
     await hydrateAppPreferences({ force: true });
 
     setObjPanelLogsTargetPerScopeLimit(0);
-    expect(getObjPanelLogsTargetPerScopeLimit()).toBe(OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT);
+    expect(getPreference('objPanelLogsTargetPerScopeLimit')).toBe(
+      OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT
+    );
 
     setObjPanelLogsTargetPerScopeLimit(999_999);
-    expect(getObjPanelLogsTargetPerScopeLimit()).toBe(OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX);
+    expect(getPreference('objPanelLogsTargetPerScopeLimit')).toBe(
+      OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX
+    );
   });
 
   it('setObjPanelLogsTargetGlobalLimit round-trips an in-range value through the cache and backend', async () => {
@@ -1522,7 +1538,7 @@ describe('appPreferences', () => {
     await hydrateAppPreferences({ force: true });
 
     setObjPanelLogsTargetGlobalLimit(180);
-    expect(getObjPanelLogsTargetGlobalLimit()).toBe(180);
+    expect(getPreference('objPanelLogsTargetGlobalLimit')).toBe(180);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
       changes: [{ key: 'objPanelLogsTargetGlobalLimit', value: 180 }],
@@ -1534,9 +1550,91 @@ describe('appPreferences', () => {
     await hydrateAppPreferences({ force: true });
 
     setObjPanelLogsTargetGlobalLimit(0);
-    expect(getObjPanelLogsTargetGlobalLimit()).toBe(OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT);
+    expect(getPreference('objPanelLogsTargetGlobalLimit')).toBe(
+      OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT
+    );
 
     setObjPanelLogsTargetGlobalLimit(999_999);
-    expect(getObjPanelLogsTargetGlobalLimit()).toBe(OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX);
+    expect(getPreference('objPanelLogsTargetGlobalLimit')).toBe(OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX);
+  });
+
+  describe('preference subscriptions', () => {
+    const record = <K extends AppPreferenceKey>(key: K) => {
+      const values: AppPreferences[K][] = [];
+      const unsubscribe = subscribePreference(key, (value) => values.push(value));
+      return { values, unsubscribe };
+    };
+
+    it('notifies only the subscribers of the preference that changed', async () => {
+      const shortNames = record('useShortResourceNames');
+      const dim = record('dimInactiveNamespaces');
+
+      await setUseShortResourceNames(true);
+      await setUseShortResourceNames(true);
+
+      expect(getPreference('useShortResourceNames')).toBe(true);
+      expect(shortNames.values).toEqual([true]);
+      expect(dim.values).toEqual([]);
+      shortNames.unsubscribe();
+      dim.unsubscribe();
+    });
+
+    it('notifies a palette, accent, or link key only when that mode value changes', async () => {
+      const lightHue = record('paletteHueLight');
+      const lightSaturation = record('paletteSaturationLight');
+      const darkHue = record('paletteHueDark');
+      const darkAccent = record('accentColorDark');
+      const lightLink = record('linkColorLight');
+
+      setPaletteTint('light', 0, 30, 0);
+      setPaletteTint('light', 0, 30, 0);
+      setAccentColor('dark', '#112233');
+      await flushPromises();
+
+      expect(lightSaturation.values).toEqual([30]);
+      expect(lightHue.values).toEqual([]);
+      expect(darkHue.values).toEqual([]);
+      expect(darkAccent.values).toEqual(['#112233']);
+      expect(lightLink.values).toEqual([]);
+      for (const subscription of [lightHue, lightSaturation, darkHue, darkAccent, lightLink]) {
+        subscription.unsubscribe();
+      }
+    });
+
+    it('keeps notifying and saving when one subscriber throws', async () => {
+      const failure = new Error('subscriber failed');
+      const unsubscribeFailing = subscribePreference('autoRefreshEnabled', () => {
+        throw failure;
+      });
+      const healthy = record('autoRefreshEnabled');
+
+      setAutoRefreshEnabled(false);
+      await flushPromises();
+
+      expect(healthy.values).toEqual([false]);
+      expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
+        changes: [{ key: 'autoRefreshEnabled', value: false }],
+      });
+      expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledWith(
+        failure,
+        expect.objectContaining({ surface: 'operational' })
+      );
+      unsubscribeFailing();
+      healthy.unsubscribe();
+    });
+
+    it('ends each subscription independently, even for the same listener', async () => {
+      const values: boolean[] = [];
+      const listener = (value: boolean) => values.push(value);
+      const unsubscribeFirst = subscribePreference('exclusiveNamespaces', listener);
+      const unsubscribeSecond = subscribePreference('exclusiveNamespaces', listener);
+
+      unsubscribeFirst();
+      await setExclusiveNamespaces(false);
+      unsubscribeSecond();
+      await setExclusiveNamespaces(true);
+
+      expect(values).toEqual([false]);
+    });
   });
 });

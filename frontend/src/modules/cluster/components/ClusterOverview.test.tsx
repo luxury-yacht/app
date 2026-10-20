@@ -15,9 +15,9 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { act, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { ClusterOverviewPayload, ClusterOverviewSnapshotPayload } from '@/core/refresh/types';
+import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
 import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
 import ClusterOverview from './ClusterOverview';
@@ -87,7 +87,6 @@ const {
 let mockLifecycleState = 'ready';
 let mockNamespaceReady = true;
 let mockHealth: 'healthy' | 'degraded' | 'unknown' = 'healthy';
-let mockAutoRefreshEnabled = true;
 let mockAuthState = {
   hasError: false,
   reason: '',
@@ -253,10 +252,6 @@ vi.mock('@/core/contexts/AuthErrorContext', () => ({
   useActiveClusterAuthState: () => mockAuthState,
 }));
 
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => mockAutoRefreshEnabled,
-}));
-
 describe('ClusterOverview', () => {
   let cleanupRoot: (() => void) | null = null;
 
@@ -275,7 +270,7 @@ describe('ClusterOverview', () => {
     mockLifecycleState = 'ready';
     mockNamespaceReady = true;
     mockHealth = 'healthy';
-    mockAutoRefreshEnabled = true;
+    setAppPreferencesForTesting({ autoRefreshEnabled: true });
     mockAuthState = {
       hasError: false,
       reason: '',
@@ -476,7 +471,7 @@ describe('ClusterOverview', () => {
   });
 
   it('shows auto-refresh paused when background refresh is disabled', async () => {
-    mockAutoRefreshEnabled = false;
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
 
     const { container, cleanup } = renderClusterOverview();
     cleanupRoot = cleanup;
@@ -560,7 +555,7 @@ describe('ClusterOverview', () => {
   });
 
   it('stays empty and paused on a new cluster tab even if overview data exists for another cluster', async () => {
-    mockAutoRefreshEnabled = false;
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
     kubeconfigStateRef.current = {
       ...kubeconfigStateRef.current,
       selectedKubeconfigs: ['cluster-1', 'cluster-2'],
@@ -601,8 +596,7 @@ describe('ClusterOverview', () => {
     expect(container.textContent).toContain('Ready');
 
     await act(async () => {
-      mockAutoRefreshEnabled = false;
-      eventBus.emit('settings:auto-refresh', false);
+      setAppPreferencesForTesting({ autoRefreshEnabled: false });
     });
 
     expect(container.textContent).toContain('Auto-refresh paused');

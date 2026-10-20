@@ -11,6 +11,7 @@ import { act, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanonicalRowTestOverrides, ObjectEventSummary } from '@/core/refresh/types';
+import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -70,20 +71,12 @@ const autoRefreshLoadingState = vi.hoisted(() => ({
   suppressPassiveLoading: false,
 }));
 
-const appPreferencesMocks = vi.hoisted(() => ({
-  getAutoRefreshEnabled: vi.fn(() => true),
-}));
-
 vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: () => hoistedSnapshot,
 }));
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
   useAutoRefreshLoadingState: () => autoRefreshLoadingState,
-}));
-
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => appPreferencesMocks.getAutoRefreshEnabled(),
 }));
 
 const mockFetchScopedDomain = vi.fn(() => Promise.resolve());
@@ -202,7 +195,7 @@ describe('EventsTab', () => {
     autoRefreshLoadingState.isPaused = false;
     autoRefreshLoadingState.isManualRefreshActive = false;
     autoRefreshLoadingState.suppressPassiveLoading = false;
-    appPreferencesMocks.getAutoRefreshEnabled.mockReturnValue(true);
+    setAppPreferencesForTesting({ autoRefreshEnabled: true });
     gridTableState.lastProps = null;
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -549,7 +542,7 @@ describe('EventsTab', () => {
   it('shows the paused message instead of a loading placeholder before first load', async () => {
     autoRefreshLoadingState.isPaused = true;
     autoRefreshLoadingState.suppressPassiveLoading = true;
-    appPreferencesMocks.getAutoRefreshEnabled.mockReturnValue(false);
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
     hoistedSnapshot.data = null;
     hoistedSnapshot.status = 'loading';
 

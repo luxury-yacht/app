@@ -48,10 +48,6 @@ vi.mock('@/core/refresh/store', () => ({
   getScopedDomainState: refreshStoreMocks.getScopedDomainState,
 }));
 
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => true,
-}));
-
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => objectPanelMocks,
 }));

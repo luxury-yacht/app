@@ -5,7 +5,7 @@
  * Provides shared helper functions for the frontend.
  */
 
-import { getUseShortResourceNames } from '@/core/settings/appPreferences';
+import { getPreference } from '@/core/settings/appPreferences';
 
 // Map of Kubernetes resource types to their short names (Kind -> alias)
 const kindAliasMap: Record<string, string> = {
@@ -76,14 +76,14 @@ const displayNameOverrides: Record<string, string> = {
 
 // Get type alias based on user preference
 export function getTypeAlias(kind: string): string | undefined {
-  const useShortNames = getUseShortResourceNames();
+  const useShortNames = getPreference('useShortResourceNames');
   return useShortNames ? kindAliasMap[kind] : undefined;
 }
 
 // Get display type (short or full) based on user preference
 export function getDisplayKind(kind: string, useShortNames?: boolean): string {
   // If not provided, read from the preference cache.
-  const shouldUseShort = useShortNames ?? getUseShortResourceNames();
+  const shouldUseShort = useShortNames ?? getPreference('useShortResourceNames');
 
   if (shouldUseShort) {
     return kindAliasMap[kind] || kind;

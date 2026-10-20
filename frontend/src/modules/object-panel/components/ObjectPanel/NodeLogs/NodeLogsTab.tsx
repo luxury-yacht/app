@@ -39,8 +39,7 @@ import './NodeLogsTab.css';
 import { useLogDownloadMenu } from '@shared/hooks/useLogDownloadMenu';
 import { useLogScrollRestoration } from '@shared/hooks/useLogScrollRestoration';
 import { errorHandler } from '@utils/errorHandler';
-import { eventBus } from '@/core/events';
-import { getObjPanelLogsBufferMaxSize } from '@/core/settings/appPreferences';
+import { getPreference, subscribePreference } from '@/core/settings/appPreferences';
 import { useLogKeyboardShortcuts } from '../Logs/hooks/useLogKeyboardShortcuts';
 import { useLogMessageRenderer } from '../Logs/hooks/useLogMessageRenderer';
 import {
@@ -322,7 +321,7 @@ const useNodeLogRequest = ({
   // Shrinking the buffer setting trims at once; growing applies as lines arrive.
   useEffect(
     () =>
-      eventBus.on('settings:obj-panel-logs-buffer-size', (maxLines) => {
+      subscribePreference('objPanelLogsBufferMaxSize', (maxLines) => {
         const kept = keepRecentNodeLogLines(contentRef.current, maxLines);
         if (kept.dropped) {
           setContent(kept.content);
@@ -362,7 +361,7 @@ const useNodeLogRequest = ({
         const resolution = resolveNodeLogBatch(
           batch,
           { content: contentRef.current, truncated: truncatedRef.current },
-          getObjPanelLogsBufferMaxSize()
+          getPreference('objPanelLogsBufferMaxSize')
         );
         if (!resolution) {
           return;

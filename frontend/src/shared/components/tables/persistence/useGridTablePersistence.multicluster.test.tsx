@@ -10,9 +10,11 @@ import type React from 'react';
 import { act, useEffect } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import {
+  resetAppPreferencesCacheForTesting,
+  setGridTablePersistenceMode,
+} from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
-import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
 import { useGridTablePersistence } from './useGridTablePersistence';
 
 const stateMap: Record<string, unknown> = {};

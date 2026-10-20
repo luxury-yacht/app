@@ -11,8 +11,9 @@ import type { types } from '@core/backend-api/models';
 import { type JSONSocket, JSONStream } from '@wailsio/runtime';
 import { eventBus } from '@/core/events';
 import {
-  getObjPanelLogsBufferMaxSize,
+  getPreference,
   OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
+  subscribePreference,
 } from '@/core/settings/appPreferences';
 import type { SnapshotStats } from '../client';
 import { localFailure, type RefreshFailure } from '../refreshFailure';
@@ -594,8 +595,8 @@ export class ContainerLogsStreamManager {
     });
     eventBus.on('app:visibility-hidden', this.visibility.suspend);
     eventBus.on('app:visibility-visible', this.visibility.resume);
-    this.maxEntries = limits.maxEntries ?? getObjPanelLogsBufferMaxSize();
-    eventBus.on('settings:obj-panel-logs-buffer-size', (size) => this.setMaxEntries(size));
+    this.maxEntries = limits.maxEntries ?? getPreference('objPanelLogsBufferMaxSize');
+    subscribePreference('objPanelLogsBufferMaxSize', (size) => this.setMaxEntries(size));
   }
 
   /** Shrinking the buffer trims existing buffers at once; growing applies as entries arrive. */

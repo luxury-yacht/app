@@ -48,7 +48,7 @@ import {
 } from '@shared/utils/objectIdentity';
 import type React from 'react';
 import { useCallback, useEffect, useMemo } from 'react';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import type { BrowseScope, BrowseViewProps } from './BrowseView.types';
 import CatalogPaginationFooter, {
   catalogPaginationPageKeyProps,
@@ -121,7 +121,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   loadingMessage,
 }) => {
   const { selectedClusterId } = useKubeconfig();
-  const useShortResourceNames = useShortNames();
+  const useShortResourceNames = usePreference('useShortResourceNames');
   const { openWithObject } = useObjectPanel();
   const namespaceContext = useNamespace();
   const viewState = useViewState();

@@ -24,7 +24,9 @@ data-access request wrapper create reporting context and breadcrumbs.
   result; only `loaded` provenance may enable the reporter. It is absent from
   `DesktopService` and generated bindings.
 - `sentry.ts` initializes `@sentry/react` after the preference loads; React 19
-  root handlers capture frontend failures. `frontend/src/main.ts` must import
+  root handlers capture frontend failures. `main.ts` hands it the
+  `errorReportingEnabled` subscription for live changes, because the preference
+  store reports its own errors through `sentry.ts` and cannot be imported by it. `frontend/src/main.ts` must import
   `App` dynamically after initialization, or a module-level failure reaches an
   uninstrumented page (`src/main.test.ts` pins this).
 - Preference-hydration failures are buffered in memory until the choice is

@@ -32,7 +32,7 @@ import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation'
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { errorHandler } from '@/utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -63,7 +63,7 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
-  const useShortResourceNames = useShortNames();
+  const useShortResourceNames = usePreference('useShortResourceNames');
 
   const handleResourceClick = useCallback(
     (resource: CustomResourceGridRow) => {

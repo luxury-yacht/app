@@ -6,7 +6,8 @@
  * from the canonical object reference.
  */
 
-import { getDefaultObjectPanelPosition } from '@core/settings/appPreferences';
+import { getPreference } from '@core/settings/appPreferences';
+import { usePreference } from '@core/settings/usePreference';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import {
   useObjectPanelActiveTab,
@@ -22,7 +23,6 @@ import { DockablePanel, useDockablePanelContext } from '@ui/dockable';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { queryNamespacePermissions } from '@/core/capabilities';
 import { PanelLifecycleClusterSurface } from '@/core/panel-windows/panelLifecycleGuards';
-import { useAutoRefreshEnabled } from '@/core/refresh/hooks/useRefreshPreferences';
 import './ObjectPanel.css';
 import { RESOURCE_CAPABILITIES } from '@modules/object-panel/components/ObjectPanel/constants';
 import { useObjectPanelCapabilities } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities';
@@ -89,7 +89,7 @@ function ObjectPanel({
   const { closePanel, setObjectPanelActiveTab } = useObjectPanelState();
   const { tabGroups, getPreferredOpenGroupKey } = useDockablePanelContext();
   const openTarget = resolveObjectPanelOpenTarget(
-    defaultPosition ?? getDefaultObjectPanelPosition(),
+    defaultPosition ?? getPreference('defaultObjectPanelPosition'),
     defaultGroupKey,
     getPreferredOpenGroupKey
   );
@@ -122,7 +122,7 @@ function ObjectPanel({
 
   // Metrics are collected for the panel's whole life, whatever tab it shows and even behind
   // another panel of its dock group, so the Metrics tab opens on a chart that is already running.
-  const autoRefreshEnabled = useAutoRefreshEnabled();
+  const autoRefreshEnabled = usePreference('autoRefreshEnabled');
   usePanelMetricsCollector(panelId, objectRef, autoRefreshEnabled);
 
   const {

@@ -23,7 +23,7 @@ import {
 } from '@shared/utils/objectIdentity';
 import React, { useCallback, useMemo } from 'react';
 import type { NamespaceHelmSnapshotPayload, NamespaceHelmSummary } from '@/core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
@@ -62,7 +62,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId, selectedClusterName } = useKubeconfig();
     const queryClusterId = selectedClusterId;
-    const useShortResourceNames = useShortNames();
+    const useShortResourceNames = usePreference('useShortResourceNames');
     const namespaceColumnLink = useNamespaceColumnLink<HelmData>('helm');
     const helmReference = useCallback(
       (resource: HelmData) =>

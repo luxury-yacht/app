@@ -8,19 +8,17 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
+import {
+  type AppPreferenceKey,
+  type AppPreferences,
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 import { controlName } from '@/test-utils/controlName';
 import { requireValue } from '@/test-utils/requireValue';
 import LogsSection from './LogsSection';
 
 const prefs = vi.hoisted(() => ({
-  values: {
-    bufferSize: 1000,
-    perScopeLimit: 20,
-    globalLimit: 100,
-    useLocalTimeZone: false,
-    timestampFormat: 'YYYY-MM-DDTHH:mm:ss.SSS[Z]',
-  },
   setBufferSize: vi.fn(),
   setPerScopeLimit: vi.fn(),
   setGlobalLimit: vi.fn(),
@@ -28,10 +26,18 @@ const prefs = vi.hoisted(() => ({
   setTimestampFormat: vi.fn(),
 }));
 
-// The owner updates its value and announces it, as the optimistic setters do.
-vi.mock('@/core/settings/appPreferences', async () => {
-  const { eventBus: bus } = await import('@/core/events');
+// The real preference store; the setters update it as the optimistic setters do,
+// without a backend.
+vi.mock('@/core/settings/appPreferences', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/core/settings/appPreferences')>();
+  const owner =
+    <K extends AppPreferenceKey>(key: K, record: (value: AppPreferences[K]) => void) =>
+    (value: AppPreferences[K]) => {
+      record(value);
+      actual.setAppPreferencesForTesting({ [key]: value });
+    };
   return {
+    ...actual,
     commitIntegerPreferenceInput: (_key: string, raw: string, persist: (value: number) => void) => {
       const value = Number(raw);
       persist(value);
@@ -39,36 +45,20 @@ vi.mock('@/core/settings/appPreferences', async () => {
     },
     getIntegerPreferenceMetadata: () => ({ min: 1, max: 10000 }),
     hydrateAppPreferences: vi.fn().mockResolvedValue({}),
-    getObjPanelLogsBufferMaxSize: () => prefs.values.bufferSize,
-    getObjPanelLogsTargetPerScopeLimit: () => prefs.values.perScopeLimit,
-    getObjPanelLogsTargetGlobalLimit: () => prefs.values.globalLimit,
-    getObjPanelLogsApiTimestampUseLocalTimeZone: () => prefs.values.useLocalTimeZone,
-    getObjPanelLogsApiTimestampFormat: () => prefs.values.timestampFormat,
-    setObjPanelLogsBufferMaxSize: (value: number) => {
-      prefs.setBufferSize(value);
-      prefs.values.bufferSize = value;
-      bus.emit('settings:obj-panel-logs-buffer-size', value);
-    },
-    setObjPanelLogsTargetPerScopeLimit: (value: number) => {
-      prefs.setPerScopeLimit(value);
-      prefs.values.perScopeLimit = value;
-      bus.emit('settings:obj-panel-logs-target-per-scope-limit', value);
-    },
-    setObjPanelLogsTargetGlobalLimit: (value: number) => {
-      prefs.setGlobalLimit(value);
-      prefs.values.globalLimit = value;
-      bus.emit('settings:obj-panel-logs-target-global-limit', value);
-    },
-    setObjPanelLogsApiTimestampUseLocalTimeZone: (value: boolean) => {
-      prefs.setUseLocalTimeZone(value);
-      prefs.values.useLocalTimeZone = value;
-      bus.emit('settings:obj-panel-logs-api-timestamp-use-local-time-zone', value);
-    },
-    setObjPanelLogsApiTimestampFormat: (value: string) => {
-      prefs.setTimestampFormat(value);
-      prefs.values.timestampFormat = value;
-      bus.emit('settings:obj-panel-logs-api-timestamp-format', value);
-    },
+    setObjPanelLogsBufferMaxSize: owner('objPanelLogsBufferMaxSize', prefs.setBufferSize),
+    setObjPanelLogsTargetPerScopeLimit: owner(
+      'objPanelLogsTargetPerScopeLimit',
+      prefs.setPerScopeLimit
+    ),
+    setObjPanelLogsTargetGlobalLimit: owner('objPanelLogsTargetGlobalLimit', prefs.setGlobalLimit),
+    setObjPanelLogsApiTimestampUseLocalTimeZone: owner(
+      'objPanelLogsApiTimestampUseLocalTimeZone',
+      prefs.setUseLocalTimeZone
+    ),
+    setObjPanelLogsApiTimestampFormat: owner(
+      'objPanelLogsApiTimestampFormat',
+      prefs.setTimestampFormat
+    ),
   };
 });
 
@@ -79,13 +69,14 @@ describe('LogsSection', () => {
   let root: ReactDOM.Root;
 
   beforeEach(async () => {
-    prefs.values = {
-      bufferSize: 1000,
-      perScopeLimit: 20,
-      globalLimit: 100,
-      useLocalTimeZone: false,
-      timestampFormat: 'YYYY-MM-DDTHH:mm:ss.SSS[Z]',
-    };
+    resetAppPreferencesCacheForTesting();
+    setAppPreferencesForTesting({
+      objPanelLogsBufferMaxSize: 1000,
+      objPanelLogsTargetPerScopeLimit: 20,
+      objPanelLogsTargetGlobalLimit: 100,
+      objPanelLogsApiTimestampUseLocalTimeZone: false,
+      objPanelLogsApiTimestampFormat: 'YYYY-MM-DDTHH:mm:ss.SSS[Z]',
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -150,8 +141,7 @@ describe('LogsSection', () => {
     await leave(inputFor('Buffer size'));
 
     await act(async () => {
-      prefs.values.bufferSize = 1000;
-      eventBus.emit('settings:obj-panel-logs-buffer-size', 1000);
+      setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 1000 });
     });
 
     expect(inputFor('Buffer size').value).toBe('1000');

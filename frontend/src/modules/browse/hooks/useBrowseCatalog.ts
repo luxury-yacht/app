@@ -36,7 +36,7 @@ import { useQueryStreamSignal } from '@/core/refresh/hooks/useQueryStreamSignal'
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { type RefreshFailure, refreshFailureOf } from '@/core/refresh/refreshFailure';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
-import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
+import { usePreference } from '@/core/settings/usePreference';
 import {
   acceptsCatalogSnapshotScope,
   applyCatalogBaseline,
@@ -284,7 +284,7 @@ export function useBrowseCatalog({
   // Controlled page size: normalize the owner-provided value; no local mirror.
   // Views without a persisted page size fall back to the app-wide Default Page
   // Size preference (Settings ▸ Display ▸ Tables).
-  const defaultTablePageSize = useDefaultTablePageSize();
+  const defaultTablePageSize = usePreference('defaultTablePageSize');
   const pageLimit = useMemo(
     () => normalizeInitialPageLimit(pageLimitProp ?? defaultTablePageSize, defaultTablePageSize),
     [defaultTablePageSize, pageLimitProp]

@@ -18,6 +18,10 @@ vi.mock('@utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
 
 import { errorStatusOf } from '@utils/errorStatus';
 import { eventBus } from '@/core/events';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { getScopedDomainState, resetScopedDomainState } from '../store';
 import type { ContainerLogsStreamEventPayload, ContainerLogsWireEntry } from '../types';
@@ -105,6 +109,7 @@ beforeEach(() => {
   ).__wailsJSONStreamFactory = () => new FakeStream();
   resetContainerLogsStreamScopeParamsCacheForTesting();
   resetScopedDomainState('container-logs', SCOPE);
+  resetAppPreferencesCacheForTesting();
 });
 
 afterEach(() => {
@@ -422,12 +427,12 @@ describe('ContainerLogsStreamManager', () => {
     const manager = new ContainerLogsStreamManager();
     await startLive(manager, resumeBuffer);
 
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 50);
+    setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 50 });
     manager.startStream(SCOPE);
     await flushOpen();
     expect(sentResume()).toBeDefined();
 
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 9000);
+    setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 9000 });
     manager.startStream(SCOPE);
     await flushOpen();
     expect(sentResume()).toBeUndefined();
@@ -442,14 +447,14 @@ describe('ContainerLogsStreamManager', () => {
     manager.startStream(SCOPE);
     await flushOpen();
 
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 100);
+    setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 100 });
     FakeStream.latest().receive({
       reset: true,
       resumed: true,
       snapshotComplete: true,
       entries: [],
     });
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 5000);
+    setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 5000 });
     manager.startStream(SCOPE);
     await flushOpen();
 
@@ -629,7 +634,7 @@ describe('ContainerLogsStreamManager', () => {
       )
     );
 
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 100);
+    setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 100 });
 
     expect(state().data?.entries).toHaveLength(100);
     expect(state().data?.truncation).toEqual({ shown: 100, received: 150 });

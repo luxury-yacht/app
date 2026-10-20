@@ -7,6 +7,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { localFailure } from '@/core/refresh/refreshFailure';
+import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
 import { useObjectPanelRefresh } from './useObjectPanelRefresh';
 
@@ -35,10 +36,6 @@ vi.mock('@/core/refresh/store', () => ({
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
   useAutoRefreshLoadingState: () => hoistedMocks.autoRefreshLoadingState,
-}));
-
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => !hoistedMocks.autoRefreshLoadingState.isPaused,
 }));
 
 const mockRefreshOrchestrator = hoistedMocks.refreshOrchestrator;
@@ -97,6 +94,7 @@ describe('useObjectPanelRefresh', () => {
     mockRefreshOrchestrator.fetchScopedDomain.mockResolvedValue(undefined);
     mockUseRefreshScopedDomain.mockReset();
     autoRefreshLoadingState.isPaused = false;
+    setAppPreferencesForTesting({ autoRefreshEnabled: true });
     autoRefreshLoadingState.isManualRefreshActive = false;
     autoRefreshLoadingState.suppressPassiveLoading = false;
     mockUseRefreshScopedDomain.mockReturnValue({
@@ -205,6 +203,7 @@ describe('useObjectPanelRefresh', () => {
 
   it('suppresses passive detail loading while auto-refresh is paused', async () => {
     autoRefreshLoadingState.isPaused = true;
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
     autoRefreshLoadingState.suppressPassiveLoading = true;
     mockUseRefreshScopedDomain.mockReturnValue({
       data: null,

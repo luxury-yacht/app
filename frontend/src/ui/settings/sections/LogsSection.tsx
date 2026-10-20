@@ -11,15 +11,9 @@ import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import ToggleSwitch from '@shared/components/ToggleSwitch';
 import { errorHandler } from '@utils/errorHandler';
 import { useEffect, useId, useState } from 'react';
-import type { AppEvents } from '@/core/events';
 import {
   type AppPreferenceKey,
   commitIntegerPreferenceInput,
-  getObjPanelLogsApiTimestampFormat,
-  getObjPanelLogsApiTimestampUseLocalTimeZone,
-  getObjPanelLogsBufferMaxSize,
-  getObjPanelLogsTargetGlobalLimit,
-  getObjPanelLogsTargetPerScopeLimit,
   hydrateAppPreferences,
   setObjPanelLogsApiTimestampFormat,
   setObjPanelLogsApiTimestampUseLocalTimeZone,
@@ -27,11 +21,12 @@ import {
   setObjPanelLogsTargetGlobalLimit,
   setObjPanelLogsTargetPerScopeLimit,
 } from '@/core/settings/appPreferences';
+import { usePreference } from '@/core/settings/usePreference';
 import {
   formatObjPanelLogsApiTimestamp,
   getObjPanelLogsApiTimestampFormatValidationError,
 } from '@/utils/objPanelLogsApiTimestampFormat';
-import { PreferenceNumberInput, SettingRow, usePreferenceValue } from './SettingsControls';
+import { PreferenceNumberInput, SettingRow } from './SettingsControls';
 
 const TIMESTAMP_EXAMPLE = '2026-04-11T12:34:55.000Z';
 const TIMESTAMP_FORMAT_REFERENCE =
@@ -41,8 +36,6 @@ type NumberSetting = {
   title: string;
   help: string;
   prefKey: AppPreferenceKey;
-  event: keyof AppEvents;
-  read: () => number;
   persist: (value: number) => void;
   step: number;
   unit: string;
@@ -53,8 +46,6 @@ const CONSTRAINTS: NumberSetting[] = [
     title: 'Buffer size',
     help: 'Max number of log rows kept by each Logs tab. Larger values use more memory but give deeper scrollback.',
     prefKey: 'objPanelLogsBufferMaxSize',
-    event: 'settings:obj-panel-logs-buffer-size',
-    read: getObjPanelLogsBufferMaxSize,
     persist: setObjPanelLogsBufferMaxSize,
     step: 100,
     unit: 'logs',
@@ -63,8 +54,6 @@ const CONSTRAINTS: NumberSetting[] = [
     title: 'Max containers per tab',
     help: 'Limits how many pod/container targets a single Logs tab can stream or fetch at once.',
     prefKey: 'objPanelLogsTargetPerScopeLimit',
-    event: 'settings:obj-panel-logs-target-per-scope-limit',
-    read: getObjPanelLogsTargetPerScopeLimit,
     persist: setObjPanelLogsTargetPerScopeLimit,
     step: 1,
     unit: 'containers',
@@ -73,8 +62,6 @@ const CONSTRAINTS: NumberSetting[] = [
     title: 'Max containers across all tabs',
     help: 'Limits how many pod/container targets can be shared across all open Logs tabs.',
     prefKey: 'objPanelLogsTargetGlobalLimit',
-    event: 'settings:obj-panel-logs-target-global-limit',
-    read: getObjPanelLogsTargetGlobalLimit,
     persist: setObjPanelLogsTargetGlobalLimit,
     step: 1,
     unit: 'containers',
@@ -85,7 +72,7 @@ const CONSTRAINTS: NumberSetting[] = [
 // so a value the owner settles on (including a rollback) shows as soon as the
 // field is left.
 function NumberSettingRow({ setting, id }: Readonly<{ setting: NumberSetting; id: string }>) {
-  const value = usePreferenceValue(setting.read, setting.event);
+  const value = usePreference(setting.prefKey);
   const [draft, setDraft] = useState<string | null>(null);
   return (
     <SettingRow title={setting.title} help={setting.help} controlId={id}>
@@ -113,10 +100,7 @@ function TimestampFormatRow({
   id,
   useLocalTimeZone,
 }: Readonly<{ id: string; useLocalTimeZone: boolean }>) {
-  const format = usePreferenceValue(
-    getObjPanelLogsApiTimestampFormat,
-    'settings:obj-panel-logs-api-timestamp-format'
-  );
+  const format = usePreference('objPanelLogsApiTimestampFormat');
   const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const shown = draft ?? format;
@@ -187,10 +171,7 @@ function TimestampFormatRow({
 
 function LogsSection() {
   const elementIdPrefix = useId();
-  const useLocalTimeZone = usePreferenceValue(
-    getObjPanelLogsApiTimestampUseLocalTimeZone,
-    'settings:obj-panel-logs-api-timestamp-use-local-time-zone'
-  );
+  const useLocalTimeZone = usePreference('objPanelLogsApiTimestampUseLocalTimeZone');
 
   useEffect(() => {
     void hydrateAppPreferences({ force: true }).catch((error) => {

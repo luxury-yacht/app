@@ -3,13 +3,12 @@
  *
  * Shared building blocks for the settings sections: the label/control row
  * wrapper every preference renders, the integer preference input (with the
- * Enter-to-blur commit convention), and preference subscriptions/commands.
+ * Enter-to-blur commit convention), and preference commands.
  */
 
 import { errorHandler } from '@utils/errorHandler';
 import type { ComponentType, ReactNode } from 'react';
-import { useCallback, useSyncExternalStore } from 'react';
-import { type AppEvents, eventBus } from '@/core/events';
+import { useCallback } from 'react';
 import {
   type AppPreferenceKey,
   getIntegerPreferenceMetadata,
@@ -125,12 +124,6 @@ export function PreferenceNumberInput({
       }}
     />
   );
-}
-
-/** Read the preference owner directly, including optimistic updates and rollback. */
-export function usePreferenceValue<T>(read: () => T, event: keyof AppEvents): T {
-  const subscribe = useCallback((notify: () => void) => eventBus.on(event, notify), [event]);
-  return useSyncExternalStore(subscribe, read);
 }
 
 export function usePreferenceToggle({

@@ -18,7 +18,7 @@ import {
   RESOURCE_EXPORT_UNITS,
 } from '@shared/utils/resourceCalculations';
 import type React from 'react';
-import { getUseShortResourceNames } from '@/core/settings/appPreferences';
+import { getPreference } from '@/core/settings/appPreferences';
 import { parseCompactAgeToSeconds } from '@/utils/ageFormatter';
 
 /**
@@ -435,7 +435,7 @@ export const createKindColumn = <T,>(
     }
     const baseKind = getKind(item);
     const alias = getAlias?.(item);
-    const useShortNames = getUseShortResourceNames();
+    const useShortNames = getPreference('useShortResourceNames');
     return useShortNames && alias ? alias : baseKind;
   };
 

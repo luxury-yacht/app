@@ -120,11 +120,6 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   useNamespace: () => ({ setSelectedNamespace: vi.fn() }),
 }));
 
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => true,
-  getDefaultTablePageSize: () => 50,
-}));
-
 vi.mock('@core/contexts/ViewStateContext', () => ({
   useViewState: () => ({ onNamespaceSelect: vi.fn(), setActiveNamespaceTab: vi.fn() }),
 }));
@@ -162,10 +157,6 @@ vi.mock('@/core/capabilities', () => ({
     permissions.get = () => ({ allowed: true, pending: false });
     return permissions;
   },
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
 }));
 
 const refreshMocks = vi.hoisted(() => ({

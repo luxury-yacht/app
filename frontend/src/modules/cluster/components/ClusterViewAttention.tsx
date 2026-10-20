@@ -30,7 +30,7 @@ import {
   restoreClusterAttentionObjectFinding,
   restoreGlobalAttentionFindingType,
 } from '@/core/settings/clusterAttentionIgnores';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import { errorHandler } from '@/utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import AttentionIgnoredModal from './AttentionIgnoredModal';
@@ -82,7 +82,7 @@ export default function ClusterViewAttention() {
   const { selectedClusterId } = useKubeconfig();
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
-  const useShortResourceNames = useShortNames();
+  const useShortResourceNames = usePreference('useShortResourceNames');
   const [ignoredModalOpen, setIgnoredModalOpen] = useState(false);
   const namespaceColumnLink = useNamespaceColumnLink<ClusterAttentionFinding>(
     'workloads',

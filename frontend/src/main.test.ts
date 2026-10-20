@@ -80,6 +80,7 @@ vi.mock('@shared/scrollbars/scrollbarActivity', () => ({
 
 vi.mock('@/core/settings/appPreferences', () => ({
   hydrateAppPreferences: vi.fn(async () => ({ errorReportingEnabled: true })),
+  subscribePreference: vi.fn(() => () => undefined),
 }));
 
 vi.mock('react-dom/client', () => ({
@@ -123,6 +124,22 @@ describe('application bootstrap', () => {
     });
 
     expect(order).toEqual(['error-reporting-configured', 'workspace-module-evaluated']);
+  });
+
+  it('keeps error reporting following the persisted error-reporting preference', async () => {
+    await import('@/main');
+    const { configureErrorReportingFromPreferences } = await import('@/core/telemetry/sentry');
+    const { subscribePreference } = await import('@/core/settings/appPreferences');
+    await vi.waitFor(() => {
+      expect(configureErrorReportingFromPreferences).toHaveBeenCalled();
+    });
+    const [, , subscribeToPreference] =
+      vi.mocked(configureErrorReportingFromPreferences).mock.calls[0] ?? [];
+    const listener = vi.fn();
+
+    subscribeToPreference?.(listener);
+
+    expect(subscribePreference).toHaveBeenCalledWith('errorReportingEnabled', listener);
   });
 
   it('loads the panel root with its own cluster projection and initializes auto-refresh', async () => {

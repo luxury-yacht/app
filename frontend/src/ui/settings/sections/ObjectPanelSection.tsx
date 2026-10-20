@@ -7,9 +7,9 @@
 
 import {
   type AppPreferenceKey,
-  getDefaultObjectPanelPosition,
   getIntegerPreferenceMetadata,
   getObjectPanelLayoutDefaults,
+  getPreference,
   normalizeIntegerPreferenceValue,
   type ObjectPanelLayoutDefaults,
   type ObjectPanelPosition,
@@ -93,7 +93,7 @@ function ObjectPanelSection() {
   const elementIdPrefix = useId();
   const { applyLayoutDefaultsAcrossClusters } = useDockablePanelContext();
   const [objectPanelPosition, setObjectPanelPositionState] = useState<ObjectPanelPosition>(() =>
-    getDefaultObjectPanelPosition()
+    getPreference('defaultObjectPanelPosition')
   );
   const [panelLayout, setPanelLayout] = useState<ObjectPanelLayoutDefaults>(() =>
     getObjectPanelLayoutDefaults()

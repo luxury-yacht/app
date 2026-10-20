@@ -45,7 +45,7 @@ import {
   useScopedRefreshDomainLifecycle,
 } from '@/core/data-access';
 import { failureMessage, type RefreshFailure } from '@/core/refresh/refreshFailure';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import { formatAgeAgo, formatFullDate } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { useObjectDiffYaml } from './useObjectDiffYaml';
@@ -1012,7 +1012,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
   const rightMatchRequestRef = useRef(0);
   const appliedInitialRequestIdRef = useRef<number | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
-  const useShortNamesSetting = useShortNames();
+  const useShortNamesSetting = usePreference('useShortResourceNames');
 
   const clusterOptions = useMemo(
     () => buildClusterOptions(selectedKubeconfigs, getClusterMeta),

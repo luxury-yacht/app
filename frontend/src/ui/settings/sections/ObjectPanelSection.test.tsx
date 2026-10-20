@@ -11,7 +11,6 @@ const setInputValue = (input: HTMLInputElement, value: string): void => {
 };
 
 const appPreferenceMocks = vi.hoisted(() => ({
-  getDefaultObjectPanelPosition: vi.fn(() => 'right'),
   setDefaultObjectPanelPosition: vi.fn(),
   getObjectPanelLayoutDefaults: vi.fn(() => ({
     dockedRightWidth: 420,
@@ -54,8 +53,9 @@ const dockableMocks = vi.hoisted(() => ({
   applyLayoutDefaultsAcrossClusters: vi.fn(),
 }));
 
-vi.mock('@core/settings/appPreferences', () => ({
-  getDefaultObjectPanelPosition: () => appPreferenceMocks.getDefaultObjectPanelPosition(),
+// The real store supplies the default position ('right'); layout helpers are stubbed.
+vi.mock('@core/settings/appPreferences', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@core/settings/appPreferences')>()),
   getIntegerPreferenceMetadata: (key: string) =>
     appPreferenceMocks.getIntegerPreferenceMetadata(key),
   setDefaultObjectPanelPosition: (...args: unknown[]) =>
@@ -85,7 +85,6 @@ describe('ObjectPanelSection', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    appPreferenceMocks.getDefaultObjectPanelPosition.mockReturnValue('right');
     appPreferenceMocks.setDefaultObjectPanelPosition.mockClear();
 
     act(() => {

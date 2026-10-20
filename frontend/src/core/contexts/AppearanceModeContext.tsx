@@ -3,7 +3,7 @@
  *
  * Handles light, dark, and system appearance modes with persisted preferences.
  * Applies the resolved light/dark mode to the document and listens for system changes.
- * Also listens for mode changes from the frontend settings event bus.
+ * Also follows the appearance-mode preference.
  */
 import type React from 'react';
 import {
@@ -20,8 +20,10 @@ import { eventBus } from '@/core/events';
 import {
   type AppearanceMode,
   applyBroadcastAppearanceModePreference,
-  getAppearanceModePreference,
+  getPreference,
+  subscribePreference,
 } from '@/core/settings/appPreferences';
+import { usePreference } from '@/core/settings/usePreference';
 import { applyAppearanceOverrides } from '@/utils/appearanceMode';
 
 type ResolvedAppearanceMode = 'light' | 'dark';
@@ -59,7 +61,7 @@ interface AppearanceModeProviderProps {
 }
 
 export const AppearanceModeProvider: React.FC<AppearanceModeProviderProps> = ({ children }) => {
-  const [mode, setMode] = useState<AppearanceMode>(() => getAppearanceModePreference());
+  const mode = usePreference('appearanceMode');
 
   const [resolvedMode, setResolvedMode] = useState<ResolvedAppearanceMode>(getInitialResolvedMode);
 
@@ -79,14 +81,14 @@ export const AppearanceModeProvider: React.FC<AppearanceModeProviderProps> = ({ 
   }, []);
 
   useEffect(() => {
-    const preference = getAppearanceModePreference();
+    const preference = getPreference('appearanceMode');
     const initialMode = preference === 'system' ? detectSystemAppearanceMode() : preference;
 
     applyResolvedMode(initialMode);
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleSystemModeChange = (e: MediaQueryListEvent) => {
-      const currentPreference = getAppearanceModePreference();
+      const currentPreference = getPreference('appearanceMode');
       if (currentPreference === 'system') {
         const newMode = e.matches ? 'dark' : 'light';
         applyResolvedMode(newMode);
@@ -99,10 +101,9 @@ export const AppearanceModeProvider: React.FC<AppearanceModeProviderProps> = ({ 
       const resolved =
         nextMode === 'system' ? detectSystemAppearanceMode() : (nextMode as ResolvedAppearanceMode);
       applyResolvedMode(resolved);
-      setMode(nextMode);
     };
 
-    const unsubscribeAppearanceMode = eventBus.on('settings:appearance-mode', applyModePreference);
+    const unsubscribeAppearanceMode = subscribePreference('appearanceMode', applyModePreference);
     const unsubscribeBroadcast = desktopRuntimeAvailable()
       ? onBroadcastEvent('settings:appearance-mode-changed', ({ mode: nextMode }) => {
           applyBroadcastAppearanceModePreference(nextMode);

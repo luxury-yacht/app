@@ -9,6 +9,7 @@ import {
   getBrokerReadDiagnosticsSnapshot,
   resetBrokerReadDiagnosticsForTesting,
 } from '@/core/read-diagnostics';
+import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
 
 const hoisted = vi.hoisted(() => ({
   fetchScopedDomain: vi.fn(),
@@ -16,7 +17,6 @@ const hoisted = vi.hoisted(() => ({
   releaseScopedDomainLease: vi.fn(),
   refreshCluster: vi.fn(),
   getScopedDomainState: vi.fn(),
-  getAutoRefreshEnabled: vi.fn(),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -30,10 +30,6 @@ vi.mock('@/core/refresh', () => ({
 
 vi.mock('@/core/refresh/store', () => ({
   getScopedDomainState: (...args: unknown[]) => hoisted.getScopedDomainState(...args),
-}));
-
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => hoisted.getAutoRefreshEnabled(),
 }));
 
 import {
@@ -53,7 +49,7 @@ describe('dataAccess', () => {
     hoisted.fetchScopedDomain.mockResolvedValue(undefined);
     hoisted.getScopedDomainState.mockReturnValue({ status: 'ready', data: null });
     hoisted.refreshCluster.mockResolvedValue(undefined);
-    hoisted.getAutoRefreshEnabled.mockReturnValue(true);
+    setAppPreferencesForTesting({ autoRefreshEnabled: true });
   });
 
   it.each([
@@ -94,7 +90,7 @@ describe('dataAccess', () => {
   );
 
   it('blocks startup requests when auto-refresh is disabled', async () => {
-    hoisted.getAutoRefreshEnabled.mockReturnValue(false);
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
 
     await expect(
       requestRefreshDomain({
@@ -111,7 +107,7 @@ describe('dataAccess', () => {
   });
 
   it('blocks background requests when auto-refresh is disabled', async () => {
-    hoisted.getAutoRefreshEnabled.mockReturnValue(false);
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
 
     await expect(
       requestRefreshDomain({
@@ -127,7 +123,7 @@ describe('dataAccess', () => {
   });
 
   it('allows user requests when auto-refresh is disabled', async () => {
-    hoisted.getAutoRefreshEnabled.mockReturnValue(false);
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
 
     await expect(
       requestRefreshDomain({
@@ -145,7 +141,7 @@ describe('dataAccess', () => {
   });
 
   it('runs foreground activation immediately without classifying it as a manual refresh', async () => {
-    hoisted.getAutoRefreshEnabled.mockReturnValue(false);
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
 
     await expect(
       requestRefreshDomain({
@@ -244,7 +240,7 @@ describe('dataAccess', () => {
   });
 
   it('records diagnostics for blocked and executed cluster-data reads', async () => {
-    hoisted.getAutoRefreshEnabled.mockReturnValue(false);
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
 
     await requestData({
       resource: 'namespaces',
@@ -255,7 +251,7 @@ describe('dataAccess', () => {
       read: vi.fn(),
     });
 
-    hoisted.getAutoRefreshEnabled.mockReturnValue(true);
+    setAppPreferencesForTesting({ autoRefreshEnabled: true });
     await requestData({
       resource: 'query-permissions',
       reason: 'startup',

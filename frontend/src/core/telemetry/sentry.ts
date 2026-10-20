@@ -702,13 +702,20 @@ export function captureBootstrapError(error: unknown, context: { action: string 
   }
 }
 
+// Follows live changes to the error-reporting preference. The caller supplies it
+// because the preference store itself reports errors through this module.
+export type ErrorReportingPreferenceSubscription = (
+  listener: (enabled: boolean) => void
+) => () => void;
+
 // configureErrorReporting keeps the build configuration separate from the
 // persisted preference. It returns whether reporting is available in this
 // build so React root handlers can remain installed across live preference
 // changes without sending anything while the SDK is disabled.
 export function configureErrorReporting(
   config: SentryRuntimeConfig,
-  preferenceEnabled: boolean
+  preferenceEnabled: boolean,
+  subscribeToPreference: ErrorReportingPreferenceSubscription
 ): boolean {
   unsubscribePreference?.();
   configuredRuntime = { ...config };
@@ -729,7 +736,7 @@ export function configureErrorReporting(
       context: { source: 'EventBus', action: String(event) },
     });
   });
-  unsubscribePreference = eventBus.on('settings:error-reporting', applyErrorReportingPreference);
+  unsubscribePreference = subscribeToPreference(applyErrorReportingPreference);
   return available;
 }
 
@@ -737,12 +744,17 @@ export async function configureErrorReportingFromPreferences<
   TPreferences extends { errorReportingEnabled: boolean; anonymizedId: string },
 >(
   config: SentryRuntimeConfig,
-  loadPreferences: () => Promise<TPreferences>
+  loadPreferences: () => Promise<TPreferences>,
+  subscribeToPreference: ErrorReportingPreferenceSubscription
 ): Promise<{ available: boolean; preferences: TPreferences }> {
   const preferences = await loadPreferences();
   const runtimeConfig = { ...config, anonymizedId: preferences.anonymizedId };
   return {
-    available: configureErrorReporting(runtimeConfig, preferences.errorReportingEnabled),
+    available: configureErrorReporting(
+      runtimeConfig,
+      preferences.errorReportingEnabled,
+      subscribeToPreference
+    ),
     preferences,
   };
 }

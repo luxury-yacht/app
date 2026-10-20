@@ -7,44 +7,40 @@
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import ToggleSwitch from '@shared/components/ToggleSwitch';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
-import {
-  type GridTablePersistenceMode,
-  getGridTablePersistenceMode,
-  setGridTablePersistenceMode,
-} from '@shared/components/tables/persistence/gridTablePersistenceSettings';
 import { clearAccentColor } from '@utils/accentColor';
 import { errorHandler } from '@utils/errorHandler';
 import { clearLinkColor } from '@utils/linkColor';
 import { clearTintedPalette } from '@utils/paletteTint';
 import { useEffect, useId, useState } from 'react';
 import { ClearAppState } from '@/core/backend-api';
-import { useAutoRefresh } from '@/core/refresh';
 import {
   type AppPreferenceKey,
   commitIntegerPreferenceInput,
-  getKubernetesClientBurst,
-  getKubernetesClientQPS,
-  getPermissionSSRRFetchConcurrency,
+  type GridTablePersistenceMode,
+  getPreference,
   hydrateAppPreferences,
+  setAutoRefreshEnabled,
+  setGridTablePersistenceMode,
   setKubernetesClientBurst,
   setKubernetesClientQPS,
   setPermissionSSRRFetchConcurrency,
 } from '@/core/settings/appPreferences';
+import { usePreference } from '@/core/settings/usePreference';
 import { PreferenceNumberInput, SettingRow } from './SettingsControls';
 
 function AdvancedSection() {
   const elementIdPrefix = useId();
-  const { enabled: refreshEnabled, setAutoRefresh } = useAutoRefresh();
+  const refreshEnabled = usePreference('autoRefreshEnabled');
   const [kubernetesClientQPSInput, setKubernetesClientQPSInput] = useState<string>(() =>
-    String(getKubernetesClientQPS())
+    String(getPreference('kubernetesClientQPS'))
   );
   const [kubernetesClientBurstInput, setKubernetesClientBurstInput] = useState<string>(() =>
-    String(getKubernetesClientBurst())
+    String(getPreference('kubernetesClientBurst'))
   );
   const [permissionSSRRFetchConcurrencyInput, setPermissionSSRRFetchConcurrencyInput] =
-    useState<string>(() => String(getPermissionSSRRFetchConcurrency()));
+    useState<string>(() => String(getPreference('permissionSSRRFetchConcurrency')));
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
-    getGridTablePersistenceMode()
+    getPreference('gridTablePersistenceMode')
   );
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   const [isResetViewsConfirmOpen, setIsResetViewsConfirmOpen] = useState(false);
@@ -58,7 +54,7 @@ function AdvancedSection() {
           setKubernetesClientQPSInput(String(prefs.kubernetesClientQPS));
           setKubernetesClientBurstInput(String(prefs.kubernetesClientBurst));
           setPermissionSSRRFetchConcurrencyInput(String(prefs.permissionSSRRFetchConcurrency));
-          setPersistenceMode(getGridTablePersistenceMode());
+          setPersistenceMode(getPreference('gridTablePersistenceMode'));
         }
       } catch (error) {
         errorHandler.handle(error, { action: 'loadAdvancedSettings' });
@@ -152,7 +148,7 @@ function AdvancedSection() {
         <ToggleSwitch
           id={`${elementIdPrefix}-refresh-enabled`}
           checked={refreshEnabled}
-          onChange={setAutoRefresh}
+          onChange={setAutoRefreshEnabled}
           ariaLabel="Auto-refresh"
         />
       </SettingRow>

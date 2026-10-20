@@ -11,6 +11,7 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as YAML from 'yaml';
 import { localFailure, type RefreshFailure } from '@/core/refresh/refreshFailure';
+import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
 
 interface CapturedCodeMirrorProps {
@@ -131,10 +132,6 @@ vi.mock('@/core/refresh/store', () => ({
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
   useAutoRefreshLoadingState: () => autoRefreshLoadingState,
-}));
-
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => !autoRefreshLoadingState.isPaused,
 }));
 
 vi.mock('@uiw/react-codemirror', () => ({
@@ -277,6 +274,7 @@ describe('ValuesTab', () => {
     codeMirrorState.editorView.focus.mockClear();
     refreshMocks.fetchScopedDomain.mockClear();
     autoRefreshLoadingState.isPaused = false;
+    setAppPreferencesForTesting({ autoRefreshEnabled: true });
     autoRefreshLoadingState.isManualRefreshActive = false;
     autoRefreshLoadingState.suppressPassiveLoading = false;
     searchShortcutMocks.useSearchShortcutTarget.mockClear();
@@ -403,6 +401,7 @@ describe('ValuesTab', () => {
 
   it('suppresses passive loading while auto-refresh is paused', async () => {
     autoRefreshLoadingState.isPaused = true;
+    setAppPreferencesForTesting({ autoRefreshEnabled: false });
     autoRefreshLoadingState.suppressPassiveLoading = true;
     snapshotState.current = { status: 'loading', data: null, error: null };
     const { container, unmount } = await renderValuesTab();

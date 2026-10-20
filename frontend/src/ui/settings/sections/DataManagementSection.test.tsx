@@ -1,7 +1,10 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
 import DataManagementSection from './DataManagementSection';
 
@@ -13,7 +16,6 @@ const backendMocks = vi.hoisted(() => ({
 }));
 
 const preferenceMocks = vi.hoisted(() => ({
-  enabled: false,
   hydrateAppPreferences: vi.fn(),
   setErrorReportingEnabled: vi.fn(),
 }));
@@ -30,8 +32,9 @@ vi.mock('@/core/backend-api', () => backendMocks);
 vi.mock('@/core/persistence/favorites', () => ({
   hydrateFavorites: (...args: unknown[]) => favoritesMocks.hydrateFavorites(...args),
 }));
-vi.mock('@/core/settings/appPreferences', () => ({
-  getErrorReportingEnabled: () => preferenceMocks.enabled,
+// Real preference store; only the backend-facing commands are stubbed.
+vi.mock('@/core/settings/appPreferences', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/core/settings/appPreferences')>()),
   hydrateAppPreferences: (...args: unknown[]) => preferenceMocks.hydrateAppPreferences(...args),
   setErrorReportingEnabled: (...args: unknown[]) =>
     preferenceMocks.setErrorReportingEnabled(...args),
@@ -49,13 +52,13 @@ describe('DataManagementSection', () => {
   let root: ReactDOM.Root;
 
   beforeEach(async () => {
-    preferenceMocks.enabled = false;
+    resetAppPreferencesCacheForTesting();
+    setAppPreferencesForTesting({ errorReportingEnabled: false });
     preferenceMocks.hydrateAppPreferences.mockReset();
     preferenceMocks.hydrateAppPreferences.mockResolvedValue({ errorReportingEnabled: false });
     preferenceMocks.setErrorReportingEnabled.mockReset();
     preferenceMocks.setErrorReportingEnabled.mockImplementation(async (value: boolean) => {
-      preferenceMocks.enabled = value;
-      eventBus.emit('settings:error-reporting', value);
+      setAppPreferencesForTesting({ errorReportingEnabled: value });
     });
     favoritesMocks.hydrateFavorites.mockReset();
     favoritesMocks.hydrateFavorites.mockResolvedValue([]);

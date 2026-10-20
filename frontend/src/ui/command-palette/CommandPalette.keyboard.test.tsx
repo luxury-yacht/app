@@ -25,10 +25,6 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterId: 'alpha:ctx' }),
 }));
 
-vi.mock('@hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
 vi.mock('@/core/refresh/client', () => ({
   fetchSnapshot: vi.fn().mockResolvedValue({ snapshot: null }),
 }));

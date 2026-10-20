@@ -34,10 +34,6 @@ vi.mock('./domainRegistrations', () => ({
 }));
 
 // Bypass the auto-refresh gate so shouldStreamScope answers on scope shape alone.
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => true,
-}));
-
 vi.mock('@/core/logging/appLogsClient', () => ({
   APP_LOG_SOURCES: new Proxy({}, { get: (_t, key) => String(key) }),
   logAppLogsInfo: () => undefined,

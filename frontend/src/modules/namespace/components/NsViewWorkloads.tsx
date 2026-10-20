@@ -40,7 +40,7 @@ import {
 } from '@shared/utils/objectIdentity';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { NamespaceWorkloadSnapshotPayload, PodMetricsInfo } from '@/core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { buildWorkloadActionReference } from './workloadActionReference';
 
@@ -85,7 +85,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
   }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
-    const useShortResourceNames = useShortNames();
+    const useShortResourceNames = usePreference('useShortResourceNames');
     const { selectedClusterId, selectedClusterName } = useKubeconfig();
     const queryClusterId = clusterId ?? selectedClusterId;
     const [tableMetricsInfo, setTableMetricsInfo] = useState<PodMetricsInfo | null>(null);

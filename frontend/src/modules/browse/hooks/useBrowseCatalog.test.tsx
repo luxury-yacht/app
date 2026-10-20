@@ -15,6 +15,10 @@ import type {
   CatalogItem,
   CatalogSnapshotPayload,
 } from '@/core/refresh/types';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 import { backendQuerySource } from '@/modules/resource-grid/backendQuerySource';
 import {
   resetResourceInventoryRowCache,
@@ -90,12 +94,7 @@ vi.mock('@/core/refresh/loadingPolicy', () => ({
   applyPassiveLoadingPolicy: ({ loading }: { loading: boolean }) => ({ loading }),
 }));
 
-const defaultTablePageSizeMock = vi.hoisted(() => vi.fn(() => 50));
 const handleInlineMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@/hooks/useDefaultTablePageSize', () => ({
-  useDefaultTablePageSize: () => defaultTablePageSizeMock(),
-}));
 
 vi.mock('@utils/errorHandler', () => ({
   errorHandler: {
@@ -214,7 +213,7 @@ describe('useBrowseCatalog', () => {
     mocks.refreshFns.clear();
     mocks.handleCalls.length = 0;
     resetResourceInventoryRowCache();
-    defaultTablePageSizeMock.mockReturnValue(50);
+    setAppPreferencesForTesting({ defaultTablePageSize: 50 });
     handleInlineMock.mockReset();
     handleInlineMock.mockImplementation((error: unknown) => ({
       message: error instanceof Error ? error.message : String(error),
@@ -248,7 +247,7 @@ describe('useBrowseCatalog', () => {
   });
 
   it('uses the app-wide Default Page Size preference when the view has no persisted page size', async () => {
-    defaultTablePageSizeMock.mockReturnValue(250);
+    setAppPreferencesForTesting({ defaultTablePageSize: 250 });
 
     const UnpersistedHarness = () => {
       result = useBrowseCatalog({
@@ -1529,7 +1528,8 @@ describe('doorbell refetch quietness on a paged catalog', () => {
     result = null;
     vi.clearAllMocks();
     mocks.refreshFns.clear();
-    defaultTablePageSizeMock.mockReturnValue(2);
+    // The explicit page limit wins; the app-wide default is never consulted.
+    resetAppPreferencesCacheForTesting();
   });
   afterEach(() => {
     act(() => root.unmount());
