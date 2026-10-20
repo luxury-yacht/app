@@ -117,9 +117,10 @@ The authored domain contract declares which clocks can change a payload:
   object clock or makes an object snapshot appear changed.
 - Every producer rings the cluster generation's doorbell (`doorbell.Bell`,
   implemented by `resourcestream.Manager`). `Ring` invalidates the domain's
-  snapshot/query cache before delivering the new clock; otherwise the
-  signal-triggered read can consume the pre-change cached page and no later
-  signal arrives. The bell exists before any producer is built and accepts
+  snapshot/query cache before delivering the new clock, even when no view is
+  subscribed; otherwise a signal-triggered read, or a view reopened before the
+  cache expires, can consume the pre-change cached page and no later signal
+  arrives. The bell exists before any producer is built and accepts
   rings from construction; rings during initial sync reach only existing
   subscribers. `Ring` takes only leaf locks and never calls back into a store,
   so stores may ring under their own write lock.
@@ -137,6 +138,9 @@ The authored domain contract declares which clocks can change a payload:
   handler on the same informer could ring before the store holds the change;
   `resourcestream` registers no ringing handler or sink. Its ReplicaSet and Job
   owner heals only rewrite pod bundles, which the pods store then publishes.
+  A LIST-fallback domain has no maintained store, so the ingest store of the
+  kind it lists rings it: the Nodes fallback (no pod access) rings from the node
+  ingest store.
 - A domain that joins an ingest store at serve time (pod aggregates for
   workloads and nodes, Identities' bindings) rings from inside that store's
   sink fan-out, under its write lock, so a read that starts after the ring

@@ -112,24 +112,9 @@ func (m *Manager) ResumeSelector(selector StreamSelector, since uint64) ([]Updat
 	return results, true
 }
 
-// broadcast is a translator's ring: generation work, so Stop joins it and
-// nothing rings after Stop.
-func (m *Manager) broadcast(domain string, scopes []string, update Update) {
-	if m == nil {
-		return
-	}
-	m.generation.Run(func() { m.fanOut(domain, scopes, update) })
-}
-
-// fanOut invalidates the domain's cached snapshots, then delivers the update
-// to every subscriber of the scopes. Callers run it as generation work.
-func (m *Manager) fanOut(domain string, scopes []string, update Update) {
-	m.invalidateSnapshotDomain(domain)
-	if len(scopes) == 0 {
-		return
-	}
-
-	// Fan-out updates per scope and trigger a RESET when subscribers fall behind.
+// deliverScopes sends the update to every subscriber of the scopes, triggering
+// a RESET when subscribers fall behind. Ring has invalidated the domain first.
+func (m *Manager) deliverScopes(domain string, scopes []string, update Update) {
 	for _, scope := range uniqueScopes(scopes) {
 		result := m.broadcastScope(domain, scope, update)
 		m.recordBroadcastResult(domain, scope, result)

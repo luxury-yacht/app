@@ -64,10 +64,10 @@ func TestManagerRejectsUnscopedAndForeignSubscriptionIdentity(t *testing.T) {
 	sub, err := manager.SubscribeSelector(selector)
 	require.NoError(t, err)
 	for _, version := range []string{"1", "2"} {
-		manager.broadcast(domainPods, []string{selector.CanonicalScope()}, Update{
-			Type: MessageTypeModified, Domain: domainPods, ClusterID: "c1",
-			ResourceVersion: version,
-			Ref:             refPtr(resourcemodel.ResourceRef{ClusterID: "c1", Version: "v1", Kind: "Pod", Namespace: "default", Name: "pod-a"}),
+		manager.Ring(doorbell.Change{
+			Domain: domainPods, Source: doorbell.SourceObject, Target: doorbell.Scopes(selector.CanonicalScope()),
+			Type: MessageTypeModified, ResourceVersion: version,
+			Ref: refPtr(resourcemodel.ResourceRef{ClusterID: "c1", Version: "v1", Kind: "Pod", Namespace: "default", Name: "pod-a"}),
 		})
 		require.Equal(t, version, requireNextUpdate(t, sub).Sequence)
 	}
@@ -279,11 +279,11 @@ func TestManagerResumeReturnsBufferedUpdates(t *testing.T) {
 	require.NoError(t, err)
 	defer sub.Cancel()
 
-	first := Update{
-		Type:            MessageTypeAdded,
+	first := doorbell.Change{
 		Domain:          domainPods,
-		ClusterID:       "c1",
-		ClusterName:     "cluster",
+		Source:          doorbell.SourceObject,
+		Target:          doorbell.Scopes("namespace:default"),
+		Type:            MessageTypeAdded,
 		ResourceVersion: "1",
 		Ref:             refPtr(resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c1", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-1", UID: "pod-1"})),
 	}
@@ -291,8 +291,8 @@ func TestManagerResumeReturnsBufferedUpdates(t *testing.T) {
 	second.ResourceVersion = "2"
 	second.Ref = refPtr(resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c1", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-2", UID: "pod-2"}))
 
-	manager.broadcast(domainPods, []string{"namespace:default"}, first)
-	manager.broadcast(domainPods, []string{"namespace:default"}, second)
+	manager.Ring(first)
+	manager.Ring(second)
 
 	updates, ok := resumeForTest(t, manager, domainPods, "namespace:default", 1)
 	require.True(t, ok)
@@ -323,15 +323,14 @@ func TestManagerChangeSignalInvalidatesSnapshotCacheBeforeDelivery(t *testing.T)
 	require.NoError(t, err)
 	defer sub.Cancel()
 
-	update := Update{
-		Type:            MessageTypeModified,
+	manager.Ring(doorbell.Change{
 		Domain:          domainClusterRBAC,
-		ClusterID:       "c1",
-		ClusterName:     "cluster",
+		Source:          doorbell.SourceObject,
+		Target:          doorbell.Scopes(""),
+		Type:            MessageTypeModified,
 		ResourceVersion: "2",
 		Ref:             refPtr(resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c1", Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole", Resource: "clusterroles", Namespace: "", Name: "admin", UID: "uid-admin"})),
-	}
-	manager.broadcast(domainClusterRBAC, []string{""}, update)
+	})
 	require.Equal(t, domainClusterRBAC, requireNextUpdate(t, sub).Domain)
 
 	_, err = service.Build(context.Background(), domainClusterRBAC, "c1|")
@@ -351,15 +350,15 @@ func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
 	sub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
 	require.NoError(t, err)
 
-	update := Update{
-		Type:            MessageTypeAdded,
+	change := doorbell.Change{
 		Domain:          domainPods,
-		ClusterID:       "c1",
-		ClusterName:     "cluster",
+		Source:          doorbell.SourceObject,
+		Target:          doorbell.Scopes("namespace:default"),
+		Type:            MessageTypeAdded,
 		ResourceVersion: "1",
 		Ref:             refPtr(resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c1", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-1", UID: "pod-1"})),
 	}
-	manager.broadcast(domainPods, []string{"namespace:default"}, update)
+	manager.Ring(change)
 
 	key := bufferKey(domainPods, "namespace:default")
 	require.Contains(t, manager.buffers, key)
@@ -374,7 +373,7 @@ func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(replacement.Cancel)
 	sub.Cancel()
-	manager.broadcast(domainPods, []string{"namespace:default"}, update)
+	manager.Ring(change)
 	require.Equal(t, "1", requireNextUpdate(t, replacement).Sequence)
 }
 
@@ -563,16 +562,16 @@ func TestManagerBackpressureTriggersReset(t *testing.T) {
 	sub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
 	require.NoError(t, err)
 
-	update := Update{
-		Type:        MessageTypeAdded,
-		Domain:      domainPods,
-		ClusterID:   "c1",
-		ClusterName: "cluster",
-		Ref:         refPtr(resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c1", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-1", UID: ""})),
+	change := doorbell.Change{
+		Domain: domainPods,
+		Source: doorbell.SourceObject,
+		Target: doorbell.Scopes("namespace:default"),
+		Type:   MessageTypeAdded,
+		Ref:    refPtr(resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c1", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-1", UID: ""})),
 	}
 
 	for i := 0; i < config.ResourceStreamSubscriberBufferSize+1; i++ {
-		manager.broadcast(domainPods, []string{"namespace:default"}, update)
+		manager.Ring(change)
 	}
 
 	require.Eventually(t, func() bool {

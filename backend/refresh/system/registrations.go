@@ -374,7 +374,13 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 				{group: "", resource: "nodes"},
 			},
 			registerFallback: func() error {
-				return snapshot.RegisterNodeDomainList(deps.registry, deps.cfg.KubernetesClient, deps.metricsProvider)
+				return snapshot.RegisterNodeDomainList(
+					deps.registry,
+					deps.cfg.KubernetesClient,
+					deps.metricsProvider,
+					deps.ingestManager,
+					deps.bell,
+				)
 			},
 			fallbackLog:  "Registering nodes domain using list fallback due to missing informer permissions",
 			deniedReason: "core/nodes (and pods)",

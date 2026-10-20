@@ -273,19 +273,22 @@ func (m *Manager) AfterFunc(d time.Duration, fn func()) doorbell.Timer {
 var _ doorbell.Bell = (*Manager)(nil)
 
 func (m *Manager) deliver(change doorbell.Change) {
+	// The change happened whether or not anyone is subscribed, so a later read
+	// must not serve the pre-change cached snapshot.
+	m.invalidateSnapshotDomain(change.Domain)
 	scopes, explicit := change.Target.ExplicitScopes()
 	if !explicit {
 		// Subscribed and matching targets ring only scopes someone subscribed to.
 		scopes = m.targetSubscribedScopes(change)
-		if len(scopes) == 0 {
-			return
-		}
+	}
+	if len(scopes) == 0 {
+		return
 	}
 	if change.Reason != "" {
 		m.logDebug(fmt.Sprintf("%s doorbell %s: %s — signaling %d scope(s) to refetch",
 			change.Domain, change.Version, change.Reason, len(scopes)))
 	}
-	m.fanOut(change.Domain, scopes, m.changeUpdate(change))
+	m.deliverScopes(change.Domain, scopes, m.changeUpdate(change))
 }
 
 func (m *Manager) targetSubscribedScopes(change doorbell.Change) []string {

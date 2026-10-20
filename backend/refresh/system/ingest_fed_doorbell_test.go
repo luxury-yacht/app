@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"reflect"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -54,12 +55,20 @@ type ingestHarness struct {
 
 func newIngestHarness(t *testing.T, allowedNamespaces ...string) *ingestHarness {
 	t.Helper()
+	return newIngestHarnessDenying(t, nil, allowedNamespaces...)
+}
+
+// newIngestHarnessDenying is newIngestHarness for an identity that may not
+// read the denied core resources.
+func newIngestHarnessDenying(t *testing.T, denied []string, allowedNamespaces ...string) *ingestHarness {
+	t.Helper()
 	kube := fake.NewClientset()
 	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
 		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
 		attrs := review.Spec.ResourceAttributes
 		// No metrics API in this harness: leave the poller disabled.
-		review.Status.Allowed = attrs != nil && attrs.Group != "metrics.k8s.io"
+		review.Status.Allowed = attrs != nil && attrs.Group != "metrics.k8s.io" &&
+			!(attrs.Group == "" && slices.Contains(denied, attrs.Resource))
 		return true, review, nil
 	})
 	subsystem, err := NewSubsystemWithServices(t.Context(), Config{
@@ -499,4 +508,46 @@ func TestServiceAccountChangesDoNotRingIdentities(t *testing.T) {
 
 	require.Equal(t, 2, collect(rbac, 300*time.Millisecond))
 	require.Equal(t, 0, collect(identities, 100*time.Millisecond))
+}
+
+// A whole-kind relist rings only subscribed views, but it must still drop the
+// domain's cached pages: a user who left the table and returns before the
+// cache expires must not reload the pre-relist rows.
+func TestUnsubscribedRelistDoesNotServeStaleCachedRows(t *testing.T) {
+	h := newIngestHarness(t)
+	store := h.store(t, configMapGVR)
+	require.NoError(t, store.Replace([]interface{}{configMap("keep", "a", "1"), configMap("drop", "a", "2")}, "10"))
+	require.Equal(t, []string{"drop", "keep"}, h.rowNames(t, "namespace-config", "namespace:a"), "prime the cache")
+
+	require.NoError(t, store.PartitionView("").Replace([]interface{}{configMap("keep", "a", "1"), configMap("add", "a", "3")}, "11"))
+
+	require.Equal(t, []string{"add", "keep"}, h.rowNames(t, "namespace-config", "namespace:a"))
+}
+
+// Without pod access the Nodes table falls back to listing nodes from the API
+// server. Its rows still change only through node changes, so the node ingest
+// store must ring it; a healthy stream does not poll.
+func TestNodesListFallbackRingsOnNodeChanges(t *testing.T) {
+	h := newIngestHarnessDenying(t, []string{"pods"})
+	nodes := h.store(t, nodeGVR)
+	sub := h.subscribe(t, "nodes", "")
+	require.Empty(t, h.rowNames(t, "nodes", ""), "prime the cache")
+
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "worker-1", UID: "node-1", ResourceVersion: "1"}}
+	created, err := h.kube.CoreV1().Nodes().Create(t.Context(), node, metav1.CreateOptions{})
+	require.NoError(t, err)
+	require.NoError(t, nodes.Add(created))
+	require.Positive(t, collect(sub, 300*time.Millisecond), "create: no doorbell")
+	require.Equal(t, []string{"worker-1"}, h.rowNames(t, "nodes", ""))
+
+	require.NoError(t, h.kube.CoreV1().Nodes().Delete(t.Context(), "worker-1", metav1.DeleteOptions{}))
+	require.NoError(t, nodes.Delete(created))
+	require.Positive(t, collect(sub, 300*time.Millisecond), "delete: no doorbell")
+	require.Empty(t, h.rowNames(t, "nodes", ""))
+
+	require.NoError(t, nodes.Replace([]interface{}{
+		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "worker-2", UID: "node-2", ResourceVersion: "3"}},
+		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "worker-3", UID: "node-3", ResourceVersion: "4"}},
+	}, "5"))
+	require.Equal(t, 1, collect(sub, 300*time.Millisecond), "a relist rings once")
 }
