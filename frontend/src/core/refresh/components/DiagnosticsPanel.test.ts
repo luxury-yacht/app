@@ -1215,6 +1215,63 @@ describe('DiagnosticsPanel component', () => {
     healthSpy.mockRestore();
   });
 
+  // A query-backed table never reads its base snapshot, so its open scope stays
+  // idle until the first change signal arrives. A live stream still means the
+  // scope is in use, so Cluster Data lists it; an idle scope with no stream is
+  // not in use and stays hidden.
+  test('lists an idle table scope while its stream is live', async () => {
+    mockKubeconfigState.selectedClusterId = 'cluster-a';
+    fetchTelemetrySummaryMock.mockResolvedValue(makeTelemetrySummary());
+    const openScope = testScope('cluster-a', 'namespace:podinfo');
+    const closedScope = testScope('cluster-a', 'namespace:retired');
+    const idleState = (scope: string): DomainSnapshotState<unknown> => ({
+      status: 'idle',
+      data: null,
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope,
+    });
+    setScopedEntries('namespace-network', [
+      [openScope, idleState(openScope)],
+      [closedScope, idleState(closedScope)],
+    ]);
+    // The Pods view is query-backed the same way.
+    setScopedEntries('pods', [
+      [openScope, idleState(openScope)],
+      [closedScope, idleState(closedScope)],
+    ]);
+    const healthSpy = vi
+      .spyOn(resourceStreamManager, 'getHealthSnapshot')
+      .mockImplementation((domain, scope) =>
+        (domain === 'namespace-network' || domain === 'pods') && scope === openScope
+          ? {
+              domain,
+              scope,
+              status: 'healthy',
+              reason: 'synchronized',
+              connectionStatus: 'connected',
+            }
+          : null
+      );
+
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectClusterDataTab(rendered.container);
+    await flushAsync();
+
+    const rows = readScopeRows(rendered.container);
+    const networkRows = rows.filter((row) => row.label === 'NS Network');
+    expect(networkRows).toHaveLength(1);
+    expect(networkRows[0].scope).toContain('podinfo');
+    const podRows = rows.filter((row) => row.label.startsWith('ObjPanel - Pods'));
+    expect(podRows).toHaveLength(1);
+    expect(podRows[0].label).toContain('podinfo');
+
+    await rendered.unmount();
+    healthSpy.mockRestore();
+  });
+
   test('surfaces catalog watch availability warnings alongside the retained object count', async () => {
     mockKubeconfigState.selectedClusterId = 'cluster-a';
     const scope = testScope('cluster-a', '?limit=200');

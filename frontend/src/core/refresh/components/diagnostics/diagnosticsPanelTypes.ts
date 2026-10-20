@@ -23,6 +23,9 @@ export interface DiagnosticsRow {
   clusterId: string;
   label: string;
   status: DomainStatus;
+  // A live stream subscription serves this scope, so it is in use even while
+  // its status is idle (a query-backed table before its first change signal).
+  streamActive?: boolean;
   version: string;
   interval: string;
   lastUpdated: string;

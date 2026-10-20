@@ -965,6 +965,7 @@ const buildPodDiagnosticsRow = (
     domain: 'pods',
     label: resolvePodLabel(scope),
     status: state.status,
+    streamActive,
     version: stateVersion(state),
     interval: formatInterval(refreshOrchestrator.getPollingStatus('pods', scope).intervalMs),
     lastUpdated: lastUpdatedInfo.display,
@@ -1362,6 +1363,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           domain,
           label,
           status: state.status,
+          streamActive: telemetryDetails.streamActive,
           version: stateVersion(state),
           interval: intervalLabel,
           lastUpdated:
@@ -1473,7 +1475,11 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     getClusterMeta,
   ]);
 
-  const filteredRows = useMemo(() => rows.filter((row) => row.status !== 'idle'), [rows]);
+  // Idle scopes nobody uses are noise; an idle scope a live stream serves is in use.
+  const filteredRows = useMemo(
+    () => rows.filter((row) => row.status !== 'idle' || row.streamActive),
+    [rows]
+  );
 
   // Cluster names for the tree's cluster group rows, keyed by cluster id.
   const clusterNamesById = useMemo(() => {
