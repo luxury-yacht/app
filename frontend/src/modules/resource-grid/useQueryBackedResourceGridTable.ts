@@ -23,7 +23,7 @@ import { errorHandler } from '@utils/errorHandler';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
-import { useQueryStreamSignal } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import { useQueryStreamSignal } from '@/core/refresh/hooks/useQueryStreamSignal';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import {
   buildRefreshScope,

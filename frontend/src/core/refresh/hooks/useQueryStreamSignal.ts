@@ -1,5 +1,5 @@
 /**
- * frontend/src/core/refresh/hooks/useStreamSignalRefetch.ts
+ * frontend/src/core/refresh/hooks/useQueryStreamSignal.ts
  *
  * Signal identity for query-backed readers. Doorbells only advance a scope's
  * declared signal clocks; the orchestrator refetches snapshot leases itself,

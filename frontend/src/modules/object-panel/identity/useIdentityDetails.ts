@@ -4,7 +4,7 @@ import { useTypedResourceQuery } from '@modules/resource-grid/useTypedResourceQu
 import { ALL_MULTISELECT_FILTER } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { useMemo } from 'react';
 import { useRefreshDomainHandle } from '@/core/data-access';
-import { useQueryStreamSignal } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import { useQueryStreamSignal } from '@/core/refresh/hooks/useQueryStreamSignal';
 import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
 import type { ClusterIdentitiesSnapshot, ClusterIdentity } from '@/core/refresh/types';
 import type { IdentityPanelRef } from '../panelTarget';

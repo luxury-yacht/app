@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { liveDomainVersion } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import { liveDomainVersion } from '@/core/refresh/hooks/useQueryStreamSignal';
 
 describe('liveDomainVersion', () => {
   it('is stable when only the refresh timestamp changes (same data)', () => {

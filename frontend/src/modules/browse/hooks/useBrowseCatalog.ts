@@ -32,7 +32,7 @@ import {
 } from '@/core/data-access';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
-import { useQueryStreamSignal } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import { useQueryStreamSignal } from '@/core/refresh/hooks/useQueryStreamSignal';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { type RefreshFailure, refreshFailureOf } from '@/core/refresh/refreshFailure';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
