@@ -202,6 +202,74 @@ describe('scheduled polling follows leases', () => {
   });
 });
 
+describe('poll deadlines', () => {
+  // A hung backend read: it settles only when its signal aborts.
+  const stallReads = (readTimes: number[] = []) => {
+    fetchSnapshotMock.mockReset();
+    fetchSnapshotMock.mockImplementation(
+      (_domain: RefreshDomain, options: { signal?: AbortSignal }) => {
+        readTimes.push(Date.now());
+        return new Promise((_resolve, reject) => {
+          options.signal?.addEventListener('abort', () => reject(options.signal?.reason));
+        });
+      }
+    );
+    return readTimes;
+  };
+
+  it('records a poll that outlives its deadline as a failure and backs it off', async () => {
+    markClusterReady('stall-a');
+    const scope = yamlScope('stall-a');
+    const readTimes = stallReads();
+    acquireRefreshDomainLease({ domain: 'object-yaml', scope });
+    await settle();
+
+    // The first poll starts at 5 s; its 10 s deadline expires at 15 s.
+    await advance(15_000);
+    expect(getScopedDomainState('object-yaml', scope)).toMatchObject({
+      status: 'error',
+      error: { kind: 'local', errorName: 'TimeoutError' },
+    });
+
+    await advance(400_000);
+    const gaps = readTimes.slice(1).map((time, index) => time - readTimes[index]);
+    expect(gaps[gaps.length - 1]).toBeGreaterThanOrEqual(60_000);
+    releaseRefreshDomainLease({ domain: 'object-yaml', scope });
+  });
+
+  it('records nothing when a release cancels a stalled poll', async () => {
+    markClusterReady('stall-b');
+    const scope = yamlScope('stall-b');
+    stallReads();
+    acquireRefreshDomainLease({ domain: 'object-yaml', scope, preserveState: true });
+    await settle();
+    await advance(5_000);
+
+    releaseRefreshDomainLease({ domain: 'object-yaml', scope, preserveState: true });
+    await advance(20_000);
+
+    expect(getScopedDomainState('object-yaml', scope).error).toBeNull();
+  });
+
+  // Activation cancels in-flight reads while their scopes stay leased; that is
+  // the backend being re-warmed, not the read failing.
+  it('records nothing when foreground activation cancels a stalled poll', async () => {
+    markClusterReady('stall-c');
+    const scope = yamlScope('stall-c');
+    stallReads();
+    acquireRefreshDomainLease({ domain: 'object-yaml', scope });
+    await settle();
+    await advance(5_000);
+
+    clusterReadiness.beginForegroundActivation('stall-c');
+    await advance(20_000);
+
+    expect(getScopedDomainState('object-yaml', scope).error).toBeNull();
+    clusterReadiness.endForegroundActivation('stall-c');
+    releaseRefreshDomainLease({ domain: 'object-yaml', scope });
+  });
+});
+
 describe('retained data', () => {
   it('keeps a preserved scope’s rows through release and paints them on re-acquire', async () => {
     markClusterReady('retain-a');
@@ -540,6 +608,23 @@ describe('hidden document', () => {
     fetchSnapshotMock.mockClear();
     await advance(10_000);
     expect(readsOf('object-yaml', scope)).toBe(2);
+    releaseRefreshDomainLease({ domain: 'object-yaml', scope });
+  });
+
+  // A window root publishes its visibility when it mounts, so a repeat of the
+  // current state must not restart a poll that is already counting down.
+  it('keeps a pending poll on schedule when told the visible window is visible', async () => {
+    markClusterReady('hidden-b');
+    const scope = yamlScope('hidden-b');
+    acquireRefreshDomainLease({ domain: 'object-yaml', scope });
+    await settle();
+    fetchSnapshotMock.mockClear();
+
+    await advance(4_000);
+    eventBus.emit('app:visibility-visible');
+    await advance(1_000);
+
+    expect(readsOf('object-yaml', scope)).toBe(1);
     releaseRefreshDomainLease({ domain: 'object-yaml', scope });
   });
 });

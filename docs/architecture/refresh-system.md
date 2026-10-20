@@ -149,9 +149,10 @@ health.
 - Leases are the only demand signal. Each leased scope owns one poll timer,
   armed at its contract interval after the previous poll settles and bounded
   by its contract timeout. The pause input is the auto-refresh preference plus
-  window visibility (`app:visibility-hidden`/`app:visibility-visible`); a
-  pause change cancels every poll and re-arms leased scopes when passive work
-  resumes. Streams follow leases: they start on the first lease, readiness,
+  window visibility (`app:visibility-hidden`/`app:visibility-visible`), which
+  each window root publishes when it mounts and on every change. A pause
+  change cancels every poll and re-arms leased scopes when passive work
+  resumes; a repeat of the current state changes nothing. Streams follow leases: they start on the first lease, readiness,
   auth recovery, the end of an auto-refresh pause, or a cleared block, never
   from a fetch path. Active subscriptions always equal the leased streaming
   scopes that are serviceable, not blocked, and not one-shot queries, while

@@ -171,7 +171,10 @@ Payload shape and presentation: [resource-metrics.md](resource-metrics.md).
 - Retries are per scope. A failed read keeps that scope pending and its next
   poll retries after a backoff (immediate, then 1 s doubling to 60 s); a failed
   stream start retries on its own timer (1 s doubling to 30 s). One scope's
-  failures never delay another's reads.
+  failures never delay another's reads. A poll that outlives its contract
+  timeout is a failed read (`TimeoutError`) and backs off like any other; a
+  read its owner cancels (release, kubeconfig or selection change, view reset,
+  foreground activation) records nothing.
 - Foreground activation is a per-cluster dispatch boundary. Beginning it stops
   that cluster's streams and aborts its in-flight snapshots before the backend
   replaces or re-warms producers. Visible leased work is replayed afterwards

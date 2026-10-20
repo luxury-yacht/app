@@ -80,6 +80,16 @@ const isUserIntent = (options: { intent: RefreshIntent }): boolean => options.in
 const isSignalIntent = (options: { intent: RefreshIntent }): boolean =>
   options.intent === 'stream-signal';
 
+// A poll that outlives its contract timeout is a failed read, not a
+// cancellation: its abort carries this reason so failure handling can tell an
+// expired deadline from an owner cancelling the read.
+class RefreshDeadlineError extends Error {
+  constructor(domain: RefreshDomain, seconds: number) {
+    super(`${domain} refresh timed out after ${seconds} s`);
+    this.name = 'TimeoutError';
+  }
+}
+
 type ScopedFetchExecution<K extends RefreshDomain> = {
   runtime: ClusterRefreshRuntime;
   scope: string;
@@ -1102,9 +1112,10 @@ class RefreshOrchestrator {
       return;
     }
     const controller = new AbortController();
+    const timeoutSeconds = getRefreshDomainDescriptor(domain).timing.timeout;
     const timeout = globalThis.setTimeout(
-      () => controller.abort(),
-      getRefreshDomainDescriptor(domain).timing.timeout * 1000
+      () => controller.abort(new RefreshDeadlineError(domain, timeoutSeconds)),
+      timeoutSeconds * 1000
     );
     try {
       await this.fetchScopedDomain(domain, scope, {
@@ -1347,13 +1358,32 @@ class RefreshOrchestrator {
     if (!signal) {
       return undefined;
     }
-    const abortListener = () => controller.abort();
+    const abortListener = () => controller.abort(signal.reason);
     signal.addEventListener('abort', abortListener);
     return () => signal.removeEventListener('abort', abortListener);
   }
 
   private fetchCanCommit<K extends RefreshDomain>(execution: ScopedFetchExecution<K>): boolean {
     return !execution.controller.signal.aborted && execution.contextVersion === this.contextVersion;
+  }
+
+  // The failure a settled read records, or null to drop it. A read its owner
+  // cancelled (release, context change, activation) is dropped; a read whose
+  // deadline expired failed, while its scope is still current.
+  private recordableFailure<K extends RefreshDomain>(
+    domain: K,
+    execution: ScopedFetchExecution<K>,
+    error: unknown
+  ): { error: unknown } | null {
+    if (this.fetchCanCommit(execution)) {
+      return { error };
+    }
+    const { reason } = execution.controller.signal;
+    const deadlineExpired =
+      reason instanceof RefreshDeadlineError &&
+      execution.contextVersion === this.contextVersion &&
+      this.isScopedDomainEnabledInternal(domain, execution.scope);
+    return deadlineExpired ? { error: reason } : null;
   }
 
   private applyFetchResult<K extends RefreshDomain>(
@@ -1390,12 +1420,14 @@ class RefreshOrchestrator {
     domain: K,
     execution: ScopedFetchExecution<K>,
     options: DomainFetchOptions,
-    error: unknown
+    settledError: unknown
   ): void {
-    if (!this.fetchCanCommit(execution)) {
+    const recordable = this.recordableFailure(domain, execution, settledError);
+    if (!recordable) {
       return;
     }
 
+    const { error } = recordable;
     const message = error instanceof Error ? error.message : String(error);
     if (isSnapshotPermissionDenied(error)) {
       // A typed 403 is a settled answer and bypasses startup network-error
@@ -1938,16 +1970,24 @@ class RefreshOrchestrator {
     this.reschedulePolls();
   };
 
-  // A hidden document pauses polls; its stream managers suspend themselves.
   private readonly handleDocumentHidden = () => {
-    this.documentHidden = true;
-    this.reschedulePolls();
+    this.setDocumentHidden(true);
   };
 
   private readonly handleDocumentVisible = () => {
-    this.documentHidden = false;
-    this.reschedulePolls();
+    this.setDocumentHidden(false);
   };
+
+  // A hidden document pauses polls; its stream managers suspend themselves.
+  // Window roots republish the current state when they mount, so an unchanged
+  // state must not re-arm, and so delay, every pending poll.
+  private setDocumentHidden(hidden: boolean): void {
+    if (this.documentHidden === hidden) {
+      return;
+    }
+    this.documentHidden = hidden;
+    this.reschedulePolls();
+  }
 }
 
 export const refreshOrchestrator = new RefreshOrchestrator();
