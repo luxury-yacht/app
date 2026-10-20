@@ -19,6 +19,11 @@ operations, permissions, and object actions for one cluster never affect another
   selection transition (`openKubeconfig`, `closeKubeconfig`,
   `setSelectedKubeconfigs`). UI never splices selected clusters locally or calls
   generated backend selection/close commands.
+- A window sends its `ApplyClusterWorkspace` commands one at a time through
+  `KubeconfigContext`'s selection and visibility queues. Each command is its own
+  request with no sequence number, and the backend applies a window's commands
+  in arrival order, so the queues are what keep the last tab change last. Do
+  not remove them as duplicates of the backend's serialization.
 - Add/remove updates aggregate refresh handlers and object-catalog services via
   the live update path, not only initial setup. Removal cleans refresh
   subsystems, catalog state, runtime operations, stream subscriptions, and

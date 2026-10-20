@@ -195,6 +195,13 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const committedActiveRef = useRef<string>('');
   const latestSelectionRequestIdRef = useRef(0);
   const latestActiveIntentRef = useRef(0);
+  // These queues are this window's ordering guarantee, not a copy of the
+  // backend's: each ApplyClusterWorkspace is its own request and carries no
+  // sequence, so two sent together can reach the backend in either order. The
+  // backend applies a window's selection commands in lock order without
+  // dropping older ones, and applies visibility commands without that lock.
+  // Sending the next command only after the previous one settles keeps the
+  // user's last tab change last.
   const selectionQueueRef = useRef<Promise<void> | null>(null);
   const visibilityQueueRef = useRef<Promise<void> | null>(null);
   const latestVisibilityRequestIdRef = useRef(0);
