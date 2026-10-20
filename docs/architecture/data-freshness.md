@@ -36,7 +36,9 @@ causes Kubernetes API work. Mechanics and transport live in
    hidden.
 6. **Manual means the user asked.** Buttons and commands use manual jobs.
    Startup, foreground, stream signals, and fallback polling are non-manual and
-   never surface manual-job timeout errors.
+   never surface manual-job timeout errors. Only manual refresh emits
+   `refresh:start`/`refresh:complete`, which drive the connectivity
+   indicator's refreshing state; polls and signal refetches stay quiet.
 
 ## Request intents
 

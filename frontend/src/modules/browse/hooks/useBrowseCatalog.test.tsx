@@ -43,7 +43,6 @@ vi.mock('@/core/refresh', () => ({
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomain: (...args: unknown[]) => mocks.requestRefreshDomain(...args),
   requestRefreshDomainState: (...args: unknown[]) => mocks.requestRefreshDomainState(...args),
-  readRefreshDomainState: (...args: unknown[]) => mocks.getScopedDomainState(...args),
   useScopedRefreshDomainLifecycle: (params: unknown) => mocks.lifecycle(params),
   useRefreshDomainHandle: (params: {
     domain: string | null;

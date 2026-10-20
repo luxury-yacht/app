@@ -21,7 +21,7 @@ type StreamFrame = Record<string, unknown>;
 
 const RESOURCE_STREAM = 'refresh-resources';
 
-export class FakeStreamSocket {
+class FakeStreamSocket {
   readonly OPEN = 1;
   readyState = 1;
   onopen: ((event?: Event) => void) | null = null;

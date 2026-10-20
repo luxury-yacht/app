@@ -153,7 +153,9 @@ health.
   pause change cancels every poll and re-arms leased scopes when passive work
   resumes. Streams follow leases: they start on the first lease, readiness,
   auth recovery, the end of an auto-refresh pause, or a cleared block, never
-  from a fetch path. The orchestrator separately reduces global metrics demand
+  from a fetch path. Active subscriptions always equal the leased streaming
+  scopes that are serviceable, not blocked, and not one-shot queries, while
+  auto-refresh is on and the window is visible. The orchestrator separately reduces global metrics demand
   (`metricsDemandState.ts`) as `idle`/`requesting`/`waiting-retry`; only the
   matching demand key completes or schedules a retry.
 - A scope change releases the old lease, which cancels its poll and in-flight

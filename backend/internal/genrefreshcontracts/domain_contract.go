@@ -223,15 +223,9 @@ func parseFrontendDomainPolicy(
 	if registration.Frontend.Priority != nil && *registration.Frontend.Priority < 0 {
 		return parsedFrontendDomainPolicy{}, fmt.Errorf("refresh domain %q has a negative frontend priority", registration.Domain)
 	}
-	if registration.Frontend.RegistrationOrder == nil {
-		return parsedFrontendDomainPolicy{}, fmt.Errorf("refresh domain %q is missing frontend.registrationOrder", registration.Domain)
-	}
-	registrationOrder := *registration.Frontend.RegistrationOrder
-	if registrationOrder < 0 || registrationOrder >= inventorySize {
-		return parsedFrontendDomainPolicy{}, fmt.Errorf("refresh domain %q has out-of-range frontend.registrationOrder %d", registration.Domain, registrationOrder)
-	}
-	if previous, duplicate := seenFrontendOrder[registrationOrder]; duplicate {
-		return parsedFrontendDomainPolicy{}, fmt.Errorf("refresh domains %q and %q share frontend.registrationOrder %d", previous, registration.Domain, registrationOrder)
+	registrationOrder, err := parseFrontendRegistrationOrder(registration, inventorySize, seenFrontendOrder)
+	if err != nil {
+		return parsedFrontendDomainPolicy{}, err
 	}
 	diagnosticsStream, err := decodeNullableString(registration.Frontend.DiagnosticsStream)
 	if err != nil {
@@ -252,6 +246,25 @@ func parseFrontendDomainPolicy(
 		policy.priority = *registration.Frontend.Priority
 	}
 	return policy, nil
+}
+
+// parseFrontendRegistrationOrder requires a unique order within the inventory.
+func parseFrontendRegistrationOrder(
+	registration authoredDomainRegistration,
+	inventorySize int,
+	seenFrontendOrder map[int]string,
+) (int, error) {
+	if registration.Frontend.RegistrationOrder == nil {
+		return 0, fmt.Errorf("refresh domain %q is missing frontend.registrationOrder", registration.Domain)
+	}
+	registrationOrder := *registration.Frontend.RegistrationOrder
+	if registrationOrder < 0 || registrationOrder >= inventorySize {
+		return 0, fmt.Errorf("refresh domain %q has out-of-range frontend.registrationOrder %d", registration.Domain, registrationOrder)
+	}
+	if previous, duplicate := seenFrontendOrder[registrationOrder]; duplicate {
+		return 0, fmt.Errorf("refresh domains %q and %q share frontend.registrationOrder %d", previous, registration.Domain, registrationOrder)
+	}
+	return registrationOrder, nil
 }
 
 func validateDomainSourceClocks(registration authoredDomainRegistration) error {

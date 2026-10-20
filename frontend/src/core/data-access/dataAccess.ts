@@ -113,7 +113,7 @@ export const requestRefreshDomainState = async <K extends RefreshDomain>({
 
     return {
       status: 'executed',
-      data: readRefreshDomainState(domain, scope),
+      data: getScopedDomainState(domain, scope),
     };
   } finally {
     releaseRefreshDomainLease({ domain, scope, preserveState });
@@ -161,9 +161,6 @@ export const releaseRefreshDomainLease = (lease: RefreshDomainLease): void => {
 export const resetRefreshDomain = (domain: RefreshDomain, scope: string): void => {
   refreshOrchestrator.resetScopedDomain(domain, scope);
 };
-
-export const readRefreshDomainState = <K extends RefreshDomain>(domain: K, scope: string) =>
-  getScopedDomainState(domain, scope);
 
 // Manual refresh of what the named cluster shows: every scope it leases.
 export const requestContextRefresh = async ({

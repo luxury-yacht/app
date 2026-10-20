@@ -504,13 +504,7 @@ describe('appPreferences', () => {
 
     await hydrateAppPreferences({ force: true });
 
-    expect(events).toEqual([
-      'appearance',
-      'short-names',
-      'dim',
-      'exclusive',
-      'auto-refresh',
-    ]);
+    expect(events).toEqual(['appearance', 'short-names', 'dim', 'exclusive', 'auto-refresh']);
     unsubscribers.forEach((unsubscribe) => {
       unsubscribe();
     });

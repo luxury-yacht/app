@@ -473,6 +473,35 @@ describe('refreshOrchestrator', () => {
     });
   });
 
+  it('does not turn a leased background poll into queued demand at the activation gate', async () => {
+    registerAllSnapshotDomains();
+    const clusterId = 'cluster-cold';
+    eventBus.emit('cluster:lifecycle', { clusterId, state: 'ready' });
+    clusterReadiness.beginForegroundActivation(clusterId);
+    clientMocks.fetchSnapshotMock.mockClear();
+    clientMocks.fetchSnapshotMock.mockResolvedValue({
+      snapshot: null,
+      etag: undefined,
+      notModified: true,
+    });
+    SNAPSHOT_REFRESH_DOMAINS.forEach((domain) => {
+      leaseRuntimeScope(domain, exampleScopeFor(domain, clusterId));
+    });
+
+    await Promise.all(
+      SNAPSHOT_REFRESH_DOMAINS.map((domain) =>
+        refreshOrchestrator.fetchScopedDomain(domain, exampleScopeFor(domain, clusterId), {
+          intent: 'background',
+        })
+      )
+    );
+    clusterReadiness.endForegroundActivation(clusterId);
+    // Let any replay the gate queued dispatch before asserting none did.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+  });
+
   it('preserves manual intent while a refresh waits for foreground activation', async () => {
     registerCatalogDomain();
     const clusterId = 'cluster-cold';

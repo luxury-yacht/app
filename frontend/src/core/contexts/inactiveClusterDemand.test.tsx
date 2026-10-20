@@ -63,7 +63,11 @@ vi.mock('@/core/contexts/AppearanceModeContext', () => ({
   AppearanceModeProvider: PassThrough,
 }));
 
-import { flushRefreshWork, markClusterReady, resetRefreshHarness } from '@/test-utils/refreshHarness';
+import {
+  flushRefreshWork,
+  markClusterReady,
+  resetRefreshHarness,
+} from '@/test-utils/refreshHarness';
 import { KubernetesProvider } from './KubernetesProvider';
 
 describe('an inactive cluster tab', () => {
