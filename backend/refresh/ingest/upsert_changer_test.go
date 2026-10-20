@@ -30,21 +30,21 @@ type catalogChange struct {
 	row      interface{}
 }
 
-// recordingChangeSink records UpsertChange deliveries and any plain Upsert, which
-// a change sink must never receive.
-type recordingChangeSink struct {
+// recordingUpsertChanger records UpsertChange deliveries and any plain Upsert, which
+// an UpsertChanger must never receive.
+type recordingUpsertChanger struct {
 	recordingSink
 	changeMu sync.Mutex
 	changes  []catalogChange
 }
 
-func (s *recordingChangeSink) UpsertChange(previous, row interface{}) {
+func (s *recordingUpsertChanger) UpsertChange(previous, row interface{}) {
 	s.changeMu.Lock()
 	defer s.changeMu.Unlock()
 	s.changes = append(s.changes, catalogChange{previous: previous, row: row})
 }
 
-func (s *recordingChangeSink) takeChanges() []catalogChange {
+func (s *recordingUpsertChanger) takeChanges() []catalogChange {
 	s.changeMu.Lock()
 	defer s.changeMu.Unlock()
 	changes := s.changes
@@ -56,13 +56,13 @@ func versionedRow(ns, name, resourceVersion string) versionedCatalogRow {
 	return versionedCatalogRow{Key: ns + "/" + name, RV: resourceVersion}
 }
 
-// A change sink sees the row each delivery replaces, so it can tell a relist's
+// An UpsertChanger sees the row each delivery replaces, so it can tell a relist's
 // unchanged re-upsert from a real change without remembering every object.
-func TestProjectingStoreGivesChangeSinksTheRowTheyReplace(t *testing.T) {
+func TestProjectingStoreGivesUpsertChangersTheRowTheyReplace(t *testing.T) {
 	store := NewProjectingStore(versionedCatalogProject)
 	require.NoError(t, store.Add(configMapAt("default", "a", "1")))
 
-	sink := &recordingChangeSink{}
+	sink := &recordingUpsertChanger{}
 	store.AddCatalogSink(sink)
 	require.Equal(t, []catalogChange{{previous: versionedRow("default", "a", "1"), row: versionedRow("default", "a", "1")}},
 		sink.takeChanges(), "replaying the current set is not a change")
@@ -84,6 +84,6 @@ func TestProjectingStoreGivesChangeSinksTheRowTheyReplace(t *testing.T) {
 	require.Equal(t, []catalogChange{{previous: versionedRow("default", "a", "2"), row: versionedRow("default", "a", "3")}}, sink.takeChanges())
 
 	upserts, deletes := sink.snapshot()
-	require.Empty(t, upserts, "a change sink receives UpsertChange instead of Upsert")
+	require.Empty(t, upserts, "an UpsertChanger receives UpsertChange instead of Upsert")
 	require.Equal(t, []interface{}{versionedRow("default", "b", "1")}, deletes)
 }

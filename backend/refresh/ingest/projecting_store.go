@@ -77,12 +77,12 @@ type Sink interface {
 	Delete(tableRow interface{})
 }
 
-// ChangeSink is an optional Catalog-sink extension. Instead of Upsert, the store
+// UpsertChanger is an optional Catalog-sink extension. Instead of Upsert, the store
 // hands it the Catalog half of the row being replaced (nil for a new key) with
 // the new one, so the sink can tell a relist's unchanged re-upsert from a real
 // change without remembering every row itself. Replaying the current set to a
 // newly added sink pairs each row with itself. Deletes arrive through Delete.
-type ChangeSink interface {
+type UpsertChanger interface {
 	UpsertChange(previous, row interface{})
 }
 
@@ -403,7 +403,7 @@ func emitCatalogUpsert(sinks []Sink, previous, value interface{}) {
 }
 
 func upsertCatalogRow(sink Sink, previous, value interface{}) {
-	if change, ok := sink.(ChangeSink); ok {
+	if change, ok := sink.(UpsertChanger); ok {
 		change.UpsertChange(previous, value)
 		return
 	}
@@ -796,11 +796,11 @@ func (s *ProjectingStore) feedSinksReplace(prev, next map[string]interface{}) {
 	s.emitReplaceBundles(bundles)
 }
 
-// emitReplaceCatalogRows is emitReplaceRows for Catalog sinks: a ChangeSink gets
+// emitReplaceCatalogRows is emitReplaceRows for Catalog sinks: an UpsertChanger gets
 // each new row paired with the row it replaces.
 func emitReplaceCatalogRows(sinks []Sink, rows []interface{}, prev, next map[string]interface{}) {
 	for _, sink := range sinks {
-		change, ok := sink.(ChangeSink)
+		change, ok := sink.(UpsertChanger)
 		if !ok {
 			emitReplaceRows([]Sink{sink}, rows)
 			continue

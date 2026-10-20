@@ -366,38 +366,43 @@ func registerSubsystemDomains(ctx context.Context, factory *informer.Factory, ga
 	return registerDomains(ctx, gate, runtimePerms, registrations)
 }
 
-func wireStreamObservers(
-	resourceManager *resourcestream.Manager,
-	metricsPoller refresh.MetricsPoller,
-	snapshotService *snapshot.Service,
-	namespaceNotifier *snapshot.NamespaceChangeNotifier,
-	objectEventsNotifier *snapshot.ObjectEventsChangeNotifier,
-	objectDetailsNotifier *snapshot.ObjectDetailsChangeNotifier,
-	eventTableNotifiers []*snapshot.EventTableChangeNotifier,
-	attentionIndex *snapshot.ClusterAttentionIndex,
-) *NamespacesDoorbellObserver {
+// streamObserverDeps bundles the stream manager with the snapshot-side change
+// sources whose doorbells it rings. Nil sources are skipped.
+type streamObserverDeps struct {
+	resourceManager       *resourcestream.Manager
+	metricsPoller         refresh.MetricsPoller
+	snapshotService       *snapshot.Service
+	namespaceNotifier     *snapshot.NamespaceChangeNotifier
+	objectEventsNotifier  *snapshot.ObjectEventsChangeNotifier
+	objectDetailsNotifier *snapshot.ObjectDetailsChangeNotifier
+	eventTableNotifiers   []*snapshot.EventTableChangeNotifier
+	attentionIndex        *snapshot.ClusterAttentionIndex
+}
+
+func wireStreamObservers(deps streamObserverDeps) *NamespacesDoorbellObserver {
+	resourceManager := deps.resourceManager
 	if resourceManager != nil {
-		resourceManager.SetSnapshotDomainInvalidator(snapshotService.InvalidateDomainCache)
-		wireMetricsObserver(metricsPoller, resourceManager)
+		resourceManager.SetSnapshotDomainInvalidator(deps.snapshotService.InvalidateDomainCache)
+		wireMetricsObserver(deps.metricsPoller, resourceManager)
 	}
 	observer := &NamespacesDoorbellObserver{}
 	if resourceManager == nil {
 		return observer
 	}
-	if namespaceNotifier != nil {
-		wireNamespacesDoorbell(namespaceNotifier, resourceManager, observer)
+	if deps.namespaceNotifier != nil {
+		wireNamespacesDoorbell(deps.namespaceNotifier, resourceManager, observer)
 	}
-	if objectEventsNotifier != nil {
-		wireObjectEventsDoorbell(objectEventsNotifier, resourceManager)
+	if deps.objectEventsNotifier != nil {
+		wireObjectEventsDoorbell(deps.objectEventsNotifier, resourceManager)
 	}
-	if objectDetailsNotifier != nil {
-		objectDetailsNotifier.SetBroadcast(resourceManager.BroadcastObjectDetailsRefresh)
+	if deps.objectDetailsNotifier != nil {
+		deps.objectDetailsNotifier.SetBroadcast(resourceManager.BroadcastObjectDetailsRefresh)
 	}
-	for _, notifier := range eventTableNotifiers {
+	for _, notifier := range deps.eventTableNotifiers {
 		wireEventTableDoorbell(notifier, resourceManager)
 	}
-	if attentionIndex != nil {
-		wireClusterAttentionDoorbell(attentionIndex, resourceManager)
+	if deps.attentionIndex != nil {
+		wireClusterAttentionDoorbell(deps.attentionIndex, resourceManager)
 	}
 	return observer
 }
@@ -496,16 +501,16 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 		return nil, err
 	}
 	objectDetailsNotifier := snapshot.NewObjectDetailsChangeNotifier()
-	namespacesDoorbellObserver := wireStreamObservers(
-		resourceManager,
-		metricsPoller,
-		snapshotService,
-		namespaceNotifier,
-		objectEventsNotifier,
-		objectDetailsNotifier,
-		eventTableNotifiers,
-		attentionIndex,
-	)
+	namespacesDoorbellObserver := wireStreamObservers(streamObserverDeps{
+		resourceManager:       resourceManager,
+		metricsPoller:         metricsPoller,
+		snapshotService:       snapshotService,
+		namespaceNotifier:     namespaceNotifier,
+		objectEventsNotifier:  objectEventsNotifier,
+		objectDetailsNotifier: objectDetailsNotifier,
+		eventTableNotifiers:   eventTableNotifiers,
+		attentionIndex:        attentionIndex,
+	})
 
 	return &Subsystem{
 		Manager:               manager,

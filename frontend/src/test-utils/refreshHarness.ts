@@ -16,6 +16,7 @@ import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { encodeScopeSelector, parseRefreshScope } from '@/core/refresh/scopeSelector';
 import type { RefreshDomain } from '@/core/refresh/types';
 import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 
 type StreamFrame = Record<string, unknown>;
 
@@ -82,7 +83,7 @@ export const activeStreamSubscriptions = (): string[] => {
       }
     });
   });
-  return Array.from(active).sort();
+  return Array.from(active).sort(compareUtf16Strings);
 };
 
 export const streamKey = (domain: RefreshDomain, scope: string): string =>
@@ -134,12 +135,15 @@ export const setAutoRefresh = (enabled: boolean): void => {
   eventBus.emit('settings:auto-refresh', enabled);
 };
 
-/** Settles queued promise continuations without advancing timers. */
-export const flushRefreshWork = async (): Promise<void> => {
-  for (let i = 0; i < 10; i += 1) {
-    await Promise.resolve();
-  }
-};
+/**
+ * Settles queued promise continuations without advancing timers: ten chained
+ * steps, each one microtask turn.
+ */
+export const flushRefreshWork = (): Promise<void> =>
+  Array.from({ length: 10 }).reduce<Promise<void>>(
+    (settled) => settled.then(() => undefined),
+    Promise.resolve()
+  );
 
 /** Tears down every scope, stream, and runtime the previous test created. */
 export const resetRefreshHarness = (): void => {

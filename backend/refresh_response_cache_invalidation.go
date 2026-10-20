@@ -267,7 +267,7 @@ func registerHelmCacheInvalidation(helm *informer.HelmStorageSource, targets res
 // sink. The reflector delivers the projected catalog Summary, which carries the
 // identity eviction keys off. It evicts on every upsert and delete — a cached
 // detail is stale once the resource changes or disappears — and rings the
-// details doorbell only for real changes: as an ingest.ChangeSink it sees the
+// details doorbell only for real changes: as an ingest.UpsertChanger it sees the
 // row an upsert replaces, so a relist's unchanged row rings nothing.
 type responseCacheSink struct {
 	targets responseCacheEvictionTargets
