@@ -171,9 +171,10 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   acknowledges) retry every failed close intent and the latest failed
   publication once, and reject if any still fails. A newer publication
   supersedes a failed one; a close intent stays pending until a retry lands.
-  Before a renderer asks the directory to open an object, its queued close
-  intents land first (best effort), so a reopen never finds the panel it just
-  closed. Retained-panel notifications coalesce while claims run; successful
+  Before a renderer asks the directory to open an object, that object's queued
+  close intent lands first; while it cannot, the open fails. A reopen therefore
+  never finds the panel it just closed, and a late retry can never delete the
+  reopened one. Other objects' failed closes do not affect the open. Retained-panel notifications coalesce while claims run; successful
   claims mount even if a later claim fails.
 - Known limits: until a failed close intent lands, other views still see the
   panel. A dock-back whose directory move fails to begin can leave behind the

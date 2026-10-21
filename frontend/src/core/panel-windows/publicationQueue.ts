@@ -1,6 +1,8 @@
 type QueuedOperation = {
   operation: () => Promise<void>;
   onError?: (error: unknown) => void;
+  // What a command is about; settleCommands(key) retries and fails only those.
+  key?: string;
 };
 
 type FailedOperation = QueuedOperation & { error: unknown };
@@ -30,23 +32,24 @@ export class PanelPublicationQueue {
     );
   }
 
-  command(operation: () => Promise<void>, onError?: (error: unknown) => void): void {
-    this.#enqueueCommand({ operation, onError }, true);
+  command(operation: () => Promise<void>, onError?: (error: unknown) => void, key?: string): void {
+    this.#enqueueCommand({ operation, onError, key }, true);
   }
 
-  // Lands every queued command, retrying each failed one once. A retry that
-  // fails again stays pending and is not reported twice; the caller sees the
-  // rejection.
-  async settleCommands(): Promise<void> {
+  // Lands every queued command, then retries the failed ones (only those for
+  // key, when given) once and rejects while one still fails. A retry that fails
+  // again stays pending and is not reported twice; the caller sees the rejection.
+  async settleCommands(key?: string): Promise<void> {
     await this.#landCommands();
-    const failed = this.#failedCommands;
-    this.#failedCommands = [];
+    const matches = (command: QueuedOperation) => key === undefined || command.key === key;
+    const failed = this.#failedCommands.filter(matches);
+    this.#failedCommands = this.#failedCommands.filter((command) => !matches(command));
     for (const command of failed) {
       this.#enqueueCommand(command, false);
     }
     // Also waits for retries a concurrent settle queued.
     await this.#landCommands();
-    const [stillFailed] = this.#failedCommands;
+    const stillFailed = this.#failedCommands.find(matches);
     if (stillFailed) {
       throw stillFailed.error;
     }

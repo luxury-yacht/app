@@ -89,6 +89,23 @@ describe('PanelPublicationQueue', () => {
     expect(settled).toHaveBeenCalledTimes(2);
   });
 
+  it("settles one panel's commands without waiting on another panel's failure", async () => {
+    const queue = new PanelPublicationQueue();
+    const closeApi = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('api offline'))
+      .mockResolvedValue(undefined);
+    const closeWorker = vi.fn().mockRejectedValue(new Error('worker offline'));
+    queue.command(closeApi, undefined, 'api');
+    queue.command(closeWorker, undefined, 'worker');
+
+    await expect(queue.settleCommands('api')).resolves.toBeUndefined();
+    expect(closeApi).toHaveBeenCalledTimes(2);
+    expect(closeWorker).toHaveBeenCalledOnce();
+    await expect(queue.settleCommands('worker')).rejects.toThrow('worker offline');
+    await expect(queue.flush()).rejects.toThrow('worker offline');
+  });
+
   it('never retries an obsolete failed snapshot after a newer successful publication', async () => {
     const queue = new PanelPublicationQueue();
     const obsolete = vi.fn().mockRejectedValue(new Error('offline'));

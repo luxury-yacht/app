@@ -27,12 +27,8 @@ import {
   publishDockedPanels,
 } from './index';
 import { PanelLayoutLifecycle } from './PanelLayoutLifecycle';
-import {
-  nativePanelPublication,
-  type PanelPublicationQueue,
-  workspacePanelPublication,
-} from './publicationQueue';
-import { useClosedPanelIntents } from './useClosedPanelIntents';
+import { nativePanelPublication, workspacePanelPublication } from './publicationQueue';
+import { settlePanelClose, useClosedPanelIntents } from './useClosedPanelIntents';
 import { useRemoveWorkspacePanels } from './useRemoveWorkspacePanels';
 import { useRestoreWorkspacePanels } from './useRestoreWorkspacePanels';
 
@@ -122,14 +118,12 @@ export function usePanelWorkspaceSync(): WorkspaceSync {
   return sync;
 }
 
-// Land a renderer's queued closes before it asks the directory to open, so the
-// directory cannot answer with a panel the user already closed here. Best
-// effort: a close that still fails was reported and is retried at the next flush.
-const settleClosedPanels = (queue: PanelPublicationQueue) =>
-  queue.settleCommands().catch(() => undefined);
-
 const openNativePanel = async (tab: panelwindow.TabSnapshot) => {
-  await settleClosedPanels(nativePanelPublication);
+  await settlePanelClose(
+    nativePanelPublication,
+    panelTargetFromSnapshot(tab).clusterId,
+    tab.panelId
+  );
   return openPanelWorkspaceObject(getWindowIdentity(), tab);
 };
 
@@ -223,7 +217,7 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
           return null;
         }
         const result = await activity.run(clusterId, async () => {
-          await settleClosedPanels(queue.current);
+          await settlePanelClose(queue.current, clusterId, tab.panelId);
           return openPanelWorkspaceObject(windowName, tab);
         });
         return activity.isClosing(clusterId) ? null : result;

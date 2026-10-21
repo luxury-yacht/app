@@ -613,6 +613,34 @@ it('reopens an object only after this view retries its failed close', async () =
   );
 });
 
+it('refuses to reopen an object while its close cannot land', async () => {
+  const offline = new Error('ipc unavailable');
+  mocks.closeIntent.mockRejectedValueOnce(offline).mockRejectedValueOnce(offline);
+  act(() => mocks.closedListener?.('production', ['api']));
+  await act(async () => undefined);
+
+  await expect(sync.openPanel(mocks.local.production[0] as never)).rejects.toBe(offline);
+  expect(mocks.open).not.toHaveBeenCalled();
+  await act(async () => sync.flush());
+  expect(mocks.closeIntent).toHaveBeenCalledTimes(3);
+});
+
+it("reopens an object while another object's close is still failing", async () => {
+  mocks.closeIntent.mockRejectedValueOnce(new Error('ipc unavailable'));
+  act(() => mocks.closedListener?.('production', ['worker']));
+  await act(async () => undefined);
+  mocks.open.mockResolvedValueOnce({ render: true });
+
+  await act(async () => {
+    await sync.openPanel(mocks.local.production[0] as never);
+  });
+
+  expect(mocks.open).toHaveBeenCalledOnce();
+  expect(mocks.closeIntent).toHaveBeenCalledOnce();
+  await act(async () => sync.flush());
+  expect(mocks.closeIntent).toHaveBeenCalledTimes(2);
+});
+
 it('reopens an object only after a close still in flight lands', async () => {
   let release: () => void = () => undefined;
   mocks.closeIntent.mockImplementationOnce(
@@ -658,6 +686,26 @@ it('opens from a native window only after its failed close is retried', async ()
   expect(mocks.closeIntent.mock.invocationCallOrder[1]).toBeLessThan(
     mocks.open.mock.invocationCallOrder[0] ?? 0
   );
+  await act(async () => nativeRoot.unmount());
+});
+
+it('refuses to open from a native window while its close cannot land', async () => {
+  const nativeRoot = ReactDOM.createRoot(document.createElement('div'));
+  let open: ReturnType<typeof usePanelWorkspaceOpen> | undefined;
+  function NativeProbe() {
+    useClosedPanelIntents(nativePanelPublication, 'panel-1');
+    open = usePanelWorkspaceOpen();
+    return null;
+  }
+  await act(async () => nativeRoot.render(<NativeProbe />));
+  const offline = new Error('ipc unavailable');
+  mocks.closeIntent.mockRejectedValueOnce(offline).mockRejectedValueOnce(offline);
+  act(() => mocks.closedListener?.('production', ['api']));
+  await act(async () => undefined);
+
+  await expect(open?.(mocks.local.production[0] as never)).rejects.toBe(offline);
+  expect(mocks.open).not.toHaveBeenCalled();
+  await act(async () => nativePanelPublication.flush());
   await act(async () => nativeRoot.unmount());
 });
 
