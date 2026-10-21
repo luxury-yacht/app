@@ -10,6 +10,7 @@
 ### Fixed
 
 - The Diagnostics panel no longer closes when you switch cluster tabs.
+- Closing the app window a floating panel is docking into no longer leaves that panel window unresponsive for up to 15 seconds.
 - Tables:
   - Gateway API resources, HPAs, CRDs, and Helm releases update in their tables as soon as they change. Before, a table could keep the old rows until the next change.
   - Those tables no longer refetch every 15 seconds when nothing has changed.

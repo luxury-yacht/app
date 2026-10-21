@@ -1,7 +1,10 @@
 package appwindow
 
 import (
+	"slices"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/stretchr/testify/require"
@@ -12,8 +15,10 @@ type groupTransferFixture struct {
 	registry *Registry
 	owner    string
 	snapshot PanelGroupSnapshot
-	events   []string
-	closed   []string
+	// Backend timers emit from their own goroutine.
+	mu     sync.Mutex
+	events []string
+	closed []string
 }
 
 // The owner app window renders one docked panel whose directory entry still has
@@ -34,10 +39,24 @@ func newGroupTransferFixture(t *testing.T) *groupTransferFixture {
 	fixture.registry.showWindow = func(string) bool { return true }
 	fixture.registry.closeWindow = func(name string) bool { fixture.closed = append(fixture.closed, name); return true }
 	fixture.registry.emitWindowEvent = func(target, name string, _ any) bool {
+		fixture.mu.Lock()
+		defer fixture.mu.Unlock()
 		fixture.events = append(fixture.events, target+":"+name)
 		return true
 	}
 	return fixture
+}
+
+func (f *groupTransferFixture) resetEvents() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = nil
+}
+
+func (f *groupTransferFixture) sawEvent(event string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Contains(f.events, event)
 }
 
 func (f *groupTransferFixture) panel(t *testing.T) panelwindow.WorkspacePanel {
@@ -73,7 +92,7 @@ func (f *groupTransferFixture) beginDock(t *testing.T, native PanelWindowDescrip
 	dock.SourceWindowName = native.WindowName
 	dock.GroupID = native.GroupID
 	dock.TransferID = "dock-" + position
-	f.events = nil
+	f.resetEvents()
 	require.NoError(t, f.registry.BeginPanelWindowDock(native.WindowName, position, dock))
 	return dock
 }
@@ -138,7 +157,7 @@ func TestDockBackTargetLearnsFromTheDirectoryAndCommitsAfterTheSourceCloses(t *t
 	native := fixture.float(t)
 	dock := fixture.beginDock(t, native, "bottom")
 
-	require.Contains(t, fixture.events, fixture.owner+":"+panelwindow.WorkspaceChangedEventName)
+	require.True(t, fixture.sawEvent(fixture.owner+":"+panelwindow.WorkspaceChangedEventName))
 	pending := fixture.panel(t)
 	require.Equal(t, native.WindowName, pending.Location.WindowName)
 	require.Equal(t, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: fixture.owner, GroupID: "bottom", Active: true}, pending.Transfer.Target)
@@ -160,24 +179,31 @@ func TestFailedDockKeepsNativeSourceAndTellsTheTargetToDropItsCopy(t *testing.T)
 		t.Run(failure, func(t *testing.T) {
 			fixture := newGroupTransferFixture(t)
 			native := fixture.float(t)
+			if failure == "dock times out" {
+				fixture.registry.panelDockTimeout = time.Millisecond
+			}
 			dock := fixture.beginDock(t, native, "right")
-			fixture.events = nil
 
 			switch failure {
 			case "source cannot close":
+				fixture.resetEvents()
 				fixture.registry.closeWindow = func(string) bool { return false }
 				require.Error(t, fixture.registry.AcknowledgePanelTransfer(fixture.owner, dock.TransferID, true))
 			case "target rejects":
+				fixture.resetEvents()
 				require.NoError(t, fixture.registry.AcknowledgePanelTransfer(fixture.owner, dock.TransferID, false))
 			case "dock times out":
-				require.NoError(t, fixture.registry.FailPanelWindowTransfer(native.WindowName, native.WindowName, dock.TransferID))
+				// The backend's own timer cancels a dock its target never answers.
+				require.Eventually(t, func() bool {
+					return fixture.sawEvent(fixture.owner + ":" + panelwindow.WindowTransferFailedEventName)
+				}, time.Second, time.Millisecond)
 			}
 
 			kept := fixture.panel(t)
 			require.Equal(t, native.WindowName, kept.Location.WindowName)
 			require.Zero(t, kept.Transfer)
 			require.Equal(t, PanelWindowStateLive, fixture.registry.panels.State(native.WindowName))
-			require.Contains(t, fixture.events, fixture.owner+":"+panelwindow.WorkspaceChangedEventName, "the target re-reads and drops its provisional copy")
+			require.True(t, fixture.sawEvent(fixture.owner+":"+panelwindow.WorkspaceChangedEventName), "the target re-reads and drops its provisional copy")
 			require.Error(t, fixture.registry.workspace.CommitGroupTransfer(dock.TransferID))
 		})
 	}

@@ -34,6 +34,10 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
 - One native window holds one same-cluster group; clusters never share a group.
 - Renderers project the shared directory and acknowledge changes through its
   owner.
+- The directory is the only writer of which renderer and group hold a panel.
+  Each renderer writes only the order, activation, edge, and view of the panels
+  in its groups. Directory-owned arrangement was rejected: it needs a
+  `DockablePanelProvider` rewrite and a directory round trip on every reorder.
 - Docked and native renderers share group chrome and object content. Native
   descriptors and arrangement reports hold serializable identity and view state
   only: no React nodes, refs, fetched data, credentials, drafts, or terminal
@@ -137,6 +141,12 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   panel identity, not the published view, and places a dropped tab at its drop
   index. Publications cannot move, delete, or claim a moving panel, and they
   never commit a move.
+- Each transfer ends in one terminal (`panelIndex.finishLocked`,
+  `removePanelTabTransferLocked`, `removeClusterTransferLocked`) that releases
+  its uncommitted directory move. A path that skipped it would leave the panels
+  moving, and a moving panel cannot be closed. While a panel moves, close
+  intents ignore it, `Open` cannot reclaim it from retention, and deleting it
+  removes it from the move.
 - App-view targets mount provisional copies of the moves their directory reads
   list for them; a live native target receives the tab request itself. Each
   target settles the move with `acknowledgePanelTransfer`: mounted commits,
@@ -158,9 +168,13 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   a cluster with no panels; a transaction may finish its own reconstruction
   while frozen.
 - Close and transfer flushes (including a move target's flush before it
-  acknowledges, so no queued snapshot can omit committed tabs) retry the latest
-  failed publication once and reject if that fails. Retained-panel notifications coalesce while claims run;
-  successful claims mount even if a later claim fails.
+  acknowledges) retry the latest failed publication once and reject if that
+  fails. Retained-panel notifications coalesce while claims run; successful
+  claims mount even if a later claim fails.
+- Known limits: a close intent lost to an IPC failure leaves its panel in the
+  directory until its window or cluster closes, because the outbound queue
+  retries only its latest failure. A dock-back whose directory move fails to
+  begin can leave behind the app window it created for the cluster.
 
 ## Refresh and runtime state
 
@@ -219,7 +233,8 @@ Sequences:
   identities, release the view. Floating panels stay open. Closing cancels the
   transfers it takes part in, and the view declines every directory move
   addressed to it (a dock-back included), so each source keeps its panels at
-  once rather than at the move's timeout.
+  once rather than at the move's timeout. The per-protocol cancellation stays
+  because a request its source has not accepted yet is not in the directory.
 - Quit: preflight every ready app and panel renderer; close none until all
   approve. Approved renderers stay frozen while peers decide and through
   shutdown. Unanimous approval requests application Quit instead of closing
@@ -249,10 +264,13 @@ Sequences:
 ## Validation
 
 - Trace complete object identity from the initiating link or action through the
-  directory and snapshot. Prove the source stays live until target
+  directory. Prove the source stays live until target
   acknowledgement and unchanged on failure or timeout, and that panel visibility
   controls only its scoped demand. Add reducer/protocol and visible component
-  tests.
+  tests. Prove transfer contracts on the real `WorkspaceDirectory` and
+  registry; seed panels with `Open` (`seedPanels`, `seedNativeGroup` in
+  `internal/appwindow/registry_test.go`), since publications cannot create
+  them.
 - Exercise clean, unsaved-YAML, saving, and mutation-in-flight guards across
   move, tab close, titlebar close, cluster close, app-window close, and quit;
   cover both docks, Float, dock-back, group order, active tabs, uniqueness,
@@ -263,7 +281,8 @@ Sequences:
   several tabs into new and existing windows; occupied and empty docks (preview
   matches final placement, clears after drop or cancel); cross-cluster
   rejection incl. empty docks; identity, active view, phantom animation,
-  empty-source closure; failed or cancelled transfers keep the source. Linux:
+  empty-source closure; failed or cancelled transfers keep the source; closing
+  a dock-back's target app window returns the native window at once. Linux:
   drag-out deferred; test reorder, moves between existing panels, Float,
   dock-back.
 - One cluster in two app windows: find/focus shared panels from either; closing
