@@ -12,8 +12,6 @@ import ToggleSwitch from '@shared/components/ToggleSwitch';
 import { errorHandler } from '@utils/errorHandler';
 import { useEffect, useId, useState } from 'react';
 import {
-  type AppPreferenceKey,
-  commitIntegerPreferenceInput,
   hydrateAppPreferences,
   setObjPanelLogsApiTimestampFormat,
   setObjPanelLogsApiTimestampUseLocalTimeZone,
@@ -26,22 +24,13 @@ import {
   formatObjPanelLogsApiTimestamp,
   getObjPanelLogsApiTimestampFormatValidationError,
 } from '@/utils/objPanelLogsApiTimestampFormat';
-import { PreferenceNumberInput, SettingRow } from './SettingsControls';
+import { PreferenceNumberRow, type PreferenceNumberSetting, SettingRow } from './SettingsControls';
 
 const TIMESTAMP_EXAMPLE = '2026-04-11T12:34:55.000Z';
 const TIMESTAMP_FORMAT_REFERENCE =
   'https://day.js.org/docs/en/parse/string-format#list-of-all-available-parsing-tokens';
 
-type NumberSetting = {
-  title: string;
-  help: string;
-  prefKey: AppPreferenceKey;
-  persist: (value: number) => void;
-  step: number;
-  unit: string;
-};
-
-const CONSTRAINTS: NumberSetting[] = [
+const CONSTRAINTS: PreferenceNumberSetting[] = [
   {
     title: 'Buffer size',
     help: 'Max number of log rows kept by each Logs tab. Larger values use more memory but give deeper scrollback.',
@@ -67,34 +56,6 @@ const CONSTRAINTS: NumberSetting[] = [
     unit: 'containers',
   },
 ];
-
-// Shows the preference owner's value; a draft exists only while the user types,
-// so a value the owner settles on (including a rollback) shows as soon as the
-// field is left.
-function NumberSettingRow({ setting, id }: Readonly<{ setting: NumberSetting; id: string }>) {
-  const value = usePreference(setting.prefKey);
-  const [draft, setDraft] = useState<string | null>(null);
-  return (
-    <SettingRow title={setting.title} help={setting.help} controlId={id}>
-      <div className="setting-item setting-item-inline">
-        <PreferenceNumberInput
-          id={id}
-          prefKey={setting.prefKey}
-          step={setting.step}
-          value={draft ?? String(value)}
-          onChange={setDraft}
-          onCommit={(raw) => {
-            commitIntegerPreferenceInput(setting.prefKey, raw, setting.persist, {
-              defaultOnNonPositive: true,
-            });
-            setDraft(null);
-          }}
-        />{' '}
-        {setting.unit}
-      </div>
-    </SettingRow>
-  );
-}
 
 function TimestampFormatRow({
   id,
@@ -187,7 +148,7 @@ function LogsSection() {
       <hr className="settings-subgroup-divider" />
 
       {CONSTRAINTS.map((setting) => (
-        <NumberSettingRow
+        <PreferenceNumberRow
           key={setting.prefKey}
           setting={setting}
           id={`${elementIdPrefix}-${setting.prefKey}`}

@@ -14,10 +14,7 @@ import { clearTintedPalette } from '@utils/paletteTint';
 import { useEffect, useId, useState } from 'react';
 import { ClearAppState } from '@/core/backend-api';
 import {
-  type AppPreferenceKey,
-  commitIntegerPreferenceInput,
   type GridTablePersistenceMode,
-  getPreference,
   hydrateAppPreferences,
   setAutoRefreshEnabled,
   setGridTablePersistenceMode,
@@ -26,76 +23,56 @@ import {
   setPermissionSSRRFetchConcurrency,
 } from '@/core/settings/appPreferences';
 import { usePreference } from '@/core/settings/usePreference';
-import { PreferenceNumberInput, SettingRow } from './SettingsControls';
+import { PreferenceNumberRow, type PreferenceNumberSetting, SettingRow } from './SettingsControls';
+
+const KUBERNETES_API_SETTINGS: PreferenceNumberSetting[] = [
+  {
+    title: 'Client QPS',
+    help: 'Sustained per-second rate for K8s API requests. This value is per-cluster.',
+    prefKey: 'kubernetesClientQPS',
+    persist: setKubernetesClientQPS,
+    step: 10,
+    unit: 'queries per second',
+  },
+  {
+    title: 'Client burst allowance',
+    help: 'Short-term burst allowance for K8s API requests. This value is per-cluster.',
+    prefKey: 'kubernetesClientBurst',
+    persist: setKubernetesClientBurst,
+    step: 10,
+    unit: 'queries per second',
+  },
+  {
+    title: 'SSRR concurrency',
+    help: (
+      <>
+        Concurrent <code>SelfSubjectRulesReview</code> requests during permission checks.
+      </>
+    ),
+    prefKey: 'permissionSSRRFetchConcurrency',
+    persist: setPermissionSSRRFetchConcurrency,
+    step: 1,
+    unit: 'concurrent requests',
+  },
+];
 
 function AdvancedSection() {
   const elementIdPrefix = useId();
   const refreshEnabled = usePreference('autoRefreshEnabled');
-  const [kubernetesClientQPSInput, setKubernetesClientQPSInput] = useState<string>(() =>
-    String(getPreference('kubernetesClientQPS'))
-  );
-  const [kubernetesClientBurstInput, setKubernetesClientBurstInput] = useState<string>(() =>
-    String(getPreference('kubernetesClientBurst'))
-  );
-  const [permissionSSRRFetchConcurrencyInput, setPermissionSSRRFetchConcurrencyInput] =
-    useState<string>(() => String(getPreference('permissionSSRRFetchConcurrency')));
-  const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
-    getPreference('gridTablePersistenceMode')
-  );
+  const persistenceMode = usePreference('gridTablePersistenceMode');
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   const [isResetViewsConfirmOpen, setIsResetViewsConfirmOpen] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const prefs = await hydrateAppPreferences({ force: true });
-        if (!cancelled) {
-          setKubernetesClientQPSInput(String(prefs.kubernetesClientQPS));
-          setKubernetesClientBurstInput(String(prefs.kubernetesClientBurst));
-          setPermissionSSRRFetchConcurrencyInput(String(prefs.permissionSSRRFetchConcurrency));
-          setPersistenceMode(getPreference('gridTablePersistenceMode'));
-        }
-      } catch (error) {
-        errorHandler.handle(error, { action: 'loadAdvancedSettings' });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    void hydrateAppPreferences({ force: true }).catch((error) => {
+      errorHandler.handle(error, { action: 'loadAdvancedSettings' });
+    });
   }, []);
 
   const handlePersistenceModeToggle = (checked: boolean) => {
     const mode: GridTablePersistenceMode = checked ? 'namespaced' : 'shared';
-    setPersistenceMode(mode);
     setGridTablePersistenceMode(mode);
   };
-
-  // Commit a raw input string: normalize + persist, then reflect the applied value.
-  const commitPreferenceInput =
-    (key: AppPreferenceKey, persist: (value: number) => void, setInput: (value: string) => void) =>
-    (raw: string) => {
-      const normalized = commitIntegerPreferenceInput(key, raw, persist, {
-        defaultOnNonPositive: true,
-      });
-      setInput(String(normalized));
-    };
-
-  const commitKubernetesClientQPS = commitPreferenceInput(
-    'kubernetesClientQPS',
-    setKubernetesClientQPS,
-    setKubernetesClientQPSInput
-  );
-  const commitKubernetesClientBurst = commitPreferenceInput(
-    'kubernetesClientBurst',
-    setKubernetesClientBurst,
-    setKubernetesClientBurstInput
-  );
-  const commitPermissionSSRRFetchConcurrency = commitPreferenceInput(
-    'permissionSSRRFetchConcurrency',
-    setPermissionSSRRFetchConcurrency,
-    setPermissionSSRRFetchConcurrencyInput
-  );
 
   const handleResetViews = async () => {
     setIsResetViewsConfirmOpen(false);
@@ -156,63 +133,13 @@ function AdvancedSection() {
       <div className="settings-subgroup-label">Kubernetes API</div>
       <hr className="settings-subgroup-divider" />
 
-      <SettingRow
-        title="Client QPS"
-        controlId={`${elementIdPrefix}-settings-kubernetes-client-qps`}
-        help="Sustained per-second rate for K8s API requests. This value is per-cluster."
-      >
-        <div className="setting-item setting-item-inline">
-          <PreferenceNumberInput
-            id={`${elementIdPrefix}-settings-kubernetes-client-qps`}
-            prefKey="kubernetesClientQPS"
-            step={10}
-            value={kubernetesClientQPSInput}
-            onChange={setKubernetesClientQPSInput}
-            onCommit={commitKubernetesClientQPS}
-          />{' '}
-          queries per second
-        </div>
-      </SettingRow>
-
-      <SettingRow
-        title="Client burst allowance"
-        controlId={`${elementIdPrefix}-settings-kubernetes-client-burst`}
-        help="Short-term burst allowance for K8s API requests. This value is per-cluster."
-      >
-        <div className="setting-item setting-item-inline">
-          <PreferenceNumberInput
-            id={`${elementIdPrefix}-settings-kubernetes-client-burst`}
-            prefKey="kubernetesClientBurst"
-            step={10}
-            value={kubernetesClientBurstInput}
-            onChange={setKubernetesClientBurstInput}
-            onCommit={commitKubernetesClientBurst}
-          />{' '}
-          queries per second
-        </div>
-      </SettingRow>
-
-      <SettingRow
-        title="SSRR concurrency"
-        controlId={`${elementIdPrefix}-settings-permission-ssrr-concurrency`}
-        help={
-          <>
-            Concurrent <code>SelfSubjectRulesReview</code> requests during permission checks.
-          </>
-        }
-      >
-        <div className="setting-item setting-item-inline">
-          <PreferenceNumberInput
-            id={`${elementIdPrefix}-settings-permission-ssrr-concurrency`}
-            prefKey="permissionSSRRFetchConcurrency"
-            step={1}
-            value={permissionSSRRFetchConcurrencyInput}
-            onChange={setPermissionSSRRFetchConcurrencyInput}
-            onCommit={commitPermissionSSRRFetchConcurrency}
-          />{' '}
-          concurrent requests
-        </div>
-      </SettingRow>
+      {KUBERNETES_API_SETTINGS.map((setting) => (
+        <PreferenceNumberRow
+          key={setting.prefKey}
+          setting={setting}
+          id={`${elementIdPrefix}-${setting.prefKey}`}
+        />
+      ))}
 
       <div className="settings-subgroup-label">Persistence</div>
       <hr className="settings-subgroup-divider" />

@@ -5,9 +5,12 @@ import {
   hydrateAppPreferences,
   resetAppPreferencesCacheForTesting,
 } from '@/core/settings/appPreferences';
+import { controlName } from '@/test-utils/controlName';
 import { requireValue } from '@/test-utils/requireValue';
+import AdvancedSection from './AdvancedSection';
 import DataManagementSection from './DataManagementSection';
 import DisplaySection from './DisplaySection';
+import ObjectPanelSection from './ObjectPanelSection';
 
 const backend = vi.hoisted(() => ({
   GetAppSettings: vi.fn(),
@@ -17,8 +20,15 @@ const backend = vi.hoisted(() => ({
   ImportSettings: vi.fn(),
   ExportFavorites: vi.fn(),
   ImportFavorites: vi.fn(),
+  ClearAppState: vi.fn(),
 }));
 vi.mock('@/core/backend-api', () => backend);
+vi.mock('@ui/dockable', () => ({
+  useDockablePanelContext: () => ({ applyLayoutDefaultsAcrossClusters: vi.fn() }),
+}));
+vi.mock('@ui/dockable/dockablePanelLayout', () => ({
+  getContentBounds: () => ({ width: 4000, height: 4000 }),
+}));
 vi.mock('@/core/persistence/favorites', () => ({ hydrateFavorites: vi.fn() }));
 vi.mock('@/core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => true,
@@ -66,17 +76,23 @@ const pendingSave = () => {
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+const savedSettings = {
+  useShortResourceNames: false,
+  errorReportingEnabled: false,
+  defaultTablePageSize: 50,
+  kubernetesClientQPS: 200,
+  gridTablePersistenceMode: 'shared',
+  defaultObjectPanelPosition: 'right',
+  objectPanelDockedRightWidth: 600,
+};
+
 describe('settings controls with the preference owner', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   beforeEach(async () => {
     resetAppPreferencesCacheForTesting();
     backend.GetAppSettingsSchema.mockResolvedValue(null);
-    backend.GetAppSettings.mockResolvedValue({
-      useShortResourceNames: false,
-      errorReportingEnabled: false,
-      defaultTablePageSize: 50,
-    });
+    backend.GetAppSettings.mockResolvedValue(savedSettings);
     backend.UpdateAppPreferences.mockReset().mockResolvedValue({});
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -86,6 +102,8 @@ describe('settings controls with the preference owner', () => {
         <>
           <DisplaySection />
           <DataManagementSection />
+          <AdvancedSection />
+          <ObjectPanelSection />
         </>
       );
       await flush();
@@ -94,6 +112,58 @@ describe('settings controls with the preference owner', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+  });
+
+  const input = (selector: string) =>
+    requireValue(container.querySelector<HTMLInputElement>(selector), selector);
+  const qpsInput = () =>
+    requireValue(
+      Array.from(container.querySelectorAll<HTMLInputElement>('input')).find(
+        (field) => controlName(field) === 'Client QPS'
+      ),
+      'Client QPS input'
+    );
+  const dockedRightInput = () => input('input[aria-label="Docked right width"]');
+  const perNamespaceToggle = () =>
+    requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Per-namespace views"]'),
+      'per-namespace views toggle'
+    );
+  const positionButton = (label: string) =>
+    requireValue(
+      Array.from(container.querySelectorAll<HTMLButtonElement>('.settings-choice-button')).find(
+        (button) => button.textContent === label
+      ),
+      `${label} position`
+    );
+  const typeAndLeave = async (field: HTMLInputElement, value: string) => {
+    await act(async () => {
+      field.focus();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, value);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      field.blur();
+      await flush();
+    });
+  };
+
+  it('returns Advanced and Object Panel controls to the saved values when saves fail', async () => {
+    backend.UpdateAppPreferences.mockRejectedValue(new Error('save failed'));
+
+    await act(async () => {
+      perNamespaceToggle().click();
+      await flush();
+    });
+    await typeAndLeave(qpsInput(), '321');
+    await act(async () => {
+      positionButton('Bottom').click();
+      await flush();
+    });
+    await typeAndLeave(dockedRightInput(), '700');
+
+    expect(perNamespaceToggle().getAttribute('aria-checked')).toBe('false');
+    expect(qpsInput().value).toBe('200');
+    expect(positionButton('Right').getAttribute('aria-pressed')).toBe('true');
+    expect(dockedRightInput().value).toBe('600');
   });
 
   it.each(['Short resource names', 'Error Reporting'])(
@@ -129,6 +199,10 @@ describe('settings controls with the preference owner', () => {
       useShortResourceNames: true,
       errorReportingEnabled: true,
       defaultTablePageSize: 250,
+      kubernetesClientQPS: 250,
+      gridTablePersistenceMode: 'namespaced',
+      defaultObjectPanelPosition: 'floating',
+      objectPanelDockedRightWidth: 720,
     });
     await act(async () => {
       await hydrateAppPreferences({ force: true });
@@ -141,6 +215,10 @@ describe('settings controls with the preference owner', () => {
     expect(
       container.querySelector<HTMLSelectElement>('select[aria-label="Default page size"]')?.value
     ).toBe('250');
+    expect(qpsInput().value).toBe('250');
+    expect(perNamespaceToggle().getAttribute('aria-checked')).toBe('true');
+    expect(positionButton('Floating').getAttribute('aria-pressed')).toBe('true');
+    expect(dockedRightInput().value).toBe('720');
   });
 
   it('restores the displayed page size when persistence fails', async () => {

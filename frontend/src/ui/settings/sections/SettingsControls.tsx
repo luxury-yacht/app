@@ -3,16 +3,18 @@
  *
  * Shared building blocks for the settings sections: the label/control row
  * wrapper every preference renders, the integer preference input (with the
- * Enter-to-blur commit convention), and preference commands.
+ * Enter-to-blur commit convention) and its row, and preference commands.
  */
 
 import { errorHandler } from '@utils/errorHandler';
 import type { ComponentType, ReactNode } from 'react';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
   type AppPreferenceKey,
+  commitIntegerPreferenceInput,
   getIntegerPreferenceMetadata,
 } from '@/core/settings/appPreferences';
+import { usePreference } from '@/core/settings/usePreference';
 
 /**
  * The standard settings row: title + help on the left, control on the right.
@@ -90,7 +92,7 @@ export function SettingsChoiceButtons<T extends string>({
  * Numeric preference input bounded by the preference's metadata. Enter commits
  * by blurring (the blur handler owns normalization + persistence).
  */
-export function PreferenceNumberInput({
+function PreferenceNumberInput({
   id,
   prefKey,
   step,
@@ -123,6 +125,46 @@ export function PreferenceNumberInput({
         }
       }}
     />
+  );
+}
+
+export interface PreferenceNumberSetting {
+  title: string;
+  help: ReactNode;
+  prefKey: AppPreferenceKey;
+  persist: (value: number) => void;
+  step: number;
+  unit: string;
+}
+
+// Shows the preference owner's value; a draft exists only while the user types,
+// so a value the owner settles on (including a rollback) shows as soon as the
+// field is left.
+export function PreferenceNumberRow({
+  setting,
+  id,
+}: Readonly<{ setting: PreferenceNumberSetting; id: string }>) {
+  const value = usePreference(setting.prefKey);
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <SettingRow title={setting.title} help={setting.help} controlId={id}>
+      <div className="setting-item setting-item-inline">
+        <PreferenceNumberInput
+          id={id}
+          prefKey={setting.prefKey}
+          step={setting.step}
+          value={draft ?? String(value)}
+          onChange={setDraft}
+          onCommit={(raw) => {
+            commitIntegerPreferenceInput(setting.prefKey, raw, setting.persist, {
+              defaultOnNonPositive: true,
+            });
+            setDraft(null);
+          }}
+        />{' '}
+        {setting.unit}
+      </div>
+    </SettingRow>
   );
 }
 

@@ -56,7 +56,12 @@ effects. App-state reads use `appStateAccess`
   starts hydration without awaiting it, so notification delivery can finish the
   write hydration waits on.
 - Mounted controls subscribe to the owner and read its value; no second
-  component-local rollback after a persistence failure.
+  component-local rollback after a persistence failure. A typed field keeps
+  only a draft while the user types (`PreferenceNumberRow`).
+- Appearance's palette, accent, and link controls are the deliberate exception:
+  they keep live-preview drafts, and page styling re-reads those preferences only
+  on a light/dark change or when a theme is applied, so a rollback or another
+  window's change shows after either event or on restart.
 - Transient component state and state needed before Wails is available stay
   frontend-owned (last Settings tab, first-paint appearance caches); Settings
   displaying a value is no reason to move it to the backend.

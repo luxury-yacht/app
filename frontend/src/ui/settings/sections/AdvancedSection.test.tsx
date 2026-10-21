@@ -2,6 +2,8 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  type AppPreferenceKey,
+  type AppPreferences,
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
@@ -33,25 +35,41 @@ const resetMocks = vi.hoisted(() => ({
   clearAppState: vi.fn(),
 }));
 
-// Real preference store; only the backend-facing commands are stubbed.
-vi.mock('@/core/settings/appPreferences', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/core/settings/appPreferences')>()),
-  commitIntegerPreferenceInput: (_key: string, raw: string, persist: (value: number) => void) => {
-    const value = Number(raw);
-    persist(value);
-    return value;
-  },
-  getIntegerPreferenceMetadata: () => ({ min: 1, max: 10000 }),
-  hydrateAppPreferences: (...args: unknown[]) => preferenceMocks.hydrateAppPreferences(...args),
-  setAutoRefreshEnabled: (...args: unknown[]) => preferenceMocks.setAutoRefreshEnabled(...args),
-  setGridTablePersistenceMode: (...args: unknown[]) =>
-    preferenceMocks.setGridTablePersistenceMode(...args),
-  setKubernetesClientBurst: (...args: unknown[]) =>
-    preferenceMocks.setKubernetesClientBurst(...args),
-  setKubernetesClientQPS: (...args: unknown[]) => preferenceMocks.setKubernetesClientQPS(...args),
-  setPermissionSSRRFetchConcurrency: (...args: unknown[]) =>
-    preferenceMocks.setPermissionSSRRFetchConcurrency(...args),
-}));
+// The real preference store; the setters update it as the optimistic setters do,
+// without a backend.
+vi.mock('@/core/settings/appPreferences', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/core/settings/appPreferences')>();
+  const owner =
+    <K extends AppPreferenceKey>(key: K, record: (value: AppPreferences[K]) => void) =>
+    (value: AppPreferences[K]) => {
+      record(value);
+      actual.setAppPreferencesForTesting({ [key]: value });
+    };
+  return {
+    ...actual,
+    commitIntegerPreferenceInput: (_key: string, raw: string, persist: (value: number) => void) => {
+      const value = Number(raw);
+      persist(value);
+      return value;
+    },
+    getIntegerPreferenceMetadata: () => ({ min: 1, max: 10000 }),
+    hydrateAppPreferences: (...args: unknown[]) => preferenceMocks.hydrateAppPreferences(...args),
+    setAutoRefreshEnabled: owner('autoRefreshEnabled', preferenceMocks.setAutoRefreshEnabled),
+    setGridTablePersistenceMode: owner(
+      'gridTablePersistenceMode',
+      preferenceMocks.setGridTablePersistenceMode
+    ),
+    setKubernetesClientBurst: owner(
+      'kubernetesClientBurst',
+      preferenceMocks.setKubernetesClientBurst
+    ),
+    setKubernetesClientQPS: owner('kubernetesClientQPS', preferenceMocks.setKubernetesClientQPS),
+    setPermissionSSRRFetchConcurrency: owner(
+      'permissionSSRRFetchConcurrency',
+      preferenceMocks.setPermissionSSRRFetchConcurrency
+    ),
+  };
+});
 
 vi.mock('@shared/components/tables/persistence/gridTablePersistenceReset', () => ({
   clearAllGridTableState: (...args: unknown[]) => persistenceMocks.clearAllGridTableState(...args),
@@ -166,27 +184,25 @@ describe('AdvancedSection', () => {
 
   it.each(['blur', 'Enter'])('commits edited Kubernetes API preferences on %s', (commit) => {
     const inputs = [
+      { label: 'Client QPS', value: '321', persist: preferenceMocks.setKubernetesClientQPS },
       {
-        suffix: 'settings-kubernetes-client-qps',
-        value: '321',
-        persist: preferenceMocks.setKubernetesClientQPS,
-      },
-      {
-        suffix: 'settings-kubernetes-client-burst',
+        label: 'Client burst allowance',
         value: '654',
         persist: preferenceMocks.setKubernetesClientBurst,
       },
       {
-        suffix: 'settings-permission-ssrr-concurrency',
+        label: 'SSRR concurrency',
         value: '12',
         persist: preferenceMocks.setPermissionSSRRFetchConcurrency,
       },
     ];
 
-    for (const { suffix, value, persist } of inputs) {
+    for (const { label, value, persist } of inputs) {
       const input = requireValue(
-        container.querySelector<HTMLInputElement>(`[id$="${suffix}"]`),
-        `expected ${suffix} input`
+        Array.from(container.querySelectorAll<HTMLInputElement>('input')).find(
+          (field) => controlName(field) === label
+        ),
+        `expected ${label} input`
       );
 
       act(() => {
