@@ -354,6 +354,17 @@ func clonePanelGroupSnapshot(snapshot PanelGroupSnapshot) PanelGroupSnapshot {
 	return result
 }
 
+// TransferWindow names the native window a pending group transfer belongs to.
+func (p *panelIndex) TransferWindow(transferID string) (string, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	transfer := p.transfers.get(transferID)
+	if transfer == nil {
+		return "", false
+	}
+	return transfer.windowName, true
+}
+
 func (p *panelIndex) Names(clusterID string) []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()

@@ -28,20 +28,10 @@ const payload: DockableTabDragPayload = {
 };
 
 it.each(['right', 'bottom', 'floating'] as const)(
-  'moves only the requested tab to %s after publication',
+  'moves only the requested tab to %s without waiting for a publication',
   async (target) => {
     request.mockClear();
-    let release: () => void = () => undefined;
-    const publication = {
-      flush: () =>
-        new Promise<void>((resolve) => {
-          release = resolve;
-        }),
-    };
-    const moving = requestPanelTabMove(payload, target, publication, '');
-    expect(request).not.toHaveBeenCalled();
-    release();
-    await moving;
+    await requestPanelTabMove(payload, target, '');
     expect(request).toHaveBeenCalledWith(
       'panel-1',
       expect.objectContaining({
@@ -61,30 +51,11 @@ it.each(['right', 'bottom', 'floating'] as const)(
   }
 );
 
-it('keeps a failed publication from starting a transfer', async () => {
+it('rejects a tab without source identity', async () => {
   request.mockClear();
   await expect(
-    requestPanelTabMove(
-      payload,
-      'floating',
-      {
-        flush: async () => {
-          throw new Error('publication failed');
-        },
-      },
-      ''
-    )
-  ).rejects.toThrow('publication failed');
-  expect(request).not.toHaveBeenCalled();
-});
-
-it('rejects a tab without source identity before publishing', async () => {
-  request.mockClear();
-  const flush = vi.fn();
-  await expect(
-    requestPanelTabMove({ ...payload, sourceWindowName: undefined }, 'floating', { flush }, '')
+    requestPanelTabMove({ ...payload, sourceWindowName: undefined }, 'floating', '')
   ).rejects.toThrow('complete source');
-  expect(flush).not.toHaveBeenCalled();
   expect(request).not.toHaveBeenCalled();
 });
 
@@ -95,7 +66,6 @@ it.each(['right', 'bottom', 'floating'] as const)(
     await requestPanelTabMove(
       { ...payload, sourceWindowName: 'workspace-1', sourceWindowGroupId: 'right' },
       target,
-      { flush: async () => undefined },
       'workspace-1'
     );
     expect(request).toHaveBeenCalledWith(

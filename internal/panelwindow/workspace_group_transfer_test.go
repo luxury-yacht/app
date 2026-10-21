@@ -15,6 +15,19 @@ func openDocked(t *testing.T, directory *WorkspaceDirectory, window string, tabs
 	require.NoError(t, directory.PublishWindow(window, PanelLocationDocked, []WorkspaceGroup{{ClusterID: tabs[0].ClusterID(), GroupID: "right", Tabs: tabs, ActivePanelID: tabs[0].PanelID}}))
 }
 
+// moveTab moves one tab through the directory's only cross-window writer.
+func moveTab(directory *WorkspaceDirectory, id string, tab TabSnapshot, source string, target PanelLocation) error {
+	if err := directory.BeginGroupTransfer(GroupTransfer{
+		TransferID:   id,
+		SourceWindow: source,
+		Target:       target,
+		Group:        WorkspaceGroup{ClusterID: tab.ClusterID(), Tabs: []TabSnapshot{tab}, ActivePanelID: tab.PanelID},
+	}); err != nil {
+		return err
+	}
+	return directory.CommitGroupTransfer(id)
+}
+
 func floatTransfer(id, source string, tabs ...TabSnapshot) GroupTransfer {
 	return GroupTransfer{
 		TransferID:   id,
@@ -153,7 +166,7 @@ func TestDockedGroupCommitAppendsAfterExistingTabsAndMovesActivation(t *testing.
 	require.NoError(t, directory.BeginGroupTransfer(GroupTransfer{
 		TransferID:   "dock-1",
 		SourceWindow: "panel-1",
-		Target:       PanelLocation{Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "right"},
+		Target:       PanelLocation{Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "right", Index: AppendToGroup},
 		Group:        WorkspaceGroup{ClusterID: "production", Tabs: []TabSnapshot{source}, ActivePanelID: source.PanelID},
 	}))
 	require.NoError(t, directory.CommitGroupTransfer("dock-1"))
@@ -161,6 +174,28 @@ func TestDockedGroupCommitAppendsAfterExistingTabsAndMovesActivation(t *testing.
 	panels := panelsByID(directory, "production")
 	require.Equal(t, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "right", Index: 1, Active: true}, panels[source.PanelID].Location)
 	require.False(t, panels[existing.PanelID].Location.Active)
+}
+
+func TestSingleTabTransferLandsAtTheDropIndex(t *testing.T) {
+	directory := NewWorkspaceDirectory()
+	first, second, moving := workspaceTab("production", "first"), workspaceTab("production", "second"), workspaceTab("production", "moving")
+	openDocked(t, directory, "app-a", first, second)
+	_, _, err := directory.Open(moving, PanelLocation{Kind: PanelLocationWindow, WindowName: "panel-1", GroupID: "floating", Active: true})
+	require.NoError(t, err)
+
+	require.NoError(t, directory.BeginGroupTransfer(GroupTransfer{
+		TransferID:   "drop-1",
+		SourceWindow: "panel-1",
+		Target:       PanelLocation{Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "right", Index: 1},
+		Group:        WorkspaceGroup{ClusterID: "production", Tabs: []TabSnapshot{moving}, ActivePanelID: moving.PanelID},
+	}))
+	require.Equal(t, 1, panelsByID(directory, "production")[moving.PanelID].Transfer.Target.Index, "the target mounts its copy where it was dropped")
+	require.NoError(t, directory.CommitGroupTransfer("drop-1"))
+
+	panels := panelsByID(directory, "production")
+	require.Equal(t, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "right", Index: 1, Active: true}, panels[moving.PanelID].Location)
+	require.Equal(t, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "right", Index: 0}, panels[first.PanelID].Location)
+	require.Equal(t, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "right", Index: 2}, panels[second.PanelID].Location)
 }
 
 func TestRemovedPanelsLeaveTheirPendingTransfer(t *testing.T) {

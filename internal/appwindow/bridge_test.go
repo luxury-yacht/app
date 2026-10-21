@@ -62,8 +62,8 @@ func (registry *recordingNativeWindowRegistry) BeginPanelWindowDock(
 	return nil
 }
 
-func (registry *recordingNativeWindowRegistry) AcknowledgePanelWindowDock(string, string, string) error {
-	registry.record("acknowledge-dock")
+func (registry *recordingNativeWindowRegistry) AcknowledgePanelTransfer(string, string, bool) error {
+	registry.record("acknowledge-transfer")
 	return nil
 }
 
@@ -142,7 +142,7 @@ func TestWindowRegistryBridgePreservesUnboundStartupSemantics(t *testing.T) {
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.BeginPanelWindowDock("panel-1", "right", panelwindow.GroupSnapshot{})
 	require.ErrorContains(t, err, "native window registry is not available")
-	err = options.AcknowledgePanelDock("workspace-1", "panel-1", "transfer-1")
+	err = options.AcknowledgePanelTransfer("workspace-1", "transfer-1", true)
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.FailPanelTransfer("workspace-1", "panel-1", "transfer-1")
 	require.ErrorContains(t, err, "native window registry is not available")
@@ -184,7 +184,7 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 	_, err = options.AcknowledgePanelReady("panel-1", "transfer-1")
 	require.NoError(t, err)
 	require.NoError(t, options.BeginPanelWindowDock("panel-1", "right", snapshot))
-	require.NoError(t, options.AcknowledgePanelDock("workspace-1", "panel-1", "transfer-1"))
+	require.NoError(t, options.AcknowledgePanelTransfer("workspace-1", "transfer-1", true))
 	require.NoError(t, options.FailPanelTransfer("workspace-1", "panel-1", "transfer-1"))
 	require.NoError(t, options.AcknowledgePanelClose("panel-1"))
 	require.NoError(t, options.AcknowledgeWorkspaceClose("workspace-1"))
@@ -205,7 +205,7 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 		"begin-open",
 		"acknowledge-ready",
 		"begin-dock",
-		"acknowledge-dock",
+		"acknowledge-transfer",
 		"fail-transfer",
 		"acknowledge-close",
 		"acknowledge-workspace-close",

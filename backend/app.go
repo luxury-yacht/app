@@ -53,7 +53,7 @@ type ApplicationRuntimeOptions struct {
 	BeginPanelWindowOpen       func(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	AcknowledgePanelReady      func(string, string) (panelwindow.WindowDescriptor, error)
 	BeginPanelWindowDock       func(string, string, panelwindow.GroupSnapshot) error
-	AcknowledgePanelDock       func(string, string, string) error
+	AcknowledgePanelTransfer   func(string, string, bool) error
 	FailPanelTransfer          func(string, string, string) error
 	AcknowledgePanelClose      func(string) error
 	AcknowledgeWorkspaceClose  func(string) error
@@ -107,7 +107,7 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 			BeginPanelWindowOpen:       options.BeginPanelWindowOpen,
 			AcknowledgePanelReady:      options.AcknowledgePanelReady,
 			BeginPanelWindowDock:       options.BeginPanelWindowDock,
-			AcknowledgePanelDock:       options.AcknowledgePanelDock,
+			AcknowledgePanelTransfer:   options.AcknowledgePanelTransfer,
 			FailPanelTransfer:          options.FailPanelTransfer,
 			AcknowledgePanelClose:      options.AcknowledgePanelClose,
 			AcknowledgeWorkspaceClose:  options.AcknowledgeWorkspaceClose,

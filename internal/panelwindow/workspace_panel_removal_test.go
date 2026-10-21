@@ -24,7 +24,7 @@ func TestWorkspaceReportsClosedPanelsButNotMovedOnes(t *testing.T) {
 	require.False(t, directory.HasPanel("staging", api.PanelID))
 
 	// The panel floats into a native window; the app window republishes without it.
-	require.NoError(t, directory.Move(api, docked, native))
+	require.NoError(t, moveTab(directory, "float-api", api, docked.WindowName, native))
 	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, []WorkspaceGroup{
 		{ClusterID: "production", GroupID: "right", Tabs: []TabSnapshot{worker}, ActivePanelID: worker.PanelID},
 	}))

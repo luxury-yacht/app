@@ -20,6 +20,9 @@ type GroupTransfer struct {
 	Group        WorkspaceGroup
 }
 
+// AppendToGroup places a moving group after the target group's existing tabs.
+const AppendToGroup = -1
+
 func (panel WorkspacePanel) moving() bool {
 	return panel.Transfer.TransferID != ""
 }
@@ -46,10 +49,12 @@ func (d *WorkspaceDirectory) BeginGroupTransfer(transfer GroupTransfer, reservat
 	if err := d.validateGroupTransferSourceLocked(transfer.SourceWindow, next); err != nil {
 		return err
 	}
+	base := d.insertIndexLocked(transfer.Group.ClusterID, transfer.Target, next)
 	keys := make([]workspacePanelKey, 0, len(next))
 	for key, target := range next {
 		panel := d.panels[key]
 		panel.Tab = target.Tab
+		target.Location.Index += base
 		panel.Transfer = PanelTransfer{TransferID: transfer.TransferID, Target: target.Location}
 		d.panels[key] = panel
 		keys = append(keys, key)
@@ -60,6 +65,26 @@ func (d *WorkspaceDirectory) BeginGroupTransfer(transfer GroupTransfer, reservat
 	d.transfers[transfer.TransferID] = keys
 	d.revision++
 	return nil
+}
+
+// The moving group lands at the requested index within the target group, or
+// after its existing tabs when the index is AppendToGroup or out of range.
+func (d *WorkspaceDirectory) insertIndexLocked(clusterID string, target PanelLocation, moving map[workspacePanelKey]WorkspacePanel) int {
+	size := 0
+	for key, panel := range d.panels {
+		if _, isMoving := moving[key]; !isMoving && inGroup(key, panel, clusterID, target) {
+			size++
+		}
+	}
+	if target.Index < 0 || target.Index > size {
+		return size
+	}
+	return target.Index
+}
+
+func inGroup(key workspacePanelKey, panel WorkspacePanel, clusterID string, group PanelLocation) bool {
+	return key.clusterID == clusterID && panel.Location.Kind == group.Kind &&
+		panel.Location.WindowName == group.WindowName && panel.Location.GroupID == group.GroupID
 }
 
 func (d *WorkspaceDirectory) validateGroupTransferSourceLocked(source string, next map[workspacePanelKey]WorkspacePanel) error {
@@ -82,22 +107,44 @@ func (d *WorkspaceDirectory) CommitGroupTransfer(transferID string) error {
 	}
 	delete(d.transfers, transferID)
 	next := make(map[workspacePanelKey]WorkspacePanel, len(keys))
-	var target PanelLocation
 	for _, key := range keys {
 		panel := d.panels[key]
-		target = panel.Transfer.Target
-		panel.Location, panel.Transfer = target, PanelTransfer{}
+		panel.Location, panel.Transfer = panel.Transfer.Target, PanelTransfer{}
 		next[key] = panel
 	}
-	if target.Kind == PanelLocationDocked {
-		d.appendPlacementsLocked(target.WindowName, next)
-	}
+	d.makeRoomLocked(next)
 	for key, panel := range next {
 		d.panels[key] = panel
 		delete(d.unpublished, key)
 	}
 	d.revision++
 	return nil
+}
+
+// Existing tabs at or after the arriving group's index move behind it, and an
+// arriving active tab takes activation. Indexes order a group; gaps are allowed
+// because the target renderer republishes its arrangement.
+func (d *WorkspaceDirectory) makeRoomLocked(next map[workspacePanelKey]WorkspacePanel) {
+	var clusterID string
+	var target PanelLocation
+	base, activates := -1, false
+	for key, panel := range next {
+		clusterID, target = key.clusterID, panel.Location
+		if base < 0 || panel.Location.Index < base {
+			base = panel.Location.Index
+		}
+		activates = activates || panel.Location.Active
+	}
+	for key, panel := range d.panels {
+		if _, isMoving := next[key]; isMoving || !inGroup(key, panel, clusterID, target) {
+			continue
+		}
+		if panel.Location.Index >= base {
+			panel.Location.Index += len(next)
+		}
+		panel.Location.Active = panel.Location.Active && !activates
+		d.panels[key] = panel
+	}
 }
 
 // CancelGroupTransfer releases a pending move; placement never changed.

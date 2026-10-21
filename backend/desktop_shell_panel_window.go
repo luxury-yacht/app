@@ -53,11 +53,11 @@ func (s *DesktopShell) BeginPanelWindowDock(windowName, targetPosition string, s
 	return s.beginPanelWindowDock(windowName, targetPosition, snapshot)
 }
 
-func (s *DesktopShell) AcknowledgePanelWindowDock(callerWindowName, windowName, transferID string) error {
-	if s == nil || s.acknowledgePanelDock == nil {
+func (s *DesktopShell) AcknowledgePanelTransfer(callerWindowName, transferID string, mounted bool) error {
+	if s == nil || s.acknowledgePanelTransfer == nil {
 		return fmt.Errorf("panel-window registry is not available")
 	}
-	return s.acknowledgePanelDock(callerWindowName, windowName, transferID)
+	return s.acknowledgePanelTransfer(callerWindowName, transferID, mounted)
 }
 
 func (s *DesktopShell) FailPanelWindowTransfer(callerWindowName, windowName, transferID string) error {

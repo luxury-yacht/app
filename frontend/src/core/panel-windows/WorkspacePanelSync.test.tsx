@@ -595,6 +595,7 @@ it('lists a dock-back group the directory targets at this view and keeps its pro
       clusterId: 'production',
       sourceWindowName: 'panel-1',
       groupId: 'bottom',
+      insertIndex: 0,
       tabs: [mocks.local.production[0]],
       activePanelId: 'api',
     },

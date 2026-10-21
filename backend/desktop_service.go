@@ -161,7 +161,7 @@ type PanelWindowCommands interface {
 	BeginPanelWindowOpen(string, panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	AcknowledgePanelWindowReady(string, string) (panelwindow.WindowDescriptor, error)
 	BeginPanelWindowDock(string, string, panelwindow.GroupSnapshot) error
-	AcknowledgePanelWindowDock(string, string, string) error
+	AcknowledgePanelTransfer(string, string, bool) error
 	FailPanelWindowTransfer(string, string, string) error
 	AcknowledgePanelWindowClose(string) error
 	AcknowledgeWorkspaceWindowClose(string) error
@@ -696,11 +696,13 @@ func (s *DesktopService) BeginPanelWindowDock(ctx context.Context, windowName, t
 	return s.panelWindows.BeginPanelWindowDock(windowName, targetPosition, snapshot)
 }
 
-func (s *DesktopService) AcknowledgePanelWindowDock(ctx context.Context, callerWindowName, windowName, transferID string) error {
+// AcknowledgePanelTransfer settles a directory move this renderer was asked to
+// reconstruct: mounted commits it, otherwise the source keeps the panels.
+func (s *DesktopService) AcknowledgePanelTransfer(ctx context.Context, callerWindowName, transferID string, mounted bool) error {
 	if err := validatePanelCommandCaller(ctx, callerWindowName); err != nil {
 		return err
 	}
-	return s.panelWindows.AcknowledgePanelWindowDock(callerWindowName, windowName, transferID)
+	return s.panelWindows.AcknowledgePanelTransfer(callerWindowName, transferID, mounted)
 }
 
 func (s *DesktopService) FailPanelWindowTransfer(ctx context.Context, callerWindowName, windowName, transferID string) error {

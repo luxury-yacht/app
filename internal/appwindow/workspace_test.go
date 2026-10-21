@@ -123,7 +123,7 @@ func TestQuitPreflightsAppAndPanelRenderersBeforeClosingAny(t *testing.T) {
 	require.Nil(t, registry.pendingQuit)
 }
 
-func TestPanelTabMovesBetweenTwoAppViewsAfterTargetPublication(t *testing.T) {
+func TestPanelTabMovesBetweenTwoAppViewsAfterTargetAcknowledgement(t *testing.T) {
 	lifecycle := newLifecycle()
 	source := lifecycle.Add()
 	target := lifecycle.Add()
@@ -141,9 +141,11 @@ func TestPanelTabMovesBetweenTwoAppViewsAfterTargetPublication(t *testing.T) {
 	require.Contains(t, events, source+":"+panelwindow.TabTransferRequestedEventName)
 	require.Error(t, registry.AcceptPanelTabTransfer(target, request.TransferID), "only the actual source may approve disposal")
 	require.NoError(t, registry.AcceptPanelTabTransfer(source, request.TransferID))
-	require.Contains(t, events, target+":"+panelwindow.TabTransferInsertRequestedEventName)
+	require.Contains(t, events, target+":"+panelwindow.WorkspaceChangedEventName)
 	require.Equal(t, source, registry.workspace.Snapshot("cluster-1").Panels[0].Location.WindowName)
 	require.NoError(t, registry.PublishDockedPanels(target, []panelwindow.WorkspaceGroup{{ClusterID: "cluster-1", GroupID: "bottom", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}}))
+	require.Equal(t, source, registry.workspace.Snapshot("cluster-1").Panels[0].Location.WindowName, "publication alone does not move it")
+	require.NoError(t, registry.AcknowledgePanelTransfer(target, request.TransferID, true))
 	require.Equal(t, target, registry.workspace.Snapshot("cluster-1").Panels[0].Location.WindowName)
 	require.Contains(t, events, source+":"+panelwindow.TabTransferCommittedEventName)
 	require.NoError(t, registry.PublishDockedPanels(source, nil))
@@ -167,7 +169,7 @@ func TestWholePanelDockKeepsSourceUntilAcknowledgementAfterTargetPublication(t *
 	require.NoError(t, registry.BeginPanelWindowDock(native.WindowName, "right", snapshot))
 	require.NoError(t, registry.PublishDockedPanels(target, []panelwindow.WorkspaceGroup{{ClusterID: snapshot.ClusterID, GroupID: "right", Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}}))
 	require.Equal(t, native.WindowName, registry.workspace.Snapshot(snapshot.ClusterID).Panels[0].Location.WindowName)
-	require.NoError(t, registry.AcknowledgePanelWindowDock(target, native.WindowName, snapshot.TransferID))
+	require.NoError(t, registry.AcknowledgePanelTransfer(target, snapshot.TransferID, true))
 	require.Equal(t, target, registry.workspace.Snapshot(snapshot.ClusterID).Panels[0].Location.WindowName)
 	require.Equal(t, PanelWindowStateMissing, registry.panels.State(native.WindowName))
 }

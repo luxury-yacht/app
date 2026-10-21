@@ -44,14 +44,15 @@ interface WorkspaceSync {
 }
 const PublicationContext = createContext<WorkspaceSync | null>(null);
 
-// A whole group the directory is moving into this app view. The view mounts a
-// provisional copy, acknowledges once it is visible, and drops the copy if a
-// later read shows the move cancelled or its source gone.
+// A group or single tab the directory is moving into this app view. The view
+// mounts a provisional copy at insertIndex, acknowledges once it is visible, and
+// drops the copy if a later read shows the move cancelled or its source gone.
 export interface IncomingGroupTransfer {
   transferId: string;
   clusterId: string;
   sourceWindowName: string;
   groupId: 'right' | 'bottom';
+  insertIndex: number;
   tabs: panelwindow.TabSnapshot[];
   activePanelId: string;
 }
@@ -83,6 +84,7 @@ function incomingGroupTransfers(
       clusterId,
       sourceWindowName: ordered[0].location.windowName,
       groupId: ordered[0].transfer?.target.groupId === 'bottom' ? 'bottom' : 'right',
+      insertIndex: ordered[0].transfer?.target.index ?? 0,
       tabs: ordered.map((panel) => panel.tab),
       activePanelId: active.tab.panelId,
     };

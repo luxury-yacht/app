@@ -47,7 +47,7 @@ func windowRuntimeOptions(
 		BeginPanelWindowOpen:       bridge.BeginPanelWindowOpen,
 		AcknowledgePanelReady:      bridge.AcknowledgePanelReady,
 		BeginPanelWindowDock:       bridge.BeginPanelWindowDock,
-		AcknowledgePanelDock:       bridge.AcknowledgePanelDock,
+		AcknowledgePanelTransfer:   bridge.AcknowledgePanelTransfer,
 		FailPanelTransfer:          bridge.FailPanelTransfer,
 		AcknowledgePanelClose:      bridge.AcknowledgePanelClose,
 		AcknowledgeWorkspaceClose:  bridge.AcknowledgeWorkspaceClose,

@@ -34,12 +34,13 @@ func TestPanelTabMenuDockResolvesClusterTargetAndWaitsForRenderer(t *testing.T) 
 	resolved := events[0].payload.(panelwindow.TabTransferRequestedEvent).Request
 	require.Equal(t, target, resolved.TargetWindowName)
 	require.NoError(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
-	require.Len(t, events, 1, "the destination must subscribe before insertion is delivered")
 	require.Equal(t, snapshot, requirePanelDescriptor(t, registry.panels, source.WindowName).Snapshot)
 	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
-	require.Len(t, events, 2)
-	require.Equal(t, panelwindow.TabTransferInsertRequestedEventName, events[1].name)
+	require.NotContains(t, eventNames(events), target+":"+panelwindow.TabTransferInsertRequestedEventName, "a ready target reads the directory instead")
+	// The resolved app view appends the tab to its bottom dock.
+	require.Equal(t, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: target, GroupID: "bottom", Active: true}, directoryPanel(t, registry, resolved).Transfer.Target)
 	require.NoError(t, registry.PublishDockedPanels(target, []panelwindow.WorkspaceGroup{{ClusterID: source.ClusterID, GroupID: "bottom", Tabs: []panelwindow.TabSnapshot{request.Tab}, ActivePanelID: request.Tab.PanelID}}))
+	require.NoError(t, registry.AcknowledgePanelTransfer(target, request.TransferID, true))
 	require.Contains(t, events, capturedPanelWindowEvent{target: source.WindowName, name: panelwindow.TabTransferCommittedEventName, payload: panelwindow.TabTransferCommittedEvent{Request: resolved}})
 	snapshot.Tabs = []panelwindow.TabSnapshot{sibling}
 	snapshot.ActivePanelID = sibling.PanelID
@@ -76,7 +77,7 @@ func TestPanelTabMenuDockCreatesAnAppViewWithoutAnExistingAppWindow(t *testing.T
 	require.Equal(t, snapshot, requirePanelDescriptor(t, registry.panels, source.WindowName).Snapshot)
 }
 
-func TestPanelTabMenuDockCancellationDiscardsQueuedInsertion(t *testing.T) {
+func TestCancelledPanelTabMenuDockIsNotOfferedToALateTarget(t *testing.T) {
 	lifecycle := newLifecycle()
 	target := lifecycle.Add()
 	registry := &Registry{lifecycle: lifecycle, panels: newPanelIndex(), workspace: panelwindow.NewWorkspaceDirectory(), backend: &recordingLifecycleBackend{windowClusters: map[string][]string{target: {"cluster-1"}}}, emitWindowEvent: func(string, string, any) bool { return true }}
@@ -88,14 +89,12 @@ func TestPanelTabMenuDockCancellationDiscardsQueuedInsertion(t *testing.T) {
 	require.NoError(t, registry.RequestPanelTabTransfer(source.WindowName, request))
 	require.NoError(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
 	require.NoError(t, registry.FailPanelTabTransfer(source.WindowName, request.TransferID))
-	var insertions int
-	registry.emitWindowEvent = func(_ string, name string, _ any) bool {
-		if name == panelwindow.TabTransferInsertRequestedEventName {
-			insertions++
-		}
-		return true
-	}
 	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
-	require.Zero(t, insertions)
+	// The target reads the directory when it becomes ready; nothing targets it.
+	workspace, err := registry.GetPanelWorkspace(target, request.ClusterID)
+	require.NoError(t, err)
+	require.Len(t, workspace.Panels, 1)
+	require.Equal(t, source.WindowName, workspace.Panels[0].Location.WindowName)
+	require.Zero(t, workspace.Panels[0].Transfer)
 	require.Equal(t, snapshot, requirePanelDescriptor(t, registry.panels, source.WindowName).Snapshot)
 }

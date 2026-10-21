@@ -18,13 +18,11 @@ import { ClusterTabTransferCoordinator } from './ClusterTabTransferCoordinator';
 import { canMoveClusterToNewWindow } from './clusterTabTransferPolicy';
 import {
   acceptPanelTabTransfer,
-  acknowledgePanelWindowDock,
+  acknowledgePanelTransfer,
   beginPanelWindowOpen,
   failPanelTabTransfer,
-  failPanelWindowTransfer,
   onPanelTabTransferCommitted,
   onPanelTabTransferFailed,
-  onPanelTabTransferInsertRequested,
   onPanelTabTransferRequested,
   onPanelWindowClosed,
   onPanelWindowOpened,
@@ -34,11 +32,9 @@ import {
 } from './index';
 import { usePanelLifecycleGuardRegistry } from './panelLifecycleGuards';
 import { requestPanelTabMove } from './panelTabActions';
-import { workspacePanelPublication } from './publicationQueue';
 import {
   type DockableTabDragPayload,
   objectPanelTabSnapshot,
-  singleTabGroupSnapshot,
   tabTransferRequestFromDragPayload,
   tornOffTabSnapshot,
 } from './tabTransfer';
@@ -291,13 +287,12 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       onGroupMoveRequest={handleGroupMove}
       canFloatPanel={canFloatPanel}
       onTabMoveRequest={(payload, target) => {
-        void requestPanelTabMove(payload, target, workspacePanelPublication, windowName).catch(
-          (error) =>
-            reportOperationalError(error, {
-              source: 'WorkspacePanelCoordinator',
-              action: 'move-panel-tab',
-              clusterId: payload.clusterId,
-            })
+        void requestPanelTabMove(payload, target, windowName).catch((error) =>
+          reportOperationalError(error, {
+            source: 'WorkspacePanelCoordinator',
+            action: 'move-panel-tab',
+            clusterId: payload.clusterId,
+          })
         );
       }}
       tabDragIdentity={tabDragIdentity}
@@ -360,18 +355,12 @@ function WorkspaceObjectRouteCoordinator({
 }>) {
   const { getOwnedPanel } = useObjectPanelState();
   const restoreWorkspacePanels = useRestoreWorkspacePanels();
-  const {
-    selectedClusterIds,
-    selectedKubeconfigs,
-    getClusterMeta,
-    setActiveKubeconfig,
-    selectedClusterId,
-  } = useKubeconfig();
+  const { selectedKubeconfigs, getClusterMeta, setActiveKubeconfig, selectedClusterId } =
+    useKubeconfig();
   const { tabGroups, focusPanel, detachPanelGroup, discardPanelLayouts } =
     useDockablePanelContext();
   const guards = usePanelLifecycleGuardRegistry();
   const removeLocalTabs = useRemoveWorkspacePanels();
-  const pendingTargets = useRef(new Map<string, panelwindow.TabTransferRequest>());
   const sync = usePanelWorkspaceSync();
   const flushPublication = sync.flush;
   const activateCluster = useCallback(
@@ -411,8 +400,9 @@ function WorkspaceObjectRouteCoordinator({
           return;
         }
         guards.freeze(request.transferId, [request.tab.panelId]);
-        void flushPublication()
-          .then(() => acceptPanelTabTransfer(windowName, request.transferId))
+        // Accepting begins the directory move; it checks identity, not this
+        // renderer's published view, so no publication flush comes first.
+        void acceptPanelTabTransfer(windowName, request.transferId)
           .then(() => {
             if (request.targetKind === 'new-window') {
               return beginPanelWindowOpen(
@@ -430,75 +420,23 @@ function WorkspaceObjectRouteCoordinator({
             });
           });
       }),
-    [windowName, getOwnedPanel, tabGroups, guards, flushPublication]
-  );
-
-  useEffect(
-    () =>
-      onPanelTabTransferInsertRequested(({ request }) => {
-        if (request.targetWindowName !== windowName) {
-          return;
-        }
-        if (
-          guards.isFrozen(request.transferId) ||
-          !selectedClusterIds.includes(request.clusterId) ||
-          (request.targetGroupId !== 'right' && request.targetGroupId !== 'bottom') ||
-          getOwnedPanel(request.clusterId, request.tab.panelId)
-        ) {
-          void failPanelTabTransfer(windowName, request.transferId);
-          return;
-        }
-        guards.freeze(request.transferId, [request.tab.panelId]);
-        sync.stage(request.transferId, [
-          {
-            clusterId: request.clusterId,
-            groupId: request.targetGroupId,
-            tabs: [request.tab],
-            activePanelId: request.tab.panelId,
-          },
-        ]);
-        pendingTargets.current.set(request.transferId, request);
-        activateCluster(request.clusterId);
-        restoreWorkspacePanels(
-          singleTabGroupSnapshot(request),
-          request.targetGroupId,
-          request.targetIndex
-        );
-      }),
-    [
-      windowName,
-      selectedClusterIds,
-      getOwnedPanel,
-      activateCluster,
-      restoreWorkspacePanels,
-      guards,
-      sync.stage,
-    ]
+    [windowName, getOwnedPanel, tabGroups, guards]
   );
 
   useEffect(
     () =>
       onPanelTabTransferCommitted(({ request }) => {
         guards.releaseTransfer(request.transferId);
-        sync.settle(request.transferId);
-        pendingTargets.current.delete(request.transferId);
         if (request.sourceWindowName === windowName) {
           removeLocalTabs(request.clusterId, [request.tab.panelId]);
         }
       }),
-    [windowName, removeLocalTabs, guards.releaseTransfer, sync.settle]
+    [windowName, removeLocalTabs, guards.releaseTransfer]
   );
+  // A target's provisional copy follows the directory; the source only unfreezes.
   useEffect(
-    () =>
-      onPanelTabTransferFailed(({ request }) => {
-        guards.releaseTransfer(request.transferId);
-        sync.settle(request.transferId);
-        if (!pendingTargets.current.delete(request.transferId)) {
-          return;
-        }
-        removeLocalTabs(request.clusterId, [request.tab.panelId]);
-      }),
-    [removeLocalTabs, sync.settle, guards.releaseTransfer]
+    () => onPanelTabTransferFailed(({ request }) => guards.releaseTransfer(request.transferId)),
+    [guards.releaseTransfer]
   );
   useEffect(
     () =>
@@ -520,7 +458,7 @@ function WorkspaceObjectRouteCoordinator({
       ),
     [onOwnedPanelWindowClosed]
   );
-  useIncomingDockBack({
+  useIncomingPanelTransfers({
     windowName,
     selectedClusterId,
     tabGroups,
@@ -539,18 +477,19 @@ function WorkspaceObjectRouteCoordinator({
   return children;
 }
 
-type DockBackStatus = 'mounted' | 'acknowledging' | 'rejected';
+type IncomingTransferStatus = 'mounted' | 'acknowledging' | 'rejected';
 
-const reportDockBackError = (action: string, transfer: IncomingGroupTransfer) => (error: unknown) =>
-  reportOperationalError(error, {
-    source: 'WorkspacePanelCoordinator',
-    action,
-    clusterId: transfer.clusterId,
-  });
+const reportIncomingTransferError =
+  (action: string, transfer: IncomingGroupTransfer) => (error: unknown) =>
+    reportOperationalError(error, {
+      source: 'WorkspacePanelCoordinator',
+      action,
+      clusterId: transfer.clusterId,
+    });
 
 // The directory stopped listing these moves: committed, cancelled, or source gone.
-function releaseSettledDockBacks(
-  statuses: Map<string, DockBackStatus>,
+function releaseSettledTransfers(
+  statuses: Map<string, IncomingTransferStatus>,
   incoming: readonly IncomingGroupTransfer[],
   release: (transferId: string) => void
 ) {
@@ -565,20 +504,19 @@ function releaseSettledDockBacks(
 
 // Asks the directory to cancel a move this view cannot take; its next read then
 // drops any provisional copy.
-const cancelDockBack = (
+const cancelIncomingTransfer = (
   windowName: string,
   transfer: IncomingGroupTransfer,
   onError: (error: unknown) => void
 ) => {
-  void failPanelWindowTransfer(windowName, transfer.sourceWindowName, transfer.transferId).catch(
-    onError
-  );
+  void acknowledgePanelTransfer(windowName, transfer.transferId, false).catch(onError);
 };
 
-// Projects whole-group dock-backs the directory targets at this view: mount a
-// provisional copy, acknowledge once it is visible, and release the guard when
-// the directory stops listing the move (commit, cancel, or vanished source).
-function useIncomingDockBack({
+// Projects the moves the directory targets at this view (dock-back groups and
+// dropped tabs): mount a provisional copy, acknowledge once it is visible, and
+// release the guard when the directory stops listing the move (commit, cancel,
+// or vanished source).
+function useIncomingPanelTransfers({
   windowName,
   selectedClusterId,
   tabGroups,
@@ -594,10 +532,10 @@ function useIncomingDockBack({
   const incoming = useIncomingGroupTransfers();
   const guards = usePanelLifecycleGuardRegistry();
   const restoreWorkspacePanels = useRestoreWorkspacePanels();
-  const statuses = useRef(new Map<string, DockBackStatus>());
+  const statuses = useRef(new Map<string, IncomingTransferStatus>());
 
   useEffect(() => {
-    releaseSettledDockBacks(statuses.current, incoming, (transferId) =>
+    releaseSettledTransfers(statuses.current, incoming, (transferId) =>
       guards.releaseTransfer(transferId)
     );
     for (const transfer of incoming) {
@@ -607,10 +545,10 @@ function useIncomingDockBack({
       // A view frozen by its own close or another move cannot take the group.
       if (guards.isFrozen(transfer.transferId)) {
         statuses.current.set(transfer.transferId, 'rejected');
-        cancelDockBack(
+        cancelIncomingTransfer(
           windowName,
           transfer,
-          reportDockBackError('reject-dock-during-close', transfer)
+          reportIncomingTransferError('reject-move-during-close', transfer)
         );
         continue;
       }
@@ -619,7 +557,7 @@ function useIncomingDockBack({
         transfer.transferId,
         transfer.tabs.map((tab) => tab.panelId)
       );
-      restoreWorkspacePanels(transfer, transfer.groupId);
+      restoreWorkspacePanels(transfer, transfer.groupId, transfer.insertIndex);
     }
   }, [incoming, guards, windowName, restoreWorkspacePanels]);
 
@@ -640,13 +578,11 @@ function useIncomingDockBack({
       // Queued docked snapshots land before the commit, so none can omit the
       // committed tabs afterwards.
       void flushPublication()
-        .then(() =>
-          acknowledgePanelWindowDock(windowName, transfer.sourceWindowName, transfer.transferId)
-        )
+        .then(() => acknowledgePanelTransfer(windowName, transfer.transferId, true))
         .catch((error) => {
           // The registry may already have cancelled it; only the commit error matters.
-          cancelDockBack(windowName, transfer, () => undefined);
-          reportDockBackError('acknowledge-dock', transfer)(error);
+          cancelIncomingTransfer(windowName, transfer, () => undefined);
+          reportIncomingTransferError('acknowledge-move', transfer)(error);
         });
     }
   }, [incoming, tabGroups, selectedClusterId, activateCluster, flushPublication, windowName]);

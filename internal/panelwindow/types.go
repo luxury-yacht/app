@@ -68,6 +68,12 @@ func (tab TabSnapshot) identity() panelIdentity {
 	return panelIdentity{tab.Kind, tab.ObjectRef, tab.IdentityRef}
 }
 
+// SameIdentity reports whether two tabs show the same panel and target,
+// regardless of the view either one currently shows.
+func (tab TabSnapshot) SameIdentity(other TabSnapshot) bool {
+	return tab.PanelID == other.PanelID && tab.identity() == other.identity()
+}
+
 func validateTabReference(tab TabSnapshot) error {
 	switch tab.Kind {
 	case TabKindObject:

@@ -31,7 +31,13 @@ func TestPanelMetricsFollowThePanelAcrossWindowsUntilItCloses(t *testing.T) {
 	require.NoError(t, service.AppendPanelMetricSample("dev", tab.PanelID, panelMetricsSample(1_000)))
 
 	// Popping the panel out keeps its samples; the new window adds to them.
-	require.NoError(t, directory.Move(tab, docked, native))
+	require.NoError(t, directory.BeginGroupTransfer(panelwindow.GroupTransfer{
+		TransferID:   "float-api",
+		SourceWindow: docked.WindowName,
+		Target:       native,
+		Group:        panelwindow.WorkspaceGroup{ClusterID: tab.ClusterID(), Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID},
+	}))
+	require.NoError(t, directory.CommitGroupTransfer("float-api"))
 	require.NoError(t, service.AppendPanelMetricSample("dev", tab.PanelID, panelMetricsSample(6_000)))
 	series, err := service.GetPanelMetricSeries("dev", tab.PanelID, 0)
 	require.NoError(t, err)

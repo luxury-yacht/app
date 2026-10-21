@@ -16,7 +16,7 @@ type nativeWindowRegistry interface {
 	BeginPanelWindowOpen(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	AcknowledgePanelWindowReady(string, string) (panelwindow.WindowDescriptor, error)
 	BeginPanelWindowDock(string, string, panelwindow.GroupSnapshot) error
-	AcknowledgePanelWindowDock(string, string, string) error
+	AcknowledgePanelTransfer(string, string, bool) error
 	FailPanelWindowTransfer(string, string, string) error
 	AcknowledgePanelWindowClose(string) error
 	AcknowledgeWorkspaceWindowClose(string) error
@@ -114,14 +114,15 @@ func (bridge *Bridge) BeginPanelWindowDock(
 	return registry.BeginPanelWindowDock(windowName, targetPosition, snapshot)
 }
 
-func (bridge *Bridge) AcknowledgePanelDock(
-	callerWindowName, windowName, transferID string,
+func (bridge *Bridge) AcknowledgePanelTransfer(
+	callerWindowName, transferID string,
+	mounted bool,
 ) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
-	return registry.AcknowledgePanelWindowDock(callerWindowName, windowName, transferID)
+	return registry.AcknowledgePanelTransfer(callerWindowName, transferID, mounted)
 }
 
 func (bridge *Bridge) FailPanelTransfer(

@@ -147,7 +147,7 @@ func TestDockBackTargetLearnsFromTheDirectoryAndCommitsAfterTheSourceCloses(t *t
 	require.NoError(t, fixture.registry.PublishDockedPanels(fixture.owner, provisional))
 	require.Equal(t, native.WindowName, fixture.panel(t).Location.WindowName)
 
-	require.NoError(t, fixture.registry.AcknowledgePanelWindowDock(fixture.owner, native.WindowName, dock.TransferID))
+	require.NoError(t, fixture.registry.AcknowledgePanelTransfer(fixture.owner, dock.TransferID, true))
 	committed := fixture.panel(t)
 	require.Equal(t, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: fixture.owner, GroupID: "bottom", Active: true}, committed.Location)
 	require.Equal(t, "events", committed.Tab.ActiveView)
@@ -156,7 +156,7 @@ func TestDockBackTargetLearnsFromTheDirectoryAndCommitsAfterTheSourceCloses(t *t
 }
 
 func TestFailedDockKeepsNativeSourceAndTellsTheTargetToDropItsCopy(t *testing.T) {
-	for _, failure := range []string{"source cannot close", "dock times out"} {
+	for _, failure := range []string{"source cannot close", "dock times out", "target rejects"} {
 		t.Run(failure, func(t *testing.T) {
 			fixture := newGroupTransferFixture(t)
 			native := fixture.float(t)
@@ -166,7 +166,9 @@ func TestFailedDockKeepsNativeSourceAndTellsTheTargetToDropItsCopy(t *testing.T)
 			switch failure {
 			case "source cannot close":
 				fixture.registry.closeWindow = func(string) bool { return false }
-				require.Error(t, fixture.registry.AcknowledgePanelWindowDock(fixture.owner, native.WindowName, dock.TransferID))
+				require.Error(t, fixture.registry.AcknowledgePanelTransfer(fixture.owner, dock.TransferID, true))
+			case "target rejects":
+				require.NoError(t, fixture.registry.AcknowledgePanelTransfer(fixture.owner, dock.TransferID, false))
 			case "dock times out":
 				require.NoError(t, fixture.registry.FailPanelWindowTransfer(native.WindowName, native.WindowName, dock.TransferID))
 			}
@@ -189,7 +191,7 @@ func TestClosingTheNativeSourceDuringDockLeavesNoPinnedPanels(t *testing.T) {
 	require.NoError(t, fixture.registry.AcknowledgePanelWindowClose(native.WindowName))
 
 	require.Empty(t, fixture.registry.workspace.Snapshot(fixture.snapshot.ClusterID).Panels)
-	require.Error(t, fixture.registry.AcknowledgePanelWindowDock(fixture.owner, native.WindowName, dock.TransferID))
+	require.Error(t, fixture.registry.AcknowledgePanelTransfer(fixture.owner, dock.TransferID, true))
 	require.Error(t, fixture.registry.workspace.CommitGroupTransfer(dock.TransferID))
 }
 

@@ -37,7 +37,7 @@ func TestRemovedReservationCannotCommitAfterEarlierLivenessCheck(t *testing.T) {
 			if action == "open" {
 				_, _, err = directory.Open(tab, PanelLocation{Kind: PanelLocationDocked, WindowName: "app", GroupID: "right"}, reservation)
 			} else {
-				_, err = directory.PublishWindowWithTransfers("app", PanelLocationDocked, []WorkspaceGroup{{ClusterID: tab.ObjectRef.ClusterID, GroupID: "right", Tabs: []TabSnapshot{tab}, ActivePanelID: tab.PanelID}}, nil, reservation)
+				err = directory.PublishWindow("app", PanelLocationDocked, []WorkspaceGroup{{ClusterID: tab.ObjectRef.ClusterID, GroupID: "right", Tabs: []TabSnapshot{tab}, ActivePanelID: tab.PanelID}}, reservation)
 			}
 			require.Error(t, err)
 			require.Empty(t, directory.Snapshot(tab.ObjectRef.ClusterID).Panels)

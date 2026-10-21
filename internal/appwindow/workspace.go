@@ -55,24 +55,11 @@ func (r *Registry) AcknowledgePanelWorkspaceReady(windowName string) error {
 	delete(r.queuedWorkspaceEvents, windowName)
 	r.closeMu.Unlock()
 	for _, event := range queued {
-		if !r.workspaceEventPending(windowName, event) {
-			continue
-		}
 		if !r.emitWindowEvent(windowName, event.name, event.payload) {
 			return fmt.Errorf("app window %q is not available", windowName)
 		}
 	}
 	return nil
-}
-
-// Readiness cannot revive a transfer that failed while its renderer was loading.
-func (r *Registry) workspaceEventPending(windowName string, event workspaceWindowEvent) bool {
-	switch request := event.payload.(type) {
-	case panelwindow.TabTransferInsertRequestedEvent:
-		return r.panelTabInsertionPending(request.Request)
-	default:
-		return true
-	}
 }
 
 func (r *Registry) queueWorkspaceEvent(windowName, name string, payload any) bool {
@@ -222,7 +209,7 @@ func (r *Registry) commitDockedPublication(windowName string, groups []panelwind
 	if err != nil {
 		return err
 	}
-	if err := r.publishPanelGroups(windowName, panelwindow.PanelLocationDocked, publishedGroups, reservations...); err != nil {
+	if err := r.workspace.PublishWindow(windowName, panelwindow.PanelLocationDocked, publishedGroups, reservations...); err != nil {
 		return err
 	}
 	for _, clusterID := range clusterIDs {

@@ -735,7 +735,7 @@ func TestRegistryRoutesOpenToSourceAndDockToAnAppDisplayingTheCluster(t *testing
 
 	require.NoError(
 		t,
-		registry.AcknowledgePanelWindowDock(owner.Name(), descriptor.WindowName, dockSnapshot.TransferID),
+		registry.AcknowledgePanelTransfer(owner.Name(), dockSnapshot.TransferID, true),
 	)
 	require.Equal(t, []string{descriptor.WindowName}, closed)
 	require.Equal(t, PanelWindowStateMissing, registry.panels.State(descriptor.WindowName))
@@ -760,9 +760,7 @@ func TestRegistryFailedDockCloseLeavesNativeSourceLive(t *testing.T) {
 	require.NoError(t, registry.BeginPanelWindowDock(descriptor.WindowName, "bottom", dockSnapshot))
 	registry.closeWindow = func(string) bool { return false }
 
-	err = registry.AcknowledgePanelWindowDock(
-		owner.Name(), descriptor.WindowName, dockSnapshot.TransferID,
-	)
+	err = registry.AcknowledgePanelTransfer(owner.Name(), dockSnapshot.TransferID, true)
 	require.ErrorContains(t, err, "not available")
 	require.Equal(t, PanelWindowStateLive, registry.panels.State(descriptor.WindowName))
 }
@@ -859,7 +857,7 @@ func TestRegistryValidatesDockAcknowledgementBeforeClosingThePanelWindow(t *test
 		return true
 	}
 
-	err = registry.AcknowledgePanelWindowDock(owner.Name(), descriptor.WindowName, "stale-transfer")
+	err = registry.AcknowledgePanelTransfer(owner.Name(), "stale-transfer", true)
 
 	require.ErrorContains(t, err, "stale")
 	require.Empty(t, closed)
@@ -890,9 +888,7 @@ func TestRegistrySerializesDockCommitAgainstTransferFailure(t *testing.T) {
 	}
 	acknowledged := make(chan error, 1)
 	go func() {
-		acknowledged <- registry.AcknowledgePanelWindowDock(
-			owner.Name(), descriptor.WindowName, dockSnapshot.TransferID,
-		)
+		acknowledged <- registry.AcknowledgePanelTransfer(owner.Name(), dockSnapshot.TransferID, true)
 	}()
 	<-closeStarted
 	failed := make(chan error, 1)

@@ -126,19 +126,24 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   content.
 - For every move: check source guards, keep the source mounted until the target
   reconstructs, and commit directory placement only after destination readiness.
-- Whole-group Float and dock-back are directory-owned: the source sends an
-  intent (no snapshot flush first) and the directory records a pending move on
-  each panel without changing placement. Publications cannot move, delete, or
-  claim a moving panel. A dock-back target mounts provisional copies of the
-  groups its directory reads list as moving to it and acknowledges once they are
-  visible; it drops a copy when a later read shows the move cancelled or its
-  source gone. Native side effects (show, close) precede the commit, so failure
-  cancels the pending move with no rollback.
-- Panel-tab and cluster-tab moves flush the latest source snapshot before
-  acceptance. Their targets stay provisional until the registry commits and must
-  not claim source panels; existing targets publish the exact tab before commit.
-  Directory reads started before such a target stages or settles must not remove
-  its reconstructed panels: invalidate them per cluster and refetch.
+- Whole-group Float and dock-back, and single panel-tab moves (drag between
+  windows, tear-off, tab-menu Float/Dock), are directory-owned: the source sends
+  an intent or accepts a request (no snapshot flush first), and the directory
+  records a pending move on each panel without changing placement. It checks
+  panel identity, not the published view, and places a dropped tab at its drop
+  index. Publications cannot move, delete, or claim a moving panel, and they
+  never commit a move.
+- App-view targets mount provisional copies of the moves their directory reads
+  list for them; a live native target receives the tab request itself. Each
+  target settles the move with `acknowledgePanelTransfer`: mounted commits,
+  otherwise the source keeps the panels. An app target drops a copy when a later
+  read shows the move cancelled or its source gone. Native side effects (show,
+  close) precede the commit, so failure cancels the pending move with no
+  rollback.
+- Cluster-tab moves flush the latest source snapshot before acceptance. Their
+  targets stay provisional until the registry commits and must not claim source
+  panels. Directory reads started before such a target stages or settles must
+  not remove its reconstructed panels: invalidate them per cluster and refetch.
 - Failure or timeout removes provisional copies and keeps source placement. A
   native source closes once its last tab commits elsewhere.
 - Dock-back moves the whole same-cluster group to right or bottom, keeping order
@@ -146,7 +151,7 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
 - Incoming transfers reject a renderer frozen by another transaction, even for
   a cluster with no panels; a transaction may finish its own reconstruction
   while frozen.
-- Close and transfer flushes (including a dock-back target's flush before it
+- Close and transfer flushes (including a move target's flush before it
   acknowledges, so no queued snapshot can omit committed tabs) retry the latest
   failed publication once and reject if that fails. Retained-panel notifications coalesce while claims run;
   successful claims mount even if a later claim fails.

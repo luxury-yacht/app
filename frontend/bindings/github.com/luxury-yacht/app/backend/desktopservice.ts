@@ -57,12 +57,16 @@ export function AcknowledgeClusterTabTransfer(windowName: string, transferID: st
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgeClusterTabTransfer", windowName, transferID);
 }
 
-export function AcknowledgePanelWindowClose(windowName: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgePanelWindowClose", windowName);
+/**
+ * AcknowledgePanelTransfer settles a directory move this renderer was asked to
+ * reconstruct: mounted commits it, otherwise the source keeps the panels.
+ */
+export function AcknowledgePanelTransfer(callerWindowName: string, transferID: string, mounted: boolean): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgePanelTransfer", callerWindowName, transferID, mounted);
 }
 
-export function AcknowledgePanelWindowDock(callerWindowName: string, windowName: string, transferID: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgePanelWindowDock", callerWindowName, windowName, transferID);
+export function AcknowledgePanelWindowClose(windowName: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgePanelWindowClose", windowName);
 }
 
 export function AcknowledgePanelWindowReady(windowName: string, transferID: string): $CancellablePromise<panelwindow$0.WindowDescriptor> {

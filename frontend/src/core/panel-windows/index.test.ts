@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
     BeginPanelWindowOpen: vi.fn(),
     AcknowledgePanelWindowReady: vi.fn(),
     BeginPanelWindowDock: vi.fn(),
-    AcknowledgePanelWindowDock: vi.fn(),
+    AcknowledgePanelTransfer: vi.fn(),
     FailPanelWindowTransfer: vi.fn(),
     AcknowledgePanelWindowClose: vi.fn(),
     AcknowledgeWorkspaceWindowClose: vi.fn(),
@@ -38,8 +38,8 @@ import {
   acceptPanelTabTransfer,
   acknowledgeApplicationQuitPreflight,
   acknowledgeClusterPanelClose,
+  acknowledgePanelTransfer,
   acknowledgePanelWindowClose,
-  acknowledgePanelWindowDock,
   acknowledgePanelWindowReady,
   acknowledgePanelWorkspaceReady,
   acknowledgeWorkspaceWindowClose,
@@ -169,7 +169,7 @@ describe('native panel-window transport', () => {
     await beginPanelWindowOpen('workspace-1', snapshot);
     await acknowledgePanelWindowReady('panel-1', 'transfer-1');
     await beginPanelWindowDock('panel-1', 'right', snapshot);
-    await acknowledgePanelWindowDock('workspace-1', 'panel-1', 'transfer-1');
+    await acknowledgePanelTransfer('workspace-1', 'transfer-1', true);
     await failPanelWindowTransfer('workspace-1', 'panel-1', 'transfer-1');
     await acknowledgePanelWindowClose('panel-1');
     await acknowledgeWorkspaceWindowClose('workspace-1');
@@ -189,10 +189,10 @@ describe('native panel-window transport', () => {
     expect(mocks.backend.BeginPanelWindowOpen).toHaveBeenCalledWith('workspace-1', snapshot);
     expect(mocks.backend.AcknowledgePanelWindowReady).toHaveBeenCalledWith('panel-1', 'transfer-1');
     expect(mocks.backend.BeginPanelWindowDock).toHaveBeenCalledWith('panel-1', 'right', snapshot);
-    expect(mocks.backend.AcknowledgePanelWindowDock).toHaveBeenCalledWith(
+    expect(mocks.backend.AcknowledgePanelTransfer).toHaveBeenCalledWith(
       'workspace-1',
-      'panel-1',
-      'transfer-1'
+      'transfer-1',
+      true
     );
     expect(mocks.backend.FailPanelWindowTransfer).toHaveBeenCalledWith(
       'workspace-1',

@@ -574,7 +574,7 @@ func (r *Registry) BeginPanelWindowDock(windowName, targetPosition string, snaps
 	if err := r.panels.BeginDock(windowName, snapshot, target, targetPosition); err != nil {
 		return err
 	}
-	location := panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: target, GroupID: targetPosition}
+	location := panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: target, GroupID: targetPosition, Index: panelwindow.AppendToGroup}
 	if err := r.beginGroupPlacement(windowName, snapshot, location); err != nil {
 		_ = r.panels.FailTransfer(windowName, snapshot.TransferID)
 		return err
@@ -589,9 +589,26 @@ func (r *Registry) BeginPanelWindowDock(windowName, targetPosition string, snaps
 	return nil
 }
 
-// AcknowledgePanelWindowDock closes the now-redundant source window, commits the
+// AcknowledgePanelTransfer settles a directory move the caller was asked to
+// reconstruct: mounted commits it; otherwise the move is cancelled and the
+// source keeps its panels. The owning handoff is found by transfer ID.
+func (r *Registry) AcknowledgePanelTransfer(targetWindow, transferID string, mounted bool) error {
+	if r.hasPanelTabTransfer(transferID) {
+		return r.settlePanelTabTransfer(targetWindow, transferID, mounted)
+	}
+	windowName, pending := r.panels.TransferWindow(transferID)
+	if !pending {
+		return fmt.Errorf("stale panel transfer %q", transferID)
+	}
+	if !mounted {
+		return r.FailPanelWindowTransfer(targetWindow, windowName, transferID)
+	}
+	return r.acknowledgePanelWindowDock(targetWindow, windowName, transferID)
+}
+
+// acknowledgePanelWindowDock closes the now-redundant source window, commits the
 // directory move to the acknowledging app view, and removes the native role.
-func (r *Registry) AcknowledgePanelWindowDock(targetWindow, windowName, transferID string) error {
+func (r *Registry) acknowledgePanelWindowDock(targetWindow, windowName, transferID string) error {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
 	descriptor, err := r.commitPanelWindowDock(targetWindow, windowName, transferID)
@@ -690,7 +707,7 @@ func (r *Registry) UpdatePanelWindowSnapshot(windowName string, snapshot PanelGr
 	if err := r.panels.ValidateSnapshot(windowName, snapshot); err != nil {
 		return err
 	}
-	if err := r.publishPanelGroups(windowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{{ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}}); err != nil {
+	if err := r.workspace.PublishWindow(windowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{{ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}}); err != nil {
 		return err
 	}
 	if err := r.panels.UpdateSnapshot(windowName, snapshot); err != nil {

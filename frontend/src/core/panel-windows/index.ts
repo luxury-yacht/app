@@ -4,8 +4,8 @@ import {
   AcknowledgeApplicationQuitPreflight,
   AcknowledgeClusterPanelClose,
   AcknowledgeClusterTabTransfer,
+  AcknowledgePanelTransfer,
   AcknowledgePanelWindowClose,
-  AcknowledgePanelWindowDock,
   AcknowledgePanelWindowReady,
   AcknowledgePanelWorkspaceReady,
   AcknowledgeWorkspaceWindowClose,
@@ -85,11 +85,13 @@ export const beginPanelWindowDock = (
   snapshot: panelwindow.GroupSnapshot
 ): Promise<void> => BeginPanelWindowDock(windowName, targetPosition, snapshot);
 
-export const acknowledgePanelWindowDock = (
+// Settles a directory move this renderer was asked to reconstruct: mounted
+// commits it, otherwise the source keeps the panels.
+export const acknowledgePanelTransfer = (
   callerWindowName: string,
-  windowName: string,
-  transferId: string
-): Promise<void> => AcknowledgePanelWindowDock(callerWindowName, windowName, transferId);
+  transferId: string,
+  mounted: boolean
+): Promise<void> => AcknowledgePanelTransfer(callerWindowName, transferId, mounted);
 
 export const failPanelWindowTransfer = (
   callerWindowName: string,

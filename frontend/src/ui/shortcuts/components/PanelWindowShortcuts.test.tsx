@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   freezeCluster: vi.fn(),
   releaseTransfer: vi.fn(),
   acceptTabTransfer: vi.fn(async () => undefined),
+  acknowledgeTransfer: vi.fn(async () => undefined),
   beginOpen: vi.fn(async () => undefined),
   failTabTransfer: vi.fn(async () => undefined),
   upsertOwnedPanel: vi.fn(() => 'panel-c'),
@@ -80,6 +81,7 @@ vi.mock('@/core/panel-windows', () => ({
   failPanelTabTransfer: mocks.failTabTransfer,
   acknowledgeApplicationQuitPreflight: mocks.acknowledgeQuit,
   acceptPanelTabTransfer: mocks.acceptTabTransfer,
+  acknowledgePanelTransfer: mocks.acknowledgeTransfer,
   beginPanelWindowOpen: mocks.beginOpen,
   onApplicationQuitPreflightRequested: (handler: (event: never) => void) => {
     mocks.handlers.quit = handler;
@@ -280,22 +282,17 @@ describe('PanelWindowShortcuts', () => {
     },
   });
 
-  it('publishes a frozen native source before creating the target and retains it until commit', async () => {
+  it('freezes a native source and accepts without waiting for its publication', async () => {
     const request = outgoingTabRequest();
-    let publish: () => void = () => {
-      throw new Error('Publication was not started');
-    };
-    const flush = vi.spyOn(nativePanelPublication, 'flush').mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          publish = resolve;
-        })
-    );
-    await act(async () => mocks.handlers.transferSource?.({ request } as never));
+    const flush = vi
+      .spyOn(nativePanelPublication, 'flush')
+      .mockImplementationOnce(() => new Promise<void>(() => undefined));
+    await act(async () => {
+      mocks.handlers.transferSource?.({ request } as never);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(mocks.freeze).toHaveBeenCalledWith(request.transferId, ['panel-b']);
-    expect(mocks.acceptTabTransfer).not.toHaveBeenCalled();
-    expect(mocks.beginOpen).not.toHaveBeenCalled();
-    await act(async () => publish());
     expect(mocks.acceptTabTransfer).toHaveBeenCalledWith('panel-1', request.transferId);
     expect(mocks.beginOpen).toHaveBeenCalledWith(
       'panel-1',
@@ -548,37 +545,62 @@ describe('PanelWindowShortcuts', () => {
     );
   });
 
-  it('inserts an authorized transferred tab at the requested native-window index', async () => {
-    const request = {
-      transferId: 'tab-transfer-1',
-      sourceWindowName: 'panel-2',
-      targetWindowName: 'panel-1',
-      ownerWindowName: 'workspace-1',
-      clusterId: 'cluster-1',
-      sourceGroupId: 'group-2',
-      targetGroupId: 'group-1',
-      targetIndex: 1,
-      targetKind: 'panel-window',
-      tab: {
-        kind: 'object',
-        panelId: 'panel-c',
-        activeView: 'details',
-        objectRef: {
-          clusterId: 'cluster-1',
-          group: 'apps',
-          version: 'v1',
-          kind: 'Deployment',
-          namespace: 'default',
-          name: 'worker',
-        },
+  const incomingTabRequest = () => ({
+    transferId: 'tab-transfer-1',
+    sourceWindowName: 'panel-2',
+    targetWindowName: 'panel-1',
+    ownerWindowName: 'workspace-1',
+    clusterId: 'cluster-1',
+    sourceGroupId: 'group-2',
+    targetGroupId: 'group-1',
+    targetIndex: 1,
+    targetKind: 'panel-window',
+    tab: {
+      kind: 'object',
+      panelId: 'panel-c',
+      activeView: 'details',
+      objectRef: {
+        clusterId: 'cluster-1',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'default',
+        name: 'worker',
       },
-    };
+    },
+  });
+
+  it('inserts an authorized transferred tab at the requested native-window index', async () => {
+    const request = incomingTabRequest();
 
     await act(async () => mocks.handlers.tabTransferInsert?.({ request } as never));
 
     expect(mocks.upsertOwnedPanel).toHaveBeenCalledWith(request.tab.objectRef, 'details');
     expect(mocks.movePanelBetweenGroups).toHaveBeenCalledWith('panel-c', 'right', 1);
     expect(mocks.failTabTransfer).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges an inserted tab once it is mounted, after its queued publication', async () => {
+    const flush = vi.spyOn(nativePanelPublication, 'flush');
+    await act(async () =>
+      mocks.handlers.tabTransferInsert?.({ request: incomingTabRequest() } as never)
+    );
+    expect(mocks.acknowledgeTransfer).not.toHaveBeenCalled();
+
+    mocks.tabs = ['panel-a', 'panel-c', 'panel-b'];
+    for (let render = 0; render < 2; render += 1) {
+      await act(async () => {
+        root.render(<PanelWindowShortcuts descriptor={descriptor} ready={true} />);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    }
+    expect(mocks.acknowledgeTransfer).toHaveBeenCalledOnce();
+    expect(mocks.acknowledgeTransfer).toHaveBeenCalledWith('panel-1', 'tab-transfer-1', true);
+    expect(flush.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.acknowledgeTransfer.mock.invocationCallOrder[0]
+    );
+    flush.mockRestore();
   });
 
   it('removes only the committed source tab and closes a source window that becomes empty', async () => {

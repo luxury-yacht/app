@@ -198,23 +198,6 @@ func (d *WorkspaceDirectory) RetainWindowCluster(windowName, clusterID string) {
 	}
 }
 
-func (d *WorkspaceDirectory) Move(tab TabSnapshot, source, target PanelLocation) error {
-	if err := validatePanelLocation(target); err != nil {
-		return err
-	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	key := workspacePanelKey{tab.ClusterID(), tab.PanelID}
-	panel, ok := d.panels[key]
-	if !ok || panel.Tab != tab || panel.Location != source {
-		return fmt.Errorf("panel transfer source is stale")
-	}
-	panel.Location = target
-	d.panels[key] = panel
-	d.revision++
-	return nil
-}
-
 func (d *WorkspaceDirectory) RemoveWindow(windowName string) {
 	removal := &panelRemoval{}
 	defer removal.report()
@@ -275,71 +258,38 @@ func ValidateWorkspaceGroups(windowName string, kind PanelLocationKind, groups [
 	return err
 }
 
-// PublishWindow reconciles only the publishing renderer's groups. Validation
-// precedes writes so a rejected snapshot cannot partially remove its panels.
-type PlacementTransfer struct {
-	TransferID       string
-	Tab              TabSnapshot
-	SourceWindowName string
-	SourceGroupID    string
-	TargetGroupID    string
-}
-
-func (d *WorkspaceDirectory) PublishWindow(windowName string, kind PanelLocationKind, groups []WorkspaceGroup) error {
-	_, err := d.PublishWindowWithTransfers(windowName, kind, groups, nil)
-	return err
-}
-
-// Snapshot publication and acknowledged tab placement share one commit. Invalid
-// target content cannot move a source tab before the publication is rejected.
-func (d *WorkspaceDirectory) PublishWindowWithTransfers(windowName string, kind PanelLocationKind, groups []WorkspaceGroup, transfers []PlacementTransfer, reservations ...*WorkspaceReservation) ([]string, error) {
+// PublishWindow reconciles only the publishing renderer's groups: order,
+// activation, and which of its own panels remain. Only the directory moves a
+// panel between renderers. Validation precedes writes so a rejected snapshot
+// cannot partially remove its panels.
+func (d *WorkspaceDirectory) PublishWindow(windowName string, kind PanelLocationKind, groups []WorkspaceGroup, reservations ...*WorkspaceReservation) error {
 	if windowName == "" || (kind != PanelLocationDocked && kind != PanelLocationWindow) {
-		return nil, fmt.Errorf("panel publication requires a live renderer")
+		return fmt.Errorf("panel publication requires a live renderer")
 	}
 	next, err := panelsFromGroups(windowName, kind, groups)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	removal := &panelRemoval{}
 	defer removal.report()
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if err := d.validateReservationsLocked(reservations); err != nil {
-		return nil, err
-	}
-	approved := make(map[workspacePanelKey]PlacementTransfer)
-	for _, transfer := range transfers {
-		approved[workspacePanelKey{transfer.Tab.ClusterID(), transfer.Tab.PanelID}] = transfer
+		return err
 	}
 	d.skipMovingPanelsLocked(windowName, next)
-	if err := d.validatePublicationLocked(windowName, next, approved); err != nil {
-		return nil, err
+	if err := d.validatePublicationLocked(windowName, next); err != nil {
+		return err
 	}
 	d.replacePublishedWindowLocked(windowName, next, removal)
-	committed := make([]string, 0, len(transfers))
-	for _, transfer := range transfers {
-		panel, found := next[workspacePanelKey{transfer.Tab.ClusterID(), transfer.Tab.PanelID}]
-		if found && panel.Tab == transfer.Tab && panel.Location.GroupID == transfer.TargetGroupID {
-			committed = append(committed, transfer.TransferID)
-		}
-	}
 	d.revision++
-	return committed, nil
+	return nil
 }
 
-func validPublicationTransfer(previous, next WorkspacePanel, transfer PlacementTransfer) bool {
-	return transfer.TransferID != "" && previous.Tab == transfer.Tab && next.Tab == transfer.Tab &&
-		previous.Location.WindowName == transfer.SourceWindowName && previous.Location.GroupID == transfer.SourceGroupID && next.Location.GroupID == transfer.TargetGroupID
-}
-
-func (d *WorkspaceDirectory) validatePublicationLocked(windowName string, next map[workspacePanelKey]WorkspacePanel, approved map[workspacePanelKey]PlacementTransfer) error {
+func (d *WorkspaceDirectory) validatePublicationLocked(windowName string, next map[workspacePanelKey]WorkspacePanel) error {
 	for key, panel := range next {
 		previous, exists := d.panels[key]
-		if transfer, transferring := approved[key]; transferring {
-			if !exists || !validPublicationTransfer(previous, panel, transfer) {
-				return fmt.Errorf("panel transfer source is stale")
-			}
-		} else if exists && (previous.Location.WindowName != windowName || previous.Tab.identity() != panel.Tab.identity()) {
+		if exists && (previous.Location.WindowName != windowName || previous.Tab.identity() != panel.Tab.identity()) {
 			return fmt.Errorf("panel %q is owned by another placement", key.panelID)
 		}
 		if err := d.validateObjectIdentityLocked(key, panel.Tab.identity()); err != nil {

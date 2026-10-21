@@ -3,10 +3,11 @@ import type { DockPosition } from '@/ui/dockable/useDockablePanelState';
 import { requestPanelTabTransfer } from './index';
 import { type DockableTabDragPayload, tabTransferRequestFromDragPayload } from './tabTransfer';
 
+// The directory checks the tab's identity, not its published view, so the move
+// need not wait for this renderer's queued publication.
 export async function requestPanelTabMove(
   payload: DockableTabDragPayload,
   target: DockPosition,
-  publication: { flush: () => Promise<void> },
   dockWindowName: string
 ): Promise<void> {
   const request = tabTransferRequestFromDragPayload(payload, {
@@ -21,6 +22,5 @@ export async function requestPanelTabMove(
   if (!request) {
     throw new Error('Panel tab move requires complete source and object identity');
   }
-  await publication.flush();
   await requestPanelTabTransfer(request.sourceWindowName, request);
 }

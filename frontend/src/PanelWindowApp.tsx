@@ -40,7 +40,6 @@ import {
 } from '@/core/panel-windows/panelLifecycleGuards';
 import { requestPanelTabMove } from '@/core/panel-windows/panelTabActions';
 import { resolvePanelWindowClusterName } from '@/core/panel-windows/panelWindowClusterName';
-import { nativePanelPublication } from '@/core/panel-windows/publicationQueue';
 import {
   type DockableTabDragPayload,
   objectPanelTabSnapshot,
@@ -247,7 +246,7 @@ function PanelWindowSurface({
       initialTabGroups={initialTabGroups}
       onGroupMoveRequest={handleGroupMove}
       onTabMoveRequest={(payload, target) => {
-        void requestPanelTabMove(payload, target, nativePanelPublication, '').catch((error) =>
+        void requestPanelTabMove(payload, target, '').catch((error) =>
           reportOperationalError(error, {
             source: 'PanelWindowApp',
             action: 'move-panel-tab',

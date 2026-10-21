@@ -1,8 +1,10 @@
 # Panel placement: single-writer prototype (finding #4)
 
-Status: prototype in the working tree on `main` (base 59136764), uncommitted, for
-review. Only whole-group **Float** (app dock → new native window) and
-**dock-back** (native window → app dock) were migrated. No other path changed.
+Status: Phase 0 (whole-group **Float** and **dock-back**) is committed as
+`e1d3b937 wip` on `single-panel-writer`; John's native checks passed on macOS.
+Phase 1 (**single-tab transfer**) is in the working tree, uncommitted; its
+native checks passed on macOS ([Phase 1](#phase-1-single-tab-transfer)). Cluster-view
+transfer, close, and the native index are unchanged.
 
 ## Recommendation
 
@@ -223,20 +225,14 @@ and delete the shared two-writer machinery that this path still needed.
 Each phase reuses `Begin/Commit/CancelGroupTransfer` and the read-driven
 projection. Each needs its own TDD, its Go contract tests, and native checks.
 
-1. **Single-tab transfer.** Covers tab drag between windows, tear-off to a new
-   window, and the tab-menu Float and Dock commands.
-   - Change: `RequestPanelTabTransfer` begins a one-tab directory move. The
-     target projects it the way dock-back does.
-   - Delete:
-     - `PlacementTransfer` approvals in publication (`validPublicationTransfer`,
-       the approvals loop in `publishPanelGroups`);
-     - `sync.stage`/`settle`/`isProvisional`/`transferRevision`;
-     - the tab-insert event and its queue case;
-     - the tear-off double commit (`completePanelTabTransferForOpenedWindow` →
-       `moveTransferredPanel`).
-
-   This is the largest deletion (estimate, not measured).
-2. **Cluster-view transfer.**
+1. **Single-tab transfer.** Done in the working tree; see
+   [Phase 1](#phase-1-single-tab-transfer). Two planned deletions moved:
+   `sync.stage`/`settle`/`isProvisional`/`transferRevision` stay because
+   cluster-view transfer still uses them, and the tab-insert event stays for
+   live native targets.
+2. **Cluster-view transfer.** Also deletes the last users of
+   `sync.stage`/`settle`/`isProvisional`/`transferRevision`
+   (`ClusterTabTransferCoordinator.tsx`).
    - Change: the staged view's docked panels begin a directory move.
      `TransferClusterView` commits it.
    - Delete:
@@ -258,6 +254,110 @@ projection. Each needs its own TDD, its Go contract tests, and native checks.
 
 Open already writes the directory first (`OpenPanelWorkspaceObject`). The
 prototype's immunity rules cover it, so it needs no phase.
+
+## Phase 1: single-tab transfer
+
+What changed (working tree on top of `e1d3b937`):
+
+- The source's `AcceptPanelTabTransfer` begins a one-tab directory move
+  (`beginPanelTabPlacementLocked`, `internal/appwindow/panel_tab_transfer.go`).
+  Its release runs at the tab transfer's single terminal
+  (`removePanelTabTransferLocked`). A tear-off's move is the new window's open
+  transfer from Phase 0, so completion only finishes the tab transfer
+  (`finishOpenedPanelTabTransfer`).
+- The directory places a moving group at an insert index: the drop index for a
+  dropped tab, `AppendToGroup` for dock-back. On commit, existing tabs at or
+  after it make room (`insertIndexLocked`, `makeRoomLocked`,
+  `workspace_group_transfer.go`).
+- Every target settles through one endpoint, `AcknowledgePanelTransfer(caller,
+  transferID, mounted)`, which routes by transfer ID. It replaces
+  `AcknowledgePanelWindowDock` in every binding layer.
+- App targets project tab moves exactly like dock-back (`IncomingGroupTransfer`
+  gained `insertIndex`; the coordinator hook is now `useIncomingPanelTransfers`).
+  Native targets keep the insert event and acknowledge once the tab is mounted
+  (`PanelWindowShortcuts.tsx`).
+
+Guards on the single-tab path (main line refs where they existed):
+
+| # | Guard | Under one writer |
+| --- | --- | --- |
+| T1 | Exact source equality at request, so the source flushes first (`panelTabActions.ts:24`, `WorkspacePanelCoordinator.tsx:445`, `PanelWindowShortcuts.tsx:175`) | **Removed.** An identity check at request; the directory decides at accept. |
+| T2 | Target publication commits the move (publication approvals, `validPublicationTransfer`, directory `Move`, `moveTransferredPanel`) | **Removed.** The target acknowledges explicitly; publications never move panels. |
+| T3 | App target staging and read invalidation for tab insert (`Coordinator:483-526`) | **Removed for this path.** Cluster-view still uses them. |
+| T4 | Workspace insert queue and its replay check (`workspaceEventPending`, `panelTabInsertionPending`) | **Removed.** |
+| T5 | App target `pendingTargets` and copy cleanup on failure | **Removed.** The projection drops the copy. |
+| T6 | Tear-off double commit | **Removed.** |
+| T7 | App target rejects: frozen, unselected cluster, non-dock group, already owned | **Simplified.** Only "frozen" remains; the directory validates the rest. |
+| T8 | Native target insert and failure cleanup | **Still needed**, plus a new mount-then-flush-then-acknowledge effect. |
+| T9 | Source authority checks (`isAuthoritativeTransferSource`, `samePanelTab`) | **Still needed.** |
+| T10 | One pending transfer per source tab; transfer timeout | **Still needed.** The timeout now also cancels the directory move. |
+| N5 | *New:* the tab transfer's terminal releases its directory move | — |
+| N6 | *New:* drop-index placement in the directory | — |
+
+Measured (code only, comments and blank lines excluded, `git diff -U0` against
+`e1d3b937`):
+
+- **Production:** backend +175 / −170 (net +5); frontend +91 / −124 (net −33).
+  Including comments: +332 / −316.
+- **Tests:** +285 / −287.
+- **Cumulative since main (59136764, Phases 0 and 1):** backend +373 / −298
+  (net +75); frontend +293 / −335 (net −42); +808 / −670 including comments.
+- **Guards:** 6 of 10 removed, 1 simplified, 3 still needed; 2 new.
+- **Mutation checks:** each mutation was reverted, and each was caught.
+
+  | # | Mutation | Tests that fail |
+  | --- | --- | --- |
+  | M7 | accept begins no directory move | 4 |
+  | M8 | the tab terminal skips release | 2 |
+  | M9 | native target acknowledges before its publication | 1 |
+  | M10 | drop index ignored | 3 |
+
+- **Evidence:**
+  - `go test` passes for `panelwindow`, `appwindow`, `bootstrap`, and
+    `backend`; `-race` passes on the transfer packages.
+  - Vitest: 168 passed across `src/core/panel-windows`, `PanelWindowApp`, and
+    `PanelWindowShortcuts`.
+  - gocognit: maximum 12 on changed functions. Biome complexity is clean, and
+    knip exits 0.
+  - Coverage of the changed functions is 75–100% (Go).
+    `WorkspacePanelCoordinator.tsx` is 96.2%, `WorkspacePanelSync.tsx` 96.5%,
+    and `PanelWindowShortcuts.tsx` 86.8% statements.
+
+Phase 1 native checks. Run these on macOS and Windows; Linux drag-out is
+deferred. For each check, confirm that no tab is duplicated or lost and no error
+toast appears.
+
+1. **Drop into the app.** Drag a native tab onto the app's right dock strip
+   between two tabs.
+   - Path: `WorkspacePanelCoordinator` `handleExternalTabDrop`.
+   - Expect it at that position.
+   - The native window closes if that was its last tab.
+2. **Drop into a native window.** Drag an app tab onto an existing native
+   window's strip at position 2.
+   - Path: `PanelWindowApp` `handleExternalTabDrop`.
+   - Expect it at that position. It leaves the app dock.
+3. **Native to native.** Drag a tab from one native window onto another.
+4. **Tear-off.** Drag a native tab, or one tab of a multi-tab app dock, to the
+   desktop.
+   - Path: `handleTabTearOff`.
+   - Expect a new window with that tab.
+5. **Tab menu, native.** Right-click a native tab and choose **Dock to bottom**
+   (`DockableTabMenu.tsx`).
+   - Expect it appended to the app's bottom dock.
+   - If the app shows another cluster tab, it switches first.
+6. **Tab menu, app.** Right-click a docked object tab and choose **Float**.
+   - Expect only that tab in a new window.
+7. **View travels.** Switch a tab to YAML, then within a second drag it to
+   another window. Expect it to arrive showing YAML (the removed flush, T1).
+8. **Two app windows.** With the same cluster in two app windows, drag a docked
+   tab from one to the other's dock. Expect a move, not a copy.
+9. **After the moves.**
+   - Close a moved tab in its new window: it closes.
+   - Reopen the object from another window: it focuses the moved tab.
+10. **Blocked moves.**
+    - With unsaved YAML in a tab, its drag and menu moves are blocked
+      (unchanged guard).
+    - Quit after the moves, then restart: the selections restore.
 
 ## Native checks for John
 
@@ -330,3 +430,7 @@ each check, confirm three things:
 | Complexity ≤ 12 on changed functions | passed | gocognit v1.2.1: max 12; `npm run complexity` on changed TS files: clean |
 | Prerelease gate | passed | `mise exec -- wails3 task qc:prerelease` exit 0 on the final tree (docs, fmt, bindings, vet + staticcheck, `go test ./... -race` 107 packages ok, Biome, typecheck, frontend 5357 passed / 1 skipped, knip, trivy); no files reformatted |
 | Native multi-window behavior | passed on macOS; Windows not run | John ran checks 1–10 on macOS on 2026-10-20 and reported all working |
+| Phase 1 single-tab contract (directory and registry) | passed | `go test` (and `-race` on transfer packages) ok; tests named in [Phase 1](#phase-1-single-tab-transfer) |
+| Phase 1 frontend projection and native acknowledgement | passed | Vitest: 168 passed (mocks bindings and dockable context; the guard-release test uses the real registry) |
+| Phase 1 prerelease gate | passed | `mise exec -- wails3 task qc:prerelease` exit 0 (docs, fmt, bindings, vet + staticcheck, `go test ./... -race` 107 packages ok, Biome, typecheck, frontend 5356 passed / 1 skipped, knip, trivy); lint-fix re-sorted one export in `frontend/src/core/backend-api/index.ts` |
+| Phase 1 native multi-window behavior | passed on macOS; Windows not run | John ran Phase 1 checks 1–10 on macOS on 2026-10-20 and reported them good |

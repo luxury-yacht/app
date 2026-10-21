@@ -52,7 +52,7 @@ type DesktopShellBindings struct {
 	BeginPanelWindowOpen       func(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	AcknowledgePanelReady      func(string, string) (panelwindow.WindowDescriptor, error)
 	BeginPanelWindowDock       func(string, string, panelwindow.GroupSnapshot) error
-	AcknowledgePanelDock       func(string, string, string) error
+	AcknowledgePanelTransfer   func(string, string, bool) error
 	FailPanelTransfer          func(string, string, string) error
 	AcknowledgePanelClose      func(string) error
 	AcknowledgeWorkspaceClose  func(string) error
@@ -79,7 +79,7 @@ type DesktopShell struct {
 	beginPanelWindowOpen       func(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	acknowledgePanelReady      func(string, string) (panelwindow.WindowDescriptor, error)
 	beginPanelWindowDock       func(string, string, panelwindow.GroupSnapshot) error
-	acknowledgePanelDock       func(string, string, string) error
+	acknowledgePanelTransfer   func(string, string, bool) error
 	failPanelTransfer          func(string, string, string) error
 	acknowledgePanelClose      func(string) error
 	acknowledgeWorkspaceClose  func(string) error
@@ -130,7 +130,7 @@ func NewDesktopShell(
 		shell.beginPanelWindowOpen = bindings[0].BeginPanelWindowOpen
 		shell.acknowledgePanelReady = bindings[0].AcknowledgePanelReady
 		shell.beginPanelWindowDock = bindings[0].BeginPanelWindowDock
-		shell.acknowledgePanelDock = bindings[0].AcknowledgePanelDock
+		shell.acknowledgePanelTransfer = bindings[0].AcknowledgePanelTransfer
 		shell.failPanelTransfer = bindings[0].FailPanelTransfer
 		shell.acknowledgePanelClose = bindings[0].AcknowledgePanelClose
 		shell.acknowledgeWorkspaceClose = bindings[0].AcknowledgeWorkspaceClose
