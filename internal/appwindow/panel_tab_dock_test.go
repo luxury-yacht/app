@@ -18,10 +18,9 @@ func TestPanelTabMenuDockResolvesClusterTargetAndWaitsForRenderer(t *testing.T) 
 	sibling.ObjectRef.Name = "sibling"
 	snapshot.Tabs = append(snapshot.Tabs, sibling)
 	source := livePanelWindowForTabTransfer(t, registry.panels, snapshot)
-	snapshot.SourceWindowName = source.WindowName
 	registry.emitWindowEvent = func(string, string, any) bool { return true }
 	seedNativeGroup(t, registry.workspace, source.WindowName, snapshot)
-	require.NoError(t, registry.UpdatePanelWindowSnapshot(source.WindowName, snapshot))
+	require.NoError(t, registry.PublishPanelWindowGroup(source.WindowName, nativeGroup(snapshot)))
 	var events []capturedPanelWindowEvent
 	registry.emitWindowEvent = func(target, name string, payload any) bool {
 		events = append(events, capturedPanelWindowEvent{target: target, name: name, payload: payload})
@@ -35,7 +34,7 @@ func TestPanelTabMenuDockResolvesClusterTargetAndWaitsForRenderer(t *testing.T) 
 	resolved := events[0].payload.(panelwindow.TabTransferRequestedEvent).Request
 	require.Equal(t, target, resolved.TargetWindowName)
 	require.NoError(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
-	require.Equal(t, snapshot, requirePanelDescriptor(t, registry.panels, source.WindowName).Snapshot)
+	require.Equal(t, nativeGroup(snapshot), requireNativeGroup(t, registry, source.WindowName))
 	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
 	require.NotContains(t, eventNames(events), target+":"+panelwindow.TabTransferInsertRequestedEventName, "a ready target reads the directory instead")
 	// The resolved app view appends the tab to its bottom dock.
@@ -45,8 +44,8 @@ func TestPanelTabMenuDockResolvesClusterTargetAndWaitsForRenderer(t *testing.T) 
 	require.Contains(t, events, capturedPanelWindowEvent{target: source.WindowName, name: panelwindow.TabTransferCommittedEventName, payload: panelwindow.TabTransferCommittedEvent{Request: resolved}})
 	snapshot.Tabs = []panelwindow.TabSnapshot{sibling}
 	snapshot.ActivePanelID = sibling.PanelID
-	require.NoError(t, registry.UpdatePanelWindowSnapshot(source.WindowName, snapshot))
-	require.Equal(t, snapshot.Tabs, requirePanelDescriptor(t, registry.panels, source.WindowName).Snapshot.Tabs)
+	require.NoError(t, registry.PublishPanelWindowGroup(source.WindowName, nativeGroup(snapshot)))
+	require.Equal(t, snapshot.Tabs, requireNativeGroup(t, registry, source.WindowName).Tabs)
 }
 
 func TestPanelTabMenuDockCreatesAnAppViewWithoutAnExistingAppWindow(t *testing.T) {
@@ -56,10 +55,9 @@ func TestPanelTabMenuDockCreatesAnAppViewWithoutAnExistingAppWindow(t *testing.T
 	registry.tabTransferTimeout = 0
 	snapshot := validPanelGroupSnapshot()
 	source := livePanelWindowForTabTransfer(t, registry.panels, snapshot)
-	snapshot.SourceWindowName = source.WindowName
 	registry.emitWindowEvent = func(string, string, any) bool { return true }
 	seedNativeGroup(t, registry.workspace, source.WindowName, snapshot)
-	require.NoError(t, registry.UpdatePanelWindowSnapshot(source.WindowName, snapshot))
+	require.NoError(t, registry.PublishPanelWindowGroup(source.WindowName, nativeGroup(snapshot)))
 	request := panelwindow.TabTransferRequest{TransferID: "dock-with-no-app", SourceWindowName: source.WindowName, ClusterID: source.ClusterID, SourceGroupID: source.GroupID, TargetGroupID: "right", TargetKind: panelwindow.TabTransferTargetWorkspace, Tab: snapshot.Tabs[0]}
 	stale := request
 	stale.Tab.ObjectRef.Name = "stale"
@@ -76,7 +74,7 @@ func TestPanelTabMenuDockCreatesAnAppViewWithoutAnExistingAppWindow(t *testing.T
 	require.Equal(t, PanelWindowStateLive, registry.panels.State(source.WindowName))
 	require.NoError(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
 	require.NoError(t, registry.FailPanelTabTransfer(source.WindowName, request.TransferID))
-	require.Equal(t, snapshot, requirePanelDescriptor(t, registry.panels, source.WindowName).Snapshot)
+	require.Equal(t, nativeGroup(snapshot), requireNativeGroup(t, registry, source.WindowName))
 }
 
 func TestCancelledPanelTabMenuDockIsNotOfferedToALateTarget(t *testing.T) {
@@ -85,9 +83,8 @@ func TestCancelledPanelTabMenuDockIsNotOfferedToALateTarget(t *testing.T) {
 	registry := &Registry{lifecycle: lifecycle, panels: newPanelIndex(), workspace: panelwindow.NewWorkspaceDirectory(), backend: &recordingLifecycleBackend{windowClusters: map[string][]string{target: {"cluster-1"}}}, emitWindowEvent: func(string, string, any) bool { return true }}
 	snapshot := validPanelGroupSnapshot()
 	source := livePanelWindowForTabTransfer(t, registry.panels, snapshot)
-	snapshot.SourceWindowName = source.WindowName
 	seedNativeGroup(t, registry.workspace, source.WindowName, snapshot)
-	require.NoError(t, registry.UpdatePanelWindowSnapshot(source.WindowName, snapshot))
+	require.NoError(t, registry.PublishPanelWindowGroup(source.WindowName, nativeGroup(snapshot)))
 	request := panelwindow.TabTransferRequest{TransferID: "cancel-menu-dock", SourceWindowName: source.WindowName, ClusterID: source.ClusterID, SourceGroupID: source.GroupID, TargetGroupID: "right", TargetKind: panelwindow.TabTransferTargetWorkspace, Tab: snapshot.Tabs[0]}
 	require.NoError(t, registry.RequestPanelTabTransfer(source.WindowName, request))
 	require.NoError(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
@@ -99,5 +96,5 @@ func TestCancelledPanelTabMenuDockIsNotOfferedToALateTarget(t *testing.T) {
 	require.Len(t, workspace.Panels, 1)
 	require.Equal(t, source.WindowName, workspace.Panels[0].Location.WindowName)
 	require.Zero(t, workspace.Panels[0].Transfer)
-	require.Equal(t, snapshot, requirePanelDescriptor(t, registry.panels, source.WindowName).Snapshot)
+	require.Equal(t, nativeGroup(snapshot), requireNativeGroup(t, registry, source.WindowName))
 }

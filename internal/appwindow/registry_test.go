@@ -1026,19 +1026,16 @@ func TestRegistryRejectsPanelCommandsAcrossOwnerAndTransportBoundaries(t *testin
 		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.WorkspaceCommandOpenSettings), "not available")
 	})
 
-	t.Run("snapshot and tab commands fail closed on invalid state or delivery", func(t *testing.T) {
+	t.Run("arrangement and tab commands fail closed on invalid state or delivery", func(t *testing.T) {
 		registry, _, descriptor, snapshot := setup(t)
-		invalid := snapshot
-		invalid.TransferID = ""
-		require.Error(t, registry.UpdatePanelWindowSnapshot(descriptor.WindowName, invalid))
+		require.ErrorContains(t, registry.PublishPanelWindowGroup(descriptor.WindowName, nativeGroup(snapshot)), "state", "an opening window cannot report an arrangement")
 		require.ErrorContains(t, registry.RequestPanelTabClose(descriptor.WindowName, "panel-missing"), "not in window")
 		registry.showWindow = func(string) bool { return true }
 		registry.emitWindowEvent = func(string, string, any) bool { return true }
 		_, err := registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
 		require.NoError(t, err)
 		registry.emitWindowEvent = func(string, string, any) bool { return false }
-		snapshot.SourceWindowName = descriptor.WindowName
-		require.NoError(t, registry.UpdatePanelWindowSnapshot(descriptor.WindowName, snapshot))
+		require.NoError(t, registry.PublishPanelWindowGroup(descriptor.WindowName, nativeGroup(snapshot)))
 		require.ErrorContains(t, registry.RequestPanelTabClose(descriptor.WindowName, snapshot.ActivePanelID), "not available")
 	})
 
@@ -1300,10 +1297,15 @@ func seedPanels(t *testing.T, directory *panelwindow.WorkspaceDirectory, windowN
 	}
 }
 
+// nativeGroup is the arrangement a native window holding snapshot reports.
+func nativeGroup(snapshot PanelGroupSnapshot) panelwindow.WorkspaceGroup {
+	return panelwindow.WorkspaceGroup{ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}
+}
+
 // seedNativeGroup places a live native window's group in the directory.
 func seedNativeGroup(t *testing.T, directory *panelwindow.WorkspaceDirectory, windowName string, snapshot PanelGroupSnapshot) {
 	t.Helper()
-	seedPanels(t, directory, windowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{{ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}})
+	seedPanels(t, directory, windowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{nativeGroup(snapshot)})
 }
 
 // Native lifecycle fixtures start with panels already mounted in their source

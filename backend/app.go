@@ -58,7 +58,7 @@ type ApplicationRuntimeOptions struct {
 	AcknowledgePanelClose      func(string) error
 	AcknowledgeWorkspaceClose  func(string) error
 	RoutePanelCommand          func(string, panelwindow.WorkspaceCommand) error
-	UpdatePanelSnapshot        func(string, panelwindow.GroupSnapshot) error
+	PublishPanelGroup          func(string, panelwindow.WorkspaceGroup) error
 	RequestPanelTabClose       func(string, string) error
 	RequestPanelTabTransfer    func(string, panelwindow.TabTransferRequest) error
 	AcceptPanelTabTransfer     func(string, string) error
@@ -112,7 +112,7 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 			AcknowledgePanelClose:      options.AcknowledgePanelClose,
 			AcknowledgeWorkspaceClose:  options.AcknowledgeWorkspaceClose,
 			RoutePanelCommand:          options.RoutePanelCommand,
-			UpdatePanelSnapshot:        options.UpdatePanelSnapshot,
+			PublishPanelGroup:          options.PublishPanelGroup,
 			RequestPanelTabClose:       options.RequestPanelTabClose,
 			RequestPanelTabTransfer:    options.RequestPanelTabTransfer,
 			AcceptPanelTabTransfer:     options.AcceptPanelTabTransfer,

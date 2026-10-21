@@ -256,10 +256,10 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
   const handlePanelWindowOpened = useCallback(
     (event: panelwindow.WindowOpenedEvent) => {
       pendingFloatGroupIdsRef.current.delete(event.groupId);
-      for (const tab of event.snapshot.tabs ?? []) {
+      for (const tab of event.tabs ?? []) {
         removeOwnedPanel(event.clusterId, tab.panelId);
       }
-      guards.releaseTransfer(event.snapshot.transferId);
+      guards.releaseTransfer(event.transferId);
     },
     [removeOwnedPanel, guards.releaseTransfer]
   );
@@ -441,12 +441,12 @@ function WorkspaceObjectRouteCoordinator({
   useEffect(
     () =>
       onPanelWindowOpened((event) => {
-        if (event.snapshot.sourceWindowName !== windowName) {
+        if (event.sourceWindowName !== windowName) {
           return;
         }
-        const ids = (event.snapshot.tabs ?? []).map((tab) => tab.panelId);
-        detachPanelGroup(event.snapshot.clusterId, ids);
-        discardPanelLayouts(event.snapshot.clusterId, ids);
+        const ids = (event.tabs ?? []).map((tab) => tab.panelId);
+        detachPanelGroup(event.clusterId, ids);
+        discardPanelLayouts(event.clusterId, ids);
         onWindowOpened(event);
       }),
     [windowName, detachPanelGroup, discardPanelLayouts, onWindowOpened]

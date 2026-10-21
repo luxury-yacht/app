@@ -1,12 +1,14 @@
 # Panel placement: single-writer prototype (finding #4)
 
 Status: on `single-panel-writer`, Phase 0 (whole-group **Float** and
-**dock-back**, `e1d3b937`), Phase 1 (**single-tab transfer**, `64595908`), and
-Phase 2 (**cluster-view transfer**, `d25ad0c7`) are committed. Phases 0 and 1
-passed John's native checks on macOS; Phase 2's checks are in progress. Phase 3
-(**close as an intent**) is in the working tree, uncommitted, and awaits its
-native checks ([Phase 3](#phase-3-close-as-an-intent)). The native index is
-unchanged.
+**dock-back**, `e1d3b937`), Phase 1 (**single-tab transfer**, `64595908`),
+Phase 2 (**cluster-view transfer**, `d25ad0c7`), and Phase 3 (**close as an
+intent**, `cbc1295a`) are committed. Phases 0 and 1 passed John's native checks
+on macOS; Phase 2 and 3 checks are in progress. Phase 4 (**native index
+without snapshots**) and Phase 5 (**close and quit**) are in the working tree,
+uncommitted, and await their native checks
+([Phase 4](#phase-4-native-index-without-snapshots),
+[Phase 5](#phase-5-close-and-quit)). All five planned phases are implemented.
 
 ## Recommendation
 
@@ -95,7 +97,7 @@ Directory mutations (`internal/panelwindow/workspace.go`):
 
 A second copy of each native group's tabs lives in `panelIndex.snapshots`
 (`internal/appwindow/panel.go:74,118,156`). It also stores the pending transfer
-ID (:212).
+ID (:212). Phase 4 removes it.
 
 Renderers write through three channels:
 
@@ -128,7 +130,7 @@ Line references are main at 59136764 unless marked "now" (working tree).
 | G11 | Frontend 15 s dock timer and `acknowledging` flag | `Coordinator:405,635-663,681,714` | **Removed.** The backend timeout cancels, and the projection releases. | `TestFailedDock…/dock times out` |
 | G12 | Target matches `transfer-failed` to its pending dock | `Coordinator:624-633` | **Removed.** | — |
 | G13 | Docked publications replace the window's whole snapshot | `panelwindow/workspace.go:426` | **Still needed** (publication), plus one skip condition. | now `workspace.go:405` |
-| G14 | A native snapshot cannot adopt another window's pending op | `panel.go:211` | **Still needed** until the index stops storing snapshots (Phase 4). | — |
+| G14 | A native snapshot cannot adopt another window's pending op | `panel.go:211` | **Still needed** until the index stops storing snapshots. Removed in [Phase 4](#phase-4-native-index-without-snapshots). | — |
 | G15 | Stale publication after commit is rejected ("owned by another placement") | `panelwindow/workspace.go:378` | **Still needed.** | post-commit assertion in the G3 test |
 | G16 | Float dedupe `pendingFloatGroupIdsRef` | `Coordinator:94-120` | **Still needed for UX.** The directory now also rejects overlap. | `TestGroupTransferRejectsStaleSourceAndOverlappingTransferAtomically` |
 | G17 | Auto-float rollback re-docks a failed default-floating panel | `Coordinator:100,147,278,419` | **Still needed.** | — |
@@ -205,7 +207,8 @@ and delete the shared two-writer machinery that this path still needed.
 - **An orphaned move pins panels.** Publications ignore a moving panel. A
   terminal path that skips `finishLocked` would leave it unclosable. Today every
   `panelIndex` terminal goes through `finishLocked` (`panel.go:116`). Phase 4
-  should merge the two transfer records.
+  kept the two records; see [Phase 4](#phase-4-native-index-without-snapshots)
+  for why.
 - **Dock-back needs one extra round trip.** The target learns of the move from
   `panel-workspace:changed` followed by `GetPanelWorkspace`, instead of from an
   event payload. The cost is not measured here [unverified]; native check 4
@@ -237,13 +240,15 @@ projection. Each needs its own TDD, its Go contract tests, and native checks.
 3. **Close as an intent.** Done in the working tree; see
    [Phase 3](#phase-3-close-as-an-intent). The cluster-view source flush (C6)
    stays: it now drains queued close intents.
-4. **Native index without snapshots.**
-   - Build the descriptor from the directory.
-   - Delete `UpdatePanelWindowSnapshot`'s second write, `panelIndex.snapshots`,
-     and the adoption guard (G14).
-   - Make the directory move the only transfer record.
-5. **Close and quit.** Preflights query pending moves from the directory. No
-   placement logic remains in the close sequences.
+4. **Native index without snapshots.** Done in the working tree; see
+   [Phase 4](#phase-4-native-index-without-snapshots). The directory move is
+   now the only record of where panels go; the native lifecycle record stays
+   for window state and timeouts, like the tab and cluster handoffs.
+5. **Close and quit.** Done in the working tree; see
+   [Phase 5](#phase-5-close-and-quit). A closing app view now asks the
+   directory which moves target it and declines them. Close sequences hold no
+   placement logic beyond directory calls. The protocol checks for requests
+   not yet accepted stay, because the directory does not see those requests.
 
 Open already writes the directory first (`OpenPanelWorkspaceObject`). The
 prototype's immunity rules cover it, so it needs no phase.
@@ -518,7 +523,8 @@ Phase 3 risks:
 - **A native index snapshot can name a foreign panel.** A native window's
   snapshot that names another window's panel is no longer rejected. The
   directory ignores it, but the native index stores the report until Phase 4
-  removes that copy. Only a buggy renderer could trigger this.
+  removes that copy. Only a buggy renderer could trigger this. Resolved in
+  [Phase 4](#phase-4-native-index-without-snapshots).
 
 Phase 3 native checks. Run these on macOS and Windows. For each check, confirm
 no duplicate or lost panel and no error toast.
@@ -540,6 +546,212 @@ no duplicate or lost panel and no error toast.
    close the app window that holds them. Floating panels stay. Reopen the
    cluster in another window: the retained panels come back in the arranged
    order.
+
+## Phase 4: native index without snapshots
+
+What changed (working tree on top of `cbc1295a`):
+
+- **The native index stores no group.** `panelIndex.snapshots`,
+  `UpdateSnapshot`, `ValidateSnapshot`, `DockTarget`, `IsTransferParticipant`,
+  and `clonePanelGroupSnapshot` are gone (`internal/appwindow/panel.go`). The
+  index keeps each window's cluster and group, its state, and one native
+  lifecycle record per pending open or dock: window, state, opening source,
+  directory release, and timeout.
+- **The descriptor reads the directory.** `WindowDescriptor` replaces
+  `Snapshot` with `TransferID` and `Group`. `Registry.withPanelGroup` fills
+  `Group` from the new `WorkspaceDirectory.WindowGroup`: the panels placed in
+  the window, or while it opens, the panels its opening move takes in.
+  `PanelWindowApp`, `main.ts`, `ObjectPanelStateProvider` (`initialGroup`), and
+  the native close fallback read it.
+- **Native reports only arrange.** `UpdatePanelWindowSnapshot` became
+  `PublishPanelWindowGroup(window, WorkspaceGroup)`. It checks that the window
+  is live and names its own cluster and group, then calls the arrangement-only
+  `PublishWindow`. A report carries no transfer ID, so it cannot touch a
+  pending transfer.
+- **The directory move names the dock target.** The dock commit and the
+  participant check read `WorkspaceDirectory.TransferTarget`, not a second copy
+  on the native record.
+- **Tab close checks the directory.** `RequestPanelTabClose` authorizes only a
+  panel the directory places in the window.
+- **The opened event reports directory tabs.** `WindowOpenedEvent` replaces
+  `Snapshot` with `SourceWindowName` and `Tabs`, read after commit.
+
+Guards (refs at `cbc1295a`):
+
+| # | Guard | Under one writer |
+| --- | --- | --- |
+| F1 | G14: a published snapshot cannot adopt another window's pending transfer (`panel.go:240-248`) | **Removed.** Reports carry no transfer ID, and only `BeginOpen`/`BeginDock` create a window's transfer. The adoption test is deleted. |
+| F2 | Each report re-validates the snapshot schema, transfer ID, and source window (`registry.go:704-709`) | **Simplified** to `ValidatePublication`: a live window, naming its own cluster and group. |
+| F3 | Descriptors deep-copy the stored snapshot so readers cannot change it (`clonePanelGroupSnapshot`) | **Removed.** Each read builds a new group. |
+| F4 | Dock target and position copied onto the native record (`DockTarget`) | **Removed.** Read from the directory move. |
+| F5 | Tear-off completion re-checks source, cluster, group, and tab against the stored snapshot (`panel_tab_transfer.go:418-427`) | **Removed.** The open validated them and bound the window, and IDs are never reused (mutation M23 could not fail). |
+| F6 | Window-closed event also sent to the stored snapshot's source (`registry.go:544-553`) | **Removed.** Only app views subscribe (`WorkspacePanelCoordinator.tsx:456`, mounted by `App.tsx`), and every app view already receives it. |
+| F7 | Tab close authorized from the stored snapshot (`registry.go:725`) | **Still needed, now authoritative.** It reads the directory, which resolves the Phase 3 foreign-panel risk. |
+| F8 | Native lifecycle record linked to the directory move by `release` | **Still needed** (see below). |
+| F9 | Reports only from a live window | **Still needed.** |
+| N11 | *New:* the directory projects a native window's group (`WindowGroup`) | — |
+| N12 | *New:* the directory reports a move's target (`TransferTarget`) | — |
+
+**Why two transfer records remain.** The plan asked for the directory move to
+be the only transfer record. It is now the only record of *where* the panels
+go (F4). The native record keeps what only the native side knows: whether the
+window is opening or docking, the opening source, the timeout, and used IDs.
+The tab and cluster handoffs split their records the same way
+(`transfer_lifecycle.go`), so folding only this one into the directory would
+make it the exception. The orphaned-move risk is unchanged: every native
+terminal still releases through `finishLocked`.
+
+Measured (code only, against `cbc1295a`; cumulative against main `59136764`,
+same script):
+
+- **Production, Phase 4:** backend +145 / −173 (net −28); frontend +36 / −39
+  (net −3).
+- **Tests, Phase 4:** +148 / −163 in existing files, plus the new
+  `panel_descriptor_test.go` (117 code lines, 4 tests). Native fixtures now
+  place their groups in the directory instead of reading them back from the
+  index. One test assertion changed meaning: after a committed move out of a
+  native window, the old test expected the stale stored copy to still list the
+  moved tab; the directory now reports the window empty.
+- **Cumulative since main (Phases 0–4):** backend +637 / −632 (net +5);
+  frontend +432 / −447 (net −15). Total net −10 code lines. The same script
+  gives net +33 backend at `cbc1295a`; the +43 in Phase 3 came from a slightly
+  different file filter.
+- **Guards:** 5 of 9 removed, 1 simplified, 3 still needed; 2 new.
+- **Mutation checks:** each mutation was reverted (verified with `cmp`), and
+  each was caught. M23 could not fail, so its check was removed (F5).
+
+  | # | Mutation | Tests that fail |
+  | --- | --- | --- |
+  | M19 | an opening window's descriptor ignores the incoming move | 1 |
+  | M20 | tab close authorizes a panel the window does not hold | 3 |
+  | M21 | any window may cancel a dock-back | 1 |
+  | M21b | any window may cancel an opening window | 1 |
+  | M22 | a non-target app view may commit a dock-back | 1 |
+  | M24 | a report is accepted from a window that is not live | 1 |
+  | M25 | the native provider is not given the directory group | 1 |
+  | M26 | the provider ignores the group's tabs | 1 |
+  | M27 | a native report drops its group identity | 1 |
+  | M28 | a view that is not the source handles the opened event | 1 |
+  | M29 | native bootstrap reads no transfer ID | 1 |
+
+- **Evidence:**
+  - `go test` passes for `appwindow`, `panelwindow`, `bootstrap`, `backend`,
+    and `cmd/project`; `-race` passes on `appwindow` and `panelwindow`.
+  - Vitest: 197 passed across panel-windows, `PanelWindowApp`, `main`,
+    shortcuts, and the object-panel provider.
+  - gocognit: maximum 12. Biome complexity is clean.
+
+Phase 4 risks:
+
+- **A dock whose panels all vanish loses its target.** If cluster removal
+  deletes every moving panel, the directory drops the move and its target. The
+  dock acknowledgement then fails as stale, and cluster removal closes the
+  native window anyway [assumed acceptable].
+- **The descriptor is two reads.** It reads the index, then the directory, not
+  under one lock. A commit between them is harmless: committed panels are
+  placed in the window, so the group is the same.
+
+Phase 4 native checks. Run these on macOS and Windows. For each check, confirm
+no duplicate or lost panel and no error toast.
+
+1. **Float shows the group.** Open two objects in the right dock and switch the
+   second to YAML. Click **Float panel** (`DockablePanelControls.tsx` →
+   `WorkspacePanelCoordinator` `handleGroupMove`). The native window shows both
+   tabs in order, the second active, with YAML showing. The window now reads
+   these tabs from the directory.
+2. **Tear-off shows the tab.** Drag a docked tab onto the desktop
+   (`DockablePanelProvider` → `handleTabTearOff`). The new window shows that
+   tab, and the source loses it. Repeat from a native window with two tabs
+   (`PanelWindowShortcuts` tear-off).
+3. **Arrangement reaches dock-back.** In a native window, reorder the tabs and
+   switch one tab's view. Then click **Dock to bottom** (`PanelWindowApp`
+   `handleGroupMove`). The app's bottom dock shows the new order, active tab,
+   and view.
+4. **Close in a native window.** Close a non-final tab with its close button,
+   then press Cmd/Ctrl+W (`PanelWindowShortcuts` `closeActiveTab` →
+   `requestPanelTabClose`). Each action closes one tab. Closing the last tab
+   closes the window.
+5. **Close right after a move in.** Drag a tab from the app onto a native
+   window's tab strip, then close it from the native window straight away. It
+   closes and does not reappear.
+6. **Two app views.** Open the cluster in two app windows, then dock a native
+   window back. The group lands only in the most recently focused app window
+   (`appWindowForCluster`).
+
+## Phase 5: close and quit
+
+What changed (working tree on top of Phase 4):
+
+- **A closing app view declines the moves addressed to it.** `handleClosing`
+  (`internal/appwindow/registry.go:874`) calls `declinePanelMovesInto`. That
+  function asks the directory which pending moves target the closing window
+  (`WorkspaceDirectory.MovesInto`), then declines each one through
+  `AcknowledgePanelTransfer(window, id, false)`, the same call a target
+  renderer makes when it cannot mount a move.
+- Before this, nothing cancelled a dock-back into a closing app view. The
+  native source stayed frozen until the 15 s dock timeout (Phase 0 native
+  check 9 recorded that delay).
+
+Close and quit inventory (current tree):
+
+| # | Step in a close or quit sequence | Role | Phase 5 |
+| --- | --- | --- | --- |
+| Q1 | App-window close cancels the cluster-view transfers it sends or receives (`registry.go:862`) | Protocol sweep; also covers requests not yet accepted | **Still needed** |
+| Q2 | App-window close cancels the tab transfers it sends or receives (`registry.go:873`) | Protocol sweep; also covers requests not yet accepted | **Still needed** |
+| Q3 | Nothing cancelled a dock-back into a closing app view | Gap | **Fixed** with a directory query (`registry.go:874`) |
+| Q4 | Native-window close cancels its tab transfers and its own open or dock (`registry.go:775-777`) | Protocol sweep and the window's own record | **Still needed** |
+| Q5 | Cluster close refuses while a cluster-view transfer or a native open or dock is pending (`cluster_panel_close.go:47-56`) | Protocol checks; also cover requests not yet accepted | **Still needed** (see below) |
+| Q6 | Renderer preflights refuse while a transfer freezes the renderer (`panelLifecycleGuards.tsx:139`) | G8: protects window-local drafts and terminals | **Still needed** |
+| Q7 | Renderer preflights flush their outbound queue (`panelLifecycleGuards.tsx:153`) | Drains queued close intents and arrangement reports; decides no placement | **Still needed** |
+| Q8 | Cluster close pauses the cluster's directory reads and opens (`WorkspacePanelSync.tsx:218`) | Lifecycle, not placement | **Still needed** |
+| Q9 | Placement changes while closing: retain (`registry.go:918`), remove a window (`:778`), remove a cluster (`cluster_panel_close.go:160`) | Directory mutations; the directory is their only writer | No change |
+
+The close sequences now hold no placement logic outside directory calls (Q9)
+and the drain (Q7).
+
+**Why the protocol checks stay (Q1, Q2, Q5).** The directory sees a move only
+from acceptance (tab and cluster-view transfers) or begin (Float, dock-back)
+until it ends. Before that, two kinds of request are known only to their
+protocol: a request still waiting for its source to accept, and a cluster view
+with no panels, which records no panel markers. A directory-only check would
+need the directory to record each move when it is requested. That redesigns
+the request and accept handshake, and this phase does not attempt it.
+
+Measured (code only):
+
+- **Production, Phase 5:** backend +18 / −0; frontend none.
+- **Tests:** `TestClosingADockTargetDeclinesTheDockAtOnce` closes an unrelated
+  app view (the dock stays pending), then the dock's target (the native window
+  is live at once and keeps its panels).
+- **Cumulative since main (Phases 0–5):** backend +655 / −632 (net +23);
+  frontend +432 / −447 (net −15). Total net +8 code lines.
+- **Mutation checks:** each mutation was reverted (verified with `cmp`).
+
+  | # | Mutation | Tests that fail |
+  | --- | --- | --- |
+  | M30 | app-window close skips the decline | 1 |
+  | M31 | the directory lists moves into every other window instead | 1 |
+  | M32 | the directory lists every move | 0 |
+
+  M32 survives by design: `FailPanelWindowTransfer`'s participant check
+  (guarded by M21) rejects a decline from a window that is not the target. The
+  `MovesInto` filter only saves that rejected call and its log line.
+
+- **Evidence:** `go test` and `-race` pass on `appwindow` and `panelwindow`.
+
+Phase 5 native checks. These need manual timing. Run them on macOS and Windows,
+and for each, confirm no duplicate or lost panel and no error toast.
+
+1. **Close the dock target.** In a native window, click **Dock to right**, then
+   close the target app window before the tabs appear. The native window keeps
+   its tabs and is interactive at once, not after 15 s.
+2. **Close a new dock target.** Close every app window that shows the cluster
+   (floating panels stay). In the native window, click **Dock to right**, then
+   close the new app window that opens before it finishes loading. Expect the
+   same result as check 1.
+3. **Close another app view.** Open the cluster in two app windows. Dock a
+   native window back, and close the app window that is *not* receiving the
+   group while the dock runs. The dock completes into the other window.
 
 ## Native checks for John
 
@@ -592,7 +804,8 @@ each check, confirm three things:
    the exact interleavings.
    - Click Dock in the native window, then close the target app window before
      the tabs appear. Expect the native window to keep its tabs and become
-     interactive within 15 s (the backend timeout).
+     interactive within 15 s (the backend timeout). After
+     [Phase 5](#phase-5-close-and-quit), expect this at once.
    - With unsaved YAML in a docked panel, click Float. Expect it to be blocked
      with focus on the editor.
    - With unsaved YAML in a native panel, click Dock. Expect the same.
@@ -624,3 +837,10 @@ each check, confirm three things:
 | Phase 3 frontend close intents | passed | Vitest 1210 passed (provider test uses the real `ObjectPanelStateProvider`; Sync and shortcuts mock bindings) |
 | Phase 3 prerelease gate | passed | `mise exec -- wails3 task qc:prerelease` exit 0 (docs, fmt, bindings, vet + staticcheck, `go test ./... -race` 107 packages ok, Biome, typecheck, frontend 5359 passed / 1 skipped, knip, trivy); no files reformatted |
 | Phase 3 native multi-window behavior | pending (John) | Phase 3 checks 1–7 |
+| Phase 4 descriptor, report, and dock-target contract (directory, registry, backend) | passed | `go test` and `-race` ok; tests named in [Phase 4](#phase-4-native-index-without-snapshots) |
+| Phase 4 frontend bootstrap and native report | passed | Vitest 197 passed (provider test uses the real `ObjectPanelStateProvider`; `PanelWindowApp`, shortcuts, and coordinator mock bindings) |
+| Phase 4 prerelease gate | passed | `mise exec -- wails3 task qc:prerelease` exit 0 (docs, fmt, bindings, vet + staticcheck, `go test ./... -race` 107 packages ok, Biome, typecheck, frontend 5360 passed / 1 skipped, knip, trivy); Biome reformatted three edited files (`WorkspacePanelCoordinator.test.tsx`, `index.test.ts`, `PanelWindowShortcuts.tsx`), formatting only |
+| Phase 4 native multi-window behavior | pending (John) | Phase 4 checks 1–6 |
+| Phase 5 close declines moves into a closing app view (registry) | passed | `go test` and `-race` ok; `TestClosingADockTargetDeclinesTheDockAtOnce` |
+| Phase 5 prerelease gate | pending | — |
+| Phase 5 native multi-window behavior | pending (John) | Phase 5 checks 1–3 |

@@ -121,7 +121,7 @@ func (d *WorkspaceDirectory) viewPanelsLocked(source, clusterID string) (map[wor
 	return moving, nil
 }
 
-// viewGroups lists a view's moving panels by group in their current order.
+// viewGroups lists panels by group in index order.
 func viewGroups(clusterID string, moving map[workspacePanelKey]WorkspacePanel) []WorkspaceGroup {
 	byGroup := make(map[string][]WorkspacePanel)
 	for _, panel := range moving {
@@ -141,6 +141,52 @@ func viewGroups(clusterID string, moving map[workspacePanelKey]WorkspacePanel) [
 	}
 	sort.Slice(groups, func(i, j int) bool { return groups[i].GroupID < groups[j].GroupID })
 	return groups
+}
+
+// WindowGroup lists the tabs a native panel window holds, in order: the panels
+// placed in it, or, while it opens, the panels its opening transfer moves in.
+func (d *WorkspaceDirectory) WindowGroup(clusterID, windowName, groupID, openingTransferID string) WorkspaceGroup {
+	window := groupRef{clusterID, windowName, groupID, PanelLocationWindow}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	held := make(map[workspacePanelKey]WorkspacePanel)
+	for key, panel := range d.panels {
+		if openingTransferID != "" && panel.Transfer.TransferID == openingTransferID {
+			panel.Location = panel.Transfer.Target
+		}
+		if refOf(key.clusterID, panel.Location) == window {
+			held[key] = panel
+		}
+	}
+	if groups := viewGroups(clusterID, held); len(groups) == 1 {
+		return groups[0]
+	}
+	return WorkspaceGroup{ClusterID: clusterID, GroupID: groupID}
+}
+
+// TransferTarget reports where a pending move takes its panels.
+func (d *WorkspaceDirectory) TransferTarget(transferID string) (PanelLocation, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	keys := d.transfers[transferID]
+	if len(keys) == 0 {
+		return PanelLocation{}, false
+	}
+	return d.panels[keys[0]].Transfer.Target, true
+}
+
+// MovesInto lists the pending moves taking panels into windowName.
+func (d *WorkspaceDirectory) MovesInto(windowName string) []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var ids []string
+	for id, keys := range d.transfers {
+		if len(keys) > 0 && d.panels[keys[0]].Transfer.Target.WindowName == windowName {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 func (d *WorkspaceDirectory) recordTransferLocked(transferID string, keys []workspacePanelKey) {

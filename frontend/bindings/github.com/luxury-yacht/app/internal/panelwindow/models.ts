@@ -225,7 +225,17 @@ export interface WindowDescriptor {
     "clusterId": string;
     "groupId": string;
     "state": WindowState;
-    "snapshot": GroupSnapshot;
+
+    /**
+     * TransferID names the window's pending open or dock; empty while live.
+     */
+    "transferId": string;
+
+    /**
+     * Group is the directory's placement for the window: the tabs it holds, or
+     * while it opens, the tabs moving into it.
+     */
+    "group": WorkspaceGroup;
 }
 
 export interface WindowFocusRequestedEvent {
@@ -235,9 +245,10 @@ export interface WindowFocusRequestedEvent {
 export interface WindowOpenedEvent {
     "windowName": string;
     "transferId": string;
+    "sourceWindowName": string;
     "clusterId": string;
     "groupId": string;
-    "snapshot": GroupSnapshot;
+    "tabs": TabSnapshot[] | null;
 }
 
 export interface WindowPoint {

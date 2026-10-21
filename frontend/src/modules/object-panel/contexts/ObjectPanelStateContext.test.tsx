@@ -643,6 +643,37 @@ describe('ObjectPanelStateContext', () => {
     expect(resetScopedDomainMock.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('opens a native window with the group the directory gives it', async () => {
+    const objectRef = {
+      clusterId: 'cluster-a',
+      group: 'apps',
+      version: 'v1',
+      kind: 'Deployment',
+      namespace: 'default',
+      name: 'api',
+    };
+    const group = {
+      clusterId: 'cluster-a',
+      groupId: 'floating-1',
+      activePanelId: 'panel-native',
+      tabs: [{ kind: 'object', panelId: 'panel-native', objectRef, activeView: 'yaml' }],
+    } as panelwindow.WorkspaceGroup;
+
+    await act(async () => {
+      root.render(
+        <ObjectPanelStateProvider initialGroup={group}>
+          <Harness />
+        </ObjectPanelStateProvider>
+      );
+    });
+
+    expect(stateRef.current?.panelIdsForCluster('cluster-a')).toEqual(['panel-native']);
+    expect(stateRef.current?.getOwnedPanel('cluster-a', 'panel-native')).toMatchObject({
+      objectRef,
+      activeView: 'yaml',
+    });
+  });
+
   it('retains complete local object identity while updating the active view', async () => {
     await renderProvider();
     const objectRef = {

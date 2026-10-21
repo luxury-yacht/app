@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   handlers: {} as Record<string, (event: never) => void>,
   requestTabClose: vi.fn(async () => undefined),
   acknowledgeClose: vi.fn(async () => undefined),
-  updateSnapshot: vi.fn<(_windowName: string, _snapshot: unknown) => Promise<void>>(
+  publishGroup: vi.fn<(_windowName: string, _group: unknown) => Promise<void>>(
     async () => undefined
   ),
   openDevTools: vi.fn(async () => undefined),
@@ -62,7 +62,7 @@ vi.mock('@/core/panel-windows', () => ({
     return () => undefined;
   },
   requestPanelTabClose: mocks.requestTabClose,
-  updatePanelWindowSnapshot: mocks.updateSnapshot,
+  publishPanelWindowGroup: mocks.publishGroup,
   onPanelTabCloseAuthorized: (handler: (event: never) => void) => {
     mocks.handlers.authorized = handler;
     return () => undefined;
@@ -214,14 +214,11 @@ vi.mock('@/utils/errorHandler', () => ({
 
 const descriptor = {
   windowName: 'panel-1',
-  ownerWindowName: 'workspace-1',
   clusterId: 'cluster-1',
   groupId: 'group-1',
   state: 'live',
-  snapshot: {
-    schemaVersion: 1,
-    transferId: 'transfer-1',
-    ownerWindowName: 'workspace-1',
+  transferId: '',
+  group: {
     clusterId: 'cluster-1',
     groupId: 'group-1',
     tabs: [],
@@ -522,10 +519,10 @@ describe('PanelWindowShortcuts', () => {
     );
   });
 
-  it('does not install accelerators or publish snapshots before native readiness', async () => {
+  it('does not install accelerators or publish arrangement before native readiness', async () => {
     await act(async () => root.unmount());
     mocks.handlers = {};
-    mocks.updateSnapshot.mockClear();
+    mocks.publishGroup.mockClear();
     root = ReactDOM.createRoot(container);
 
     await act(async () => {
@@ -535,7 +532,7 @@ describe('PanelWindowShortcuts', () => {
 
     expect(mocks.handlers['menu:close']).toBeUndefined();
     expect(mocks.handlers['debug:open-inspector']).toBeUndefined();
-    expect(mocks.updateSnapshot).not.toHaveBeenCalled();
+    expect(mocks.publishGroup).not.toHaveBeenCalled();
     expect(mocks.applicationShortcutsProps?.enabled).toBe(false);
   });
 
@@ -744,11 +741,11 @@ describe('PanelWindowShortcuts', () => {
     expect(mocks.commitTabClose).not.toHaveBeenCalled();
   });
 
-  it('serializes live snapshot writes', async () => {
+  it('serializes live arrangement reports', async () => {
     await act(async () => root.unmount());
-    mocks.updateSnapshot.mockReset();
+    mocks.publishGroup.mockReset();
     let resolveFirst: (() => void) | undefined;
-    mocks.updateSnapshot
+    mocks.publishGroup
       .mockImplementationOnce(
         () =>
           new Promise<void>((resolve) => {
@@ -760,21 +757,23 @@ describe('PanelWindowShortcuts', () => {
     await act(async () =>
       root.render(<PanelWindowShortcuts descriptor={descriptor} ready={true} />)
     );
-    expect(mocks.updateSnapshot).toHaveBeenCalledTimes(1);
+    expect(mocks.publishGroup).toHaveBeenCalledTimes(1);
 
     mocks.tabs = ['panel-b', 'panel-a'];
     await act(async () =>
       root.render(<PanelWindowShortcuts descriptor={descriptor} ready={true} />)
     );
-    expect(mocks.updateSnapshot).toHaveBeenCalledTimes(1);
+    expect(mocks.publishGroup).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       resolveFirst?.();
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(mocks.updateSnapshot).toHaveBeenCalledTimes(2);
-    expect(mocks.updateSnapshot.mock.calls[1]?.[1]).toMatchObject({
+    expect(mocks.publishGroup).toHaveBeenCalledTimes(2);
+    expect(mocks.publishGroup.mock.calls[1]?.[1]).toMatchObject({
+      clusterId: 'cluster-1',
+      groupId: 'group-1',
       tabs: [
         expect.objectContaining({ panelId: 'panel-b' }),
         expect.objectContaining({ panelId: 'panel-a' }),
@@ -783,11 +782,11 @@ describe('PanelWindowShortcuts', () => {
     });
   });
 
-  it('continues serialized snapshot writes after an earlier write fails', async () => {
+  it('continues serialized arrangement reports after an earlier report fails', async () => {
     await act(async () => root.unmount());
-    mocks.updateSnapshot.mockReset();
+    mocks.publishGroup.mockReset();
     let rejectFirst: ((error: Error) => void) | undefined;
-    mocks.updateSnapshot
+    mocks.publishGroup
       .mockImplementationOnce(
         () =>
           new Promise<void>((_resolve, reject) => {
@@ -810,10 +809,10 @@ describe('PanelWindowShortcuts', () => {
       await Promise.resolve();
     });
 
-    expect(mocks.updateSnapshot).toHaveBeenCalledTimes(2);
+    expect(mocks.publishGroup).toHaveBeenCalledTimes(2);
     expect(mocks.reportError).toHaveBeenCalledWith(
       expect.any(Error),
-      expect.objectContaining({ action: 'sync-panel-window-snapshot' })
+      expect.objectContaining({ action: 'publish-panel-window-group' })
     );
   });
 

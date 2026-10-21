@@ -20,7 +20,8 @@ const { order, bootstrap } = vi.hoisted(() => ({
             clusterId: string;
             groupId: string;
             state: string;
-            snapshot: Record<string, unknown>;
+            transferId: string;
+            group: Record<string, unknown>;
           }
         | undefined,
     },
@@ -152,9 +153,8 @@ describe('application bootstrap', () => {
         clusterId: 'cluster-1',
         groupId: 'group-1',
         state: 'opening',
-        snapshot: {
-          schemaVersion: 1,
-          transferId: 'transfer-1',
+        transferId: 'transfer-1',
+        group: {
           clusterId: 'cluster-1',
           groupId: 'group-1',
           activePanelId: 'panel-a',
@@ -186,9 +186,8 @@ describe('application bootstrap', () => {
         clusterId: 'cluster-1',
         groupId: 'group-1',
         state: 'opening',
-        snapshot: {
-          schemaVersion: 1,
-          transferId: 'transfer-1',
+        transferId: 'transfer-1',
+        group: {
           clusterId: 'cluster-1',
           groupId: 'group-1',
           activePanelId: 'panel-a',

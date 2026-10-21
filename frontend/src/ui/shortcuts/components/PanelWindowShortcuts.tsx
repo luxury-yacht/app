@@ -28,8 +28,8 @@ import {
   onPanelTabTransferRequested,
   onPanelWindowCloseRequested,
   onPanelWindowFocusRequested,
+  publishPanelWindowGroup,
   requestPanelTabClose,
-  updatePanelWindowSnapshot,
 } from '@/core/panel-windows';
 import type { PanelLifecycleBlocker } from '@/core/panel-windows/panelLifecycleGuards';
 import {
@@ -204,8 +204,8 @@ export function PanelWindowShortcuts({
       return;
     }
     const group = getGroupTabs(tabGroups, 'right') ?? getGroupTabs(tabGroups, 'bottom');
-    const activePanelId = group?.activeTab ?? descriptor.snapshot.activePanelId;
-    const tabs = group?.tabs ?? descriptor.snapshot.tabs?.map((tab) => tab.panelId) ?? [];
+    const activePanelId = group?.activeTab ?? descriptor.group.activePanelId;
+    const tabs = group?.tabs ?? descriptor.group.tabs?.map((tab) => tab.panelId) ?? [];
     const blocker = guards.firstBlocker(activePanelId ? [activePanelId] : tabs);
     if (blocker) {
       focusLifecycleBlocker(blocker);
@@ -406,10 +406,7 @@ export function PanelWindowShortcuts({
     if (!group || group.tabs.length === 0) {
       return;
     }
-    const snapshot: import('@/core/backend-api/models').panelwindow.GroupSnapshot = {
-      schemaVersion: 1,
-      transferId: descriptor.snapshot.transferId,
-      sourceWindowName: descriptor.windowName,
+    const arrangement: import('@/core/backend-api/models').panelwindow.WorkspaceGroup = {
       clusterId: descriptor.clusterId,
       groupId: descriptor.groupId,
       tabs: group.tabs.flatMap((panelId) => {
@@ -421,11 +418,11 @@ export function PanelWindowShortcuts({
       activePanelId: group.activeTab ?? group.tabs[0],
     };
     nativePanelPublication.publish(
-      () => updatePanelWindowSnapshot(descriptor.windowName, snapshot),
+      () => publishPanelWindowGroup(descriptor.windowName, arrangement),
       (error) => {
         reportOperationalError(error, {
           source: 'PanelWindowShortcuts',
-          action: 'sync-panel-window-snapshot',
+          action: 'publish-panel-window-group',
         });
       }
     );

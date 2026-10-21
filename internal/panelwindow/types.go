@@ -202,11 +202,15 @@ const (
 )
 
 type WindowDescriptor struct {
-	WindowName string        `json:"windowName"`
-	ClusterID  string        `json:"clusterId"`
-	GroupID    string        `json:"groupId"`
-	State      WindowState   `json:"state"`
-	Snapshot   GroupSnapshot `json:"snapshot"`
+	WindowName string      `json:"windowName"`
+	ClusterID  string      `json:"clusterId"`
+	GroupID    string      `json:"groupId"`
+	State      WindowState `json:"state"`
+	// TransferID names the window's pending open or dock; empty while live.
+	TransferID string `json:"transferId"`
+	// Group is the directory's placement for the window: the tabs it holds, or
+	// while it opens, the tabs moving into it.
+	Group WorkspaceGroup `json:"group"`
 }
 
 const NativeDescriptorSchemaVersion = 1
@@ -241,11 +245,12 @@ const (
 )
 
 type WindowOpenedEvent struct {
-	WindowName string        `json:"windowName"`
-	TransferID string        `json:"transferId"`
-	ClusterID  string        `json:"clusterId"`
-	GroupID    string        `json:"groupId"`
-	Snapshot   GroupSnapshot `json:"snapshot"`
+	WindowName       string        `json:"windowName"`
+	TransferID       string        `json:"transferId"`
+	SourceWindowName string        `json:"sourceWindowName"`
+	ClusterID        string        `json:"clusterId"`
+	GroupID          string        `json:"groupId"`
+	Tabs             []TabSnapshot `json:"tabs"`
 }
 
 type WindowFocusRequestedEvent struct {

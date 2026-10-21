@@ -389,6 +389,13 @@ export function PublishDockedPanels(windowName: string, groups: panelwindow$0.Wo
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.PublishDockedPanels", windowName, groups);
 }
 
+/**
+ * PublishPanelWindowGroup reports a native window's arrangement of its group.
+ */
+export function PublishPanelWindowGroup(windowName: string, group: panelwindow$0.WorkspaceGroup): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.PublishPanelWindowGroup", windowName, group);
+}
+
 export function QueryPermissions(queries: capabilities$0.PermissionQuery[] | null): $CancellablePromise<capabilities$0.QueryPermissionsResponse | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.QueryPermissions", queries);
 }
@@ -511,10 +518,6 @@ export function UpdateAppPreferences(request: $models.UpdateAppPreferencesReques
 
 export function UpdateFavorite(favorite: $models.Favorite): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.UpdateFavorite", favorite);
-}
-
-export function UpdatePanelWindowSnapshot(windowName: string, snapshot: panelwindow$0.GroupSnapshot): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.UpdatePanelWindowSnapshot", windowName, snapshot);
 }
 
 export function ValidateThemeClusterPattern(pattern: string): $CancellablePromise<$models.ThemeClusterPatternValidationResult> {

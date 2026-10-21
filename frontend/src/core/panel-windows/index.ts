@@ -20,10 +20,10 @@ import {
   OpenClusterWindow,
   OpenPanelWorkspaceObject,
   PublishDockedPanels,
+  PublishPanelWindowGroup,
   RequestClusterTabTransfer,
   RequestPanelTabClose,
   RequestPanelTabTransfer,
-  UpdatePanelWindowSnapshot,
 } from '@/core/backend-api';
 import type { panelwindow } from '@/core/backend-api/models';
 import { desktopRuntimeAvailable, onEvent } from '@/core/desktop-runtime';
@@ -118,10 +118,11 @@ export const acknowledgeApplicationQuitPreflight = (
   allowed: boolean
 ): Promise<void> => AcknowledgeApplicationQuitPreflight(callerWindowName, transactionId, allowed);
 
-export const updatePanelWindowSnapshot = (
+// Reports a native window's arrangement; it never opens, closes, or moves a panel.
+export const publishPanelWindowGroup = (
   windowName: string,
-  snapshot: panelwindow.GroupSnapshot
-): Promise<void> => UpdatePanelWindowSnapshot(windowName, snapshot);
+  group: panelwindow.WorkspaceGroup
+): Promise<void> => PublishPanelWindowGroup(windowName, group);
 
 export const requestPanelTabClose = (windowName: string, panelId: string): Promise<void> =>
   RequestPanelTabClose(windowName, panelId);

@@ -359,7 +359,7 @@ func TestApplicationRuntimeComposesLeafOwners(t *testing.T) {
 	require.Contains(t, compactMainSource, "NativeWindowDescriptor: bridge.NativeWindowDescriptor,")
 	require.Contains(t, compactMainSource, "BeginPanelWindowOpen: bridge.BeginPanelWindowOpen,")
 	require.Contains(t, compactMainSource, "AcknowledgePanelReady: bridge.AcknowledgePanelReady,")
-	require.Contains(t, compactMainSource, "UpdatePanelSnapshot: bridge.UpdatePanelSnapshot,")
+	require.Contains(t, compactMainSource, "PublishPanelGroup: bridge.PublishPanelGroup,")
 	require.Contains(t, compactMainSource, "RequestPanelTabClose: bridge.RequestPanelTabClose,")
 	require.Contains(t, compactMainSource, "PanelWorkspace: bridge,")
 	require.Contains(t, mainSource, "desktopShell := backendRuntime.DesktopShell")

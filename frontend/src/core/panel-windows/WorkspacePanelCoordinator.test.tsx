@@ -264,6 +264,20 @@ vi.mock('@/ui/dockable', () => ({
   }),
 }));
 
+// The registry reports an opened window with the tabs the directory committed
+// to it and the renderer the group came from.
+const openedEvent = (windowName: string, snapshot: object) => {
+  const begun = snapshot as Record<string, unknown>;
+  return {
+    windowName,
+    transferId: begun.transferId,
+    sourceWindowName: begun.sourceWindowName,
+    clusterId: begun.clusterId,
+    groupId: begun.groupId,
+    tabs: begun.tabs,
+  };
+};
+
 describe('WorkspacePanelCoordinator', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -466,21 +480,14 @@ describe('WorkspacePanelCoordinator', () => {
     const snapshot = mocks.beginOpen.mock.calls[0]?.[1] as Record<string, unknown>;
     await act(async () =>
       mocks.eventHandlers.opened?.({
-        windowName: 'panel-other',
-        snapshot: { ...snapshot, sourceWindowName: 'workspace-other' },
+        ...openedEvent('panel-other', snapshot),
+        sourceWindowName: 'workspace-other',
       } as never)
     );
     expect(mocks.commitWindow).not.toHaveBeenCalled();
     expect(mocks.detachPanelGroup).not.toHaveBeenCalled();
 
-    await act(async () =>
-      mocks.eventHandlers.opened?.({
-        windowName: 'panel-1',
-        groupId: snapshot.groupId,
-        clusterId: 'cluster-1',
-        snapshot,
-      } as never)
-    );
+    await act(async () => mocks.eventHandlers.opened?.(openedEvent('panel-1', snapshot) as never));
     expect(mocks.detachPanelGroup).toHaveBeenCalledWith('cluster-1', ['panel-a']);
     expect(mocks.discardPanelLayouts).toHaveBeenCalledWith('cluster-1', ['panel-a']);
     expect(mocks.removeOwnedPanel).toHaveBeenCalledWith('cluster-1', 'panel-a');
@@ -688,13 +695,7 @@ describe('WorkspacePanelCoordinator', () => {
     expect(snapshot.useInitialPosition).toBe(true);
     expect(mocks.detachPanelGroup).not.toHaveBeenCalled();
 
-    await act(async () =>
-      mocks.eventHandlers.opened?.({
-        windowName: 'panel-2',
-        groupId: request.targetGroupId,
-        snapshot,
-      } as never)
-    );
+    await act(async () => mocks.eventHandlers.opened?.(openedEvent('panel-2', snapshot) as never));
     expect(mocks.detachPanelGroup).toHaveBeenCalledWith('cluster-1', ['panel-a']);
   });
 

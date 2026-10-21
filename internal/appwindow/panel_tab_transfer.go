@@ -18,15 +18,6 @@ func samePanelTab(left, right panelwindow.TabSnapshot) bool {
 	return left == right
 }
 
-func snapshotContainsPanelTab(snapshot PanelGroupSnapshot, tab panelwindow.TabSnapshot) bool {
-	for _, candidate := range snapshot.Tabs {
-		if samePanelTab(candidate, tab) {
-			return true
-		}
-	}
-	return false
-}
-
 // A fast check before any target is resolved or created. The directory repeats
 // it authoritatively when the source accepts; the dragged view need not have
 // been published.
@@ -374,7 +365,7 @@ func (r *Registry) abortOpeningPanelTabTarget(transfer *panelTabTransfer) {
 	}
 	descriptor, err := r.panels.Descriptor(transfer.targetWindowName)
 	if err != nil || descriptor.State != PanelWindowStateOpening ||
-		descriptor.Snapshot.TransferID != transfer.request.TransferID {
+		descriptor.TransferID != transfer.request.TransferID {
 		return
 	}
 	if err := r.panels.FailTransfer(descriptor.WindowName, transfer.request.TransferID); err != nil {
@@ -415,18 +406,17 @@ func (r *Registry) emitPanelTabTransferEvent(
 	}
 }
 
-func (r *Registry) completePanelTabTransferForOpenedWindow(descriptor PanelWindowDescriptor) {
+// A tear-off shares its ID with the window open it caused. The open validated
+// the tab and bound the transfer to this window, and the native index never
+// reuses an ID, so the ready window is always the tear-off's target.
+func (r *Registry) completePanelTabTransferForOpenedWindow(transferID string) {
 	r.tabTransferMu.Lock()
-	transfer := r.tabTransfers.get(descriptor.Snapshot.TransferID)
+	transfer := r.tabTransfers.get(transferID)
 	canCommit := transfer != nil &&
-		r.tabTransfers.awaiting(descriptor.Snapshot.TransferID, transferAwaitingTarget) &&
-		transfer.request.TargetKind == panelwindow.TabTransferTargetNewWindow &&
-		transfer.request.SourceWindowName == descriptor.Snapshot.SourceWindowName &&
-		transfer.request.ClusterID == descriptor.ClusterID &&
-		transfer.request.TargetGroupID == descriptor.GroupID &&
-		snapshotContainsPanelTab(descriptor.Snapshot, transfer.request.Tab)
+		r.tabTransfers.awaiting(transferID, transferAwaitingTarget) &&
+		transfer.request.TargetKind == panelwindow.TabTransferTargetNewWindow
 	r.tabTransferMu.Unlock()
 	if canCommit {
-		r.finishOpenedPanelTabTransfer(descriptor.Snapshot.TransferID)
+		r.finishOpenedPanelTabTransfer(transferID)
 	}
 }

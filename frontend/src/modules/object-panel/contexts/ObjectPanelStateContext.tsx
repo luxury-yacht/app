@@ -240,25 +240,26 @@ export const useObjectPanelActiveTabs = (): Map<string, ViewType> =>
 
 interface ObjectPanelStateProviderProps {
   children: React.ReactNode;
-  initialGroupSnapshot?: panelwindow.GroupSnapshot;
+  // A native window starts with the group the directory places in it.
+  initialGroup?: panelwindow.WorkspaceGroup;
 }
 
 const EMPTY_CLUSTER_IDS: string[] = [];
 
-const stateFromGroupSnapshot = (
-  snapshot: panelwindow.GroupSnapshot | undefined
+const stateFromGroup = (
+  group: panelwindow.WorkspaceGroup | undefined
 ): Record<string, ObjectPanelState> => {
-  if (!snapshot) {
+  if (!group) {
     return {};
   }
   const openPanels = new Map<string, PanelTarget>();
   const activeTabs = new Map<string, ViewType>();
-  for (const tab of snapshot.tabs ?? []) {
+  for (const tab of group.tabs ?? []) {
     openPanels.set(tab.panelId, panelTargetFromSnapshot(tab));
     activeTabs.set(tab.panelId, tab.activeView as ViewType);
   }
   return {
-    [snapshot.clusterId]: {
+    [group.clusterId]: {
       openPanels,
       activeTabs,
       pendingNativeOpenPanelIds: new Set(),
@@ -268,14 +269,14 @@ const stateFromGroupSnapshot = (
 
 export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> = ({
   children,
-  initialGroupSnapshot,
+  initialGroup,
 }) => {
   const { selectedClusterId, selectedClusterName, managedClusterIds } = useKubeconfig();
   const activeClusterIds = managedClusterIds ?? EMPTY_CLUSTER_IDS;
   // Keep object panel state scoped per cluster tab to avoid cross-tab state leakage.
   const [objectPanelStateByCluster, setObjectPanelStateByCluster] = useState<
     Record<string, ObjectPanelState>
-  >(() => stateFromGroupSnapshot(initialGroupSnapshot));
+  >(() => stateFromGroup(initialGroup));
   const clusterKey = selectedClusterId || '__default__';
   const activeState = objectPanelStateByCluster[clusterKey] ?? DEFAULT_OBJECT_PANEL_STATE;
   const { openPanels } = activeState;

@@ -88,11 +88,11 @@ func (s *DesktopShell) RoutePanelWindowCommand(windowName string, command panelw
 	return s.routePanelCommand(windowName, command)
 }
 
-func (s *DesktopShell) UpdatePanelWindowSnapshot(windowName string, snapshot panelwindow.GroupSnapshot) error {
-	if s == nil || s.updatePanelSnapshot == nil {
+func (s *DesktopShell) PublishPanelWindowGroup(windowName string, group panelwindow.WorkspaceGroup) error {
+	if s == nil || s.publishPanelGroup == nil {
 		return fmt.Errorf("panel-window registry is not available")
 	}
-	return s.updatePanelSnapshot(windowName, snapshot)
+	return s.publishPanelGroup(windowName, group)
 }
 
 func (s *DesktopShell) RequestPanelTabClose(windowName, panelID string) error {

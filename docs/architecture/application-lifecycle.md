@@ -59,8 +59,8 @@ close sequences: [dockable-panels.md](../frontend/dockable-panels.md).
   saved geometry. New app windows' readiness waits for cluster hydration and
   coordinator subscriptions.
 - A panel window's runtime-ready event only lets that webview bootstrap its
-  immutable descriptor; the panel stays hidden until its reconstructed group
-  acknowledges readiness. It never initializes or releases a workspace,
+  descriptor (identity plus the group the directory moves into it); the panel
+  stays hidden until its reconstructed group acknowledges readiness. It never initializes or releases a workspace,
   restores workspace geometry, or counts toward last-workspace quit.
 - `windowOptionsForPlatform`: macOS/Windows peers start hidden until runtime
   ready; Linux starts visible.
@@ -218,7 +218,7 @@ Lock ordering:
 
 | Close | Wails surface | Backend contract |
 | --- | --- | --- |
-| App window | Cancellable `events.Common.WindowClosing` starts a renderer preflight | Denial keeps it open. Releases only that view's cluster tabs and foreground demand; docked panel identities stay in the directory; floating panels stay live. |
+| App window | Cancellable `events.Common.WindowClosing` starts a renderer preflight | Denial keeps it open. Releases only that view's cluster tabs and foreground demand; docked panel identities stay in the directory; floating panels stay live. Cancels the transfers it takes part in and declines every directory move addressed to it. |
 | Cluster tab | `KubeconfigContext` preflight calls the registry's cluster-panel close transaction | Requests and acknowledgements carry cluster, window, and transaction identity; denial, cancellation, unavailable windows, or changed participants abort. |
 | Panel window | Cancellable native hook sends a guard request to that renderer | Closes through the registry, removes its shared entries, releases the native and any unused shared-panel reference; failure keeps the source. |
 | Application quit | `application.Options.ShouldQuit` asks every ready app and panel renderer to acknowledge one preflight | Unanimous approval requests Wails Quit; its `ShouldQuit` reentry runs the once-only persistence flush before teardown. Denial, timeout, delivery failure, or rejected handoff cancels; settlement reaches the original participants without holding the quit mutex. |

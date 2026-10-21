@@ -47,7 +47,7 @@ if (appElement) {
         if (descriptor.panel.state === 'opening') {
           openingPanel = {
             windowName: descriptor.panel.windowName,
-            transferId: descriptor.panel.snapshot.transferId,
+            transferId: descriptor.panel.transferId,
           };
         }
       }

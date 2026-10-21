@@ -52,7 +52,7 @@ func windowRuntimeOptions(
 		AcknowledgePanelClose:      bridge.AcknowledgePanelClose,
 		AcknowledgeWorkspaceClose:  bridge.AcknowledgeWorkspaceClose,
 		RoutePanelCommand:          bridge.RoutePanelCommand,
-		UpdatePanelSnapshot:        bridge.UpdatePanelSnapshot,
+		PublishPanelGroup:          bridge.PublishPanelGroup,
 		RequestPanelTabClose:       bridge.RequestPanelTabClose,
 		RequestPanelTabTransfer:    bridge.RequestPanelTabTransfer,
 		AcceptPanelTabTransfer:     bridge.AcceptPanelTabTransfer,

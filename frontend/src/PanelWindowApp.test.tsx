@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   firstBlocker: vi.fn(() => null as { focus: () => void } | null),
   onRowClick: vi.fn(() => 'panel-pod'),
   objectPanelProps: null as Record<string, unknown> | null,
+  objectPanelStateProps: null as Record<string, unknown> | null,
   shortcutsProps: null as Record<string, unknown> | null,
   onObjectOpenAuthorized: vi.fn(() => vi.fn()),
   authorizedHandler: null as ((event: Record<string, unknown>) => void) | null,
@@ -51,7 +52,10 @@ vi.mock('@modules/object-panel/components/ObjectPanel/ObjectPanel', () => ({
   },
 }));
 vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
-  ObjectPanelStateProvider: PassThrough,
+  ObjectPanelStateProvider: ({ children, ...props }: { children: ReactNode }) => {
+    mocks.objectPanelStateProps = props;
+    return <>{children}</>;
+  },
   useObjectPanelActiveTabs: () => new Map([['panel-pod', 'events']]),
   useLocalPanelSnapshots: () => ({}),
   useObjectPanelState: () => ({
@@ -133,14 +137,11 @@ import PanelWindowApp from './PanelWindowApp';
 
 const descriptor = {
   windowName: 'panel-1',
-  sourceWindowName: 'workspace-1',
   clusterId: 'cluster-a',
   groupId: 'group-1',
   state: 'opening',
-  snapshot: {
-    schemaVersion: 1,
-    transferId: 'transfer-panel-window-test',
-    sourceWindowName: 'workspace-1',
+  transferId: 'transfer-panel-window-test',
+  group: {
     clusterId: 'cluster-a',
     groupId: 'group-1',
     tabs: [
@@ -164,7 +165,7 @@ const descriptor = {
 
 const descriptorWithTransfer = (transferId: string): panelwindow.WindowDescriptor => ({
   ...descriptor,
-  snapshot: { ...descriptor.snapshot, transferId },
+  transferId,
 });
 
 describe('PanelWindowApp', () => {
@@ -232,6 +233,7 @@ describe('PanelWindowApp', () => {
       defaultPosition: 'right',
       defaultGroupKey: 'right',
     });
+    expect(mocks.objectPanelStateProps).toEqual({ initialGroup: descriptor.group });
     expect(mocks.acknowledgeReady).toHaveBeenCalledWith('panel-1', 'transfer-panel-window-test');
     expect(mocks.shortcutsProps).toMatchObject({ ready: true });
   });
@@ -353,7 +355,7 @@ describe('PanelWindowApp', () => {
     act(() => dockProviderProps.onTabCloseRequest('panel-pod'));
     expect(mocks.requestTabClose).toHaveBeenCalledWith('panel-1', 'panel-pod');
 
-    const objectRef = descriptor.snapshot.tabs?.[0]?.objectRef;
+    const objectRef = descriptor.group.tabs?.[0]?.objectRef;
     if (!objectRef) {
       throw new Error('expected descriptor object reference');
     }

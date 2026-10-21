@@ -43,10 +43,9 @@ func TestPanelSnapshotContinuesAfterOriginatingAppWindowDisappears(t *testing.T)
 	_, err = index.AcknowledgeOpen(descriptor.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
 	registry := &Registry{lifecycle: newLifecycle(), panels: index, workspace: panelwindow.NewWorkspaceDirectory(), emitWindowEvent: func(string, string, any) bool { return false }}
-	snapshot.SourceWindowName = descriptor.WindowName
 	seedNativeGroup(t, registry.workspace, descriptor.WindowName, snapshot)
 	snapshot.Tabs[0].ActiveView = "yaml"
-	require.NoError(t, registry.UpdatePanelWindowSnapshot(descriptor.WindowName, snapshot))
+	require.NoError(t, registry.PublishPanelWindowGroup(descriptor.WindowName, nativeGroup(snapshot)))
 	shared, err := registry.GetPanelWorkspace(descriptor.WindowName, snapshot.ClusterID)
 	require.NoError(t, err)
 	require.Equal(t, "yaml", shared.Panels[0].Tab.ActiveView)
@@ -182,16 +181,15 @@ func TestNativeSnapshotCannotClaimAnotherWindowsPanel(t *testing.T) {
 	require.NoError(t, err)
 	_, err = registry.panels.AcknowledgeOpen(native.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
-	snapshot.SourceWindowName = native.WindowName
 	seedNativeGroup(t, registry.workspace, native.WindowName, snapshot)
-	require.NoError(t, registry.UpdatePanelWindowSnapshot(native.WindowName, snapshot))
+	require.NoError(t, registry.PublishPanelWindowGroup(native.WindowName, nativeGroup(snapshot)))
 	foreign := snapshot.Tabs[0]
 	foreign.PanelID = "foreign"
 	foreign.ObjectRef.Name = "foreign"
 	_, _, err = registry.workspace.Open(foreign, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: "workspace-other", GroupID: "right"})
 	require.NoError(t, err)
 	snapshot.Tabs = append(snapshot.Tabs, foreign)
-	require.NoError(t, registry.UpdatePanelWindowSnapshot(native.WindowName, snapshot))
+	require.NoError(t, registry.PublishPanelWindowGroup(native.WindowName, nativeGroup(snapshot)))
 	// The report arranges only the window's own panels; the foreign one stays put.
 	for _, panel := range registry.workspace.Snapshot(snapshot.ClusterID).Panels {
 		if panel.Tab.PanelID == foreign.PanelID {

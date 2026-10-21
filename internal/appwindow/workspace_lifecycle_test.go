@@ -14,12 +14,12 @@ func TestFailedGroupDockIsNotDeliveredWhenTargetBecomesReady(t *testing.T) {
 	registry := NewRegistry(application.New(application.Options{}), backend)
 	registry.panelOpenTimeout = 0
 	owner := registry.Create(true)
-	source := livePanelWindowForTabTransfer(t, registry.panels, validPanelGroupSnapshot())
-	snapshot := source.Snapshot
+	snapshot := validPanelGroupSnapshot()
+	source := livePanelWindowForTabTransfer(t, registry.panels, snapshot)
 	snapshot.SourceWindowName = source.WindowName
 	registry.emitWindowEvent = func(string, string, any) bool { return true }
 	seedNativeGroup(t, registry.workspace, source.WindowName, snapshot)
-	require.NoError(t, registry.UpdatePanelWindowSnapshot(source.WindowName, snapshot))
+	require.NoError(t, registry.PublishPanelWindowGroup(source.WindowName, nativeGroup(snapshot)))
 	snapshot.TransferID = "late-dock"
 	require.NoError(t, registry.BeginPanelWindowDock(source.WindowName, "right", snapshot))
 	require.NoError(t, registry.FailPanelWindowTransfer(source.WindowName, source.WindowName, snapshot.TransferID))
@@ -222,4 +222,42 @@ func TestClusterTransferRequestsWaitForStagedMutation(t *testing.T) {
 	if !t.Failed() {
 		require.NoError(t, <-requested)
 	}
+}
+
+// Closing the app view a dock-back targets declines the move at once: the
+// native source keeps its panels and is live again without waiting for the
+// dock timeout. Closing another app view leaves the dock pending.
+func TestClosingADockTargetDeclinesTheDockAtOnce(t *testing.T) {
+	registry := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{})
+	owner := registry.Create(true).Name()
+	other := registry.Create(true).Name()
+	snapshot := validPanelGroupSnapshot()
+	snapshot.SourceWindowName = owner
+	descriptor, err := beginTestPanelWindow(t, registry, snapshot)
+	require.NoError(t, err)
+	registry.emitWindowEvent = func(string, string, any) bool { return true }
+	registry.showWindow = func(string) bool { return true }
+	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
+	require.NoError(t, err)
+	dock := snapshot
+	dock.SourceWindowName = descriptor.WindowName
+	dock.TransferID = "dock-to-closing-view"
+	require.NoError(t, registry.BeginPanelWindowDock(descriptor.WindowName, "right", dock))
+	target := registry.workspace.Snapshot(snapshot.ClusterID).Panels[0].Transfer.Target.WindowName
+	unrelated := other
+	if target == other {
+		unrelated = owner
+	}
+
+	registry.authorizeClose(unrelated)
+	registry.handleClosing(nil, unrelated)
+	require.Equal(t, PanelWindowStateDocking, registry.panels.State(descriptor.WindowName))
+
+	registry.authorizeClose(target)
+	registry.handleClosing(nil, target)
+
+	require.Equal(t, PanelWindowStateLive, registry.panels.State(descriptor.WindowName))
+	panel := registry.workspace.Snapshot(snapshot.ClusterID).Panels[0]
+	require.Equal(t, descriptor.WindowName, panel.Location.WindowName)
+	require.Zero(t, panel.Transfer)
 }

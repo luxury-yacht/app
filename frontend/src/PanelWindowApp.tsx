@@ -53,10 +53,10 @@ import './PanelWindowApp.css';
 
 const acknowledgedTransfers = new Set<string>();
 
-const initialGroups = (snapshot: panelwindow.GroupSnapshot): TabGroupState => ({
+const initialGroups = (group: panelwindow.WorkspaceGroup): TabGroupState => ({
   right: {
-    tabs: snapshot.tabs?.map((tab) => tab.panelId) ?? [],
-    activeTab: snapshot.activePanelId,
+    tabs: group.tabs?.map((tab) => tab.panelId) ?? [],
+    activeTab: group.activePanelId,
   },
   bottom: { tabs: [], activeTab: null },
   floating: [],
@@ -82,7 +82,7 @@ function PanelWindowSurface({
       }),
     [descriptor.windowName, guards]
   );
-  const initialTabGroups = useMemo(() => initialGroups(descriptor.snapshot), [descriptor.snapshot]);
+  const initialTabGroups = useMemo(() => initialGroups(descriptor.group), [descriptor.group]);
 
   const requestTabClose = useCallback(
     (panelId: string) => {
@@ -98,21 +98,21 @@ function PanelWindowSurface({
   );
 
   useEffect(() => {
-    if (acknowledgedTransfers.has(descriptor.snapshot.transferId)) {
+    if (acknowledgedTransfers.has(descriptor.transferId)) {
       return;
     }
-    acknowledgedTransfers.add(descriptor.snapshot.transferId);
+    acknowledgedTransfers.add(descriptor.transferId);
     const acknowledgeReady = async () => {
       try {
-        await acknowledgePanelWindowReady(descriptor.windowName, descriptor.snapshot.transferId);
+        await acknowledgePanelWindowReady(descriptor.windowName, descriptor.transferId);
         setReady(true);
       } catch (error) {
-        acknowledgedTransfers.delete(descriptor.snapshot.transferId);
+        acknowledgedTransfers.delete(descriptor.transferId);
         try {
           await failPanelWindowTransfer(
             descriptor.windowName,
             descriptor.windowName,
-            descriptor.snapshot.transferId
+            descriptor.transferId
           );
         } catch (cleanupError) {
           reportOperationalError(cleanupError, {
@@ -313,7 +313,7 @@ export default function PanelWindowApp({
                       clusterId={descriptor.clusterId}
                       clusterName={clusterName}
                     >
-                      <ObjectPanelStateProvider initialGroupSnapshot={descriptor.snapshot}>
+                      <ObjectPanelStateProvider initialGroup={descriptor.group}>
                         <ClusterLifecycleProvider>
                           <NamespaceProvider>
                             <PanelLifecycleGuardProvider>

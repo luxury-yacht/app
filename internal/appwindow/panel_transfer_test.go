@@ -93,7 +93,7 @@ func TestPanelTransferStateAllowsAcknowledgedOpenAndDock(t *testing.T) {
 
 	dockSnapshot := snapshot
 	dockSnapshot.TransferID = "transfer-2"
-	require.NoError(t, panels.BeginDock(descriptor.WindowName, dockSnapshot, "workspace-1", "right"))
+	require.NoError(t, panels.BeginDock(descriptor.WindowName, dockSnapshot))
 	require.Equal(t, PanelWindowStateDocking, panels.State(descriptor.WindowName))
 
 	require.NoError(t, panels.AcknowledgeDock(descriptor.WindowName, dockSnapshot.TransferID))
@@ -121,7 +121,7 @@ func TestPanelTransferStateRejectsStaleAcknowledgementsAndRollsBack(t *testing.T
 
 	dockSnapshot := retrySnapshot
 	dockSnapshot.TransferID = "transfer-3"
-	require.NoError(t, panels.BeginDock(descriptor.WindowName, dockSnapshot, "workspace-1", "right"))
+	require.NoError(t, panels.BeginDock(descriptor.WindowName, dockSnapshot))
 	require.ErrorContains(
 		t,
 		panels.AcknowledgeDock(descriptor.WindowName, "stale-dock"),
@@ -132,69 +132,25 @@ func TestPanelTransferStateRejectsStaleAcknowledgementsAndRollsBack(t *testing.T
 	require.Equal(t, PanelWindowStateLive, panels.State(descriptor.WindowName))
 }
 
-func TestPanelTransferDescriptorOwnsAnImmutableSnapshot(t *testing.T) {
+// A native report is admitted only from a live window for its own cluster and
+// group; the index does not store it.
+func TestPanelPublicationRequiresALiveWindowsOwnGroup(t *testing.T) {
 	panels := newPanelIndex()
 	snapshot := validPanelGroupSnapshot()
 	descriptor, err := panels.BeginOpen(snapshot)
 	require.NoError(t, err)
-
-	snapshot.Tabs[0].ObjectRef.Name = "changed-by-source"
-	stored, err := panels.Descriptor(descriptor.WindowName)
-	require.NoError(t, err)
-	require.Equal(t, "api", stored.Snapshot.Tabs[0].ObjectRef.Name)
-
-	stored.Snapshot.Tabs[0].ObjectRef.Name = "changed-by-reader"
-	storedAgain, err := panels.Descriptor(descriptor.WindowName)
-	require.NoError(t, err)
-	require.Equal(t, "api", storedAgain.Snapshot.Tabs[0].ObjectRef.Name)
-}
-
-func TestPanelTransferUpdatesOnlyLiveSnapshotState(t *testing.T) {
-	panels := newPanelIndex()
-	snapshot := validPanelGroupSnapshot()
-	descriptor, err := panels.BeginOpen(snapshot)
-	require.NoError(t, err)
-	require.ErrorContains(t, panels.UpdateSnapshot(descriptor.WindowName, snapshot), "state")
+	group := nativeGroup(snapshot)
+	require.ErrorContains(t, panels.ValidatePublication(descriptor.WindowName, group), "state")
 	_, err = panels.AcknowledgeOpen(descriptor.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
+	require.NoError(t, panels.ValidatePublication(descriptor.WindowName, group))
 
-	updated := snapshot
-	updated.Tabs = append([]PanelTabSnapshot(nil), snapshot.Tabs...)
-	updated.Tabs[0].ActiveView = "yaml"
-	require.NoError(t, panels.UpdateSnapshot(descriptor.WindowName, updated))
-	stored, err := panels.Descriptor(descriptor.WindowName)
-	require.NoError(t, err)
-	require.Equal(t, "yaml", stored.Snapshot.Tabs[0].ActiveView)
-
-	updated.ClusterID = "cluster-2"
-	updated.Tabs[0].ObjectRef.ClusterID = "cluster-2"
-	require.ErrorContains(t, panels.UpdateSnapshot(descriptor.WindowName, updated), "cannot change")
-}
-
-func TestLivePanelSnapshotCannotAdoptAnotherWindowsTransfer(t *testing.T) {
-	panels := newPanelIndex()
-	firstSnapshot := validPanelGroupSnapshot()
-	first, err := panels.BeginOpen(firstSnapshot)
-	require.NoError(t, err)
-	_, err = panels.AcknowledgeOpen(first.WindowName, firstSnapshot.TransferID)
-	require.NoError(t, err)
-
-	secondSnapshot := validPanelGroupSnapshot()
-	secondSnapshot.TransferID = "second-open"
-	secondSnapshot.GroupID = "second-group"
-	secondSnapshot.SourceWindowName = "second-source"
-	second, err := panels.BeginOpen(secondSnapshot)
-	require.NoError(t, err)
-
-	firstSnapshot.TransferID = secondSnapshot.TransferID
-	require.NoError(t, panels.UpdateSnapshot(first.WindowName, firstSnapshot))
-	require.Equal(t, PanelWindowStateLive, panels.State(first.WindowName))
-	require.False(t, panels.IsTransferParticipant(first.WindowName, secondSnapshot.SourceWindowName))
-	require.Error(t, panels.FailTransfer(first.WindowName, secondSnapshot.TransferID))
-	require.True(t, panels.Remove(first.WindowName))
-	_, err = panels.AcknowledgeOpen(second.WindowName, secondSnapshot.TransferID)
-	require.NoError(t, err)
-	require.Equal(t, PanelWindowStateLive, panels.State(second.WindowName))
+	other := group
+	other.ClusterID = "cluster-2"
+	require.ErrorContains(t, panels.ValidatePublication(descriptor.WindowName, other), "cannot change")
+	other = group
+	other.GroupID = "floating-2"
+	require.ErrorContains(t, panels.ValidatePublication(descriptor.WindowName, other), "cannot change")
 }
 
 func TestPanelTransferStateRejectsIdentityChangesAndInvalidTransitions(t *testing.T) {
@@ -207,7 +163,7 @@ func TestPanelTransferStateRejectsIdentityChangesAndInvalidTransitions(t *testin
 	dockSnapshot.TransferID = "transfer-2"
 	require.ErrorContains(
 		t,
-		panels.BeginDock(descriptor.WindowName, dockSnapshot, "workspace-1", "right"),
+		panels.BeginDock(descriptor.WindowName, dockSnapshot),
 		"cannot dock from state",
 	)
 	_, err = panels.AcknowledgeOpen(descriptor.WindowName, snapshot.TransferID)
@@ -235,7 +191,7 @@ func TestPanelTransferStateRejectsIdentityChangesAndInvalidTransitions(t *testin
 
 			require.ErrorContains(
 				t,
-				panels.BeginDock(descriptor.WindowName, next, "workspace-1", "right"),
+				panels.BeginDock(descriptor.WindowName, next),
 				"cannot change cluster or group",
 			)
 		})
@@ -245,7 +201,7 @@ func TestPanelTransferStateRejectsIdentityChangesAndInvalidTransitions(t *testin
 	reused.TransferID = snapshot.TransferID
 	require.ErrorContains(
 		t,
-		panels.BeginDock(descriptor.WindowName, reused, "workspace-1", "right"),
+		panels.BeginDock(descriptor.WindowName, reused),
 		"already exists",
 	)
 }

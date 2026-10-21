@@ -253,20 +253,19 @@ func (r *Registry) BeginPanelWindowOpen(
 		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
 		return PanelWindowDescriptor{}, err
 	}
-	if err := r.createRetainedPanelWindow(descriptor, reservation); err != nil {
+	if err := r.createRetainedPanelWindow(descriptor, snapshot, reservation); err != nil {
 		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
 		return PanelWindowDescriptor{}, errors.Join(err, r.releaseNativePanelReference(descriptor.WindowName))
 	}
-	return descriptor, nil
+	return r.withPanelGroup(descriptor), nil
 }
 
 // Backend retention may wait behind a connection. Revalidate cluster admission
 // after that wait (the directory already holds the group's panels in place), then
 // serialize native creation with cancellation and readiness.
-func (r *Registry) createRetainedPanelWindow(descriptor PanelWindowDescriptor, reservation *panelwindow.WorkspaceReservation) error {
+func (r *Registry) createRetainedPanelWindow(descriptor PanelWindowDescriptor, snapshot PanelGroupSnapshot, reservation *panelwindow.WorkspaceReservation) error {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
-	snapshot := descriptor.Snapshot
 	pending, err := r.panels.Descriptor(descriptor.WindowName)
 	if err != nil || pending.State != PanelWindowStateOpening {
 		return fmt.Errorf("panel open is no longer pending")
@@ -480,7 +479,11 @@ func (r *Registry) PanelDescriptor(name string) (PanelWindowDescriptor, error) {
 	if r == nil || r.panels == nil {
 		return PanelWindowDescriptor{}, fmt.Errorf("panel window %q is not live", name)
 	}
-	return r.panels.Descriptor(name)
+	descriptor, err := r.panels.Descriptor(name)
+	if err != nil {
+		return PanelWindowDescriptor{}, err
+	}
+	return r.withPanelGroup(descriptor), nil
 }
 
 // WindowDescriptor resolves the native role associated with a Wails window
@@ -496,6 +499,7 @@ func (r *Registry) WindowDescriptor(name string) (NativeWindowDescriptor, error)
 	if r != nil && r.panels != nil {
 		panel, err := r.panels.Descriptor(name)
 		if err == nil {
+			panel = r.withPanelGroup(panel)
 			return NativeWindowDescriptor{
 				SchemaVersion: NativeWindowDescriptorSchemaVersion,
 				Role:          NativeWindowRolePanel,
@@ -515,19 +519,31 @@ func (r *Registry) AcknowledgePanelWindowReady(name, transferID string) (PanelWi
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
+	source := r.panels.OpeningSource(name)
 	if err := r.commitReadyPanelPlacement(descriptor); err != nil {
 		return PanelWindowDescriptor{}, errors.Join(err, r.abortReadyPanelWindow(descriptor))
 	}
 	if descriptor, err = r.panels.AcknowledgeOpen(name, transferID); err != nil {
 		return PanelWindowDescriptor{}, err
 	}
-	snapshot := descriptor.Snapshot
-	r.emitWindowEvent(snapshot.SourceWindowName, panelwindow.WindowOpenedEventName, panelwindow.WindowOpenedEvent{
-		WindowName: name, TransferID: snapshot.TransferID, ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Snapshot: snapshot,
+	descriptor = r.withPanelGroup(descriptor)
+	r.emitWindowEvent(source, panelwindow.WindowOpenedEventName, panelwindow.WindowOpenedEvent{
+		WindowName: name, TransferID: transferID, SourceWindowName: source, ClusterID: descriptor.ClusterID, GroupID: descriptor.GroupID, Tabs: descriptor.Group.Tabs,
 	})
-	r.completePanelTabTransferForOpenedWindow(descriptor)
-	r.emitWorkspaceChanged(snapshot.ClusterID)
+	r.completePanelTabTransferForOpenedWindow(transferID)
+	r.emitWorkspaceChanged(descriptor.ClusterID)
 	return descriptor, nil
+}
+
+// withPanelGroup adds the directory's placement for a native window: the tabs
+// it holds, or while it opens, the tabs moving into it.
+func (r *Registry) withPanelGroup(descriptor PanelWindowDescriptor) PanelWindowDescriptor {
+	opening := ""
+	if descriptor.State == PanelWindowStateOpening {
+		opening = descriptor.TransferID
+	}
+	descriptor.Group = r.workspace.WindowGroup(descriptor.ClusterID, descriptor.WindowName, descriptor.GroupID, opening)
+	return descriptor
 }
 
 // Placement moves only after the native side effect succeeded, so a failure
@@ -538,17 +554,12 @@ func (r *Registry) commitReadyPanelPlacement(descriptor PanelWindowDescriptor) e
 	}
 	r.workspaceMu.Lock()
 	defer r.workspaceMu.Unlock()
-	return r.workspace.CommitGroupTransfer(descriptor.Snapshot.TransferID)
+	return r.workspace.CommitGroupTransfer(descriptor.TransferID)
 }
 
+// Only app views track the native windows their panels float into.
 func (r *Registry) emitPanelClosed(descriptor PanelWindowDescriptor) {
-	targets := append(r.lifecycle.Names(), descriptor.Snapshot.SourceWindowName)
-	sent := make(map[string]struct{})
-	for _, target := range targets {
-		if _, exists := sent[target]; exists {
-			continue
-		}
-		sent[target] = struct{}{}
+	for _, target := range r.lifecycle.Names() {
 		r.emitWindowEvent(target, panelwindow.WindowClosedEventName, panelwindow.WindowClosedEvent{WindowName: descriptor.WindowName, ClusterID: descriptor.ClusterID, GroupID: descriptor.GroupID})
 	}
 }
@@ -571,7 +582,7 @@ func (r *Registry) BeginPanelWindowDock(windowName, targetPosition string, snaps
 	if err != nil {
 		return err
 	}
-	if err := r.panels.BeginDock(windowName, snapshot, target, targetPosition); err != nil {
+	if err := r.panels.BeginDock(windowName, snapshot); err != nil {
 		return err
 	}
 	location := panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: target, GroupID: targetPosition, Index: panelwindow.AppendToGroup}
@@ -581,7 +592,7 @@ func (r *Registry) BeginPanelWindowDock(windowName, targetPosition string, snaps
 	}
 	r.panels.setTransferTimeout(windowName, snapshot.TransferID, r.panelDockTimeout, func() {
 		current, err := r.panels.Descriptor(windowName)
-		if err == nil && current.State == PanelWindowStateDocking && current.Snapshot.TransferID == snapshot.TransferID {
+		if err == nil && current.State == PanelWindowStateDocking && current.TransferID == snapshot.TransferID {
 			_ = r.FailPanelWindowTransfer(windowName, windowName, snapshot.TransferID)
 		}
 	})
@@ -629,8 +640,11 @@ func (r *Registry) commitPanelWindowDock(targetWindow, windowName, transferID st
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
-	if _, err := r.panels.DockTarget(windowName, transferID, targetWindow); err != nil {
+	if _, err := r.panels.Pending(windowName, transferID, PanelWindowStateDocking); err != nil {
 		return PanelWindowDescriptor{}, err
+	}
+	if target, ok := r.workspace.TransferTarget(transferID); !ok || target.WindowName != targetWindow {
+		return PanelWindowDescriptor{}, fmt.Errorf("panel dock target does not match caller")
 	}
 	if !r.windowHasCluster(targetWindow, descriptor.ClusterID) {
 		return PanelWindowDescriptor{}, fmt.Errorf("dock target no longer displays the cluster")
@@ -653,7 +667,7 @@ func (r *Registry) FailPanelWindowTransfer(callerWindowName, windowName, transfe
 	if err != nil {
 		return err
 	}
-	if !r.panels.IsTransferParticipant(windowName, callerWindowName) {
+	if !r.isPanelTransferParticipant(descriptor, callerWindowName) {
 		return fmt.Errorf("window %q cannot fail panel transfer for %q", callerWindowName, windowName)
 	}
 	wasOpening := descriptor.State == PanelWindowStateOpening
@@ -673,6 +687,21 @@ func (r *Registry) FailPanelWindowTransfer(callerWindowName, windowName, transfe
 	releaseErr := r.releaseNativePanelReference(windowName)
 	r.emitPanelClosed(descriptor)
 	return errors.Join(closeErr, releaseErr)
+}
+
+// A native window may fail its own transfer; an opening window's source and a
+// dock's target app view may fail theirs.
+func (r *Registry) isPanelTransferParticipant(descriptor PanelWindowDescriptor, caller string) bool {
+	switch {
+	case caller == descriptor.WindowName:
+		return true
+	case descriptor.State == PanelWindowStateOpening:
+		return caller == r.panels.OpeningSource(descriptor.WindowName)
+	case descriptor.State == PanelWindowStateDocking:
+		target, ok := r.workspace.TransferTarget(descriptor.TransferID)
+		return ok && caller == target.WindowName
+	}
+	return false
 }
 
 func (r *Registry) RoutePanelWindowCommand(windowName string, command panelwindow.WorkspaceCommand) error {
@@ -696,33 +725,29 @@ func (r *Registry) RoutePanelWindowCommand(windowName string, command panelwindo
 	return nil
 }
 
-func (r *Registry) UpdatePanelWindowSnapshot(windowName string, snapshot PanelGroupSnapshot) error {
+// PublishPanelWindowGroup reports a live native window's arrangement. Like an
+// app view's report, it only arranges the panels the directory places there.
+func (r *Registry) PublishPanelWindowGroup(windowName string, group panelwindow.WorkspaceGroup) error {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
 	r.workspaceMu.Lock()
 	defer r.workspaceMu.Unlock()
-	if snapshot.SourceWindowName != windowName {
-		return fmt.Errorf("panel snapshot source does not match its renderer")
-	}
-	if err := r.panels.ValidateSnapshot(windowName, snapshot); err != nil {
+	if err := r.panels.ValidatePublication(windowName, group); err != nil {
 		return err
 	}
-	if err := r.workspace.PublishWindow(windowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{{ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}}); err != nil {
+	if err := r.workspace.PublishWindow(windowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{group}); err != nil {
 		return err
 	}
-	if err := r.panels.UpdateSnapshot(windowName, snapshot); err != nil {
-		return err
-	}
-	r.emitWorkspaceChanged(snapshot.ClusterID)
+	r.emitWorkspaceChanged(group.ClusterID)
 	return nil
 }
 
 func (r *Registry) RequestPanelTabClose(windowName, panelID string) error {
-	descriptor, err := r.panels.Descriptor(windowName)
+	descriptor, err := r.PanelDescriptor(windowName)
 	if err != nil {
 		return err
 	}
-	for _, tab := range descriptor.Snapshot.Tabs {
+	for _, tab := range descriptor.Group.Tabs {
 		if tab.PanelID != panelID {
 			continue
 		}
@@ -846,6 +871,7 @@ func (r *Registry) handleClosing(event *application.WindowEvent, name string) {
 		return
 	}
 	r.failPanelTabTransfersForWindow(name, "app window closed during tab transfer")
+	r.declinePanelMovesInto(name)
 	if r.releaseClosedAppView(name, remaining) {
 		return
 	}
@@ -860,6 +886,16 @@ func (r *Registry) handleClosing(event *application.WindowEvent, name string) {
 	r.lifecycle.CancelClose(name)
 	if event != nil {
 		event.Cancel()
+	}
+}
+
+// A closing app view declines every move the directory is taking into it, as
+// its renderer declines one it cannot mount, so each source keeps its panels at
+// once instead of at the move's timeout. Cluster-view moves were already
+// cancelled with their handoff (failClusterTransfersForWindow).
+func (r *Registry) declinePanelMovesInto(windowName string) {
+	for _, transferID := range r.workspace.MovesInto(windowName) {
+		r.reportPanelLifecycleError(r.AcknowledgePanelTransfer(windowName, transferID, false), "decline a move into a closing app view")
 	}
 }
 
@@ -1146,7 +1182,7 @@ func sharedMacWindowChrome() application.MacWindow {
 }
 
 func (r *Registry) emitDockFailure(descriptor PanelWindowDescriptor) {
-	event := panelwindow.WindowTransferFailedEvent{WindowName: descriptor.WindowName, TransferID: descriptor.Snapshot.TransferID, ClusterID: descriptor.ClusterID}
+	event := panelwindow.WindowTransferFailedEvent{WindowName: descriptor.WindowName, TransferID: descriptor.TransferID, ClusterID: descriptor.ClusterID}
 	targets := append(r.lifecycle.Names(), descriptor.WindowName)
 	for _, target := range targets {
 		if r.windowHasCluster(target, descriptor.ClusterID) {

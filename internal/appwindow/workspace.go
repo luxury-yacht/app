@@ -98,7 +98,7 @@ func (r *Registry) appWindowForCluster(clusterID, source string) (string, error)
 func (r *Registry) abortReadyPanelWindow(descriptor PanelWindowDescriptor) error {
 	r.closeAuthorizedWindow(descriptor.WindowName)
 	r.panels.Remove(descriptor.WindowName)
-	r.failPanelTabTransfer(descriptor.Snapshot.TransferID, "new panel target failed before readiness")
+	r.failPanelTabTransfer(descriptor.TransferID, "new panel target failed before readiness")
 	cleanup := r.releaseNativePanelReference(descriptor.WindowName)
 	r.emitPanelClosed(descriptor)
 	return cleanup

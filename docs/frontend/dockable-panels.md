@@ -35,8 +35,9 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
 - Renderers project the shared directory and acknowledge changes through its
   owner.
 - Docked and native renderers share group chrome and object content. Native
-  snapshots hold serializable identity and view state only: no React nodes,
-  refs, fetched data, credentials, drafts, or terminal buffers.
+  descriptors and arrangement reports hold serializable identity and view state
+  only: no React nodes, refs, fetched data, credentials, drafts, or terminal
+  buffers.
 - Panel windows reuse workspace chrome: `WindowHeader` is the drag/maximize
   surface; `DockablePanelHeader` holds only tab and panel controls. Workspace
   status, favorites, and command palette never render there.
@@ -121,9 +122,12 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   preparation, authenticated callers, placement commits, and rollback under
   their existing locks; the lifecycle adds no mutex or backend dependency, and
   timeouts re-enter the adapter's failure path.
-- Live native snapshots are separate from pending group operations; the
-  registry binds each pending operation to its window regardless of published
-  content.
+- The native index stores no copy of a window's group. A native window's
+  descriptor reads the directory (the tabs placed in it, or while it opens, the
+  tabs moving in), and its reports only arrange, like an app view's. Each
+  pending open or dock has one native lifecycle record (state, opening source,
+  timeout) that releases its directory move; the move alone records where the
+  panels go, including the dock target.
 - For every move: check source guards, keep the source mounted until the target
   reconstructs, and commit directory placement only after destination readiness.
 - Whole-group Float and dock-back, and single panel-tab moves (drag between
@@ -166,8 +170,8 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   events, map, and logs; shells reconnect by backend session identity. Unsaved
   YAML, saves, and mutations block renderer disposal. Native geometry is
   process-local.
-- Each renderer serializes its own snapshots (native: live; app: docked groups)
-  and flushes before moving or closing. Native panels never publish through an
+- Each renderer reports its own arrangement (native: its group once live; app:
+  docked groups) and flushes before moving or closing. Native panels never publish through an
   originating app window. Directory revisions drive app-view reconciliation and
   retained-panel restoration.
 
@@ -212,7 +216,10 @@ Sequences:
   timeout, or a pending transfer keeps the tab; approved renderers stay frozen
   until settlement.
 - App window: guard and flush local docked panels, keep their shared
-  identities, release the view. Floating panels stay open.
+  identities, release the view. Floating panels stay open. Closing cancels the
+  transfers it takes part in, and the view declines every directory move
+  addressed to it (a dock-back included), so each source keeps its panels at
+  once rather than at the move's timeout.
 - Quit: preflight every ready app and panel renderer; close none until all
   approve. Approved renderers stay frozen while peers decide and through
   shutdown. Unanimous approval requests application Quit instead of closing

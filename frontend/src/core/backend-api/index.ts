@@ -89,6 +89,7 @@ export {
   OpenKubeconfigSearchPathDialog,
   OpenPanelWorkspaceObject,
   PublishDockedPanels,
+  PublishPanelWindowGroup,
   QueryPermissions,
   RemoveApplicationUpdateSkip,
   ReorderThemes,
@@ -120,6 +121,5 @@ export {
   StopPortForward,
   UpdateAppPreferences,
   UpdateFavorite,
-  UpdatePanelWindowSnapshot,
   ValidateThemeClusterPattern,
 } from '@bindings/github.com/luxury-yacht/app/backend/desktopservice';

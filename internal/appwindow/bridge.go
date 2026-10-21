@@ -21,7 +21,7 @@ type nativeWindowRegistry interface {
 	AcknowledgePanelWindowClose(string) error
 	AcknowledgeWorkspaceWindowClose(string) error
 	RoutePanelWindowCommand(string, panelwindow.WorkspaceCommand) error
-	UpdatePanelWindowSnapshot(string, panelwindow.GroupSnapshot) error
+	PublishPanelWindowGroup(string, panelwindow.WorkspaceGroup) error
 	RequestPanelTabClose(string, string) error
 	RequestPanelTabTransfer(string, panelwindow.TabTransferRequest) error
 	AcceptPanelTabTransfer(string, string) error
@@ -159,15 +159,15 @@ func (bridge *Bridge) RoutePanelCommand(windowName string, command panelwindow.W
 	return registry.RoutePanelWindowCommand(windowName, command)
 }
 
-func (bridge *Bridge) UpdatePanelSnapshot(
+func (bridge *Bridge) PublishPanelGroup(
 	windowName string,
-	snapshot panelwindow.GroupSnapshot,
+	group panelwindow.WorkspaceGroup,
 ) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
-	return registry.UpdatePanelWindowSnapshot(windowName, snapshot)
+	return registry.PublishPanelWindowGroup(windowName, group)
 }
 
 func (bridge *Bridge) RequestPanelTabClose(windowName, panelID string) error {
