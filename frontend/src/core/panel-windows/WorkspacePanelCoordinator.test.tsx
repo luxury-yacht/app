@@ -1,12 +1,14 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PanelLifecycleGuardRegistry } from './panelLifecycleGuards';
 import { WorkspacePanelCoordinator } from './WorkspacePanelCoordinator';
 
 vi.mock('./ClusterTabTransferCoordinator', () => ({ ClusterTabTransferCoordinator: () => null }));
 
 vi.mock('./WorkspacePanelSync', () => ({
   WorkspacePanelSync: ({ children }: { children: React.ReactNode }) => children,
+  useIncomingGroupTransfers: () => mocks.incoming,
   usePanelWorkspaceSync: () => ({
     flush: mocks.flushPublication,
     quiesceCluster: async () => {
@@ -31,6 +33,11 @@ const mocks = vi.hoisted(() => ({
   tabTearOff: null as null | ((payload: never, cursor: { x: number; y: number }) => void),
   clusterTearOff: null as null | ((payload: never, cursor: { x: number; y: number }) => void),
   selectedClusterIds: ['cluster-1'],
+  incoming: [] as unknown[],
+  guardRegistry: null as PanelLifecycleGuardRegistry | null,
+  freeze: vi.fn(),
+  releaseTransfer: vi.fn(),
+  setActiveKubeconfig: vi.fn(),
   requestClusterTransfer: vi.fn(async (_caller: string, _request: unknown) => undefined),
   canStartTabDrag: null as null | ((panelId: string) => boolean),
   canFloatPanel: null as null | ((panelId: string) => boolean),
@@ -124,7 +131,6 @@ vi.mock('@/core/panel-windows', async (importOriginal) => {
     onPanelWindowOpened: event('opened'),
     onPanelWindowSnapshotUpdated: event('snapshot'),
     onPanelTabCloseRequested: event('tabClose'),
-    onPanelWindowDockRequested: event('dock'),
     onPanelWindowClosed: event('closed'),
     onPanelWindowTransferFailed: event('windowTransferFailed'),
     onWorkspaceCloseRequested: event('ownerClose'),
@@ -196,23 +202,24 @@ vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
     },
     selectedClusterIds: mocks.selectedClusterIds,
     managedClusterIds: mocks.selectedClusterIds,
-    selectedKubeconfigs: ['cluster-1'],
+    selectedKubeconfigs: ['cluster-1', 'cluster-2'],
     getClusterMeta: (value: string) => ({ id: value, name: value }),
-    setActiveKubeconfig: vi.fn(),
+    setActiveKubeconfig: mocks.setActiveKubeconfig,
     selectedClusterId: 'cluster-1',
   }),
 }));
 
 vi.mock('@/core/panel-windows/panelLifecycleGuards', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  usePanelLifecycleGuardRegistry: () => ({
-    freeze: vi.fn(),
-    freezeCluster: vi.fn(),
-    releaseTransfer: vi.fn(),
-    isFrozen: () => mocks.frozen,
-    isClusterFrozen: () => mocks.frozen,
-    firstBlocker: () => mocks.blocker,
-  }),
+  usePanelLifecycleGuardRegistry: () =>
+    mocks.guardRegistry ?? {
+      freeze: mocks.freeze,
+      freezeCluster: vi.fn(),
+      releaseTransfer: mocks.releaseTransfer,
+      isFrozen: () => mocks.frozen,
+      isClusterFrozen: () => mocks.frozen,
+      firstBlocker: () => mocks.blocker,
+    },
 }));
 
 vi.mock('@/utils/errorHandler', () => ({
@@ -268,6 +275,8 @@ describe('WorkspacePanelCoordinator', () => {
     vi.clearAllMocks();
     mocks.blocker = null;
     mocks.frozen = false;
+    mocks.incoming = [];
+    mocks.guardRegistry = null;
     mocks.selectedClusterIds = ['cluster-1'];
     mocks.openPanels.clear();
     mocks.openPanels.set('panel-a', objectRef);
@@ -283,6 +292,10 @@ describe('WorkspacePanelCoordinator', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
+    await renderCoordinator();
+  });
+
+  const renderCoordinator = async () => {
     await act(async () => {
       root.render(
         <WorkspacePanelCoordinator>
@@ -291,7 +304,23 @@ describe('WorkspacePanelCoordinator', () => {
       );
       await Promise.resolve();
     });
-  });
+  };
+
+  // The directory lists a native group moving into this view's bottom dock.
+  const receiveDockBack = async (overrides: Record<string, unknown> = {}) => {
+    mocks.incoming = [
+      {
+        transferId: 'dock-1',
+        clusterId: 'cluster-1',
+        sourceWindowName: 'panel-1',
+        groupId: 'bottom',
+        tabs: [tabTransferRequest().tab],
+        activePanelId: 'panel-a',
+        ...overrides,
+      },
+    ];
+    await renderCoordinator();
+  };
 
   afterEach(async () => {
     await act(async () => root.unmount());
@@ -1009,31 +1038,10 @@ describe('WorkspacePanelCoordinator', () => {
     );
   });
 
-  it('acknowledges a dock handoff once after the owner target is mounted', async () => {
-    let releaseDock!: () => void;
-    mocks.acknowledgeDock.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          releaseDock = resolve;
-        })
-    );
-    const snapshot = {
-      clusterId: 'cluster-1',
-      groupId: 'group-1',
-      transferId: 'dock-transfer-1',
-      tabs: [{ panelId: 'panel-a' }],
-      activePanelId: 'panel-a',
-    };
-
-    await act(async () => {
-      mocks.eventHandlers.dock?.({
-        windowName: 'panel-1',
-        transferId: 'dock-transfer-1',
-        targetPosition: 'bottom',
-        snapshot,
-      } as never);
-      await Promise.resolve();
-    });
+  it('mounts a dock-back group the directory targets here and acknowledges once it is visible', async () => {
+    mocks.tabGroups.right = { tabs: [], activeTab: null };
+    await receiveDockBack();
+    expect(mocks.freeze).toHaveBeenCalledWith('dock-1', ['panel-a']);
     expect(mocks.dockPanelGroup).toHaveBeenCalledWith(
       'cluster-1',
       ['panel-a'],
@@ -1041,96 +1049,43 @@ describe('WorkspacePanelCoordinator', () => {
       'bottom',
       undefined
     );
-    expect(mocks.dockWindow).toHaveBeenCalledWith(snapshot);
-    expect(mocks.dockPanelGroup.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.dockWindow.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
+    expect(mocks.dockWindow).toHaveBeenCalledWith(
+      expect.objectContaining({ clusterId: 'cluster-1', activePanelId: 'panel-a' })
     );
-    expect(mocks.acknowledgeDock).toHaveBeenCalledOnce();
+    expect(mocks.acknowledgeDock).not.toHaveBeenCalled();
 
-    await act(async () => {
-      mocks.eventHandlers.ownerClose?.({
-        panelWindows: [],
-      } as never);
-      await Promise.resolve();
-    });
+    mocks.tabGroups.bottom = { tabs: ['panel-a'], activeTab: 'panel-a' };
+    await renderCoordinator();
+    await renderCoordinator();
     expect(mocks.acknowledgeDock).toHaveBeenCalledOnce();
-
-    await act(async () => {
-      releaseDock();
-      await Promise.resolve();
-    });
+    expect(mocks.acknowledgeDock).toHaveBeenCalledWith('workspace-1', 'panel-1', 'dock-1');
+    expect(mocks.flushPublication.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.acknowledgeDock.mock.invocationCallOrder[0]
+    );
+    expect(mocks.dockPanelGroup).toHaveBeenCalledOnce();
   });
 
-  it('rolls back a dock handoff when owner readiness times out', async () => {
-    vi.useFakeTimers();
-    mocks.tabGroups.right = { tabs: [], activeTab: null };
-    const snapshot = {
-      clusterId: 'cluster-1',
-      groupId: 'group-1',
-      transferId: 'dock-transfer-timeout',
-      tabs: [{ panelId: 'panel-a' }],
-    };
-
-    await act(async () => {
-      mocks.eventHandlers.dock?.({
-        windowName: 'panel-1',
-        transferId: 'dock-transfer-timeout',
-        targetPosition: 'right',
-        snapshot,
-      } as never);
-      await Promise.resolve();
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(15_000);
-    });
-
-    expect(mocks.failTransfer).toHaveBeenCalledWith(
-      'workspace-1',
-      'panel-1',
-      'dock-transfer-timeout'
-    );
-    expect(mocks.removeOwnedPanel).toHaveBeenCalledWith('cluster-1', 'panel-a');
-    expect(mocks.detachPanelGroup).toHaveBeenCalledWith('cluster-1', ['panel-a']);
-    expect(mocks.discardPanelLayouts).toHaveBeenCalledWith('cluster-1', ['panel-a']);
+  it('shows the target cluster before acknowledging a dock-back into it', async () => {
+    await receiveDockBack({ clusterId: 'cluster-2' });
+    expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('cluster-2');
+    expect(mocks.acknowledgeDock).not.toHaveBeenCalled();
   });
 
-  it('does not roll back a dock handoff while its acknowledgement is in flight', async () => {
-    vi.useFakeTimers();
-    let releaseDock!: () => void;
-    mocks.acknowledgeDock.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          releaseDock = resolve;
-        })
-    );
-    const snapshot = {
-      clusterId: 'cluster-1',
-      groupId: 'group-1',
-      transferId: 'dock-transfer-acknowledging',
-      tabs: [{ panelId: 'panel-a' }],
-    };
+  it('asks the directory to cancel a dock-back whose acknowledgement fails', async () => {
+    mocks.acknowledgeDock.mockRejectedValueOnce(new Error('commit failed'));
+    mocks.tabGroups.bottom = { tabs: ['panel-a'], activeTab: 'panel-a' };
+    await receiveDockBack();
+    expect(mocks.failTransfer).toHaveBeenCalledWith('workspace-1', 'panel-1', 'dock-1');
+    expect(mocks.reportError).toHaveBeenCalledOnce();
+  });
 
-    await act(async () => {
-      mocks.eventHandlers.dock?.({
-        windowName: 'panel-1',
-        transferId: 'dock-transfer-acknowledging',
-        targetPosition: 'right',
-        snapshot,
-      } as never);
-      await Promise.resolve();
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(15_000);
-    });
-
-    expect(mocks.acknowledgeDock).toHaveBeenCalledOnce();
-    expect(mocks.failTransfer).not.toHaveBeenCalled();
-    expect(mocks.commitWindow).not.toHaveBeenCalledWith(snapshot, 'panel-1');
-
-    await act(async () => {
-      releaseDock();
-      await Promise.resolve();
-    });
+  it('releases the move guard once the directory stops listing the transfer', async () => {
+    mocks.guardRegistry = new PanelLifecycleGuardRegistry();
+    await receiveDockBack();
+    expect(mocks.guardRegistry.isFrozen()).toBe(true);
+    mocks.incoming = [];
+    await renderCoordinator();
+    expect(mocks.guardRegistry.isFrozen()).toBe(false);
   });
 
   it('routes a tab menu float separately from a complete group float', async () => {
@@ -1247,22 +1202,14 @@ describe('WorkspacePanelCoordinator', () => {
     expect(mocks.dockPanelGroup).not.toHaveBeenCalled();
   });
 
-  it('rejects incoming docked groups while the app renderer is closing', async () => {
+  it('rejects a dock-back while another transaction freezes this view', async () => {
     mocks.frozen = true;
-    await act(async () =>
-      mocks.eventHandlers.dock({
-        windowName: 'panel-1',
-        transferId: 'incoming-dock',
-        targetPosition: 'right',
-        snapshot: {
-          clusterId: 'cluster-1',
-          tabs: [tabTransferRequest().tab],
-          activePanelId: 'panel-a',
-        },
-      } as never)
-    );
-    expect(mocks.failTransfer).toHaveBeenCalledWith('workspace-1', 'panel-1', 'incoming-dock');
+    await receiveDockBack();
+    expect(mocks.failTransfer).toHaveBeenCalledWith('workspace-1', 'panel-1', 'dock-1');
     expect(mocks.dockPanelGroup).not.toHaveBeenCalled();
+    expect(mocks.freeze).not.toHaveBeenCalled();
+    await renderCoordinator();
+    expect(mocks.failTransfer).toHaveBeenCalledOnce();
   });
 
   it('waits for the cluster panel windows before removing the cluster tab', async () => {

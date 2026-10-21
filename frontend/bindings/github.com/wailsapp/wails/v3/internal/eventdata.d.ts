@@ -55,7 +55,6 @@ declare module "@wailsio/runtime" {
             "panel-window:application-quit-preflight-settled": panelwindow$0.ApplicationQuitPreflightRequestedEvent;
             "panel-window:close-requested": panelwindow$0.WindowCloseRequestedEvent;
             "panel-window:closed": panelwindow$0.WindowClosedEvent;
-            "panel-window:dock-requested": panelwindow$0.WindowDockRequestedEvent;
             "panel-window:focus-requested": panelwindow$0.WindowFocusRequestedEvent;
             "panel-window:opened": panelwindow$0.WindowOpenedEvent;
             "panel-window:tab-close-authorized": panelwindow$0.TabCloseAuthorizedEvent;

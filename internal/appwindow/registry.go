@@ -235,16 +235,16 @@ func (r *Registry) BeginPanelWindowOpen(
 			snapshot.SourceWindowName,
 		)
 	}
-	reservation := r.workspace.ReserveCluster(snapshot.ClusterID)
-	defer r.releasePanelReservation(reservation, snapshot.ClusterID)
-	if err := r.validateGroupSource(snapshot.SourceWindowName, snapshot); err != nil {
+	if err := ValidatePanelGroupSnapshot(snapshot); err != nil {
 		return PanelWindowDescriptor{}, err
 	}
+	reservation := r.workspace.ReserveCluster(snapshot.ClusterID)
+	defer r.releasePanelReservation(reservation, snapshot.ClusterID)
 	if err := r.retainPanelWorkspace(snapshot.ClusterID); err != nil {
 		return PanelWindowDescriptor{}, err
 	}
 	r.panelTransferMu.Lock()
-	descriptor, err := r.beginPanelWindowOpenTransfer(snapshot)
+	descriptor, err := r.beginPanelWindowOpenTransfer(snapshot, reservation)
 	r.panelTransferMu.Unlock()
 	if err != nil {
 		return PanelWindowDescriptor{}, err
@@ -260,8 +260,9 @@ func (r *Registry) BeginPanelWindowOpen(
 	return descriptor, nil
 }
 
-// Backend retention may wait behind a connection. Revalidate the handoff after
-// that wait, then serialize native creation with cancellation and readiness.
+// Backend retention may wait behind a connection. Revalidate cluster admission
+// after that wait (the directory already holds the group's panels in place), then
+// serialize native creation with cancellation and readiness.
 func (r *Registry) createRetainedPanelWindow(descriptor PanelWindowDescriptor, reservation *panelwindow.WorkspaceReservation) error {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
@@ -272,10 +273,9 @@ func (r *Registry) createRetainedPanelWindow(descriptor PanelWindowDescriptor, r
 	}
 	r.workspaceMu.Lock()
 	valid := reservation.Live() && r.windowHasCluster(snapshot.SourceWindowName, snapshot.ClusterID)
-	sourceErr := r.validateGroupSource(snapshot.SourceWindowName, snapshot)
 	r.workspaceMu.Unlock()
-	if !valid || sourceErr != nil {
-		return errors.Join(fmt.Errorf("panel source changed during open"), sourceErr)
+	if !valid {
+		return fmt.Errorf("panel source changed during open")
 	}
 	options := r.transferredPanelWindowOptions(descriptor.WindowName, snapshot)
 	window := r.newWindow(options)
@@ -506,17 +506,20 @@ func (r *Registry) WindowDescriptor(name string) (NativeWindowDescriptor, error)
 	return NativeWindowDescriptor{}, fmt.Errorf("native window %q is not registered", name)
 }
 
-// AcknowledgePanelWindowReady commits an opening transfer and reveals the
-// hidden native target. A stale acknowledgement leaves the source transfer pending.
+// AcknowledgePanelWindowReady reveals the hidden native target, then commits the
+// directory move. A stale acknowledgement leaves the source transfer pending.
 func (r *Registry) AcknowledgePanelWindowReady(name, transferID string) (PanelWindowDescriptor, error) {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
-	descriptor, err := r.panels.AcknowledgeOpen(name, transferID)
+	descriptor, err := r.panels.Pending(name, transferID, PanelWindowStateOpening)
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
 	if err := r.commitReadyPanelPlacement(descriptor); err != nil {
 		return PanelWindowDescriptor{}, errors.Join(err, r.abortReadyPanelWindow(descriptor))
+	}
+	if descriptor, err = r.panels.AcknowledgeOpen(name, transferID); err != nil {
+		return PanelWindowDescriptor{}, err
 	}
 	snapshot := descriptor.Snapshot
 	r.emitWindowEvent(snapshot.SourceWindowName, panelwindow.WindowOpenedEventName, panelwindow.WindowOpenedEvent{
@@ -527,20 +530,15 @@ func (r *Registry) AcknowledgePanelWindowReady(name, transferID string) (PanelWi
 	return descriptor, nil
 }
 
+// Placement moves only after the native side effect succeeded, so a failure
+// needs no rollback: aborting the native transfer cancels the directory move.
 func (r *Registry) commitReadyPanelPlacement(descriptor PanelWindowDescriptor) error {
-	r.workspaceMu.Lock()
-	defer r.workspaceMu.Unlock()
-	snapshot := descriptor.Snapshot
-	previous := r.workspace.Snapshot(snapshot.ClusterID).Panels
-	group := panelwindow.WorkspaceGroup{ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}
-	if err := r.workspace.TransferGroup(snapshot.SourceWindowName, descriptor.WindowName, panelwindow.PanelLocationWindow, group); err != nil {
-		return err
-	}
 	if !r.showWindow(descriptor.WindowName) {
-		r.restoreFailedPanelOpen(descriptor.WindowName, previous)
 		return fmt.Errorf("panel window %q disappeared before ready", descriptor.WindowName)
 	}
-	return nil
+	r.workspaceMu.Lock()
+	defer r.workspaceMu.Unlock()
+	return r.workspace.CommitGroupTransfer(descriptor.Snapshot.TransferID)
 }
 
 func (r *Registry) emitPanelClosed(descriptor PanelWindowDescriptor) {
@@ -555,8 +553,8 @@ func (r *Registry) emitPanelClosed(descriptor PanelWindowDescriptor) {
 	}
 }
 
-// BeginPanelWindowDock records a target handoff while the native source stays
-// live, then routes the complete snapshot to an app window displaying the same cluster.
+// BeginPanelWindowDock records a directory move while the native source stays
+// live. The target app view learns of it from its next directory read.
 func (r *Registry) BeginPanelWindowDock(windowName, targetPosition string, snapshot PanelGroupSnapshot) error {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
@@ -566,7 +564,7 @@ func (r *Registry) BeginPanelWindowDock(windowName, targetPosition string, snaps
 	if snapshot.SourceWindowName != windowName {
 		return fmt.Errorf("panel dock source does not match caller")
 	}
-	if err := r.validateGroupSource(windowName, snapshot); err != nil {
+	if err := ValidatePanelGroupSnapshot(snapshot); err != nil {
 		return err
 	}
 	target, err := r.appWindowForCluster(snapshot.ClusterID, windowName)
@@ -576,37 +574,37 @@ func (r *Registry) BeginPanelWindowDock(windowName, targetPosition string, snaps
 	if err := r.panels.BeginDock(windowName, snapshot, target, targetPosition); err != nil {
 		return err
 	}
+	location := panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: target, GroupID: targetPosition}
+	if err := r.beginGroupPlacement(windowName, snapshot, location); err != nil {
+		_ = r.panels.FailTransfer(windowName, snapshot.TransferID)
+		return err
+	}
 	r.panels.setTransferTimeout(windowName, snapshot.TransferID, r.panelDockTimeout, func() {
 		current, err := r.panels.Descriptor(windowName)
 		if err == nil && current.State == PanelWindowStateDocking && current.Snapshot.TransferID == snapshot.TransferID {
 			_ = r.FailPanelWindowTransfer(windowName, windowName, snapshot.TransferID)
 		}
 	})
-	if !r.queueWorkspaceEvent(target, panelwindow.WindowDockRequestedEventName, panelwindow.WindowDockRequestedEvent{WindowName: windowName, TransferID: snapshot.TransferID, TargetPosition: targetPosition, Snapshot: snapshot}) {
-		_ = r.panels.FailTransfer(windowName, snapshot.TransferID)
-		descriptor, _ := r.panels.Descriptor(windowName)
-		r.emitDockFailure(descriptor)
-		return fmt.Errorf("app window %q is not available", target)
-	}
+	r.emitWorkspaceChanged(snapshot.ClusterID)
 	return nil
 }
 
-// AcknowledgePanelWindowDock commits the destination's reconstructed docked group,
-// removes the native role, and closes the now-redundant source window.
+// AcknowledgePanelWindowDock closes the now-redundant source window, commits the
+// directory move to the acknowledging app view, and removes the native role.
 func (r *Registry) AcknowledgePanelWindowDock(targetWindow, windowName, transferID string) error {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
 	descriptor, err := r.commitPanelWindowDock(targetWindow, windowName, transferID)
-	if err != nil {
+	if descriptor.WindowName == "" {
 		return err
 	}
-	if err := r.releaseNativePanelReference(windowName); err != nil {
-		return err
-	}
+	releaseErr := r.releaseNativePanelReference(windowName)
 	r.emitWorkspaceChanged(descriptor.ClusterID)
-	return nil
+	return errors.Join(err, releaseErr)
 }
 
+// Returns the descriptor once the native source is closed, even if a concurrent
+// cluster removal discarded the move, so the caller still releases the window.
 func (r *Registry) commitPanelWindowDock(targetWindow, windowName, transferID string) (PanelWindowDescriptor, error) {
 	r.workspaceMu.Lock()
 	defer r.workspaceMu.Unlock()
@@ -614,29 +612,21 @@ func (r *Registry) commitPanelWindowDock(targetWindow, windowName, transferID st
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
-	position, err := r.panels.DockTarget(windowName, transferID, targetWindow)
-	if err != nil {
+	if _, err := r.panels.DockTarget(windowName, transferID, targetWindow); err != nil {
 		return PanelWindowDescriptor{}, err
 	}
 	if !r.windowHasCluster(targetWindow, descriptor.ClusterID) {
 		return PanelWindowDescriptor{}, fmt.Errorf("dock target no longer displays the cluster")
 	}
-	previous := r.workspace.Snapshot(descriptor.ClusterID).Panels
-	group := panelwindow.WorkspaceGroup{ClusterID: descriptor.ClusterID, GroupID: position, Tabs: descriptor.Snapshot.Tabs, ActivePanelID: descriptor.Snapshot.ActivePanelID}
-	if err := r.workspace.TransferGroup(windowName, targetWindow, panelwindow.PanelLocationDocked, group); err != nil {
-		return PanelWindowDescriptor{}, err
-	}
 	if !r.closeAuthorizedWindow(windowName) {
-		r.restoreFailedPanelOpen(targetWindow, previous)
 		_ = r.panels.FailTransfer(windowName, transferID)
 		r.emitDockFailure(descriptor)
+		r.emitWorkspaceChanged(descriptor.ClusterID)
 		return PanelWindowDescriptor{}, fmt.Errorf("panel window %q is not available for dock commit", windowName)
 	}
+	commitErr := r.workspace.CommitGroupTransfer(transferID)
 	r.failPanelTabTransfersForWindow(windowName, "panel window moved as a whole group")
-	if err := r.panels.AcknowledgeDock(windowName, transferID); err != nil {
-		return PanelWindowDescriptor{}, err
-	}
-	return descriptor, nil
+	return descriptor, errors.Join(commitErr, r.panels.AcknowledgeDock(windowName, transferID))
 }
 
 func (r *Registry) FailPanelWindowTransfer(callerWindowName, windowName, transferID string) error {
@@ -655,6 +645,7 @@ func (r *Registry) FailPanelWindowTransfer(callerWindowName, windowName, transfe
 	}
 	if !wasOpening {
 		r.emitDockFailure(descriptor)
+		r.emitWorkspaceChanged(descriptor.ClusterID)
 		return nil
 	}
 	r.failPanelTabTransfer(transferID, "new panel target failed before readiness")

@@ -728,9 +728,10 @@ func TestRegistryRoutesOpenToSourceAndDockToAnAppDisplayingTheCluster(t *testing
 	dockSnapshot.SourceWindowName = descriptor.WindowName
 	dockSnapshot.TransferID = "transfer-dock"
 	require.NoError(t, registry.BeginPanelWindowDock(descriptor.WindowName, "right", dockSnapshot))
-	require.Len(t, events, 2)
-	require.Equal(t, owner.Name(), events[1].windowName)
-	require.Equal(t, PanelWindowDockRequestedEventName, events[1].eventName)
+	require.Len(t, events, 1, "the dock target learns of the move from the directory")
+	pending := registry.workspace.Snapshot(snapshot.ClusterID).Panels[0]
+	require.Equal(t, owner.Name(), pending.Transfer.Target.WindowName)
+	require.Equal(t, "right", pending.Transfer.Target.GroupID)
 
 	require.NoError(
 		t,

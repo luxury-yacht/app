@@ -113,7 +113,6 @@ func init() {
 	application.RegisterEvent[panelwindow.ClusterTabTransferEvent](panelwindow.ClusterTabTransferFailedEventName)
 	application.RegisterEvent[panelwindow.WorkspaceChangedEvent](panelwindow.WorkspaceChangedEventName)
 	application.RegisterEvent[panelwindow.WorkspaceFocusRequestedEvent](panelwindow.WorkspaceFocusRequestedEventName)
-	application.RegisterEvent[panelwindow.WindowDockRequestedEvent](panelwindow.WindowDockRequestedEventName)
 	application.RegisterEvent[panelwindow.WindowFocusRequestedEvent](panelwindow.WindowFocusRequestedEventName)
 	application.RegisterEvent[panelwindow.WindowCloseRequestedEvent](panelwindow.WindowCloseRequestedEventName)
 	application.RegisterEvent[panelwindow.WindowTransferFailedEvent](panelwindow.WindowTransferFailedEventName)

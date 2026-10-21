@@ -113,6 +113,16 @@ export interface PanelOpenResult {
     "render": boolean;
 }
 
+/**
+ * PanelTransfer marks a panel whose whole group is moving to another renderer.
+ * Only the directory commits or cancels it. Renderers project it from reads: the
+ * source keeps rendering the panel and the target mounts a provisional copy.
+ */
+export interface PanelTransfer {
+    "transferId": string;
+    "target": PanelLocation;
+}
+
 export interface TabCloseAuthorizedEvent {
     "panelId": string;
 }
@@ -203,13 +213,6 @@ export interface WindowDescriptor {
     "snapshot": GroupSnapshot;
 }
 
-export interface WindowDockRequestedEvent {
-    "windowName": string;
-    "transferId": string;
-    "targetPosition": string;
-    "snapshot": GroupSnapshot;
-}
-
 export interface WindowFocusRequestedEvent {
     "panelId": string;
 }
@@ -272,6 +275,7 @@ export interface WorkspaceGroup {
 export interface WorkspacePanel {
     "tab": TabSnapshot;
     "location": PanelLocation;
+    "transfer"?: PanelTransfer;
 }
 
 export interface WorkspaceSnapshot {

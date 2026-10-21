@@ -281,6 +281,7 @@ func (r *Registry) failPanelTabTransfer(transferID, reason string) {
 
 func (r *Registry) beginPanelWindowOpenTransfer(
 	snapshot PanelGroupSnapshot,
+	reservation *panelwindow.WorkspaceReservation,
 ) (PanelWindowDescriptor, error) {
 	r.tabTransferMu.Lock()
 	defer r.tabTransferMu.Unlock()
@@ -311,6 +312,11 @@ func (r *Registry) beginPanelWindowOpenTransfer(
 	}
 	descriptor, err := r.panels.BeginOpen(snapshot)
 	if err != nil {
+		return PanelWindowDescriptor{}, err
+	}
+	target := panelwindow.PanelLocation{Kind: panelwindow.PanelLocationWindow, WindowName: descriptor.WindowName, GroupID: snapshot.GroupID}
+	if err := r.beginGroupPlacement(descriptor.WindowName, snapshot, target, reservation); err != nil {
+		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
 		return PanelWindowDescriptor{}, err
 	}
 	if transfer != nil {

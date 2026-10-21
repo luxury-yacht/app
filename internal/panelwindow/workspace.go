@@ -26,6 +26,7 @@ type PanelLocation struct {
 type WorkspacePanel struct {
 	Tab      TabSnapshot   `json:"tab"`
 	Location PanelLocation `json:"location"`
+	Transfer PanelTransfer `json:"transfer,omitempty,omitzero"`
 }
 
 type WorkspaceSnapshot struct {
@@ -102,6 +103,7 @@ type WorkspaceDirectory struct {
 	onPanelsRemoved  func([]PanelKey)
 	reservations     map[uint64]string
 	nextReservation  uint64
+	transfers        map[string][]workspacePanelKey
 }
 
 func NewWorkspaceDirectory() *WorkspaceDirectory {
@@ -159,7 +161,7 @@ func (d *WorkspaceDirectory) Open(tab TabSnapshot, location PanelLocation, reser
 		}
 	}
 	if existing, ok := d.panels[key]; ok {
-		if existing.Location.Kind == PanelLocationRetained {
+		if existing.Location.Kind == PanelLocationRetained && !existing.moving() {
 			existing.Location = location
 			d.panels[key] = existing
 			d.unpublished[key] = struct{}{}
@@ -243,49 +245,11 @@ func (d *WorkspaceDirectory) HasPanel(clusterID, panelID string) bool {
 }
 
 func (d *WorkspaceDirectory) deletePanelLocked(key workspacePanelKey, removal *panelRemoval) {
+	d.leaveTransferLocked(key)
 	delete(d.panels, key)
 	delete(d.unpublished, key)
 	removal.keys = append(removal.keys, PanelKey{ClusterID: key.clusterID, PanelID: key.panelID})
 	removal.notify = d.onPanelsRemoved
-}
-
-// TransferGroup commits an acknowledged handoff as one directory mutation.
-// A closed source may have retained its tabs while the destination was mounting.
-func (d *WorkspaceDirectory) TransferGroup(sourceWindow, targetWindow string, kind PanelLocationKind, group WorkspaceGroup) error {
-	next, err := panelsFromGroups(targetWindow, kind, []WorkspaceGroup{group})
-	if err != nil {
-		return err
-	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	for key, panel := range next {
-		current, exists := d.panels[key]
-		if !exists || current.Tab != panel.Tab || (current.Location.WindowName != sourceWindow && current.Location.Kind != PanelLocationRetained) {
-			return fmt.Errorf("panel group transfer source is stale")
-		}
-	}
-	if kind == PanelLocationDocked {
-		d.appendPlacementsLocked(targetWindow, next)
-	}
-	for key, panel := range next {
-		d.panels[key] = panel
-		delete(d.unpublished, key)
-	}
-	d.revision++
-	return nil
-}
-
-func (d *WorkspaceDirectory) RestoreTransferredPanels(targetWindow string, previous []WorkspacePanel) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	for _, panel := range previous {
-		key := workspacePanelKey{panel.Tab.ClusterID(), panel.Tab.PanelID}
-		current, exists := d.panels[key]
-		if exists && current.Location.WindowName == targetWindow && current.Tab == panel.Tab {
-			d.panels[key] = panel
-			d.revision++
-		}
-	}
 }
 
 func panelsFromGroups(windowName string, kind PanelLocationKind, groups []WorkspaceGroup) (map[workspacePanelKey]WorkspacePanel, error) {
@@ -347,6 +311,7 @@ func (d *WorkspaceDirectory) PublishWindowWithTransfers(windowName string, kind 
 	for _, transfer := range transfers {
 		approved[workspacePanelKey{transfer.Tab.ClusterID(), transfer.Tab.PanelID}] = transfer
 	}
+	d.skipMovingPanelsLocked(windowName, next)
 	if err := d.validatePublicationLocked(windowName, next, approved); err != nil {
 		return nil, err
 	}
@@ -423,10 +388,21 @@ func addWorkspaceGroupPanels(group WorkspaceGroup, location PanelLocation, panel
 	return nil
 }
 
+// Only the directory moves a panel with a pending group transfer. Its source and
+// target renderers still publish their other tabs; anyone else is rejected.
+func (d *WorkspaceDirectory) skipMovingPanelsLocked(windowName string, next map[workspacePanelKey]WorkspacePanel) {
+	for key := range next {
+		current := d.panels[key]
+		if current.moving() && (current.Location.WindowName == windowName || current.Transfer.Target.WindowName == windowName) {
+			delete(next, key)
+		}
+	}
+}
+
 func (d *WorkspaceDirectory) replacePublishedWindowLocked(windowName string, next map[workspacePanelKey]WorkspacePanel, removal *panelRemoval) {
 	for key, panel := range d.panels {
 		_, awaitingMount := d.unpublished[key]
-		if panel.Location.WindowName != windowName || awaitingMount {
+		if panel.Location.WindowName != windowName || awaitingMount || panel.moving() {
 			continue
 		}
 		if _, republished := next[key]; republished {

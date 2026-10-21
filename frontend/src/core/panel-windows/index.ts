@@ -133,10 +133,6 @@ export const failPanelTabTransfer = (callerWindowName: string, transferId: strin
 export const onPanelWindowOpened = (handler: (event: panelwindow.WindowOpenedEvent) => void) =>
   onEvent('panel-window:opened', handler);
 
-export const onPanelWindowDockRequested = (
-  handler: (event: panelwindow.WindowDockRequestedEvent) => void
-) => onEvent('panel-window:dock-requested', handler);
-
 export const onPanelWindowFocusRequested = (
   handler: (event: panelwindow.WindowFocusRequestedEvent) => void
 ) => onEvent('panel-window:focus-requested', handler);

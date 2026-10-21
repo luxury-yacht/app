@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
 } from 'react';
 import { readPanelWorkspace } from '@/core/app-state-access';
@@ -42,6 +43,66 @@ interface WorkspaceSync {
   ) => Promise<Awaited<ReturnType<typeof openPanelWorkspaceObject>> | null>;
 }
 const PublicationContext = createContext<WorkspaceSync | null>(null);
+
+// A whole group the directory is moving into this app view. The view mounts a
+// provisional copy, acknowledges once it is visible, and drops the copy if a
+// later read shows the move cancelled or its source gone.
+export interface IncomingGroupTransfer {
+  transferId: string;
+  clusterId: string;
+  sourceWindowName: string;
+  groupId: 'right' | 'bottom';
+  tabs: panelwindow.TabSnapshot[];
+  activePanelId: string;
+}
+const IncomingTransfersContext = createContext<readonly IncomingGroupTransfer[]>([]);
+export const useIncomingGroupTransfers = () => useContext(IncomingTransfersContext);
+
+const targetsWindow = (panel: panelwindow.WorkspacePanel, windowName: string) =>
+  panel.transfer?.target.windowName === windowName;
+
+function incomingGroupTransfers(
+  clusterId: string,
+  panels: panelwindow.WorkspacePanel[],
+  windowName: string
+): IncomingGroupTransfer[] {
+  const groups = new Map<string, panelwindow.WorkspacePanel[]>();
+  for (const panel of panels) {
+    const transferId = panel.transfer?.transferId;
+    if (transferId && targetsWindow(panel, windowName)) {
+      groups.set(transferId, [...(groups.get(transferId) ?? []), panel]);
+    }
+  }
+  return Array.from(groups, ([transferId, members]) => {
+    const ordered = [...members].sort(
+      (a, b) => (a.transfer?.target.index ?? 0) - (b.transfer?.target.index ?? 0)
+    );
+    const active = ordered.find((panel) => panel.transfer?.target.active) ?? ordered[0];
+    return {
+      transferId,
+      clusterId,
+      sourceWindowName: ordered[0].location.windowName,
+      groupId: ordered[0].transfer?.target.groupId === 'bottom' ? 'bottom' : 'right',
+      tabs: ordered.map((panel) => panel.tab),
+      activePanelId: active.tab.panelId,
+    };
+  });
+}
+
+// A local tab is foreign when the directory places it elsewhere and is not
+// moving it here, or when it was an incoming copy whose source has disappeared.
+function isForeignLocalPanel(
+  panel: panelwindow.WorkspacePanel | undefined,
+  panelId: string,
+  windowName: string,
+  wasIncoming: ReadonlySet<string> | undefined
+): boolean {
+  if (!panel) {
+    return Boolean(wasIncoming?.has(panelId));
+  }
+  return panel.location.windowName !== windowName && !targetsWindow(panel, windowName);
+}
+
 export function usePanelWorkspaceSync(): WorkspaceSync {
   const sync = useContext(PublicationContext);
   if (!sync) {
@@ -109,6 +170,14 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
   const queue = useRef(workspacePanelPublication);
   const lastPublication = useRef('');
   const provisional = useRef(new Map<string, panelwindow.WorkspaceGroup[]>());
+  const incomingIds = useRef(new Map<string, ReadonlySet<string>>());
+  const [incomingByCluster, setIncomingByCluster] = useState<
+    Record<string, IncomingGroupTransfer[]>
+  >({});
+  const incomingTransfers = useMemo(
+    () => Object.values(incomingByCluster).flat(),
+    [incomingByCluster]
+  );
   const transferRevision = useRef(new Map<string, number>());
   const invalidateDirectoryReads = useCallback((pending: panelwindow.WorkspaceGroup[]) => {
     for (const { clusterId } of pending) {
@@ -209,23 +278,55 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
 
   const removeForeignPlacements = useCallback(
     (clusterId: string, panels: panelwindow.WorkspacePanel[]) => {
-      const localIds = new Set((current.current.local[clusterId] ?? []).map((tab) => tab.panelId));
-      const moved = panels.filter(
-        (panel) =>
-          localIds.has(panel.tab.panelId) &&
-          panel.location.windowName !== windowName &&
-          !isProvisional(clusterId, panel.tab.panelId)
-      );
-      if (!moved.length) {
-        return;
+      const listed = new Map(panels.map((panel) => [panel.tab.panelId, panel]));
+      const wasIncoming = incomingIds.current.get(clusterId);
+      const moved = (current.current.local[clusterId] ?? [])
+        .map((tab) => tab.panelId)
+        .filter(
+          (panelId) =>
+            !isProvisional(clusterId, panelId) &&
+            isForeignLocalPanel(listed.get(panelId), panelId, windowName, wasIncoming)
+        );
+      if (moved.length) {
+        removeWorkspacePanels(clusterId, moved);
       }
-      removeWorkspacePanels(
-        clusterId,
-        moved.map((panel) => panel.tab.panelId)
-      );
     },
     [windowName, isProvisional, removeWorkspacePanels]
   );
+
+  const applyIncomingTransfers = useCallback(
+    (clusterId: string, panels: panelwindow.WorkspacePanel[]) => {
+      const transfers = incomingGroupTransfers(clusterId, panels, windowName);
+      incomingIds.current.set(
+        clusterId,
+        new Set(transfers.flatMap((transfer) => transfer.tabs.map((tab) => tab.panelId)))
+      );
+      setIncomingByCluster((byCluster) =>
+        JSON.stringify(byCluster[clusterId] ?? []) === JSON.stringify(transfers)
+          ? byCluster
+          : { ...byCluster, [clusterId]: transfers }
+      );
+    },
+    [windowName]
+  );
+
+  // A view that stops showing a cluster no longer receives its moves.
+  useEffect(() => {
+    for (const clusterId of incomingIds.current.keys()) {
+      if (!selectedClusterIds.includes(clusterId)) {
+        incomingIds.current.delete(clusterId);
+      }
+    }
+    setIncomingByCluster((byCluster) =>
+      Object.keys(byCluster).every((clusterId) => selectedClusterIds.includes(clusterId))
+        ? byCluster
+        : Object.fromEntries(
+            Object.entries(byCluster).filter(([clusterId]) =>
+              selectedClusterIds.includes(clusterId)
+            )
+          )
+    );
+  }, [selectedClusterIds]);
 
   const mountRetained = useCallback(
     (clusterId: string, claimed: panelwindow.WorkspacePanel[]) => {
@@ -330,6 +431,7 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
         revisions.set(clusterId, snapshot.revision);
         const panels = snapshot.panels || [];
         removeForeignPlacements(clusterId, panels);
+        applyIncomingTransfers(clusterId, panels);
         await restoreRetained(clusterId, panels);
       } catch (error) {
         reportRefreshError(clusterId, error);
@@ -370,6 +472,7 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
   }, [
     selectedClusterIds,
     removeForeignPlacements,
+    applyIncomingTransfers,
     restoreRetained,
     sync,
     activity,
@@ -389,14 +492,17 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
   }, [windowName, kubeconfigsLoading]);
   return (
     <PublicationContext.Provider value={sync}>
-      <PanelLayoutLifecycle />
-      {children}
+      <IncomingTransfersContext.Provider value={incomingTransfers}>
+        <PanelLayoutLifecycle />
+        {children}
+      </IncomingTransfersContext.Provider>
     </PublicationContext.Provider>
   );
 }
 
+// A retained panel the directory is moving belongs to its transfer, not to a claim.
 function retainedPanelOrder(panels: panelwindow.WorkspacePanel[]): panelwindow.WorkspacePanel[] {
   return panels
-    .filter((panel) => panel.location.kind === 'retained')
+    .filter((panel) => panel.location.kind === 'retained' && !panel.transfer)
     .sort((a, b) => a.location.index - b.location.index);
 }

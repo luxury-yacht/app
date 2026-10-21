@@ -30,6 +30,9 @@ type panelGroupTransfer struct {
 	state        PanelWindowState
 	dockTarget   string
 	dockPosition string
+	// release cancels the directory-owned placement move. Every native transfer
+	// ends in finishLocked, so a failed or abandoned transfer cannot pin panels.
+	release func()
 }
 
 type panelIndex struct {
@@ -84,8 +87,36 @@ func (p *panelIndex) AcknowledgeOpen(
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
-	p.transfers.finish(transferID)
+	p.finishLocked(transferID)
 	return p.descriptorLocked(windowName), nil
+}
+
+// Pending validates a transfer without finishing it, so the caller can commit
+// directory placement before the native transfer ends.
+func (p *panelIndex) Pending(windowName, transferID string, state PanelWindowState) (PanelWindowDescriptor, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if _, err := p.pendingLocked(windowName, transferID, state); err != nil {
+		return PanelWindowDescriptor{}, err
+	}
+	return p.descriptorLocked(windowName), nil
+}
+
+func (p *panelIndex) attachRelease(windowName, transferID string, release func()) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	transfer := p.windowTransferLocked(windowName)
+	if transfer == nil || p.snapshots[windowName].TransferID != transferID {
+		release()
+		return
+	}
+	transfer.release = release
+}
+
+func (p *panelIndex) finishLocked(transferID string) {
+	if transfer := p.transfers.finish(transferID); transfer != nil && transfer.release != nil {
+		transfer.release()
+	}
 }
 
 func (p *panelIndex) BeginDock(windowName string, snapshot PanelGroupSnapshot, targetWindow, targetPosition string) error {
@@ -184,7 +215,7 @@ func (p *panelIndex) FailTransfer(windowName, transferID string) error {
 	if transfer.state == PanelWindowStateOpening {
 		p.removeLocked(windowName)
 	} else {
-		p.transfers.finish(transferID)
+		p.finishLocked(transferID)
 	}
 	return nil
 }
@@ -299,7 +330,7 @@ func (p *panelIndex) removeLocked(windowName string) {
 	}
 	delete(p.panels, windowName)
 	if p.windowTransferLocked(windowName) != nil {
-		p.transfers.finish(p.snapshots[windowName].TransferID)
+		p.finishLocked(p.snapshots[windowName].TransferID)
 	}
 	delete(p.snapshots, windowName)
 	groups := p.clusterGroups[spec.ClusterID]

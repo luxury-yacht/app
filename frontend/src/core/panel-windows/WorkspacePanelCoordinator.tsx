@@ -27,9 +27,7 @@ import {
   onPanelTabTransferInsertRequested,
   onPanelTabTransferRequested,
   onPanelWindowClosed,
-  onPanelWindowDockRequested,
   onPanelWindowOpened,
-  onPanelWindowTransferFailed,
   onPanelWorkspaceFocusRequested,
   requestClusterTabTransfer,
   requestPanelTabTransfer,
@@ -82,15 +80,18 @@ const isAuthoritativeTransferSource = (
 };
 
 import { WorkspacePanelLifecycle } from './WorkspacePanelLifecycle';
-import { usePanelWorkspaceSync, WorkspacePanelSync } from './WorkspacePanelSync';
+import {
+  type IncomingGroupTransfer,
+  useIncomingGroupTransfers,
+  usePanelWorkspaceSync,
+  WorkspacePanelSync,
+} from './WorkspacePanelSync';
 export function WorkspacePanelCoordinator({ children }: Readonly<{ children: React.ReactNode }>) {
   const windowName = getWindowIdentity();
   const { openPanels, pendingNativeOpenPanelIds, removeOwnedPanel } = useObjectPanelState();
   const activeTabs = useObjectPanelActiveTabs();
   const { selectedClusterId, selectedClusterIds } = useKubeconfig();
   const guards = usePanelLifecycleGuardRegistry();
-  const [pendingDockRequest, setPendingDockRequest] =
-    useState<panelwindow.WindowDockRequestedEvent | null>(null);
   const pendingFloatGroupIdsRef = useRef(
     new Map<
       string,
@@ -153,21 +154,20 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         autoFloat,
       });
       guards.freeze(snapshot.transferId, group.tabs);
-      void workspacePanelPublication
-        .flush()
-        .then(() => beginPanelWindowOpen(windowName, snapshot))
-        .catch((error) => {
-          guards.releaseTransfer(snapshot.transferId);
-          const pending = pendingFloatGroupIdsRef.current.get(groupId);
-          pendingFloatGroupIdsRef.current.delete(groupId);
-          if (pending?.autoFloat) {
-            queueAutoFloatRollback(pending.snapshot);
-          }
-          reportOperationalError(error, {
-            source: 'WorkspacePanelCoordinator',
-            action: 'float-group',
-          });
+      // The directory validates the group against its own placement, so a
+      // queued docked publication need not land first.
+      void beginPanelWindowOpen(windowName, snapshot).catch((error) => {
+        guards.releaseTransfer(snapshot.transferId);
+        const pending = pendingFloatGroupIdsRef.current.get(groupId);
+        pendingFloatGroupIdsRef.current.delete(groupId);
+        if (pending?.autoFloat) {
+          queueAutoFloatRollback(pending.snapshot);
+        }
+        reportOperationalError(error, {
+          source: 'WorkspacePanelCoordinator',
+          action: 'float-group',
         });
+      });
       return true;
     },
     [activeTabs, guards, openPanels, windowName, pendingNativeOpenPanelIds, queueAutoFloatRollback]
@@ -281,22 +281,6 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
     },
     [queueAutoFloatRollback, guards.releaseTransfer]
   );
-  const handleDockRequest = useCallback((request: panelwindow.WindowDockRequestedEvent) => {
-    setPendingDockRequest(request);
-  }, []);
-  const handleDockRequestSettled = useCallback(
-    (request: panelwindow.WindowDockRequestedEvent, committed: boolean) => {
-      if (!committed) {
-        for (const tab of request.snapshot.tabs ?? []) {
-          removeOwnedPanel(request.snapshot.clusterId, tab.panelId);
-        }
-      }
-      setPendingDockRequest((current) =>
-        current?.transferId === request.transferId ? null : current
-      );
-    },
-    [removeOwnedPanel]
-  );
   const handleAutoFloatRollbackSettled = useCallback((transferId: string) => {
     setPendingAutoFloatRollbacks((current) =>
       current.filter((snapshot) => snapshot.transferId !== transferId)
@@ -348,11 +332,8 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
         <ClusterTabTransferCoordinator />
         <WorkspaceObjectRouteCoordinator
           windowName={windowName}
-          pendingDockRequest={pendingDockRequest}
           pendingAutoFloatRollbacks={pendingAutoFloatRollbacks}
           onWindowOpened={handlePanelWindowOpened}
-          onDockRequest={handleDockRequest}
-          onDockRequestSettled={handleDockRequestSettled}
           onOwnedPanelWindowClosed={handlePanelWindowClosed}
           onAutoFloatRollbackSettled={handleAutoFloatRollbackSettled}
         >
@@ -364,24 +345,15 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
 }
 function WorkspaceObjectRouteCoordinator({
   windowName,
-  pendingDockRequest,
   pendingAutoFloatRollbacks,
   onWindowOpened,
-  onDockRequest,
-  onDockRequestSettled,
   onOwnedPanelWindowClosed,
   onAutoFloatRollbackSettled,
   children,
 }: Readonly<{
   windowName: string;
-  pendingDockRequest: panelwindow.WindowDockRequestedEvent | null;
   pendingAutoFloatRollbacks: panelwindow.GroupSnapshot[];
   onWindowOpened: (event: panelwindow.WindowOpenedEvent) => void;
-  onDockRequest: (
-    request: panelwindow.WindowDockRequestedEvent,
-    targetPosition: 'right' | 'bottom'
-  ) => void;
-  onDockRequestSettled: (request: panelwindow.WindowDockRequestedEvent, committed: boolean) => void;
   onOwnedPanelWindowClosed: (windowName: string, groupId?: string) => void;
   onAutoFloatRollbackSettled: (transferId: string) => void;
   children: React.ReactNode;
@@ -402,9 +374,6 @@ function WorkspaceObjectRouteCoordinator({
   const pendingTargets = useRef(new Map<string, panelwindow.TabTransferRequest>());
   const sync = usePanelWorkspaceSync();
   const flushPublication = sync.flush;
-  const dockAttemptRef = useRef<{ key: string; timeout: number; acknowledging: boolean } | null>(
-    null
-  );
   const activateCluster = useCallback(
     (clusterId: string) => {
       const selection = selectedKubeconfigs.find(
@@ -546,180 +515,18 @@ function WorkspaceObjectRouteCoordinator({
   );
   useEffect(
     () =>
-      onPanelWindowDockRequested((event) => {
-        if (guards.isFrozen(event.transferId)) {
-          void failPanelWindowTransfer(windowName, event.windowName, event.transferId).catch(
-            (error) =>
-              reportOperationalError(error, {
-                source: 'WorkspacePanelCoordinator',
-                action: 'reject-dock-during-close',
-                clusterId: event.snapshot.clusterId,
-              })
-          );
-          return;
-        }
-        if (
-          !selectedClusterIds.includes(event.snapshot.clusterId) ||
-          (event.targetPosition !== 'right' && event.targetPosition !== 'bottom')
-        ) {
-          return;
-        }
-        guards.freeze(
-          event.transferId,
-          (event.snapshot.tabs ?? []).map((tab) => tab.panelId)
-        );
-        sync.stage(event.transferId, [
-          {
-            clusterId: event.snapshot.clusterId,
-            groupId: event.targetPosition,
-            tabs: event.snapshot.tabs,
-            activePanelId: event.snapshot.activePanelId,
-          },
-        ]);
-        restoreWorkspacePanels(event.snapshot, event.targetPosition);
-        onDockRequest(event, event.targetPosition);
-      }),
-    [selectedClusterIds, restoreWorkspacePanels, onDockRequest, sync.stage, guards, windowName]
-  );
-  useEffect(
-    () =>
       onPanelWindowClosed(({ windowName: closedWindowName, groupId }) =>
         onOwnedPanelWindowClosed(closedWindowName, groupId)
       ),
     [onOwnedPanelWindowClosed]
   );
-  const settleDockAttempt = useCallback(
-    (request: panelwindow.WindowDockRequestedEvent, committed: boolean, error?: unknown) => {
-      const key = `${request.windowName}\0${request.transferId}`;
-      if (dockAttemptRef.current?.key !== key) {
-        return;
-      }
-      window.clearTimeout(dockAttemptRef.current.timeout);
-      dockAttemptRef.current = null;
-      if (!committed) {
-        const panelIds = (request.snapshot.tabs ?? []).map((tab) => tab.panelId);
-        detachPanelGroup(request.snapshot.clusterId, panelIds);
-        discardPanelLayouts(request.snapshot.clusterId, panelIds);
-      }
-      guards.releaseTransfer(request.transferId);
-      sync.settle(request.transferId);
-      onDockRequestSettled(request, committed);
-      if (error) {
-        reportOperationalError(error, {
-          source: 'WorkspacePanelCoordinator',
-          action: committed ? 'acknowledge-dock' : 'rollback-dock',
-          clusterId: request.snapshot.clusterId,
-        });
-      }
-    },
-    [
-      detachPanelGroup,
-      discardPanelLayouts,
-      onDockRequestSettled,
-      sync.settle,
-      guards.releaseTransfer,
-    ]
-  );
-
-  useEffect(
-    () =>
-      onPanelWindowTransferFailed((event) => {
-        if (event.transferId !== pendingDockRequest?.transferId) {
-          return;
-        }
-        settleDockAttempt(pendingDockRequest, false);
-      }),
-    [pendingDockRequest, settleDockAttempt]
-  );
-
-  const beginDockAttempt = useCallback(
-    (request: panelwindow.WindowDockRequestedEvent, key: string) => {
-      if (dockAttemptRef.current?.key !== key) {
-        if (dockAttemptRef.current) {
-          window.clearTimeout(dockAttemptRef.current.timeout);
-        }
-        const timeout = window.setTimeout(() => {
-          if (dockAttemptRef.current?.key !== key || dockAttemptRef.current.acknowledging) {
-            return;
-          }
-          void failPanelWindowTransfer(windowName, request.windowName, request.transferId).catch(
-            (error) =>
-              reportOperationalError(error, {
-                source: 'WorkspacePanelCoordinator',
-                action: 'fail-dock-timeout',
-                clusterId: request.snapshot.clusterId,
-              })
-          );
-          settleDockAttempt(
-            request,
-            false,
-            new Error(`Panel dock timed out for ${request.windowName}`)
-          );
-        }, 15_000);
-        dockAttemptRef.current = { key, timeout, acknowledging: false };
-      }
-    },
-    [windowName, settleDockAttempt]
-  );
-
-  useEffect(() => {
-    if (!pendingDockRequest) {
-      return;
-    }
-    const key = `${pendingDockRequest.windowName}\0${pendingDockRequest.transferId}`;
-    beginDockAttempt(pendingDockRequest, key);
-    if (selectedClusterId !== pendingDockRequest.snapshot.clusterId) {
-      activateCluster(pendingDockRequest.snapshot.clusterId);
-      return;
-    }
-    const mountedPanelIds = new Set([...tabGroups.right.tabs, ...tabGroups.bottom.tabs]);
-    if (
-      !(pendingDockRequest.snapshot.tabs ?? []).every((tab) => mountedPanelIds.has(tab.panelId))
-    ) {
-      return;
-    }
-    const attempt = dockAttemptRef.current;
-    if (attempt?.key !== key || attempt.acknowledging) {
-      return;
-    }
-    attempt.acknowledging = true;
-    void flushPublication()
-      .then(() =>
-        acknowledgePanelWindowDock(
-          windowName,
-          pendingDockRequest.windowName,
-          pendingDockRequest.transferId
-        )
-      )
-      .then(() => settleDockAttempt(pendingDockRequest, true))
-      .catch((error) => {
-        void failPanelWindowTransfer(
-          windowName,
-          pendingDockRequest.windowName,
-          pendingDockRequest.transferId
-        );
-        settleDockAttempt(pendingDockRequest, false, error);
-      });
-  }, [
-    beginDockAttempt,
+  useIncomingDockBack({
     windowName,
-    pendingDockRequest,
     selectedClusterId,
-    settleDockAttempt,
-    flushPublication,
     tabGroups,
     activateCluster,
-  ]);
-
-  useEffect(
-    () => () => {
-      if (dockAttemptRef.current) {
-        window.clearTimeout(dockAttemptRef.current.timeout);
-        dockAttemptRef.current = null;
-      }
-    },
-    []
-  );
+    flushPublication,
+  });
 
   useEffect(
     () =>
@@ -730,4 +537,117 @@ function WorkspaceObjectRouteCoordinator({
     [activateCluster, focusPanel]
   );
   return children;
+}
+
+type DockBackStatus = 'mounted' | 'acknowledging' | 'rejected';
+
+const reportDockBackError = (action: string, transfer: IncomingGroupTransfer) => (error: unknown) =>
+  reportOperationalError(error, {
+    source: 'WorkspacePanelCoordinator',
+    action,
+    clusterId: transfer.clusterId,
+  });
+
+// The directory stopped listing these moves: committed, cancelled, or source gone.
+function releaseSettledDockBacks(
+  statuses: Map<string, DockBackStatus>,
+  incoming: readonly IncomingGroupTransfer[],
+  release: (transferId: string) => void
+) {
+  const listed = new Set(incoming.map((transfer) => transfer.transferId));
+  for (const transferId of statuses.keys()) {
+    if (!listed.has(transferId)) {
+      statuses.delete(transferId);
+      release(transferId);
+    }
+  }
+}
+
+// Asks the directory to cancel a move this view cannot take; its next read then
+// drops any provisional copy.
+const cancelDockBack = (
+  windowName: string,
+  transfer: IncomingGroupTransfer,
+  onError: (error: unknown) => void
+) => {
+  void failPanelWindowTransfer(windowName, transfer.sourceWindowName, transfer.transferId).catch(
+    onError
+  );
+};
+
+// Projects whole-group dock-backs the directory targets at this view: mount a
+// provisional copy, acknowledge once it is visible, and release the guard when
+// the directory stops listing the move (commit, cancel, or vanished source).
+function useIncomingDockBack({
+  windowName,
+  selectedClusterId,
+  tabGroups,
+  activateCluster,
+  flushPublication,
+}: Readonly<{
+  windowName: string;
+  selectedClusterId: string;
+  tabGroups: ReturnType<typeof useDockablePanelContext>['tabGroups'];
+  activateCluster: (clusterId: string) => void;
+  flushPublication: () => Promise<void>;
+}>) {
+  const incoming = useIncomingGroupTransfers();
+  const guards = usePanelLifecycleGuardRegistry();
+  const restoreWorkspacePanels = useRestoreWorkspacePanels();
+  const statuses = useRef(new Map<string, DockBackStatus>());
+
+  useEffect(() => {
+    releaseSettledDockBacks(statuses.current, incoming, (transferId) =>
+      guards.releaseTransfer(transferId)
+    );
+    for (const transfer of incoming) {
+      if (statuses.current.has(transfer.transferId)) {
+        continue;
+      }
+      // A view frozen by its own close or another move cannot take the group.
+      if (guards.isFrozen(transfer.transferId)) {
+        statuses.current.set(transfer.transferId, 'rejected');
+        cancelDockBack(
+          windowName,
+          transfer,
+          reportDockBackError('reject-dock-during-close', transfer)
+        );
+        continue;
+      }
+      statuses.current.set(transfer.transferId, 'mounted');
+      guards.freeze(
+        transfer.transferId,
+        transfer.tabs.map((tab) => tab.panelId)
+      );
+      restoreWorkspacePanels(transfer, transfer.groupId);
+    }
+  }, [incoming, guards, windowName, restoreWorkspacePanels]);
+
+  useEffect(() => {
+    const mounted = new Set([...tabGroups.right.tabs, ...tabGroups.bottom.tabs]);
+    for (const transfer of incoming) {
+      if (statuses.current.get(transfer.transferId) !== 'mounted') {
+        continue;
+      }
+      if (selectedClusterId !== transfer.clusterId) {
+        activateCluster(transfer.clusterId);
+        continue;
+      }
+      if (!transfer.tabs.every((tab) => mounted.has(tab.panelId))) {
+        continue;
+      }
+      statuses.current.set(transfer.transferId, 'acknowledging');
+      // Queued docked snapshots land before the commit, so none can omit the
+      // committed tabs afterwards.
+      void flushPublication()
+        .then(() =>
+          acknowledgePanelWindowDock(windowName, transfer.sourceWindowName, transfer.transferId)
+        )
+        .catch((error) => {
+          // The registry may already have cancelled it; only the commit error matters.
+          cancelDockBack(windowName, transfer, () => undefined);
+          reportDockBackError('acknowledge-dock', transfer)(error);
+        });
+    }
+  }, [incoming, tabGroups, selectedClusterId, activateCluster, flushPublication, windowName]);
 }

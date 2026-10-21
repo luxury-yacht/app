@@ -89,23 +89,6 @@ func TestWorkspaceClaimSurvivesPublicationBeforePanelMounts(t *testing.T) {
 	require.Empty(t, directory.Snapshot("production").Panels)
 }
 
-func TestWorkspaceGroupTransferValidatesEveryTabBeforeMovingAny(t *testing.T) {
-	directory := NewWorkspaceDirectory()
-	first, second := workspaceTab("production", "first"), workspaceTab("production", "second")
-	_, _, err := directory.Open(first, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "right"})
-	require.NoError(t, err)
-	_, _, err = directory.Open(second, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-b", GroupID: "right"})
-	require.NoError(t, err)
-	group := WorkspaceGroup{ClusterID: "production", GroupID: "native-group", Tabs: []TabSnapshot{first, second}, ActivePanelID: first.PanelID}
-	before := directory.Snapshot("production")
-	require.Error(t, directory.TransferGroup("app-a", "panel-1", PanelLocationWindow, group))
-	require.Equal(t, before, directory.Snapshot("production"))
-	group.Tabs = []TabSnapshot{first}
-	require.NoError(t, directory.TransferGroup("app-a", "panel-1", PanelLocationWindow, group))
-	require.Equal(t, "panel-1", directory.Snapshot("production").Panels[0].Location.WindowName)
-	require.Error(t, directory.TransferGroup("app-a", "panel-2", PanelLocationWindow, group))
-}
-
 func TestWorkspacePublicationAndTabTransferCommitAtomically(t *testing.T) {
 	directory := NewWorkspaceDirectory()
 	source, target, foreign := workspaceTab("production", "source"), workspaceTab("production", "target"), workspaceTab("production", "foreign")
@@ -177,25 +160,6 @@ func TestClusterViewTransferMovesDockedGroupsAndPreservesFloatingPanels(t *testi
 			require.Equal(t, 0, panel.Location.Index)
 		case floating.PanelID:
 			require.Equal(t, "panel-1", panel.Location.WindowName)
-		}
-	}
-}
-
-func TestDockedGroupTransferAppendsWithoutDuplicatingTheActiveTab(t *testing.T) {
-	directory := NewWorkspaceDirectory()
-	source, existing := workspaceTab("production", "source"), workspaceTab("production", "existing")
-	_, _, err := directory.Open(source, PanelLocation{Kind: PanelLocationWindow, WindowName: "panel-1", GroupID: "floating", Active: true})
-	require.NoError(t, err)
-	_, _, err = directory.Open(existing, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "right", Active: true})
-	require.NoError(t, err)
-	require.NoError(t, directory.TransferGroup("panel-1", "app-a", PanelLocationDocked, WorkspaceGroup{ClusterID: "production", GroupID: "right", Tabs: []TabSnapshot{source}, ActivePanelID: source.PanelID}))
-	for _, panel := range directory.Snapshot("production").Panels {
-		if panel.Tab.PanelID == source.PanelID {
-			require.Equal(t, 1, panel.Location.Index)
-			require.True(t, panel.Location.Active)
-		}
-		if panel.Tab.PanelID == existing.PanelID {
-			require.False(t, panel.Location.Active)
 		}
 	}
 }

@@ -225,7 +225,6 @@ type NativeDescriptor struct {
 
 const (
 	WindowOpenedEventName                      = "panel-window:opened"
-	WindowDockRequestedEventName               = "panel-window:dock-requested"
 	WindowFocusRequestedEventName              = "panel-window:focus-requested"
 	WindowCloseRequestedEventName              = "panel-window:close-requested"
 	WindowClosedEventName                      = "panel-window:closed"
@@ -241,13 +240,6 @@ type WindowOpenedEvent struct {
 	ClusterID  string        `json:"clusterId"`
 	GroupID    string        `json:"groupId"`
 	Snapshot   GroupSnapshot `json:"snapshot"`
-}
-
-type WindowDockRequestedEvent struct {
-	WindowName     string        `json:"windowName"`
-	TransferID     string        `json:"transferId"`
-	TargetPosition string        `json:"targetPosition"`
-	Snapshot       GroupSnapshot `json:"snapshot"`
 }
 
 type WindowFocusRequestedEvent struct {

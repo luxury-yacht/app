@@ -163,13 +163,12 @@ function PanelWindowSurface({
         activePanelId: group.activeTab ?? group.tabs[0] ?? '',
       };
       guards.freeze(snapshot.transferId, group.tabs);
-      void nativePanelPublication
-        .flush()
-        .then(() => beginPanelWindowDock(descriptor.windowName, targetPosition, snapshot))
-        .catch((error) => {
-          guards.releaseTransfer(snapshot.transferId);
-          reportOperationalError(error, { source: 'PanelWindowApp', action: 'dock-group' });
-        });
+      // The directory validates the group against its own placement, so a
+      // queued window snapshot need not land first.
+      void beginPanelWindowDock(descriptor.windowName, targetPosition, snapshot).catch((error) => {
+        guards.releaseTransfer(snapshot.transferId);
+        reportOperationalError(error, { source: 'PanelWindowApp', action: 'dock-group' });
+      });
     },
     [descriptor, guards, getTabSnapshot]
   );

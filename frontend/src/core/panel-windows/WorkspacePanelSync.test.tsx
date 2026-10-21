@@ -5,7 +5,11 @@ import { clusterWorkspaceStore } from '@/core/cluster-workspace/clusterWorkspace
 import type { ClusterClosePreflight } from '@/modules/kubernetes/config/KubeconfigContext';
 import { PanelLifecycleGuardProvider } from './panelLifecycleGuards';
 import { WorkspacePanelLifecycle } from './WorkspacePanelLifecycle';
-import { usePanelWorkspaceSync, WorkspacePanelSync } from './WorkspacePanelSync';
+import {
+  useIncomingGroupTransfers,
+  usePanelWorkspaceSync,
+  WorkspacePanelSync,
+} from './WorkspacePanelSync';
 
 const mocks = vi.hoisted(() => ({
   selected: ['production'],
@@ -109,9 +113,11 @@ vi.mock('./index', () => ({
 let root: ReactDOM.Root;
 let container: HTMLDivElement;
 let sync: ReturnType<typeof usePanelWorkspaceSync>;
+let incoming: ReturnType<typeof useIncomingGroupTransfers>;
 let releaseWorkspace: () => void;
 function Probe() {
   sync = usePanelWorkspaceSync();
+  incoming = useIncomingGroupTransfers();
   return null;
 }
 beforeEach(async () => {
@@ -556,4 +562,73 @@ it('processes a retained-panel notification received while an earlier claim is p
   await act(async () => mocks.changed?.({ clusterId: 'production' }));
   await act(async () => finish({ render: true, panel: first }));
   expect(mocks.dock).toHaveBeenCalledWith('production', ['second'], 'second', 'bottom', undefined);
+});
+
+// A native window docking its group into this app view ('app-a'). The directory
+// keeps the source placement until commit and records this view as the target.
+const dockingPanel = (overrides: Record<string, unknown> = {}) => ({
+  tab: mocks.local.production[0],
+  location: {
+    kind: 'panel-window',
+    windowName: 'panel-1',
+    groupId: 'native',
+    index: 0,
+    active: true,
+  },
+  transfer: {
+    transferId: 'dock-1',
+    target: { kind: 'docked', windowName: 'app-a', groupId: 'bottom', index: 0, active: true },
+  },
+  ...overrides,
+});
+
+async function readDirectory(revision: number, panels: unknown[]) {
+  mocks.read.mockResolvedValue({ revision, panels });
+  await act(async () => mocks.changed?.({ clusterId: 'production' }));
+}
+
+it('lists a dock-back group the directory targets at this view and keeps its provisional copy', async () => {
+  await readDirectory(2, [dockingPanel()]);
+  expect(incoming).toEqual([
+    {
+      transferId: 'dock-1',
+      clusterId: 'production',
+      sourceWindowName: 'panel-1',
+      groupId: 'bottom',
+      tabs: [mocks.local.production[0]],
+      activePanelId: 'api',
+    },
+  ]);
+  expect(mocks.detach).not.toHaveBeenCalled();
+  expect(mocks.remove).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['the directory cancels the move', [dockingPanel({ transfer: undefined })]],
+  ['the native source closes with its panels', []],
+])('drops the provisional copy when %s', async (_case, panels) => {
+  await readDirectory(2, [dockingPanel()]);
+  await readDirectory(3, panels);
+  expect(incoming).toEqual([]);
+  expect(mocks.detach).toHaveBeenCalledWith('production', ['api']);
+  expect(mocks.remove).toHaveBeenCalledWith('production', 'api');
+});
+
+it('keeps the copy once the directory commits the dock to this view', async () => {
+  await readDirectory(2, [dockingPanel()]);
+  await readDirectory(3, [
+    {
+      tab: mocks.local.production[0],
+      location: { kind: 'docked', windowName: 'app-a', groupId: 'bottom', index: 0, active: true },
+    },
+  ]);
+  expect(incoming).toEqual([]);
+  expect(mocks.remove).not.toHaveBeenCalled();
+});
+
+it('ignores an older directory read that predates the move', async () => {
+  await readDirectory(2, [dockingPanel()]);
+  await readDirectory(1, [dockingPanel({ transfer: undefined })]);
+  expect(incoming).toHaveLength(1);
+  expect(mocks.remove).not.toHaveBeenCalled();
 });

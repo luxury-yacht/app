@@ -22,15 +22,13 @@ func TestFailedGroupDockIsNotDeliveredWhenTargetBecomesReady(t *testing.T) {
 	snapshot.TransferID = "late-dock"
 	require.NoError(t, registry.BeginPanelWindowDock(source.WindowName, "right", snapshot))
 	require.NoError(t, registry.FailPanelWindowTransfer(source.WindowName, source.WindowName, snapshot.TransferID))
-	insertions := 0
-	registry.emitWindowEvent = func(_ string, name string, _ any) bool {
-		if name == panelwindow.WindowDockRequestedEventName {
-			insertions++
-		}
-		return true
-	}
 	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(owner.Name()))
-	require.Zero(t, insertions)
+	// A target that becomes ready later reads the directory; nothing targets it.
+	workspace, err := registry.GetPanelWorkspace(owner.Name(), snapshot.ClusterID)
+	require.NoError(t, err)
+	require.Len(t, workspace.Panels, 1)
+	require.Equal(t, source.WindowName, workspace.Panels[0].Location.WindowName)
+	require.Zero(t, workspace.Panels[0].Transfer)
 	require.Equal(t, PanelWindowStateLive, registry.panels.State(source.WindowName))
 }
 
