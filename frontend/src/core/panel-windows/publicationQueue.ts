@@ -80,20 +80,22 @@ export class PanelPublicationQueue {
     this.#lastCommand = this.#tail;
   }
 
-  async #landCommands(): Promise<void> {
-    let pending: Promise<void>;
-    do {
-      pending = this.#lastCommand;
-      await pending;
-    } while (pending !== this.#lastCommand);
+  #landCommands(): Promise<void> {
+    return untilSettled(() => this.#lastCommand);
   }
 
-  async #drain(): Promise<void> {
-    let pending: Promise<void>;
-    do {
-      pending = this.#tail;
-      await pending;
-    } while (pending !== this.#tail);
+  #drain(): Promise<void> {
+    return untilSettled(() => this.#tail);
+  }
+}
+
+// Waits for the promise read() returns, and again if work queued meanwhile
+// replaced it.
+async function untilSettled(read: () => Promise<void>): Promise<void> {
+  const pending = read();
+  await pending;
+  if (pending !== read()) {
+    await untilSettled(read);
   }
 }
 
