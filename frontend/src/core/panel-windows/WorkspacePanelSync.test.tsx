@@ -4,9 +4,12 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { clusterWorkspaceStore } from '@/core/cluster-workspace/clusterWorkspaceStore';
 import type { ClusterClosePreflight } from '@/modules/kubernetes/config/KubeconfigContext';
 import { PanelLifecycleGuardProvider } from './panelLifecycleGuards';
+import { nativePanelPublication } from './publicationQueue';
+import { useClosedPanelIntents } from './useClosedPanelIntents';
 import { WorkspacePanelLifecycle } from './WorkspacePanelLifecycle';
 import {
   useIncomingGroupTransfers,
+  usePanelWorkspaceOpen,
   usePanelWorkspaceSync,
   WorkspacePanelSync,
 } from './WorkspacePanelSync';
@@ -591,6 +594,71 @@ it('lists each group of a cluster view move as a view move', async () => {
     ])
   );
   expect(incoming).toHaveLength(2);
+});
+
+it('reopens an object only after this view retries its failed close', async () => {
+  const tab = mocks.local.production[0] as never;
+  mocks.closeIntent.mockRejectedValueOnce(new Error('ipc unavailable'));
+  act(() => mocks.closedListener?.('production', ['api']));
+  await act(async () => undefined);
+  mocks.open.mockResolvedValueOnce({ render: true });
+
+  await act(async () => {
+    await sync.openPanel(tab);
+  });
+
+  expect(mocks.closeIntent).toHaveBeenCalledTimes(2);
+  expect(mocks.closeIntent.mock.invocationCallOrder[1]).toBeLessThan(
+    mocks.open.mock.invocationCallOrder[0] ?? 0
+  );
+});
+
+it('reopens an object only after a close still in flight lands', async () => {
+  let release: () => void = () => undefined;
+  mocks.closeIntent.mockImplementationOnce(
+    () =>
+      new Promise<undefined>((resolve) => {
+        release = () => resolve(undefined);
+      })
+  );
+  act(() => mocks.closedListener?.('production', ['api']));
+  mocks.open.mockResolvedValueOnce({ render: true });
+
+  const opening = sync.openPanel(mocks.local.production[0] as never);
+  await act(async () => undefined);
+  expect(mocks.open).not.toHaveBeenCalled();
+  release();
+  await act(async () => {
+    await opening;
+  });
+  expect(mocks.open).toHaveBeenCalledOnce();
+});
+
+it('opens from a native window only after its failed close is retried', async () => {
+  const nativeContainer = document.createElement('div');
+  const nativeRoot = ReactDOM.createRoot(nativeContainer);
+  let open: ReturnType<typeof usePanelWorkspaceOpen> | undefined;
+  function NativeProbe() {
+    useClosedPanelIntents(nativePanelPublication, 'panel-1');
+    open = usePanelWorkspaceOpen();
+    return null;
+  }
+  await act(async () => nativeRoot.render(<NativeProbe />));
+  mocks.closeIntent.mockRejectedValueOnce(new Error('ipc unavailable'));
+  act(() => mocks.closedListener?.('production', ['api']));
+  await act(async () => undefined);
+  mocks.open.mockResolvedValueOnce({ render: true });
+
+  await act(async () => {
+    await open?.(mocks.local.production[0] as never);
+  });
+
+  expect(mocks.closeIntent).toHaveBeenCalledTimes(2);
+  expect(mocks.closeIntent).toHaveBeenLastCalledWith('panel-1', 'production', 'api');
+  expect(mocks.closeIntent.mock.invocationCallOrder[1]).toBeLessThan(
+    mocks.open.mock.invocationCallOrder[0] ?? 0
+  );
+  await act(async () => nativeRoot.unmount());
 });
 
 it('sends a close intent for each panel the user closes and drains it on flush', async () => {

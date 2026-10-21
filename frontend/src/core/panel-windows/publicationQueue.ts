@@ -1,12 +1,22 @@
-// Keep the failure separate from the tail: the next snapshot may recover the
+type QueuedOperation = {
+  operation: () => Promise<void>;
+  onError?: (error: unknown) => void;
+};
+
+type FailedOperation = QueuedOperation & { error: unknown };
+
+// Keep failures separate from the tail: the next operation may recover the
 // transport, but a close or transfer must not mistake a caught error for success.
+// Arrangement reports supersede each other, so only the latest failed one is
+// kept. Commands (close intents) never supersede: each failed command stays
+// pending until a retry lands, so a later successful report cannot hide it.
 export class PanelPublicationQueue {
   #tail: Promise<void> = Promise.resolve();
-  #failure: {
-    error: unknown;
-    operation: () => Promise<void>;
-    onError?: (error: unknown) => void;
-  } | null = null;
+  // Settles once the latest queued command has run, so callers that need only
+  // commands to land do not wait on reports queued after it.
+  #lastCommand: Promise<void> = Promise.resolve();
+  #failure: FailedOperation | null = null;
+  #failedCommands: FailedOperation[] = [];
 
   publish(operation: () => Promise<void>, onError?: (error: unknown) => void): void {
     this.#tail = this.#tail.then(operation).then(
@@ -20,8 +30,31 @@ export class PanelPublicationQueue {
     );
   }
 
+  command(operation: () => Promise<void>, onError?: (error: unknown) => void): void {
+    this.#enqueueCommand({ operation, onError }, true);
+  }
+
+  // Lands every queued command, retrying each failed one once. A retry that
+  // fails again stays pending and is not reported twice; the caller sees the
+  // rejection.
+  async settleCommands(): Promise<void> {
+    await this.#landCommands();
+    const failed = this.#failedCommands;
+    this.#failedCommands = [];
+    for (const command of failed) {
+      this.#enqueueCommand(command, false);
+    }
+    // Also waits for retries a concurrent settle queued.
+    await this.#landCommands();
+    const [stillFailed] = this.#failedCommands;
+    if (stillFailed) {
+      throw stillFailed.error;
+    }
+  }
+
   async flush(): Promise<void> {
     await this.#drain();
+    await this.settleCommands();
     if (this.#failure) {
       // Retry once at the close/transfer boundary, even if the layout has not
       // changed. A newer publication supersedes the failed snapshot.
@@ -32,6 +65,24 @@ export class PanelPublicationQueue {
     if (this.#failure) {
       throw this.#failure.error;
     }
+  }
+
+  #enqueueCommand(command: QueuedOperation, report: boolean): void {
+    this.#tail = this.#tail.then(command.operation).then(undefined, (error: unknown) => {
+      this.#failedCommands.push({ ...command, error });
+      if (report) {
+        command.onError?.(error);
+      }
+    });
+    this.#lastCommand = this.#tail;
+  }
+
+  async #landCommands(): Promise<void> {
+    let pending: Promise<void>;
+    do {
+      pending = this.#lastCommand;
+      await pending;
+    } while (pending !== this.#lastCommand);
   }
 
   async #drain(): Promise<void> {

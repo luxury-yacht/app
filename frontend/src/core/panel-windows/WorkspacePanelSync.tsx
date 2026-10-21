@@ -27,7 +27,11 @@ import {
   publishDockedPanels,
 } from './index';
 import { PanelLayoutLifecycle } from './PanelLayoutLifecycle';
-import { workspacePanelPublication } from './publicationQueue';
+import {
+  nativePanelPublication,
+  type PanelPublicationQueue,
+  workspacePanelPublication,
+} from './publicationQueue';
 import { useClosedPanelIntents } from './useClosedPanelIntents';
 import { useRemoveWorkspacePanels } from './useRemoveWorkspacePanels';
 import { useRestoreWorkspacePanels } from './useRestoreWorkspacePanels';
@@ -118,8 +122,16 @@ export function usePanelWorkspaceSync(): WorkspaceSync {
   return sync;
 }
 
-const openNativePanel = (tab: panelwindow.TabSnapshot) =>
-  openPanelWorkspaceObject(getWindowIdentity(), tab);
+// Land a renderer's queued closes before it asks the directory to open, so the
+// directory cannot answer with a panel the user already closed here. Best
+// effort: a close that still fails was reported and is retried at the next flush.
+const settleClosedPanels = (queue: PanelPublicationQueue) =>
+  queue.settleCommands().catch(() => undefined);
+
+const openNativePanel = async (tab: panelwindow.TabSnapshot) => {
+  await settleClosedPanels(nativePanelPublication);
+  return openPanelWorkspaceObject(getWindowIdentity(), tab);
+};
 
 // App views drain these opens before relinquishing cluster membership. Native
 // panel views have a fixed cluster and use their own close handshake.
@@ -210,9 +222,10 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
         if (!current.current.selectedClusterIds.includes(clusterId)) {
           return null;
         }
-        const result = await activity.run(clusterId, () =>
-          openPanelWorkspaceObject(windowName, tab)
-        );
+        const result = await activity.run(clusterId, async () => {
+          await settleClosedPanels(queue.current);
+          return openPanelWorkspaceObject(windowName, tab);
+        });
         return activity.isClosing(clusterId) ? null : result;
       },
       quiesceCluster: async (clusterId) => {

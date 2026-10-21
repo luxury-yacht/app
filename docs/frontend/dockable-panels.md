@@ -168,13 +168,16 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   a cluster with no panels; a transaction may finish its own reconstruction
   while frozen.
 - Close and transfer flushes (including a move target's flush before it
-  acknowledges) retry the latest failed publication once and reject if that
-  fails. Retained-panel notifications coalesce while claims run; successful
+  acknowledges) retry every failed close intent and the latest failed
+  publication once, and reject if any still fails. A newer publication
+  supersedes a failed one; a close intent stays pending until a retry lands.
+  Before a renderer asks the directory to open an object, its queued close
+  intents land first (best effort), so a reopen never finds the panel it just
+  closed. Retained-panel notifications coalesce while claims run; successful
   claims mount even if a later claim fails.
-- Known limits: a close intent lost to an IPC failure leaves its panel in the
-  directory until its window or cluster closes, because the outbound queue
-  retries only its latest failure. A dock-back whose directory move fails to
-  begin can leave behind the app window it created for the cluster.
+- Known limits: until a failed close intent lands, other views still see the
+  panel. A dock-back whose directory move fails to begin can leave behind the
+  app window it created for the cluster.
 
 ## Refresh and runtime state
 
