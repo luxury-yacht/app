@@ -34,6 +34,13 @@ func (s *DesktopShell) OpenPanelWorkspaceObject(windowName string, tab panelwind
 	return s.panelWorkspace.OpenPanelWorkspaceObject(windowName, tab)
 }
 
+func (s *DesktopShell) ClosePanelWorkspaceObject(windowName, clusterID, panelID string) error {
+	if s.panelWorkspace == nil {
+		return fmt.Errorf("panel workspace registry is not available")
+	}
+	return s.panelWorkspace.ClosePanelWorkspaceObject(windowName, clusterID, panelID)
+}
+
 func (s *DesktopShell) PublishDockedPanels(windowName string, groups []panelwindow.WorkspaceGroup) error {
 	if s.panelWorkspace == nil {
 		return fmt.Errorf("panel workspace registry is not available")

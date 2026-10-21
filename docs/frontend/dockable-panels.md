@@ -140,9 +140,8 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   read shows the move cancelled or its source gone. Native side effects (show,
   close) precede the commit, so failure cancels the pending move with no
   rollback.
-- Cluster-tab moves are directory-owned too. The source flushes its latest
-  snapshot (tab closes still reach the directory as publications), then sends
-  only its view state. The directory moves every docked panel of that cluster in
+- Cluster-tab moves are directory-owned too. The source flushes its outbound
+  queue (so queued close intents land first), then sends only its view state. The directory moves every docked panel of that cluster in
   the source view into the same edges of the target, after their existing tabs,
   and the insert event names those panels. The target's panel projection mounts
   them like any move; the cluster handoff, not `acknowledgePanelTransfer`,
@@ -186,19 +185,24 @@ Backend surfaces:
   rollback) and keep content visible; a compact corner status appears only after
   500 ms, never blanking the window, and settlement clears it and any pending
   delay.
+- Publications report only a renderer's arrangement (edge, order, activation,
+  view) of the panels the directory places in it; they never open, close, claim,
+  or move a panel. Closing a tab is an intent (`closePanelWorkspaceObject`)
+  announced by `ObjectPanelStateContext.closePanel`/`onCloseObjectPanel`, never
+  by `removeOwnedPanel`, and queued with that renderer's publications; the
+  directory ignores a close for a panel it has since placed elsewhere or is
+  moving.
 - Before the backend removes an app view's cluster membership, shared-panel sync
   pauses that cluster's directory reads and object opens, drains admitted calls,
-  and flushes queued publications. Docked publications replace the whole
-  snapshot, so new ones wait until accepted closures reach the frontend
-  selection; rejected closes resume sync. The close-preparation lease keeps
-  input guarded through the transition; duplicate or stale close requests must
-  not reach the backend again.
+  and flushes queued publications and close intents. A closing cluster drops out
+  of later publications; other clusters keep publishing. The close-preparation
+  lease keeps input guarded through the transition; duplicate or stale close
+  requests must not reach the backend again.
 
 Sequences:
 
 - Panel tab: guard, get registry authorization, remove a non-final tab locally,
-  publish the remaining snapshot. A final tab stays until its window close
-  commits.
+  send its close intent. A final tab stays until its window close commits.
 - Panel window: guard the group, close the window, then dispose local state,
   remove shared entries, and release its runtime reference.
 - Cluster tab: guard and flush local docked panels. If another app window shows

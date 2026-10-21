@@ -47,6 +47,8 @@ const mocks = vi.hoisted(() => ({
   upsert: vi.fn(),
   dock: vi.fn(),
   open: vi.fn(),
+  closeIntent: vi.fn(async (..._args: unknown[]) => undefined),
+  closedListener: null as null | ((clusterId: string, panelIds: string[]) => void),
   report: vi.fn(),
   close: vi.fn(),
   preflight: null as ClusterClosePreflight | null,
@@ -82,6 +84,12 @@ vi.mock('@/modules/object-panel/contexts/ObjectPanelStateContext', () => ({
     restorePanelTabs: mocks.upsert,
     panelIdsForCluster: () => ['api'],
     getOwnedPanel: () => ({ nativeLocation: null }),
+    subscribeClosedPanels: (listener: typeof mocks.closedListener) => {
+      mocks.closedListener = listener;
+      return () => {
+        mocks.closedListener = null;
+      };
+    },
   }),
 }));
 vi.mock('@/ui/dockable', () => ({
@@ -98,6 +106,7 @@ vi.mock('@/utils/errorHandler', () => ({ reportOperationalError: mocks.report })
 vi.mock('./index', () => ({
   acknowledgePanelWorkspaceReady: mocks.ready,
   openPanelWorkspaceObject: mocks.open,
+  closePanelWorkspaceObject: mocks.closeIntent,
   publishDockedPanels: mocks.publish,
   closeClusterView: mocks.close,
   onWorkspaceCloseRequested: () => () => undefined,
@@ -192,12 +201,14 @@ it('waits for confirmed tab membership before panel reads, opens, and publicatio
 });
 
 it.each([true, false])(
-  'pauses full-window publication until close settles (accepted: %s)',
+  'leaves a closing cluster out of publications until its close settles (accepted: %s)',
   async (accepted) => {
     let settle: (closed: boolean) => void = () => undefined;
     await act(async () => {
       settle = await sync.quiesceCluster('production');
     });
+    // Publications only arrange, so leaving the cluster out closes nothing.
+    expect(mocks.publish).toHaveBeenLastCalledWith('app-a', []);
     mocks.publish.mockClear();
     mocks.read.mockClear();
     mocks.visible = [];
@@ -226,7 +237,7 @@ it.each([true, false])(
           </WorkspacePanelSync>
         )
       );
-      expect(mocks.publish).toHaveBeenLastCalledWith('app-a', []);
+      expect(mocks.publish).not.toHaveBeenCalled();
     } else {
       expect(mocks.publish).toHaveBeenLastCalledWith('app-a', [
         expect.objectContaining({ clusterId: 'production' }),
@@ -237,7 +248,9 @@ it.each([true, false])(
 );
 
 it('resumes synchronization after a failed publication prevents cluster closure', async () => {
+  // The initial snapshot, the one without the closing cluster, and its retry.
   mocks.publish
+    .mockRejectedValueOnce(new Error('publication failed'))
     .mockRejectedValueOnce(new Error('publication failed'))
     .mockRejectedValueOnce(new Error('publication failed'));
   await act(async () =>
@@ -578,4 +591,26 @@ it('lists each group of a cluster view move as a view move', async () => {
     ])
   );
   expect(incoming).toHaveLength(2);
+});
+
+it('sends a close intent for each panel the user closes and drains it on flush', async () => {
+  let release: () => void = () => undefined;
+  mocks.closeIntent.mockImplementationOnce(
+    () =>
+      new Promise<undefined>((resolve) => {
+        release = () => resolve(undefined);
+      })
+  );
+  act(() => mocks.closedListener?.('production', ['api', 'worker']));
+  let flushed = false;
+  const flushing = sync.flush().then(() => {
+    flushed = true;
+  });
+  await act(async () => undefined);
+  expect(mocks.closeIntent).toHaveBeenCalledWith('app-a', 'production', 'api');
+  expect(flushed).toBe(false);
+  release();
+  await act(async () => flushing);
+  expect(mocks.closeIntent).toHaveBeenLastCalledWith('app-a', 'production', 'worker');
+  expect(flushed).toBe(true);
 });

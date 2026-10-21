@@ -67,7 +67,7 @@ func TestClusterViewTransferMovesTheDirectorysPanelsAfterAcknowledgement(t *test
 	opened := tab
 	opened.PanelID, opened.ObjectRef.Name = "opened", "opened"
 	groups := []panelwindow.WorkspaceGroup{{ClusterID: "cluster-1", GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}}
-	require.NoError(t, registry.PublishDockedPanels(source, groups))
+	seedPanels(t, registry.workspace, source, panelwindow.PanelLocationDocked, groups)
 	// Opened in the source but not yet published: the view still carries it.
 	_, err := registry.OpenPanelWorkspaceObject(source, opened)
 	require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestFailedClusterViewTransferKeepsPanelsWithTheSourceWithoutPinningThem(t *
 	var events []string
 	registry.emitWindowEvent = func(name, event string, _ any) bool { events = append(events, name+":"+event); return true }
 	tab := validPanelGroupSnapshot().Tabs[0]
-	require.NoError(t, registry.PublishDockedPanels(source, []panelwindow.WorkspaceGroup{{ClusterID: "cluster-1", GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}}))
+	seedPanels(t, registry.workspace, source, panelwindow.PanelLocationDocked, []panelwindow.WorkspaceGroup{{ClusterID: "cluster-1", GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}})
 	request := panelwindow.ClusterTabTransferRequest{TransferID: "cluster-fails", ClusterID: "cluster-1", SourceWindowName: source, TargetWindowName: target}
 	require.NoError(t, registry.RequestClusterTabTransfer(target, request))
 	require.NoError(t, registry.AcceptClusterTabTransfer(source, request.TransferID, panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}"}))
@@ -103,7 +103,7 @@ func TestFailedClusterViewTransferKeepsPanelsWithTheSourceWithoutPinningThem(t *
 	require.Equal(t, source, panel.Location.WindowName)
 	require.Zero(t, panel.Transfer)
 	require.Contains(t, events, target+":"+panelwindow.WorkspaceChangedEventName, "the target re-reads and drops its copies")
-	require.NoError(t, registry.PublishDockedPanels(source, nil))
+	require.NoError(t, registry.ClosePanelWorkspaceObject(source, "cluster-1", tab.PanelID))
 	require.Empty(t, registry.workspace.Snapshot("cluster-1").Panels, "the source can close a panel whose view stayed")
 }
 
@@ -222,7 +222,7 @@ func TestClusterTabTransferClosesOnlyEmptySourceAfterAcknowledgement(t *testing.
 			}
 			tab := validPanelGroupSnapshot().Tabs[0]
 			groups := []panelwindow.WorkspaceGroup{{ClusterID: "cluster-1", GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}}
-			require.NoError(t, registry.PublishDockedPanels(source, groups))
+			seedPanels(t, registry.workspace, source, panelwindow.PanelLocationDocked, groups)
 			request := panelwindow.ClusterTabTransferRequest{TransferID: "last-tab", ClusterID: "cluster-1", SourceWindowName: source, TargetWindowName: target}
 			require.NoError(t, registry.RequestClusterTabTransfer(source, request))
 			t.Cleanup(func() { _ = registry.FailClusterTabTransfer(source, request.TransferID) })

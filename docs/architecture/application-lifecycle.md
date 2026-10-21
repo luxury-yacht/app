@@ -181,8 +181,10 @@ close sequences: [dockable-panels.md](../frontend/dockable-panels.md).
 - Panel-lifetime state owners (such as the panel metrics buffer) register a
   removal handler and drop state when a panel leaves every window; moves and
   retained placements are not removals.
-- Publications report only a renderer's own arrangement; they never move a
-  panel between renderers. Whole-group Float and dock-back and single panel-tab
+- Publications report only a renderer's own arrangement; they never open,
+  close, claim, or move a panel. A renderer closes a panel with an explicit
+  intent (`ClosePanelWorkspaceObject`), which removes it only if the directory
+  still places it in that renderer and is not moving it. Whole-group Float and dock-back and single panel-tab
   moves record a pending move in the directory (`BeginGroupTransfer`); a
   cluster-view transfer records one for every docked panel the directory places
   in the source view (`BeginViewTransfer`). Publications and `Open` cannot

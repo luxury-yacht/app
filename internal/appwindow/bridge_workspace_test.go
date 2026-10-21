@@ -24,6 +24,9 @@ func (r *sharedWorkspaceBridgeRecorder) GetPanelWorkspace(windowName, clusterID 
 func (r *sharedWorkspaceBridgeRecorder) OpenPanelWorkspaceObject(windowName string, tab panelwindow.TabSnapshot) (panelwindow.PanelOpenResult, error) {
 	return panelwindow.PanelOpenResult{Panel: panelwindow.WorkspacePanel{Tab: tab}, Render: true}, r.record(windowName, tab)
 }
+func (r *sharedWorkspaceBridgeRecorder) ClosePanelWorkspaceObject(windowName, clusterID, panelID string) error {
+	return r.record(windowName, clusterID, panelID)
+}
 func (r *sharedWorkspaceBridgeRecorder) PublishDockedPanels(windowName string, groups []panelwindow.WorkspaceGroup) error {
 	return r.record(windowName, groups)
 }
@@ -79,6 +82,9 @@ func TestSharedWorkspaceBridgePreservesIdentityAndReportsUnboundRegistry(t *test
 			}
 			return err
 		}, []any{"workspace-1", tab}},
+		{"ClosePanelWorkspaceObject", func(bridge *Bridge) error {
+			return bridge.ClosePanelWorkspaceObject("workspace-1", "production", "api")
+		}, []any{"workspace-1", "production", "api"}},
 		{"PublishDockedPanels", func(bridge *Bridge) error { return bridge.PublishDockedPanels("workspace-1", groups) }, []any{"workspace-1", groups}},
 		{"OpenClusterWindow", func(bridge *Bridge) error {
 			return bridge.OpenClusterWindow("workspace-1", "production")

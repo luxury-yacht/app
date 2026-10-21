@@ -537,7 +537,7 @@ func prepareRegistryTransferSource(t *testing.T, registry *Registry, request pan
 		descriptor, err := registry.panels.Descriptor(name)
 		require.NoError(t, err)
 		snapshot := descriptor.Snapshot
-		require.NoError(t, registry.workspace.PublishWindow(name, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{{ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}}))
+		seedNativeGroup(t, registry.workspace, name, snapshot)
 	}
 	if registry.lifecycle.Contains(request.SourceWindowName) {
 		_, _, err := registry.workspace.Open(request.Tab, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: request.SourceWindowName, GroupID: request.SourceGroupID})

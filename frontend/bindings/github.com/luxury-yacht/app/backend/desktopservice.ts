@@ -141,6 +141,14 @@ export function CloseClusterView(windowName: string, clusterID: string): $Cancel
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.CloseClusterView", windowName, clusterID);
 }
 
+/**
+ * ClosePanelWorkspaceObject removes a panel this renderer closed; publications
+ * only report arrangement, so a close must be explicit.
+ */
+export function ClosePanelWorkspaceObject(windowName: string, clusterID: string, panelID: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ClosePanelWorkspaceObject", windowName, clusterID, panelID);
+}
+
 export function CloseShellSession(sessionID: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.CloseShellSession", sessionID);
 }

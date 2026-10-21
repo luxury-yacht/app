@@ -20,6 +20,7 @@ func TestPanelTabMenuDockResolvesClusterTargetAndWaitsForRenderer(t *testing.T) 
 	source := livePanelWindowForTabTransfer(t, registry.panels, snapshot)
 	snapshot.SourceWindowName = source.WindowName
 	registry.emitWindowEvent = func(string, string, any) bool { return true }
+	seedNativeGroup(t, registry.workspace, source.WindowName, snapshot)
 	require.NoError(t, registry.UpdatePanelWindowSnapshot(source.WindowName, snapshot))
 	var events []capturedPanelWindowEvent
 	registry.emitWindowEvent = func(target, name string, payload any) bool {
@@ -57,6 +58,7 @@ func TestPanelTabMenuDockCreatesAnAppViewWithoutAnExistingAppWindow(t *testing.T
 	source := livePanelWindowForTabTransfer(t, registry.panels, snapshot)
 	snapshot.SourceWindowName = source.WindowName
 	registry.emitWindowEvent = func(string, string, any) bool { return true }
+	seedNativeGroup(t, registry.workspace, source.WindowName, snapshot)
 	require.NoError(t, registry.UpdatePanelWindowSnapshot(source.WindowName, snapshot))
 	request := panelwindow.TabTransferRequest{TransferID: "dock-with-no-app", SourceWindowName: source.WindowName, ClusterID: source.ClusterID, SourceGroupID: source.GroupID, TargetGroupID: "right", TargetKind: panelwindow.TabTransferTargetWorkspace, Tab: snapshot.Tabs[0]}
 	stale := request
@@ -84,6 +86,7 @@ func TestCancelledPanelTabMenuDockIsNotOfferedToALateTarget(t *testing.T) {
 	snapshot := validPanelGroupSnapshot()
 	source := livePanelWindowForTabTransfer(t, registry.panels, snapshot)
 	snapshot.SourceWindowName = source.WindowName
+	seedNativeGroup(t, registry.workspace, source.WindowName, snapshot)
 	require.NoError(t, registry.UpdatePanelWindowSnapshot(source.WindowName, snapshot))
 	request := panelwindow.TabTransferRequest{TransferID: "cancel-menu-dock", SourceWindowName: source.WindowName, ClusterID: source.ClusterID, SourceGroupID: source.GroupID, TargetGroupID: "right", TargetKind: panelwindow.TabTransferTargetWorkspace, Tab: snapshot.Tabs[0]}
 	require.NoError(t, registry.RequestPanelTabTransfer(source.WindowName, request))

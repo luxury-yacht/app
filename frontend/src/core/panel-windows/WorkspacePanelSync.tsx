@@ -28,6 +28,7 @@ import {
 } from './index';
 import { PanelLayoutLifecycle } from './PanelLayoutLifecycle';
 import { workspacePanelPublication } from './publicationQueue';
+import { useClosedPanelIntents } from './useClosedPanelIntents';
 import { useRemoveWorkspacePanels } from './useRemoveWorkspacePanels';
 import { useRestoreWorkspacePanels } from './useRestoreWorkspacePanels';
 
@@ -174,6 +175,7 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
   const restoreWorkspacePanels = useRestoreWorkspacePanels();
   const removeWorkspacePanels = useRemoveWorkspacePanels();
   const queue = useRef(workspacePanelPublication);
+  useClosedPanelIntents(workspacePanelPublication, windowName);
   const lastPublication = useRef('');
   const incomingIds = useRef(new Map<string, ReadonlySet<string>>());
   const [incomingByCluster, setIncomingByCluster] = useState<
@@ -214,10 +216,7 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
         return activity.isClosing(clusterId) ? null : result;
       },
       quiesceCluster: async (clusterId) => {
-        const settle = (closed: boolean) => {
-          lastPublication.current = '';
-          activity.settle(clusterId, closed);
-        };
+        const settle = (closed: boolean) => activity.settle(clusterId, closed);
         try {
           await Promise.all([activity.pause(clusterId), queue.current.flush()]);
           return settle;
@@ -232,21 +231,19 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
 
   useEffect(() => {
     activity.reconcile(managedClusterIds);
-    // Publications replace every docked group in this renderer. Resume only
-    // after accepted closes release their managed cluster membership.
-    if (
-      groups.some((group) => !admittedClusterIds.has(group.clusterId)) ||
-      Array.from(closingClusters).some(([id, closed]) => !closed || managedClusterIds.includes(id))
-    ) {
+    // Publish only once tab membership is confirmed. Publications only arrange
+    // panels, so a closing cluster view simply drops out of them.
+    if (groups.some((group) => !admittedClusterIds.has(group.clusterId))) {
       return;
     }
-    const serialized = JSON.stringify(groups);
+    const publishable = groups.filter((group) => !closingClusters.has(group.clusterId));
+    const serialized = JSON.stringify(publishable);
     if (serialized === lastPublication.current) {
       return;
     }
     lastPublication.current = serialized;
     queue.current.publish(
-      () => publishDockedPanels(windowName, groups),
+      () => publishDockedPanels(windowName, publishable),
       (error) => {
         reportOperationalError(error, {
           source: 'WorkspacePanelSync',

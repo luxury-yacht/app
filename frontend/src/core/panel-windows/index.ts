@@ -12,6 +12,7 @@ import {
   BeginPanelWindowDock,
   BeginPanelWindowOpen,
   CloseClusterView,
+  ClosePanelWorkspaceObject,
   FailClusterTabTransfer,
   FailPanelTabTransfer,
   FailPanelWindowTransfer,
@@ -32,6 +33,12 @@ export type PanelWindowDescriptor = panelwindow.WindowDescriptor;
 
 export const openPanelWorkspaceObject = (windowName: string, tab: panelwindow.TabSnapshot) =>
   OpenPanelWorkspaceObject(windowName, tab);
+
+export const closePanelWorkspaceObject = (
+  windowName: string,
+  clusterId: string,
+  panelId: string
+): Promise<void> => ClosePanelWorkspaceObject(windowName, clusterId, panelId);
 
 export const publishDockedPanels = (windowName: string, groups: panelwindow.WorkspaceGroup[]) =>
   PublishDockedPanels(windowName, groups);

@@ -24,6 +24,9 @@ func (r *sharedWorkspaceRecorder) GetPanelWorkspace(windowName, clusterID string
 func (r *sharedWorkspaceRecorder) OpenPanelWorkspaceObject(windowName string, tab panelwindow.TabSnapshot) (panelwindow.PanelOpenResult, error) {
 	return panelwindow.PanelOpenResult{Panel: panelwindow.WorkspacePanel{Tab: tab}, Render: true}, r.record(windowName, tab)
 }
+func (r *sharedWorkspaceRecorder) ClosePanelWorkspaceObject(windowName, clusterID, panelID string) error {
+	return r.record(windowName, clusterID, panelID)
+}
 func (r *sharedWorkspaceRecorder) PublishDockedPanels(windowName string, groups []panelwindow.WorkspaceGroup) error {
 	return r.record(windowName, groups)
 }
@@ -82,6 +85,9 @@ func TestSharedPanelWorkspaceBoundaryAuthenticatesAndPreservesEveryCommand(t *te
 			}
 			return err
 		}, []any{"workspace-1", tab}},
+		{"ClosePanelWorkspaceObject", func(service *DesktopService, ctx context.Context, caller string) error {
+			return service.ClosePanelWorkspaceObject(ctx, caller, "production", "api")
+		}, []any{"workspace-1", "production", "api"}},
 		{"PublishDockedPanels", func(service *DesktopService, ctx context.Context, caller string) error {
 			return service.PublishDockedPanels(ctx, caller, groups)
 		}, []any{"workspace-1", groups}},

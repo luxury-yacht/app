@@ -17,8 +17,8 @@ func TestClusterViewTransferKeepsRuntimeSelectionAndMovesOnlySourceView(t *testi
 	coordinator.GetClusterWorkspaceStateForWindow("app-a")
 	coordinator.GetClusterWorkspaceStateForWindow("app-c")
 	tab := panelwindow.TabSnapshot{Kind: panelwindow.TabKindObject, PanelID: "pod", ActiveView: "yaml", ObjectRef: panelwindow.ObjectReference{ClusterID: clusterID, Version: "v1", Kind: "Pod", Namespace: "default", Name: "pod"}}
-	groups := []panelwindow.WorkspaceGroup{{ClusterID: clusterID, GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}}
-	require.NoError(t, coordinator.PanelWorkspaceDirectory().PublishWindow("app-a", panelwindow.PanelLocationDocked, groups))
+	_, _, err := coordinator.PanelWorkspaceDirectory().Open(tab, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: "app-a", GroupID: "right", Active: true})
+	require.NoError(t, err)
 	alreadyOpen, err := coordinator.StageClusterViewTransfer("app-a", "app-b", clusterID)
 	require.NoError(t, err)
 	require.False(t, alreadyOpen)

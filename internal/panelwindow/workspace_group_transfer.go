@@ -204,7 +204,6 @@ func (d *WorkspaceDirectory) CommitGroupTransfer(transferID string) error {
 	d.makeRoomLocked(next)
 	for key, panel := range next {
 		d.panels[key] = panel
-		delete(d.unpublished, key)
 	}
 	d.revision++
 	return nil

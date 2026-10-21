@@ -43,6 +43,7 @@ import {
   tornOffTabSnapshot,
 } from '@/core/panel-windows/tabTransfer';
 import { useApplicationQuitPreflight } from '@/core/panel-windows/useApplicationQuitPreflight';
+import { useClosedPanelIntents } from '@/core/panel-windows/useClosedPanelIntents';
 import type { ViewType } from '@/modules/object-panel/components/ObjectPanel/types';
 import {
   useObjectPanelActiveTabs,
@@ -74,6 +75,7 @@ export function PanelWindowShortcuts({
     new Map()
   );
   const acknowledgingRef = useRef(new Set<string>());
+  useClosedPanelIntents(nativePanelPublication, descriptor.windowName);
   const focusLifecycleBlocker = useCallback(
     (blocker: PanelLifecycleBlocker) => {
       if (blocker.panelId) {

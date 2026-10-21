@@ -38,6 +38,14 @@ func (bridge *Bridge) OpenPanelWorkspaceObject(windowName string, tab panelwindo
 	return registry.OpenPanelWorkspaceObject(windowName, tab)
 }
 
+func (bridge *Bridge) ClosePanelWorkspaceObject(windowName, clusterID, panelID string) error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
+	}
+	return registry.ClosePanelWorkspaceObject(windowName, clusterID, panelID)
+}
+
 func (bridge *Bridge) PublishDockedPanels(windowName string, groups []panelwindow.WorkspaceGroup) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {

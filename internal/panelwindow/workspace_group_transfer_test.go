@@ -84,8 +84,7 @@ func TestCancelledGroupTransferKeepsSourceAndReleasesPanels(t *testing.T) {
 	require.Error(t, directory.CommitGroupTransfer("float-1"))
 
 	require.Equal(t, before, directory.Snapshot("production").Panels)
-	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, nil))
-	require.Empty(t, directory.Snapshot("production").Panels, "a cancelled transfer must not pin its panels")
+	require.True(t, directory.ClosePanel("app-a", "production", tab.PanelID), "a cancelled transfer must not pin its panels")
 }
 
 func TestStaleSourcePublicationsCannotMoveDeleteOrDuplicateAFloatingGroup(t *testing.T) {
@@ -99,7 +98,7 @@ func TestStaleSourcePublicationsCannotMoveDeleteOrDuplicateAFloatingGroup(t *tes
 	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, []WorkspaceGroup{{ClusterID: "production", GroupID: "bottom", Tabs: []TabSnapshot{staying, moving}, ActivePanelID: staying.PanelID}}))
 	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, []WorkspaceGroup{{ClusterID: "production", GroupID: "bottom", Tabs: []TabSnapshot{staying}, ActivePanelID: staying.PanelID}}))
 	// A renderer outside the transfer still cannot claim the panel.
-	require.Error(t, directory.PublishWindow("app-b", PanelLocationDocked, []WorkspaceGroup{{ClusterID: "production", GroupID: "right", Tabs: []TabSnapshot{moving}, ActivePanelID: moving.PanelID}}))
+	require.NoError(t, directory.PublishWindow("app-b", PanelLocationDocked, []WorkspaceGroup{{ClusterID: "production", GroupID: "right", Tabs: []TabSnapshot{moving}, ActivePanelID: moving.PanelID}}))
 
 	pending := panelsByID(directory, "production")
 	require.Len(t, pending, 2)
@@ -109,7 +108,7 @@ func TestStaleSourcePublicationsCannotMoveDeleteOrDuplicateAFloatingGroup(t *tes
 	require.NoError(t, directory.CommitGroupTransfer("float-1"))
 	// The source's pre-intent snapshot arrives after commit: it must not steal
 	// the floated tab back or create a second copy.
-	require.Error(t, directory.PublishWindow("app-a", PanelLocationDocked, []WorkspaceGroup{{ClusterID: "production", GroupID: "bottom", Tabs: []TabSnapshot{staying, moving}, ActivePanelID: staying.PanelID}}))
+	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, []WorkspaceGroup{{ClusterID: "production", GroupID: "bottom", Tabs: []TabSnapshot{staying, moving}, ActivePanelID: staying.PanelID}}))
 	committed := panelsByID(directory, "production")
 	require.Len(t, committed, 2)
 	require.Equal(t, "panel-1", committed[moving.PanelID].Location.WindowName)
@@ -231,15 +230,16 @@ func TestViewTransferMovesEveryDockedPanelOfTheClusterAndAppends(t *testing.T) {
 	directory := NewWorkspaceDirectory()
 	first, second, bottom := workspaceTab("production", "first"), workspaceTab("production", "second"), workspaceTab("production", "bottom")
 	existing, floating, otherCluster := workspaceTab("production", "existing"), workspaceTab("production", "floating"), workspaceTab("staging", "first")
-	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, []WorkspaceGroup{
-		{ClusterID: "production", GroupID: "right", Tabs: []TabSnapshot{first, second}, ActivePanelID: second.PanelID},
-		{ClusterID: "staging", GroupID: "right", Tabs: []TabSnapshot{otherCluster}, ActivePanelID: otherCluster.PanelID},
-	}))
-	// Opened in the source but not yet published: it still belongs to the view.
-	_, _, err := directory.Open(bottom, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "bottom", Active: true})
-	require.NoError(t, err)
-	_, _, err = directory.Open(floating, PanelLocation{Kind: PanelLocationWindow, WindowName: "panel-1", GroupID: "native"})
-	require.NoError(t, err)
+	for tab, location := range map[TabSnapshot]PanelLocation{
+		first:        {Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "right", Index: 0},
+		second:       {Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "right", Index: 1, Active: true},
+		otherCluster: {Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "right", Active: true},
+		bottom:       {Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "bottom", Active: true},
+		floating:     {Kind: PanelLocationWindow, WindowName: "panel-1", GroupID: "native"},
+	} {
+		_, _, err := directory.Open(tab, location)
+		require.NoError(t, err)
+	}
 	openDocked(t, directory, "app-b", existing)
 
 	groups, err := directory.BeginViewTransfer("view-1", "app-a", "app-b", "production")
@@ -290,4 +290,46 @@ func TestViewTransferRejectsAViewWhosePanelIsAlreadyMoving(t *testing.T) {
 	require.Error(t, err)
 	require.Error(t, directory.CommitGroupTransfer("view-1"))
 	require.Equal(t, "float-1", panelsByID(directory, "production")[tab.PanelID].Transfer.TransferID)
+}
+
+func TestClosePanelRemovesOnlyASettledPanelOfTheCallersWindow(t *testing.T) {
+	directory := NewWorkspaceDirectory()
+	var removed []PanelKey
+	directory.SetPanelRemovalHandler(func(keys []PanelKey) { removed = append(removed, keys...) })
+	mine, elsewhere, moving := workspaceTab("production", "mine"), workspaceTab("production", "elsewhere"), workspaceTab("production", "moving")
+	openDocked(t, directory, "app-a", mine, moving)
+	openDocked(t, directory, "app-b", elsewhere)
+	require.NoError(t, directory.BeginGroupTransfer(floatTransfer("float-1", "app-a", moving)))
+
+	require.False(t, directory.ClosePanel("app-a", "production", elsewhere.PanelID), "another window's panel")
+	require.False(t, directory.ClosePanel("app-a", "production", moving.PanelID), "a panel the directory is moving")
+	require.False(t, directory.ClosePanel("app-a", "production", "missing"))
+	require.True(t, directory.ClosePanel("app-a", "production", mine.PanelID))
+
+	require.Equal(t, []PanelKey{{ClusterID: "production", PanelID: mine.PanelID}}, removed)
+	require.Len(t, directory.Snapshot("production").Panels, 2)
+}
+
+func TestPublicationReportsArrangementOnly(t *testing.T) {
+	directory := NewWorkspaceDirectory()
+	var removed []PanelKey
+	directory.SetPanelRemovalHandler(func(keys []PanelKey) { removed = append(removed, keys...) })
+	first, second, foreign := workspaceTab("production", "first"), workspaceTab("production", "second"), workspaceTab("production", "foreign")
+	unknown := workspaceTab("production", "unknown")
+	openDocked(t, directory, "app-a", first, second)
+	openDocked(t, directory, "app-b", foreign)
+	yaml := first
+	yaml.ActiveView = "yaml"
+
+	// Reorder onto the other edge, change a view, omit a tab, mention another
+	// window's panel and one the directory never opened.
+	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, []WorkspaceGroup{{ClusterID: "production", GroupID: "bottom", Tabs: []TabSnapshot{foreign, unknown, yaml}, ActivePanelID: yaml.PanelID}}))
+
+	panels := panelsByID(directory, "production")
+	require.Equal(t, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "bottom", Index: 2, Active: true}, panels[first.PanelID].Location)
+	require.Equal(t, "yaml", panels[first.PanelID].Tab.ActiveView)
+	require.Equal(t, "app-a", panels[second.PanelID].Location.WindowName, "an omitted tab is not closed")
+	require.Equal(t, "app-b", panels[foreign.PanelID].Location.WindowName, "another window's panel is not claimed")
+	require.NotContains(t, panels, unknown.PanelID, "a publication does not open panels")
+	require.Empty(t, removed)
 }

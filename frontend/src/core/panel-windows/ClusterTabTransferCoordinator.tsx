@@ -91,8 +91,8 @@ export function ClusterTabTransferCoordinator() {
         }
         guards.freeze(request.transferId, ids);
         const accept = async () => {
-          // Closes still reach the directory as publications, so land them
-          // before it decides which docked panels travel with the view.
+          // Close intents queue with publications; land them before the
+          // directory decides which docked panels travel with the view.
           await sync.flush();
           const viewState: ClusterViewState = {
             clusterId: request.clusterId,

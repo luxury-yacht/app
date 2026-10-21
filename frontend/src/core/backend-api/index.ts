@@ -28,6 +28,7 @@ export {
   ClearAppState,
   ClearGridTablePersistence,
   CloseClusterView,
+  ClosePanelWorkspaceObject,
   CloseShellSession,
   DeleteFavorite,
   DeleteGridTablePersistence,

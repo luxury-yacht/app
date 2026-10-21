@@ -30,6 +30,8 @@ const mocks = vi.hoisted(() => ({
   releaseTransfer: vi.fn(),
   acceptTabTransfer: vi.fn(async () => undefined),
   acknowledgeTransfer: vi.fn(async () => undefined),
+  closeIntent: vi.fn(async (..._args: unknown[]) => undefined),
+  closedListener: null as null | ((clusterId: string, panelIds: string[]) => void),
   beginOpen: vi.fn(async () => undefined),
   failTabTransfer: vi.fn(async () => undefined),
   upsertOwnedPanel: vi.fn(() => 'panel-c'),
@@ -82,6 +84,7 @@ vi.mock('@/core/panel-windows', () => ({
   acknowledgeApplicationQuitPreflight: mocks.acknowledgeQuit,
   acceptPanelTabTransfer: mocks.acceptTabTransfer,
   acknowledgePanelTransfer: mocks.acknowledgeTransfer,
+  closePanelWorkspaceObject: mocks.closeIntent,
   beginPanelWindowOpen: mocks.beginOpen,
   onApplicationQuitPreflightRequested: (handler: (event: never) => void) => {
     mocks.handlers.quit = handler;
@@ -183,6 +186,12 @@ vi.mock('@/modules/object-panel/contexts/ObjectPanelStateContext', () => ({
       ],
     ]),
     upsertOwnedPanel: mocks.upsertOwnedPanel,
+    subscribeClosedPanels: (listener: typeof mocks.closedListener) => {
+      mocks.closedListener = listener;
+      return () => {
+        mocks.closedListener = null;
+      };
+    },
   }),
 }));
 
@@ -568,6 +577,12 @@ describe('PanelWindowShortcuts', () => {
         name: 'worker',
       },
     },
+  });
+
+  it('tells the directory about a tab this window closed', async () => {
+    await act(async () => mocks.closedListener?.('cluster-1', ['panel-b']));
+    await act(async () => nativePanelPublication.flush());
+    expect(mocks.closeIntent).toHaveBeenCalledWith('panel-1', 'cluster-1', 'panel-b');
   });
 
   it('inserts an authorized transferred tab at the requested native-window index', async () => {

@@ -143,6 +143,23 @@ func (r *Registry) OpenPanelWorkspaceObject(windowName string, tab panelwindow.T
 	return panelwindow.PanelOpenResult{Panel: panel, Render: render}, nil
 }
 
+// ClosePanelWorkspaceObject removes a panel its renderer closed. The directory
+// ignores a panel it has since placed elsewhere or is moving.
+func (r *Registry) ClosePanelWorkspaceObject(windowName, clusterID, panelID string) error {
+	if windowName == "" || clusterID == "" || panelID == "" {
+		return fmt.Errorf("panel close requires window, cluster, and panel identity")
+	}
+	r.workspaceMu.Lock()
+	closed := r.workspace.ClosePanel(windowName, clusterID, panelID)
+	r.workspaceMu.Unlock()
+	if !closed {
+		return nil
+	}
+	r.releaseUnusedPanelWorkspace(clusterID)
+	r.emitWorkspaceChanged(clusterID)
+	return nil
+}
+
 func (r *Registry) releasePanelReservation(reservation *panelwindow.WorkspaceReservation, clusterID string) {
 	reservation.Release()
 	r.releaseUnusedPanelWorkspace(clusterID)

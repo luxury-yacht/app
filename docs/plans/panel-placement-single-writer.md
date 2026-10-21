@@ -1,11 +1,12 @@
 # Panel placement: single-writer prototype (finding #4)
 
 Status: on `single-panel-writer`, Phase 0 (whole-group **Float** and
-**dock-back**, `e1d3b937`) and Phase 1 (**single-tab transfer**, `64595908`)
-are committed, and both passed John's native checks on macOS. Phase 2
-(**cluster-view transfer**) is in the working tree, uncommitted, and awaits its
-native checks ([Phase 2](#phase-2-cluster-view-transfer)). Close and the native
-index are unchanged.
+**dock-back**, `e1d3b937`), Phase 1 (**single-tab transfer**, `64595908`), and
+Phase 2 (**cluster-view transfer**, `d25ad0c7`) are committed. Phases 0 and 1
+passed John's native checks on macOS; Phase 2's checks are in progress. Phase 3
+(**close as an intent**) is in the working tree, uncommitted, and awaits its
+native checks ([Phase 3](#phase-3-close-as-an-intent)). The native index is
+unchanged.
 
 ## Recommendation
 
@@ -209,10 +210,9 @@ and delete the shared two-writer machinery that this path still needed.
   `panel-workspace:changed` followed by `GetPanelWorkspace`, instead of from an
   event payload. The cost is not measured here [unverified]; native check 4
   observes it.
-- **A stale publication can still be rejected after commit.** It happens only if
-  a queued source publication lands after the native window has booted and
-  acknowledged. The result is an error report, never a lost or duplicated panel
-  (G15). The race window has not been measured [assumed rare].
+- **A stale publication could be rejected after commit.** Resolved in
+  [Phase 3](#phase-3-close-as-an-intent): publications now skip panels placed
+  elsewhere instead of rejecting.
 - **The target's pre-acknowledgement flush stays.** Without it, a stale target
   publication that omits the committed tabs would delete them until the next
   publication. That would fire panel-removal handlers such as the metrics
@@ -234,11 +234,9 @@ projection. Each needs its own TDD, its Go contract tests, and native checks.
 2. **Cluster-view transfer.** Done in the working tree; see
    [Phase 2](#phase-2-cluster-view-transfer). The source still flushes before
    accepting, until Phase 3 makes close an intent.
-3. **Close as an intent.** Tab close calls the directory. Publications never
-   delete panels, so the following go away:
-   - `unpublished`;
-   - the "docked publications replace the whole snapshot" pause in cluster
-     close (G13 context).
+3. **Close as an intent.** Done in the working tree; see
+   [Phase 3](#phase-3-close-as-an-intent). The cluster-view source flush (C6)
+   stays: it now drains queued close intents.
 4. **Native index without snapshots.**
    - Build the descriptor from the directory.
    - Delete `UpdatePanelWindowSnapshot`'s second write, `panelIndex.snapshots`,
@@ -449,6 +447,100 @@ that no panel is duplicated or lost and no error toast appears.
 9. **After the moves.** Close a moved panel: it closes. Quit and restart: the
    selections restore.
 
+## Phase 3: close as an intent
+
+What changed (working tree on top of `d25ad0c7`):
+
+- **Closing a panel is a directory intent.** `ObjectPanelStateContext` announces
+  closes through `closePanel` and `onCloseObjectPanel`, never through
+  `removeOwnedPanel`, which moves use. The new `useClosedPanelIntents` sends
+  `ClosePanelWorkspaceObject` for each close through that renderer's outbound
+  queue: `WorkspacePanelSync`'s in app windows, `PanelWindowShortcuts`' in
+  native windows. The directory's `ClosePanel` removes a panel only if it still
+  places it in the caller's window and is not moving it.
+- **Publications only arrange.** `PublishWindow` updates edge, order,
+  activation, and view of the caller's own panels. It never opens, closes,
+  claims, or moves a panel, and never rejects one placed elsewhere.
+- **A closing cluster leaves publications instead of pausing them.**
+  `WorkspacePanelSync` drops a closing cluster from its publications; other
+  clusters keep publishing.
+
+Guards (main line refs):
+
+| # | Guard | Under one writer |
+| --- | --- | --- |
+| P1 | `unpublished`: a panel opened before the renderer's publication survives it (`panelwindow/workspace.go:100,165,173,428`) | **Removed.** |
+| P2 | Publication rejected when it names a panel placed elsewhere (G15, `:378`) | **Removed.** Such panels are skipped. This also removes Phase 0's spurious-error residual risk. |
+| P3 | Publication rejected when it opens a second panel for an open object (`validateObjectIdentityLocked`) | **Removed.** Publications cannot open panels; malformed input is still rejected. |
+| P4 | Publications skip moving panels (Phase 0) | **Simplified.** Part of the arrangement-only rule. |
+| P5 | Whole-snapshot replacement deletes omitted panels (G13, `replacePublishedWindowLocked`) | **Removed.** |
+| P6 | Pause all publication until an accepted cluster close reaches the selection, plus the dedupe reset on settle (`WorkspacePanelSync.tsx:184-208,169`) | **Simplified** to "a closing cluster drops out". |
+| P7 | Cluster-view source flush (C6) | **Still needed.** It drains queued close intents. |
+| P8 | Publication queue retries its latest failure on flush (G9) | **Still needed.** It now also covers close intents (see Risks). |
+| N9 | *New:* close intent announced by the provider and queued per renderer | — |
+| N10 | *New:* the directory ignores a close for a panel placed elsewhere or moving | — |
+
+Measured (code only, against `d25ad0c7`; cumulative against main `59136764`;
+the new `useClosedPanelIntents.ts` is included):
+
+- **Production, Phase 3:** backend +57 / −57 (net 0); frontend +66 / −12 (net
+  +54). Including comments: +156 / −83.
+- **Tests, Phase 3:** +239 / −73. About 20 tests that created panels by
+  publishing now seed them with `Open` (`seedPanels`, `seedNativeGroup`), as
+  production does.
+- **Cumulative since main (Phases 0–3):** backend +528 / −485 (net +43);
+  frontend +396 / −408 (net −12). Total net +31 code lines.
+- **Guards:** 4 of 8 removed, 2 simplified, 2 still needed; 2 new.
+- **Mutation checks:** each mutation was reverted, and each was caught.
+
+  | # | Mutation | Tests that fail |
+  | --- | --- | --- |
+  | M15 | close removes a moving panel | 1 |
+  | M16 | a publication claims another window's panel | 2 |
+  | M17 | a close intent bypasses the outbound queue | 1 |
+  | M18 | a bulk close is not announced | 1 |
+
+- **Evidence:**
+  - `go test` passes for `panelwindow`, `appwindow`, `bootstrap`, and
+    `backend` (the ownership contract now counts 26 panel commands); `-race`
+    passes on the transfer packages.
+  - Vitest: 1,210 passed across panel-windows, `PanelWindowApp`, shortcuts, and
+    object-panel.
+  - gocognit: maximum 12. Biome complexity is clean, and knip exits 0.
+
+Phase 3 risks:
+
+- **A close intent that fails leaves a ghost panel.** This happens only on an
+  IPC failure. The directory keeps the panel until its window or cluster
+  closes, because a later publication no longer repairs it. The outbound queue
+  retries only its latest failure, so a later successful publication clears a
+  failed close. A per-intent retry would fix this if it ever shows up.
+- **A native index snapshot can name a foreign panel.** A native window's
+  snapshot that names another window's panel is no longer rejected. The
+  directory ignores it, but the native index stores the report until Phase 4
+  removes that copy. Only a buggy renderer could trigger this.
+
+Phase 3 native checks. Run these on macOS and Windows. For each check, confirm
+no duplicate or lost panel and no error toast.
+
+1. **Close a docked tab.** Use its tab close button or its context menu's
+   **Close** (`DockableTabMenu.tsx`). It disappears. Open the same object from
+   another window: it opens a new panel and does not focus a ghost.
+2. **Close every tab in a group.** Click the dock header's Close
+   (`DockablePanelGroup.tsx` `handleClose`). Every tab closes.
+3. **Close a non-final tab in a native window.** It disappears. Reopen the
+   object elsewhere: it opens a new panel.
+4. **Close the final tab in a native window.** The window closes.
+5. **Close, then move.** Close a docked tab, then immediately drag its cluster
+   tab to another window. The closed tab does not reappear (P7).
+6. **Close a cluster shown in two windows.** Close the cluster tab in one
+   window; the other window keeps every shared panel. Close the last view: its
+   panels close.
+7. **Arrangement survives.** Reorder tabs and move one to the other edge, then
+   close the app window that holds them. Floating panels stay. Reopen the
+   cluster in another window: the retained panels come back in the arranged
+   order.
+
 ## Native checks for John
 
 These run in the real app (`mise exec -- wails3 dev`), on macOS and Windows,
@@ -528,3 +620,7 @@ each check, confirm three things:
 | Phase 2 frontend projection and cluster handoff | passed | Vitest 168 passed (mocks bindings, kubeconfig, and dockable context) |
 | Phase 2 prerelease gate | passed | `mise exec -- wails3 task qc:prerelease` exit 0 (docs, fmt, bindings, vet + staticcheck, `go test ./... -race` 107 packages ok, Biome, typecheck, frontend 5356 passed / 1 skipped, knip, trivy); no files reformatted |
 | Phase 2 native multi-window behavior | pending (John) | Phase 2 checks 1–9 |
+| Phase 3 close and arrangement contract (directory, registry, backend) | passed | `go test` and `-race` ok; tests named in [Phase 3](#phase-3-close-as-an-intent) |
+| Phase 3 frontend close intents | passed | Vitest 1210 passed (provider test uses the real `ObjectPanelStateProvider`; Sync and shortcuts mock bindings) |
+| Phase 3 prerelease gate | passed | `mise exec -- wails3 task qc:prerelease` exit 0 (docs, fmt, bindings, vet + staticcheck, `go test ./... -race` 107 packages ok, Biome, typecheck, frontend 5359 passed / 1 skipped, knip, trivy); no files reformatted |
+| Phase 3 native multi-window behavior | pending (John) | Phase 3 checks 1–7 |

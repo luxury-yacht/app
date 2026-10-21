@@ -18,6 +18,7 @@ func TestFailedGroupDockIsNotDeliveredWhenTargetBecomesReady(t *testing.T) {
 	snapshot := source.Snapshot
 	snapshot.SourceWindowName = source.WindowName
 	registry.emitWindowEvent = func(string, string, any) bool { return true }
+	seedNativeGroup(t, registry.workspace, source.WindowName, snapshot)
 	require.NoError(t, registry.UpdatePanelWindowSnapshot(source.WindowName, snapshot))
 	snapshot.TransferID = "late-dock"
 	require.NoError(t, registry.BeginPanelWindowDock(source.WindowName, "right", snapshot))

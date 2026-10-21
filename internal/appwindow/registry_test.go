@@ -1287,6 +1287,25 @@ func TestCascadedCoordinateKeepsWindowsInsideTheWorkArea(t *testing.T) {
 	}
 }
 
+// seedPanels opens panels at a placement the way renderers obtain them (Open
+// or a directory move). Publications only arrange panels that already exist.
+func seedPanels(t *testing.T, directory *panelwindow.WorkspaceDirectory, windowName string, kind panelwindow.PanelLocationKind, groups []panelwindow.WorkspaceGroup) {
+	t.Helper()
+	for _, group := range groups {
+		for index, tab := range group.Tabs {
+			location := panelwindow.PanelLocation{Kind: kind, WindowName: windowName, GroupID: group.GroupID, Index: index, Active: tab.PanelID == group.ActivePanelID}
+			_, _, err := directory.Open(tab, location)
+			require.NoError(t, err)
+		}
+	}
+}
+
+// seedNativeGroup places a live native window's group in the directory.
+func seedNativeGroup(t *testing.T, directory *panelwindow.WorkspaceDirectory, windowName string, snapshot PanelGroupSnapshot) {
+	t.Helper()
+	seedPanels(t, directory, windowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{{ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}})
+}
+
 // Native lifecycle fixtures start with panels already mounted in their source
 // renderer. Invalid snapshots and unknown sources still reach the real boundary.
 func beginTestPanelWindow(t *testing.T, registry *Registry, snapshot PanelGroupSnapshot) (PanelWindowDescriptor, error) {

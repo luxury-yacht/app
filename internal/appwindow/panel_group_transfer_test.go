@@ -101,7 +101,7 @@ func TestFloatKeepsSourceUntilReadyAndSurvivesStaleSourcePublications(t *testing
 	require.Zero(t, committed.Transfer)
 
 	// The same stale snapshot arriving after commit cannot pull the tab back.
-	require.Error(t, fixture.registry.PublishDockedPanels(fixture.owner, fixture.docked(t)))
+	require.NoError(t, fixture.registry.PublishDockedPanels(fixture.owner, fixture.docked(t)))
 	require.Equal(t, descriptor.WindowName, fixture.panel(t).Location.WindowName)
 }
 
@@ -127,7 +127,7 @@ func TestFailedFloatKeepsSourcePlacementWithoutPinningIt(t *testing.T) {
 			kept := fixture.panel(t)
 			require.Equal(t, fixture.owner, kept.Location.WindowName)
 			require.Zero(t, kept.Transfer)
-			require.NoError(t, fixture.registry.PublishDockedPanels(fixture.owner, nil))
+			require.NoError(t, fixture.registry.ClosePanelWorkspaceObject(fixture.owner, fixture.snapshot.ClusterID, fixture.snapshot.Tabs[0].PanelID))
 			require.Empty(t, fixture.registry.workspace.Snapshot(fixture.snapshot.ClusterID).Panels, "the source can close a panel whose float failed")
 		})
 	}

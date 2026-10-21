@@ -57,35 +57,6 @@ func TestWorkspaceWindowRemovalDeletesOnlyThatWindowsPanels(t *testing.T) {
 	require.Equal(t, docked, panels[0].Tab)
 }
 
-func TestWorkspacePublicationPreservesOtherWindowsAndRejectsForeignPanelsAtomically(t *testing.T) {
-	directory := NewWorkspaceDirectory()
-	prod := workspaceTab("production", "api")
-	stage := workspaceTab("staging", "api")
-	prodGroup := WorkspaceGroup{ClusterID: "production", GroupID: "right", Tabs: []TabSnapshot{prod}, ActivePanelID: prod.PanelID}
-	stageGroup := WorkspaceGroup{ClusterID: "staging", GroupID: "bottom", Tabs: []TabSnapshot{stage}, ActivePanelID: stage.PanelID}
-	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, []WorkspaceGroup{prodGroup}))
-	require.NoError(t, directory.PublishWindow("app-b", PanelLocationDocked, []WorkspaceGroup{stageGroup}))
-	before := directory.Snapshot("production")
-	require.Error(t, directory.PublishWindow("app-b", PanelLocationDocked, []WorkspaceGroup{prodGroup}))
-	require.Equal(t, before, directory.Snapshot("production"))
-	require.Len(t, directory.Snapshot("staging").Panels, 1)
-	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, nil))
-	require.Empty(t, directory.Snapshot("production").Panels)
-	require.Len(t, directory.Snapshot("staging").Panels, 1)
-}
-
-func TestWorkspaceClaimSurvivesPublicationBeforePanelMounts(t *testing.T) {
-	directory := NewWorkspaceDirectory()
-	tab := workspaceTab("production", "api")
-	_, _, err := directory.Open(tab, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "right"})
-	require.NoError(t, err)
-	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, nil))
-	require.Len(t, directory.Snapshot("production").Panels, 1)
-	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, []WorkspaceGroup{{ClusterID: "production", GroupID: "right", Tabs: []TabSnapshot{tab}, ActivePanelID: tab.PanelID}}))
-	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, nil))
-	require.Empty(t, directory.Snapshot("production").Panels)
-}
-
 func TestWorkspaceOpenUsesCompleteObjectIdentityAcrossPanelIDs(t *testing.T) {
 	directory := NewWorkspaceDirectory()
 	tab := workspaceTab("production", "api")
