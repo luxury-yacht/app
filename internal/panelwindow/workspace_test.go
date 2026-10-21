@@ -102,32 +102,6 @@ func TestWorkspaceOpenUsesCompleteObjectIdentityAcrossPanelIDs(t *testing.T) {
 	require.True(t, render)
 }
 
-func TestClusterViewTransferMovesDockedGroupsAndPreservesFloatingPanels(t *testing.T) {
-	directory := NewWorkspaceDirectory()
-	source, existing, floating := workspaceTab("production", "source"), workspaceTab("production", "existing"), workspaceTab("production", "floating")
-	groups := []WorkspaceGroup{{ClusterID: "production", GroupID: "right", Tabs: []TabSnapshot{source}, ActivePanelID: source.PanelID}}
-	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, groups))
-	require.NoError(t, directory.PublishWindow("app-b", PanelLocationDocked, []WorkspaceGroup{{ClusterID: "production", GroupID: "right", Tabs: []TabSnapshot{existing}, ActivePanelID: existing.PanelID}}))
-	_, _, err := directory.Open(floating, PanelLocation{Kind: PanelLocationWindow, WindowName: "panel-1", GroupID: "floating-1"})
-	require.NoError(t, err)
-	before := directory.Snapshot("production")
-	require.Error(t, directory.TransferClusterView("app-a", "app-b", "production", nil))
-	require.Equal(t, before, directory.Snapshot("production"))
-	require.NoError(t, directory.TransferClusterView("app-a", "app-b", "production", groups))
-	for _, panel := range directory.Snapshot("production").Panels {
-		switch panel.Tab.PanelID {
-		case source.PanelID:
-			require.Equal(t, "app-b", panel.Location.WindowName)
-			require.Equal(t, 1, panel.Location.Index)
-		case existing.PanelID:
-			require.Equal(t, "app-b", panel.Location.WindowName)
-			require.Equal(t, 0, panel.Location.Index)
-		case floating.PanelID:
-			require.Equal(t, "panel-1", panel.Location.WindowName)
-		}
-	}
-}
-
 func TestPublicationRejectsTwoIDsForTheSameObjectAtomically(t *testing.T) {
 	directory := NewWorkspaceDirectory()
 	first := workspaceTab("production", "api")

@@ -1,10 +1,11 @@
 # Panel placement: single-writer prototype (finding #4)
 
-Status: Phase 0 (whole-group **Float** and **dock-back**) is committed as
-`e1d3b937 wip` on `single-panel-writer`; John's native checks passed on macOS.
-Phase 1 (**single-tab transfer**) is in the working tree, uncommitted; its
-native checks passed on macOS ([Phase 1](#phase-1-single-tab-transfer)). Cluster-view
-transfer, close, and the native index are unchanged.
+Status: on `single-panel-writer`, Phase 0 (whole-group **Float** and
+**dock-back**, `e1d3b937`) and Phase 1 (**single-tab transfer**, `64595908`)
+are committed, and both passed John's native checks on macOS. Phase 2
+(**cluster-view transfer**) is in the working tree, uncommitted, and awaits its
+native checks ([Phase 2](#phase-2-cluster-view-transfer)). Close and the native
+index are unchanged.
 
 ## Recommendation
 
@@ -230,15 +231,9 @@ projection. Each needs its own TDD, its Go contract tests, and native checks.
    `sync.stage`/`settle`/`isProvisional`/`transferRevision` stay because
    cluster-view transfer still uses them, and the tab-insert event stays for
    live native targets.
-2. **Cluster-view transfer.** Also deletes the last users of
-   `sync.stage`/`settle`/`isProvisional`/`transferRevision`
-   (`ClusterTabTransferCoordinator.tsx`).
-   - Change: the staged view's docked panels begin a directory move.
-     `TransferClusterView` commits it.
-   - Delete:
-     - `excludeProvisionalDockTabs`/`addClusterTransferTabs`;
-     - the "omits a docked panel" validation;
-     - the groups parameter.
+2. **Cluster-view transfer.** Done in the working tree; see
+   [Phase 2](#phase-2-cluster-view-transfer). The source still flushes before
+   accepting, until Phase 3 makes close an intent.
 3. **Close as an intent.** Tab close calls the directory. Publications never
    delete panels, so the following go away:
    - `unpublished`;
@@ -359,6 +354,101 @@ toast appears.
       (unchanged guard).
     - Quit after the moves, then restart: the selections restore.
 
+## Phase 2: cluster-view transfer
+
+What changed (working tree on top of `64595908`):
+
+- At acceptance, the registry calls `BeginViewTransfer`, which moves every
+  docked panel the directory places in the source view for that cluster. Each
+  panel keeps its edge, order, and activation, appended after the target's tabs;
+  the move is marked `View` (`workspace_group_transfer.go`). The insert event
+  carries those groups, produced by the directory. The source sends only its
+  view state (`ClusterViewSnapshot` lost `groups`).
+- `CommitClusterViewTransfer(source, target, cluster, transferID)` commits the
+  directory move inside the backend's selection mutation. The cluster transfer's
+  terminal (`removeClusterTransferLocked`) releases an uncommitted move.
+- On the target, the panel projection mounts view moves but never guards or
+  settles them (`useIncomingPanelTransfers`). The cluster coordinator restores
+  the view and acknowledges once the listed panels are mounted.
+- `makeRoomLocked` now handles several arriving groups, which replaces
+  `appendPlacementsLocked`.
+
+Guards on the cluster-view path (main line refs):
+
+| # | Guard | Under one writer |
+| --- | --- | --- |
+| C1 | Source-sent groups checked against the directory: exact tab equality, plus "omits a docked panel" (`workspace_cluster_transfer.go:29-45` on main) | **Removed.** The directory picks the set; a panel opened but not yet published travels too (it used to fail the move). |
+| C2 | Target publications exclude provisional view tabs (`excludeProvisionalDockTabs`, `addClusterTransferTabs`, `appwindow/workspace.go:264-368` on main) | **Removed.** Moving panels are immune. |
+| C3 | Target staging, read invalidation, and `isProvisional` checks, including the empty-view marker (`WorkspacePanelSync.tsx:111-150,217,273,318-326`, `ClusterTabTransferCoordinator.tsx:135-143`) | **Removed**, together with the last staging code in Sync. |
+| C4 | Retained claims paused during a transfer (`WorkspacePanelSync.tsx:273`) | **Removed.** The commit (`820d554d`) gives no reason. The plausible risk, panels retained mid-transfer, is covered by N3 [assumed]. |
+| C5 | Target mounts panels from the source-sent snapshot | **Replaced** by the read-driven projection. |
+| C6 | Source flushes before accepting | **Still needed.** The reason changed: closes are publications, so the set is right only after they land (Phase 3). |
+| C7 | Queued insert for a target that is not ready, discarded on cancel | **Still needed.** It carries the view state. |
+| C8 | Target acknowledges only after exact panel reconstruction | **Still needed.** The groups now come from the directory. |
+| C9 | Frozen-target rejection, source blockers, one transfer per cluster, timeouts, created-window cleanup | **Still needed.** |
+| N7 | *New:* the cluster transfer's terminal releases its directory move | — |
+| N8 | *New:* `View` marks moves the projection mounts but must not settle | — |
+
+Measured (code only, against `64595908`; cumulative against main `59136764`):
+
+- **Production, Phase 2:** backend +138 / −170 (net −32); frontend +54 / −78
+  (net −24). Including comments: +239 / −272.
+- **Tests, Phase 2:** +190 / −146.
+- **Cumulative since main (Phases 0–2):** backend +488 / −445 (net +43);
+  frontend +330 / −396 (net −66). Total net −23 code lines (+997 / −892
+  including comments).
+- **Guards:** 4 of 9 removed, 1 replaced, 4 still needed; 2 new.
+- **Mutation checks:** each mutation was reverted, and each was caught.
+
+  | # | Mutation | Tests that fail |
+  | --- | --- | --- |
+  | M11 | accept begins no view move | 4 |
+  | M12 | the cluster terminal skips release | 1 |
+  | M13 | the projection settles view moves | 1 |
+  | M14 | the target acknowledges before its panels mount | 1 |
+
+- **Evidence:**
+  - `go test` passes for `panelwindow`, `appwindow`, and `bootstrap`, and for
+    the `backend` cluster-view, desktop-service, and startup tests; `-race`
+    passes on the transfer packages.
+  - Vitest: 168 passed.
+  - gocognit: maximum 12. Biome complexity is clean, and knip exits 0.
+  - Coverage of the changed Go functions is 83–100%.
+
+Phase 2 native checks. Run these on macOS and Windows. For each check, confirm
+that no panel is duplicated or lost and no error toast appears.
+
+1. **Drag to another app window.** With two app windows, drag a cluster tab
+   that has docked panels on both edges onto the other window's cluster strip.
+   - Path: `ClusterTabs.tsx` drop → `requestClusterTabTransfer`.
+   - Expect the tab at the drop position with its navigation, both edges'
+     panels in order with their active tabs, and the source tab gone.
+   - The source window closes if that was its last tab.
+2. **Move to new window.** Open the cluster tab's menu and choose **Move to new
+   window** (`ClusterPanelsMenu.tsx`), then drag a cluster tab out of the
+   window (`onClusterTabTearOff`).
+   - Expect a new window with the same view and panels.
+3. **Panel opened just before the move.** Open an object, then immediately
+   drag its cluster tab to the other window.
+   - Expect the new panel to travel with the view (C1).
+4. **Panel closed just before the move.** Close a docked panel, then
+   immediately move the cluster tab.
+   - Expect it not to reappear in the target (C6).
+5. **Cluster already open in the target.** Move a cluster tab into a window
+   that already shows that cluster with its own docked panels.
+   - Expect the arriving panels after the existing ones.
+   - The arriving active tab becomes active.
+6. **Empty view.** A cluster tab with no panels moves and keeps its navigation.
+7. **Blocked move.** Give a docked panel unsaved YAML, then try to move its
+   cluster tab.
+   - Expect it to be blocked with focus on the editor.
+   - The source keeps everything.
+8. **Retained panels.** Close an app window that showed cluster A with docked
+   panels, then move another window's A tab elsewhere.
+   - Expect the retained panels to be restored once, with no duplicates (C4).
+9. **After the moves.** Close a moved panel: it closes. Quit and restart: the
+   selections restore.
+
 ## Native checks for John
 
 These run in the real app (`mise exec -- wails3 dev`), on macOS and Windows,
@@ -434,3 +524,7 @@ each check, confirm three things:
 | Phase 1 frontend projection and native acknowledgement | passed | Vitest: 168 passed (mocks bindings and dockable context; the guard-release test uses the real registry) |
 | Phase 1 prerelease gate | passed | `mise exec -- wails3 task qc:prerelease` exit 0 (docs, fmt, bindings, vet + staticcheck, `go test ./... -race` 107 packages ok, Biome, typecheck, frontend 5356 passed / 1 skipped, knip, trivy); lint-fix re-sorted one export in `frontend/src/core/backend-api/index.ts` |
 | Phase 1 native multi-window behavior | passed on macOS; Windows not run | John ran Phase 1 checks 1–10 on macOS on 2026-10-20 and reported them good |
+| Phase 2 cluster-view contract (directory, registry, backend) | passed | `go test` and `-race` ok; tests named in [Phase 2](#phase-2-cluster-view-transfer) |
+| Phase 2 frontend projection and cluster handoff | passed | Vitest 168 passed (mocks bindings, kubeconfig, and dockable context) |
+| Phase 2 prerelease gate | passed | `mise exec -- wails3 task qc:prerelease` exit 0 (docs, fmt, bindings, vet + staticcheck, `go test ./... -race` 107 packages ok, Biome, typecheck, frontend 5356 passed / 1 skipped, knip, trivy); no files reformatted |
+| Phase 2 native multi-window behavior | pending (John) | Phase 2 checks 1–9 |

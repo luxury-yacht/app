@@ -226,3 +226,68 @@ func TestOpenCannotReclaimARetainedPanelWhileItIsMoving(t *testing.T) {
 	require.NoError(t, directory.CommitGroupTransfer("float-1"))
 	require.Equal(t, "panel-1", panelsByID(directory, "production")[tab.PanelID].Location.WindowName)
 }
+
+func TestViewTransferMovesEveryDockedPanelOfTheClusterAndAppends(t *testing.T) {
+	directory := NewWorkspaceDirectory()
+	first, second, bottom := workspaceTab("production", "first"), workspaceTab("production", "second"), workspaceTab("production", "bottom")
+	existing, floating, otherCluster := workspaceTab("production", "existing"), workspaceTab("production", "floating"), workspaceTab("staging", "first")
+	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, []WorkspaceGroup{
+		{ClusterID: "production", GroupID: "right", Tabs: []TabSnapshot{first, second}, ActivePanelID: second.PanelID},
+		{ClusterID: "staging", GroupID: "right", Tabs: []TabSnapshot{otherCluster}, ActivePanelID: otherCluster.PanelID},
+	}))
+	// Opened in the source but not yet published: it still belongs to the view.
+	_, _, err := directory.Open(bottom, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-a", GroupID: "bottom", Active: true})
+	require.NoError(t, err)
+	_, _, err = directory.Open(floating, PanelLocation{Kind: PanelLocationWindow, WindowName: "panel-1", GroupID: "native"})
+	require.NoError(t, err)
+	openDocked(t, directory, "app-b", existing)
+
+	groups, err := directory.BeginViewTransfer("view-1", "app-a", "app-b", "production")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []WorkspaceGroup{
+		{ClusterID: "production", GroupID: "right", Tabs: []TabSnapshot{first, second}, ActivePanelID: second.PanelID},
+		{ClusterID: "production", GroupID: "bottom", Tabs: []TabSnapshot{bottom}, ActivePanelID: bottom.PanelID},
+	}, groups)
+	pending := panelsByID(directory, "production")
+	require.True(t, pending[first.PanelID].Transfer.View)
+	require.Equal(t, "app-a", pending[first.PanelID].Location.WindowName, "the source keeps the view until commit")
+	require.Zero(t, pending[floating.PanelID].Transfer)
+	require.Zero(t, panelsByID(directory, "staging")[otherCluster.PanelID].Transfer)
+	// The source's late snapshot without the moving tabs cannot delete them.
+	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, []WorkspaceGroup{{ClusterID: "staging", GroupID: "right", Tabs: []TabSnapshot{otherCluster}, ActivePanelID: otherCluster.PanelID}}))
+	require.Len(t, panelsByID(directory, "production"), 5)
+
+	require.NoError(t, directory.CommitGroupTransfer("view-1"))
+	committed := panelsByID(directory, "production")
+	require.Equal(t, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-b", GroupID: "right", Index: 0}, committed[existing.PanelID].Location)
+	require.Equal(t, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-b", GroupID: "right", Index: 1}, committed[first.PanelID].Location)
+	require.Equal(t, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-b", GroupID: "right", Index: 2, Active: true}, committed[second.PanelID].Location)
+	require.Equal(t, PanelLocation{Kind: PanelLocationDocked, WindowName: "app-b", GroupID: "bottom", Index: 0, Active: true}, committed[bottom.PanelID].Location)
+	require.Equal(t, "panel-1", committed[floating.PanelID].Location.WindowName)
+	require.Equal(t, "app-a", panelsByID(directory, "staging")[otherCluster.PanelID].Location.WindowName)
+}
+
+func TestEmptyViewTransferSettlesWithoutPanels(t *testing.T) {
+	directory := NewWorkspaceDirectory()
+	groups, err := directory.BeginViewTransfer("view-empty", "app-a", "app-b", "production")
+	require.NoError(t, err)
+	require.Empty(t, groups)
+	require.NoError(t, directory.CommitGroupTransfer("view-empty"))
+
+	_, err = directory.BeginViewTransfer("view-cancelled", "app-a", "app-b", "production")
+	require.NoError(t, err)
+	require.True(t, directory.CancelGroupTransfer("view-cancelled"))
+	require.Error(t, directory.CommitGroupTransfer("view-cancelled"))
+}
+
+func TestViewTransferRejectsAViewWhosePanelIsAlreadyMoving(t *testing.T) {
+	directory := NewWorkspaceDirectory()
+	tab := workspaceTab("production", "api")
+	openDocked(t, directory, "app-a", tab)
+	require.NoError(t, directory.BeginGroupTransfer(floatTransfer("float-1", "app-a", tab)))
+
+	_, err := directory.BeginViewTransfer("view-1", "app-a", "app-b", "production")
+	require.Error(t, err)
+	require.Error(t, directory.CommitGroupTransfer("view-1"))
+	require.Equal(t, "float-1", panelsByID(directory, "production")[tab.PanelID].Transfer.TransferID)
+}

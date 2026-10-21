@@ -140,10 +140,13 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   read shows the move cancelled or its source gone. Native side effects (show,
   close) precede the commit, so failure cancels the pending move with no
   rollback.
-- Cluster-tab moves flush the latest source snapshot before acceptance. Their
-  targets stay provisional until the registry commits and must not claim source
-  panels. Directory reads started before such a target stages or settles must
-  not remove its reconstructed panels: invalidate them per cluster and refetch.
+- Cluster-tab moves are directory-owned too. The source flushes its latest
+  snapshot (tab closes still reach the directory as publications), then sends
+  only its view state. The directory moves every docked panel of that cluster in
+  the source view into the same edges of the target, after their existing tabs,
+  and the insert event names those panels. The target's panel projection mounts
+  them like any move; the cluster handoff, not `acknowledgePanelTransfer`,
+  commits once the view is restored and those panels are mounted.
 - Failure or timeout removes provisional copies and keeps source placement. A
   native source closes once its last tab commits elsewhere.
 - Dock-back moves the whole same-cluster group to right or bottom, keeping order

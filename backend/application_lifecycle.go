@@ -424,8 +424,8 @@ func (a *ApplicationLifecycle) ReleasePanelCluster(referenceID string) error {
 func (a *ApplicationLifecycle) StageClusterViewTransfer(source, target, clusterID string) (bool, error) {
 	return a.workspace.StageClusterViewTransfer(source, target, clusterID)
 }
-func (a *ApplicationLifecycle) CommitClusterViewTransfer(source, target, clusterID string, groups []panelwindow.WorkspaceGroup) error {
-	return a.workspace.CommitClusterViewTransfer(source, target, clusterID, groups)
+func (a *ApplicationLifecycle) CommitClusterViewTransfer(source, target, clusterID, transferID string) error {
+	return a.workspace.CommitClusterViewTransfer(source, target, clusterID, transferID)
 }
 func (a *ApplicationLifecycle) CancelClusterViewTransfer(target, clusterID string) error {
 	return a.workspace.CancelClusterViewTransfer(target, clusterID)

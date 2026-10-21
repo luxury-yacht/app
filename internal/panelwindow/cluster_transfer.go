@@ -14,16 +14,20 @@ type ClusterTabTransferRequest struct {
 	DropPosition     *WindowPoint `json:"dropPosition,omitempty"`
 }
 
+// ClusterViewSnapshot is the source view's navigation state. Its docked panels
+// are not part of it: the directory moves the panels it places in that view.
 type ClusterViewSnapshot struct {
-	SchemaVersion int              `json:"schemaVersion"`
-	ViewState     string           `json:"viewState"`
-	Groups        []WorkspaceGroup `json:"groups"`
+	SchemaVersion int    `json:"schemaVersion"`
+	ViewState     string `json:"viewState"`
 }
 
 type ClusterTabTransferEvent struct {
-	Request           ClusterTabTransferRequest `json:"request"`
-	Snapshot          ClusterViewSnapshot       `json:"snapshot"`
-	TargetAlreadyOpen bool                      `json:"targetAlreadyOpen"`
+	Request  ClusterTabTransferRequest `json:"request"`
+	Snapshot ClusterViewSnapshot       `json:"snapshot"`
+	// Groups are the panels the directory is moving with the view, which the
+	// target reconstructs before it acknowledges.
+	Groups            []WorkspaceGroup `json:"groups"`
+	TargetAlreadyOpen bool             `json:"targetAlreadyOpen"`
 }
 
 type ClusterTabTransferCommands interface {
@@ -35,7 +39,7 @@ type ClusterTabTransferCommands interface {
 
 type ClusterViewTransferLifecycle interface {
 	StageClusterViewTransfer(string, string, string) (bool, error)
-	CommitClusterViewTransfer(string, string, string, []WorkspaceGroup) error
+	CommitClusterViewTransfer(string, string, string, string) error
 	CancelClusterViewTransfer(string, string) error
 }
 
@@ -46,14 +50,9 @@ const (
 	ClusterTabTransferFailedEventName    = "cluster-tab-transfer:failed"
 )
 
-func ValidateClusterViewSnapshot(clusterID, source string, snapshot ClusterViewSnapshot) error {
+func ValidateClusterViewSnapshot(snapshot ClusterViewSnapshot) error {
 	if snapshot.SchemaVersion != 1 || len(snapshot.ViewState) > 1024*1024 || !json.Valid([]byte(snapshot.ViewState)) {
 		return fmt.Errorf("invalid cluster view snapshot")
 	}
-	for _, group := range snapshot.Groups {
-		if group.ClusterID != clusterID {
-			return fmt.Errorf("cluster view contains foreign panel group")
-		}
-	}
-	return ValidateWorkspaceGroups(source, PanelLocationDocked, snapshot.Groups)
+	return nil
 }

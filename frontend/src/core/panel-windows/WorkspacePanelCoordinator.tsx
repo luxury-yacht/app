@@ -502,6 +502,17 @@ function releaseSettledTransfers(
   }
 }
 
+const viewGroupKey = (transfer: IncomingGroupTransfer) =>
+  `${transfer.transferId}\0${transfer.groupId}`;
+
+function retainOnly(keys: Set<string>, listed: ReadonlySet<string>) {
+  for (const key of keys) {
+    if (!listed.has(key)) {
+      keys.delete(key);
+    }
+  }
+}
+
 // Asks the directory to cancel a move this view cannot take; its next read then
 // drops any provisional copy.
 const cancelIncomingTransfer = (
@@ -533,12 +544,29 @@ function useIncomingPanelTransfers({
   const guards = usePanelLifecycleGuardRegistry();
   const restoreWorkspacePanels = useRestoreWorkspacePanels();
   const statuses = useRef(new Map<string, IncomingTransferStatus>());
+  const mountedViewGroups = useRef(new Set<string>());
+  const moves = useMemo(() => incoming.filter((transfer) => !transfer.view), [incoming]);
+  const viewMoves = useMemo(() => incoming.filter((transfer) => transfer.view), [incoming]);
+
+  // A cluster view's groups mount here like any move, but the cluster-view
+  // handoff guards, acknowledges, and releases them.
+  useEffect(() => {
+    retainOnly(mountedViewGroups.current, new Set(viewMoves.map(viewGroupKey)));
+    for (const transfer of viewMoves) {
+      const key = viewGroupKey(transfer);
+      if (mountedViewGroups.current.has(key) || guards.isFrozen(transfer.transferId)) {
+        continue;
+      }
+      mountedViewGroups.current.add(key);
+      restoreWorkspacePanels(transfer, transfer.groupId, transfer.insertIndex);
+    }
+  }, [viewMoves, guards, restoreWorkspacePanels]);
 
   useEffect(() => {
-    releaseSettledTransfers(statuses.current, incoming, (transferId) =>
+    releaseSettledTransfers(statuses.current, moves, (transferId) =>
       guards.releaseTransfer(transferId)
     );
-    for (const transfer of incoming) {
+    for (const transfer of moves) {
       if (statuses.current.has(transfer.transferId)) {
         continue;
       }
@@ -559,11 +587,11 @@ function useIncomingPanelTransfers({
       );
       restoreWorkspacePanels(transfer, transfer.groupId, transfer.insertIndex);
     }
-  }, [incoming, guards, windowName, restoreWorkspacePanels]);
+  }, [moves, guards, windowName, restoreWorkspacePanels]);
 
   useEffect(() => {
     const mounted = new Set([...tabGroups.right.tabs, ...tabGroups.bottom.tabs]);
-    for (const transfer of incoming) {
+    for (const transfer of moves) {
       if (statuses.current.get(transfer.transferId) !== 'mounted') {
         continue;
       }
@@ -585,5 +613,5 @@ function useIncomingPanelTransfers({
           reportIncomingTransferError('acknowledge-move', transfer)(error);
         });
     }
-  }, [incoming, tabGroups, selectedClusterId, activateCluster, flushPublication, windowName]);
+  }, [moves, tabGroups, selectedClusterId, activateCluster, flushPublication, windowName]);
 }

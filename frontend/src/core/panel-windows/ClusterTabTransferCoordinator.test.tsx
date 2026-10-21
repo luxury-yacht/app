@@ -5,12 +5,10 @@ import { ClusterTabTransferCoordinator } from './ClusterTabTransferCoordinator';
 
 const mocks = vi.hoisted(() => ({
   handlers: {} as Record<string, (event: never) => void>,
-  accept: vi.fn(async () => undefined),
+  accept: vi.fn(async (..._args: unknown[]) => undefined),
   ack: vi.fn(async () => undefined),
   fail: vi.fn(async () => undefined),
   flush: vi.fn(async () => undefined),
-  stage: vi.fn(),
-  settle: vi.fn(),
   freeze: vi.fn(),
   release: vi.fn(),
   blocker: null as null | { focus: () => void },
@@ -86,8 +84,6 @@ vi.mock('@/ui/dockable', () => ({
 vi.mock('./WorkspacePanelSync', () => ({
   usePanelWorkspaceSync: () => ({
     flush: mocks.flush,
-    stage: mocks.stage,
-    settle: mocks.settle,
     groupsForCluster: () => mocks.groups,
   }),
 }));
@@ -117,7 +113,6 @@ const request = {
 };
 const snapshot = {
   schemaVersion: 1,
-  groups: [],
   viewState: JSON.stringify({
     clusterId: 'production',
     navigation: {
@@ -154,8 +149,10 @@ it('freezes and flushes the source before handing off its local view state', asy
   expect(mocks.accept).toHaveBeenCalledWith(
     'app-a',
     'move-1',
-    expect.objectContaining({ schemaVersion: 1, groups: [] })
+    expect.objectContaining({ schemaVersion: 1 })
   );
+  // The directory, not this renderer, decides which docked panels move.
+  expect(mocks.accept.mock.calls[0]?.[2]).not.toHaveProperty('groups');
   expect(mocks.remove).not.toHaveBeenCalled();
   expect(mocks.release).not.toHaveBeenCalled();
 });
@@ -176,6 +173,7 @@ it.each(['source', 'insert'])(
           ? request
           : { ...request, sourceWindowName: 'app-b', targetWindowName: 'app-a' },
       snapshot,
+      groups: [],
       targetAlreadyOpen: true,
     };
     await act(async () => mocks.handlers[role](event as never));
@@ -190,6 +188,7 @@ it('reuses existing destination navigation and acknowledges only after publicati
     mocks.handlers.insert({
       request: { ...request, sourceWindowName: 'app-b', targetWindowName: 'app-a' },
       snapshot,
+      groups: [],
       targetAlreadyOpen: true,
     } as never)
   );
@@ -205,6 +204,7 @@ it('restores the source navigation when the destination tab is new', async () =>
     mocks.handlers.insert({
       request: { ...request, sourceWindowName: 'app-b', targetWindowName: 'app-a' },
       snapshot,
+      groups: [],
       targetAlreadyOpen: false,
     } as never)
   );
@@ -215,7 +215,7 @@ it('restores the source navigation when the destination tab is new', async () =>
   expect(mocks.restoreTables).toHaveBeenCalledWith('production', {});
 });
 
-it('waits for exact panel reconstruction and removes the provisional copy on rollback', async () => {
+it('acknowledges once the directory-listed panels are mounted, without mounting them itself', async () => {
   const tab = {
     kind: 'object',
     panelId: 'pod-api',
@@ -237,20 +237,15 @@ it('waits for exact panel reconstruction and removes the provisional copy on rol
   };
   const event = {
     request: { ...request, sourceWindowName: 'app-b', targetWindowName: 'app-a' },
-    snapshot: { ...snapshot, groups: [group] },
+    snapshot,
+    groups: [group],
     targetAlreadyOpen: true,
   };
   await act(async () => mocks.handlers.insert(event as never));
-  expect(mocks.upsert).toHaveBeenCalledWith(
-    expect.objectContaining({ clusterId: 'production', tabs: [tab], activePanelId: tab.panelId })
-  );
-  expect(mocks.dock).toHaveBeenCalledWith(
-    'production',
-    ['pod-api'],
-    'pod-api',
-    'bottom',
-    undefined
-  );
+  expect(mocks.freeze).toHaveBeenCalledWith('move-1', ['pod-api']);
+  // The panel projection mounts the copies from directory reads.
+  expect(mocks.upsert).not.toHaveBeenCalled();
+  expect(mocks.dock).not.toHaveBeenCalled();
   expect(mocks.ack).not.toHaveBeenCalled();
   mocks.groups = [{ ...group, tabs: [{ ...tab, activeView: 'details' }] }];
   await act(async () => root.render(<ClusterTabTransferCoordinator />));

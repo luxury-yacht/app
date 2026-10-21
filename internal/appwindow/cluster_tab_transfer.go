@@ -11,6 +11,9 @@ import (
 type clusterViewTransfer struct {
 	event         panelwindow.ClusterTabTransferEvent
 	createdTarget bool
+	// release cancels the directory move begun at acceptance. Every cluster
+	// transfer ends in removeClusterTransferLocked, so its panels cannot be pinned.
+	release func()
 }
 
 func (r *Registry) RequestClusterTabTransfer(caller string, request panelwindow.ClusterTabTransferRequest) error {
@@ -78,24 +81,37 @@ func (r *Registry) AcceptClusterTabTransfer(source, id string, snapshot panelwin
 	if transfer == nil || !r.clusterTransfers.awaiting(id, transferAwaitingSource) || transfer.event.Request.SourceWindowName != source {
 		return fmt.Errorf("cluster transfer source or state is stale")
 	}
-	request := transfer.event.Request
-	if err := panelwindow.ValidateClusterViewSnapshot(request.ClusterID, source, snapshot); err != nil {
+	if err := panelwindow.ValidateClusterViewSnapshot(snapshot); err != nil {
 		return err
 	}
 	alreadyOpen, err := r.stageClusterTransferTargetUnlocked(transfer)
 	if err != nil {
 		return err
 	}
-	request = transfer.event.Request
-	snapshot.Groups = slices.Clone(snapshot.Groups)
-	for i := range snapshot.Groups {
-		snapshot.Groups[i].Tabs = slices.Clone(snapshot.Groups[i].Tabs)
-	}
+	request := transfer.event.Request
 	transfer.event = panelwindow.ClusterTabTransferEvent{Request: request, Snapshot: snapshot, TargetAlreadyOpen: alreadyOpen}
 	r.clusterTransfers.accept(id)
+	if err := r.beginClusterViewPlacementLocked(transfer); err != nil {
+		return errors.Join(err, r.cancelClusterTransferLocked(id, &closeWindows))
+	}
 	if !r.queueWorkspaceEvent(request.TargetWindowName, panelwindow.ClusterTabTransferInsertEventName, transfer.event) {
 		return errors.Join(fmt.Errorf("cluster transfer target is unavailable"), r.cancelClusterTransferLocked(id, &closeWindows))
 	}
+	r.emitWorkspaceChanged(request.ClusterID)
+	return nil
+}
+
+// The directory, not the source renderer, decides which docked panels travel
+// with the view; the insert event names them for the target's acknowledgement.
+func (r *Registry) beginClusterViewPlacementLocked(transfer *clusterViewTransfer) error {
+	request := transfer.event.Request
+	groups, err := r.workspace.BeginViewTransfer(request.TransferID, request.SourceWindowName, request.TargetWindowName, request.ClusterID)
+	if err != nil {
+		return err
+	}
+	directory := r.workspace
+	transfer.release = func() { directory.CancelGroupTransfer(request.TransferID) }
+	transfer.event.Groups = groups
 	return nil
 }
 
@@ -111,7 +127,7 @@ func (r *Registry) AcknowledgeClusterTabTransfer(target, id string) error {
 	event := transfer.event
 	request := event.Request
 	r.workspaceMu.Unlock()
-	err := r.backend.CommitClusterViewTransfer(request.SourceWindowName, target, request.ClusterID, event.Snapshot.Groups)
+	err := r.backend.CommitClusterViewTransfer(request.SourceWindowName, target, request.ClusterID, id)
 	r.workspaceMu.Lock()
 	if err != nil {
 		return err
@@ -156,6 +172,8 @@ func (r *Registry) cancelClusterTransferLocked(id string, closeWindows *[]string
 	r.discardQueuedClusterInsert(event.Request.TargetWindowName, id)
 	r.removeClusterTransferLocked(id)
 	r.emitClusterTransfer(event, panelwindow.ClusterTabTransferFailedEventName)
+	// A target that already read the move re-reads and drops its copies.
+	r.emitWorkspaceChanged(event.Request.ClusterID)
 	if transfer.createdTarget {
 		*closeWindows = append(*closeWindows, event.Request.TargetWindowName)
 	}
@@ -163,7 +181,9 @@ func (r *Registry) cancelClusterTransferLocked(id string, closeWindows *[]string
 }
 
 func (r *Registry) removeClusterTransferLocked(id string) {
-	r.clusterTransfers.finish(id)
+	if transfer := r.clusterTransfers.finish(id); transfer != nil && transfer.release != nil {
+		transfer.release()
+	}
 }
 
 func (r *Registry) emitClusterTransfer(event panelwindow.ClusterTabTransferEvent, name string) {

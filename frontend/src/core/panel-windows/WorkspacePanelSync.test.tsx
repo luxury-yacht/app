@@ -323,94 +323,12 @@ it('drains an object open and prevents its late result from remounting a closing
   expect(result).toBeNull();
 });
 
-it('preserves a provisional target while the directory still points to its source', async () => {
-  sync.stage('move-1', [
-    {
-      clusterId: 'production',
-      groupId: 'right',
-      tabs: mocks.local.production,
-      activePanelId: 'api',
-    },
-  ] as never);
-  mocks.read.mockResolvedValue({
-    revision: 2,
-    panels: [
-      {
-        tab: mocks.local.production[0],
-        location: { kind: 'docked', windowName: 'app-b', groupId: 'right' },
-      },
-    ],
-  });
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  expect(mocks.remove).not.toHaveBeenCalled();
-  sync.settle('move-1');
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  expect(mocks.remove).toHaveBeenCalledWith('production', 'api');
-});
-
 it('returns the latest source groups for a cluster-view handoff', async () => {
   await sync.flush();
   expect(sync.groupsForCluster('production')).toEqual([
     expect.objectContaining({ tabs: mocks.local.production }),
   ]);
   expect(sync.groupsForCluster('staging')).toEqual([]);
-});
-
-it('keeps transferred panels when a pre-commit directory read returns after settlement', async () => {
-  sync.stage('move-1', [
-    {
-      clusterId: 'production',
-      groupId: 'right',
-      tabs: mocks.local.production,
-      activePanelId: 'api',
-    },
-  ] as never);
-  let finishRead: (value: unknown) => void = () => undefined;
-  mocks.read.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        finishRead = resolve;
-      })
-  );
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  mocks.read.mockClear();
-  mocks.read.mockResolvedValue({
-    revision: 3,
-    panels: [
-      {
-        tab: mocks.local.production[0],
-        location: { kind: 'docked', windowName: 'app-a', groupId: 'right' },
-      },
-    ],
-  });
-  await act(async () => {
-    sync.settle('move-1');
-    finishRead({
-      revision: 2,
-      panels: [
-        {
-          tab: mocks.local.production[0],
-          location: { kind: 'docked', windowName: 'app-b', groupId: 'right' },
-        },
-      ],
-    });
-  });
-  expect(mocks.remove).not.toHaveBeenCalled();
-  expect(mocks.detach).not.toHaveBeenCalled();
-  expect(mocks.read).toHaveBeenCalledWith('app-a', 'production');
-
-  // A later authoritative move must still remove the old renderer's copy.
-  mocks.read.mockResolvedValue({
-    revision: 4,
-    panels: [
-      {
-        tab: mocks.local.production[0],
-        location: { kind: 'docked', windowName: 'app-c', groupId: 'right' },
-      },
-    ],
-  });
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  expect(mocks.remove).toHaveBeenCalledWith('production', 'api');
 });
 
 it('does not read a revoked cluster while the frontend still displays its closing tab', async () => {
@@ -596,6 +514,7 @@ it('lists a dock-back group the directory targets at this view and keeps its pro
       sourceWindowName: 'panel-1',
       groupId: 'bottom',
       insertIndex: 0,
+      view: false,
       tabs: [mocks.local.production[0]],
       activePanelId: 'api',
     },
@@ -632,4 +551,31 @@ it('ignores an older directory read that predates the move', async () => {
   await readDirectory(1, [dockingPanel({ transfer: undefined })]);
   expect(incoming).toHaveLength(1);
   expect(mocks.remove).not.toHaveBeenCalled();
+});
+
+it('lists each group of a cluster view move as a view move', async () => {
+  const [api] = mocks.local.production;
+  const worker = { ...api, panelId: 'worker', objectRef: { ...api.objectRef, name: 'worker' } };
+  const viewPanel = (tab: typeof api, groupId: string) => ({
+    tab,
+    location: { kind: 'docked', windowName: 'app-b', groupId, index: 0, active: true },
+    transfer: {
+      transferId: 'view-1',
+      view: true,
+      target: { kind: 'docked', windowName: 'app-a', groupId, index: 0, active: true },
+    },
+  });
+  await readDirectory(2, [viewPanel(api, 'right'), viewPanel(worker, 'bottom')]);
+  expect(incoming).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ transferId: 'view-1', groupId: 'right', view: true, tabs: [api] }),
+      expect.objectContaining({
+        transferId: 'view-1',
+        groupId: 'bottom',
+        view: true,
+        tabs: [worker],
+      }),
+    ])
+  );
+  expect(incoming).toHaveLength(2);
 });

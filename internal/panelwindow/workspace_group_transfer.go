@@ -1,6 +1,9 @@
 package panelwindow
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // PanelTransfer marks a panel whose whole group is moving to another renderer.
 // Only the directory commits or cancels it. Renderers project it from reads: the
@@ -8,6 +11,9 @@ import "fmt"
 type PanelTransfer struct {
 	TransferID string        `json:"transferId"`
 	Target     PanelLocation `json:"target"`
+	// View marks a panel moving with its cluster view; the view handoff, not
+	// the panel's target, settles the move.
+	View bool `json:"view,omitempty"`
 }
 
 // GroupTransfer is a renderer's intent to move a same-cluster group. Its tabs
@@ -59,20 +65,108 @@ func (d *WorkspaceDirectory) BeginGroupTransfer(transfer GroupTransfer, reservat
 		d.panels[key] = panel
 		keys = append(keys, key)
 	}
+	d.recordTransferLocked(transfer.TransferID, keys)
+	d.revision++
+	return nil
+}
+
+// BeginViewTransfer records a pending move of a cluster view's docked panels:
+// every panel the directory docks in source for the cluster, each keeping its
+// group, order, and activation, appended after the target's existing tabs. It
+// returns the moving groups so the target knows what it will reconstruct. A
+// view without panels records an empty move that still commits.
+func (d *WorkspaceDirectory) BeginViewTransfer(transferID, source, target, clusterID string, reservations ...*WorkspaceReservation) ([]WorkspaceGroup, error) {
+	if transferID == "" || source == "" || target == "" || source == target || clusterID == "" {
+		return nil, fmt.Errorf("view transfer requires transfer, cluster, and distinct window identity")
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if err := d.validateReservationsLocked(reservations); err != nil {
+		return nil, err
+	}
+	if _, exists := d.transfers[transferID]; exists {
+		return nil, fmt.Errorf("panel group transfer %q already exists", transferID)
+	}
+	moving, err := d.viewPanelsLocked(source, clusterID)
+	if err != nil {
+		return nil, err
+	}
+	keys := make([]workspacePanelKey, 0, len(moving))
+	for key, panel := range moving {
+		location := panel.Location
+		location.WindowName = target
+		appended := location
+		appended.Index = AppendToGroup
+		location.Index += d.insertIndexLocked(clusterID, appended, moving)
+		panel.Transfer = PanelTransfer{TransferID: transferID, Target: location, View: true}
+		d.panels[key] = panel
+		keys = append(keys, key)
+	}
+	d.recordTransferLocked(transferID, keys)
+	d.revision++
+	return viewGroups(clusterID, moving), nil
+}
+
+func (d *WorkspaceDirectory) viewPanelsLocked(source, clusterID string) (map[workspacePanelKey]WorkspacePanel, error) {
+	moving := make(map[workspacePanelKey]WorkspacePanel)
+	for key, panel := range d.panels {
+		if key.clusterID != clusterID || panel.Location.Kind != PanelLocationDocked || panel.Location.WindowName != source {
+			continue
+		}
+		if panel.moving() {
+			return nil, fmt.Errorf("cluster view panel %q is already moving", key.panelID)
+		}
+		moving[key] = panel
+	}
+	return moving, nil
+}
+
+// viewGroups lists a view's moving panels by group in their current order.
+func viewGroups(clusterID string, moving map[workspacePanelKey]WorkspacePanel) []WorkspaceGroup {
+	byGroup := make(map[string][]WorkspacePanel)
+	for _, panel := range moving {
+		byGroup[panel.Location.GroupID] = append(byGroup[panel.Location.GroupID], panel)
+	}
+	groups := make([]WorkspaceGroup, 0, len(byGroup))
+	for groupID, panels := range byGroup {
+		sort.Slice(panels, func(i, j int) bool { return panels[i].Location.Index < panels[j].Location.Index })
+		group := WorkspaceGroup{ClusterID: clusterID, GroupID: groupID, ActivePanelID: panels[0].Tab.PanelID}
+		for _, panel := range panels {
+			group.Tabs = append(group.Tabs, panel.Tab)
+			if panel.Location.Active {
+				group.ActivePanelID = panel.Tab.PanelID
+			}
+		}
+		groups = append(groups, group)
+	}
+	sort.Slice(groups, func(i, j int) bool { return groups[i].GroupID < groups[j].GroupID })
+	return groups
+}
+
+func (d *WorkspaceDirectory) recordTransferLocked(transferID string, keys []workspacePanelKey) {
 	if d.transfers == nil {
 		d.transfers = make(map[string][]workspacePanelKey)
 	}
-	d.transfers[transfer.TransferID] = keys
-	d.revision++
-	return nil
+	d.transfers[transferID] = keys
+}
+
+// groupRef identifies one cluster's group in one renderer.
+type groupRef struct {
+	clusterID, windowName, groupID string
+	kind                           PanelLocationKind
+}
+
+func refOf(clusterID string, location PanelLocation) groupRef {
+	return groupRef{clusterID, location.WindowName, location.GroupID, location.Kind}
 }
 
 // The moving group lands at the requested index within the target group, or
 // after its existing tabs when the index is AppendToGroup or out of range.
 func (d *WorkspaceDirectory) insertIndexLocked(clusterID string, target PanelLocation, moving map[workspacePanelKey]WorkspacePanel) int {
 	size := 0
+	group := refOf(clusterID, target)
 	for key, panel := range d.panels {
-		if _, isMoving := moving[key]; !isMoving && inGroup(key, panel, clusterID, target) {
+		if _, isMoving := moving[key]; !isMoving && refOf(key.clusterID, panel.Location) == group {
 			size++
 		}
 	}
@@ -80,11 +174,6 @@ func (d *WorkspaceDirectory) insertIndexLocked(clusterID string, target PanelLoc
 		return size
 	}
 	return target.Index
-}
-
-func inGroup(key workspacePanelKey, panel WorkspacePanel, clusterID string, group PanelLocation) bool {
-	return key.clusterID == clusterID && panel.Location.Kind == group.Kind &&
-		panel.Location.WindowName == group.WindowName && panel.Location.GroupID == group.GroupID
 }
 
 func (d *WorkspaceDirectory) validateGroupTransferSourceLocked(source string, next map[workspacePanelKey]WorkspacePanel) error {
@@ -121,28 +210,36 @@ func (d *WorkspaceDirectory) CommitGroupTransfer(transferID string) error {
 	return nil
 }
 
-// Existing tabs at or after the arriving group's index move behind it, and an
-// arriving active tab takes activation. Indexes order a group; gaps are allowed
-// because the target renderer republishes its arrangement.
+type arrival struct {
+	base, count int
+	activates   bool
+}
+
+// In each group receiving panels, existing tabs at or after the arrivals' index
+// move behind them, and an arriving active tab takes activation. Indexes order
+// a group; gaps are allowed because the target renderer republishes its
+// arrangement.
 func (d *WorkspaceDirectory) makeRoomLocked(next map[workspacePanelKey]WorkspacePanel) {
-	var clusterID string
-	var target PanelLocation
-	base, activates := -1, false
+	arrivals := make(map[groupRef]arrival)
 	for key, panel := range next {
-		clusterID, target = key.clusterID, panel.Location
-		if base < 0 || panel.Location.Index < base {
-			base = panel.Location.Index
+		ref := refOf(key.clusterID, panel.Location)
+		group, seen := arrivals[ref]
+		if !seen || panel.Location.Index < group.base {
+			group.base = panel.Location.Index
 		}
-		activates = activates || panel.Location.Active
+		group.count++
+		group.activates = group.activates || panel.Location.Active
+		arrivals[ref] = group
 	}
 	for key, panel := range d.panels {
-		if _, isMoving := next[key]; isMoving || !inGroup(key, panel, clusterID, target) {
+		group, arriving := arrivals[refOf(key.clusterID, panel.Location)]
+		if _, isMoving := next[key]; isMoving || !arriving {
 			continue
 		}
-		if panel.Location.Index >= base {
-			panel.Location.Index += len(next)
+		if panel.Location.Index >= group.base {
+			panel.Location.Index += group.count
 		}
-		panel.Location.Active = panel.Location.Active && !activates
+		panel.Location.Active = panel.Location.Active && !group.activates
 		d.panels[key] = panel
 	}
 }

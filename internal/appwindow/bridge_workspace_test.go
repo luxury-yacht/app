@@ -47,7 +47,7 @@ func TestSharedWorkspaceBridgePreservesIdentityAndReportsUnboundRegistry(t *test
 	tab := panelwindow.TabSnapshot{Kind: panelwindow.TabKindObject, PanelID: "api", ActiveView: "yaml", ObjectRef: panelwindow.ObjectReference{ClusterID: "production", Version: "v1", Kind: "Pod", Namespace: "payments", Name: "api"}}
 	groups := []panelwindow.WorkspaceGroup{{ClusterID: "production", GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}}
 	request := panelwindow.ClusterTabTransferRequest{TransferID: "transfer-1", SourceWindowName: "workspace-1", TargetWindowName: "workspace-2", ClusterID: "production"}
-	snapshot := panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}", Groups: groups}
+	snapshot := panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}"}
 	cases := []struct {
 		name string
 		call func(*Bridge) error

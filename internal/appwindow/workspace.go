@@ -205,11 +205,7 @@ func (r *Registry) commitDockedPublication(windowName string, groups []panelwind
 			return fmt.Errorf("panel publication cluster was removed")
 		}
 	}
-	publishedGroups, err := r.excludeProvisionalDockTabs(windowName, groups)
-	if err != nil {
-		return err
-	}
-	if err := r.workspace.PublishWindow(windowName, panelwindow.PanelLocationDocked, publishedGroups, reservations...); err != nil {
+	if err := r.workspace.PublishWindow(windowName, panelwindow.PanelLocationDocked, groups, reservations...); err != nil {
 		return err
 	}
 	for _, clusterID := range clusterIDs {
@@ -232,34 +228,6 @@ func (r *Registry) validateDockedPublication(windowName string, groups []panelwi
 		}
 	}
 	return clusterIDs, nil
-}
-
-type provisionalDockTab struct {
-	tab      panelwindow.TabSnapshot
-	position string
-}
-
-// A cluster-view target can publish its mounted layout before the transfer
-// commits. Those tabs stay assigned to the source view until commit. (Whole-group
-// dock-back needs no exclusion: the directory ignores panels it is moving.)
-func (r *Registry) excludeProvisionalDockTabs(windowName string, groups []panelwindow.WorkspaceGroup) ([]panelwindow.WorkspaceGroup, error) {
-	pending := make(map[string]provisionalDockTab)
-	r.addClusterTransferTabs(windowName, pending)
-	result := make([]panelwindow.WorkspaceGroup, 0, len(groups))
-	for _, group := range groups {
-		kept, err := excludeProvisionalGroupTabs(group, pending)
-		if err != nil {
-			return nil, err
-		}
-		if len(kept.Tabs) == 0 {
-			continue
-		}
-		if !slices.ContainsFunc(kept.Tabs, func(tab panelwindow.TabSnapshot) bool { return tab.PanelID == kept.ActivePanelID }) {
-			kept.ActivePanelID = kept.Tabs[0].PanelID
-		}
-		result = append(result, kept)
-	}
-	return result, nil
 }
 
 func (r *Registry) retainPanelWorkspace(clusterID string) error {
@@ -292,33 +260,4 @@ func (r *Registry) reportPanelLifecycleError(err error, action string) {
 	if err != nil && r.application != nil && r.application.Logger != nil {
 		r.application.Logger.Error(action, "error", err)
 	}
-}
-
-func (r *Registry) addClusterTransferTabs(windowName string, tabs map[string]provisionalDockTab) {
-	for id, transfer := range r.clusterTransfers.all() {
-		if !r.clusterTransfers.awaiting(id, transferAwaitingTarget) || transfer.event.Request.TargetWindowName != windowName {
-			continue
-		}
-		for _, group := range transfer.event.Snapshot.Groups {
-			for _, tab := range group.Tabs {
-				tabs[group.ClusterID+"\x00"+tab.PanelID] = provisionalDockTab{tab, group.GroupID}
-			}
-		}
-	}
-}
-
-func excludeProvisionalGroupTabs(group panelwindow.WorkspaceGroup, pending map[string]provisionalDockTab) (panelwindow.WorkspaceGroup, error) {
-	kept := group
-	kept.Tabs = nil
-	for _, tab := range group.Tabs {
-		provisional, exists := pending[group.ClusterID+"\x00"+tab.PanelID]
-		if !exists {
-			kept.Tabs = append(kept.Tabs, tab)
-			continue
-		}
-		if provisional.tab != tab || provisional.position != group.GroupID {
-			return panelwindow.WorkspaceGroup{}, fmt.Errorf("provisional dock tab does not match the transfer")
-		}
-	}
-	return kept, nil
 }

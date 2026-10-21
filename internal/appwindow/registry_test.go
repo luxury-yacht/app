@@ -1314,11 +1314,11 @@ func (b *recordingLifecycleBackend) StageClusterViewTransfer(source, target, clu
 	b.windowClusters[target] = append(existing, clusterID)
 	return false, nil
 }
-func (b *recordingLifecycleBackend) CommitClusterViewTransfer(source, target, clusterID string, groups []panelwindow.WorkspaceGroup) error {
+func (b *recordingLifecycleBackend) CommitClusterViewTransfer(source, target, clusterID, transferID string) error {
 	if b.commitClusterTransferError != nil {
 		return b.commitClusterTransferError
 	}
-	if err := b.PanelWorkspaceDirectory().TransferClusterView(source, target, clusterID, groups); err != nil {
+	if err := b.PanelWorkspaceDirectory().CommitGroupTransfer(transferID); err != nil {
 		return err
 	}
 	if b.windowClusters != nil {

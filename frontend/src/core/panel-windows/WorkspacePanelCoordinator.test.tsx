@@ -15,8 +15,6 @@ vi.mock('./WorkspacePanelSync', () => ({
       await mocks.flushPublication();
       return vi.fn();
     },
-    stage: vi.fn(),
-    settle: vi.fn(),
     groupsForCluster: () => [],
   }),
 }));
@@ -1056,6 +1054,21 @@ describe('WorkspacePanelCoordinator', () => {
     await receiveDockBack();
     expect(mocks.acknowledgeDock).toHaveBeenLastCalledWith('workspace-1', 'dock-1', false);
     expect(mocks.reportError).toHaveBeenCalledOnce();
+  });
+
+  it('mounts a cluster view move but leaves its handoff to the cluster coordinator', async () => {
+    mocks.tabGroups.bottom = { tabs: ['panel-a'], activeTab: 'panel-a' };
+    await receiveDockBack({ transferId: 'view-1', view: true });
+    expect(mocks.dockPanelGroup).toHaveBeenCalledWith(
+      'cluster-1',
+      ['panel-a'],
+      'panel-a',
+      'bottom',
+      0
+    );
+    await renderCoordinator();
+    expect(mocks.acknowledgeDock).not.toHaveBeenCalled();
+    expect(mocks.freeze).not.toHaveBeenCalled();
   });
 
   it('releases the move guard once the directory stops listing the transfer', async () => {

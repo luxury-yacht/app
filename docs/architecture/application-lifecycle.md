@@ -182,12 +182,14 @@ close sequences: [dockable-panels.md](../frontend/dockable-panels.md).
   removal handler and drop state when a panel leaves every window; moves and
   retained placements are not removals.
 - Publications report only a renderer's own arrangement; they never move a
-  panel between renderers. Cluster-view transfers validate complete source sets
-  before moving anything. Whole-group Float and dock-back and single panel-tab
-  moves record a pending move in the directory (`BeginGroupTransfer`), which
-  publications and `Open` cannot change; the owning transfer's terminal cancels
-  it unless it committed. The registry commits placement only after the
-  destination acknowledges reconstruction (`AcknowledgePanelTransfer`)
+  panel between renderers. Whole-group Float and dock-back and single panel-tab
+  moves record a pending move in the directory (`BeginGroupTransfer`); a
+  cluster-view transfer records one for every docked panel the directory places
+  in the source view (`BeginViewTransfer`). Publications and `Open` cannot
+  change a pending move, and the owning transfer's terminal cancels it unless
+  it committed. The registry commits placement only after the destination
+  acknowledges reconstruction (`AcknowledgePanelTransfer`, or the cluster-view
+  handoff, whose commit runs inside the selection mutation)
   ([renderer protocol](../frontend/dockable-panels.md#acknowledged-handoffs)).
 - Opening another app view of a cluster uses the move's cluster-selection
   admission and seeded window factory without committing source removal.

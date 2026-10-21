@@ -15,6 +15,12 @@ export interface ClusterPanelCloseEvent {
 export interface ClusterTabTransferEvent {
     "request": ClusterTabTransferRequest;
     "snapshot": ClusterViewSnapshot;
+
+    /**
+     * Groups are the panels the directory is moving with the view, which the
+     * target reconstructs before it acknowledges.
+     */
+    "groups": WorkspaceGroup[] | null;
     "targetAlreadyOpen": boolean;
 }
 
@@ -27,10 +33,13 @@ export interface ClusterTabTransferRequest {
     "dropPosition"?: WindowPoint | null;
 }
 
+/**
+ * ClusterViewSnapshot is the source view's navigation state. Its docked panels
+ * are not part of it: the directory moves the panels it places in that view.
+ */
 export interface ClusterViewSnapshot {
     "schemaVersion": number;
     "viewState": string;
-    "groups": WorkspaceGroup[] | null;
 }
 
 export interface GroupSnapshot {
@@ -121,6 +130,12 @@ export interface PanelOpenResult {
 export interface PanelTransfer {
     "transferId": string;
     "target": PanelLocation;
+
+    /**
+     * View marks a panel moving with its cluster view; the view handoff, not
+     * the panel's target, settles the move.
+     */
+    "view"?: boolean;
 }
 
 export interface TabCloseAuthorizedEvent {

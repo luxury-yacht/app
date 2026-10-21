@@ -124,9 +124,9 @@ func (b *workspaceLockCheckingBackend) StageClusterViewTransfer(source, target, 
 	b.check()
 	return b.recordingLifecycleBackend.StageClusterViewTransfer(source, target, cluster)
 }
-func (b *workspaceLockCheckingBackend) CommitClusterViewTransfer(source, target, cluster string, groups []panelwindow.WorkspaceGroup) error {
+func (b *workspaceLockCheckingBackend) CommitClusterViewTransfer(source, target, cluster, transferID string) error {
 	b.check()
-	return b.recordingLifecycleBackend.CommitClusterViewTransfer(source, target, cluster, groups)
+	return b.recordingLifecycleBackend.CommitClusterViewTransfer(source, target, cluster, transferID)
 }
 func (b *workspaceLockCheckingBackend) CancelClusterViewTransfer(target, cluster string) error {
 	b.check()
