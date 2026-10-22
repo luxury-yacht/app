@@ -36,8 +36,8 @@ changed path crosses that boundary.
   selection, close, drag/drop, and identity contracts.
 - Reuse shared CSS/tokens.
 
-Focused checks while iterating; use browser or Storybook validation for visual
-behavior:
+Focused checks while iterating; use Storybook or the native app for visual
+behavior (see [browser automation](../../setup/browser-automation.md)):
 
 ```sh
 mise exec -- npm run typecheck --prefix frontend

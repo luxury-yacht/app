@@ -58,7 +58,10 @@ For missing kinds or links:
    or user-facing behavior change.
 
 For visual-only renderer work, confirm the data/model is already correct,
-change only renderer/layout/styles, and validate in a browser or screenshot.
+change only renderer/layout/styles, and validate in Storybook
+(`ObjectMap.stories.tsx` fixtures) or the native app. A browser on the
+`wails3 dev` URL shows no backend data; see
+[browser automation](../../setup/browser-automation.md).
 
 ## Validation
 
