@@ -8,10 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/rest"
 )
@@ -159,5 +162,62 @@ func TestProtobufRestConfigNegotiatesProtobufWithJSONFallback(t *testing.T) {
 	}
 	if cfg.Host != base.Host {
 		t.Fatalf("the copy must retain the base config's fields, Host = %q", cfg.Host)
+	}
+}
+
+// Owned reflectors list through the cluster clientset's typed RESTClients
+// (ingest.IngestManager.restClientFor), which, unlike generated typed clients,
+// do not ask for protobuf on their own. If that clientset were built from the
+// base config, every reflector would silently decode JSON, several times slower
+// than protobuf at intake. A production reflector's LIST must ask for protobuf.
+func TestOwnedReflectorListsNegotiateProtobuf(t *testing.T) {
+	listAccept := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/api/v1/configmaps" {
+			_, _ = w.Write([]byte(`{"major":"1","minor":"30"}`))
+			return
+		}
+		if r.URL.Query().Get("watch") == "true" {
+			// Hold the watch open until the reflector stops.
+			w.WriteHeader(http.StatusOK)
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		select {
+		case listAccept <- r.Header.Get("Accept"):
+		default:
+		}
+		_, _ = w.Write([]byte(`{"kind":"ConfigMapList","apiVersion":"v1","metadata":{"resourceVersion":"1"},"items":[]}`))
+	}))
+	defer server.Close()
+
+	app := newClusterRuntimeTestFixture(t)
+	clients, err := app.ClusterRuntime.buildClusterClientsWithManager(
+		context.Background(),
+		kubeconfigSelection{Path: writeTestKubeconfig(t, server.URL), Context: "test-context"},
+		ClusterMeta{ID: "test-cluster", Name: "Test Cluster"},
+		nil,
+	)
+	require.NoError(t, err)
+	defer clients.authManager.Shutdown()
+
+	// The production hand-off: the refresh subsystem disables WatchList and gives
+	// clients.client to the ingest manager.
+	require.NoError(t, ingest.DisableWatchList())
+	manager := ingest.NewIngestManager(streamrows.ClusterMeta{ClusterID: "test-cluster", ClusterName: "Test Cluster"}, clients.client, nil, nil)
+	manager.SetPermissionFilter(func(group, resource, _ string) bool { return group == "" && resource == "configmaps" })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager.Start(ctx)
+	defer manager.Stop()
+
+	select {
+	case accept := <-listAccept:
+		require.True(t, strings.HasPrefix(accept, "application/vnd.kubernetes.protobuf"),
+			"reflector LIST Accept = %q, want protobuf first", accept)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the configmaps reflector never listed")
 	}
 }

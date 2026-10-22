@@ -107,6 +107,14 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
   disables client-go's beta WatchList gate before reflectors are built. A
   capability probe is insufficient: a proxy can deliver the terminal bookmark
   while streaming a large initial collection too slowly for an interactive app.
+- **Built-in reflectors decode protobuf.** The clientset handed to ingest is
+  built from `protobufRestConfig` (`backend/cluster_client_contract.go`), and
+  `TestOwnedReflectorListsNegotiateProtobuf` pins it. A reflector built on a
+  plain config decodes JSON, several times slower at intake, so benchmarks
+  and spikes must build their clientset the same way. The 2026-10 events spike
+  missed this and blamed reflectors for a 2× slower initial sync than an
+  informer; with protobuf on both sides, the owned events reflector synced
+  faster (73 ms against 102 ms at 30,000 events).
 - **Sync deadline is liveness only.** A per-GVR deadline
   (`IngestManager.entrySettled`) degrades a hung GVR instead of wedging the cluster;
   until the source completes a real initial list, dependent snapshots report
