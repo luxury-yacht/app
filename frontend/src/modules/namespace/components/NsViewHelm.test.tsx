@@ -24,7 +24,6 @@ vi.mock('@shared/hooks/useObjectActionController', () => ({
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({}),
 }));
-vi.mock('@/hooks/useShortNames', () => ({ useShortNames: () => false }));
 vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({ default: () => null }));
 vi.mock('@modules/resource-grid/useQueryBackedResourceGridTable', () => ({
   useQueryBackedNamespaceResourceGridTable: (params: {

@@ -222,10 +222,6 @@ vi.mock('@/core/data-access', async (importOriginal) => {
   };
 });
 
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
 const baseNode: ClusterNodeRow = {
   ref: {
     ...makeResourceRef({ kind: 'Node', resource: 'nodes', name: 'node-1' }),

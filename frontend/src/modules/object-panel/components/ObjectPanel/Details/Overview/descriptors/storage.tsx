@@ -179,13 +179,13 @@ export const pvcDescriptor: OverviewDescriptor<PersistentVolumeClaimDetails> = {
         field: 'dataSource',
         label: 'Data Source',
         hidden: (d) => !d.dataSource,
-        render: (d, context) => {
+        render: (d) => {
           const source = d.dataSource?.ref ?? d.dataSource?.display;
           if (!source) {
             return undefined;
           }
           const label = `${source.kind}/${source.name}`;
-          const ref = resourceLinkToObjectReference(d.dataSource, context.clusterName);
+          const ref = resourceLinkToObjectReference(d.dataSource);
           return ref ? <ObjectPanelLink objectRef={ref}>{label}</ObjectPanelLink> : label;
         },
       },

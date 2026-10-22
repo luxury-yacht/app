@@ -279,10 +279,6 @@ vi.mock('@/core/data-access', () => ({
   useScopedRefreshDomainLifecycle: vi.fn(),
 }));
 
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
 vi.mock('@core/backend-api', () => ({
   RunObjectAction: vi.fn().mockResolvedValue({ name: 'job-123' }),
 }));

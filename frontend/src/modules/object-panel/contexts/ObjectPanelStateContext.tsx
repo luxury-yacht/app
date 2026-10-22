@@ -271,7 +271,8 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   children,
   initialGroup,
 }) => {
-  const { selectedClusterId, selectedClusterName, managedClusterIds } = useKubeconfig();
+  const { selectedClusterId, managedClusterIds, selectedKubeconfigs, getClusterMeta } =
+    useKubeconfig();
   const activeClusterIds = managedClusterIds ?? EMPTY_CLUSTER_IDS;
   // Keep object panel state scoped per cluster tab to avoid cross-tab state leakage.
   const [objectPanelStateByCluster, setObjectPanelStateByCluster] = useState<
@@ -331,14 +332,26 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
     });
   }, [activeClusterIds]);
 
+  // A cluster's name comes from its id: a ref built in another cluster's view
+  // (a link to an object elsewhere) can carry that other cluster's name.
+  const clusterNamesById = useMemo(
+    () =>
+      new Map(
+        selectedKubeconfigs.map((selection) => {
+          const meta = getClusterMeta(selection);
+          return [meta.id, meta.name] as const;
+        })
+      ),
+    [selectedKubeconfigs, getClusterMeta]
+  );
+
   const hydrateClusterMeta = useCallback(
     (data: KubernetesObjectReference): KubernetesObjectReference => {
       const clusterId = data.clusterId?.trim() || undefined;
       const clusterName =
+        (clusterId && clusterNamesById.get(clusterId)?.trim()) ||
         data.clusterName?.trim() ||
-        (clusterId && clusterId === selectedClusterId?.trim()
-          ? selectedClusterName?.trim() || undefined
-          : undefined);
+        undefined;
       if (clusterId === data.clusterId && clusterName === data.clusterName) {
         return data;
       }
@@ -348,7 +361,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         clusterName,
       };
     },
-    [selectedClusterId, selectedClusterName]
+    [clusterNamesById]
   );
 
   const onRowClick = useCallback(

@@ -6,31 +6,22 @@ import { DockablePanelTestHost } from '@/test-utils/DockablePanelTestHost';
  * Covers key behaviors and edge cases for DockablePanel.
  */
 
-import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/ObjectPanelTabs';
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { useAppRegionNavigation } from '@ui/layout/appFocusRegions';
-import { KeyboardProvider } from '@ui/shortcuts/context';
 import React, { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 import type { PanelLayoutStore } from './panelLayoutStore';
 import { usePanelLayoutStoreContext } from './panelLayoutStoreContext';
 
-vi.mock('@core/backend-api', () => ({
-  GetZoomLevel: vi.fn().mockResolvedValue(100),
-  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: vi.fn(() => ({
-    selectedClusterId: 'cluster-a',
-    managedClusterIds: ['cluster-a'],
-  })),
-}));
+// The app shell supplies the production keyboard, zoom, and cluster owners
+// (test-utils/appState); each test renders its own dockable provider.
+const app = installAppStateHarness();
+let view: MountedApp;
 
 const ensureContentElement = () => {
   if (!document.querySelector('.content')) {
@@ -50,47 +41,27 @@ const ensureContentElement = () => {
 
 const renderPanel = async (ui: React.ReactElement<{ children?: React.ReactNode }>) => {
   ensureContentElement();
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-
-  await act(async () => {
-    const wrapped =
-      ui.type === DockablePanelProvider ? (
-        <KeyboardProvider>
-          <ZoomProvider>
-            {React.cloneElement(
-              ui,
-              undefined,
-              <>
-                <DockablePanelTestHost />
-                {ui.props.children}
-              </>
-            )}
-          </ZoomProvider>
-        </KeyboardProvider>
-      ) : (
-        <KeyboardProvider>
-          <DockablePanelProvider>
-            <ZoomProvider>
-              <DockablePanelTestHost />
-              {ui}
-            </ZoomProvider>
-          </DockablePanelProvider>
-        </KeyboardProvider>
-      );
-    root.render(wrapped);
-    await Promise.resolve();
-  });
+  const wrapped =
+    ui.type === DockablePanelProvider ? (
+      React.cloneElement(
+        ui,
+        undefined,
+        <>
+          <DockablePanelTestHost />
+          {ui.props.children}
+        </>
+      )
+    ) : (
+      <DockablePanelProvider>
+        <DockablePanelTestHost />
+        {ui}
+      </DockablePanelProvider>
+    );
+  await view.show(wrapped);
 
   return {
-    container,
-    root,
-    unmount: () =>
-      act(() => {
-        root.unmount();
-        container.remove();
-      }),
+    container: view.container,
+    unmount: () => view.clear(),
   };
 };
 
@@ -101,6 +72,12 @@ const getVisiblePanelSection = (selector: string) =>
   }) ?? null;
 
 describe('DockablePanel', () => {
+  beforeEach(async () => {
+    const dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default']);
+    view = await app.render(null);
+  });
+
   afterEach(() => {
     document.querySelectorAll('.dockable-panel-layer').forEach((node) => {
       node.remove();

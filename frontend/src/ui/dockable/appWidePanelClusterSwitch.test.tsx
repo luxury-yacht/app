@@ -3,111 +3,82 @@
  *
  * App-wide panels (Diagnostics) keep their open flag outside the per-cluster
  * dock layout. Switching cluster tabs must not hide one the user has open.
+ * Two real clusters are open and the user switches between them through the
+ * real kubeconfig owner (test-utils/appState).
  */
 
-import { ZoomProvider } from '@core/contexts/ZoomContext';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { DockablePanelTestHost } from '@/test-utils/DockablePanelTestHost';
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider } from './DockablePanelProvider';
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: vi.fn(),
-}));
-vi.mock('@core/backend-api', () => ({
-  GetZoomLevel: vi.fn().mockResolvedValue(100),
-  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
-}));
-
-const selectCluster = (clusterId: string) => {
-  vi.mocked(useKubeconfig).mockReturnValue({
-    selectedClusterId: clusterId,
-    managedClusterIds: ['cluster-a', 'cluster-b'],
-  } as unknown as ReturnType<typeof useKubeconfig>);
-};
+const app = installAppStateHarness();
 
 describe('app-wide dockable panels across cluster tabs', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let view: MountedApp;
+  let alpha: TestCluster;
+  let beta: TestCluster;
 
   const draw = async (isOpen: boolean) => {
-    await act(async () => {
-      root.render(
-        <ZoomProvider>
-          <TabDragProvider>
-            <DockablePanelProvider>
-              <DockablePanelTestHost />
-              <DockablePanel panelId="diagnostics" title="Diagnostics" isOpen={isOpen}>
-                <div data-testid="diagnostics-body" />
-              </DockablePanel>
-            </DockablePanelProvider>
-          </TabDragProvider>
-        </ZoomProvider>
-      );
-    });
-    // Registration, group sync, and the content host settle over a few passes.
-    for (let pass = 0; pass < 3; pass += 1) {
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
-    }
+    await view.show(
+      <DockablePanelProvider>
+        <DockablePanelTestHost />
+        <DockablePanel panelId="diagnostics" title="Diagnostics" isOpen={isOpen}>
+          <div data-testid="diagnostics-body" />
+        </DockablePanel>
+      </DockablePanelProvider>
+    );
   };
 
   const diagnosticsVisible = () =>
     Boolean(document.querySelector('[data-testid="diagnostics-body"]'));
 
-  beforeEach(() => {
+  beforeEach(async () => {
     const content = document.createElement('div');
     content.className = 'content';
     const body = document.createElement('div');
     body.className = 'content-body';
     content.appendChild(body);
     document.body.appendChild(content);
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+    alpha = app.cluster({ name: 'dev', context: 'alpha' });
+    beta = app.cluster({ name: 'dev', context: 'beta' });
+    app.namespaces(alpha, ['default']);
+    app.namespaces(beta, ['default']);
+    view = await app.render(null);
   });
 
   afterEach(() => {
-    act(() => root.unmount());
-    while (document.body.firstChild) {
-      document.body.removeChild(document.body.firstChild);
-    }
-    vi.clearAllMocks();
+    document.querySelectorAll('.content').forEach((node) => {
+      node.remove();
+    });
   });
 
   it('stays open when the user switches to a cluster tab visited before it opened', async () => {
     // Both tabs are visited while the panel is closed, as when two clusters
     // are open before the user opens Diagnostics.
-    selectCluster('cluster-a');
     await draw(false);
-    selectCluster('cluster-b');
-    await draw(false);
-    selectCluster('cluster-a');
-    await draw(false);
+    await view.selectCluster(beta);
+    await view.selectCluster(alpha);
 
     await draw(true);
     expect(diagnosticsVisible()).toBe(true);
 
-    selectCluster('cluster-b');
-    await draw(true);
+    await view.selectCluster(beta);
     expect(diagnosticsVisible()).toBe(true);
   });
 
   it('stays closed on every cluster tab once the user closes it', async () => {
-    selectCluster('cluster-a');
     await draw(true);
-    selectCluster('cluster-b');
-    await draw(true);
+    await view.selectCluster(beta);
     expect(diagnosticsVisible()).toBe(true);
 
     await draw(false);
-    selectCluster('cluster-a');
-    await draw(false);
+    await view.selectCluster(alpha);
     expect(diagnosticsVisible()).toBe(false);
   });
 });

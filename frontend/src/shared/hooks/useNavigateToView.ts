@@ -71,10 +71,7 @@ function navigationTarget(objectRef: KubernetesObjectReference) {
   if (!focus?.version || focus.group === undefined) {
     return null;
   }
-  const destination = getViewForKind(focus.kind, objectRef.group, focus.namespace);
-  if (!destination) {
-    return null;
-  }
+  const destination = getViewForKind(focus.kind, focus.group, focus.namespace);
   return {
     destination,
     request: {

@@ -45,16 +45,26 @@ backend and object panel. Editor mechanics: [YAML editor](../frontend/yaml-edito
    proceeds without a prompt; it must never block saving. An identity change
    found by the check comes back as `yamlConflict` and is likewise ignored;
    Apply reports it.
-6. **Drift is discovered reactively, not enforced.** The `object-yaml` refresh
-   domain is disabled while editing, freezing the snapshot; drift surfaces
-   through a failed merge, ownership conflicts on untouched fields, or the
-   post-apply diff. Reload & Merge is an in-process three-way merge
-   (`overwrite=false`) that never writes; unresolvable overlap returns a
-   `MergeConflict` with the live YAML for manual review. Conflicts (UID
-   mismatch, merge conflict, failed merge precondition) are `yamlConflict`
-   results on the Apply, Merge and ownership-check responses, never errors,
-   so the live YAML cannot reach toasts, history, or telemetry; real API
-   rejections stay errors whose status carries the field causes.
+6. **Drift is watched while editing, never enforced.**
+   - The tab keeps its `object-yaml` lease while it is active, also while
+     editing. Live snapshots never touch the draft or its baseline; only
+     editor actions set them.
+   - Drift is a new resourceVersion whose content differs from the baseline
+     under the field policy's semantic compare. Status, resourceVersion, uid,
+     managedFields, and the other server-managed fields are ignored, so
+     controller churn is not drift.
+   - A drifted object shows the draft's diff against the live YAML and offers
+     Reload & Merge: an in-process three-way merge (`overwrite=false`) that
+     never writes. Unresolvable overlap returns a `MergeConflict` with the
+     live YAML for manual review.
+   - A replaced object (a live uid that differs from the baseline's, or an
+     `ObjectUIDMismatch` conflict from Apply) shows the diff without Reload &
+     Merge, because the merge refuses a different object.
+   - Conflicts (UID mismatch, merge conflict, failed merge precondition) are
+     `yamlConflict` results on the Apply, Merge and ownership-check responses,
+     never errors, so the live YAML cannot reach toasts, history, or
+     telemetry. Real API rejections stay errors whose status carries the field
+     causes.
 7. **Every save is verified.** The editor re-fetches the live object,
    semantic-compares it with the submission, and shows a diff when
    controllers or concurrent writers changed the stored result.
@@ -69,7 +79,8 @@ backend and object panel. Editor mechanics: [YAML editor](../frontend/yaml-edito
   deleted paths.
 - CRD list edits use JSON merge patch, which replaces whole arrays and ignores
   `x-kubernetes-list-type`; only SSA or precise JSON Patch fixes this.
-- Concurrent same-field overwrites show only in the post-apply diff.
+- A same-field change made by someone else during the edit is flagged as
+  drift, but saving anyway still writes the draft's value, like kubectl edit.
 
 ## Rejected Approaches
 

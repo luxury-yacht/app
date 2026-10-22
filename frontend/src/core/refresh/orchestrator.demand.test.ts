@@ -2,28 +2,14 @@
  * frontend/src/core/refresh/orchestrator.demand.test.ts
  *
  * Demand contract of the refresh layer, driven through the real orchestrator,
- * runtimes, store, domain registrations, and stream managers. Only snapshot
- * reads and the named-stream sockets are faked (test-utils/refreshHarness).
+ * runtimes, store, domain registrations, and stream managers. Only the
+ * refresh HTTP API and the named-stream sockets are faked
+ * (test-utils/appState).
  * Each test states what the backend is asked for: which scopes are read and
  * which stream subscriptions are open.
  */
 
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const { fetchSnapshotMock } = vi.hoisted(() => ({ fetchSnapshotMock: vi.fn() }));
-
-vi.mock('./client', () => ({
-  fetchSnapshot: (...args: unknown[]) => fetchSnapshotMock(...args),
-  setMetricsActive: () => Promise.resolve(),
-}));
-
-vi.mock('@/core/logging/appLogsClient', () => ({
-  APP_LOG_SOURCES: new Proxy({}, { get: (_target, key) => String(key) }),
-  logAppLogsDebug: () => undefined,
-  logAppLogsInfo: () => undefined,
-  logAppLogsWarn: () => undefined,
-  logAppLogsError: () => undefined,
-}));
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   acquireRefreshDomainLease,
@@ -34,21 +20,18 @@ import {
 } from '@/core/data-access/dataAccess';
 import { eventBus } from '@/core/events';
 import {
-  resetAppPreferencesCacheForTesting,
-  setAppPreferencesForTesting,
-} from '@/core/settings/appPreferences';
-import { errorWithStatus, makeErrorStatus } from '@/test-utils/errorStatusFixtures';
-import {
-  acknowledgeStream,
-  activeStreamSubscriptions,
   flushRefreshWork,
-  installFakeStreamSockets,
+  installAppStateHarness,
   markClusterReady,
-  resetRefreshHarness,
-  ringStream,
   setAutoRefresh,
+} from '@/test-utils/appState/harness';
+import {
+  type SnapshotRequest,
+  snapshotResponse,
+  statusResponse,
   streamKey,
-} from '@/test-utils/refreshHarness';
+} from '@/test-utils/appState/transport';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { testScope } from '@/test-utils/refreshScope';
 import { clusterReadiness } from './clusterReadiness';
 import { refreshOrchestrator } from './orchestrator';
@@ -66,37 +49,35 @@ const namespaceScope = (clusterId: string, namespace = 'team-a') =>
 const defaultPayload = (domain: RefreshDomain): unknown =>
   domain === 'cluster-events' ? makeClusterEventsSnapshotPayload() : {};
 
+const app = installAppStateHarness({ streams: 'manual' });
+
 let snapshotVersion = 0;
 
-const snapshotResponse = (domain: RefreshDomain, scope: string) => {
+/** A fresh snapshot version for every read, as a changing backend answers. */
+const answerRead = ({ domain, scope }: SnapshotRequest) => {
   snapshotVersion += 1;
-  return {
-    notModified: false,
-    etag: `v${snapshotVersion}`,
-    snapshot: {
-      domain,
-      scope,
-      version: snapshotVersion,
-      checksum: `c${snapshotVersion}`,
-      generatedAt: Date.now(),
-      sequence: snapshotVersion,
-      payload: defaultPayload(domain),
-      stats: { itemCount: 0, buildDurationMs: 0 },
-    },
-  };
+  return snapshotResponse({
+    domain,
+    scope,
+    version: snapshotVersion,
+    payload: defaultPayload(domain as RefreshDomain),
+    itemCount: 0,
+  });
 };
 
+/** A read the backend never answers; it settles only when the client aborts. */
+const stalledRead = (signal: AbortSignal | null): Promise<Response> =>
+  new Promise((_resolve, reject) => {
+    signal?.addEventListener('abort', () => reject(signal.reason));
+  });
+
 const answerReads = () => {
-  fetchSnapshotMock.mockImplementation(async (domain: RefreshDomain, options: { scope: string }) =>
-    snapshotResponse(domain, options.scope)
-  );
+  app.snapshots.respond(answerRead);
 };
 
 /** Scopes read since the last reset, in order. */
 const reads = (domain?: RefreshDomain): string[] =>
-  fetchSnapshotMock.mock.calls
-    .filter(([calledDomain]) => !domain || calledDomain === domain)
-    .map(([calledDomain, options]) => `${calledDomain} ${(options as { scope: string }).scope}`);
+  app.snapshots.reads(domain).map((read) => `${read.domain} ${read.scope}`);
 
 const readsOf = (domain: RefreshDomain, scope: string): number =>
   reads(domain).filter((entry) => entry === `${domain} ${scope}`).length;
@@ -112,21 +93,13 @@ const settle = async () => {
   await flushRefreshWork();
 };
 
-beforeAll(() => {
-  installFakeStreamSockets();
-});
-
 beforeEach(() => {
   vi.useFakeTimers();
-  resetAppPreferencesCacheForTesting();
-  setAppPreferencesForTesting({ autoRefreshEnabled: true });
   setAutoRefresh(true);
-  fetchSnapshotMock.mockReset();
   answerReads();
 });
 
 afterEach(async () => {
-  resetRefreshHarness();
   await vi.runOnlyPendingTimersAsync();
   vi.useRealTimers();
 });
@@ -137,13 +110,13 @@ describe('scheduled polling follows leases', () => {
     const scope = yamlScope('poll-a');
     acquireRefreshDomainLease({ domain: 'object-yaml', scope });
     await settle();
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
 
     await advance(10_000);
     expect(readsOf('object-yaml', scope)).toBe(2);
 
     releaseRefreshDomainLease({ domain: 'object-yaml', scope });
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(20_000);
     expect(readsOf('object-yaml', scope)).toBe(0);
   });
@@ -158,7 +131,7 @@ describe('scheduled polling follows leases', () => {
     await settle();
 
     releaseRefreshDomainLease({ domain: 'object-yaml', scope: first });
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(10_000);
 
     expect(readsOf('object-yaml', first)).toBe(0);
@@ -170,10 +143,10 @@ describe('scheduled polling follows leases', () => {
     markClusterReady('poll-fail');
     const scope = yamlScope('poll-fail');
     const readTimes: number[] = [];
-    fetchSnapshotMock.mockReset();
-    fetchSnapshotMock.mockImplementation(async () => {
+    app.snapshots.clearReads();
+    app.snapshots.respond(() => {
       readTimes.push(Date.now());
-      throw errorWithStatus(makeErrorStatus('InternalError'));
+      return statusResponse(makeErrorStatus('InternalError'));
     });
     acquireRefreshDomainLease({ domain: 'object-yaml', scope });
     await settle();
@@ -199,21 +172,20 @@ describe('scheduled polling follows leases', () => {
     readTimes.length = 0;
     await advance(130_000);
     expect(readTimes).toHaveLength(0);
+
+    // The user is told about the failing poll once, not on every retry.
+    expect(app.errors.take((record) => record.kinds.includes('toast'))).toHaveLength(1);
   });
 });
 
 describe('poll deadlines', () => {
   // A hung backend read: it settles only when its signal aborts.
   const stallReads = (readTimes: number[] = []) => {
-    fetchSnapshotMock.mockReset();
-    fetchSnapshotMock.mockImplementation(
-      (_domain: RefreshDomain, options: { signal?: AbortSignal }) => {
-        readTimes.push(Date.now());
-        return new Promise((_resolve, reject) => {
-          options.signal?.addEventListener('abort', () => reject(options.signal?.reason));
-        });
-      }
-    );
+    app.snapshots.clearReads();
+    app.snapshots.respond(({ signal }) => {
+      readTimes.push(Date.now());
+      return stalledRead(signal);
+    });
     return readTimes;
   };
 
@@ -235,6 +207,9 @@ describe('poll deadlines', () => {
     const gaps = readTimes.slice(1).map((time, index) => time - readTimes[index]);
     expect(gaps[gaps.length - 1]).toBeGreaterThanOrEqual(60_000);
     releaseRefreshDomainLease({ domain: 'object-yaml', scope });
+
+    // The user is told about the timed-out poll once, not on every retry.
+    expect(app.errors.take((record) => record.kinds.includes('toast'))).toHaveLength(1);
   });
 
   it('records nothing when a release cancels a stalled poll', async () => {
@@ -276,7 +251,7 @@ describe('retained data', () => {
     const scope = eventsScope('retain-a');
     acquireRefreshDomainLease({ domain: 'cluster-events', scope, preserveState: true });
     await settle();
-    acknowledgeStream('cluster-events', scope);
+    app.streams.acknowledge('cluster-events', scope);
     await settle();
     const painted = getScopedDomainState('cluster-events', scope).data;
     expect(painted).toBeTruthy();
@@ -285,7 +260,7 @@ describe('retained data', () => {
     await settle();
     expect(getScopedDomainState('cluster-events', scope).data).toBe(painted);
 
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     acquireRefreshDomainLease({ domain: 'cluster-events', scope, preserveState: true });
     expect(getScopedDomainState('cluster-events', scope).data).toBe(painted);
     releaseRefreshDomainLease({ domain: 'cluster-events', scope, preserveState: true });
@@ -316,13 +291,13 @@ describe('streams replace polling while healthy', () => {
     const scope = eventsScope('stream-a');
     acquireRefreshDomainLease({ domain: 'cluster-events', scope });
     await settle();
-    expect(activeStreamSubscriptions()).toContain(streamKey('cluster-events', scope));
+    expect(app.streams.active()).toContain(streamKey('cluster-events', scope));
 
-    acknowledgeStream('cluster-events', scope);
+    app.streams.acknowledge('cluster-events', scope);
     await settle();
     expect(getScopedDomainState('cluster-events', scope).data).toBeTruthy();
 
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(15_000);
     expect(readsOf('cluster-events', scope)).toBe(0);
     releaseRefreshDomainLease({ domain: 'cluster-events', scope });
@@ -333,10 +308,10 @@ describe('streams replace polling while healthy', () => {
     const scope = overviewScope('overview-poll');
     acquireRefreshDomainLease({ domain: 'cluster-overview', scope });
     await settle();
-    acknowledgeStream('cluster-overview', scope);
+    app.streams.acknowledge('cluster-overview', scope);
     await settle();
 
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(20_000);
     expect(readsOf('cluster-overview', scope)).toBeGreaterThanOrEqual(2);
     releaseRefreshDomainLease({ domain: 'cluster-overview', scope });
@@ -349,14 +324,14 @@ describe('auto-refresh pause', () => {
     const scope = eventsScope('pause-a');
     acquireRefreshDomainLease({ domain: 'cluster-events', scope });
     await settle();
-    acknowledgeStream('cluster-events', scope);
+    app.streams.acknowledge('cluster-events', scope);
     await settle();
 
     setAutoRefresh(false);
     await advance(30_000);
-    expect(activeStreamSubscriptions()).not.toContain(streamKey('cluster-events', scope));
+    expect(app.streams.active()).not.toContain(streamKey('cluster-events', scope));
 
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(30_000);
     expect(readsOf('cluster-events', scope)).toBe(0);
 
@@ -380,13 +355,13 @@ describe('settled permission denial', () => {
   it('stops automatic reads after a typed denial and lets the user ask again', async () => {
     markClusterReady('denied-a');
     const scope = yamlScope('denied-a');
-    fetchSnapshotMock.mockRejectedValue(errorWithStatus(makeErrorStatus('Forbidden')));
+    app.snapshots.respond(() => statusResponse(makeErrorStatus('Forbidden')));
     acquireRefreshDomainLease({ domain: 'object-yaml', scope });
     await requestRefreshDomain({ domain: 'object-yaml', scope, reason: 'startup' });
     await settle();
     expect(getScopedDomainState('object-yaml', scope).permissionDenied).toBe(true);
 
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(30_000);
     expect(readsOf('object-yaml', scope)).toBe(0);
 
@@ -435,8 +410,8 @@ describe('closing a cluster', () => {
     acquireRefreshDomainLease({ domain: 'cluster-events', scope: kept, preserveState: true });
     acquireRefreshDomainLease({ domain: 'object-yaml', scope: closedYaml });
     await settle();
-    acknowledgeStream('cluster-events', closed);
-    acknowledgeStream('cluster-events', kept);
+    app.streams.acknowledge('cluster-events', closed);
+    app.streams.acknowledge('cluster-events', kept);
     await settle();
     expect(getScopedDomainState('cluster-events', closed).data).toBeTruthy();
     const keptData = getScopedDomainState('cluster-events', kept).data;
@@ -444,12 +419,12 @@ describe('closing a cluster', () => {
 
     refreshOrchestrator.setConnectedClusters(['close-b']);
     await settle();
-    expect(activeStreamSubscriptions()).not.toContain(streamKey('cluster-events', closed));
-    expect(activeStreamSubscriptions()).toContain(streamKey('cluster-events', kept));
+    expect(app.streams.active()).not.toContain(streamKey('cluster-events', closed));
+    expect(app.streams.active()).toContain(streamKey('cluster-events', kept));
     expect(getScopedDomainState('cluster-events', closed).data).toBeNull();
     expect(getScopedDomainState('cluster-events', kept).data).toBe(keptData);
 
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(10_000);
     expect(readsOf('cluster-events', closed)).toBe(0);
     expect(readsOf('object-yaml', closedYaml)).toBe(0);
@@ -467,9 +442,9 @@ describe('closing every cluster', () => {
     acquireRefreshDomainLease({ domain: 'cluster-events', scope: events });
     acquireRefreshDomainLease({ domain: 'object-yaml', scope: yaml });
     await settle();
-    acknowledgeStream('cluster-events', events);
+    app.streams.acknowledge('cluster-events', events);
     await settle();
-    expect(activeStreamSubscriptions()).toContain(streamKey('cluster-events', events));
+    expect(app.streams.active()).toContain(streamKey('cluster-events', events));
     expect(getScopedDomainState('cluster-events', events).data).toBeTruthy();
 
     eventBus.emit('kubeconfig:changing', '');
@@ -477,8 +452,8 @@ describe('closing every cluster', () => {
     expect(getScopedDomainState('cluster-events', events).data).toBeNull();
     releaseRefreshDomainLease({ domain: 'cluster-events', scope: events });
     releaseRefreshDomainLease({ domain: 'object-yaml', scope: yaml });
-    expect(activeStreamSubscriptions()).not.toContain(streamKey('cluster-events', events));
-    fetchSnapshotMock.mockClear();
+    expect(app.streams.active()).not.toContain(streamKey('cluster-events', events));
+    app.snapshots.clearReads();
     await advance(20_000);
     expect(reads()).toEqual([]);
 
@@ -486,7 +461,7 @@ describe('closing every cluster', () => {
     markClusterReady('all-a');
     acquireRefreshDomainLease({ domain: 'cluster-events', scope: events });
     await settle();
-    expect(activeStreamSubscriptions()).toContain(streamKey('cluster-events', events));
+    expect(app.streams.active()).toContain(streamKey('cluster-events', events));
     releaseRefreshDomainLease({ domain: 'cluster-events', scope: events });
   });
 });
@@ -497,21 +472,19 @@ describe('failed reads under a healthy stream', () => {
     const scope = eventsScope('retry-a');
     acquireRefreshDomainLease({ domain: 'cluster-events', scope });
     await settle();
-    acknowledgeStream('cluster-events', scope);
+    app.streams.acknowledge('cluster-events', scope);
     await settle();
     expect(getScopedDomainState('cluster-events', scope).data).toBeTruthy();
 
     let failNext = true;
-    fetchSnapshotMock.mockReset();
-    fetchSnapshotMock.mockImplementation(
-      async (domain: RefreshDomain, options: { scope: string }) => {
-        if (failNext) {
-          failNext = false;
-          throw errorWithStatus(makeErrorStatus('InternalError'));
-        }
-        return snapshotResponse(domain, options.scope);
+    app.snapshots.clearReads();
+    app.snapshots.respond((request) => {
+      if (failNext) {
+        failNext = false;
+        return statusResponse(makeErrorStatus('InternalError'));
       }
-    );
+      return answerRead(request);
+    });
     await requestRefreshDomain({ domain: 'cluster-events', scope, reason: 'stream-signal' });
     await settle();
     expect(readsOf('cluster-events', scope)).toBe(1);
@@ -520,6 +493,9 @@ describe('failed reads under a healthy stream', () => {
     expect(readsOf('cluster-events', scope)).toBe(2);
     expect(getScopedDomainState('cluster-events', scope).error).toBeNull();
     releaseRefreshDomainLease({ domain: 'cluster-events', scope });
+
+    // The user is told about the failed signal read once, not on every retry.
+    expect(app.errors.take((record) => record.kinds.includes('toast'))).toHaveLength(1);
   });
 });
 
@@ -578,7 +554,7 @@ describe('Overview cluster switch', () => {
         setAutoRefresh(false);
         await settle();
       }
-      fetchSnapshotMock.mockClear();
+      app.snapshots.clearReads();
 
       showOverviewFor(to);
       await settle();
@@ -596,7 +572,7 @@ describe('hidden document', () => {
     await settle();
 
     eventBus.emit('app:visibility-hidden');
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(20_000);
     expect(readsOf('object-yaml', scope)).toBe(0);
 
@@ -605,7 +581,7 @@ describe('hidden document', () => {
     expect(readsOf('object-yaml', scope)).toBe(1);
 
     eventBus.emit('app:visibility-visible');
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(10_000);
     expect(readsOf('object-yaml', scope)).toBe(2);
     releaseRefreshDomainLease({ domain: 'object-yaml', scope });
@@ -618,7 +594,7 @@ describe('hidden document', () => {
     const scope = yamlScope('hidden-b');
     acquireRefreshDomainLease({ domain: 'object-yaml', scope });
     await settle();
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
 
     await advance(4_000);
     eventBus.emit('app:visibility-visible');
@@ -640,7 +616,7 @@ describe('manual refresh', () => {
     acquireRefreshDomainLease({ domain: 'cluster-events', scope: eventsA });
     acquireRefreshDomainLease({ domain: 'object-yaml', scope: yamlB });
     await settle();
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
 
     await requestContextRefresh({ reason: 'user', clusterId: 'manual-a' });
     await settle();
@@ -740,16 +716,10 @@ describe('request intent survives deferral', () => {
     await settle();
 
     const hung = new Set<string>();
-    fetchSnapshotMock.mockImplementation(
-      (_domain: RefreshDomain, options: { scope: string; signal?: AbortSignal }) => {
-        hung.add(options.scope);
-        return new Promise((_resolve, reject) => {
-          options.signal?.addEventListener('abort', () =>
-            reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
-          );
-        });
-      }
-    );
+    app.snapshots.respond(({ scope, signal }) => {
+      hung.add(scope);
+      return stalledRead(signal);
+    });
     await advance(5_000);
     void requestRefreshDomain({ domain: 'object-yaml', scope: asked, reason: 'user' });
     await settle();
@@ -758,7 +728,7 @@ describe('request intent survives deferral', () => {
     clusterReadiness.beginForegroundActivation('activate-a');
     await settle();
     answerReads();
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     clusterReadiness.endForegroundActivation('activate-a');
     await settle();
 
@@ -778,7 +748,7 @@ describe('leases own streaming', () => {
     acquireRefreshDomainLease({ domain: 'namespace-config', scope });
     await settle();
 
-    expect(activeStreamSubscriptions()).toContain(streamKey('namespace-config', scope));
+    expect(app.streams.active()).toContain(streamKey('namespace-config', scope));
     releaseRefreshDomainLease({ domain: 'namespace-config', scope });
   });
 
@@ -793,11 +763,11 @@ describe('leases own streaming', () => {
 
       releaseRefreshDomainLease({ domain: 'namespace-config', scope, demand });
       await advance(1_000);
-      expect(activeStreamSubscriptions()).toContain(streamKey('namespace-config', scope));
+      expect(app.streams.active()).toContain(streamKey('namespace-config', scope));
 
       releaseRefreshDomainLease({ domain: 'namespace-config', scope, demand });
       await advance(1_000);
-      expect(activeStreamSubscriptions()).not.toContain(streamKey('namespace-config', scope));
+      expect(app.streams.active()).not.toContain(streamKey('namespace-config', scope));
     }
   );
 
@@ -811,20 +781,20 @@ describe('leases own streaming', () => {
     await settle();
 
     expect(readsOf('cluster-events', scope)).toBeGreaterThan(0);
-    expect(activeStreamSubscriptions()).not.toContain(streamKey('cluster-events', scope));
+    expect(app.streams.active()).not.toContain(streamKey('cluster-events', scope));
   });
 
   it('starts nothing before the cluster serves, then streams and reads once it does', async () => {
     const scope = namespaceScope('own-d');
     acquireRefreshDomainLease({ domain: 'namespace-config', scope });
     await settle();
-    expect(activeStreamSubscriptions()).not.toContain(streamKey('namespace-config', scope));
+    expect(app.streams.active()).not.toContain(streamKey('namespace-config', scope));
     expect(readsOf('namespace-config', scope)).toBe(0);
 
     markClusterReady('own-d');
     await settle();
-    expect(activeStreamSubscriptions()).toContain(streamKey('namespace-config', scope));
-    acknowledgeStream('namespace-config', scope);
+    expect(app.streams.active()).toContain(streamKey('namespace-config', scope));
+    app.streams.acknowledge('namespace-config', scope);
     await settle();
     expect(readsOf('namespace-config', scope)).toBe(1);
     releaseRefreshDomainLease({ domain: 'namespace-config', scope });
@@ -851,7 +821,7 @@ describe('leases own streaming', () => {
 
       start.mockRestore();
       await advance(4_000);
-      expect(activeStreamSubscriptions()).toContain(streamKey('namespace-config', scope));
+      expect(app.streams.active()).toContain(streamKey('namespace-config', scope));
 
       releaseRefreshDomainLease({ domain: 'namespace-config', scope });
       const restarted = vi.spyOn(resourceStreamManager, 'start');
@@ -860,6 +830,9 @@ describe('leases own streaming', () => {
     } finally {
       vi.restoreAllMocks();
     }
+
+    // The user is told about the failing stream start once, not on every retry.
+    expect(app.errors.take((record) => record.kinds.includes('toast'))).toHaveLength(1);
   });
 
   it('stops a released scope’s retries even while its start keeps failing', async () => {
@@ -881,6 +854,9 @@ describe('leases own streaming', () => {
     } finally {
       vi.restoreAllMocks();
     }
+
+    // The user is told about the failing stream start once, not on every retry.
+    expect(app.errors.take((record) => record.kinds.includes('toast'))).toHaveLength(1);
   });
 
   it('stops streams while auto-refresh is off and restarts only leased scopes', async () => {
@@ -894,11 +870,11 @@ describe('leases own streaming', () => {
 
     setAutoRefresh(false);
     await advance(1_000);
-    expect(activeStreamSubscriptions()).toEqual([]);
+    expect(app.streams.active()).toEqual([]);
 
     setAutoRefresh(true);
     await settle();
-    expect(activeStreamSubscriptions()).toEqual([streamKey('namespace-config', leased)]);
+    expect(app.streams.active()).toEqual([streamKey('namespace-config', leased)]);
     releaseRefreshDomainLease({ domain: 'namespace-config', scope: leased });
   });
 
@@ -907,11 +883,11 @@ describe('leases own streaming', () => {
     const scope = namespaceScope('own-g');
     acquireRefreshDomainLease({ domain: 'namespace-workloads', scope, preserveState: true });
     await settle();
-    expect(activeStreamSubscriptions()).toContain(streamKey('namespace-workloads', scope));
-    acknowledgeStream('namespace-workloads', scope);
+    expect(app.streams.active()).toContain(streamKey('namespace-workloads', scope));
+    app.streams.acknowledge('namespace-workloads', scope);
     await settle();
 
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(30_000);
     expect(readsOf('namespace-workloads', scope)).toBe(0);
     releaseRefreshDomainLease({ domain: 'namespace-workloads', scope, preserveState: true });
@@ -922,7 +898,7 @@ describe('leases own streaming', () => {
     const scope = namespaceScope('own-h');
     acquireRefreshDomainLease({ domain: 'namespace-config', scope });
     await settle();
-    expect(activeStreamSubscriptions()).toContain(streamKey('namespace-config', scope));
+    expect(app.streams.active()).toContain(streamKey('namespace-config', scope));
 
     eventBus.emit('refresh:resource-stream-drift', {
       domain: 'namespace-config',
@@ -934,11 +910,11 @@ describe('leases own streaming', () => {
       extraKeys: 0,
     });
     await advance(1_000);
-    expect(activeStreamSubscriptions()).not.toContain(streamKey('namespace-config', scope));
+    expect(app.streams.active()).not.toContain(streamKey('namespace-config', scope));
 
     eventBus.emit('kubeconfig:selection-changed');
     await settle();
-    expect(activeStreamSubscriptions()).toContain(streamKey('namespace-config', scope));
+    expect(app.streams.active()).toContain(streamKey('namespace-config', scope));
     releaseRefreshDomainLease({ domain: 'namespace-config', scope });
   });
 });
@@ -968,13 +944,13 @@ describe('object events cadence', () => {
     const scope = testScope('events-cadence', 'team-a:apps/v1:Deployment:web');
     acquireRefreshDomainLease({ domain: 'object-events', scope, preserveState: true });
     await settle();
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(6_500);
     expect(readsOf('object-events', scope)).toBe(2);
 
-    acknowledgeStream('object-events', scope);
+    app.streams.acknowledge('object-events', scope);
     await settle();
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(30_000);
     expect(readsOf('object-events', scope)).toBe(0);
     releaseRefreshDomainLease({ domain: 'object-events', scope, preserveState: true });
@@ -991,22 +967,22 @@ describe('signal refetch follows snapshot leases', () => {
     const scope = eventsScope(clusterId);
     acquireRefreshDomainLease({ domain: 'cluster-events', scope, demand });
     await settle();
-    acknowledgeStream('cluster-events', scope);
+    app.streams.acknowledge('cluster-events', scope);
     await settle();
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     return scope;
   };
 
   it('refetches a leased snapshot scope once per declared clock advance', async () => {
     const scope = await leaseHealthyEvents('signal-a');
 
-    ringStream('cluster-events', scope, 'event', 'e1');
+    app.streams.ring('cluster-events', scope, 'event', 'e1');
     await advance(500);
     expect(readsOf('cluster-events', scope)).toBe(1);
 
     // Applying that read's payload is not a signal, and neither is a repeat
     // of a clock value the scope already holds.
-    ringStream('cluster-events', scope, 'event', 'e1');
+    app.streams.ring('cluster-events', scope, 'event', 'e1');
     await advance(10_000);
     expect(readsOf('cluster-events', scope)).toBe(1);
     releaseRefreshDomainLease({ domain: 'cluster-events', scope });
@@ -1016,7 +992,7 @@ describe('signal refetch follows snapshot leases', () => {
     const scope = await leaseHealthyEvents('signal-b');
     acquireRefreshDomainLease({ domain: 'cluster-events', scope });
 
-    ringStream('cluster-events', scope, 'event', 'e1');
+    app.streams.ring('cluster-events', scope, 'event', 'e1');
     await advance(500);
     expect(readsOf('cluster-events', scope)).toBe(1);
     releaseRefreshDomainLease({ domain: 'cluster-events', scope });
@@ -1029,18 +1005,20 @@ describe('signal refetch follows snapshot leases', () => {
     const first = new Promise<void>((resolve) => {
       finishFirst = resolve;
     });
-    fetchSnapshotMock.mockImplementationOnce(
-      async (domain: RefreshDomain, options: { scope: string }) => {
+    let held = true;
+    app.snapshots.respond(async (request) => {
+      if (held) {
+        held = false;
         await first;
-        return snapshotResponse(domain, options.scope);
       }
-    );
+      return answerRead(request);
+    });
 
-    ringStream('cluster-events', scope, 'event', 'e1');
+    app.streams.ring('cluster-events', scope, 'event', 'e1');
     await advance(500);
-    ringStream('cluster-events', scope, 'event', 'e2');
+    app.streams.ring('cluster-events', scope, 'event', 'e2');
     await advance(500);
-    ringStream('cluster-events', scope, 'event', 'e3');
+    app.streams.ring('cluster-events', scope, 'event', 'e3');
     await advance(500);
     expect(readsOf('cluster-events', scope)).toBe(1);
 
@@ -1053,7 +1031,7 @@ describe('signal refetch follows snapshot leases', () => {
   it('never reads the base snapshot for a query-only lease', async () => {
     const scope = await leaseHealthyEvents('signal-d', 'query');
 
-    ringStream('cluster-events', scope, 'event', 'e1');
+    app.streams.ring('cluster-events', scope, 'event', 'e1');
     await advance(500);
     expect(readsOf('cluster-events', scope)).toBe(0);
     releaseRefreshDomainLease({ domain: 'cluster-events', scope, demand: 'query' });
@@ -1065,16 +1043,18 @@ describe('signal refetch follows snapshot leases', () => {
     const first = new Promise<void>((resolve) => {
       finishFirst = resolve;
     });
-    fetchSnapshotMock.mockImplementationOnce(
-      async (domain: RefreshDomain, options: { scope: string }) => {
+    let held = true;
+    app.snapshots.respond(async (request) => {
+      if (held) {
+        held = false;
         await first;
-        return snapshotResponse(domain, options.scope);
       }
-    );
-    ringStream('cluster-events', scope, 'event', 'e1');
+      return answerRead(request);
+    });
+    app.streams.ring('cluster-events', scope, 'event', 'e1');
     await advance(500);
     // Lands during the read, so it latches the one trailing read.
-    ringStream('cluster-events', scope, 'event', 'e2');
+    app.streams.ring('cluster-events', scope, 'event', 'e2');
     await advance(500);
 
     setAutoRefresh(false);
@@ -1084,9 +1064,9 @@ describe('signal refetch follows snapshot leases', () => {
 
     setAutoRefresh(true);
     await settle();
-    acknowledgeStream('cluster-events', scope);
+    app.streams.acknowledge('cluster-events', scope);
     await settle();
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(3_500);
     expect(readsOf('cluster-events', scope)).toBe(1);
     await advance(10_000);

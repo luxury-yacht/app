@@ -108,8 +108,6 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
 }));
 
-vi.mock('@/hooks/useShortNames', () => ({ useShortNames: () => false }));
-
 vi.mock('@modules/resource-grid/useQueryBackedResourceGridTable', () => ({
   useQueryBackedClusterResourceGridTable: (params: Record<string, unknown>) => {
     queryParamsRef.current = params;

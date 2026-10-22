@@ -106,10 +106,6 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
   }),
 }));
 
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));

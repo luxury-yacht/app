@@ -1,836 +1,621 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.test.tsx
+ *
+ * An opened object panel: which tabs it offers for its kind and the user's
+ * permissions, what it hands each tab, how it reads, keeps, and refreshes its
+ * object's details, when it marks the object deleted, which namespace
+ * permissions it evaluates, and that it collects metrics from the moment it
+ * opens. Runs the full app (AppLayout hosts the panel); each tab's content is
+ * stubbed to capture what the panel gives it. Only the backend boundary is
+ * faked (test-utils/appState).
  */
 
-import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import { objectPanelId } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
-import { act, createContext, useSyncExternalStore } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RefreshFailure } from '@/core/refresh/refreshFailure';
-import type { ErrorStatusObjectRef, ObjectDetail } from '@/core/refresh/types';
+import { act } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  makeClusterNodeSnapshotPayload,
+  makeNamespaceWorkloadSnapshotPayload,
+  makePodSnapshotEntry,
+  makePodSnapshotPayload,
+} from '@/core/refresh/refreshContractTestBuilders';
+import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
+import { getScopedDomainState } from '@/core/refresh/store';
+import type { ErrorStatusObjectRef } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type PermissionDecision,
+  type PermissionQuery,
+  type TestCluster,
+  type TestObject,
+} from '@/test-utils/appState/harness';
 import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
-import { testScope } from '@/test-utils/refreshScope';
 import { requireValue } from '@/test-utils/requireValue';
 
-const notFound = (ref?: ErrorStatusObjectRef): RefreshFailure => ({
-  kind: 'backend',
-  status: makeErrorStatus('NotFound', 'widgets.example.com "api" not found', { ref }),
+const tabProps = vi.hoisted(() => ({
+  details: [] as Array<Record<string, unknown>>,
+  logs: [] as Array<Record<string, unknown>>,
+  shell: [] as Array<Record<string, unknown>>,
+  events: [] as Array<Record<string, unknown>>,
+  yaml: [] as Array<Record<string, unknown>>,
+  manifest: [] as Array<Record<string, unknown>>,
+  values: [] as Array<Record<string, unknown>>,
+}));
+
+const captureTab = (key: keyof typeof tabProps) => ({
+  default: (props: Record<string, unknown>) => {
+    tabProps[key].push(props);
+    return null;
+  },
 });
+vi.mock('@modules/object-panel/components/ObjectPanel/Details/DetailsTab', () =>
+  captureTab('details')
+);
+vi.mock('@modules/object-panel/components/ObjectPanel/Logs/LogViewer', () => captureTab('logs'));
+vi.mock('@modules/object-panel/components/ObjectPanel/Shell/ShellTab', () => captureTab('shell'));
+vi.mock('@modules/object-panel/components/ObjectPanel/Events/EventsTab', () =>
+  captureTab('events')
+);
+vi.mock('@modules/object-panel/components/ObjectPanel/Yaml/YamlTab', () => captureTab('yaml'));
+vi.mock('@modules/object-panel/components/ObjectPanel/Helm/ManifestTab', () =>
+  captureTab('manifest')
+);
+vi.mock('@modules/object-panel/components/ObjectPanel/Helm/ValuesTab', () => captureTab('values'));
 
-interface DetailsTabCapture {
-  onAfterDelete: () => void;
-  onAfterAction: () => void;
-  deletion?: {
-    deletionTimestamp: string;
-    finalizers?: string[];
-  } | null;
-  detailModel: {
-    activeDetail: ObjectDetail | null;
-    containerSection: unknown;
-    dataSection: unknown;
-    roleRules?: unknown;
-    desiredScaleReplicas: number;
-    activePodNames: unknown;
-  };
-}
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-type CapabilityState = {
-  allowed: boolean;
-  pending: boolean;
-  reason?: string;
-};
+const last = <T,>(items: readonly T[]): T | undefined => items[items.length - 1];
+const lastDetailsProps = () => requireValue(last(tabProps.details), 'Details tab props');
 
-type PanelTestOptions = {
-  kind: string;
-  name: string;
-  namespace?: string;
-  clusterId?: string;
-  group?: string;
-  version?: string;
-  capabilityOverrides?: Record<string, CapabilityState>;
-  logPermission?: { allowed: boolean; pending: boolean };
-  scopedDomain?: { data: unknown; status: string; error: RefreshFailure | null };
-};
+const identity = (
+  kind: string,
+  name: string,
+  namespace = 'team-a',
+  group = '',
+  version = 'v1'
+): ObjectIdentity => ({ group, version, kind, namespace, name });
+const deployment = identity('Deployment', 'api', 'team-a', 'apps');
+const widget = identity('Widget', 'api', 'team-a', 'example.com');
 
-const {
-  detailsTabPropsRef,
-  logViewerPropsRef,
-  shellTabPropsRef,
-  eventsTabPropsRef,
-  yamlTabPropsRef,
-  manifestTabPropsRef,
-  valuesTabPropsRef,
-} = vi.hoisted(() => ({
-  detailsTabPropsRef: { current: null as DetailsTabCapture | null },
-  logViewerPropsRef: { current: null as unknown },
-  shellTabPropsRef: { current: null as unknown },
-  eventsTabPropsRef: { current: null as unknown },
-  yamlTabPropsRef: { current: null as unknown },
-  manifestTabPropsRef: { current: null as unknown },
-  valuesTabPropsRef: { current: null as unknown },
-}));
+type DetailsAnswer =
+  | { details: object; deletion?: object }
+  | { fail: ReturnType<typeof makeErrorStatus> }
+  | { respond: () => Response };
 
-const getDetailsTabProps = () =>
-  requireValue(detailsTabPropsRef.current, 'expected DetailsTab props in ObjectPanel.test.tsx');
-
-const mockClosePanel = vi.fn();
-const mockUseCapabilities = vi.fn();
-const mockUseUserPermission = vi.fn();
-const mockQueryNamespacePermissions = vi.fn();
-const mockUseRefreshScopedDomain = vi.fn();
-const mockUseShortcut = vi.fn();
-
-const mockRefreshOrchestrator = {
-  acquireScopedDomainLease: vi.fn(),
-  releaseScopedDomainLease: vi.fn(),
-  resetScopedDomain: vi.fn(),
-  stopStreamingDomain: vi.fn(),
-  fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
-};
-
-const mockErrorHandler = {
-  handle: vi.fn(),
-};
-
-const mockApp = {
-  RunObjectAction: vi.fn().mockResolvedValue({}),
-};
-
-const defaultClusterId = 'alpha:ctx';
-
-// Shared, reactive active-tab store mirroring the real two-context split:
-// setObjectPanelActiveTab (on the state context) writes, useObjectPanelActiveTab
-// (a separate subscription) reads, and a write re-renders the consuming
-// ObjectPanel — matching the real provider's tab-change behavior.
-const tabStore = vi.hoisted(() => {
-  let tabs = new Map<string, string>();
-  const listeners = new Set<() => void>();
-  return {
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    getSnapshot: () => tabs,
-    set: (panelId: string, tab: string) => {
-      if (tabs.get(panelId) === tab) {
-        return;
-      }
-      const next = new Map(tabs);
-      next.set(panelId, tab);
-      tabs = next;
-      listeners.forEach((listener) => {
-        listener();
-      });
-    },
-    reset: () => {
-      tabs = new Map();
-      listeners.forEach((listener) => {
-        listener();
-      });
-    },
-  };
-});
-
-vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
-  useObjectPanelState: () => ({
-    closePanel: mockClosePanel,
-    openPanels: new Map(),
-    showObjectPanel: true,
-    onRowClick: vi.fn(),
-    onCloseObjectPanel: vi.fn(),
-    setShowObjectPanel: vi.fn(),
-    hydrateClusterMeta: vi.fn((d: unknown) => d),
-    setObjectPanelActiveTab: (_clusterId: string, panelId: string, tab: string) =>
-      tabStore.set(panelId, tab),
-  }),
-  useObjectPanelActiveTab: (panelId: string) =>
-    useSyncExternalStore(tabStore.subscribe, tabStore.getSnapshot).get(panelId),
-}));
-
-// Mock dockable to provide both DockablePanel and useDockablePanelContext
-vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({ children }: { children: React.ReactNode }) => (
-    <div>
-      <div data-testid="dockable-body">{children}</div>
-    </div>
-  ),
-  useDockablePanelContext: () => ({
-    tabGroups: {
-      right: { tabs: [], activeTab: null },
-      bottom: { tabs: [], activeTab: null },
-      floating: [],
-    },
-    switchTab: vi.fn(),
-    getPreferredOpenGroupKey: () => 'right',
-  }),
-}));
-
-// Mock tabGroupState helpers. By default the panel has no group (it counts as visible); a test
-// can put it behind another panel of its dock group.
-const dockGroup = vi.hoisted(() => ({ activeTab: null as string | null }));
-vi.mock('@ui/dockable/tabGroupState', () => ({
-  getGroupForPanel: () => (dockGroup.activeTab ? 'right' : null),
-  getGroupTabs: () => (dockGroup.activeTab ? { tabs: [], activeTab: dockGroup.activeTab } : null),
-}));
-
-const metricsCollector = vi.hoisted(() => ({
-  calls: [] as Array<{ panelId: string; objectRef: unknown; enabled: boolean }>,
-}));
-vi.mock('@modules/object-panel/components/ObjectPanel/Metrics/usePanelMetricsCollector', () => ({
-  usePanelMetricsCollector: (panelId: string, objectRef: unknown, enabled: boolean) => {
-    metricsCollector.calls.push({ panelId, objectRef, enabled });
-  },
-}));
-// Mock CurrentObjectPanelContext from useObjectPanel
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  CurrentObjectPanelContext: createContext({ objectData: null, panelId: null }),
-}));
-
-vi.mock('@modules/object-panel/components/ObjectPanel/Details/DetailsTab', () => ({
-  default: (props: DetailsTabCapture) => {
-    detailsTabPropsRef.current = props;
-    return <div data-testid="details-tab" />;
-  },
-}));
-
-vi.mock('@modules/object-panel/components/ObjectPanel/Logs/LogViewer', () => ({
-  default: (props: unknown) => {
-    logViewerPropsRef.current = props;
-    return <div data-testid="logs-tab" />;
-  },
-}));
-
-vi.mock('@modules/object-panel/components/ObjectPanel/Shell/ShellTab', () => ({
-  default: (props: unknown) => {
-    shellTabPropsRef.current = props;
-    return <div data-testid="shell-tab" />;
-  },
-}));
-
-vi.mock('@modules/object-panel/components/ObjectPanel/Events/EventsTab', () => ({
-  default: (props: unknown) => {
-    eventsTabPropsRef.current = props;
-    return <div data-testid="events-tab" />;
-  },
-}));
-
-vi.mock('@modules/object-panel/components/ObjectPanel/Yaml/YamlTab', () => ({
-  default: (props: unknown) => {
-    yamlTabPropsRef.current = props;
-    return <div data-testid="yaml-tab" />;
-  },
-}));
-
-vi.mock('@modules/object-panel/components/ObjectPanel/Helm/ManifestTab', () => ({
-  default: (props: unknown) => {
-    manifestTabPropsRef.current = props;
-    return <div data-testid="manifest-tab" />;
-  },
-}));
-
-vi.mock('@modules/object-panel/components/ObjectPanel/Helm/ValuesTab', () => ({
-  default: (props: unknown) => {
-    valuesTabPropsRef.current = props;
-    return <div data-testid="values-tab" />;
-  },
-}));
-
-vi.mock('@/core/refresh/store', () => ({
-  useRefreshScopedDomain: (...args: unknown[]) => mockUseRefreshScopedDomain(...args),
-  resetScopedDomainState: vi.fn(),
-}));
-
-vi.mock('@/core/refresh/orchestrator', () => ({
-  refreshOrchestrator: mockRefreshOrchestrator,
-}));
-
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: mockRefreshOrchestrator,
-}));
-
-vi.mock('@/core/capabilities', () => ({
-  useCapabilities: (...args: unknown[]) => mockUseCapabilities(...(args as [])),
-  useUserPermission: (...args: unknown[]) => mockUseUserPermission(...(args as [])),
-  queryNamespacePermissions: (...args: unknown[]) => mockQueryNamespacePermissions(...(args as [])),
-}));
-
-vi.mock('@ui/shortcuts', () => ({
-  useShortcut: (...args: unknown[]) => mockUseShortcut(...(args as [])),
-  useShortcuts: vi.fn(),
-  useSearchShortcutTarget: () => undefined,
-  useKeyboardSurface: vi.fn(),
-}));
-
-vi.mock('@core/backend-api', () => mockApp);
-
-vi.mock('@core/backend-api/models', () => ({
-  types: {},
-}));
-
-vi.mock('@utils/errorHandler', () => ({ errorHandler: mockErrorHandler }));
-
-interface RenderContext {
-  container: HTMLDivElement;
-  root: ReactDOM.Root;
-}
-
-let capabilityStateMap: Record<string, CapabilityState>;
-let currentLogPermission: { allowed: boolean; pending: boolean };
-let currentScopedDomain: { data: unknown; status: string; error: RefreshFailure | null };
-let ObjectPanel: typeof import('./ObjectPanel').default;
-// Loaded with the panel, after the backend mock above is initialized.
-let setAppPreferencesForTesting: typeof import('@/core/settings/appPreferences').setAppPreferencesForTesting;
-
-mockUseCapabilities.mockImplementation(() => ({
-  getState: (id: string) => capabilityStateMap[id] ?? { allowed: true, pending: false },
-}));
-
-mockUseUserPermission.mockImplementation(() => currentLogPermission);
-mockUseRefreshScopedDomain.mockImplementation(() => currentScopedDomain);
-
-beforeAll(async () => {
-  ObjectPanel = (await import('./ObjectPanel')).default;
-  ({ setAppPreferencesForTesting } = await import('@/core/settings/appPreferences'));
-});
-
-describe('ObjectPanel tab availability', () => {
-  let ctx: RenderContext;
-
-  beforeEach(() => {
-    capabilityStateMap = {};
-    currentLogPermission = { allowed: true, pending: false };
-    currentScopedDomain = { data: null, status: 'idle', error: null };
-    detailsTabPropsRef.current = null;
-    logViewerPropsRef.current = null;
-    shellTabPropsRef.current = null;
-    eventsTabPropsRef.current = null;
-    yamlTabPropsRef.current = null;
-    manifestTabPropsRef.current = null;
-    valuesTabPropsRef.current = null;
-
-    mockApp.RunObjectAction.mockReset();
-    mockApp.RunObjectAction.mockResolvedValue({});
-
-    mockRefreshOrchestrator.fetchScopedDomain.mockResolvedValue(undefined);
-
-    mockClosePanel.mockReset();
-    tabStore.reset();
-    dockGroup.activeTab = null;
-    metricsCollector.calls = [];
-    setAppPreferencesForTesting({ autoRefreshEnabled: true });
-
-    ctx = {} as RenderContext;
-    ctx.container = document.createElement('div');
-    document.body.appendChild(ctx.container);
-    ctx.root = ReactDOM.createRoot(ctx.container);
-  });
-
-  afterEach(() => {
-    act(() => {
-      ctx.root.unmount();
-    });
-    ctx.container.remove();
-    vi.clearAllMocks();
-  });
-
-  /**
-   * Helper to build a panelId matching the format used by objectPanelId():
-   * obj:{clusterId}:{kind}:{namespace}:{name}
-   */
-  function buildPanelId(
-    clusterId: string,
-    kind: string,
-    namespace?: string,
-    name?: string
-  ): string {
-    return `obj:${clusterId}:${kind.toLowerCase()}:${namespace ?? '_'}:${name ?? ''}`;
+/**
+ * Serves what `identity`'s panel reads in `cluster`: its details (or their
+ * failure), and the pods, namespace workloads, and HPA check a pod or workload
+ * panel also reads.
+ */
+const servePanel = (
+  target: ObjectIdentity,
+  answer: DetailsAnswer = { details: {} },
+  cluster = dev
+): TestObject => {
+  const object = app.object(cluster, target);
+  const scope = object.scopes.detailScope ?? '';
+  if ('fail' in answer) {
+    app.snapshots.fail('object-details', scope, answer.fail);
+  } else if ('respond' in answer) {
+    app.snapshots.respond((request) =>
+      request.domain === 'object-details' && request.scope === scope ? answer.respond() : undefined
+    );
+  } else {
+    app.snapshots.serve('object-details', scope, {
+      detailType: target.kind.toLowerCase(),
+      details: answer.details,
+      ...(answer.deletion ? { deletion: answer.deletion } : {}),
+    } as never);
   }
-
-  const renderObjectPanel = async (options: PanelTestOptions) => {
-    const clusterId = options.clusterId ?? defaultClusterId;
-    const panelId = buildPanelId(clusterId, options.kind, options.namespace, options.name);
-    const builtinGVK = resolveBuiltinGroupVersion(options.kind);
-    const objectRef: ObjectPanelRef = {
-      kind: options.kind,
-      name: options.name,
-      namespace: options.namespace,
-      kindAlias: options.kind,
-      clusterId,
-      group: options.group ?? builtinGVK?.group ?? '',
-      version: options.version ?? builtinGVK?.version ?? '',
-    };
-
-    capabilityStateMap = options.capabilityOverrides ?? {};
-    currentLogPermission = options.logPermission ?? { allowed: true, pending: false };
-    currentScopedDomain = options.scopedDomain ?? { data: null, status: 'idle', error: null };
-
-    await act(async () => {
-      ctx.root.render(<ObjectPanel panelId={panelId} objectRef={objectRef} />);
-      await Promise.resolve();
-    });
-  };
-
-  const getTabLabels = () =>
-    Array.from(ctx.container.querySelectorAll('.tab-strip .tab-item')).map((button) =>
-      button.textContent?.trim()
+  const identityOfCluster = { clusterId: cluster.clusterId, clusterName: cluster.clusterName };
+  const namespace = target.namespace?.trim() ?? '';
+  const namespacePods = namespace
+    ? buildRefreshScope('pods', {
+        clusterId: cluster.clusterId,
+        selector: { kind: 'namespace', namespace },
+      })
+    : '';
+  if (namespace) {
+    app.snapshots.serve('pods', namespacePods, makePodSnapshotPayload(identityOfCluster));
+    app.snapshots.serve(
+      'namespace-workloads',
+      buildRefreshScope('namespace-workloads', {
+        clusterId: cluster.clusterId,
+        selector: { kind: 'namespace', namespace },
+      }),
+      makeNamespaceWorkloadSnapshotPayload(identityOfCluster)
     );
-
-  const getTabButton = (label: string) =>
-    Array.from(ctx.container.querySelectorAll<HTMLButtonElement>('.tab-strip .tab-item')).find(
-      (button) => button.textContent?.trim() === label
+  }
+  if (target.kind.toLowerCase() === 'node') {
+    // A node panel also reads its cluster's nodes.
+    app.snapshots.serve(
+      'nodes',
+      buildRefreshScope('nodes', { clusterId: cluster.clusterId, selector: CLUSTER_SELECTOR }),
+      makeClusterNodeSnapshotPayload(identityOfCluster)
     );
+    // ...and discovers its logs (backend/node_logs.go), which no test here reads.
+    app.backend.answer('DiscoverNodeLogs', () => ({
+      supported: false,
+      sources: [],
+      reason: 'node log query is not enabled',
+    }));
+  }
+  if (object.scopes.podsScope && object.scopes.podsScope !== namespacePods) {
+    app.snapshots.serve('pods', object.scopes.podsScope, makePodSnapshotPayload(identityOfCluster));
+  }
+  return object;
+};
 
-  it('collects metrics from the moment the panel opens, whatever tab it shows', async () => {
-    await renderObjectPanel({ kind: 'Pod', name: 'api-1', namespace: 'team-a' });
-    const panelId = buildPanelId(defaultClusterId, 'Pod', 'team-a', 'api-1');
+const start = async (clusters: TestCluster[] = [dev]) => {
+  for (const cluster of clusters) {
+    app.startScreen(cluster);
+  }
+  view = await app.mountApp();
+};
 
-    // The Details tab is showing; the Metrics tab has never been opened.
-    expect(ctx.container.textContent).not.toContain('Collecting live metrics');
-    expect(metricsCollector.calls[metricsCollector.calls.length - 1]).toMatchObject({
-      panelId,
-      objectRef: { kind: 'Pod', name: 'api-1', namespace: 'team-a', clusterId: defaultClusterId },
-      enabled: true,
-    });
+const open = async (object: TestObject) => {
+  await act(async () => {
+    view.owners().objectPanel.openWithObject(object.ref);
   });
+  await app.settle();
+};
 
-  it('keeps collecting behind another panel of its dock group, and pauses with auto-refresh', async () => {
-    dockGroup.activeTab = 'obj:alpha:ctx:pod:team-a:other';
-    await renderObjectPanel({ kind: 'Pod', name: 'api-1', namespace: 'team-a' });
-    expect(metricsCollector.calls[metricsCollector.calls.length - 1]?.enabled).toBe(true);
+/** Opens `target` as the only panel, in a freshly mounted app. */
+const openOnly = async (target: ObjectIdentity, answer?: DetailsAnswer) => {
+  const object = servePanel(target, answer);
+  await start();
+  await open(object);
+  return object;
+};
 
-    setAppPreferencesForTesting({ autoRefreshEnabled: false });
-    await renderObjectPanel({ kind: 'Pod', name: 'api-1', namespace: 'team-a' });
-    expect(metricsCollector.calls[metricsCollector.calls.length - 1]?.enabled).toBe(false);
+// The panel's tab strip owns its tabs through aria-owns.
+const panelTabs = () =>
+  (
+    view.container.querySelector('[aria-label="Object Panel Tabs"]')?.getAttribute('aria-owns') ??
+    ''
+  )
+    .split(' ')
+    .filter(Boolean)
+    .map((id) => requireValue(document.getElementById(id), `tab ${id}`));
+const tabLabels = () => panelTabs().map((tab) => tab.textContent?.trim());
+const selectTab = async (label: string) => {
+  const tab = requireValue(
+    panelTabs().find((element) => element.textContent?.trim() === label),
+    `${label} tab`
+  );
+  await act(async () => {
+    tab.click();
   });
+  await app.settle();
+};
 
+const allowAllBut = (deny: (query: PermissionQuery) => PermissionDecision | null) => {
+  app.permissions((query) => deny(query) ?? true);
+};
+
+// Only the group's front panel is shown; the others' content hosts are hidden.
+const isMarkedDeleted = () =>
+  [...view.container.querySelectorAll('.object-panel-empty-state')].some(
+    (state) => !state.closest('[hidden]')
+  );
+
+const detailReads = (object: TestObject) =>
+  app.snapshots.reads('object-details').filter((read) => read.scope === object.scopes.detailScope)
+    .length;
+
+beforeEach(() => {
+  for (const key of Object.keys(tabProps) as Array<keyof typeof tabProps>) {
+    tabProps[key] = [];
+  }
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+  app.backend.answer('IsWorkloadHPAManaged', () => false);
+  app.backend.answer('AppendPanelMetricSample', () => undefined);
+});
+
+describe('tab availability', () => {
   it('hides the logs tab when log access is denied', async () => {
-    capabilityStateMap = {
-      'view-logs': { allowed: false, pending: false },
-    };
+    allowAllBut((query) =>
+      query.resourceKind === 'Pod' && query.subresource === 'log' ? false : null
+    );
 
-    currentLogPermission = { allowed: false, pending: false };
+    await openOnly(identity('Pod', 'api'));
 
-    await renderObjectPanel({
-      kind: 'Pod',
-      name: 'api',
-      namespace: 'team-a',
-      capabilityOverrides: capabilityStateMap,
-      logPermission: currentLogPermission,
-    });
-
-    const labels = getTabLabels();
-    expect(labels).not.toContain('Logs');
-    expect(labels).toContain('Details');
-    expect(labels).toContain('Events');
-    expect(labels).toContain('YAML');
+    expect(tabLabels()).not.toContain('Logs');
+    expect(tabLabels()).toEqual(expect.arrayContaining(['Details', 'Events', 'YAML']));
   });
 
   it('shows manifest and values for Helm releases while hiding events and YAML', async () => {
-    await renderObjectPanel({
-      kind: 'HelmRelease',
-      name: 'my-app',
-      namespace: 'team-a',
-    });
+    await openOnly(identity('HelmRelease', 'my-app', 'team-a', 'helm.sh', 'v3'));
 
-    const labels = getTabLabels();
-    expect(labels).toContain('Details');
-    expect(labels).toContain('Manifest');
-    expect(labels).toContain('Values');
-    expect(labels).not.toContain('Events');
-    expect(labels).not.toContain('YAML');
+    expect(tabLabels()).toEqual(expect.arrayContaining(['Details', 'Manifest', 'Values']));
+    expect(tabLabels()).not.toContain('Events');
+    expect(tabLabels()).not.toContain('YAML');
   });
 
-  it('leases and reads the details of the active panel', async () => {
-    await renderObjectPanel({
-      kind: 'Pod',
-      name: 'api',
-      namespace: 'team-a',
-      scopedDomain: { data: { details: {} }, status: 'idle', error: null },
-    });
+  it('suppresses logs, events, and YAML tabs for event resources', async () => {
+    await openOnly(identity('Event', 'warning-123'));
 
-    const detailScope = testScope(defaultClusterId, 'team-a:/v1:Pod:api');
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'object-details',
-      detailScope,
-      expect.objectContaining({ intent: 'startup' })
-    );
-    expect(mockRefreshOrchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
-      'object-details',
-      detailScope,
-      { preserveState: true }
-    );
+    expect(tabLabels()).toContain('Details');
+    expect(tabLabels()).not.toContain('Logs');
+    expect(tabLabels()).not.toContain('Events');
+    expect(tabLabels()).not.toContain('YAML');
+  });
 
+  it('opens on the shell tab a shell session asks for as it opens the panel', async () => {
+    const pod = servePanel(identity('Pod', 'api'));
+    await start();
+
+    // As the sessions menu does: open the pod, then ask for its shell tab
+    // before the panel has mounted.
     await act(async () => {
-      ctx.root.unmount();
+      view.owners().objectPanel.openWithObject(pod.ref);
+      requestObjectPanelTab(objectPanelId(pod.ref), 'shell');
     });
+    await app.settle();
 
-    // Tier 1 responsiveness: unmount disables refreshing but preserves
-    // the cached snapshot so a remount (cluster switch round-trip)
-    // renders instantly. Eviction now lives in
-    // ObjectPanelStateContext.closePanel, not in the unmount destructor.
-    expect(mockRefreshOrchestrator.releaseScopedDomainLease).toHaveBeenCalledWith(
-      'object-details',
-      detailScope,
-      { preserveState: true }
+    const shell = requireValue(
+      panelTabs().find((tab) => tab.textContent?.trim() === 'Shell'),
+      'Shell tab'
     );
-    expect(mockRefreshOrchestrator.resetScopedDomain).not.toHaveBeenCalledWith(
-      'object-details',
-      detailScope
-    );
+    expect(shell.classList.contains('tab-item--active')).toBe(true);
   });
+});
 
-  it('closes the panel after a delete via onAfterDelete', async () => {
-    // Action execution + modals now live in the shared controller (ActionsMenu);
-    // ObjectPanel only wires the lifecycle callbacks it hands to DetailsTab.
-    await renderObjectPanel({
-      kind: 'Pod',
-      name: 'api',
-      namespace: 'team-a',
-    });
+describe('what each tab receives', () => {
+  it('gives the Logs tab its pod once selected', async () => {
+    await openOnly(identity('Pod', 'api'));
+    expect(tabProps.logs).toEqual([]);
 
-    const detailsProps = getDetailsTabProps();
-    expect(detailsProps).toBeTruthy();
+    await selectTab('Logs');
 
-    act(() => {
-      detailsProps.onAfterDelete();
-    });
-
-    expect(mockClosePanel).toHaveBeenCalled();
-  });
-
-  it('refetches details after a mutating action via onAfterAction', async () => {
-    await renderObjectPanel({
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      group: 'apps',
-      version: 'v1',
-      scopedDomain: { data: { details: {} }, status: 'idle', error: null },
-    });
-
-    const detailsProps = getDetailsTabProps();
-    expect(detailsProps).toBeTruthy();
-
-    await act(async () => {
-      detailsProps.onAfterAction();
-      await Promise.resolve();
-    });
-
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'object-details',
-      testScope(defaultClusterId, 'team-a:apps/v1:Deployment:api'),
-      expect.objectContaining({ intent: 'user' })
-    );
-  });
-
-  it('renders log viewer props when the Logs tab is selected', async () => {
-    await renderObjectPanel({
-      kind: 'Pod',
-      name: 'api',
-      namespace: 'team-a',
-    });
-
-    expect(logViewerPropsRef.current).toBeNull();
-    const logsButton = getTabButton('Logs');
-    await act(async () => {
-      logsButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(logViewerPropsRef.current).toMatchObject({
+    expect(last(tabProps.logs)).toMatchObject({
       resourceKind: 'pod',
       isActive: true,
-      clusterId: defaultClusterId,
+      clusterId: dev.clusterId,
     });
   });
 
-  it('applies a pre-mount tab request so shell opens as the active tab', async () => {
-    const panelId = buildPanelId(defaultClusterId, 'Pod', 'team-a', 'api');
-    requestObjectPanelTab(panelId, 'shell');
+  it('gives the Events tab its object once selected', async () => {
+    await openOnly(deployment);
 
-    await renderObjectPanel({
-      kind: 'Pod',
-      name: 'api',
-      namespace: 'team-a',
-    });
+    await selectTab('Events');
 
-    const shellButton = getTabButton('Shell');
-    expect(shellButton).toBeTruthy();
-    expect(shellButton?.classList.contains('tab-item--active')).toBe(true);
-  });
-
-  it('activates events tab content and passes through object data', async () => {
-    await renderObjectPanel({
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-    });
-
-    const eventsButton = getTabButton('Events');
-    await act(async () => {
-      eventsButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(eventsTabPropsRef.current).toMatchObject({
+    expect(last(tabProps.events)).toMatchObject({
       objectData: expect.objectContaining({ kind: 'Deployment', name: 'api' }),
       isActive: true,
     });
   });
 
-  it('passes capability state to the YAML tab when selected', async () => {
-    await renderObjectPanel({
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      capabilityOverrides: {
-        'edit-yaml': { allowed: false, pending: false, reason: 'forbidden' },
-      },
-    });
+  it('gives the YAML tab its scope and the denied edit permission', async () => {
+    allowAllBut((query) =>
+      query.resourceKind === 'Deployment' && query.verb === 'patch' ? { reason: 'forbidden' } : null
+    );
+    const object = await openOnly(deployment);
 
-    const yamlButton = getTabButton('YAML');
-    await act(async () => {
-      yamlButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
+    await selectTab('YAML');
 
-    expect(yamlTabPropsRef.current).toMatchObject({
-      scope: testScope(defaultClusterId, 'team-a:apps/v1:Deployment:api'),
+    expect(last(tabProps.yaml)).toMatchObject({
+      scope: object.scopes.detailScope,
       canEdit: false,
       editDisabledReason: 'forbidden',
       isActive: true,
     });
   });
 
-  it('suppresses events and YAML tabs for event resources', async () => {
-    await renderObjectPanel({
-      kind: 'Event',
-      name: 'warning-123',
-      namespace: 'team-a',
-    });
+  it('gives the Helm manifest and values tabs the release scope', async () => {
+    const release = await openOnly(identity('HelmRelease', 'my-app', 'team-a', 'helm.sh', 'v3'));
 
-    const labels = getTabLabels();
-    expect(labels).toContain('Details');
-    expect(labels).not.toContain('Logs');
-    expect(labels).not.toContain('Events');
-    expect(labels).not.toContain('YAML');
-  });
-
-  it('supplies Helm scopes to manifest and values tabs', async () => {
-    await renderObjectPanel({
-      kind: 'HelmRelease',
-      name: 'my-app',
-      namespace: 'team-a',
-    });
-
-    const manifestButton = getTabButton('Manifest');
-    await act(async () => {
-      manifestButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-    expect(manifestTabPropsRef.current).toMatchObject({
-      scope: testScope(defaultClusterId, 'team-a:my-app'),
+    await selectTab('Manifest');
+    expect(last(tabProps.manifest)).toMatchObject({
+      scope: release.scopes.helmScope,
       isActive: true,
     });
-
-    const valuesButton = getTabButton('Values');
-    await act(async () => {
-      valuesButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-    expect(valuesTabPropsRef.current).toMatchObject({
-      scope: testScope(defaultClusterId, 'team-a:my-app'),
+    await selectTab('Values');
+    expect(last(tabProps.values)).toMatchObject({
+      scope: release.scopes.helmScope,
       isActive: true,
     });
   });
 
-  it('evaluates namespace permissions whenever a namespace is present', async () => {
-    await renderObjectPanel({
-      kind: 'Pod',
-      name: 'api',
-      namespace: ' Team-A ',
-    });
-
-    expect(mockQueryNamespacePermissions).toHaveBeenCalledWith('Team-A', defaultClusterId);
-  });
-
-  it('skips namespace evaluation when the object has no namespace', async () => {
-    await renderObjectPanel({
-      kind: 'Namespace',
-      name: 'platform',
-      namespace: undefined,
-    });
-
-    expect(mockQueryNamespacePermissions).not.toHaveBeenCalled();
-  });
-
-  it('evaluates the same namespace independently after the panel changes clusters', async () => {
-    await renderObjectPanel({
-      kind: 'Pod',
-      name: 'api',
-      namespace: 'team-a',
-      clusterId: 'config:Prod',
-    });
-    mockQueryNamespacePermissions.mockClear();
-
-    await renderObjectPanel({
-      kind: 'Pod',
-      name: 'api',
-      namespace: 'team-a',
-      clusterId: 'config:prod',
-    });
-
-    expect(mockQueryNamespacePermissions).toHaveBeenCalledWith('team-a', 'config:prod');
-  });
-
-  it.each([
-    { clusterId: 'config:prod', group: 'example.com', version: 'v1' },
-    { clusterId: 'config:Prod', group: 'another.example.com', version: 'v1' },
-    { clusterId: 'config:Prod', group: 'example.com', version: 'v2' },
-  ])('does not retain a deleted marker for a different complete identity: %j', async (identity) => {
-    const object = { kind: 'Widget', name: 'api', namespace: 'team-a' };
-    await renderObjectPanel({
-      ...object,
-      clusterId: 'config:Prod',
-      group: 'example.com',
-      version: 'v1',
-      scopedDomain: {
-        data: null,
-        status: 'error',
-        error: notFound({
-          clusterId: 'config:Prod',
-          group: 'example.com',
-          version: 'v1',
-          kind: 'Widget',
-          namespace: 'team-a',
-          name: 'api',
-        }),
-      },
-    });
-    expect(ctx.container.querySelector('.object-panel-empty-state')).not.toBeNull();
-
-    await renderObjectPanel({
-      ...object,
-      ...identity,
-      scopedDomain: { data: { details: { status: 'Ready' } }, status: 'ready', error: null },
-    });
-
-    expect(ctx.container.querySelector('.object-panel-empty-state')).toBeNull();
-    expect(getDetailsTabProps().detailModel.activeDetail?.details).toEqual({ status: 'Ready' });
-  });
-
-  // The panel closes on a NotFound only when it names this exact object.
-  describe('marks its object deleted', () => {
-    const widget = {
-      clusterId: 'config:Prod',
-      group: 'example.com',
-      version: 'v1',
-      kind: 'Widget',
-      namespace: 'team-a',
-      name: 'api',
-    };
-    const renderWithDetailsFailure = (error: RefreshFailure) =>
-      renderObjectPanel({ ...widget, scopedDomain: { data: null, status: 'error', error } });
-    const isMarkedDeleted = () => ctx.container.querySelector('.object-panel-empty-state') !== null;
-
-    it('when the NotFound names this object', async () => {
-      await renderWithDetailsFailure(notFound(widget));
-      expect(isMarkedDeleted()).toBe(true);
-    });
-
-    // Links may spell the kind in any case (the Pod's Node link sends `node`);
-    // the backend names the canonical kind.
-    it('when the NotFound names this object with its canonical kind spelling', async () => {
-      const node = { clusterId: 'config:Prod', group: '', version: 'v1', name: 'worker-1' };
-      await renderObjectPanel({
-        ...node,
-        kind: 'node',
-        scopedDomain: {
-          data: null,
-          status: 'error',
-          error: notFound({ ...node, kind: 'Node' }),
-        },
-      });
-      expect(isMarkedDeleted()).toBe(true);
-    });
-
-    it.each([
-      ['carries no reference', undefined],
-      ['names the same name in another namespace', { ...widget, namespace: 'team-b' }],
-      ['names the same kind and name in another group', { ...widget, group: 'other.example.com' }],
-      ['names the same object in another cluster', { ...widget, clusterId: 'config:Stage' }],
-      ['names an object too incomplete to identify', { ...widget, version: '' }],
-    ])('not when the NotFound %s', async (_name, ref) => {
-      await renderWithDetailsFailure(notFound(ref));
-      expect(isMarkedDeleted()).toBe(false);
-    });
-
-    it('not when the failure only says "not found" in its text', async () => {
-      await renderWithDetailsFailure({
-        kind: 'local',
-        message: 'Widget api not found',
-        errorName: 'Error',
-      });
-      expect(isMarkedDeleted()).toBe(false);
-    });
-  });
-
-  it('passes the received detail payload to the Details tab', async () => {
-    const detailsPayload = { data: { key: 'value' } };
-    await renderObjectPanel({
-      kind: 'ConfigMap',
-      name: 'resource',
-      namespace: 'team-a',
-      scopedDomain: {
-        data: { details: detailsPayload },
-        status: 'ready',
-        error: null,
-      },
-    });
-
-    expect(getDetailsTabProps().detailModel.activeDetail?.details).toEqual(detailsPayload);
-  });
-
-  it('passes deletion metadata from the refresh envelope to DetailsTab', async () => {
+  it('passes the received detail payload and deletion metadata to the Details tab', async () => {
     const deletion = {
       deletionTimestamp: '2026-08-09T12:34:56Z',
       finalizers: ['example.com/cleanup'],
     };
-    await renderObjectPanel({
-      kind: 'Pod',
-      name: 'api',
-      namespace: 'team-a',
-      scopedDomain: {
-        data: { details: { status: 'Running' }, deletion },
-        status: 'ready',
-        error: null,
-      },
+    await openOnly(identity('ConfigMap', 'resource'), {
+      details: { data: { key: 'value' } },
+      deletion,
     });
 
-    expect(getDetailsTabProps().deletion).toEqual(deletion);
+    expect(lastDetailsProps()).toMatchObject({
+      detailModel: expect.objectContaining({
+        activeDetail: expect.objectContaining({ details: { data: { key: 'value' } } }),
+      }),
+      deletion,
+    });
   });
 
   it('derives no typed detail sections for unknown kinds', async () => {
-    await renderObjectPanel({
-      kind: 'UnknownKind',
-      name: 'mystery',
-      namespace: 'team-a',
-      scopedDomain: {
-        data: { details: { value: 1 } },
-        status: 'ready',
-        error: null,
-      },
+    await openOnly(identity('UnknownKind', 'mystery', 'team-a', 'example.com'), {
+      details: { value: 1 },
     });
 
-    const model = getDetailsTabProps().detailModel;
+    const model = lastDetailsProps().detailModel as Record<string, unknown>;
     expect(model.containerSection).toBeNull();
     expect(model.dataSection).toBeNull();
     expect(model.roleRules).toBeUndefined();
     expect(model.desiredScaleReplicas).toBe(0);
     expect(model.activePodNames).toBeNull();
+  });
+});
+
+describe('its object’s details', () => {
+  it('reads them on open and keeps them while another cluster is shown', async () => {
+    const staging = app.cluster({ name: 'dev', context: 'staging' });
+    app.namespaces(staging, ['default']);
+    const pod = servePanel(identity('Pod', 'api'), { details: { status: 'Running' } });
+    await start([dev, staging]);
+    await open(pod);
+    expect(detailReads(pod)).toBeGreaterThan(0);
+
+    await view.selectCluster(staging);
+
+    // The panel stops refreshing but keeps its read for the way back.
+    expect(
+      getScopedDomainState('object-details', pod.scopes.detailScope ?? '').data
+    ).not.toBeNull();
+  });
+
+  it('closes the panel after the Details tab deletes its object', async () => {
+    await openOnly(identity('Pod', 'api'));
+
+    await act(async () => {
+      (lastDetailsProps().onAfterDelete as () => void)();
+    });
+    await app.settle();
+
+    expect(view.openPanels()).toEqual([]);
+  });
+
+  it('reads them again after the Details tab runs a mutating action', async () => {
+    const object = await openOnly(deployment);
+    const readsBefore = detailReads(object);
+
+    await act(async () => {
+      (lastDetailsProps().onAfterAction as () => void)();
+    });
+    await app.settle();
+
+    expect(detailReads(object)).toBeGreaterThan(readsBefore);
+  });
+});
+
+// The panel marks its object deleted on a NotFound only when it names this
+// exact object.
+describe('marks its object deleted', () => {
+  const widgetRef = (cluster = dev): ErrorStatusObjectRef => ({
+    clusterId: cluster.clusterId,
+    group: 'example.com',
+    version: 'v1',
+    kind: 'Widget',
+    namespace: 'team-a',
+    name: 'api',
+  });
+  const notFound = (ref?: ErrorStatusObjectRef) =>
+    makeErrorStatus('NotFound', 'widgets.example.com "api" not found', { ref });
+
+  it('when the NotFound names this object', async () => {
+    await openOnly(widget, { fail: notFound(widgetRef()) });
+
+    expect(isMarkedDeleted()).toBe(true);
+  });
+
+  // Links may spell the kind in any case (the Pod's Node link sends `node`);
+  // the backend names the canonical kind.
+  it('when the NotFound names this object with its canonical kind spelling', async () => {
+    const node = { clusterId: dev.clusterId, group: '', version: 'v1', name: 'worker-1' };
+    await openOnly(
+      { group: '', version: 'v1', kind: 'node', namespace: '', name: 'worker-1' },
+      { fail: notFound({ ...node, kind: 'Node' }) }
+    );
+
+    expect(isMarkedDeleted()).toBe(true);
+  });
+
+  it.each([
+    ['carries no reference', () => undefined],
+    ['names the same name in another namespace', () => ({ ...widgetRef(), namespace: 'team-b' })],
+    [
+      'names the same kind and name in another group',
+      () => ({ ...widgetRef(), group: 'other.example.com' }),
+    ],
+    [
+      'names the same object in another cluster',
+      () => ({ ...widgetRef(), clusterId: 'dev:stage' }),
+    ],
+    ['names an object too incomplete to identify', () => ({ ...widgetRef(), version: '' })],
+  ])('not when the NotFound %s', async (_case, ref) => {
+    await openOnly(widget, { fail: notFound(ref()) });
+
+    expect(isMarkedDeleted()).toBe(false);
+    app.errors.take(() => true);
+  });
+
+  it('not when the failure only says "not found" in its text', async () => {
+    await openOnly(widget, {
+      respond: () => new Response('Widget api not found', { status: 500 }),
+    });
+
+    expect(isMarkedDeleted()).toBe(false);
+    app.errors.take(() => true);
+  });
+
+  it.each([
+    { cluster: 'other', group: 'example.com', version: 'v1' },
+    { cluster: 'same', group: 'another.example.com', version: 'v1' },
+    { cluster: 'same', group: 'example.com', version: 'v2' },
+  ] as const)(
+    'does not carry the marker to a different complete identity: %j',
+    async ({ cluster, group, version }) => {
+      const other = app.cluster({ name: 'dev', context: 'beta' });
+      app.namespaces(other, ['team-a']);
+      const gone = servePanel(widget, { fail: notFound(widgetRef()) });
+      const target = cluster === 'other' ? other : dev;
+      const present = servePanel(
+        { ...widget, group, version },
+        { details: { status: 'Ready' } },
+        target
+      );
+      await start([dev, other]);
+      await open(gone);
+      expect(isMarkedDeleted()).toBe(true);
+
+      await open(present);
+
+      expect(isMarkedDeleted()).toBe(false);
+      expect(
+        (lastDetailsProps().detailModel as { activeDetail?: { details?: unknown } }).activeDetail
+          ?.details
+      ).toEqual({ status: 'Ready' });
+    }
+  );
+});
+
+describe('namespace permissions', () => {
+  const namespaceQueries = (cluster = dev) =>
+    app.backend
+      .calls('QueryPermissions')
+      .flatMap(([queries]) => queries ?? [])
+      .filter((query) => query.clusterId === cluster.clusterId && query.namespace);
+
+  it('evaluates the panel’s namespace, trimmed', async () => {
+    await openOnly(identity('Pod', 'api', ' team-a '));
+
+    expect(namespaceQueries().map((query) => query.namespace)).toContain('team-a');
+  });
+
+  it('evaluates no namespace for a cluster-scoped object', async () => {
+    const namespace = servePanel({
+      group: '',
+      version: 'v1',
+      kind: 'Namespace',
+      namespace: '',
+      name: 'platform',
+    });
+    await start();
+    const before = namespaceQueries().length;
+
+    await open(namespace);
+
+    expect(
+      namespaceQueries()
+        .slice(before)
+        .map((query) => query.namespace)
+    ).not.toContain('platform');
+  });
+
+  it('evaluates the same namespace independently in another cluster', async () => {
+    const prod = app.cluster({ name: 'config', context: 'Prod' });
+    const prodLower = app.cluster({ name: 'config', context: 'prod' });
+    app.namespaces(prod, ['team-a']);
+    app.namespaces(prodLower, ['team-a']);
+    const first = servePanel(identity('Pod', 'api'), { details: {} }, prod);
+    const second = servePanel(identity('Pod', 'api'), { details: {} }, prodLower);
+    await start([dev, prod, prodLower]);
+    await open(first);
+
+    await open(second);
+
+    expect(namespaceQueries(prodLower).map((query) => query.namespace)).toContain('team-a');
+  });
+});
+
+describe('metrics collection', () => {
+  const T0 = 1_800_000_000;
+  const serveMetrics = (pod: ObjectIdentity, collectedAt = T0) =>
+    app.snapshots.serve(
+      'pods',
+      buildRefreshScope('pods', {
+        clusterId: dev.clusterId,
+        selector: { kind: 'namespace', namespace: pod.namespace ?? '' },
+      }),
+      makePodSnapshotPayload({
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        rows: [
+          makePodSnapshotEntry({
+            clusterId: dev.clusterId,
+            namespace: pod.namespace,
+            name: pod.name,
+            cpuUsageMilli: 100,
+            cpuLimitMilli: 500,
+          }),
+        ],
+        metrics: { collectedAt, stale: false, successCount: 1, failureCount: 0 },
+      })
+    );
+  const samplesFor = (object: TestObject) =>
+    app.backend
+      .calls('AppendPanelMetricSample')
+      .filter((args) => (args as unknown[]).includes(objectPanelId(object.ref)));
+
+  it('collects from the moment the panel opens, on whatever tab it shows', async () => {
+    const pod = identity('Pod', 'api-1');
+    const object = servePanel(pod);
+    serveMetrics(pod);
+    await start();
+
+    await open(object);
+
+    expect(tabLabels()).toContain('Details');
+    expect(samplesFor(object).length).toBeGreaterThan(0);
+  });
+
+  it('pauses collection while auto-refresh is paused', async () => {
+    app.preferences({ autoRefreshEnabled: false });
+    const pod = identity('Pod', 'api-1');
+    const object = servePanel(pod);
+    serveMetrics(pod);
+    await start();
+
+    await open(object);
+
+    expect(samplesFor(object)).toEqual([]);
+  });
+
+  it('keeps collecting behind another panel of its dock group', async () => {
+    const pod = identity('Pod', 'api-1');
+    const behind = servePanel(pod);
+    const front = servePanel(identity('Pod', 'api-2'));
+    serveMetrics(pod);
+    await start();
+    await open(behind);
+    await open(front);
+    const samplesBefore = samplesFor(behind).length;
+
+    // A new collection arrives for the namespace.
+    serveMetrics(pod, T0 + 15);
+    await act(async () => {
+      app.streams.ring(
+        'pods',
+        buildRefreshScope('pods', {
+          clusterId: dev.clusterId,
+          selector: { kind: 'namespace', namespace: 'team-a' },
+        }),
+        'metric',
+        '2'
+      );
+      // Signals apply after the stream's coalescing window.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+    await app.settle();
+
+    expect(samplesFor(behind).length).toBeGreaterThan(samplesBefore);
   });
 });

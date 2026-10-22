@@ -35,6 +35,11 @@ export function clearRequestedObjectPanelTab(panelId: string): void {
   pendingTabByPanel.delete(panelId);
 }
 
+/** Test-only: drops pending requests so a reused panel id starts with none. */
+export function resetObjectPanelTabRequestsForTesting(): void {
+  pendingTabByPanel.clear();
+}
+
 export function subscribeObjectPanelTabRequests(listener: TabRequestListener): () => void {
   listeners.add(listener);
   return () => {

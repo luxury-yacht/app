@@ -1,14 +1,13 @@
-import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { KeyboardProvider } from '@ui/shortcuts/context';
 import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { usePanelLifecycleGuard } from '@/core/panel-windows/panelLifecycleGuards';
 import {
-  PanelLifecycleGuardProvider,
-  usePanelLifecycleGuard,
-} from '@/core/panel-windows/panelLifecycleGuards';
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { DockablePanelTestHost } from '@/test-utils/DockablePanelTestHost';
 import { requireValue } from '@/test-utils/requireValue';
 import DockablePanel from './DockablePanel';
@@ -26,24 +25,17 @@ const LayoutProbe = () => {
   layoutStore = usePanelLayoutStoreContext();
   return null;
 };
-vi.mock('@core/backend-api', () => ({
-  GetZoomLevel: vi.fn().mockResolvedValue(100),
-  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock('@/utils/errorHandler', () => ({ errorHandler: { warn: vi.fn() } }));
+// Panels render inside the production shell: keyboard, zoom, cluster
+// selection, and the real lifecycle guard registry (test-utils/appState).
+const app = installAppStateHarness();
+let view: MountedApp;
+let alpha: TestCluster;
+let beta: TestCluster;
 
 function UnsavedPanel({ panelId }: Readonly<{ panelId: string }>) {
   usePanelLifecycleGuard(panelId, () => ({ reason: 'unsaved-yaml', focus: () => undefined }));
   return null;
 }
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: vi.fn(() => ({
-    selectedClusterId: 'cluster-a',
-    managedClusterIds: ['cluster-a'],
-  })),
-}));
 
 const ensureContentElement = () => {
   const content = document.createElement('div');
@@ -66,31 +58,14 @@ const renderPanel = async (
   providerProps: Omit<React.ComponentProps<typeof DockablePanelProvider>, 'children'> = {}
 ) => {
   ensureContentElement();
-  const host = document.createElement('div');
-  document.body.appendChild(host);
-  const root = ReactDOM.createRoot(host);
-
-  await act(async () => {
-    root.render(
-      <KeyboardProvider>
-        <PanelLifecycleGuardProvider>
-          <DockablePanelProvider {...providerProps}>
-            <ZoomProvider>
-              <DockablePanelTestHost />
-              <LayoutProbe />
-              {element}
-            </ZoomProvider>
-          </DockablePanelProvider>
-        </PanelLifecycleGuardProvider>
-      </KeyboardProvider>
-    );
-    await Promise.resolve();
-  });
-
-  return async () => {
-    await act(async () => root.unmount());
-    host.remove();
-  };
+  await view.show(
+    <DockablePanelProvider {...providerProps}>
+      <DockablePanelTestHost />
+      <LayoutProbe />
+      {element}
+    </DockablePanelProvider>
+  );
+  return async () => view.clear();
 };
 
 const panelState = (panelId: string) => {
@@ -107,47 +82,40 @@ const panelState = (panelId: string) => {
 };
 
 describe('DockablePanel docked behaviour', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     layoutStore = createPanelLayoutStore();
+    alpha = app.cluster({ name: 'dev', context: 'alpha' });
+    beta = app.cluster({ name: 'dev', context: 'beta' });
+    app.namespaces(alpha, ['default']);
+    app.namespaces(beta, ['default']);
+    view = await app.render(null);
   });
 
   afterEach(() => {
-    document.body.replaceChildren();
+    document.querySelectorAll('.content').forEach((node) => {
+      node.remove();
+    });
     document.body.className = '';
     layoutStore = createPanelLayoutStore();
   });
 
   it('keeps panels visible when workspace content is replaced during reconstruction', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const root = ReactDOM.createRoot(host);
-    const renderContent = async (generation: string) =>
-      act(async () =>
-        root.render(
-          <KeyboardProvider>
-            <DockablePanelProvider>
-              <ZoomProvider>
-                <div key={generation} className="content">
-                  <DockablePanelLayer />
-                  <div className="content-body" />
-                </div>
-                <DockablePanel panelId="restored-panel" isOpen title="Restored panel">
-                  <div data-testid="restored-panel-body">Restored object content</div>
-                </DockablePanel>
-              </ZoomProvider>
-            </DockablePanelProvider>
-          </KeyboardProvider>
-        )
+    const renderContent = (generation: string) =>
+      view.show(
+        <DockablePanelProvider>
+          <div key={generation} className="content">
+            <DockablePanelLayer />
+            <div className="content-body" />
+          </div>
+          <DockablePanel panelId="restored-panel" isOpen title="Restored panel">
+            <div data-testid="restored-panel-body">Restored object content</div>
+          </DockablePanel>
+        </DockablePanelProvider>
       );
-    try {
-      await renderContent('loading');
-      expect(document.querySelector('[data-testid="restored-panel-body"]')).not.toBeNull();
-      await renderContent('ready');
-      expect(document.querySelector('[data-testid="restored-panel-body"]')).not.toBeNull();
-    } finally {
-      await act(async () => root.unmount());
-      host.remove();
-    }
+    await renderContent('loading');
+    expect(document.querySelector('[data-testid="restored-panel-body"]')).not.toBeNull();
+    await renderContent('ready');
+    expect(document.querySelector('[data-testid="restored-panel-body"]')).not.toBeNull();
   });
 
   it('keeps restored bottom membership while controlled panels initialize', async () => {
@@ -184,68 +152,43 @@ describe('DockablePanel docked behaviour', () => {
   });
 
   it('retains group geometry after reordering across a cluster round trip', async () => {
-    ensureContentElement();
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const root = ReactDOM.createRoot(host);
     let context: ReturnType<typeof useDockablePanelContext> | undefined;
     const Capture = () => {
       context = useDockablePanelContext();
       return null;
     };
-    const renderCluster = async (clusterId: string) => {
-      vi.mocked(useKubeconfig).mockReturnValue({
-        selectedClusterId: clusterId,
-        managedClusterIds: ['cluster-a', 'cluster-b'],
-      } as ReturnType<typeof useKubeconfig>);
-      await act(async () =>
-        root.render(
-          <KeyboardProvider>
-            <PanelLifecycleGuardProvider>
-              <DockablePanelProvider>
-                <ZoomProvider>
-                  <DockablePanelTestHost />
-                  <Capture />
-                  {clusterId === 'cluster-a' ? (
-                    <>
-                      <DockablePanel key="a1" panelId="a1" defaultSize={{ width: 540 }} isOpen>
-                        <div>A1</div>
-                      </DockablePanel>
-                      <DockablePanel key="a2" panelId="a2" defaultSize={{ width: 680 }} isOpen>
-                        <div>A2</div>
-                      </DockablePanel>
-                    </>
-                  ) : (
-                    <DockablePanel key="b1" panelId="b1" defaultSize={{ width: 900 }} isOpen>
-                      <div>B1</div>
-                    </DockablePanel>
-                  )}
-                </ZoomProvider>
-              </DockablePanelProvider>
-            </PanelLifecycleGuardProvider>
-          </KeyboardProvider>
-        )
+    // Each cluster tab shows its own panels, chosen in the same render that
+    // switches the dock to that cluster's layout.
+    const ClusterPanels = () =>
+      useKubeconfig().selectedClusterId === alpha.clusterId ? (
+        <>
+          <DockablePanel key="a1" panelId="a1" defaultSize={{ width: 540 }} isOpen>
+            <div>A1</div>
+          </DockablePanel>
+          <DockablePanel key="a2" panelId="a2" defaultSize={{ width: 680 }} isOpen>
+            <div>A2</div>
+          </DockablePanel>
+        </>
+      ) : (
+        <DockablePanel key="b1" panelId="b1" defaultSize={{ width: 900 }} isOpen>
+          <div>B1</div>
+        </DockablePanel>
       );
-    };
     const leaderWidth = () =>
       document.querySelector<HTMLElement>('.dockable-panel:has(.dockable-panel__header)')?.style
         .width;
-    try {
-      await renderCluster('cluster-a');
-      expect(leaderWidth()).toBe('540px');
-      await act(async () => context?.reorderTabInGroup('right', 'a2', 0));
-      expect(leaderWidth()).toBe('540px');
-      await renderCluster('cluster-b');
-      await renderCluster('cluster-a');
-      expect(leaderWidth()).toBe('540px');
-    } finally {
-      await act(async () => root.unmount());
-      host.remove();
-      vi.mocked(useKubeconfig).mockReturnValue({
-        selectedClusterId: 'cluster-a',
-        managedClusterIds: ['cluster-a'],
-      } as ReturnType<typeof useKubeconfig>);
-    }
+    await renderPanel(
+      <>
+        <Capture />
+        <ClusterPanels />
+      </>
+    );
+    expect(leaderWidth()).toBe('540px');
+    await act(async () => context?.reorderTabInGroup('right', 'a2', 0));
+    expect(leaderWidth()).toBe('540px');
+    await view.selectCluster(beta);
+    await view.selectCluster(alpha);
+    expect(leaderWidth()).toBe('540px');
   });
 
   it('initializes bottom-docked geometry from the provided size', async () => {
@@ -766,6 +709,10 @@ describe('DockablePanel docked behaviour', () => {
     );
     expect(panelState('a')).toMatchObject({ position: 'right', isOpen: true });
     expect(panelState('b')).toMatchObject({ position: 'right', isOpen: true });
+    // Both blocked requests tell the user why.
+    expect(
+      app.errors.take((record) => record.kinds.includes('warning')).map(({ kinds }) => kinds)
+    ).toEqual([['warning'], ['warning']]);
     await unmount();
   });
 

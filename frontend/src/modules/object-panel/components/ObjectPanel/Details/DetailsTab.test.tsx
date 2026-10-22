@@ -5,39 +5,26 @@
  * sections (Containers, RBACRules, DataSection), each gated by the derived
  * ObjectDetailModel. Per-kind FIELD rendering is covered by the descriptor tests + driftCheck; this
  * suite covers the composition contract: what DetailsTab passes to Overview and which sibling
- * sections appear.
+ * sections appear. It renders inside the production shell (keyboard, zoom, and the real object
+ * action controller); only the backend boundary is faked (test-utils/appState). The sibling
+ * sections are stubbed to capture what they are given.
  */
 
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectDetail } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { objectDetailOf } from '@/test-utils/objectDetail';
 import type { DetailsTabProps } from './DetailsTab';
 import { buildObjectDetailModel } from './objectDetailModel';
 
-const useShortcutMock = vi.fn();
 const overviewMock = vi.fn();
 const containersMock = vi.fn();
 const rbacRulesMock = vi.fn();
 const dataMock = vi.fn();
-
-vi.mock('@core/contexts/ZoomContext', () => ({
-  useZoom: () => ({ zoomLevel: 100 }),
-}));
-
-vi.mock('@ui/shortcuts', () => ({
-  useShortcut: (options: unknown) => useShortcutMock(options),
-  useSearchShortcutTarget: () => undefined,
-}));
-
-vi.mock('@shared/hooks/useObjectActionController', () => ({
-  useObjectActionController: () => ({
-    getMenuItems: () => [],
-    modals: null,
-    requestFinalizerRemoval: vi.fn(),
-  }),
-}));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Details/Overview', () => ({
   __esModule: true,
@@ -73,21 +60,13 @@ vi.mock('./DetailsTabData', () => ({
 
 import DetailsTab from './DetailsTab';
 
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
+
 const renderDetailsTab = async (props: DetailsTabProps) => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-  await act(async () => {
-    root.render(<DetailsTab {...props} />);
-    await Promise.resolve();
-  });
-  return {
-    container,
-    cleanup: () => {
-      act(() => root.unmount());
-      container.remove();
-    },
-  };
+  await view.show(<DetailsTab {...props} />);
+  return { container: view.container, cleanup: () => view.clear() };
 };
 
 type TestObjectData = Pick<NonNullable<DetailsTabProps['objectData']>, 'kind' | 'name'> &
@@ -98,7 +77,7 @@ const createBaseProps = (
   detail: ObjectDetail | null = null
 ): DetailsTabProps => {
   const completeObjectData: NonNullable<DetailsTabProps['objectData']> = {
-    clusterId: 'test-cluster',
+    clusterId: dev.clusterId,
     group: '',
     version: 'v1',
     ...objectData,
@@ -123,12 +102,14 @@ const createBaseProps = (
 const overviewProps = () => overviewMock.mock.calls[0]?.[0] as Record<string, unknown>;
 
 describe('DetailsTab', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default']);
+    view = await app.render(null);
     overviewMock.mockClear();
     containersMock.mockClear();
     rbacRulesMock.mockClear();
     dataMock.mockClear();
-    useShortcutMock.mockClear();
   });
 
   it('passes object identity, the active detail, and lifecycle callbacks to Overview', async () => {

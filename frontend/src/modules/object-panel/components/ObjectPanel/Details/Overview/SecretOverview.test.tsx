@@ -1,32 +1,18 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/SecretOverview.test.tsx
+ *
+ * Renders the Secret overview inside the real app shell (test-utils/appState).
+ * The "Used By" links are the shared renderUsedByLinks path, covered once in
+ * ConfigMapOverview.test.tsx.
  */
 
 import type React from 'react';
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { secretDescriptor } from './descriptors/secret';
 import { OverviewRenderer } from './OverviewRenderer';
 
-const openWithObjectMock = vi.fn();
-const defaultClusterId = 'alpha:ctx';
-const podRef = (name: string, namespace: string) => ({
-  clusterId: defaultClusterId,
-  group: '',
-  version: 'v1',
-  kind: 'Pod',
-  resource: 'pods',
-  namespace,
-  name,
-});
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    openWithObject: openWithObjectMock,
-    objectData: { clusterId: defaultClusterId, clusterName: 'alpha' },
-  }),
-}));
+const app = installAppStateHarness();
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
@@ -45,10 +31,6 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
   ResourceMetadata: () => <div data-testid="resource-metadata" />,
 }));
 
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
 const getValueForLabel = (container: HTMLElement, label: string) => {
   const labelElement = Array.from(container.querySelectorAll<HTMLElement>('.overview-label')).find(
     (el) => el.textContent?.trim() === label
@@ -56,36 +38,19 @@ const getValueForLabel = (container: HTMLElement, label: string) => {
   return labelElement?.parentElement?.querySelector<HTMLElement>('.overview-value') ?? null;
 };
 
-const getLinkByText = (container: HTMLElement, text: string) =>
-  Array.from(container.querySelectorAll<HTMLElement>('.object-panel-link')).find(
-    (el) => el.textContent?.trim() === text
-  );
-
 describe('SecretOverview', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let view: MountedApp;
 
   const renderComponent = async (props: { secretDetails: unknown }) => {
-    await act(async () => {
-      root.render(
-        <OverviewRenderer descriptor={secretDescriptor} data={props.secretDetails as never} />
-      );
-      await Promise.resolve();
-    });
+    await view.show(
+      <OverviewRenderer descriptor={secretDescriptor} data={props.secretDetails as never} />
+    );
   };
 
-  beforeEach(() => {
-    openWithObjectMock.mockReset();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  beforeEach(async () => {
+    const dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['prod']);
+    view = await app.render(null);
   });
 
   it('displays the secret type from the detail payload', async () => {
@@ -101,56 +66,7 @@ describe('SecretOverview', () => {
       } as unknown,
     });
 
-    const typeValue = getValueForLabel(container, 'Type');
+    const typeValue = getValueForLabel(view.container, 'Type');
     expect(typeValue?.textContent).toBe('kubernetes.io/tls');
-  });
-
-  it('navigates to pods that consume the secret', async () => {
-    await renderComponent({
-      secretDetails: {
-        name: 'service-token',
-        namespace: 'team',
-        secretType: 'kubernetes.io/service-account-token',
-        dataKeys: ['token'],
-        usedBy: [podRef('pod-x', 'team')],
-        labels: {},
-        annotations: {},
-      } as unknown,
-    });
-
-    const podLink = getLinkByText(container, 'pod-x');
-    expect(podLink).not.toBeUndefined();
-    act(() => {
-      podLink?.click();
-    });
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'Pod',
-        name: 'pod-x',
-        namespace: 'team',
-        clusterId: defaultClusterId,
-        group: '',
-        version: 'v1',
-      })
-    );
-  });
-
-  it('shows “Not in use” when there are no consumers', async () => {
-    await renderComponent({
-      secretDetails: {
-        name: 'unused-secret',
-        namespace: 'env',
-        secretType: 'Opaque',
-        dataKeys: [],
-        usedBy: [],
-        labels: {},
-        annotations: {},
-      } as unknown,
-    });
-
-    const usedByValue = getValueForLabel(container, 'Used By');
-    expect(usedByValue?.textContent).toContain('Not in use');
-    expect(openWithObjectMock).not.toHaveBeenCalled();
   });
 });

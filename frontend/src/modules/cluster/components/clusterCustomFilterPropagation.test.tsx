@@ -59,8 +59,6 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
 }));
 
-vi.mock('@/hooks/useShortNames', () => ({ useShortNames: () => false }));
-
 vi.mock('@modules/browse/hooks/useBrowseCatalog', () => ({
   useBrowseCatalog: (...args: unknown[]) => useBrowseCatalogMock(...args),
 }));

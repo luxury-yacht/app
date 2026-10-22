@@ -30,7 +30,7 @@ import { objectPanelTabSnapshot } from '@/core/panel-windows/tabTransfer';
 import { usePanelWorkspaceOpen } from '@/core/panel-windows/WorkspacePanelSync';
 import { getPreference } from '@/core/settings/appPreferences';
 import type { KubernetesObjectReference } from '@/types/view-state';
-import { reportOperationalError } from '@/utils/errorHandler';
+import { errorHandler, reportOperationalError } from '@/utils/errorHandler';
 
 export interface OpenWithObjectOptions {
   /**
@@ -122,26 +122,28 @@ export function useObjectPanel() {
     pendingFloatPanelIdRef.current = null;
   }, [requestGroupMove, tabGroups]);
 
+  const openClusterSelection = useCallback(
+    (clusterId: string) =>
+      selectedKubeconfigs.find((selection) => getClusterMeta(selection).id === clusterId),
+    [selectedKubeconfigs, getClusterMeta]
+  );
+
+  // An object panel opens only for a cluster this window shows; openTarget
+  // checks before claiming the panel. A cluster closed while the claim was in
+  // flight mounts nothing.
   const activateObjectCluster = useCallback(
     (clusterId: string): boolean => {
-      if (clusterId !== selectedClusterId) {
-        const targetSelection = selectedKubeconfigs.find(
-          (selection) => getClusterMeta(selection).id === clusterId
-        );
-        if (!targetSelection) {
-          reportOperationalError(new Error(`Object panel cluster is not open: ${clusterId}`), {
-            source: 'useObjectPanel',
-            action: 'activate-object-panel-cluster',
-            clusterId,
-          });
-          return false;
-        }
-        setActiveKubeconfig(targetSelection);
+      if (clusterId === selectedClusterId) {
+        return true;
       }
-
+      const targetSelection = openClusterSelection(clusterId);
+      if (!targetSelection) {
+        return false;
+      }
+      setActiveKubeconfig(targetSelection);
       return true;
     },
-    [selectedClusterId, selectedKubeconfigs, getClusterMeta, setActiveKubeconfig]
+    [selectedClusterId, openClusterSelection, setActiveKubeconfig]
   );
 
   const updateExistingPanelView = useCallback(
@@ -186,6 +188,17 @@ export function useObjectPanel() {
 
   const openTarget = useCallback(
     (enriched: PanelTarget, options?: OpenWithObjectOptions) => {
+      if (enriched.clusterId !== selectedClusterId && !openClusterSelection(enriched.clusterId)) {
+        errorHandler.warn("Open the object's cluster in this window to view it.", {
+          title: 'Cluster not open',
+          context: {
+            source: 'useObjectPanel',
+            action: 'open-object-panel',
+            clusterId: enriched.clusterId,
+          },
+        });
+        return;
+      }
       const panelId = panelTargetId(enriched);
       const ownedPanel = getOwnedPanel(enriched.clusterId, panelId);
       const requestedView = options?.initialTab;
@@ -218,7 +231,15 @@ export function useObjectPanel() {
           })
         );
     },
-    [getOwnedPanel, panelWindowRole, updateExistingPanelView, mountSharedPanel, openSharedPanel]
+    [
+      selectedClusterId,
+      openClusterSelection,
+      getOwnedPanel,
+      panelWindowRole,
+      updateExistingPanelView,
+      mountSharedPanel,
+      openSharedPanel,
+    ]
   );
 
   const openWithObject = useCallback(

@@ -1,30 +1,26 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/PodOverview.test.tsx
  *
- * Exercises the Pod Overview through the descriptor-driven renderer (X1).
+ * Exercises the Pod Overview through the descriptor-driven renderer (X1),
+ * inside the real app shell: related-object links open panels through the
+ * real panel owners (test-utils/appState).
  */
 
 import type { types } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { buildObjectPanelPodsSelector } from '../../Pods/objectPanelPodsScope';
-import type { PanelObjectData } from '../../types';
 import { podDescriptor } from './descriptors/pod';
 import { OverviewRenderer } from './OverviewRenderer';
 
-const openWithObjectMock = vi.fn();
-const defaultClusterId = 'alpha:ctx';
-const defaultClusterName = 'alpha';
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    openWithObject: openWithObjectMock,
-    objectData: { clusterId: defaultClusterId, clusterName: defaultClusterName },
-  }),
-}));
+const app = installAppStateHarness();
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: { kind: string; name: string }) => (
@@ -60,13 +56,10 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
   ResourceMetadata: () => <div data-testid="resource-metadata" />,
 }));
 
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
 describe('PodOverview', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let view: MountedApp;
+  let dev: TestCluster;
+  let container: HTMLElement;
 
   // Build a PodDetailInfo-shaped DTO from the fields a test cares about. The
   // generated constructor fills the rest from the source object.
@@ -74,16 +67,20 @@ describe('PodOverview', () => {
     partialModelFixture<types.PodDetailInfo>(overrides);
 
   const renderComponent = async (overrides: Record<string, unknown>) => {
+    await view.show(
+      <OverviewRenderer
+        descriptor={podDescriptor}
+        data={makeDto(overrides)}
+        context={{ clusterId: dev.clusterId, clusterName: dev.clusterName }}
+      />
+    );
+  };
+
+  const click = async (element: HTMLElement | undefined) => {
     await act(async () => {
-      root.render(
-        <OverviewRenderer
-          descriptor={podDescriptor}
-          data={makeDto(overrides)}
-          context={{ clusterId: defaultClusterId, clusterName: defaultClusterName }}
-        />
-      );
-      await Promise.resolve();
+      element?.click();
     });
+    await app.settle();
   };
 
   const getElementByText = (text: string) =>
@@ -96,18 +93,11 @@ describe('PodOverview', () => {
       (el) => el.textContent?.trim() === text
     );
 
-  beforeEach(() => {
-    openWithObjectMock.mockReset();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  beforeEach(async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default', 'cluster', 'infra']);
+    view = await app.render(null);
+    container = view.container;
   });
 
   it('renders restart badge, QoS information, and host network warning when applicable', async () => {
@@ -153,23 +143,19 @@ describe('PodOverview', () => {
 
     const ownerLink = getLinkByText('StatefulSet/worker') ?? getElementByText('StatefulSet/worker');
     expect(ownerLink).not.toBeUndefined();
-    act(() => {
-      ownerLink?.click();
-    });
+    await click(ownerLink);
 
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'StatefulSet',
-        name: 'worker',
-        namespace: 'cluster',
-        clusterId: defaultClusterId,
-        group: 'apps',
-        version: 'v1',
-      })
-    );
-
-    const ownerRef = openWithObjectMock.mock.calls[0]?.[0] as PanelObjectData;
-    expect(buildObjectPanelPodsSelector(ownerRef, ownerRef.kind ?? null)).toEqual({
+    const ownerPanel = {
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      group: 'apps',
+      version: 'v1',
+      kind: 'StatefulSet',
+      namespace: 'cluster',
+      name: 'worker',
+    };
+    expect(view.openPanels()).toEqual([ownerPanel]);
+    expect(buildObjectPanelPodsSelector(ownerPanel, ownerPanel.kind)).toEqual({
       kind: 'workload',
       object: {
         namespace: 'cluster',
@@ -191,29 +177,25 @@ describe('PodOverview', () => {
 
     const nodeLink = getLinkByText('node-b') ?? getElementByText('node-b');
     expect(nodeLink).not.toBeUndefined();
-    act(() => {
-      nodeLink?.click();
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'node',
-        name: 'node-b',
-        clusterId: defaultClusterId,
-      })
-    );
+    await click(nodeLink);
 
     const serviceAccountLink = getLinkByText('cache-sa') ?? getElementByText('cache-sa');
     expect(serviceAccountLink).not.toBeUndefined();
-    act(() => {
-      serviceAccountLink?.click();
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+    await click(serviceAccountLink);
+
+    // Built-in kinds resolve their group/version; the kind keeps the link's
+    // casing (panel ids and backend lookups compare kinds case-insensitively).
+    const cluster = { clusterId: dev.clusterId, clusterName: dev.clusterName };
+    expect(view.openPanels()).toEqual([
+      { ...cluster, group: '', version: 'v1', kind: 'node', namespace: '', name: 'node-b' },
+      {
+        ...cluster,
+        group: '',
+        version: 'v1',
         kind: 'serviceaccount',
-        name: 'cache-sa',
         namespace: 'infra',
-        clusterId: defaultClusterId,
-      })
-    );
+        name: 'cache-sa',
+      },
+    ]);
   });
 });

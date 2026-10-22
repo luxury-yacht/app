@@ -56,7 +56,11 @@ describe('operator table relationships', () => {
         viewType: 'namespace',
         tab: 'cert-manager',
       });
-      expect(getViewForKind('Certificate', 'other.io', 'team-a')).toBeNull();
+      // The same kind in another group is some other custom resource.
+      expect(getViewForKind('Certificate', 'other.io', 'team-a')).toEqual({
+        viewType: 'namespace',
+        tab: 'custom',
+      });
       await act(async () =>
         root.render(
           column?.render({

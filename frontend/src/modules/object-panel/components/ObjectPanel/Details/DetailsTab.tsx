@@ -36,7 +36,6 @@ const DetailOverview = ({
       activeDetail={model.activeDetail}
       status={actionState.status}
       ready={actionState.ready}
-      replicas={actionState.replicas}
       unschedulable={actionState.unschedulable}
       suspend={model.cronJobSuspended}
       desiredReplicas={model.desiredScaleReplicas}

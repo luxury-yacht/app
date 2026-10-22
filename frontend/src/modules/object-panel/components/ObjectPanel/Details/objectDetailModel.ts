@@ -63,7 +63,6 @@ export interface ObjectDetailModel {
 export interface DetailActionState {
   status?: string;
   ready?: string | number;
-  replicas?: string | number;
   unschedulable?: boolean;
 }
 
@@ -246,7 +245,6 @@ const scalarOf = (value: unknown): string | number | undefined =>
 const actionStateOf = (details: DetailDTO): DetailActionState => ({
   status: 'status' in details && typeof details.status === 'string' ? details.status : undefined,
   ready: 'ready' in details ? scalarOf(details.ready) : undefined,
-  replicas: 'replicas' in details ? scalarOf(details.replicas) : undefined,
   unschedulable:
     'unschedulable' in details && typeof details.unschedulable === 'boolean'
       ? details.unschedulable

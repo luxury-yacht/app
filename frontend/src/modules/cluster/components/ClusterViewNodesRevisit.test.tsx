@@ -142,7 +142,6 @@ vi.mock('@shared/hooks/useNodeMaintenanceActions', () => ({
     modals: null,
   }),
 }));
-vi.mock('@/hooks/useShortNames', () => ({ useShortNames: () => false }));
 vi.mock('@/core/refresh/hooks/useMetricsAvailability', () => ({
   useClusterMetricsAvailability: () => ({
     available: true,

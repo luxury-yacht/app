@@ -1,9 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/RBACOverview.test.tsx
  *
- * Behavioral tests for the RBAC Overview descriptors driving the generic OverviewRenderer (X1).
- * Each case renders the kind's descriptor against a DTO-shaped fixture and threads cluster identity
- * via the OverviewContext.
+ * Behavioral tests for the RBAC Overview descriptors driving the generic OverviewRenderer (X1)
+ * inside the real app shell. Each case renders the kind's descriptor against a DTO-shaped fixture
+ * and threads cluster identity via the OverviewContext; binding links open panels through the real
+ * panel owners. Only the backend boundary is faked (test-utils/appState).
  */
 
 import type {
@@ -14,8 +15,12 @@ import type {
 } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import {
   clusterRoleBindingDescriptor,
@@ -26,6 +31,8 @@ import {
 import { OverviewRenderer } from './OverviewRenderer';
 import type { OverviewContext, OverviewDescriptor } from './schema';
 
+const app = installAppStateHarness();
+
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
@@ -34,56 +41,31 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ),
 }));
 
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    objectData: { clusterId: 'test-cluster', clusterName: 'test' },
-  }),
-}));
-
-vi.mock('@shared/components/ObjectPanelLink', () => ({
-  ObjectPanelLink: ({ children, objectRef }: React.PropsWithChildren<{ objectRef?: unknown }>) => (
-    <span data-object-ref={JSON.stringify(objectRef)}>{children}</span>
-  ),
-}));
-
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
   default: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
-const context: OverviewContext = { clusterId: 'test-cluster', clusterName: 'test' };
-
-const renderDescriptor = async <T,>(
-  root: ReactDOM.Root,
-  descriptor: OverviewDescriptor<T>,
-  data: T
-) => {
-  await act(async () => {
-    root.render(<OverviewRenderer descriptor={descriptor} data={data} context={context} />);
-    await Promise.resolve();
-  });
-};
-
 describe('RBACOverview', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let view: MountedApp;
+  let dev: TestCluster;
+  let container: HTMLElement;
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-  });
+  const renderDescriptor = async <T,>(descriptor: OverviewDescriptor<T>, data: T) => {
+    const context: OverviewContext = { clusterId: dev.clusterId, clusterName: dev.clusterName };
+    await view.show(<OverviewRenderer descriptor={descriptor} data={data} context={context} />);
+  };
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  beforeEach(async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['checkout', 'payments', 'default', 'kube-system']);
+    view = await app.render(null);
+    container = view.container;
   });
 
   it('lists every binding that uses a ClusterRole with namespaced bindings told apart', async () => {
     const binding = (kind: string, name: string, namespace?: string) => ({
-      clusterId: 'test-cluster',
+      clusterId: dev.clusterId,
       group: 'rbac.authorization.k8s.io',
       version: 'v1',
       kind,
@@ -92,7 +74,6 @@ describe('RBACOverview', () => {
       name,
     });
     await renderDescriptor(
-      root,
       clusterRoleDescriptor,
       partialModelFixture<clusterrole.ClusterRoleDetails>({
         kind: 'ClusterRole',
@@ -105,20 +86,37 @@ describe('RBACOverview', () => {
       })
     );
 
-    const links = [...container.querySelectorAll<HTMLElement>('[data-object-ref]')].map((link) => ({
-      text: link.textContent,
-      ref: JSON.parse(link.dataset.objectRef ?? 'null'),
-    }));
-    expect(links).toEqual([
-      { text: 'platform-admins', ref: binding('ClusterRoleBinding', 'platform-admins') },
-      { text: 'checkout/admins', ref: binding('RoleBinding', 'admins', 'checkout') },
-      { text: 'payments/admins', ref: binding('RoleBinding', 'admins', 'payments') },
+    const links = [...container.querySelectorAll<HTMLElement>('.object-panel-link')];
+    expect(links.map((link) => link.textContent)).toEqual([
+      'platform-admins',
+      'checkout/admins',
+      'payments/admins',
+    ]);
+    for (const link of links) {
+      await act(async () => {
+        link.click();
+      });
+      await app.settle();
+    }
+    const panel = (kind: string, name: string, namespace = '') => ({
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      group: 'rbac.authorization.k8s.io',
+      version: 'v1',
+      kind,
+      namespace,
+      name,
+    });
+    // Same-named bindings in different namespaces open different panels.
+    expect(view.openPanels()).toEqual([
+      panel('ClusterRoleBinding', 'platform-admins'),
+      panel('RoleBinding', 'admins', 'checkout'),
+      panel('RoleBinding', 'admins', 'payments'),
     ]);
   });
 
   it('renders binding role reference and inline subjects list', async () => {
     await renderDescriptor(
-      root,
       roleBindingDescriptor,
       partialModelFixture<rolebinding.RoleBindingDetails>({
         kind: 'RoleBinding',
@@ -150,7 +148,6 @@ describe('RBACOverview', () => {
 
   it('flags ServiceAccount subjects in system namespaces with a warning chip', async () => {
     await renderDescriptor(
-      root,
       clusterRoleBindingDescriptor,
       partialModelFixture<clusterrolebinding.ClusterRoleBindingDetails>({
         kind: 'ClusterRoleBinding',
@@ -168,7 +165,6 @@ describe('RBACOverview', () => {
 
   it('renders service account specific fields', async () => {
     await renderDescriptor(
-      root,
       serviceAccountDescriptor,
       partialModelFixture<serviceaccount.ServiceAccountDetails>({
         kind: 'ServiceAccount',

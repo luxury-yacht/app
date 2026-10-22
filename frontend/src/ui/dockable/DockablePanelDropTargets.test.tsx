@@ -1,15 +1,13 @@
-import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { TAB_DRAG_DATA_TYPE } from '@shared/components/tabs/dragCoordinator';
 import {
   tabDragKindDataType,
   tabDragScopeDataType,
 } from '@shared/components/tabs/dragCoordinator/types';
-import { KeyboardProvider } from '@ui/shortcuts/context';
 import type { ComponentProps, ReactNode } from 'react';
 import { act } from 'react';
 import { flushSync } from 'react-dom';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 import DockablePanel from './DockablePanel';
 import {
@@ -20,35 +18,33 @@ import {
 import type { PanelLayoutStore } from './panelLayoutStore';
 import { usePanelLayoutStoreContext } from './panelLayoutStoreContext';
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedClusterId: 'cluster-a', selectedClusterIds: ['cluster-a'] }),
-}));
-vi.mock('@core/backend-api', () => ({
-  GetZoomLevel: vi.fn().mockResolvedValue(100),
-  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
-}));
+// The dock renders inside the production shell with a real open cluster
+// (test-utils/appState). Drag scopes carry that cluster's id, or the id of a
+// second, known cluster for cross-cluster cases.
+const app = installAppStateHarness();
+const clusterIds = { open: '', other: '' };
 
-const tab = {
+const objectTab = () => ({
   kind: 'object',
   panelId: 'obj:a',
   activeView: 'logs',
   objectRef: {
-    clusterId: 'cluster-a',
+    clusterId: clusterIds.open,
     group: '',
     version: 'v1',
     kind: 'Pod',
     namespace: 'default',
     name: 'a',
   },
-};
-const payload = {
+});
+const dragPayload = (clusterId = clusterIds.open) => ({
   kind: 'dockable-tab' as const,
-  panelId: tab.panelId,
+  panelId: 'obj:a',
   sourceGroupId: 'right',
   sourceWindowName: 'workspace-source',
-  clusterId: 'cluster-a',
-  tab,
-};
+  clusterId,
+  tab: objectTab(),
+});
 
 function createTransfer() {
   const data = new Map<string, string>();
@@ -64,7 +60,7 @@ function createTransfer() {
   } as unknown as DataTransfer;
 }
 
-function protectedTransfer(kind = 'dockable-tab', clusterId = 'cluster-a') {
+function protectedTransfer(kind = 'dockable-tab', clusterId = clusterIds.open) {
   return {
     types: [
       TAB_DRAG_DATA_TYPE,
@@ -92,8 +88,8 @@ async function drag(target: EventTarget, type: string, dataTransfer: DataTransfe
 }
 
 describe('empty dock destinations', () => {
-  let host: HTMLDivElement;
-  let root: Root;
+  let view: MountedApp;
+  let host: HTMLElement;
   let context: ReturnType<typeof useDockablePanelContext>;
   let layoutStore: PanelLayoutStore;
   function Capture() {
@@ -107,41 +103,35 @@ describe('empty dock destinations', () => {
     children?: ReactNode,
     props: Partial<ComponentProps<typeof DockablePanelProvider>> = {}
   ) => {
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <DockablePanelProvider
-            tabDragIdentity={{
-              windowName: 'workspace-target',
-              clusterId: 'cluster-a',
-              getTabSnapshot: () => tab,
-            }}
-            {...props}
-          >
-            <ZoomProvider>
-              <Capture />
-              <div className="content">
-                <div className="content-body" />
-                <DockablePanelLayer />
-              </div>
-              {children}
-            </ZoomProvider>
-          </DockablePanelProvider>
-        </KeyboardProvider>
-      );
-    });
+    await view.show(
+      <DockablePanelProvider
+        tabDragIdentity={{
+          windowName: 'workspace-target',
+          clusterId: clusterIds.open,
+          getTabSnapshot: objectTab,
+        }}
+        {...props}
+      >
+        <Capture />
+        <div className="content">
+          <div className="content-body" />
+          <DockablePanelLayer />
+        </div>
+        {children}
+      </DockablePanelProvider>
+    );
     requireValue(host.querySelector('.content'), 'content bounds').getBoundingClientRect = () =>
       DOMRect.fromRect({ width: 1200, height: 900 });
   };
 
-  beforeEach(() => {
-    host = document.createElement('div');
-    document.body.appendChild(host);
-    root = createRoot(host);
-  });
-  afterEach(async () => {
-    await act(async () => root.unmount());
-    host.remove();
+  beforeEach(async () => {
+    const dev = app.cluster({ name: 'dev', context: 'alpha' });
+    const other = app.cluster({ name: 'dev', context: 'beta', open: false });
+    clusterIds.open = dev.clusterId;
+    clusterIds.other = other.clusterId;
+    app.namespaces(dev, ['default']);
+    view = await app.render(null);
+    host = view.container;
   });
 
   it.each(['right', 'bottom'] as const)('moves a local tab into an empty %s dock', async (edge) => {
@@ -292,9 +282,9 @@ describe('empty dock destinations', () => {
       const destination = requireValue(target(edge), 'empty external dock destination');
       expect((await drag(destination, 'dragover', protectedData)).defaultPrevented).toBe(true);
       const transfer = createTransfer();
-      transfer.setData(TAB_DRAG_DATA_TYPE, JSON.stringify(payload));
+      transfer.setData(TAB_DRAG_DATA_TYPE, JSON.stringify(dragPayload()));
       await drag(destination, 'drop', transfer);
-      expect(onExternalTabDrop).toHaveBeenCalledWith(payload, edge, 0);
+      expect(onExternalTabDrop).toHaveBeenCalledWith(dragPayload(), edge, 0);
       // Admission requests transfer; membership waits for the existing acknowledgement flow.
       expect(context.tabGroups[edge].tabs).toEqual([]);
       expect(target('right')).toBeNull();
@@ -303,12 +293,12 @@ describe('empty dock destinations', () => {
   );
 
   it.each([
-    ['dockable-tab', 'cluster-b'],
-    ['cluster-tab', 'cluster-a'],
-    ['Files', 'cluster-a'],
-  ])('does not offer destinations for %s from %s', async (kind, clusterId) => {
+    ['dockable-tab', 'other'],
+    ['cluster-tab', 'open'],
+    ['Files', 'open'],
+  ] as const)('does not offer destinations for %s from the %s cluster', async (kind, cluster) => {
     await render();
-    await drag(host, 'dragenter', protectedTransfer(kind, clusterId));
+    await drag(host, 'dragenter', protectedTransfer(kind, clusterIds[cluster]));
     expect(target('right')).toBeNull();
     expect(target('bottom')).toBeNull();
   });
@@ -319,7 +309,7 @@ describe('empty dock destinations', () => {
     await drag(host, 'dragenter', protectedTransfer());
     const destination = requireValue(target('right'), 'empty dock destination');
     const transfer = createTransfer();
-    transfer.setData(TAB_DRAG_DATA_TYPE, JSON.stringify({ ...payload, clusterId: 'cluster-b' }));
+    transfer.setData(TAB_DRAG_DATA_TYPE, JSON.stringify(dragPayload(clusterIds.other)));
     expect((await drag(destination, 'drop', transfer)).defaultPrevented).toBe(false);
     expect(onExternalTabDrop).not.toHaveBeenCalled();
   });
@@ -330,14 +320,14 @@ describe('empty dock destinations', () => {
     await drag(host, 'dragenter', protectedTransfer());
     const destination = requireValue(target('right'), 'empty dock destination');
     const transfer = createTransfer();
-    transfer.setData(TAB_DRAG_DATA_TYPE, JSON.stringify(payload));
+    transfer.setData(TAB_DRAG_DATA_TYPE, JSON.stringify(dragPayload()));
     // Native events let React commit between document capture and target listeners.
     // jsdom dispatch inside act normally batches both phases together.
     const commitCaptureUpdates = () => flushSync(() => undefined);
     document.addEventListener('drop', commitCaptureUpdates, true);
     try {
       await drag(destination, 'drop', transfer);
-      expect(onExternalTabDrop).toHaveBeenCalledWith(payload, 'right', 0);
+      expect(onExternalTabDrop).toHaveBeenCalledWith(dragPayload(), 'right', 0);
     } finally {
       document.removeEventListener('drop', commitCaptureUpdates, true);
     }

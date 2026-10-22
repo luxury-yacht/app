@@ -20,7 +20,7 @@ import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
 import WindowHeader from '@ui/layout/WindowHeader';
 import { KeyboardProvider } from '@ui/shortcuts';
 import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import type { panelwindow } from '@/core/backend-api/models';
 import { useClusterWorkspaceSnapshot } from '@/core/cluster-workspace/useClusterWorkspace';
 import {
@@ -53,6 +53,11 @@ import './PanelWindowApp.css';
 
 const acknowledgedTransfers = new Set<string>();
 
+/** Test helper to clear acknowledged transfers between runs. */
+export const resetAcknowledgedPanelTransfersForTesting = (): void => {
+  acknowledgedTransfers.clear();
+};
+
 const initialGroups = (group: panelwindow.WorkspaceGroup): TabGroupState => ({
   right: {
     tabs: group.tabs?.map((tab) => tab.panelId) ?? [],
@@ -68,7 +73,8 @@ const createTransferId = (): string =>
 function PanelWindowSurface({
   descriptor,
   clusterName,
-}: Readonly<{ descriptor: PanelWindowDescriptor; clusterName: string }>) {
+  children,
+}: Readonly<{ descriptor: PanelWindowDescriptor; clusterName: string; children?: ReactNode }>) {
   const { openPanels } = useObjectPanelState();
   const activeTabs = useObjectPanelActiveTabs();
   const guards = usePanelLifecycleGuardRegistry();
@@ -284,13 +290,20 @@ function PanelWindowSurface({
           </PanelErrorBoundary>
         ))}
       </div>
+      {children}
     </DockablePanelProvider>
   );
 }
 
-export default function PanelWindowApp({
+/**
+ * Every panel-window provider and the panel surface, in production order.
+ * PanelWindowApp renders it alone; the frontend test harness renders the
+ * surface under test inside it.
+ */
+export function PanelWindowShell({
   descriptor,
-}: Readonly<{ descriptor: PanelWindowDescriptor }>) {
+  children,
+}: Readonly<{ descriptor: PanelWindowDescriptor; children?: ReactNode }>) {
   useDocumentVisibilityEvents();
   const clusterWorkspace = useClusterWorkspaceSnapshot();
   const clusterName = resolvePanelWindowClusterName(
@@ -317,10 +330,9 @@ export default function PanelWindowApp({
                         <ClusterLifecycleProvider>
                           <NamespaceProvider>
                             <PanelLifecycleGuardProvider>
-                              <PanelWindowSurface
-                                descriptor={descriptor}
-                                clusterName={clusterName}
-                              />
+                              <PanelWindowSurface descriptor={descriptor} clusterName={clusterName}>
+                                {children}
+                              </PanelWindowSurface>
                             </PanelLifecycleGuardProvider>
                           </NamespaceProvider>
                         </ClusterLifecycleProvider>
@@ -335,4 +347,10 @@ export default function PanelWindowApp({
       </ErrorProvider>
     </AppErrorBoundary>
   );
+}
+
+export default function PanelWindowApp({
+  descriptor,
+}: Readonly<{ descriptor: PanelWindowDescriptor }>) {
+  return <PanelWindowShell descriptor={descriptor} />;
 }

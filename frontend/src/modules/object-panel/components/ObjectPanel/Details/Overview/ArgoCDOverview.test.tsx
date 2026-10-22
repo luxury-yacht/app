@@ -1,47 +1,27 @@
-import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ArgoCDOverview.test.tsx
+ *
+ * Renders the Argo CD Application, ApplicationSet, and AppProject overviews through the resolved
+ * descriptor inside the real app shell; the owning ApplicationSet link opens its panel through the
+ * real panel owners. Only the backend boundary is faked (test-utils/appState).
+ */
+
+import { act } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CustomResourceDetails } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { resolveOverviewDescriptor } from './descriptorRegistry';
 import { OverviewRenderer } from './OverviewRenderer';
 
-vi.mock('@core/contexts/ZoomContext', () => ({ useZoom: () => ({ zoomLevel: 1 }) }));
+const app = installAppStateHarness();
+
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({ ResourceHeader: () => null }));
 vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({ ResourceMetadata: () => null }));
-vi.mock('@shared/components/ObjectPanelLink', () => ({
-  ObjectPanelLink: ({ objectRef }: { objectRef: { namespace: string; name: string } }) => (
-    <button type="button">
-      {objectRef.namespace}/{objectRef.name}
-    </button>
-  ),
-}));
-const base: CustomResourceDetails = {
-  ref: {
-    clusterId: 'a',
-    group: 'argoproj.io',
-    version: 'v1alpha1',
-    kind: 'Application',
-    namespace: 'team-a',
-    name: 'shop',
-  },
-  resourceFamily: 'argocd',
-  kind: 'Application',
-  name: 'shop',
-  status: 'Degraded',
-  statusState: 'Degraded',
-  statusPresentation: 'error',
-};
-function render(data: CustomResourceDetails) {
-  const descriptor = resolveOverviewDescriptor({ detailType: 'customresource', details: data });
-  if (!descriptor) {
-    throw new Error('Argo CD overview missing');
-  }
-  return renderToStaticMarkup(<OverviewRenderer descriptor={descriptor} data={data} />);
-}
-const mount = (data: CustomResourceDetails) => {
-  const dom = document.createElement('div');
-  dom.innerHTML = render(data);
-  return dom;
-};
+
 const rowValue = (scope: ParentNode, label: string) =>
   [...scope.querySelectorAll('.overview-item')]
     .find((item) => item.querySelector('.overview-label')?.textContent === label)
@@ -60,18 +40,64 @@ const cards = (scope: ParentNode) =>
   }));
 const section = (dom: HTMLElement, label: string) =>
   dom.querySelector(`section[aria-label="${label}"]`) ?? document.createElement('div');
+
 describe('Argo CD overview', () => {
-  it('keeps omitted ApplicationSet policy unknown and preserves explicit false', () => {
+  let view: MountedApp;
+  let dev: TestCluster;
+  let base: CustomResourceDetails;
+
+  // Shows the overview the registry resolves for `data`, inside its own element.
+  const mount = async (data: CustomResourceDetails) => {
+    const descriptor = resolveOverviewDescriptor({ detailType: 'customresource', details: data });
+    if (!descriptor) {
+      throw new Error('Argo CD overview missing');
+    }
+    await view.show(
+      <div data-testid="argocd-overview">
+        <OverviewRenderer descriptor={descriptor} data={data} />
+      </div>
+    );
+    const dom = view.container.querySelector<HTMLElement>('[data-testid="argocd-overview"]');
+    if (!dom) {
+      throw new Error('Argo CD overview did not render');
+    }
+    return dom;
+  };
+  const render = async (data: CustomResourceDetails) => (await mount(data)).textContent ?? '';
+
+  beforeEach(async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['team-a']);
+    base = {
+      ref: {
+        clusterId: dev.clusterId,
+        group: 'argoproj.io',
+        version: 'v1alpha1',
+        kind: 'Application',
+        namespace: 'team-a',
+        name: 'shop',
+      },
+      resourceFamily: 'argocd',
+      kind: 'Application',
+      name: 'shop',
+      status: 'Degraded',
+      statusState: 'Degraded',
+      statusPresentation: 'error',
+    };
+    view = await app.render(null);
+  });
+
+  it('keeps omitted ApplicationSet policy unknown and preserves explicit false', async () => {
     const data: CustomResourceDetails = {
       ...base,
       kind: 'ApplicationSet',
       argoCD: { applicationSet: { template: { destination: {} } } },
     };
-    const absent = mount(data);
+    const absent = await mount(data);
     for (const label of ['Applications Sync', 'Preserve on Delete', 'Strategy']) {
       expect(rowValue(absent, label)).toBeUndefined();
     }
-    const explicit = mount({
+    const explicit = await mount({
       ...data,
       argoCD: {
         applicationSet: { template: { destination: {} }, preserveResourcesOnDeletion: false },
@@ -79,8 +105,8 @@ describe('Argo CD overview', () => {
     });
     expect(rowValue(explicit, 'Preserve on Delete')).toBe('No');
   });
-  it('shows independent sync and health, multiple sources, disabled automation and the namespaced owner', () => {
-    const html = render({
+  it('shows independent sync and health, multiple sources, disabled automation and the namespaced owner', async () => {
+    const dom = await mount({
       ...base,
       argoCD: {
         application: {
@@ -126,13 +152,30 @@ describe('Argo CD overview', () => {
       'apps/shop',
       '2.1.0',
       'Disabled',
-      'team-a/shops',
     ]) {
-      expect(html).toContain(value);
+      expect(dom.textContent).toContain(value);
     }
+    // The owning ApplicationSet opens in its own namespace.
+    const owner = dom.querySelector<HTMLElement>('.object-panel-link');
+    expect(owner?.textContent).toBe('shops');
+    await act(async () => {
+      owner?.click();
+    });
+    await app.settle();
+    expect(view.openPanels()).toEqual([
+      {
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        group: 'argoproj.io',
+        version: 'v1alpha1',
+        kind: 'ApplicationSet',
+        namespace: 'team-a',
+        name: 'shops',
+      },
+    ]);
   });
-  it('renders ApplicationSet template and generation errors, then project policy without application placeholders', () => {
-    const set = render({
+  it('renders ApplicationSet template and generation errors, then project policy without application placeholders', async () => {
+    const set = await render({
       ...base,
       kind: 'ApplicationSet',
       argoCD: {
@@ -156,7 +199,7 @@ describe('Argo CD overview', () => {
     expect(set).toContain('matrix');
     expect(set).toContain('{{project}}');
     expect(set).toContain('ErrorOccurred');
-    const project = render({
+    const project = await render({
       ...base,
       kind: 'AppProject',
       argoCD: {
@@ -201,8 +244,8 @@ describe('Argo CD overview', () => {
     ).toBeUndefined();
   });
 
-  it('leads an Application with health, sync and the last operation before its identity rows', () => {
-    const dom = mount({
+  it('leads an Application with health, sync and the last operation before its identity rows', async () => {
+    const dom = await mount({
       ...base,
       argoCD: {
         application: {
@@ -253,8 +296,8 @@ describe('Argo CD overview', () => {
   it.each([
     ['trailing slashes', 'https://git.example.com/platform/deploy-config.git///'],
     ['long internal slash runs', `https://git.example.com/${'/'.repeat(10_000)}deploy-config.git`],
-  ])('extracts the repository name from sources with %s', (_description, repoURL) => {
-    const dom = mount({
+  ])('extracts the repository name from sources with %s', async (_description, repoURL) => {
+    const dom = await mount({
       ...base,
       argoCD: { application: { spec: { destination: {}, source: { repoURL } } } },
     });
@@ -263,7 +306,7 @@ describe('Argo CD overview', () => {
     expect(source.rows).toEqual([['Repository', repoURL]]);
   });
 
-  it('titles source cards from name, chart or repository, keeps revisions separate and summarises automation', () => {
+  it('titles source cards from name, chart or repository, keeps revisions separate and summarises automation', async () => {
     const application = {
       spec: {
         project: 'production',
@@ -284,7 +327,7 @@ describe('Argo CD overview', () => {
       },
       revisions: ['abc123', '2.1.0', 'def456'],
     };
-    const dom = mount({ ...base, argoCD: { application } });
+    const dom = await mount({ ...base, argoCD: { application } });
     expect(cards(section(dom, 'Sources'))).toEqual([
       {
         title: 'deploy-config',
@@ -311,7 +354,7 @@ describe('Argo CD overview', () => {
     expect(rowValue(section(dom, 'Sources'), 'Deployed Revisions')).toBe('abc1232.1.0def456');
     expect(rowValue(dom, 'Automated Sync')).toBe('Enabled · prune · self heal');
     expect(rowValue(dom, 'Sync Options')).toBe('CreateNamespace=true');
-    const manual = mount({
+    const manual = await mount({
       ...base,
       argoCD: {
         application: { ...application, spec: { ...application.spec, syncPolicy: undefined } },
@@ -319,8 +362,8 @@ describe('Argo CD overview', () => {
     });
     expect(rowValue(manual, 'Automated Sync')).toBe('Disabled');
   });
-  it('folds the ApplicationSet template into rows and summarises generators as cards', () => {
-    const dom = mount({
+  it('folds the ApplicationSet template into rows and summarises generators as cards', async () => {
+    const dom = await mount({
       ...base,
       kind: 'ApplicationSet',
       argoCD: {
@@ -357,8 +400,8 @@ describe('Argo CD overview', () => {
     expect(rowValue(dom, 'Strategy')).toBe('RollingSync');
     expect(headings(dom)).toEqual(['Generators', 'Application Management']);
   });
-  it('renders AppProject destinations, permissions and sync windows as compact cards', () => {
-    const dom = mount({
+  it('renders AppProject destinations, permissions and sync windows as compact cards', async () => {
+    const dom = await mount({
       ...base,
       kind: 'AppProject',
       status: '',

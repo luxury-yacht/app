@@ -220,3 +220,49 @@ describe('Biome architectural boundary plugins', () => {
     expect(result.status).toBe(0);
   });
 });
+
+describe('owned-state mock guard', () => {
+  const HARNESS_MESSAGE = 'installAppStateHarness';
+  const lintTest = (source) => {
+    const result = lintWithProjectConfig(
+      source,
+      path.join(process.cwd(), 'src'),
+      'adversarial.test.tsx'
+    );
+    return { status: result.status, output: `${result.stdout}\n${result.stderr}` };
+  };
+
+  // Through the real project config, so an unanchored or mis-scoped include
+  // (which Biome silently ignores) fails here instead of disabling the guard.
+  it.each([
+    ['an aliased owner', "vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({}));"],
+    [
+      'a relative owner on several lines',
+      "vi.mock(\n  '../config/KubeconfigContext',\n  () => ({})\n);",
+    ],
+    ['an automocked owner', "vi.mock('@/core/capabilities');"],
+    ['an owner replaced later', "vi.doMock('@/core/data-access', () => ({}));"],
+  ])('rejects mocking %s in a test file', (_case, source) => {
+    const result = lintTest(source);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain(HARNESS_MESSAGE);
+  });
+
+  it.each([
+    ['the backend API boundary', "vi.mock('@/core/backend-api', () => ({}));"],
+    [
+      'a module whose name only starts like an owner',
+      "vi.mock('@modules/kubernetes/config/KubeconfigContextLabel', () => ({}));",
+    ],
+  ])('allows mocking %s', (_case, source) => {
+    expect(lintTest(source).output).not.toContain(HARNESS_MESSAGE);
+  });
+
+  it('rejects an owned-state mock with the plugin alone', () => {
+    const result = lintWithPlugin('no-owned-state-mocks', "vi.mock('@/core/refresh', () => ({}));");
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain(HARNESS_MESSAGE);
+  });
+});

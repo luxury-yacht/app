@@ -1,27 +1,25 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/EndpointsOverview.test.tsx
  *
- * Parity oracle for the EndpointSlice Overview migrated onto the descriptor renderer. Renders
- * <OverviewRenderer descriptor={endpointSliceDescriptor} ...> with EndpointSliceDetails-shaped
- * fixtures; the cluster identity for building target-pod/node links comes from the context (matching
- * the old useObjectPanel mock). The frame components are mocked; ObjectPanelLink/StatusChip are real.
+ * Parity oracle for the EndpointSlice Overview on the descriptor renderer, inside the real app
+ * shell: target and Service links open panels through the real panel owners, and versionless
+ * targets resolve through the real catalog lookup. Only the backend boundary is faked
+ * (test-utils/appState); the frame components are stubbed.
  */
 
-import type { endpointslice } from '@core/backend-api/models';
+import { type endpointslice, objectcatalog } from '@core/backend-api/models';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { endpointSliceDescriptor } from './descriptors/endpointslice';
 import { OverviewRenderer } from './OverviewRenderer';
 
-const openWithObject = vi.hoisted(() => vi.fn());
-const resolveCatalogObjectByUID = vi.hoisted(() => vi.fn());
-
-vi.mock('@shared/utils/resourceLinkIdentity', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@shared/utils/resourceLinkIdentity')>()),
-  resolveCatalogObjectByUID,
-}));
+const app = installAppStateHarness();
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: { kind: string; name: string }) => (
@@ -35,17 +33,6 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
   ResourceMetadata: () => <div data-testid="resource-metadata" />,
 }));
 
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    openWithObject,
-    objectData: { clusterId: 'test-cluster', clusterName: 'test' },
-  }),
-}));
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
 const getValueForLabel = (container: HTMLElement, label: string) => {
   const labelElement = Array.from(container.querySelectorAll<HTMLElement>('.overview-label')).find(
     (el) => el.textContent?.trim() === label
@@ -53,12 +40,30 @@ const getValueForLabel = (container: HTMLElement, label: string) => {
   return labelElement?.parentElement?.querySelector<HTMLElement>('.overview-value') ?? null;
 };
 
-// Cluster identity threaded via the OverviewContext, matching the old useObjectPanel mock.
-const context = { clusterId: 'test-cluster', clusterName: 'test' };
+interface TargetRef {
+  clusterId: string;
+  group: string;
+  version: string;
+  kind: string;
+  namespace: string;
+  name: string;
+  uid: string;
+}
+
+// What backend FindCatalogObjectByUID returns for a catalog hit
+// (backend/resource_gateway_catalog.go, objectcatalog.Summary).
+const catalogSummary = (ref: TargetRef): objectcatalog.Summary => ({
+  ref: { ...ref, resource: 'pods' },
+  resourceVersion: '1',
+  creationTimestamp: '',
+  scope: objectcatalog.Scope.ScopeNamespace,
+});
 
 describe('EndpointSliceOverview', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let view: MountedApp;
+  let dev: TestCluster;
+  let container: HTMLElement;
+  let context: { clusterId: string; clusterName: string };
 
   const listTexts = (label: string) =>
     Array.from(
@@ -70,27 +75,31 @@ describe('EndpointSliceOverview', () => {
 
   const renderComponent = async (fixture: Record<string, unknown>) => {
     const dto = partialModelFixture<endpointslice.EndpointSliceDetails>(fixture);
-    await act(async () => {
-      root.render(
-        <OverviewRenderer descriptor={endpointSliceDescriptor} data={dto} context={context} />
-      );
-      await Promise.resolve();
-    });
+    await view.show(
+      <OverviewRenderer descriptor={endpointSliceDescriptor} data={dto} context={context} />
+    );
   };
 
-  beforeEach(() => {
-    openWithObject.mockClear();
-    resolveCatalogObjectByUID.mockReset().mockResolvedValue(undefined);
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+  const click = async (element: HTMLElement | null | undefined) => {
+    await act(async () => {
+      element?.click();
+    });
+    await app.settle();
+  };
+
+  // A panel the real panel state holds, in the slice's cluster.
+  const panelFor = ({ uid: _uid, clusterId, ...identity }: TargetRef) => ({
+    clusterId,
+    clusterName: dev.clusterName,
+    ...identity,
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  beforeEach(async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default', 'dev', 'shop', 'slice-ns', 'target-ns']);
+    context = { clusterId: dev.clusterId, clusterName: dev.clusterName };
+    view = await app.render(null);
+    container = view.container;
   });
 
   it('renders slice details with address counts', async () => {
@@ -182,7 +191,18 @@ describe('EndpointSliceOverview', () => {
 
     const service = getValueForLabel(container, 'Service');
     expect(service?.textContent).toBe('web');
-    expect(service?.querySelector('.object-panel-link')).not.toBeNull();
+    await click(service?.querySelector<HTMLElement>('.object-panel-link'));
+    expect(view.openPanels()).toEqual([
+      {
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        group: '',
+        version: 'v1',
+        kind: 'service',
+        namespace: 'shop',
+        name: 'web',
+      },
+    ]);
     // A slice without endpoints says so in the flow.
     expect(container.querySelector('section[aria-label="Endpoints"]')?.textContent).toContain(
       'No endpoints'
@@ -225,8 +245,10 @@ describe('EndpointSliceOverview', () => {
   });
 
   it('opens the exact target identity and leaves an unresolved target as text', async () => {
+    // The catalog has no entry for the unresolved target's UID.
+    app.backend.answer('FindCatalogObjectByUID', () => null);
     const ref = {
-      clusterId: 'Cluster-A',
+      clusterId: dev.clusterId,
       group: 'custom.example.com',
       version: 'v2',
       kind: 'Pod',
@@ -244,8 +266,12 @@ describe('EndpointSliceOverview', () => {
     });
     const target = container.querySelector<HTMLElement>('.address-target.object-panel-link');
     expect(target).not.toBeNull();
-    await act(async () => target?.click());
-    expect(openWithObject).toHaveBeenCalledWith(expect.objectContaining(ref));
+    await click(target);
+    expect(view.openPanels()).toEqual([panelFor(ref)]);
+    expect(app.backend.calls('FindCatalogObjectByUID')).toContainEqual([
+      dev.clusterId,
+      'target-uid',
+    ]);
     const unresolved = Array.from(container.querySelectorAll('.address-target')).find(
       (element) => element.textContent === 'Pod/unresolved'
     );
@@ -255,7 +281,7 @@ describe('EndpointSliceOverview', () => {
 
   it('resolves a versionless target by cluster and UID before enabling navigation', async () => {
     const ref = {
-      clusterId: 'Cluster-A',
+      clusterId: dev.clusterId,
       group: '',
       version: 'v1',
       kind: 'Pod',
@@ -263,31 +289,40 @@ describe('EndpointSliceOverview', () => {
       name: 'target',
       uid: 'target-uid',
     };
-    let finish!: (value: typeof ref) => void;
-    resolveCatalogObjectByUID.mockReturnValue(
-      new Promise((resolve) => {
-        finish = resolve;
-      })
+    // StrictMode replays the lookup effect; every lookup waits for the catalog.
+    const pending: Array<(summary: objectcatalog.Summary) => void> = [];
+    app.backend.answer(
+      'FindCatalogObjectByUID',
+      () =>
+        new Promise((resolve) => {
+          pending.push(resolve);
+        })
     );
     await renderComponent({
       name: 'slice',
       namespace: 'slice-ns',
       readyAddresses: [{ ip: '10.0.0.1', targetRef: { display: { ...ref, version: '' } } }],
     });
-    expect(resolveCatalogObjectByUID).toHaveBeenCalledWith('Cluster-A', 'target-uid');
+    expect(app.backend.calls('FindCatalogObjectByUID')).toContainEqual([
+      dev.clusterId,
+      'target-uid',
+    ]);
     expect(container.querySelector('.address-target.object-panel-link')).toBeNull();
     await act(async () => {
-      finish(ref);
+      pending.forEach((finish) => {
+        finish(catalogSummary(ref));
+      });
     });
+    await app.settle();
     const target = container.querySelector<HTMLElement>('.address-target.object-panel-link');
     expect(target).not.toBeNull();
-    await act(async () => target?.click());
-    expect(openWithObject).toHaveBeenCalledWith(expect.objectContaining(ref));
+    await click(target);
+    expect(view.openPanels()).toEqual([panelFor(ref)]);
   });
 
   it('ignores an obsolete UID lookup after the target changes', async () => {
     const first = {
-      clusterId: 'Cluster-A',
+      clusterId: dev.clusterId,
       group: '',
       version: 'v1',
       kind: 'Pod',
@@ -295,27 +330,33 @@ describe('EndpointSliceOverview', () => {
       name: 'first',
       uid: 'first-uid',
     };
-    let finish!: (value: typeof first) => void;
-    resolveCatalogObjectByUID.mockReturnValueOnce(
-      new Promise((resolve) => {
-        finish = resolve;
-      })
+    const second = { ...first, name: 'second', uid: 'second-uid' };
+    // The first target's lookups stay in flight until the target has changed.
+    const pendingFirst: Array<(summary: objectcatalog.Summary) => void> = [];
+    app.backend.answer('FindCatalogObjectByUID', (_clusterId, uid) =>
+      uid === first.uid
+        ? new Promise((resolve) => {
+            pendingFirst.push(resolve);
+          })
+        : catalogSummary(second)
     );
-    const fixture = (ref: typeof first) => ({
+    const fixture = (ref: TargetRef) => ({
       name: 'slice',
       namespace: 'slice-ns',
       readyAddresses: [{ ip: '10.0.0.1', targetRef: { display: { ...ref, version: '' } } }],
     });
     await renderComponent(fixture(first));
-    const second = { ...first, clusterId: 'cluster-a', name: 'second', uid: 'second-uid' };
-    resolveCatalogObjectByUID.mockResolvedValueOnce(second);
     await renderComponent(fixture(second));
+    expect(pendingFirst.length).toBeGreaterThan(0);
     await act(async () => {
-      finish(first);
+      pendingFirst.forEach((finish) => {
+        finish(catalogSummary(first));
+      });
     });
+    await app.settle();
     const target = container.querySelector<HTMLElement>('.address-target.object-panel-link');
     expect(target).not.toBeNull();
-    await act(async () => target?.click());
-    expect(openWithObject).toHaveBeenCalledWith(expect.objectContaining(second));
+    await click(target);
+    expect(view.openPanels()).toEqual([panelFor(second)]);
   });
 });

@@ -140,10 +140,6 @@ vi.mock('@modules/browse/hooks/useHydratedCustomCatalogRows', () => ({
   useHydratedCustomCatalogRows: (...args: unknown[]) => useHydratedCustomCatalogRowsMock(...args),
 }));
 
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
 vi.mock('@core/backend-api', () => ({
   RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
 }));

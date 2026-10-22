@@ -108,10 +108,6 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
   }),
 }));
 
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
 vi.mock('@/core/data-access', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {

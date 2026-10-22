@@ -140,10 +140,6 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
   }),
 }));
 
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
 const baseEvent: EventRow = {
   ref: {
     ...makeResourceRef({

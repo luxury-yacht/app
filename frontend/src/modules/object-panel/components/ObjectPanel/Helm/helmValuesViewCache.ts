@@ -27,3 +27,8 @@ export const setHelmValuesView = (panelId: string, view: HelmValuesView): void =
 export const clearHelmValuesView = (panelId: string): void => {
   views.delete(panelId);
 };
+
+/** Test helper to clear cached views between runs. */
+export const resetHelmValuesViewCacheForTesting = (): void => {
+  views.clear();
+};

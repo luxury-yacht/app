@@ -39,13 +39,7 @@ const networkSpec: AggregatedResourceGridViewSpec<NetworkData> = {
   defaultSort: { key: 'name', direction: 'asc' },
   showKindDropdown: true,
   namespaceLinkTab: 'network',
-  buildColumns: ({
-    identity,
-    openReference,
-    navigateReference,
-    fallbackClusterName,
-    useShortResourceNames,
-  }) => [
+  buildColumns: ({ identity, openReference, navigateReference, useShortResourceNames }) => [
     ...createAggregatedIdentityColumns<NetworkData>({ identity, useShortResourceNames }),
     // Stable concepts keep the mixed-kind table scannable. Each row's segment
     // label supplies the kind-specific meaning (Class, Parent, Type, Ports...).
@@ -57,7 +51,6 @@ const networkSpec: AggregatedResourceGridViewSpec<NetworkData> = {
       getSegments: (resource) => resource.details,
       openReference,
       navigateReference,
-      clusterName: fallbackClusterName,
       autoSizeMaxWidth: 260,
     }),
     createDetailSegmentsColumn<NetworkData>({

@@ -209,10 +209,6 @@ vi.mock('@/core/capabilities', () => ({
   useUserPermissions: () => new Map(),
 }));
 
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
 vi.mock('@/utils/ageFormatter', () => ({
   formatAge: (value: unknown) => String(value ?? ''),
 }));

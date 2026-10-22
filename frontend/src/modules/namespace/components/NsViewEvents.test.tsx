@@ -36,7 +36,6 @@ const {
   gridTablePropsRef,
   openWithObjectMock,
   persistedSortRef,
-  shortNamesMock,
   formatAgeMock,
   findCatalogObjectByUIDMock,
   useTableSortMock,
@@ -45,7 +44,6 @@ const {
   gridTablePropsRef: { current: null as unknown as CapturedGridTableProps },
   openWithObjectMock: vi.fn(),
   persistedSortRef: { current: null as SortConfig | null },
-  shortNamesMock: vi.fn(() => false),
   formatAgeMock: vi.fn((timestamp: number) => `${timestamp}s`),
   findCatalogObjectByUIDMock: vi.fn(),
   requestRefreshDomainStateMock: vi.fn(),
@@ -145,10 +143,6 @@ vi.mock('@/hooks/useTableSort', () => ({
   ) => useTableSortMock(data, defaultKey, defaultDirection, options),
 }));
 
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => shortNamesMock(),
-}));
-
 // Single-namespace event tables are query-backed now, so the displayed rows come from the typed
 // query. Override only the typed-query data path and its readiness gates; keep the rest of these
 // modules real so the involved-object catalog lookup (requestData/readCatalogObjectByUID) still
@@ -239,7 +233,6 @@ describe('NsViewEvents', () => {
     openWithObjectMock.mockReset();
     findCatalogObjectByUIDMock.mockReset();
     useTableSortMock.mockClear();
-    shortNamesMock.mockReturnValue(false);
     formatAgeMock.mockClear();
     requestRefreshDomainStateMock.mockReset();
     // Default: the typed query settles with no payload (no rows). Tests that assert on rendered

@@ -44,10 +44,6 @@ const sortHookMock = vi.hoisted(() => ({
   handleSort: vi.fn(),
 }));
 
-const shortNamesMock = vi.hoisted(() => ({
-  useShortNames: vi.fn(() => false),
-}));
-
 const permissionMapMock = vi.hoisted(() => ({
   map: new Map<string, { allowed: boolean; pending: boolean }>(),
 }));
@@ -125,10 +121,6 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
     isNamespaceScoped: true,
     resetState: vi.fn(),
   }),
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => shortNamesMock.useShortNames(),
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
@@ -235,7 +227,6 @@ describe('NsViewConfig ConfigViewGrid', () => {
     sortHookMock.sortedData = [];
     sortHookMock.sortConfig = { columnKey: 'name', direction: 'asc' };
     sortHookMock.handleSort.mockClear();
-    shortNamesMock.useShortNames.mockReturnValue(false);
     permissionMapMock.map = new Map();
     objectActionMock.RunObjectAction.mockReset();
     getPermissionKeyMock.getPermissionKey.mockClear();
@@ -423,7 +414,6 @@ describe('NsViewConfig ConfigViewGrid', () => {
   });
 
   it('suppresses delete option when permission is denied and handles deletion errors', async () => {
-    shortNamesMock.useShortNames.mockReturnValue(true);
     const permissionMap = new Map<string, { allowed: boolean; pending: boolean }>();
     permissionMap.set('ConfigMap:delete:default', { allowed: false, pending: false });
     permissionMapMock.map = permissionMap;

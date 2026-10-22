@@ -1,8 +1,14 @@
 /**
  * frontend/src/modules/object-panel/contexts/ObjectPanelStateContext.test.tsx
  *
- * Test suite for ObjectPanelStateContext.
- * Ensures object panel state is scoped per cluster tab.
+ * The workspace window's object-panel state: open panels and their active
+ * views are kept per cluster tab, survive switching tabs and a denied close,
+ * and are dropped with their cached reads (refresh scopes, log viewer and Helm
+ * values views) exactly once when a panel or its cluster tab goes away. Runs
+ * the production shell's own state provider under the real kubeconfig owner
+ * and refresh orchestrator (test-utils/appState); cluster tabs switch, close,
+ * and reopen through the real owner. Evictions are observed on the real
+ * orchestrator with a pass-through spy.
  */
 
 import {
@@ -10,235 +16,399 @@ import {
   setHelmValuesView,
 } from '@modules/object-panel/components/ObjectPanel/Helm/helmValuesViewCache';
 import {
+  getLogViewerPrefs,
+  setLogViewerPrefs,
+} from '@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache';
+import {
   ObjectPanelStateProvider,
   useObjectPanelActiveTab,
   useObjectPanelState,
 } from '@modules/object-panel/contexts/ObjectPanelStateContext';
-import type React from 'react';
-import { act, StrictMode } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { panelwindow } from '@/core/backend-api/models';
+import { refreshOrchestrator } from '@/core/refresh/orchestrator';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-const clearLogViewerPrefsMock = vi.fn();
+const app = installAppStateHarness();
+let view: MountedApp;
+let alpha: TestCluster;
+let beta: TestCluster;
+let state: ReturnType<typeof useObjectPanelState> | null = null;
+let activeTab: string | undefined;
 
-let mockClusterId = 'cluster-a';
-let mockClusterName = 'Cluster A';
-let mockClusterIds = ['cluster-a', 'cluster-b'];
-let mockVisibleClusterIds: string[] | undefined;
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedClusterId: mockClusterId,
-    selectedClusterName: mockClusterName,
-    managedClusterIds: mockClusterIds,
-    selectedClusterIds: mockVisibleClusterIds ?? mockClusterIds,
-  }),
-}));
-
-const resetScopedDomainMock = vi.fn();
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: {
-    resetScopedDomain: (...args: unknown[]) => resetScopedDomainMock(...args),
-  },
-}));
-
-vi.mock('@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache', () => ({
-  clearLogViewerPrefs: (...args: unknown[]) => clearLogViewerPrefsMock(...args),
-}));
-
-const stateRef: { current: ReturnType<typeof useObjectPanelState> | null } = {
-  current: null,
-};
-
-const Harness: React.FC = () => {
-  stateRef.current = useObjectPanelState();
+function Probe({ panelId }: Readonly<{ panelId?: string }>) {
+  state = useObjectPanelState();
+  activeTab = useObjectPanelActiveTab(panelId ?? '');
   return null;
-};
+}
 
-// Captures the reactive active tab for a single panel so assertions can read
-// it imperatively. Reads through the public useObjectPanelActiveTab hook.
-const activeTabProbeRef: { current: string | undefined } = {
-  current: undefined,
-};
+const current = () => requireValue(state, 'object panel state');
+const pod = (cluster: TestCluster, name: string, namespace = 'default') => ({
+  clusterId: cluster.clusterId,
+  group: '',
+  version: 'v1',
+  kind: 'Pod',
+  namespace,
+  name,
+});
 
-const TabProbe: React.FC<{ panelId: string }> = ({ panelId }) => {
-  activeTabProbeRef.current = useObjectPanelActiveTab(panelId);
-  return null;
-};
-
-describe('ObjectPanelStateContext', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    mockClusterId = 'cluster-a';
-    mockClusterName = 'Cluster A';
-    mockClusterIds = ['cluster-a', 'cluster-b'];
-    mockVisibleClusterIds = undefined;
-    stateRef.current = null;
-    activeTabProbeRef.current = undefined;
-    resetScopedDomainMock.mockReset();
-    clearLogViewerPrefsMock.mockClear();
+/** Opens `ref` the way a row click does; returns its panel id. */
+const open = (ref: Parameters<ReturnType<typeof useObjectPanelState>['onRowClick']>[0]) => {
+  let panelId = '';
+  act(() => {
+    panelId = current().onRowClick(ref);
   });
+  return panelId;
+};
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+const openNames = () => Array.from(current().openPanels.values()).map((target) => target.name);
+
+const closeClusterTab = async (cluster: TestCluster) => {
+  await act(async () => {
+    await view.owners().kubeconfig.closeKubeconfig(cluster.selection);
   });
+  await app.settle();
+};
 
-  const renderProvider = async (probePanelId?: string) => {
-    await act(async () => {
-      root.render(
-        <ObjectPanelStateProvider>
-          <Harness />
-          {probePanelId ? <TabProbe panelId={probePanelId} /> : null}
-        </ObjectPanelStateProvider>
-      );
-    });
-  };
+const reopenClusterTab = async (cluster: TestCluster) => {
+  await act(async () => {
+    await view.owners().kubeconfig.openKubeconfig(cluster.selection);
+  });
+  await app.settle();
+};
 
+/** Records the scoped refresh entries the panel state evicts, still evicting them. */
+const recordEvictions = () => vi.spyOn(refreshOrchestrator, 'resetScopedDomain');
+const evictedDomains = (spy: ReturnType<typeof recordEvictions>) =>
+  spy.mock.calls.map(([domain]) => domain);
+
+beforeEach(async () => {
+  state = null;
+  activeTab = undefined;
+  alpha = app.cluster({ name: 'dev', context: 'alpha' });
+  beta = app.cluster({ name: 'dev', context: 'beta' });
+  app.namespaces(alpha, ['default', 'team-a']);
+  app.namespaces(beta, ['default', 'team-b']);
+  view = await app.render(null);
+  await view.show(<Probe />);
+});
+
+describe('per cluster tab', () => {
   it('keeps object panel state isolated per cluster tab', async () => {
-    await renderProvider();
+    open(pod(alpha, 'api'));
+    expect(current().showObjectPanel).toBe(true);
+    expect(openNames()).toEqual(['api']);
 
-    // Open a panel in cluster-a.
-    act(() => {
-      stateRef.current?.onRowClick({
-        kind: 'Pod',
-        name: 'api',
-        namespace: 'default',
-        clusterId: 'cluster-a',
-      });
-    });
-    expect(stateRef.current?.showObjectPanel).toBe(true);
-    expect(stateRef.current?.openPanels.size).toBeGreaterThan(0);
+    await view.selectCluster(beta);
+    expect(current().showObjectPanel).toBe(false);
+    expect(openNames()).toEqual([]);
+    open({ ...pod(beta, 'web'), group: 'apps', kind: 'Deployment' });
+    expect(openNames()).toEqual(['web']);
 
-    // The opened panel should contain the object we clicked on.
-    const panelEntries = Array.from(stateRef.current?.openPanels.values() ?? []);
-    expect(panelEntries[0]?.name).toBe('api');
-
-    // Switch to cluster-b. Its state should be empty and independent.
-    mockClusterId = 'cluster-b';
-    mockClusterName = 'Cluster B';
-    await renderProvider();
-    expect(stateRef.current?.showObjectPanel).toBe(false);
-    expect(stateRef.current?.openPanels.size).toBe(0);
-
-    // Open a different panel in cluster-b.
-    act(() => {
-      stateRef.current?.onRowClick({
-        kind: 'Deployment',
-        name: 'web',
-        namespace: 'default',
-        clusterId: 'cluster-b',
-      });
-    });
-    expect(stateRef.current?.openPanels.size).toBeGreaterThan(0);
-    const clusterBEntries = Array.from(stateRef.current?.openPanels.values() ?? []);
-    expect(clusterBEntries[0]?.name).toBe('web');
-
-    // Switch back to cluster-a. Its original state should still be intact.
-    mockClusterId = 'cluster-a';
-    mockClusterName = 'Cluster A';
-    await renderProvider();
-    expect(stateRef.current?.showObjectPanel).toBe(true);
-    const clusterAEntries = Array.from(stateRef.current?.openPanels.values() ?? []);
-    expect(clusterAEntries[0]?.name).toBe('api');
+    await view.selectCluster(alpha);
+    expect(current().showObjectPanel).toBe(true);
+    expect(openNames()).toEqual(['api']);
   });
 
   it('stores a cross-cluster object in the cluster identified by the object reference', async () => {
-    await renderProvider();
-
-    act(() => {
-      stateRef.current?.onRowClick({
-        group: '',
-        version: 'v1',
-        kind: 'Namespace',
-        name: 'team-b',
-        clusterId: 'cluster-b',
-      });
+    open({
+      group: '',
+      version: 'v1',
+      kind: 'Namespace',
+      name: 'team-b',
+      clusterId: beta.clusterId,
     });
+    expect(openNames()).toEqual([]);
 
-    expect(stateRef.current?.openPanels.size).toBe(0);
+    await view.selectCluster(beta);
 
-    mockClusterId = 'cluster-b';
-    mockClusterName = 'Cluster B';
-    await renderProvider();
-
-    expect(Array.from(stateRef.current?.openPanels.values() ?? [])).toEqual([
-      expect.objectContaining({
-        clusterId: 'cluster-b',
-        kind: 'Namespace',
-        name: 'team-b',
-      }),
+    expect(Array.from(current().openPanels.values())).toEqual([
+      expect.objectContaining({ clusterId: beta.clusterId, kind: 'Namespace', name: 'team-b' }),
     ]);
   });
 
-  it('tracks a hidden native-open handoff until the panel is committed or docked', async () => {
-    await renderProvider();
-    const objectRef = {
-      clusterId: 'cluster-a',
-      group: '',
-      version: 'v1',
-      kind: 'Pod',
-      namespace: 'default',
-      name: 'api',
-    };
-    let panelId = '';
+  it('persists the active sub-tab per cluster tab', async () => {
+    const panelId = open(pod(alpha, 'api'));
+    act(() => current().setObjectPanelActiveTab(alpha.clusterId, panelId, 'logs'));
+    await view.show(<Probe panelId={panelId} />);
+    expect(activeTab).toBe('logs');
 
-    act(() => {
-      panelId = stateRef.current?.onRowClick(objectRef, { pendingNativeOpen: true }) ?? '';
-    });
+    await view.selectCluster(beta);
+    expect(activeTab).toBeUndefined();
+    const betaPanelId = open(pod(beta, 'api'));
+    act(() => current().setObjectPanelActiveTab(beta.clusterId, betaPanelId, 'yaml'));
+    await view.show(<Probe panelId={betaPanelId} />);
+    expect(activeTab).toBe('yaml');
 
-    expect(stateRef.current?.pendingNativeOpenPanelIds.has(panelId)).toBe(true);
-
-    const snapshot = {
-      schemaVersion: 1,
-      transferId: 'transfer-pending',
-      sourceWindowName: 'workspace-1',
-      clusterId: 'cluster-a',
-      groupId: 'group-pending',
-      activePanelId: panelId,
-      tabs: [{ kind: 'object', panelId, objectRef, activeView: 'details' }],
-    } as panelwindow.GroupSnapshot;
-
-    act(() => {
-      stateRef.current?.restorePanelTabs(snapshot);
-    });
-
-    expect(stateRef.current?.pendingNativeOpenPanelIds.has(panelId)).toBe(false);
+    await view.selectCluster(alpha);
+    await view.show(<Probe panelId={panelId} />);
+    expect(activeTab).toBe('logs');
   });
 
-  it('docks a group without changing other panels or their previously published state', async () => {
-    await renderProvider();
-    const currentState = () => requireValue(stateRef.current, 'expected panel state');
-    const ref = {
-      clusterId: 'cluster-a',
-      group: '',
-      version: 'v1',
-      kind: 'Pod',
-      namespace: 'default',
-      name: 'existing',
-    };
+  it('clears the active sub-tab entry when a panel is closed', async () => {
+    const panelId = open(pod(alpha, 'api'));
+    act(() => current().setObjectPanelActiveTab(alpha.clusterId, panelId, 'events'));
+    await view.show(<Probe panelId={panelId} />);
+    expect(activeTab).toBe('events');
+
+    act(() => current().closePanel(alpha.clusterId, panelId));
+
+    expect(current().openPanels.has(panelId)).toBe(false);
+    expect(activeTab).toBeUndefined();
+  });
+
+  it('does not re-render state-only consumers when a panel tab changes', async () => {
+    let renders = 0;
+    function StateConsumer() {
+      useObjectPanelState();
+      renders += 1;
+      return null;
+    }
+    await view.show(
+      <>
+        <Probe />
+        <StateConsumer />
+      </>
+    );
+    const panelId = open(pod(alpha, 'api'));
+    const rendersAfterOpen = renders;
+
+    act(() => current().setObjectPanelActiveTab(alpha.clusterId, panelId, 'logs'));
+
+    expect(renders).toBe(rendersAfterOpen);
+  });
+
+  it('rejects object panel references without clusterId', () => {
+    expect(() => current().onRowClick({ kind: 'Pod', name: 'api', namespace: 'default' })).toThrow(
+      'Object panel reference is missing clusterId'
+    );
+    expect(current().openPanels.size).toBe(0);
+  });
+});
+
+describe('closing a cluster tab', () => {
+  it('retains panels while a tab is hidden for close and restores them after denial', async () => {
+    const panelId = open(pod(alpha, 'api'));
+    const evictions = recordEvictions();
+    app.backend.answer('CloseClusterView', () => false);
+    const decide = app.backend.hold('CloseClusterView');
+
+    let closing!: Promise<void>;
+    act(() => {
+      closing = view.owners().kubeconfig.closeKubeconfig(alpha.selection);
+    });
+    await app.settle();
+    expect(view.owners().kubeconfig.selectedClusterIds).not.toContain(alpha.clusterId);
+    expect(current().getOwnedPanel(alpha.clusterId, panelId)).not.toBeNull();
+    expect(evictions).not.toHaveBeenCalled();
+
+    await act(async () => decide());
+    await act(async () => {
+      await closing;
+    });
+    await view.selectCluster(alpha);
+
+    expect(current().openPanels.has(panelId)).toBe(true);
+  });
+
+  it('clears object panel state when a tab is closed', async () => {
+    await view.selectCluster(beta);
+    open(pod(beta, 'job'));
+    expect(current().showObjectPanel).toBe(true);
+
+    await closeClusterTab(beta);
+    await reopenClusterTab(beta);
+
+    expect(view.owners().kubeconfig.selectedClusterId).toBe(beta.clusterId);
+    expect(current().showObjectPanel).toBe(false);
+    expect(current().openPanels.size).toBe(0);
+  });
+
+  it('evicts only the closed cluster tab’s panel scopes', async () => {
+    open(pod(alpha, 'api', 'team-a'));
+    await view.selectCluster(beta);
+    open(pod(beta, 'web', 'team-b'));
+    const evictions = recordEvictions();
+
+    await closeClusterTab(beta);
+
+    const evictedScopes = evictions.mock.calls.map(([, scope]) => scope);
+    expect(evictedScopes.length).toBeGreaterThan(0);
+    expect(evictedScopes.every((scope) => scope.includes(beta.clusterId))).toBe(true);
+  });
+
+  it('does not evict scopes when a different cluster tab is activated', async () => {
+    open(pod(alpha, 'api'));
+    const evictions = recordEvictions();
+
+    await view.selectCluster(beta);
+
+    expect(evictions).not.toHaveBeenCalled();
+  });
+});
+
+describe('closing and moving panels', () => {
+  it('evicts every scoped-domain entry for a panel when closePanel runs', () => {
+    const panelId = open(pod(alpha, 'api', 'team-a'));
+    const evictions = recordEvictions();
+
+    act(() => current().closePanel(alpha.clusterId, panelId));
+
+    // A pod's details and YAML share the detail scope; events and logs have
+    // their own. Helm-only domains stay untouched.
+    expect(evictedDomains(evictions)).toEqual(
+      expect.arrayContaining(['object-details', 'object-yaml', 'object-events', 'container-logs'])
+    );
+    expect(evictedDomains(evictions)).not.toContain('object-helm-manifest');
+    expect(evictedDomains(evictions)).not.toContain('object-helm-values');
+  });
+
+  it('evicts helm scopes when closePanel runs on a HelmRelease panel', () => {
+    const panelId = open({
+      kind: 'HelmRelease',
+      name: 'my-app',
+      namespace: 'team-a',
+      clusterId: alpha.clusterId,
+    });
+    const evictions = recordEvictions();
+
+    act(() => current().closePanel(alpha.clusterId, panelId));
+
+    expect(evictedDomains(evictions)).toEqual(
+      expect.arrayContaining(['object-helm-manifest', 'object-helm-values'])
+    );
+  });
+
+  it('evicts every active-cluster panel when onCloseObjectPanel runs', () => {
+    open(pod(alpha, 'api', 'team-a'));
+    open({ ...pod(alpha, 'web', 'team-a'), group: 'apps', kind: 'Deployment' });
+    const evictions = recordEvictions();
+
+    act(() => current().onCloseObjectPanel());
+
+    const panelsEvicted = new Set(evictions.mock.calls.map(([, scope]) => scope));
+    expect(panelsEvicted.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it('announces panels the user closes, but not panels that move away', () => {
+    const closed: Array<[string, string[]]> = [];
+    const stop = current().subscribeClosedPanels((clusterId, panelIds) => {
+      closed.push([clusterId, panelIds]);
+    });
+    const api = open(pod(alpha, 'api', 'team-a'));
+    const web = open({ ...pod(alpha, 'web', 'team-a'), group: 'apps', kind: 'Deployment' });
+    const db = open({ ...pod(alpha, 'db', 'team-a'), kind: 'Service' });
+
+    act(() => current().removeOwnedPanel(alpha.clusterId, web));
+    expect(closed).toEqual([]);
+    act(() => current().closePanel(alpha.clusterId, api));
+    act(() => current().closePanel(alpha.clusterId, api));
+    expect(closed).toEqual([[alpha.clusterId, [api]]]);
+    act(() => current().onCloseObjectPanel());
+    expect(closed).toEqual([
+      [alpha.clusterId, [api]],
+      [alpha.clusterId, [db]],
+    ]);
+
+    stop();
+    open(pod(alpha, 'later', 'team-a'));
+    act(() => current().onCloseObjectPanel());
+    expect(closed).toHaveLength(2);
+  });
+
+  it('evicts local caches once when the renderer relinquishes a transferred panel', () => {
+    const panelId = open(pod(alpha, 'api'));
+    setLogViewerPrefs(panelId, {} as never);
+    const evictions = recordEvictions();
+
+    act(() => current().removeOwnedPanel(alpha.clusterId, panelId));
+
+    expect(evictedDomains(evictions)).toEqual(
+      expect.arrayContaining(['object-details', 'object-yaml', 'object-events', 'container-logs'])
+    );
+    expect(getLogViewerPrefs(panelId)).toBeUndefined();
+
+    evictions.mockClear();
+    act(() => current().removeOwnedPanel(alpha.clusterId, panelId));
+    expect(evictions).not.toHaveBeenCalled();
+  });
+
+  it.each(['transfer', 'close', 'close-all', 'cluster-close'] as const)(
+    'evicts %s scopes once after panel removal commits',
+    async (operation) => {
+      const panelId = open(pod(alpha, 'api'));
+      setHelmValuesView(panelId, 'merged');
+      setLogViewerPrefs(panelId, {} as never);
+      const stillOpenAtEviction: boolean[] = [];
+      const evictions = recordEvictions().mockImplementation(() => {
+        stillOpenAtEviction.push((state?.getOwnedPanel(alpha.clusterId, panelId) ?? null) !== null);
+      });
+
+      if (operation === 'transfer') {
+        act(() => current().removeOwnedPanel(alpha.clusterId, panelId));
+      } else if (operation === 'close') {
+        act(() => current().closePanel(alpha.clusterId, panelId));
+      } else if (operation === 'close-all') {
+        act(() => current().onCloseObjectPanel());
+      } else {
+        await view.selectCluster(beta);
+        await closeClusterTab(alpha);
+      }
+
+      expect(stillOpenAtEviction.length).toBeGreaterThan(0);
+      expect(stillOpenAtEviction.every((stillOpen) => !stillOpen)).toBe(true);
+      const evicted = evictions.mock.calls.map(([domain, scope]) => `${domain}:${scope}`);
+      expect(new Set(evicted).size).toBe(evicted.length);
+      expect(getLogViewerPrefs(panelId)).toBeUndefined();
+      expect(getHelmValuesView(panelId)).toBeUndefined();
+    }
+  );
+});
+
+describe('panel handoffs', () => {
+  it('tracks a hidden native-open handoff until the panel is committed or docked', () => {
+    const ref = pod(alpha, 'api');
+    let panelId = '';
+    act(() => {
+      panelId = current().onRowClick(ref, { pendingNativeOpen: true });
+    });
+    expect(current().pendingNativeOpenPanelIds.has(panelId)).toBe(true);
+
+    act(() =>
+      current().restorePanelTabs({
+        schemaVersion: 1,
+        transferId: 'transfer-pending',
+        sourceWindowName: app.windowName,
+        clusterId: alpha.clusterId,
+        groupId: 'group-pending',
+        activePanelId: panelId,
+        tabs: [{ kind: 'object', panelId, objectRef: ref, activeView: 'details' }],
+      } as panelwindow.GroupSnapshot)
+    );
+
+    expect(current().pendingNativeOpenPanelIds.has(panelId)).toBe(false);
+  });
+
+  it('docks a group without changing other panels or their previously published state', () => {
+    const ref = pod(alpha, 'existing');
     let existingId = '';
     let incomingId = '';
     act(() => {
-      existingId = currentState().upsertOwnedPanel(ref, 'events');
-      incomingId = currentState().onRowClick(
-        { ...ref, name: 'incoming' },
-        { pendingNativeOpen: true }
-      );
+      existingId = current().upsertOwnedPanel(ref, 'events');
+      incomingId = current().onRowClick({ ...ref, name: 'incoming' }, { pendingNativeOpen: true });
     });
-    const previous = currentState();
-    act(() => {
-      currentState().restorePanelTabs({
-        clusterId: 'cluster-a',
+    const previous = current();
+    const evictions = recordEvictions();
+
+    act(() =>
+      current().restorePanelTabs({
+        clusterId: alpha.clusterId,
         tabs: [
           {
             kind: 'object',
@@ -247,405 +417,48 @@ describe('ObjectPanelStateContext', () => {
             activeView: 'yaml',
           },
         ],
-      } as panelwindow.GroupSnapshot);
-    });
-    expect(currentState().panelIdsForCluster('cluster-a')).toEqual([existingId, incomingId]);
-    expect(currentState().getOwnedPanel('cluster-a', existingId)).toMatchObject({
+      } as panelwindow.GroupSnapshot)
+    );
+
+    expect(current().panelIdsForCluster(alpha.clusterId)).toEqual([existingId, incomingId]);
+    expect(current().getOwnedPanel(alpha.clusterId, existingId)).toMatchObject({
       activeView: 'events',
     });
-    expect(currentState().getOwnedPanel('cluster-a', incomingId)).toMatchObject({
+    expect(current().getOwnedPanel(alpha.clusterId, incomingId)).toMatchObject({
       activeView: 'yaml',
     });
-    expect(currentState().pendingNativeOpenPanelIds.has(incomingId)).toBe(false);
+    expect(current().pendingNativeOpenPanelIds.has(incomingId)).toBe(false);
     expect(previous.pendingNativeOpenPanelIds.has(incomingId)).toBe(true);
-    expect(resetScopedDomainMock).not.toHaveBeenCalled();
+    expect(evictions).not.toHaveBeenCalled();
   });
 
-  it('does not re-render state-only consumers when a panel tab changes', async () => {
-    // A consumer that uses the object-panel state context but never reads the
-    // active tab must not re-render when some panel switches its sub-tab.
-    let stateConsumerRenders = 0;
-    const StateConsumer: React.FC = () => {
-      useObjectPanelState();
-      stateConsumerRenders += 1;
-      return null;
-    };
-
-    // Render the tree exactly once so children element identity is preserved;
-    // that way a child only re-renders when the context value it reads changes.
-    await act(async () => {
-      root.render(
-        <ObjectPanelStateProvider>
-          <Harness />
-          <StateConsumer />
-        </ObjectPanelStateProvider>
-      );
-    });
-
+  it('retains complete local object identity while updating the active view', () => {
+    const ref = pod(alpha, 'api');
     let panelId = '';
     act(() => {
-      panelId =
-        stateRef.current?.onRowClick({
-          kind: 'Pod',
-          name: 'api',
-          namespace: 'default',
-          clusterId: 'cluster-a',
-        }) ?? '';
+      panelId = current().upsertOwnedPanel(ref, 'events');
     });
-
-    // Opening a panel legitimately changes openPanels, so re-renders here are
-    // expected. Baseline the count after the open.
-    const rendersAfterOpen = stateConsumerRenders;
+    expect(current().getOwnedPanel(alpha.clusterId, panelId)).toMatchObject({
+      objectRef: ref,
+      activeView: 'events',
+    });
+    expect(current().panelIdsForCluster(alpha.clusterId)).toEqual([panelId]);
 
     act(() => {
-      stateRef.current?.setObjectPanelActiveTab('cluster-a', panelId, 'logs');
+      current().upsertOwnedPanel(ref, 'yaml');
+    });
+    expect(current().getOwnedPanel(alpha.clusterId, panelId)).toMatchObject({
+      activeView: 'yaml',
     });
 
-    expect(stateConsumerRenders).toBe(rendersAfterOpen);
-  });
-
-  it('persists active sub-tab per cluster slice and isolates across switches', async () => {
-    await renderProvider();
-
-    // Open a panel in cluster-a and persist its active tab.
-    let panelId = '';
-    act(() => {
-      panelId =
-        stateRef.current?.onRowClick({
-          kind: 'Pod',
-          name: 'api',
-          namespace: 'default',
-          clusterId: 'cluster-a',
-        }) ?? '';
-    });
-    act(() => {
-      stateRef.current?.setObjectPanelActiveTab('cluster-a', panelId, 'logs');
-    });
-    // Mount the probe for this panel now that we know its id; it reads the
-    // active tab reactively through the public hook.
-    await renderProvider(panelId);
-    expect(activeTabProbeRef.current).toBe('logs');
-
-    // Switch to cluster-b. The cluster-a tab persistence must not leak.
-    mockClusterId = 'cluster-b';
-    mockClusterName = 'Cluster B';
-    await renderProvider(panelId);
-    expect(activeTabProbeRef.current).toBeUndefined();
-
-    // Open the same identity in cluster-b and store a different sub-tab.
-    act(() => {
-      stateRef.current?.onRowClick({
-        kind: 'Pod',
-        name: 'api',
-        namespace: 'default',
-        clusterId: 'cluster-b',
-      });
-    });
-    act(() => {
-      stateRef.current?.setObjectPanelActiveTab('cluster-b', panelId, 'yaml');
-    });
-    expect(activeTabProbeRef.current).toBe('yaml');
-
-    // Switching back to cluster-a should restore that slice's tab, untouched.
-    mockClusterId = 'cluster-a';
-    mockClusterName = 'Cluster A';
-    await renderProvider(panelId);
-    expect(activeTabProbeRef.current).toBe('logs');
-  });
-
-  it('clears the active sub-tab entry when a panel is closed', async () => {
-    await renderProvider();
-
-    let panelId = '';
-    act(() => {
-      panelId =
-        stateRef.current?.onRowClick({
-          kind: 'Pod',
-          name: 'api',
-          namespace: 'default',
-          clusterId: 'cluster-a',
-        }) ?? '';
-    });
-    act(() => {
-      stateRef.current?.setObjectPanelActiveTab('cluster-a', panelId, 'events');
-    });
-    await renderProvider(panelId);
-    expect(activeTabProbeRef.current).toBe('events');
-
-    act(() => {
-      stateRef.current?.closePanel('cluster-a', panelId);
-    });
-    expect(stateRef.current?.openPanels.has(panelId)).toBe(false);
-    expect(activeTabProbeRef.current).toBeUndefined();
-  });
-
-  it('retains panels while a tab is hidden for close and restores them after denial', async () => {
-    await renderProvider();
-    act(() => {
-      stateRef.current?.onRowClick({
-        kind: 'Pod',
-        name: 'api',
-        namespace: 'default',
-        clusterId: 'cluster-a',
-      });
-    });
-    const panelId = requireValue(
-      Array.from(stateRef.current?.openPanels.keys() ?? [])[0],
-      'Opened panel'
-    );
-    mockVisibleClusterIds = ['cluster-b'];
-    mockClusterId = 'cluster-b';
-    await renderProvider();
-    expect(stateRef.current?.getOwnedPanel('cluster-a', panelId)).toBeDefined();
-    expect(resetScopedDomainMock).not.toHaveBeenCalled();
-    mockVisibleClusterIds = undefined;
-    mockClusterId = 'cluster-a';
-    await renderProvider();
-    expect(stateRef.current?.openPanels.has(panelId)).toBe(true);
-  });
-
-  it('clears object panel state when a tab is closed', async () => {
-    // Start on cluster-b and open a panel.
-    mockClusterId = 'cluster-b';
-    mockClusterName = 'Cluster B';
-    await renderProvider();
-
-    act(() => {
-      stateRef.current?.onRowClick({
-        kind: 'Pod',
-        name: 'job',
-        namespace: 'default',
-        clusterId: 'cluster-b',
-      });
-    });
-    expect(stateRef.current?.showObjectPanel).toBe(true);
-
-    // Remove cluster-b from the active tabs (simulates closing the tab).
-    mockClusterIds = ['cluster-a'];
-    mockClusterId = 'cluster-a';
-    mockClusterName = 'Cluster A';
-    await renderProvider();
-
-    // Re-add cluster-b. Its state should have been cleaned up.
-    mockClusterIds = ['cluster-a', 'cluster-b'];
-    mockClusterId = 'cluster-b';
-    mockClusterName = 'Cluster B';
-    await renderProvider();
-
-    expect(stateRef.current?.showObjectPanel).toBe(false);
-    expect(stateRef.current?.openPanels.size).toBe(0);
-  });
-
-  it('rejects object panel references without clusterId', async () => {
-    await renderProvider();
-
-    expect(() =>
-      stateRef.current?.onRowClick({
-        kind: 'Pod',
-        name: 'api',
-        namespace: 'default',
-      })
-    ).toThrow('Object panel reference is missing clusterId');
-    expect(stateRef.current?.openPanels.size).toBe(0);
-  });
-
-  // --- Tier 1 responsiveness: scope eviction tied to actual close ---
-  //
-  // The unmount destructors in ObjectPanelContent / useObjectPanelRefresh
-  // intentionally preserve cached scoped-domain entries so that a
-  // transient unmount (caused by a cluster switch) renders instantly from
-  // cache on the way back. The ONLY places that should free those entries
-  // are the explicit close paths exercised below.
-
-  it('does not evict scopes when a panel is opened then a different cluster is activated', async () => {
-    await renderProvider();
-    act(() => {
-      stateRef.current?.onRowClick({
-        kind: 'Pod',
-        name: 'api',
-        namespace: 'default',
-        clusterId: 'cluster-a',
-      });
-    });
-    expect(resetScopedDomainMock).not.toHaveBeenCalled();
-
-    // Switching clusters does NOT evict — the panel still belongs to a
-    // live cluster slice, so its cached log/event/yaml entries must stay
-    // put for the eventual switch-back.
-    mockClusterId = 'cluster-b';
-    mockClusterName = 'Cluster B';
-    await renderProvider();
-    expect(resetScopedDomainMock).not.toHaveBeenCalled();
-  });
-
-  it('evicts every scoped-domain entry for a panel when closePanel runs', async () => {
-    await renderProvider();
-    let panelId = '';
-    act(() => {
-      panelId =
-        stateRef.current?.onRowClick({
-          kind: 'Pod',
-          name: 'api',
-          namespace: 'team-a',
-          clusterId: 'cluster-a',
-        }) ?? '';
-    });
-    resetScopedDomainMock.mockClear();
-
-    act(() => {
-      stateRef.current?.closePanel('cluster-a', panelId);
-    });
-
-    // Pod has 4 scopes that need eviction: details, yaml (both
-    // detailScope), events, logs. helmScope is null for non-Helm kinds.
-    const calls = resetScopedDomainMock.mock.calls.map(([domain]) => domain);
-    expect(calls).toEqual(
-      expect.arrayContaining(['object-details', 'object-yaml', 'object-events', 'container-logs'])
-    );
-    // Helm-only domains must NOT be evicted for a Pod (helmScope is null).
-    expect(calls).not.toContain('object-helm-manifest');
-    expect(calls).not.toContain('object-helm-values');
-  });
-
-  it('evicts helm scopes when closePanel runs on a HelmRelease panel', async () => {
-    await renderProvider();
-    let panelId = '';
-    act(() => {
-      panelId =
-        stateRef.current?.onRowClick({
-          kind: 'HelmRelease',
-          name: 'my-app',
-          namespace: 'team-a',
-          clusterId: 'cluster-a',
-        }) ?? '';
-    });
-    resetScopedDomainMock.mockClear();
-
-    act(() => {
-      stateRef.current?.closePanel('cluster-a', panelId);
-    });
-
-    const calls = resetScopedDomainMock.mock.calls.map(([domain]) => domain);
-    expect(calls).toEqual(expect.arrayContaining(['object-helm-manifest', 'object-helm-values']));
-  });
-
-  it('evicts every panel in a cluster slice when that cluster tab is closed', async () => {
-    await renderProvider();
-    act(() => {
-      stateRef.current?.onRowClick({
-        kind: 'Pod',
-        name: 'api',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-      });
-    });
-
-    // Switch to cluster-b and open another panel there.
-    mockClusterId = 'cluster-b';
-    mockClusterName = 'Cluster B';
-    await renderProvider();
-    act(() => {
-      stateRef.current?.onRowClick({
-        kind: 'Pod',
-        name: 'web',
-        namespace: 'team-b',
-        clusterId: 'cluster-b',
-      });
-    });
-    resetScopedDomainMock.mockClear();
-
-    // Drop cluster-b from the active tabs (close the cluster tab).
-    mockClusterIds = ['cluster-a'];
-    mockClusterId = 'cluster-a';
-    mockClusterName = 'Cluster A';
-    await renderProvider();
-
-    // Cluster-b's panel scopes must be evicted; cluster-a's panel scopes
-    // must NOT be (it's still alive).
-    const calls = resetScopedDomainMock.mock.calls;
-    expect(calls.length).toBeGreaterThan(0);
-    const evictedScopes = calls.map(([, scope]) => scope as string);
-    // Every eviction call should target a cluster-b scope.
-    evictedScopes.forEach((scope) => {
-      expect(scope).toContain('cluster-b');
-    });
-    evictedScopes.forEach((scope) => {
-      expect(scope).not.toContain('cluster-a');
-    });
-  });
-
-  it('announces panels the user closes, but not panels that move away', async () => {
-    await renderProvider();
-    const closed: Array<[string, string[]]> = [];
-    const stop = stateRef.current?.subscribeClosedPanels((clusterId, panelIds) => {
-      closed.push([clusterId, panelIds]);
-    });
-    for (const [kind, name] of [
-      ['Pod', 'api'],
-      ['Deployment', 'web'],
-      ['Service', 'db'],
-    ]) {
-      act(() => {
-        stateRef.current?.onRowClick({ kind, name, namespace: 'team-a', clusterId: 'cluster-a' });
-      });
-    }
-    const [api, web, db] = Array.from(stateRef.current?.openPanels.keys() ?? []);
-
-    act(() => stateRef.current?.removeOwnedPanel('cluster-a', web));
-    expect(closed).toEqual([]);
-    act(() => stateRef.current?.closePanel('cluster-a', api));
-    act(() => stateRef.current?.closePanel('cluster-a', api));
-    expect(closed).toEqual([['cluster-a', [api]]]);
-    act(() => stateRef.current?.onCloseObjectPanel());
-    expect(closed).toEqual([
-      ['cluster-a', [api]],
-      ['cluster-a', [db]],
-    ]);
-
-    stop?.();
-    act(() => {
-      stateRef.current?.onRowClick({
-        kind: 'Pod',
-        name: 'later',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-      });
-    });
-    act(() => stateRef.current?.onCloseObjectPanel());
-    expect(closed).toHaveLength(2);
-  });
-
-  it('evicts every active-cluster panel when onCloseObjectPanel runs', async () => {
-    await renderProvider();
-    act(() => {
-      stateRef.current?.onRowClick({
-        kind: 'Pod',
-        name: 'api',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-      });
-    });
-    act(() => {
-      stateRef.current?.onRowClick({
-        kind: 'Deployment',
-        name: 'web',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-      });
-    });
-    resetScopedDomainMock.mockClear();
-
-    act(() => {
-      stateRef.current?.onCloseObjectPanel();
-    });
-
-    // Two panels × at least one scope each → at least 2 eviction calls.
-    expect(resetScopedDomainMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    act(() => current().removeOwnedPanel(alpha.clusterId, panelId));
+    expect(current().getOwnedPanel(alpha.clusterId, panelId)).toBeNull();
+    expect(current().panelIdsForCluster(alpha.clusterId)).toEqual([]);
   });
 
   it('opens a native window with the group the directory gives it', async () => {
     const objectRef = {
-      clusterId: 'cluster-a',
+      clusterId: alpha.clusterId,
       group: 'apps',
       version: 'v1',
       kind: 'Deployment',
@@ -653,153 +466,23 @@ describe('ObjectPanelStateContext', () => {
       name: 'api',
     };
     const group = {
-      clusterId: 'cluster-a',
+      clusterId: alpha.clusterId,
       groupId: 'floating-1',
       activePanelId: 'panel-native',
       tabs: [{ kind: 'object', panelId: 'panel-native', objectRef, activeView: 'yaml' }],
     } as panelwindow.WorkspaceGroup;
 
-    await act(async () => {
-      root.render(
-        <ObjectPanelStateProvider initialGroup={group}>
-          <Harness />
-        </ObjectPanelStateProvider>
-      );
-    });
-
-    expect(stateRef.current?.panelIdsForCluster('cluster-a')).toEqual(['panel-native']);
-    expect(stateRef.current?.getOwnedPanel('cluster-a', 'panel-native')).toMatchObject({
-      objectRef,
-      activeView: 'yaml',
-    });
-  });
-
-  it('retains complete local object identity while updating the active view', async () => {
-    await renderProvider();
-    const objectRef = {
-      clusterId: 'cluster-a',
-      group: '',
-      version: 'v1',
-      kind: 'Pod',
-      namespace: 'default',
-      name: 'api',
-    };
-
-    let panelId = '';
-    act(() => {
-      panelId = stateRef.current?.upsertOwnedPanel(objectRef, 'events') ?? '';
-    });
-
-    expect(stateRef.current?.getOwnedPanel('cluster-a', panelId)).toMatchObject({
-      objectRef,
-      activeView: 'events',
-    });
-    expect(stateRef.current?.panelIdsForCluster('cluster-a')).toEqual([panelId]);
-
-    act(() => {
-      stateRef.current?.upsertOwnedPanel(objectRef, 'yaml');
-    });
-
-    expect(stateRef.current?.getOwnedPanel('cluster-a', panelId)).toMatchObject({
-      activeView: 'yaml',
-    });
-
-    act(() => {
-      stateRef.current?.removeOwnedPanel('cluster-a', panelId);
-    });
-    expect(stateRef.current?.getOwnedPanel('cluster-a', panelId)).toBeNull();
-    expect(stateRef.current?.panelIdsForCluster('cluster-a')).toEqual([]);
-  });
-
-  it('evicts local caches when the renderer relinquishes a transferred panel', async () => {
-    await renderProvider();
-    const objectRef = {
-      clusterId: 'cluster-a',
-      group: '',
-      version: 'v1',
-      kind: 'Pod',
-      namespace: 'default',
-      name: 'api',
-    };
-    let panelId = '';
-    act(() => {
-      panelId = stateRef.current?.onRowClick(objectRef) ?? '';
-    });
-    resetScopedDomainMock.mockClear();
-
-    act(() => {
-      stateRef.current?.removeOwnedPanel('cluster-a', panelId);
-    });
-
-    expect(resetScopedDomainMock.mock.calls.map(([domain]) => domain)).toEqual(
-      expect.arrayContaining(['object-details', 'object-yaml', 'object-events', 'container-logs'])
+    // A panel window's own state provider starts from its descriptor's group.
+    await view.show(
+      <ObjectPanelStateProvider initialGroup={group}>
+        <Probe />
+      </ObjectPanelStateProvider>
     );
-    expect(clearLogViewerPrefsMock).toHaveBeenCalledWith(panelId);
 
-    resetScopedDomainMock.mockClear();
-    clearLogViewerPrefsMock.mockClear();
-    act(() => {
-      stateRef.current?.removeOwnedPanel('cluster-a', panelId);
+    expect(current().panelIdsForCluster(alpha.clusterId)).toEqual(['panel-native']);
+    expect(current().getOwnedPanel(alpha.clusterId, 'panel-native')).toMatchObject({
+      objectRef,
+      activeView: 'yaml',
     });
-    expect(resetScopedDomainMock).not.toHaveBeenCalled();
-    expect(clearLogViewerPrefsMock).not.toHaveBeenCalled();
   });
-
-  it.each(['transfer', 'close', 'close-all', 'cluster-close'] as const)(
-    'evicts %s scopes once after panel removal commits',
-    async (operation) => {
-      await act(async () => {
-        root.render(
-          <StrictMode>
-            <ObjectPanelStateProvider>
-              <Harness />
-            </ObjectPanelStateProvider>
-          </StrictMode>
-        );
-      });
-      let panelId = '';
-      act(() => {
-        panelId =
-          stateRef.current?.onRowClick({
-            clusterId: 'cluster-a',
-            group: '',
-            version: 'v1',
-            kind: 'Pod',
-            namespace: 'default',
-            name: 'api',
-          }) ?? '';
-      });
-      setHelmValuesView(panelId, 'merged');
-      const panelStillMountedAtEviction: boolean[] = [];
-      resetScopedDomainMock.mockImplementation(() => {
-        panelStillMountedAtEviction.push(stateRef.current?.openPanels.has(panelId) ?? false);
-      });
-      act(() => {
-        if (operation === 'transfer') {
-          stateRef.current?.removeOwnedPanel('cluster-a', panelId);
-        } else if (operation === 'close') {
-          stateRef.current?.closePanel('cluster-a', panelId);
-        } else if (operation === 'close-all') {
-          stateRef.current?.onCloseObjectPanel();
-        } else {
-          mockClusterIds = ['cluster-b'];
-          root.render(
-            <StrictMode>
-              <ObjectPanelStateProvider>
-                <Harness />
-              </ObjectPanelStateProvider>
-            </StrictMode>
-          );
-        }
-      });
-      expect(panelStillMountedAtEviction.length).toBeGreaterThan(0);
-      expect(panelStillMountedAtEviction.every((mounted) => !mounted)).toBe(true);
-      const evictedScopes = resetScopedDomainMock.mock.calls.map(
-        ([domain, scope]) => `${domain}:${scope}`
-      );
-      expect(new Set(evictedScopes).size).toBe(evictedScopes.length);
-      expect(clearLogViewerPrefsMock).toHaveBeenCalledTimes(1);
-      expect(getHelmValuesView(panelId)).toBeUndefined();
-    }
-  );
 });

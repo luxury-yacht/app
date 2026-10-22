@@ -1,118 +1,83 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/nodeShellCapability.test.tsx
  *
- * Node shell gating through the real capability hook and permission store; only
- * the backend permission read is faked.
+ * Node shell gating through the real capability hook, permission store, and the
+ * node panel's debug-pod namespace query, inside the app shell. Only the
+ * backend boundary is faked (test-utils/appState).
  */
 
-import type React from 'react';
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { QueryPayloadItem } from '@/core/capabilities/permissionRead';
-import { __resetForTests } from '@/core/capabilities/permissionStore';
-import { eventBus } from '@/core/events';
+import { describe, expect, it } from 'vitest';
+import {
+  installAppStateHarness,
+  type PermissionQuery,
+  type TestCluster,
+  type TestObject,
+} from '@/test-utils/appState/harness';
 import { RESOURCE_CAPABILITIES } from '../constants';
-import type { PanelObjectData } from '../types';
 import { useObjectPanelCapabilities } from './useObjectPanelCapabilities';
 import { useObjectPanelFeatureSupport } from './useObjectPanelFeatureSupport';
 
-const hoisted = vi.hoisted(() => ({
-  readQueryPermissions: vi.fn(),
-}));
+const app = installAppStateHarness();
 
-vi.mock('@/core/data-access', () => ({
-  readQueryPermissions: (...args: unknown[]) => hoisted.readQueryPermissions(...args),
-  requestData: async (options: { read: () => Promise<unknown> }) => ({
-    status: 'executed',
-    data: await options.read(),
-  }),
-}));
+const checkName = (query: PermissionQuery) =>
+  query.subresource ? `${query.resourceKind}/${query.subresource}` : query.resourceKind;
 
-vi.mock('../NodeLogs/nodeLogsApi', () => ({
-  discoverNodeLogs: async () => ({ supported: false, sources: [] }),
-  getCachedNodeLogDiscovery: () => null,
-}));
-
-const node: PanelObjectData = {
-  clusterId: 'cluster-a',
-  group: '',
-  version: 'v1',
-  kind: 'Node',
-  name: 'worker-1',
+/**
+ * Decides the cluster's permission answers. A denial comes from an access
+ * review naming the check, as when the namespace's rules are incomplete (EKS
+ * access policies).
+ */
+const answerPermissions = (isAllowed: (query: PermissionQuery) => boolean) => {
+  app.permissions(
+    (query) => isAllowed(query) || { reason: `cannot ${query.verb} ${checkName(query)}` }
+  );
 };
 
-// Answers every check the way the cluster does for this user.
-const answerPermissions = (isAllowed: (query: QueryPayloadItem) => boolean) => {
-  hoisted.readQueryPermissions.mockImplementation(async (queries: QueryPayloadItem[]) => ({
-    results: queries.map((query) => ({
-      ...query,
-      allowed: isAllowed(query),
-      source: 'ssrr',
-      reason: isAllowed(query) ? '' : `cannot ${query.verb} ${query.resourceKind}`,
-      error: '',
-    })),
-    diagnostics: [],
-  }));
-};
+let shell: ReturnType<typeof useObjectPanelCapabilities> | null = null;
+
+// The node panel's capability wiring, as ObjectPanel composes it.
+function NodePanelProbe({ panel }: Readonly<{ panel: TestObject }>) {
+  const featureSupport = useObjectPanelFeatureSupport('node', RESOURCE_CAPABILITIES);
+  shell = useObjectPanelCapabilities({
+    objectData: panel.ref,
+    objectKind: 'node',
+    detailScope: panel.scopes.detailScope,
+    featureSupport,
+  });
+  return null;
+}
+
+// A user whose pod rights are limited to the debug pod namespace.
+const podsInDefault = (query: PermissionQuery) =>
+  query.resourceKind !== 'Pod' || query.namespace === 'default';
 
 describe('node shell capability', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-  const result: { current: ReturnType<typeof useObjectPanelCapabilities> | null } = {
-    current: null,
-  };
-
-  const NodePanelHarness: React.FC = () => {
-    const featureSupport = useObjectPanelFeatureSupport('node', RESOURCE_CAPABILITIES);
-    result.current = useObjectPanelCapabilities({
-      objectData: node,
-      objectKind: 'node',
-      detailScope: 'cluster-a|:/v1:node:worker-1',
-      featureSupport,
+  const showNodePanel = async () => {
+    shell = null;
+    const dev: TestCluster = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default']);
+    // backend/node_logs.go DiscoverNodeLogs for a node without readable logs.
+    app.backend.answer('DiscoverNodeLogs', () => ({
+      supported: false,
+      reason: 'node logs are not supported on this cluster',
+    }));
+    const view = await app.render(null);
+    const node = app.object(dev, {
+      group: '',
+      version: 'v1',
+      kind: 'Node',
+      namespace: '',
+      name: 'worker-1',
     });
-    return null;
+    await view.show(<NodePanelProbe panel={node} />);
   };
-
-  const renderNodePanel = async () => {
-    await act(async () => {
-      root.render(<NodePanelHarness />);
-    });
-    // Let the permission reads resolve and the store publish.
-    for (let i = 0; i < 5; i += 1) {
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
-    }
-  };
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    result.current = null;
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    __resetForTests();
-    eventBus.clear();
-    hoisted.readQueryPermissions.mockReset();
-  });
-
-  // A user whose pod rights are limited to the debug pod namespace.
-  const podsInDefault = (query: QueryPayloadItem) =>
-    query.resourceKind !== 'Pod' || query.namespace === 'default';
 
   it('offers the shell on a node to a user who may manage pods in default', async () => {
     answerPermissions(podsInDefault);
 
-    await renderNodePanel();
+    await showNodePanel();
 
-    expect(result.current?.capabilities.hasShell).toBe(true);
+    expect(shell?.capabilities.hasShell).toBe(true);
   });
 
   it.each(['create', 'get', 'delete'])(
@@ -122,10 +87,10 @@ describe('node shell capability', () => {
         (query) => podsInDefault(query) && !(query.verb === verb && !query.subresource)
       );
 
-      await renderNodePanel();
+      await showNodePanel();
 
-      expect(result.current?.capabilities.hasShell).toBe(false);
-      expect(result.current?.capabilityReasons.shell).toBe(`cannot ${verb} Pod`);
+      expect(shell?.capabilities.hasShell).toBe(false);
+      expect(shell?.capabilityReasons.shell).toBe(`cannot ${verb} Pod`);
     }
   );
 
@@ -136,17 +101,17 @@ describe('node shell capability', () => {
         podsInDefault(query) && !(query.subresource === 'attach' && query.verb === 'create')
     );
 
-    await renderNodePanel();
+    await showNodePanel();
 
-    expect(result.current?.capabilities.hasShell).toBe(true);
+    expect(shell?.capabilities.hasShell).toBe(true);
   });
 
   it('withholds the shell when the debug pod cannot be attached to', async () => {
     answerPermissions((query) => podsInDefault(query) && query.subresource !== 'attach');
 
-    await renderNodePanel();
+    await showNodePanel();
 
-    expect(result.current?.capabilities.hasShell).toBe(false);
-    expect(result.current?.capabilityReasons.shell).toBe('cannot get Pod');
+    expect(shell?.capabilities.hasShell).toBe(false);
+    expect(shell?.capabilityReasons.shell).toBe('cannot get Pod/attach');
   });
 });

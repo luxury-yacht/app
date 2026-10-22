@@ -155,18 +155,14 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
       onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
     });
 
-    const getOwnerReference = useCallback(
-      (pod: PodSnapshotEntry) => podOwnerReference(pod, selectedClusterName),
-      [selectedClusterName]
-    );
     const handleOwnerOpen = useCallback(
       (pod: PodSnapshotEntry) => {
-        const ref = getOwnerReference(pod);
+        const ref = podOwnerReference(pod);
         if (ref) {
           openWithObject(ref);
         }
       },
-      [getOwnerReference, openWithObject]
+      [openWithObject]
     );
     const handleNodeOpen = useCallback(
       (pod: PodSnapshotEntry) => {
@@ -241,13 +237,13 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
             onClick: handleOwnerOpen,
             sortValue: (pod) => (pod.ownerName || '').toLowerCase(),
             onAltClick: (pod) => {
-              const ref = getOwnerReference(pod);
+              const ref = podOwnerReference(pod);
               if (ref) {
                 navigateToView(ref);
               }
             },
-            isInteractive: (pod) => Boolean(getOwnerReference(pod)),
-            getClassName: (pod) => (getOwnerReference(pod) ? 'object-panel-link' : undefined),
+            isInteractive: (pod) => Boolean(podOwnerReference(pod)),
+            getClassName: (pod) => (podOwnerReference(pod) ? 'object-panel-link' : undefined),
             getTitle: (pod) =>
               pod.ownerKind && pod.ownerName ? `${pod.ownerName} (${pod.ownerKind})` : undefined,
           }
@@ -331,7 +327,6 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
       attachedTo,
       handleNodeOpen,
       handleOwnerOpen,
-      getOwnerReference,
       handlePodNavigate,
       handlePodOpen,
       namespaceColumnLink,

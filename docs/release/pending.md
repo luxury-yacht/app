@@ -5,6 +5,9 @@
 - Refresh:
   - Cluster tabs you are not looking at no longer refresh in the background. A tab's data refreshes when you return to it.
   - The "Refresh background clusters" setting is removed.
+- YAML editing:
+  - While you edit, the YAML tab now warns when someone else changes the object, shows how your draft differs from it, and offers Reload & merge. Status-only updates do not trigger the warning.
+  - If the object is deleted and recreated while you edit, or your save finds it replaced, the tab shows how your draft differs from the new object instead of offering a merge.
 - Scrollbar tweaks. They are wider and higher-contrast. They appear only while scrolling or when the pointer is over the scroll area, and fade out shortly after scrolling stops.
 
 ### Fixed

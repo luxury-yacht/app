@@ -490,19 +490,13 @@ const renderDisruptions = (d: PodDisruptionBudgetDetails): React.ReactNode => {
   );
 };
 
-const disruptedPodLink = (
-  pod: poddisruptionbudget.DisruptedPod['pod'],
-  clusterName: string | undefined
-): React.ReactNode => {
+const disruptedPodLink = (pod: poddisruptionbudget.DisruptedPod['pod']): React.ReactNode => {
   const name = pod.ref?.name ?? pod.display?.name;
-  const ref = resourceLinkToObjectReference(pod, clusterName);
+  const ref = resourceLinkToObjectReference(pod);
   return ref ? <ObjectPanelLink objectRef={ref}>{name}</ObjectPanelLink> : name;
 };
 
-const renderDisruptedPods = (
-  d: PodDisruptionBudgetDetails,
-  context: OverviewContext
-): React.ReactNode => {
+const renderDisruptedPods = (d: PodDisruptionBudgetDetails): React.ReactNode => {
   if (!d.disruptedPods?.length) {
     return undefined;
   }
@@ -512,7 +506,7 @@ const renderDisruptedPods = (
         const name = pod.ref?.name ?? pod.display?.name;
         return (
           <span key={name} className="overview-ref-item">
-            {disruptedPodLink(pod, context.clusterName)}{' '}
+            {disruptedPodLink(pod)}{' '}
             <span className="policy-detail-muted">
               evicted <LiveAgeText timestamp={disruptionTime} fullDateTitle /> ago
             </span>
@@ -589,15 +583,12 @@ const PdbBudget: React.FC<{ data: PodDisruptionBudgetDetails }> = ({ data }) => 
 
 // Health leads because the operational question is whether pods can be evicted right now; Budget
 // follows with the rule that decides it.
-const PdbOverview: React.FC<{ data: PodDisruptionBudgetDetails; context: OverviewContext }> = ({
-  data,
-  context,
-}) => (
+const PdbOverview: React.FC<{ data: PodDisruptionBudgetDetails }> = ({ data }) => (
   <div className="operator-overview">
     <OperatorSection title="Health">
       <OverviewItem label="Pods" value={<PdbHealthBar data={data} />} />
       <OverviewItem label="Disruptions" value={renderDisruptions(data)} />
-      <OverviewItem label="Disrupted" value={renderDisruptedPods(data, context)} />
+      <OverviewItem label="Disrupted" value={renderDisruptedPods(data)} />
     </OperatorSection>
     <PdbBudget data={data} />
   </div>
@@ -622,7 +613,7 @@ export const pdbDescriptor: OverviewDescriptor<PodDisruptionBudgetDetails> = {
           'selector',
           'unhealthyPodEvictionPolicy',
         ],
-        render: (d, context) => <PdbOverview data={d} context={context} />,
+        render: (d) => <PdbOverview data={d} />,
       },
     ],
   },

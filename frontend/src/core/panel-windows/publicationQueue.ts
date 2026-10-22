@@ -80,6 +80,14 @@ export class PanelPublicationQueue {
     this.#lastCommand = this.#tail;
   }
 
+  /** Test helper: forgets queued, failed, and pending operations. */
+  resetForTesting(): void {
+    this.#tail = Promise.resolve();
+    this.#lastCommand = Promise.resolve();
+    this.#failure = null;
+    this.#failedCommands = [];
+  }
+
   #landCommands(): Promise<void> {
     return untilSettled(() => this.#lastCommand);
   }
@@ -104,3 +112,9 @@ async function untilSettled(read: () => Promise<void>): Promise<void> {
 export const nativePanelPublication = new PanelPublicationQueue();
 
 export const workspacePanelPublication = new PanelPublicationQueue();
+
+/** Test helper to clear both renderers' queues between runs. */
+export const resetPanelPublicationQueuesForTesting = (): void => {
+  nativePanelPublication.resetForTesting();
+  workspacePanelPublication.resetForTesting();
+};

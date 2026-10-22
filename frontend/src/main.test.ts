@@ -10,7 +10,6 @@ const { order, bootstrap } = vi.hoisted(() => ({
   order: [] as string[],
   bootstrap: {
     failPanelRender: false,
-    failPanelImport: false,
     failDescriptor: false,
     descriptor: {
       schemaVersion: 1,
@@ -61,13 +60,12 @@ vi.mock('./WorkspaceApp.tsx', () => {
   return { default: () => null };
 });
 
-vi.mock('./PanelWindowApp.tsx', () => {
-  if (bootstrap.failPanelImport) {
-    throw new Error('forced panel module failure');
-  }
+const panelModule = vi.hoisted(() => () => {
   order.push('panel-module-evaluated');
   return { default: () => null };
 });
+
+vi.mock('./PanelWindowApp.tsx', () => panelModule());
 
 vi.mock('@/core/panel-windows', () => ({
   resolveNativeWindowDescriptor: vi.fn(async () => {
@@ -118,12 +116,14 @@ describe('application bootstrap', () => {
       panel: undefined,
     };
     bootstrap.failPanelRender = false;
-    bootstrap.failPanelImport = false;
     bootstrap.failDescriptor = false;
     panelTransferMocks.failPanelWindowTransfer.mockReset();
     panelTransferMocks.failPanelWindowTransfer.mockResolvedValue(undefined);
     reactRootMocks.render.mockReset();
     vi.resetModules();
+    // Mocked modules are cached across resetModules; re-registering restores
+    // the panel module a test may have replaced with a failing one.
+    vi.doMock('./PanelWindowApp.tsx', () => panelModule());
     document.body.innerHTML = '<div id="app"></div>';
   });
 
@@ -206,15 +206,14 @@ describe('application bootstrap', () => {
     },
   });
 
-  const expectPanelBootstrapFailure = async () => {
+  /** Waits for the visible bootstrap error; returns the transfer failures sent. */
+  const panelBootstrapFailure = async () => {
     await vi.waitFor(() => {
-      expect(document.getElementById('app')?.textContent).toContain('Could not open this panel');
+      if (!document.getElementById('app')?.textContent?.includes('Could not open this panel')) {
+        throw new Error('the panel bootstrap error is not shown yet');
+      }
     });
-    expect(panelTransferMocks.failPanelWindowTransfer).toHaveBeenCalledWith(
-      'panel-1',
-      'panel-1',
-      'transfer-1'
-    );
+    return panelTransferMocks.failPanelWindowTransfer.mock.calls;
   };
 
   it('shows a visible error, fails the opening transfer, and drops the preference subscription when rendering crashes', async () => {
@@ -225,19 +224,21 @@ describe('application bootstrap', () => {
 
     await import('@/main');
 
-    await expectPanelBootstrapFailure();
+    expect(await panelBootstrapFailure()).toEqual([['panel-1', 'panel-1', 'transfer-1']]);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
   it('fails the opening transfer and drops the preference subscription when the panel root module fails to load', async () => {
     const unsubscribe = vi.fn();
     desktopRuntimeMocks.onBroadcastEvent.mockReturnValue(unsubscribe);
-    bootstrap.failPanelImport = true;
+    vi.doMock('./PanelWindowApp.tsx', () => {
+      throw new Error('forced panel module failure');
+    });
     bootstrap.descriptor = openingPanelDescriptor();
 
     await import('@/main');
 
-    await expectPanelBootstrapFailure();
+    expect(await panelBootstrapFailure()).toEqual([['panel-1', 'panel-1', 'transfer-1']]);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
@@ -249,7 +250,7 @@ describe('application bootstrap', () => {
 
     await import('@/main');
 
-    await expectPanelBootstrapFailure();
+    expect(await panelBootstrapFailure()).toEqual([['panel-1', 'panel-1', 'transfer-1']]);
     expect(order).not.toContain('panel-module-evaluated');
   });
 

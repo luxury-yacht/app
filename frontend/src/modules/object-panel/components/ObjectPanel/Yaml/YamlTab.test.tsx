@@ -1,26 +1,36 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.test.tsx
+ *
+ * The object panel's YAML tab: it shows the object's YAML snapshot through the
+ * real refresh lease and store, pauses that refresh while editing, and saves,
+ * verifies, and reloads-and-merges edits through the YAML RPCs, showing every
+ * outcome in the editor. YamlTab takes its scope, cluster, and edit capability
+ * as props; it reads CurrentObjectPanelContext only for the unsaved-edit
+ * guard's panel id (YamlTab.tsx:596), which no assertion here depends on, so
+ * the suite runs in provider mode inside the real app shell. Only the backend
+ * boundary is faked (test-utils/appState); the CodeMirror editor and its
+ * extension modules are stubbed to reach the editor's value, extensions, and
+ * view. Keyboard and Edit-menu routing lives in YamlTab.shortcuts.test.tsx.
  */
 
-import type { ErrorStatus } from '@core/refresh/types';
-import { Clipboard } from '@wailsio/runtime';
 import React, { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parse as parseYaml } from 'yaml';
-import { localFailure, type RefreshFailure } from '@/core/refresh/refreshFailure';
-
-type SnapshotStatus = 'idle' | 'loading' | 'ready' | 'updating' | 'initialising' | 'error';
-
-interface MockSelectionRange {
-  from: number;
-  to: number;
-}
-
-interface MockSelection {
-  main: MockSelectionRange;
-  ranges?: MockSelectionRange[];
-}
+import type { CatalogItem, ErrorStatus } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import {
+  type BackendArgs,
+  type SnapshotRequest,
+  snapshotResponse,
+} from '@/test-utils/appState/transport';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
+import { requireValue } from '@/test-utils/requireValue';
+import { useObjectDiffYaml } from '@/ui/modals/useObjectDiffYaml';
+import YamlTab from './YamlTab';
 
 interface CapturedCodeMirrorProps {
   value: string;
@@ -30,108 +40,35 @@ interface CapturedCodeMirrorProps {
   ref?: React.Ref<unknown>;
 }
 
-interface MockEditorView {
-  state: {
-    selection: MockSelection;
-    sliceDoc: ReturnType<typeof vi.fn<() => string>>;
-    changeByRange: (updater: (range: MockSelectionRange) => unknown) => unknown;
-  };
-  dispatch: ReturnType<typeof vi.fn>;
-  focus: ReturnType<typeof vi.fn>;
-}
+type SelectionRange = { from: number; to: number };
 
 interface CodeMirrorHarness {
-  latestProps: { current: CapturedCodeMirrorProps };
-  editorView: MockEditorView;
-  value: string;
-  selectionText: string;
-}
-
-const shortcutMocks = vi.hoisted(() => ({
-  useShortcut: vi.fn(),
-  useKeyboardSurface: vi.fn(),
-}));
-const searchShortcutMocks = vi.hoisted(() => ({
-  useSearchShortcutTarget: vi.fn(),
-}));
-
-const refreshMocks = vi.hoisted(() => ({
-  acquireScopedDomainLease: vi.fn(),
-  releaseScopedDomainLease: vi.fn(),
-  fetchScopedDomain: vi.fn(() => Promise.resolve()),
-  resetScopedDomain: vi.fn(),
-}));
-
-const refreshStoreMocks = vi.hoisted(() => ({
-  useRefreshScopedDomain: vi.fn(),
-}));
-
-const codeMirrorState: CodeMirrorHarness = {
-  latestProps: {
-    current: {
-      value: '',
-      extensions: [],
-      onChange: () => undefined,
-    },
-  },
+  latestProps: { current: Omit<CapturedCodeMirrorProps, 'ref' | 'onCreateEditor'> };
   editorView: {
     state: {
-      selection: {
-        main: { from: 0, to: 0 },
-        ranges: [],
-      },
-      sliceDoc: vi.fn(() => codeMirrorState.selectionText),
-      changeByRange: (updater: (range: { from: number; to: number }) => unknown) =>
-        updater({ from: 0, to: 0 }),
-    },
-    dispatch: vi.fn(),
-    focus: vi.fn(),
-  },
-  value: '',
-  selectionText: '',
-};
-
-const CodeMirrorMock = ({ ref, ...props }: CapturedCodeMirrorProps) => {
-  const { onCreateEditor } = props;
-  codeMirrorState.value = props.value;
-  codeMirrorState.latestProps.current = props;
-  if (ref && typeof ref === 'object') {
-    (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
-      view: codeMirrorState.editorView,
+      selection: { main: SelectionRange; ranges?: SelectionRange[] };
+      sliceDoc: (from?: number, to?: number) => string;
     };
-  }
-  React.useEffect(() => {
-    onCreateEditor?.(codeMirrorState.editorView);
-  }, [onCreateEditor]);
-  return (
-    <div data-testid="code-mirror" data-value={props.value}>
-      {props.value}
-    </div>
-  );
-};
-CodeMirrorMock.displayName = 'CodeMirrorMock';
+    dispatch: (transaction: unknown) => void;
+    focus: () => void;
+  };
+  value: string;
+}
 
-const wailsMocks = vi.hoisted(() => ({
-  ApplyObjectYaml: vi.fn(),
-  CheckObjectYamlOwnership: vi.fn(),
-  GetObjectYAMLByGVK: vi.fn(),
-  MergeObjectYamlWithLatest: vi.fn(),
-}));
-
-const errorHandlerMock = vi.hoisted(() => ({
-  handle: vi.fn(),
-  handleInline: vi.fn(),
-  handleOperational: vi.fn(),
-}));
-
-const themeMocks = vi.hoisted(() => ({
-  buildCodeTheme: vi.fn(() => ({ theme: 'dark', highlight: 'highlight-ext' })),
-}));
-
-const searchModuleMocks = vi.hoisted(() => ({
-  createSearchExtensions: vi.fn(() => ['search-ext']),
-  closeSearchPanel: vi.fn(),
-}));
+const codeMirrorState = vi.hoisted(
+  (): CodeMirrorHarness => ({
+    latestProps: { current: { value: '', extensions: [], onChange: () => undefined } },
+    editorView: {
+      state: {
+        selection: { main: { from: 0, to: 0 }, ranges: [] },
+        sliceDoc: () => '',
+      },
+      dispatch: () => undefined,
+      focus: () => undefined,
+    },
+    value: '',
+  })
+);
 
 const codemirrorSearchMocks = vi.hoisted(() => {
   class SearchQuery {
@@ -172,24 +109,26 @@ const codemirrorSearchMocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('@ui/shortcuts', () => ({
-  useKeyboardSurface: (config: unknown) => shortcutMocks.useKeyboardSurface(config),
-  useShortcut: shortcutMocks.useShortcut,
-  useSearchShortcutTarget: (config: unknown) => searchShortcutMocks.useSearchShortcutTarget(config),
-}));
-
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: refreshMocks,
-}));
-
-vi.mock('@/core/refresh/store', () => ({
-  useRefreshScopedDomain: refreshStoreMocks.useRefreshScopedDomain,
-}));
-
-vi.mock('@uiw/react-codemirror', () => ({
-  __esModule: true,
-  default: CodeMirrorMock,
-}));
+// The code editor: renders its value and hands the editor its stand-in view.
+vi.mock('@uiw/react-codemirror', () => {
+  const CodeMirrorMock = ({ ref, ...props }: CapturedCodeMirrorProps) => {
+    const { onCreateEditor } = props;
+    codeMirrorState.value = props.value;
+    codeMirrorState.latestProps.current = props;
+    if (ref && typeof ref === 'object') {
+      (ref as React.RefObject<unknown>).current = { view: codeMirrorState.editorView };
+    }
+    React.useEffect(() => {
+      onCreateEditor?.(codeMirrorState.editorView);
+    }, [onCreateEditor]);
+    return (
+      <div data-testid="code-mirror" data-value={props.value}>
+        {props.value}
+      </div>
+    );
+  };
+  return { __esModule: true, default: CodeMirrorMock, ExternalChange: {} };
+});
 
 vi.mock('@codemirror/lang-yaml', () => ({
   yaml: () => 'yaml-extension',
@@ -243,31 +182,12 @@ vi.mock('@codemirror/search', () => ({
 }));
 
 vi.mock('@/core/codemirror/theme', () => ({
-  buildCodeTheme: themeMocks.buildCodeTheme,
-}));
-
-vi.mock('@core/contexts/ZoomContext', () => ({
-  useZoom: () => ({ zoomLevel: 100 }),
+  buildCodeTheme: () => ({ theme: 'dark', highlight: 'highlight-ext' }),
 }));
 
 vi.mock('@/core/codemirror/search', () => ({
-  createSearchExtensions: searchModuleMocks.createSearchExtensions,
-  closeSearchPanel: searchModuleMocks.closeSearchPanel,
-}));
-
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: {
-    handle: errorHandlerMock.handle,
-    handleInline: errorHandlerMock.handleInline,
-    handleOperational: errorHandlerMock.handleOperational,
-  },
-}));
-
-vi.mock('@core/backend-api', () => ({
-  ApplyObjectYaml: wailsMocks.ApplyObjectYaml,
-  CheckObjectYamlOwnership: wailsMocks.CheckObjectYamlOwnership,
-  GetObjectYAMLByGVK: wailsMocks.GetObjectYAMLByGVK,
-  MergeObjectYamlWithLatest: wailsMocks.MergeObjectYamlWithLatest,
+  createSearchExtensions: () => ['search-ext'],
+  closeSearchPanel: () => undefined,
 }));
 
 const YAML = `
@@ -409,22 +329,35 @@ spec:
   restartPolicy: Always
 `.trim();
 
-type Snapshot = {
-  status: SnapshotStatus;
-  data?: { yaml?: string | null };
-  error?: RefreshFailure | null;
+const app = installAppStateHarness();
+
+const pod = { group: '', version: 'v1', kind: 'Pod', namespace: 'default', name: 'demo' };
+
+let dev: TestCluster;
+let view: MountedApp;
+let scope: string;
+
+type TabProps = Partial<{
+  scope: string | null;
+  isActive: boolean;
+  canEdit: boolean;
+  editDisabledReason: string | null;
+}>;
+
+/** backend/refresh/snapshot/object_content.go: the object's YAML snapshot. */
+const serveYaml = (yaml: string) => {
+  app.snapshots.serve('object-yaml', scope, {
+    clusterId: dev.clusterId,
+    clusterName: dev.clusterName,
+    yaml,
+  });
 };
 
-const snapshotState: { current: Snapshot } = {
-  current: { status: 'ready', data: { yaml: YAML }, error: null },
-};
-
-refreshStoreMocks.useRefreshScopedDomain.mockImplementation((_domain: string, _scope: string) => {
-  return snapshotState.current;
-});
-
-// Mirrors the Wails runtime: a bound method's returned error rejects with a
-// RuntimeError whose cause is the backend's status.
+/**
+ * Mirrors the Wails runtime: a bound method's returned error rejects with a
+ * RuntimeError whose cause is the backend's status
+ * (backend/internal/errorstatus).
+ */
 const rejectedWithStatus = (
   status: Partial<ErrorStatus> & Pick<ErrorStatus, 'reason' | 'category'>
 ) => {
@@ -442,383 +375,242 @@ const rejectedWithStatus = (
   return error;
 };
 
-const waitForUpdates = async () => {
-  await act(async () => {
-    await Promise.resolve();
-  });
-  await act(async () => {
-    await Promise.resolve();
+/** backend/object_yaml_mutation.go ApplyObjectYaml: the patched object's resourceVersion. */
+const answerApply = (resourceVersion: string) => {
+  app.backend.answer('ApplyObjectYaml', () => ({ resourceVersion }));
+};
+
+/** backend/object_yaml_by_gvk.go GetObjectYAMLByGVK: the live object's YAML. */
+const answerLiveYaml = (...yamls: string[]) => {
+  let read = 0;
+  app.backend.answer('GetObjectYAMLByGVK', () => {
+    const yaml = yamls[Math.min(read, yamls.length - 1)] ?? '';
+    read += 1;
+    return yaml;
   });
 };
 
-const getIconButton = (container: ParentNode, label: string) =>
-  container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+/** backend/object_yaml_ownership.go CheckObjectYamlOwnership: contested fields. */
+const answerOwnership = (conflicts: Array<{ field: string; manager: string; message: string }>) => {
+  app.backend.answer('CheckObjectYamlOwnership', () => ({ conflicts }));
+};
 
-const renderYamlTab = async (
-  props: Partial<{
-    scope: string | null;
-    isActive: boolean;
-    canEdit: boolean;
-    editDisabledReason: string | null;
-    clusterId: string;
-  }> = {}
-) => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
+const applyCalls = (): BackendArgs<'ApplyObjectYaml'>[] => app.backend.calls('ApplyObjectYaml');
 
-  const root = ReactDOM.createRoot(container);
-  const defaultProps = {
-    scope: 'default:pod:demo',
-    isActive: true,
-    canEdit: true,
-    clusterId: 'alpha:ctx',
-  };
+const tab = (props: TabProps = {}) => (
+  <YamlTab scope={scope} isActive canEdit clusterId={dev.clusterId} {...props} />
+);
 
-  await act(async () => {
-    const { default: YamlTab } = await import('./YamlTab');
-    root.render(<YamlTab {...defaultProps} {...props} />);
-  });
-
+const renderYamlTab = async (props: TabProps = {}) => {
+  view = await app.render(null);
+  await view.show(tab(props));
   return {
-    container,
-    root,
-    rerender: async (propsOverride: Partial<typeof defaultProps> = {}) => {
-      await act(async () => {
-        const { default: YamlTab } = await import('./YamlTab');
-        root.render(<YamlTab {...defaultProps} {...props} {...propsOverride} />);
-      });
-    },
-    unmount: async () => {
-      await act(async () => {
-        root.unmount();
-      });
-      container.remove();
-    },
+    container: view.container,
+    rerender: (next: TabProps = {}) => view.show(tab({ ...props, ...next })),
   };
 };
+
+const activate = async (run: () => void) => {
+  await act(async () => {
+    run();
+  });
+  await app.settle();
+};
+
+const getIconButton = (label: string) =>
+  view.container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+
+const clickButton = async (label: string) => {
+  const button = requireValue(getIconButton(label), `expected the ${label} button`);
+  await activate(() => button.click());
+};
+
+const clickText = async (text: string) => {
+  const button = requireValue(
+    Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((candidate) =>
+      candidate.textContent?.includes(text)
+    ),
+    `expected the ${text} button`
+  );
+  await activate(() => button.click());
+};
+
+const typeDraft = (yaml: string) =>
+  activate(() => codeMirrorState.latestProps.current.onChange(yaml));
+
+const editTo = async (yaml: string) => {
+  await clickButton('Edit YAML');
+  await typeDraft(yaml);
+};
+
+const save = () => clickButton('Save YAML');
+
+const yamlReads = () => app.snapshots.reads('object-yaml').filter((read) => read.scope === scope);
+
+const buttonWithText = (text: string) =>
+  Array.from(view.container.querySelectorAll('button')).find((button) =>
+    button.textContent?.includes(text)
+  );
+
+/**
+ * Serves `yaml` as the object's live YAML and lets the tab's next poll read it
+ * (`object-yaml` polls every 5 s: core/refresh/types.generated.ts). Needs fake
+ * timers from before the render.
+ */
+const pollLiveYaml = async (yaml: string) => {
+  serveYaml(yaml);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(5_000);
+  });
+  await app.settle();
+};
+
+/** Serves `yaml` as the object's next YAML snapshot and has the tab read it. */
+const deliverSnapshot = async (rerender: (next?: TabProps) => Promise<void>, yaml: string) => {
+  serveYaml(yaml);
+  // Returning to the YAML tab rereads the object's YAML.
+  await rerender({ isActive: false });
+  await rerender({ isActive: true });
+  await app.settle();
+};
+
+/**
+ * The object diff (ui/modals/useObjectDiffYaml.ts) of the same object shares
+ * the YAML tab's scope; while it is open it keeps reading that scope, also
+ * while the tab is editing.
+ */
+function ObjectDiffOfSameObject() {
+  const item: CatalogItem = {
+    ref: { clusterId: dev.clusterId, resource: 'pods', uid: '', ...pod },
+    resourceVersion: '',
+    creationTimestamp: '',
+    scope: 'Namespace',
+  };
+  useObjectDiffYaml(item, true);
+  return null;
+}
+
+/** Opens the object's diff while editing, which reads `yaml` as the live YAML. */
+const openObjectDiffReading = async (yaml: string, props: TabProps = {}) => {
+  serveYaml(yaml);
+  await view.show(
+    <>
+      {tab(props)}
+      <ObjectDiffOfSameObject />
+    </>
+  );
+  await app.settle();
+};
+
+const takeReports = (action: string) =>
+  app.errors.take((record) => record.context?.action === action).map(({ kinds }) => kinds);
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  scope = requireValue(app.object(dev, pod).scopes.detailScope, 'expected the pod scope');
+  serveYaml(YAML);
+  answerOwnership([]);
+  codeMirrorState.value = '';
+  codeMirrorState.editorView.state.selection = { main: { from: 0, to: 0 }, ranges: [] };
+  codeMirrorState.editorView.dispatch = vi.fn();
+  codeMirrorState.editorView.focus = vi.fn();
+  codemirrorSearchMocks.findNext.mockClear();
+  codemirrorSearchMocks.findPrevious.mockClear();
+  codemirrorSearchMocks.setSearchQuery.of.mockClear();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('YamlTab', () => {
-  const previousClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
-  beforeEach(() => {
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: {
-        readText: vi.fn(() => Promise.resolve('')),
-      },
-    });
-    snapshotState.current = { status: 'ready', data: { yaml: YAML }, error: null };
-    codeMirrorState.selectionText = '';
-    codeMirrorState.value = '';
-    codeMirrorState.latestProps.current = {
-      value: '',
-      extensions: [],
-      onChange: () => undefined,
-    };
-    codeMirrorState.editorView.state.selection = {
-      main: { from: 0, to: 0 },
-      ranges: [],
-    };
-    codeMirrorState.editorView.dispatch.mockClear();
-    codeMirrorState.editorView.focus.mockClear();
-    vi.mocked(Clipboard.SetText).mockReset().mockResolvedValue(undefined);
-    refreshMocks.acquireScopedDomainLease.mockClear();
-    refreshMocks.releaseScopedDomainLease.mockClear();
-    refreshMocks.fetchScopedDomain.mockClear();
-    refreshMocks.resetScopedDomain.mockClear();
-    shortcutMocks.useShortcut.mockClear();
-    shortcutMocks.useKeyboardSurface.mockClear();
-    searchShortcutMocks.useSearchShortcutTarget.mockClear();
-    searchModuleMocks.createSearchExtensions.mockClear();
-    searchModuleMocks.closeSearchPanel.mockClear();
-    wailsMocks.ApplyObjectYaml.mockReset();
-    wailsMocks.CheckObjectYamlOwnership.mockReset();
-    wailsMocks.CheckObjectYamlOwnership.mockResolvedValue({ conflicts: [] });
-    wailsMocks.GetObjectYAMLByGVK.mockReset();
-    wailsMocks.MergeObjectYamlWithLatest.mockReset();
-    errorHandlerMock.handle.mockClear();
-    errorHandlerMock.handleInline.mockClear();
-    errorHandlerMock.handleOperational.mockClear();
-  });
-
-  afterEach(() => {
-    if (previousClipboard) {
-      Object.defineProperty(navigator, 'clipboard', previousClipboard);
-    } else {
-      Reflect.deleteProperty(navigator, 'clipboard');
-    }
-    document.body.innerHTML = '';
-  });
-
-  it('normalizes YAML output and toggles managed fields', async () => {
-    const { container, unmount } = await renderYamlTab();
-
+  it('hides managedFields until they are shown', async () => {
+    await renderYamlTab();
     expect(codeMirrorState.value).not.toContain('managedFields');
 
-    const toggleButton = getIconButton(container, 'Show managedFields');
-    expect(toggleButton).toBeTruthy();
-
-    await act(async () => {
-      toggleButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
+    await clickButton('Show managedFields');
 
     expect(codeMirrorState.value).toContain('managedFields');
-
-    await unmount();
   });
 
-  it('shows a default-on wrap toggle immediately after managed fields', async () => {
-    const { container, unmount } = await renderYamlTab();
+  it('wraps YAML lines by default from the toggle next to managedFields', async () => {
+    const { container } = await renderYamlTab();
     const toolbarButtons = Array.from(
       container.querySelectorAll<HTMLButtonElement>('.yaml-editor-toolbar .icon-bar-button')
     );
     const managedFieldsIndex = toolbarButtons.findIndex(
       (button) => button.getAttribute('aria-label') === 'Show managedFields'
     );
-    const wrapButton = getIconButton(container, 'Wrap YAML lines');
+    const wrapButton = getIconButton('Wrap YAML lines');
 
     expect(wrapButton).toBe(toolbarButtons[managedFieldsIndex + 1]);
     expect(wrapButton?.getAttribute('aria-pressed')).toBe('true');
     expect(codeMirrorState.latestProps.current.extensions).toContain('lineWrapping');
 
-    await act(async () => {
-      wrapButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    await clickButton('Wrap YAML lines');
 
-    expect(wrapButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(getIconButton('Wrap YAML lines')?.getAttribute('aria-pressed')).toBe('false');
     expect(codeMirrorState.latestProps.current.extensions).not.toContain('lineWrapping');
-    await unmount();
   });
 
-  it('uses the managedFields visibility setting when entering edit mode', async () => {
-    const { container, unmount } = await renderYamlTab();
+  it('edits with managedFields only when they are shown', async () => {
+    await renderYamlTab();
 
-    await act(async () => {
-      getIconButton(container, 'Edit YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-
+    await clickButton('Edit YAML');
     expect(codeMirrorState.value).not.toContain('managedFields');
 
-    await act(async () => {
-      getIconButton(container, 'Cancel edit')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-
-    await act(async () => {
-      getIconButton(container, 'Show managedFields')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await waitForUpdates();
-
-    await act(async () => {
-      getIconButton(container, 'Edit YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
+    await clickButton('Cancel edit');
+    await clickButton('Show managedFields');
+    await clickButton('Edit YAML');
 
     expect(codeMirrorState.value).toContain('managedFields');
-
-    await unmount();
   });
 
-  it('shows the YAML edit denial reason when editing is not allowed', async () => {
-    const { container, unmount } = await renderYamlTab({
+  it('shows why YAML editing is not allowed', async () => {
+    await renderYamlTab({
       canEdit: false,
       editDisabledReason: 'permission denied for patch pods/demo',
     });
 
-    expect(getIconButton(container, 'Edit YAML')).toBeNull();
-    const disabledEditButton = getIconButton(
-      container,
-      'Edit YAML unavailable: permission denied for patch pods/demo'
+    expect(getIconButton('Edit YAML')).toBeNull();
+    const disabledEditButton = requireValue(
+      getIconButton('Edit YAML unavailable: permission denied for patch pods/demo'),
+      'expected the disabled Edit button'
     );
-    expect(disabledEditButton).toBeTruthy();
-    expect(disabledEditButton?.disabled).toBe(true);
-    expect(disabledEditButton?.title).toBe('permission denied for patch pods/demo');
-
-    await unmount();
+    expect(disabledEditButton.disabled).toBe(true);
+    expect(disabledEditButton.title).toBe('permission denied for patch pods/demo');
   });
 
-  it('registers the CodeMirror region as an editor surface', async () => {
-    const { unmount } = await renderYamlTab();
-
-    expect(shortcutMocks.useKeyboardSurface).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'editor',
-        active: true,
-        onEscape: expect.any(Function),
-        onNativeAction: expect.any(Function),
-      })
-    );
-
-    await unmount();
-  });
-
-  it('copies the current selection from the read-only editor via native copy action', async () => {
-    const { unmount } = await renderYamlTab({ canEdit: false });
-
-    codeMirrorState.editorView.state.selection = {
-      main: { from: 0, to: 10 },
-      ranges: [{ from: 0, to: 10 }],
-    };
-    codeMirrorState.selectionText = 'apiVersion';
-
-    const surfaceConfig = shortcutMocks.useKeyboardSurface.mock.calls
-      .map(([config]) => config as { onNativeAction?: (context: unknown) => boolean })
-      .filter((config) => typeof config.onNativeAction === 'function')
-      .pop();
-
-    let handled = false;
+  // Clipboard and select-all shortcuts route to the surface holding focus.
+  it('focuses the editor while the tab is active in read mode', async () => {
+    const { rerender } = await renderYamlTab({ isActive: false });
     await act(async () => {
-      handled =
-        surfaceConfig?.onNativeAction?.({
-          action: 'copy',
-          activeElement: null,
-          selection: null,
-        }) ?? false;
-      await Promise.resolve();
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
     });
-
-    expect(handled).toBe(true);
-    expect(Clipboard.SetText).toHaveBeenCalledWith('apiVersion');
-
-    await unmount();
-  });
-
-  it('enables context-menu copy for a read-only CodeMirror selection', async () => {
-    const { unmount } = await renderYamlTab({ canEdit: false });
-
-    codeMirrorState.editorView.state.selection = {
-      main: { from: 0, to: 10 },
-      ranges: [{ from: 0, to: 10 }],
-    };
-    codeMirrorState.selectionText = 'apiVersion';
-
-    const contextMenuExtension = (codeMirrorState.latestProps.current.extensions as unknown[]).find(
-      (extension) =>
-        typeof extension === 'object' &&
-        extension !== null &&
-        'contextmenu' in (extension as Record<string, unknown>)
-    ) as { contextmenu: (event: MouseEvent, view: typeof codeMirrorState.editorView) => boolean };
-
-    await act(async () => {
-      contextMenuExtension.contextmenu(
-        new MouseEvent('contextmenu', {
-          clientX: 10,
-          clientY: 20,
-          bubbles: true,
-          cancelable: true,
-        }),
-        codeMirrorState.editorView
-      );
-      await Promise.resolve();
-    });
-
-    const copyItem = Array.from(document.querySelectorAll('.context-menu-item')).find((item) =>
-      item.textContent?.includes('Copy')
-    );
-    expect(copyItem?.getAttribute('aria-disabled')).toBe('false');
-
-    await unmount();
-  });
-
-  it('focuses the editor when the tab is active in read mode', async () => {
-    const rafSpy = vi
-      .spyOn(window, 'requestAnimationFrame')
-      .mockImplementation((callback: FrameRequestCallback) => {
-        callback(0);
-        return 0;
-      });
-
-    // Clipboard and select-all shortcuts route to the surface that contains
-    // the focused element, so the read-mode editor must take focus when the
-    // tab becomes active.
-    const { unmount } = await renderYamlTab();
-    expect(codeMirrorState.editorView.focus).toHaveBeenCalled();
-    await unmount();
-
-    codeMirrorState.editorView.focus.mockClear();
-    const inactive = await renderYamlTab({ isActive: false });
     expect(codeMirrorState.editorView.focus).not.toHaveBeenCalled();
-    await inactive.unmount();
 
-    rafSpy.mockRestore();
-  });
-
-  it('pastes native menu text into the editor while editing', async () => {
-    const { container, unmount } = await renderYamlTab();
-
-    const editButton = getIconButton(container, 'Edit YAML');
+    await rerender({ isActive: true });
     await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
     });
 
-    codeMirrorState.editorView.state.selection.main = { from: 0, to: 0 };
-
-    const surfaceConfig = shortcutMocks.useKeyboardSurface.mock.calls
-      .map(([config]) => config as { onNativeAction?: (context: unknown) => boolean })
-      .filter((config) => typeof config.onNativeAction === 'function')
-      .pop();
-
-    let handled = false;
-    await act(async () => {
-      handled =
-        surfaceConfig?.onNativeAction?.({
-          action: 'paste',
-          activeElement: null,
-          selection: null,
-          text: 'apiVersion: v1\n',
-        }) ?? false;
-    });
-
-    expect(handled).toBe(true);
-    expect(codeMirrorState.editorView.dispatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        changes: { from: 0, to: 0, insert: 'apiVersion: v1\n' },
-      })
-    );
     expect(codeMirrorState.editorView.focus).toHaveBeenCalled();
-
-    await unmount();
   });
 
-  it('saves edited YAML and refreshes the snapshot', async () => {
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
-    // hydrateLatestObject routes through GetObjectYAMLByGVK now that the
-    // YAML fixture carries apiVersion.
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(UPDATED_YAML);
+  it('saves the edited YAML against its baseline and rereads the object', async () => {
+    answerApply('789');
+    answerLiveYaml(UPDATED_YAML);
+    await renderYamlTab();
+    await editTo(UPDATED_YAML);
+    const readsBeforeSave = yamlReads().length;
 
-    const { container, unmount } = await renderYamlTab();
+    await save();
 
-    const editButton = getIconButton(container, 'Edit YAML');
-    expect(editButton).toBeTruthy();
-
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-
-    const saveButton = getIconButton(container, 'Save YAML');
-    expect(saveButton).toBeTruthy();
-    refreshMocks.fetchScopedDomain.mockClear();
-
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
-
-    expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalledTimes(1);
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[0]).toBe('alpha:ctx');
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]).toEqual(
+    expect(applyCalls()).toHaveLength(1);
+    const [clusterId, request] = requireValue(applyCalls()[0], 'expected the apply call');
+    expect(clusterId).toBe(dev.clusterId);
+    expect(request).toEqual(
       expect.objectContaining({
         apiVersion: 'v1',
         kind: 'Pod',
@@ -828,233 +620,103 @@ describe('YamlTab', () => {
         resourceVersion: '123',
       })
     );
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).toContain('image: demo:v1');
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).not.toContain('managedFields');
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).toContain('image: demo:v2');
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).not.toContain('managedFields');
-    expect(wailsMocks.CheckObjectYamlOwnership).toHaveBeenCalledTimes(1);
-    expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
-      'object-yaml',
-      'default:pod:demo',
-      expect.objectContaining({ intent: 'user' })
-    );
-
-    const editButtonAfterSave = getIconButton(container, 'Edit YAML');
-    expect(editButtonAfterSave).toBeTruthy();
-
-    await unmount();
+    expect(request.baseYAML).toContain('image: demo:v1');
+    expect(request.baseYAML).not.toContain('managedFields');
+    expect(request.yaml).toContain('image: demo:v2');
+    expect(request.yaml).not.toContain('managedFields');
+    expect(app.backend.calls('CheckObjectYamlOwnership')).toHaveLength(1);
+    expect(yamlReads().length).toBeGreaterThan(readsBeforeSave);
+    expect(getIconButton('Edit YAML')).not.toBeNull();
   });
 
-  it('asks for confirmation before saving fields owned by another manager', async () => {
-    wailsMocks.CheckObjectYamlOwnership.mockResolvedValue({
-      conflicts: [
-        {
-          field: '.spec.replicas',
-          manager: 'flux',
-          message: 'conflict with "flux" using apps/v1',
-        },
-      ],
-    });
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(UPDATED_YAML);
+  it('asks before saving fields owned by another manager', async () => {
+    answerOwnership([
+      { field: '.spec.replicas', manager: 'flux', message: 'conflict with "flux" using apps/v1' },
+    ]);
+    answerApply('789');
+    answerLiveYaml(UPDATED_YAML);
+    await renderYamlTab();
+    await editTo(UPDATED_YAML);
 
-    const { container, unmount } = await renderYamlTab();
+    await save();
 
-    await act(async () => {
-      getIconButton(container, 'Edit YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-    await act(async () => {
-      getIconButton(container, 'Save YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await waitForUpdates();
-
-    expect(wailsMocks.ApplyObjectYaml).not.toHaveBeenCalled();
+    expect(applyCalls()).toEqual([]);
     expect(document.body.textContent).toContain('flux');
     expect(document.body.textContent).toContain('spec.replicas');
 
-    const confirmButton = Array.from(document.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Save anyway'
-    );
-    expect(confirmButton).toBeTruthy();
+    await clickText('Save anyway');
 
-    await act(async () => {
-      confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    await waitForUpdates();
-
-    expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalledTimes(1);
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).toContain('image: demo:v2');
-
-    await unmount();
+    expect(applyCalls()).toHaveLength(1);
+    expect(applyCalls()[0]?.[1].yaml).toContain('image: demo:v2');
   });
 
-  it('keeps editing without saving when the ownership warning is cancelled', async () => {
-    wailsMocks.CheckObjectYamlOwnership.mockResolvedValue({
-      conflicts: [
-        {
-          field: '.spec.replicas',
-          manager: 'kube-controller-manager',
-          message: 'conflict with "kube-controller-manager" using apps/v1',
-        },
-      ],
-    });
+  it('keeps editing without saving when the ownership warning is dismissed', async () => {
+    answerOwnership([
+      {
+        field: '.spec.replicas',
+        manager: 'kube-controller-manager',
+        message: 'conflict with "kube-controller-manager" using apps/v1',
+      },
+    ]);
+    await renderYamlTab();
+    await editTo(UPDATED_YAML);
+    await save();
 
-    const { container, unmount } = await renderYamlTab();
+    await clickText('Keep editing');
 
-    await act(async () => {
-      getIconButton(container, 'Edit YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-    await act(async () => {
-      getIconButton(container, 'Save YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await waitForUpdates();
-
-    const cancelButton = Array.from(document.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Keep editing'
-    );
-    expect(cancelButton).toBeTruthy();
-
-    await act(async () => {
-      cancelButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    await waitForUpdates();
-
-    expect(wailsMocks.ApplyObjectYaml).not.toHaveBeenCalled();
+    expect(applyCalls()).toEqual([]);
     expect(document.body.textContent).not.toContain('Save anyway');
-    // Still editing: the save action remains available.
-    expect(getIconButton(container, 'Save YAML')).toBeTruthy();
-
-    await unmount();
+    expect(getIconButton('Save YAML')).not.toBeNull();
   });
 
-  it('discards the draft and exits edit mode via the ownership warning cancel action', async () => {
-    wailsMocks.CheckObjectYamlOwnership.mockResolvedValue({
-      conflicts: [
-        {
-          field: '.spec.replicas',
-          manager: 'flux',
-          message: 'conflict with "flux" using apps/v1',
-        },
-      ],
-    });
+  it('discards the draft from the ownership warning’s Cancel', async () => {
+    answerOwnership([
+      { field: '.spec.replicas', manager: 'flux', message: 'conflict with "flux" using apps/v1' },
+    ]);
+    await renderYamlTab();
+    await editTo(UPDATED_YAML);
+    await save();
 
-    const { container, unmount } = await renderYamlTab();
+    const discardButton = requireValue(
+      document.querySelector<HTMLButtonElement>('.confirmation-modal-secondary-action'),
+      'expected the warning’s Cancel'
+    );
+    expect(discardButton.textContent).toBe('Cancel');
+    await activate(() => discardButton.click());
 
-    await act(async () => {
-      getIconButton(container, 'Edit YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-    await act(async () => {
-      getIconButton(container, 'Save YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await waitForUpdates();
-
-    const discardButton = document.querySelector(
-      '.confirmation-modal-secondary-action'
-    ) as HTMLButtonElement | null;
-    expect(discardButton).toBeTruthy();
-    expect(discardButton?.textContent).toBe('Cancel');
-
-    await act(async () => {
-      discardButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    await waitForUpdates();
-
-    expect(wailsMocks.ApplyObjectYaml).not.toHaveBeenCalled();
+    expect(applyCalls()).toEqual([]);
     expect(document.querySelector('.confirmation-modal')).toBeNull();
-    // Edit mode exited: the Edit action is back and Save is gone.
-    expect(getIconButton(container, 'Edit YAML')).toBeTruthy();
-    expect(getIconButton(container, 'Save YAML')).toBeNull();
-
-    await unmount();
+    expect(getIconButton('Edit YAML')).not.toBeNull();
+    expect(getIconButton('Save YAML')).toBeNull();
   });
 
-  it('saves without prompting when the ownership check fails', async () => {
-    wailsMocks.CheckObjectYamlOwnership.mockRejectedValue(
-      new Error('server-side apply not supported')
-    );
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(UPDATED_YAML);
-
-    const { container, unmount } = await renderYamlTab();
-
-    await act(async () => {
-      getIconButton(container, 'Edit YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
+  it('saves without asking when the ownership check fails, reporting it without a toast', async () => {
+    app.backend.answer('CheckObjectYamlOwnership', () => {
+      throw new Error('server-side apply not supported');
     });
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-    await act(async () => {
-      getIconButton(container, 'Save YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await waitForUpdates();
+    answerApply('789');
+    answerLiveYaml(UPDATED_YAML);
+    await renderYamlTab();
+    await editTo(UPDATED_YAML);
 
-    expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalledTimes(1);
-    expect(errorHandlerMock.handleOperational).toHaveBeenCalledWith(
-      expect.any(Error),
-      expect.objectContaining({ action: 'checkYamlOwnership' })
-    );
-    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+    await save();
 
-    await unmount();
+    expect(applyCalls()).toHaveLength(1);
+    expect(takeReports('checkYamlOwnership')).toEqual([['operational']]);
   });
 
-  it('preserves full backend mutation target identity when applying YAML', async () => {
-    snapshotState.current = {
-      status: 'ready',
-      data: { yaml: VERIFIED_APPLIED_YAML_WITH_UID },
-      error: null,
-    };
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '790' });
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(SECOND_VERIFIED_APPLIED_YAML);
+  it('applies to the object with the uid and resourceVersion it was edited from', async () => {
+    serveYaml(VERIFIED_APPLIED_YAML_WITH_UID);
+    answerApply('790');
+    answerLiveYaml(SECOND_VERIFIED_APPLIED_YAML);
+    await renderYamlTab();
+    await editTo(SECOND_UPDATED_YAML);
 
-    const { container, unmount } = await renderYamlTab();
+    await save();
 
-    await act(async () => {
-      getIconButton(container, 'Edit YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(SECOND_UPDATED_YAML);
-    });
-
-    await act(async () => {
-      getIconButton(container, 'Save YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-
-    await waitForUpdates();
-
-    expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalledTimes(1);
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[0]).toBe('alpha:ctx');
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]).toEqual(
+    expect(applyCalls()).toHaveLength(1);
+    expect(applyCalls()[0]?.[0]).toBe(dev.clusterId);
+    expect(applyCalls()[0]?.[1]).toEqual(
       expect.objectContaining({
         apiVersion: 'v1',
         kind: 'Pod',
@@ -1064,480 +726,235 @@ describe('YamlTab', () => {
         resourceVersion: '789',
       })
     );
-
-    await unmount();
   });
 
-  it('blocks protected field edits with a local message while editing', async () => {
-    const { container, unmount } = await renderYamlTab();
+  it('blocks edits to Kubernetes-managed fields with a message while editing', async () => {
+    const { container } = await renderYamlTab();
+    await clickButton('Edit YAML');
 
-    const editButton = getIconButton(container, 'Edit YAML');
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const transactionFilter = requireValue(
+      codeMirrorState.latestProps.current.extensions.find(
+        (extension: unknown) => typeof extension === 'function'
+      ) as
+        | ((transaction: {
+            docChanged: boolean;
+            startState: { doc: { toString: () => string } };
+            changes: { iterChanges: (callback: (from: number, to: number) => void) => void };
+          }) => unknown)
+        | undefined,
+      'expected the protected-range filter'
+    );
+    const editAt = (from: number, to: number) => ({
+      docChanged: true,
+      startState: { doc: { toString: () => codeMirrorState.value } },
+      changes: {
+        iterChanges: (callback: (from: number, to: number) => void) => callback(from, to),
+      },
     });
 
-    const transactionFilter = codeMirrorState.latestProps.current.extensions.find(
-      (extension: unknown) => typeof extension === 'function'
-    ) as
-      | ((transaction: {
-          docChanged: boolean;
-          startState: { doc: { toString: () => string } };
-          changes: { iterChanges: (callback: (from: number, to: number) => void) => void };
-        }) => unknown)
-      | undefined;
-    expect(transactionFilter).toBeTruthy();
-
-    let blockedResult: unknown;
+    let blocked: unknown;
     await act(async () => {
-      blockedResult = transactionFilter?.({
-        docChanged: true,
-        startState: { doc: { toString: () => codeMirrorState.value } },
-        changes: { iterChanges: (callback) => callback(0, 'apiVersion'.length) },
-      });
+      blocked = transactionFilter(editAt(0, 'apiVersion'.length));
     });
-
-    expect(blockedResult).toEqual([]);
+    expect(blocked).toEqual([]);
     expect(container.textContent).toContain(
       'apiVersion is managed by Kubernetes and cannot be edited.'
     );
 
     const kindIndex = codeMirrorState.value.indexOf('kind:');
     await act(async () => {
-      blockedResult = transactionFilter?.({
-        docChanged: true,
-        startState: { doc: { toString: () => codeMirrorState.value } },
-        changes: { iterChanges: (callback) => callback(kindIndex, kindIndex + 'kind'.length) },
-      });
+      blocked = transactionFilter(editAt(kindIndex, kindIndex + 'kind'.length));
     });
-
-    expect(blockedResult).toEqual([]);
+    expect(blocked).toEqual([]);
     expect(container.textContent).toContain('kind is managed by Kubernetes and cannot be edited.');
 
     const imageIndex = codeMirrorState.value.indexOf('image: demo:v1');
-    const allowedTransaction = {
-      docChanged: true,
-      startState: { doc: { toString: () => codeMirrorState.value } },
-      changes: {
-        iterChanges: (callback: (from: number, to: number) => void) =>
-          callback(imageIndex, imageIndex),
-      },
-    };
-
-    expect(transactionFilter?.(allowedTransaction)).toBe(allowedTransaction);
-
-    await unmount();
+    const allowed = editAt(imageIndex, imageIndex);
+    expect(transactionFilter(allowed)).toBe(allowed);
   });
 
-  it('shows a post-apply notice when the final stored object differs from the submitted YAML', async () => {
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(POST_APPLY_MUTATED_YAML);
+  it('shows how the stored object differs from the submitted YAML, until dismissed', async () => {
+    answerApply('789');
+    answerLiveYaml(POST_APPLY_MUTATED_YAML);
+    const { container } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
 
-    const { container, unmount } = await renderYamlTab();
+    await save();
 
-    const editButton = getIconButton(container, 'Edit YAML');
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-
-    const saveButton = getIconButton(container, 'Save YAML');
-    expect(saveButton).toBeTruthy();
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
-
-    expect(container.querySelector('.yaml-post-apply-notice')?.textContent).toContain(
-      'Your changes were applied to the latest live object'
+    const notice = () => container.querySelector('.yaml-post-apply-notice');
+    expect(notice()?.textContent).toContain('Your changes were applied to the latest live object');
+    expect(notice()?.textContent).toContain('restartPolicy: Always');
+    expect(container.querySelector('.yaml-drift-diff')?.textContent).not.toContain(
+      'apiVersion: v1'
     );
-    expect(container.querySelector('.yaml-post-apply-notice')?.textContent).toContain(
-      'restartPolicy: Always'
-    );
-    const diff = container.querySelector('.yaml-drift-diff');
-    expect(diff?.textContent).not.toContain('apiVersion: v1');
-    const showFullDiffButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Show full diff')
-    );
-    expect(showFullDiffButton).toBeTruthy();
-
-    await act(async () => {
-      showFullDiffButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
+    await clickText('Show full diff');
     expect(container.querySelector('.yaml-drift-diff')?.textContent).toContain('apiVersion: v1');
     expect(codeMirrorState.value).toContain('restartPolicy: Always');
 
-    await unmount();
+    await clickButton('Close diff notice');
+
+    expect(notice()).toBeNull();
   });
 
-  it('allows dismissing the post-apply diff notice', async () => {
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(POST_APPLY_MUTATED_YAML);
-
-    const { container, unmount } = await renderYamlTab();
-
-    const editButton = getIconButton(container, 'Edit YAML');
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  it('warns, without a toast, when the saved object cannot be read back', async () => {
+    answerApply('789');
+    app.backend.answer('GetObjectYAMLByGVK', () => {
+      throw new Error('live read failed');
     });
+    const { container } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
 
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-
-    const saveButton = getIconButton(container, 'Save YAML');
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
-
-    const closeButton = container.querySelector('button[aria-label="Close diff notice"]');
-    expect(closeButton).toBeTruthy();
-
-    await act(async () => {
-      closeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(container.querySelector('.yaml-post-apply-notice')).toBeNull();
-
-    await unmount();
-  });
-
-  it('warns when apply succeeds but the final live object cannot be verified', async () => {
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
-    wailsMocks.GetObjectYAMLByGVK.mockRejectedValue(new Error('live read failed'));
-
-    const { container, unmount } = await renderYamlTab();
-
-    const editButton = getIconButton(container, 'Edit YAML');
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-
-    const saveButton = getIconButton(container, 'Save YAML');
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
+    await save();
 
     expect(container.querySelector('.yaml-post-apply-notice-warning')?.textContent).toContain(
       'could not reload the final live object'
     );
     expect(codeMirrorState.value).toContain('resourceVersion: "789"');
     // The notice explains it in place; a toast would only repeat it.
-    expect(errorHandlerMock.handleInline).toHaveBeenCalledWith(expect.any(Error), {
-      action: 'loadLatestObjectYAML',
-    });
-    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
-
-    await unmount();
+    expect(takeReports('loadLatestObjectYAML')).toEqual([['inline']]);
   });
 
-  it('does not warn when the final live object only differs by generated annotations', async () => {
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(
-      VERIFIED_APPLIED_YAML_WITH_GENERATED_ANNOTATION
-    );
+  it('does not warn when the stored object only adds generated annotations', async () => {
+    answerApply('789');
+    answerLiveYaml(VERIFIED_APPLIED_YAML_WITH_GENERATED_ANNOTATION);
+    const { container } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
 
-    const { container, unmount } = await renderYamlTab();
-
-    const editButton = getIconButton(container, 'Edit YAML');
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-
-    const saveButton = getIconButton(container, 'Save YAML');
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
+    await save();
 
     expect(container.querySelector('.yaml-post-apply-notice')).toBeNull();
     expect(codeMirrorState.value).toContain('deployment.kubernetes.io/revision: "3"');
-
-    await unmount();
   });
 
   it('warns when the live object changes again after a verified save', async () => {
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(VERIFIED_APPLIED_YAML);
-
-    const { container, rerender, unmount } = await renderYamlTab();
-
-    const editButton = getIconButton(container, 'Edit YAML');
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-
-    const saveButton = getIconButton(container, 'Save YAML');
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
-
+    answerApply('789');
+    answerLiveYaml(VERIFIED_APPLIED_YAML);
+    serveYaml(YAML);
+    const { container, rerender } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
+    await save();
     expect(container.querySelector('.yaml-post-apply-notice')).toBeNull();
 
-    snapshotState.current = {
-      status: 'ready',
-      data: { yaml: VERIFIED_APPLIED_YAML },
-      error: null,
-    };
+    await deliverSnapshot(rerender, VERIFIED_APPLIED_YAML);
+    await deliverSnapshot(rerender, LATER_MUTATED_YAML);
 
-    await rerender();
-    await waitForUpdates();
+    const stale = container.querySelector('.yaml-post-apply-notice-stale');
+    expect(stale?.textContent).toContain('changed again after save');
+    expect(stale?.textContent).toContain('restartPolicy: Always');
+  });
 
-    snapshotState.current = {
-      status: 'ready',
-      data: { yaml: LATER_MUTATED_YAML },
-      error: null,
-    };
+  it('does not warn when a previous save’s snapshot arrives after a rapid second save', async () => {
+    let applied = 0;
+    app.backend.answer('ApplyObjectYaml', () => {
+      applied += 1;
+      return { resourceVersion: applied === 1 ? '789' : '790' };
+    });
+    answerLiveYaml(VERIFIED_APPLIED_YAML, SECOND_VERIFIED_APPLIED_YAML);
+    const { container, rerender } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
+    await save();
+    await editTo(SECOND_UPDATED_YAML);
+    await save();
 
-    await rerender();
-    await waitForUpdates();
-    await waitForUpdates();
+    await deliverSnapshot(rerender, VERIFIED_APPLIED_YAML);
+    expect(container.querySelector('.yaml-post-apply-notice-stale')).toBeNull();
+    expect(codeMirrorState.value).toContain('image: demo:v3');
 
-    expect(container.querySelector('.yaml-post-apply-notice-stale')?.textContent).toContain(
-      'changed again after save'
-    );
-    expect(container.querySelector('.yaml-post-apply-notice-stale')?.textContent).toContain(
+    await deliverSnapshot(rerender, SECOND_VERIFIED_APPLIED_YAML);
+    expect(container.querySelector('.yaml-post-apply-notice-stale')).toBeNull();
+    expect(codeMirrorState.value).toContain('image: demo:v3');
+  });
+
+  it('does not compare a recreated object (new uid) with the saved one', async () => {
+    answerApply('789');
+    answerLiveYaml(VERIFIED_APPLIED_YAML_WITH_UID);
+    const { container, rerender } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
+    await save();
+
+    await deliverSnapshot(rerender, VERIFIED_APPLIED_YAML_WITH_UID);
+    await deliverSnapshot(rerender, REPLACEMENT_POD_YAML);
+
+    // The tab shows the new object without a changed-again warning.
+    expect(codeMirrorState.value).toContain('uid: pod-uid-2');
+    expect(container.querySelector('.yaml-post-apply-notice-stale')).toBeNull();
+  });
+
+  it('warns of a live change while editing, keeping the draft and a kubectl-edit-style save', async () => {
+    vi.useFakeTimers();
+    answerApply('791');
+    answerLiveYaml(LATER_MUTATED_YAML);
+    const { container } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
+
+    // Another client changes the object while the user edits.
+    await pollLiveYaml(LATER_MUTATED_YAML);
+
+    expect(codeMirrorState.value).toBe(UPDATED_YAML);
+    expect(container.querySelector('.yaml-drift-diff')?.textContent).toContain(
       'restartPolicy: Always'
     );
+    expect(buttonWithText('Reload & merge')).toBeDefined();
+    expect(getIconButton('Save YAML')?.disabled).toBe(false);
 
-    await unmount();
+    await save();
+
+    expect(applyCalls()).toHaveLength(1);
   });
 
-  it('does not warn when an older snapshot from a previous save arrives after a rapid second save', async () => {
-    wailsMocks.ApplyObjectYaml.mockResolvedValueOnce({
-      resourceVersion: '789',
-    }).mockResolvedValueOnce({ resourceVersion: '790' });
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValueOnce(
-      VERIFIED_APPLIED_YAML
-    ).mockResolvedValueOnce(SECOND_VERIFIED_APPLIED_YAML);
+  it('does not flag status churn on the live object while editing', async () => {
+    vi.useFakeTimers();
+    const { container } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
 
-    const { container, rerender, unmount } = await renderYamlTab();
+    // A controller updates only the status, which bumps the resourceVersion.
+    await pollLiveYaml(`${YAML.replace('"123"', '"124"')}\nstatus:\n  phase: Running`);
 
-    const editButton = getIconButton(container, 'Edit YAML');
-    expect(editButton).toBeTruthy();
-
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-
-    let saveButton = getIconButton(container, 'Save YAML');
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
-
-    const editButtonAgain = getIconButton(container, 'Edit YAML');
-    await act(async () => {
-      editButtonAgain?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(SECOND_UPDATED_YAML);
-    });
-
-    saveButton = getIconButton(container, 'Save YAML');
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
-
-    snapshotState.current = {
-      status: 'ready',
-      data: { yaml: VERIFIED_APPLIED_YAML },
-      error: null,
-    };
-
-    await rerender();
-    await waitForUpdates();
-
-    expect(container.querySelector('.yaml-post-apply-notice-stale')).toBeNull();
-    expect(codeMirrorState.value).toContain('image: demo:v3');
-
-    snapshotState.current = {
-      status: 'ready',
-      data: { yaml: SECOND_VERIFIED_APPLIED_YAML },
-      error: null,
-    };
-
-    await rerender();
-    await waitForUpdates();
-
-    expect(container.querySelector('.yaml-post-apply-notice-stale')).toBeNull();
-    expect(codeMirrorState.value).toContain('image: demo:v3');
-
-    await unmount();
+    expect(container.querySelector('.yaml-drift-diff')).toBeNull();
+    expect(buttonWithText('Reload & merge')).toBeUndefined();
   });
 
-  it('does not treat a recreated object as the same post-save target when uid changes', async () => {
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(VERIFIED_APPLIED_YAML_WITH_UID);
+  it('finishes a save normally when a live change lands while the save is in flight', async () => {
+    vi.useFakeTimers();
+    // The live object after the save: the other client's change plus the draft's.
+    const saved = LATER_MUTATED_YAML.replace('"790"', '"791"');
+    answerApply('791');
+    answerLiveYaml(saved);
+    const { container } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
+    const landSave = app.backend.hold('ApplyObjectYaml');
+    await save();
 
-    const { container, rerender, unmount } = await renderYamlTab();
-
-    const editButton = getIconButton(container, 'Edit YAML');
+    await pollLiveYaml(LATER_MUTATED_YAML);
+    serveYaml(saved);
     await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      landSave();
     });
+    await app.settle();
 
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    expect(applyCalls()).toHaveLength(1);
+    expect(getIconButton('Edit YAML')).not.toBeNull();
+    expect(parseYaml(codeMirrorState.value)).toMatchObject({
+      metadata: { resourceVersion: '791' },
+      spec: { restartPolicy: 'Always', containers: [{ name: 'demo', image: 'demo:v2' }] },
     });
-
-    const saveButton = getIconButton(container, 'Save YAML');
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
-
-    snapshotState.current = {
-      status: 'ready',
-      data: { yaml: VERIFIED_APPLIED_YAML_WITH_UID },
-      error: null,
-    };
-
-    await rerender();
-    await waitForUpdates();
-
-    snapshotState.current = {
-      status: 'ready',
-      data: { yaml: REPLACEMENT_POD_YAML },
-      error: null,
-    };
-
-    await rerender();
-    await waitForUpdates();
-
-    expect(container.querySelector('.yaml-post-apply-notice-stale')).toBeNull();
-
-    await unmount();
-  });
-
-  it('pauses YAML auto-refresh while editing and resumes it after cancel', async () => {
-    const { container, unmount } = await renderYamlTab();
-
-    expect(refreshMocks.acquireScopedDomainLease).toHaveBeenCalledWith(
-      'object-yaml',
-      'default:pod:demo',
-      { preserveState: true }
-    );
-    expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
-      'object-yaml',
-      'default:pod:demo',
-      expect.objectContaining({ intent: 'startup' })
-    );
-
-    refreshMocks.acquireScopedDomainLease.mockClear();
-    refreshMocks.releaseScopedDomainLease.mockClear();
-    refreshMocks.fetchScopedDomain.mockClear();
-
-    const editButton = getIconButton(container, 'Edit YAML');
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(refreshMocks.releaseScopedDomainLease).toHaveBeenCalledWith(
-      'object-yaml',
-      'default:pod:demo',
-      { preserveState: true }
-    );
-    expect(refreshMocks.fetchScopedDomain).not.toHaveBeenCalled();
-
-    refreshMocks.acquireScopedDomainLease.mockClear();
-    refreshMocks.releaseScopedDomainLease.mockClear();
-    refreshMocks.fetchScopedDomain.mockClear();
-
-    const cancelButton = getIconButton(container, 'Cancel edit');
-    await act(async () => {
-      cancelButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(refreshMocks.acquireScopedDomainLease).toHaveBeenCalledWith(
-      'object-yaml',
-      'default:pod:demo',
-      { preserveState: true }
-    );
-    expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
-      'object-yaml',
-      'default:pod:demo',
-      expect.objectContaining({ intent: 'startup' })
-    );
-
-    await unmount();
-  });
-
-  it('keeps drift non-blocking while editing and saves like kubectl edit', async () => {
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '790' });
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(LATER_MUTATED_YAML);
-
-    const { container, rerender, unmount } = await renderYamlTab();
-
-    const editButton = getIconButton(container, 'Edit YAML');
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-
-    snapshotState.current = {
-      status: 'ready',
-      data: { yaml: LATER_MUTATED_YAML },
-      error: null,
-    };
-    await rerender();
-    await waitForUpdates();
-
     expect(container.querySelector('.yaml-validation-message')).toBeNull();
+    expect(container.querySelector('.yaml-post-apply-notice-stale')).toBeNull();
+  });
 
-    const reloadButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Reload & merge')
-    );
-    expect(reloadButton).toBeTruthy();
+  it('shows the diff without offering a merge when the object is recreated during the edit', async () => {
+    vi.useFakeTimers();
+    serveYaml(VERIFIED_APPLIED_YAML_WITH_UID);
+    const { container } = await renderYamlTab();
+    await editTo(VERIFIED_APPLIED_YAML_WITH_UID.replace('image: demo:v2', 'image: demo:v3'));
 
-    const saveButton = getIconButton(container, 'Save YAML') as HTMLButtonElement | undefined;
-    expect(saveButton).toBeTruthy();
-    expect(saveButton?.disabled).toBe(false);
+    // The pod is deleted and recreated under the same name, with a new uid.
+    await pollLiveYaml(REPLACEMENT_POD_YAML);
 
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
-
-    expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalledTimes(1);
-
-    await unmount();
+    expect(codeMirrorState.value).toContain('image: demo:v3');
+    expect(container.querySelector('.yaml-drift-diff')?.textContent).toContain('pod-uid-2');
+    // backend/object_yaml_reload_merge.go refuses to merge into a replaced object.
+    expect(buttonWithText('Reload & merge')).toBeUndefined();
   });
 
   it.each(['before', 'after'] as const)(
@@ -1549,37 +966,30 @@ describe('YamlTab', () => {
       const draft = base.replace('image: demo:v1', 'image: demo:v2');
       const current = base.replace('"123"', '"456"').replace('spec:', 'spec:\n  replicas: 3');
       const merged = current.replace('image: demo:v1', 'image: demo:v2');
-      snapshotState.current = { status: 'ready', data: { yaml: base }, error: null };
-      wailsMocks.MergeObjectYamlWithLatest.mockResolvedValue({
+      serveYaml(base);
+      // backend/object_yaml_reload_merge.go MergeObjectYamlWithLatest.
+      app.backend.answer('MergeObjectYamlWithLatest', () => ({
         currentYAML: current,
         mergedYAML: merged,
         resourceVersion: '456',
-      });
-      const { container, rerender, unmount } = await renderYamlTab({ clusterId: 'Cluster-A:ctx' });
-      await act(async () => {
-        getIconButton(container, 'Edit YAML')?.click();
-      });
-      await act(async () => {
-        codeMirrorState.latestProps.current.onChange(draft);
-      });
-      snapshotState.current = {
-        status: 'ready',
-        data: { yaml: snapshotTiming === 'before' ? current : current.replace('456', '400') },
-        error: null,
-      };
-      await rerender();
-      const reloadButton = Array.from(container.querySelectorAll('button')).find((button) =>
-        button.textContent?.includes('Reload & merge')
-      );
-      expect(reloadButton).toBeTruthy();
-      await act(async () => {
-        reloadButton?.click();
-      });
-      await waitForUpdates();
+      }));
+      await renderYamlTab();
+      await editTo(draft);
+      const liveBeforeMerge = snapshotTiming === 'before' ? current : current.replace('456', '400');
+      await openObjectDiffReading(liveBeforeMerge);
+      if (snapshotTiming === 'after') {
+        // The merge's own reread brings the matching snapshot after its response.
+        serveYaml(current);
+      }
 
-      expect(wailsMocks.MergeObjectYamlWithLatest).toHaveBeenCalledTimes(1);
-      const [clusterId, request] = wailsMocks.MergeObjectYamlWithLatest.mock.calls[0];
-      expect(clusterId).toBe('Cluster-A:ctx');
+      await clickText('Reload & merge');
+
+      expect(app.backend.calls('MergeObjectYamlWithLatest')).toHaveLength(1);
+      const [clusterId, request] = requireValue(
+        app.backend.calls('MergeObjectYamlWithLatest')[0],
+        'expected the merge call'
+      );
+      expect(clusterId).toBe(dev.clusterId);
       expect(request).toMatchObject({
         apiVersion: 'example.com/v1alpha1',
         kind: 'Deployment',
@@ -1589,281 +999,115 @@ describe('YamlTab', () => {
       });
       expect(parseYaml(request.baseYAML).metadata.resourceVersion).toBe('123');
       expect(parseYaml(request.draftYAML).spec.containers[0].image).toBe('demo:v2');
-      if (snapshotTiming === 'after') {
-        snapshotState.current = { status: 'ready', data: { yaml: current }, error: null };
-        await rerender();
-        await waitForUpdates();
-      }
       expect(parseYaml(codeMirrorState.value)).toMatchObject({
         metadata: { resourceVersion: '456', uid: 'original-object' },
         spec: { replicas: 3, containers: [{ name: 'demo', image: 'demo:v2' }] },
       });
-      expect(getIconButton(container, 'Save YAML')?.disabled).toBe(false);
-      expect(wailsMocks.ApplyObjectYaml).not.toHaveBeenCalled();
-      await unmount();
+      expect(getIconButton('Save YAML')?.disabled).toBe(false);
+      expect(applyCalls()).toEqual([]);
     }
   );
 
-  it('handles search shortcuts and navigation controls', async () => {
-    const { container, unmount } = await renderYamlTab();
-    await act(async () => {
-      await Promise.resolve();
-    });
+  it('searches the YAML from the find controls', async () => {
+    const { container } = await renderYamlTab();
+    const input = requireValue(
+      container.querySelector<HTMLInputElement>('.find-input'),
+      'expected the find input'
+    );
+    const typeSearch = (value: string) =>
+      act(async () => {
+        Object.defineProperty(input, 'value', { value, configurable: true, writable: true });
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    const press = (init: KeyboardEventInit) =>
+      act(async () => {
+        input.dispatchEvent(
+          new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
+        );
+      });
+    const previousMatch = requireValue(getIconButton('Previous match'), 'previous match');
+    const nextMatch = requireValue(getIconButton('Next match'), 'next match');
+    const dispatch = vi.mocked(codeMirrorState.editorView.dispatch);
 
-    const input = container.querySelector('.find-input') as HTMLInputElement;
-    expect(input).toBeTruthy();
-
-    codeMirrorState.selectionText = 'demo';
-    codeMirrorState.editorView.state.selection = {
-      main: { from: 0, to: 4 },
-    };
-    const searchRegistration = searchShortcutMocks.useSearchShortcutTarget.mock.calls[
-      searchShortcutMocks.useSearchShortcutTarget.mock.calls.length - 1
-    ]?.[0] as { focus: () => void; isActive: boolean } | undefined;
-    expect(searchRegistration?.isActive).toBe(true);
-
-    await act(async () => {
-      searchRegistration?.focus();
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(input.value).toBe('demo');
-
-    const previousMatchButton = getIconButton(container, 'Previous match');
-    const nextMatchButton = getIconButton(container, 'Next match');
-    codeMirrorState.editorView.dispatch.mockClear();
-
-    await act(async () => {
-      Object.defineProperty(input, 'value', { value: '', configurable: true, writable: true });
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    expect(codeMirrorState.editorView.dispatch).toHaveBeenCalledWith({
-      selection: { cursor: 0 },
-    });
-    const initialNextCalls = codemirrorSearchMocks.findNext.mock.calls.length;
-    await act(async () => {
-      nextMatchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(codemirrorSearchMocks.findNext.mock.calls.length).toBe(initialNextCalls);
-
-    await act(async () => {
-      Object.defineProperty(input, 'value', { value: 'pod', configurable: true, writable: true });
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    expect(codeMirrorState.editorView.dispatch).toHaveBeenCalledWith({
-      selection: { cursor: 0 },
-    });
-    expect(codemirrorSearchMocks.setSearchQuery.of).toHaveBeenCalled();
+    // Typing searches from the top and finds the first match.
+    await typeSearch('pod');
+    expect(dispatch).toHaveBeenCalledWith({ selection: { cursor: 0 } });
+    expect(codemirrorSearchMocks.setSearchQuery.of).toHaveBeenCalledWith(
+      expect.objectContaining({ search: 'pod' })
+    );
     expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      nextMatchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    await act(async () => nextMatch.click());
     expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(2);
+    await act(async () => previousMatch.click());
+    expect(codemirrorSearchMocks.findPrevious).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      previousMatchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(codemirrorSearchMocks.findPrevious).toHaveBeenCalled();
-
-    await act(async () => {
-      Object.defineProperty(input, 'value', { value: 'pods', configurable: true, writable: true });
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    expect(
-      codeMirrorState.editorView.dispatch.mock.calls.filter(
-        ([payload]) => payload?.selection?.cursor === 0
-      )
-    ).toHaveLength(3);
+    // Enter, Shift+Enter, and the arrow keys step through matches.
+    await press({ key: 'Enter' });
     expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(3);
-
-    const enterEvent = new KeyboardEvent('keydown', {
-      key: 'Enter',
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(enterEvent, 'preventDefault', { value: vi.fn() });
-    await act(async () => {
-      input.dispatchEvent(enterEvent);
-    });
-    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(4);
-
-    const shiftEnterEvent = new KeyboardEvent('keydown', {
-      key: 'Enter',
-      shiftKey: true,
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(shiftEnterEvent, 'preventDefault', { value: vi.fn() });
-    await act(async () => {
-      input.dispatchEvent(shiftEnterEvent);
-    });
+    await press({ key: 'Enter', shiftKey: true });
     expect(codemirrorSearchMocks.findPrevious).toHaveBeenCalledTimes(2);
-
-    const downEvent = new KeyboardEvent('keydown', {
-      key: 'ArrowDown',
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(downEvent, 'preventDefault', { value: vi.fn() });
-    await act(async () => {
-      input.dispatchEvent(downEvent);
-    });
-    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(5);
-
-    const upEvent = new KeyboardEvent('keydown', {
-      key: 'ArrowUp',
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(upEvent, 'preventDefault', { value: vi.fn() });
-    await act(async () => {
-      input.dispatchEvent(upEvent);
-    });
+    await press({ key: 'ArrowDown' });
+    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(4);
+    await press({ key: 'ArrowUp' });
     expect(codemirrorSearchMocks.findPrevious).toHaveBeenCalledTimes(3);
 
-    const textButtons = Array.from(container.querySelectorAll('button')).map((button) =>
-      button.textContent?.trim()
-    );
-    expect(textButtons).not.toContain('Edit');
-    expect(textButtons).not.toContain('Cancel');
-    expect(textButtons).not.toContain('Show managedFields');
+    // Edit is offered and Save is not while reading.
+    expect(getIconButton('Show managedFields')).not.toBeNull();
+    expect(getIconButton('Edit YAML')).not.toBeNull();
+    expect(getIconButton('Save YAML')).toBeNull();
 
-    const managedFieldsButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Show managedFields"]'
-    );
-    const editButton = getIconButton(container, 'Edit YAML');
-    const saveButton = getIconButton(container, 'Save YAML');
-    const caseSensitiveButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Case-sensitive search"]'
-    );
-    const regexButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Enable regular expression search"]'
-    );
-    expect(previousMatchButton).toBeTruthy();
-    expect(nextMatchButton).toBeTruthy();
-    expect(managedFieldsButton).toBeTruthy();
-    expect(editButton).toBeTruthy();
-    expect(saveButton).toBeNull();
-    expect(caseSensitiveButton).toBeTruthy();
-    expect(regexButton).toBeTruthy();
-
-    await act(async () => {
-      previousMatchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(codemirrorSearchMocks.findPrevious).toHaveBeenCalledTimes(4);
-
-    await act(async () => {
-      nextMatchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(6);
-
-    await act(async () => {
-      caseSensitiveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    // Case sensitivity applies until a regular expression search replaces it.
+    await act(async () => requireValue(getIconButton('Case-sensitive search'), 'case').click());
     expect(codemirrorSearchMocks.setSearchQuery.of).toHaveBeenCalledWith(
-      expect.objectContaining({
-        caseSensitive: true,
-        regexp: false,
-      })
+      expect.objectContaining({ caseSensitive: true, regexp: false })
     );
-
-    await act(async () => {
-      regexButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    await act(async () =>
+      requireValue(getIconButton('Enable regular expression search'), 'regex').click()
+    );
     expect(codemirrorSearchMocks.setSearchQuery.of).toHaveBeenCalledWith(
-      expect.objectContaining({
-        caseSensitive: false,
-        regexp: true,
-      })
+      expect.objectContaining({ caseSensitive: false, regexp: true })
     );
-    expect(caseSensitiveButton?.getAttribute('aria-pressed')).toBe('false');
-    expect(caseSensitiveButton?.hasAttribute('disabled')).toBe(true);
+    const caseSensitive = requireValue(getIconButton('Case-sensitive search'), 'case');
+    expect(caseSensitive.getAttribute('aria-pressed')).toBe('false');
+    expect(caseSensitive.hasAttribute('disabled')).toBe(true);
 
-    const blurSpy = vi.spyOn(input, 'blur');
-    const escapeEvent = new KeyboardEvent('keydown', {
-      key: 'Escape',
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(escapeEvent, 'preventDefault', { value: vi.fn() });
-    await act(async () => {
-      input.dispatchEvent(escapeEvent);
-    });
+    // Escape returns to the editor; Ctrl+A selects the search text.
+    input.focus();
+    await press({ key: 'Escape' });
     expect(codeMirrorState.editorView.focus).toHaveBeenCalled();
-    expect(blurSpy).toHaveBeenCalled();
+    expect(document.activeElement).not.toBe(input);
+    const select = vi.spyOn(input, 'select');
+    await press({ key: 'a', ctrlKey: true });
+    expect(select).toHaveBeenCalled();
 
-    const selectSpy = vi.fn();
-    input.select = () => selectSpy();
-    const selectEvent = new KeyboardEvent('keydown', {
-      key: 'a',
-      metaKey: false,
-      ctrlKey: true,
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(selectEvent, 'preventDefault', { value: vi.fn() });
-    await act(async () => {
-      input.dispatchEvent(selectEvent);
-    });
-    expect(selectSpy).toHaveBeenCalled();
-
-    await unmount();
+    // A cleared search finds nothing.
+    await typeSearch('');
+    await act(async () => nextMatch.click());
+    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(4);
   });
 
-  it('stops save when client-side validation fails', async () => {
-    const { container, unmount } = await renderYamlTab();
+  it('refuses to save an empty draft', async () => {
+    const { container } = await renderYamlTab();
+    await editTo('');
 
-    const editButton = getIconButton(container, 'Edit YAML');
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange('');
-    });
-
-    const saveButton = getIconButton(container, 'Save YAML');
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    await save();
 
     expect(container.textContent).toContain('YAML content is required.');
-    await unmount();
+    expect(applyCalls()).toEqual([]);
   });
 
-  it('allows saving without metadata.resourceVersion like kubectl edit', async () => {
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(
-      UPDATED_YAML.replace('resourceVersion: "123"\n', '')
-    );
+  it('saves an object without metadata.resourceVersion like kubectl edit', async () => {
+    serveYaml(YAML.replace('  resourceVersion: "123"\n', ''));
+    answerApply('789');
+    answerLiveYaml(UPDATED_YAML.replace('resourceVersion: "123"\n', ''));
+    await renderYamlTab();
+    await clickButton('Edit YAML');
 
-    snapshotState.current = {
-      status: 'ready',
-      data: {
-        yaml: YAML.replace('  resourceVersion: "123"\n', ''),
-      },
-      error: null,
-    };
+    await save();
 
-    const { container, unmount } = await renderYamlTab();
-
-    const editButton = getIconButton(container, 'Edit YAML');
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    const saveButton = getIconButton(container, 'Save YAML');
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
-
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[0]).toBe('alpha:ctx');
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]).toEqual(
+    expect(applyCalls()[0]?.[0]).toBe(dev.clusterId);
+    const request = requireValue(applyCalls()[0]?.[1], 'expected the apply request');
+    expect(request).toEqual(
       expect.objectContaining({
         apiVersion: 'v1',
         kind: 'Pod',
@@ -1873,87 +1117,63 @@ describe('YamlTab', () => {
         resourceVersion: '',
       })
     );
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).not.toContain(
-      'resourceVersion'
-    );
-    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).not.toContain('resourceVersion');
-    await unmount();
+    expect(request.baseYAML).not.toContain('resourceVersion');
+    expect(request.yaml).not.toContain('resourceVersion');
   });
 
-  it('surfaces backend validation errors with their causes and blocks resaving', async () => {
-    wailsMocks.ApplyObjectYaml.mockRejectedValue(
-      rejectedWithStatus({
+  it('shows backend validation errors with their causes and blocks resaving', async () => {
+    app.backend.answer('ApplyObjectYaml', () => {
+      throw rejectedWithStatus({
         reason: 'Invalid',
         category: 'VALIDATION',
         message: 'Invalid YAML payload',
         details: { causes: ['disallowed field'] },
-      })
-    );
+      });
+    });
+    const { container } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
 
-    const { container, unmount } = await renderYamlTab();
-
-    await act(async () => {
-      getIconButton(container, 'Edit YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-    await act(async () => {
-      getIconButton(container, 'Save YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await waitForUpdates();
+    await save();
 
     expect(container.textContent).toContain('Invalid YAML payload');
     expect(container.textContent).toContain('disallowed field');
-    expect((getIconButton(container, 'Save YAML') as HTMLButtonElement | undefined)?.disabled).toBe(
-      true
-    );
-    await unmount();
+    expect(getIconButton('Save YAML')?.disabled).toBe(true);
+    expect(takeReports('saveObjectYAML')).toEqual([['inline']]);
   });
 
-  it('keeps the draft and editing state when the object was replaced during the edit', async () => {
+  it('keeps the draft and shows the replacement, without a merge, when the save finds the object replaced', async () => {
+    // backend/object_yaml_mutation.go checks the uid the editor tracked, and
+    // returns the live object's YAML without its uid (sanitizeForUpdate).
     const yamlConflict = {
       code: 'ObjectUIDMismatch',
-      message: 'object identity changed since editing began: current uid is replacement-uid',
+      message: 'object identity changed since editing began: current uid is pod-uid-2',
       causes: ['uid changed'],
       currentYaml: LATER_MUTATED_YAML,
-      currentResourceVersion: '999',
+      currentResourceVersion: '790',
     };
-    wailsMocks.CheckObjectYamlOwnership.mockResolvedValue({ conflicts: [], yamlConflict });
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '', yamlConflict });
+    app.backend.answer('CheckObjectYamlOwnership', () => ({ conflicts: [], yamlConflict }));
+    app.backend.answer('ApplyObjectYaml', () => ({ resourceVersion: '', yamlConflict }));
+    serveYaml(VERIFIED_APPLIED_YAML_WITH_UID);
+    const { container } = await renderYamlTab();
+    const draft = VERIFIED_APPLIED_YAML_WITH_UID.replace('image: demo:v2', 'image: demo:v3');
+    await editTo(draft);
 
-    const { container, unmount } = await renderYamlTab();
-    await act(async () => {
-      getIconButton(container, 'Edit YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-    await act(async () => {
-      getIconButton(container, 'Save YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await waitForUpdates();
+    await save();
 
-    expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalledTimes(1);
+    expect(applyCalls()).toHaveLength(1);
     expect(container.textContent).toContain('object identity changed since editing began');
     expect(container.textContent).toContain('uid changed');
-    expect(getIconButton(container, 'Save YAML')).toBeTruthy();
-    expect(codeMirrorState.value).toBe(UPDATED_YAML);
-    expect(wailsMocks.GetObjectYAMLByGVK).not.toHaveBeenCalled();
-    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
-    await unmount();
+    expect(getIconButton('Save YAML')).not.toBeNull();
+    expect(codeMirrorState.value).toBe(draft);
+    expect(app.backend.calls('GetObjectYAMLByGVK')).toEqual([]);
+    expect(container.querySelector('.yaml-drift-diff')?.textContent).toContain(
+      'restartPolicy: Always'
+    );
+    expect(buttonWithText('Reload & merge')).toBeUndefined();
   });
 
   it('shows a reload-merge conflict with the live YAML without reporting an error', async () => {
-    wailsMocks.MergeObjectYamlWithLatest.mockResolvedValue({
+    app.backend.answer('MergeObjectYamlWithLatest', () => ({
       currentYAML: '',
       mergedYAML: '',
       resourceVersion: '',
@@ -1964,60 +1184,32 @@ describe('YamlTab', () => {
         currentYaml: LATER_MUTATED_YAML,
         currentResourceVersion: '999',
       },
-    });
+    }));
+    const { container } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
+    await openObjectDiffReading(LATER_MUTATED_YAML);
 
-    const { container, rerender, unmount } = await renderYamlTab();
-    await act(async () => {
-      getIconButton(container, 'Edit YAML')?.click();
-    });
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-    snapshotState.current = { status: 'ready', data: { yaml: LATER_MUTATED_YAML }, error: null };
-    await rerender();
-    const reloadButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Reload & merge')
-    );
-    await act(async () => {
-      reloadButton?.click();
-    });
-    await waitForUpdates();
+    await clickText('Reload & merge');
 
     expect(container.textContent).toContain('conflicting live changes');
     expect(container.textContent).toContain('spec.containers');
-    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
-    await unmount();
   });
 
   it('shows a failed reload-merge in the editor and reports it without a toast', async () => {
-    wailsMocks.MergeObjectYamlWithLatest.mockRejectedValue(new Error('merge backend unavailable'));
+    app.backend.answer('MergeObjectYamlWithLatest', () => {
+      throw new Error('merge backend unavailable');
+    });
+    const { container } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
+    await openObjectDiffReading(LATER_MUTATED_YAML);
 
-    const { container, rerender, unmount } = await renderYamlTab();
-    await act(async () => {
-      getIconButton(container, 'Edit YAML')?.click();
-    });
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-    snapshotState.current = { status: 'ready', data: { yaml: LATER_MUTATED_YAML }, error: null };
-    await rerender();
-    const reloadButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Reload & merge')
-    );
-    await act(async () => {
-      reloadButton?.click();
-    });
-    await waitForUpdates();
+    await clickText('Reload & merge');
 
     expect(container.textContent).toContain('merge backend unavailable');
-    expect(errorHandlerMock.handleInline).toHaveBeenCalledWith(expect.any(Error), {
-      action: 'reloadAndMerge',
-    });
-    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
-    await unmount();
+    expect(takeReports('reloadAndMerge')).toEqual([['inline']]);
   });
 
-  it('reports a rejected ownership check without a toast and leaves the save result to Apply', async () => {
+  it('reports a denied ownership check without a toast and leaves the outcome to Apply', async () => {
     const forbidden = () =>
       rejectedWithStatus({
         reason: 'Forbidden',
@@ -2025,160 +1217,90 @@ describe('YamlTab', () => {
         code: 403,
         message: 'patch denied',
       });
-    wailsMocks.CheckObjectYamlOwnership.mockRejectedValue(forbidden());
-    wailsMocks.ApplyObjectYaml.mockRejectedValue(forbidden());
+    app.backend.answer('CheckObjectYamlOwnership', () => {
+      throw forbidden();
+    });
+    app.backend.answer('ApplyObjectYaml', () => {
+      throw forbidden();
+    });
+    const { container } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
 
-    const { container, unmount } = await renderYamlTab();
-    await act(async () => {
-      getIconButton(container, 'Edit YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-    await act(async () => {
-      getIconButton(container, 'Save YAML')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-    });
-    await waitForUpdates();
+    await save();
 
-    expect(errorHandlerMock.handleOperational).toHaveBeenCalledWith(
-      expect.any(Error),
-      expect.objectContaining({ action: 'checkYamlOwnership' })
-    );
-    expect(errorHandlerMock.handleInline).toHaveBeenCalledTimes(1);
-    expect(errorHandlerMock.handleInline).toHaveBeenCalledWith(expect.any(Error), {
-      action: 'saveObjectYAML',
-    });
-    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
-    await unmount();
+    expect(container.textContent).toContain('patch denied');
+    expect(takeReports('checkYamlOwnership')).toEqual([['operational']]);
+    expect(takeReports('saveObjectYAML')).toEqual([['inline']]);
   });
 
-  it('shows generic error when apply fails without parser details', async () => {
-    wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('network down'));
-
-    const { container, unmount } = await renderYamlTab();
-
-    const editButton = getIconButton(container, 'Edit YAML');
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  it('shows the apply failure in the editor and reports it without a toast', async () => {
+    app.backend.answer('ApplyObjectYaml', () => {
+      throw new Error('network down');
     });
+    const { container } = await renderYamlTab();
+    await editTo(UPDATED_YAML);
 
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-
-    const saveButton = getIconButton(container, 'Save YAML');
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
+    await save();
 
     expect(container.textContent).toContain('network down');
-    // The editor shows the failure; it is reported without a toast.
-    expect(errorHandlerMock.handleInline).toHaveBeenCalledWith(expect.any(Error), {
-      action: 'saveObjectYAML',
-    });
-    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
-
-    await unmount();
+    expect(takeReports('saveObjectYAML')).toEqual([['inline']]);
   });
 
-  it('evaluates managed fields and save shortcuts across editing states', async () => {
-    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '456' });
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(UPDATED_YAML);
-
-    const { container, unmount } = await renderYamlTab();
-
-    const managedShortcut = shortcutMocks.useShortcut.mock.calls.find(
-      ([config]) => (config as { key: string }).key === 'm'
-    )?.[0] as { handler: () => boolean } | undefined;
-    let toggleResult = false;
+  it('shows loading, failure, empty, and large-manifest states', async () => {
+    const otherPod = (name: string) =>
+      requireValue(app.object(dev, { ...pod, name }).scopes.detailScope, 'expected a scope');
+    const loadingScope = otherPod('loading');
+    const failedScope = otherPod('failed');
+    const emptyScope = otherPod('empty');
+    const largeScope = otherPod('large');
+    const parked: Array<() => void> = [];
+    app.snapshots.respond(({ domain, scope: readScope }: SnapshotRequest) =>
+      domain === 'object-yaml' && readScope === loadingScope
+        ? new Promise<Response>((resolve) => {
+            parked.push(() =>
+              resolve(
+                snapshotResponse({
+                  domain,
+                  scope: readScope,
+                  version: 1,
+                  payload: { clusterId: dev.clusterId, clusterName: dev.clusterName, yaml: YAML },
+                })
+              )
+            );
+          })
+        : undefined
+    );
+    app.snapshots.fail('object-yaml', failedScope, makeErrorStatus('InternalError', 'boom'));
+    for (const [readScope, yaml] of [
+      [emptyScope, ''],
+      [largeScope, `kind: Pod\nmetadata:\n  name: demo\n${'a'.repeat(160000)}`],
+    ] as const) {
+      app.snapshots.serve('object-yaml', readScope, {
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        yaml,
+      });
+    }
+    const { container } = await renderYamlTab({ scope: loadingScope });
+    expect(container.textContent).toContain('Loading YAML');
     await act(async () => {
-      toggleResult = managedShortcut?.handler() ?? false;
-    });
-    expect(toggleResult).toBe(true);
-
-    const saveShortcut = shortcutMocks.useShortcut.mock.calls.find(([config]) => {
-      const entry = config as { key: string; modifiers?: { meta?: boolean } };
-      return entry.key === 's' && entry.modifiers?.meta;
-    })?.[0] as { handler: () => boolean } | undefined;
-    let saveResult = true;
-    await act(async () => {
-      saveResult = saveShortcut?.handler() ?? true;
-    });
-    expect(saveResult).toBe(false);
-
-    const editButton = getIconButton(container, 'Edit YAML');
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    await waitForUpdates();
-
-    const updatedManagedShortcut = shortcutMocks.useShortcut.mock.calls
-      .filter(([config]) => (config as { key: string }).key === 'm')
-      .pop()?.[0] as { handler: () => boolean } | undefined;
-    await act(async () => {
-      toggleResult = updatedManagedShortcut?.handler() ?? true;
-    });
-    expect(toggleResult).toBe(false);
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+      parked.splice(0).forEach((answer) => {
+        answer();
+      });
     });
 
-    const updatedSaveShortcut = shortcutMocks.useShortcut.mock.calls
-      .filter(([config]) => {
-        const entry = config as { key: string; modifiers?: { meta?: boolean } };
-        return entry.key === 's' && entry.modifiers?.meta;
-      })
-      .pop()?.[0] as { handler: () => boolean } | undefined;
+    await view.show(tab({ scope: failedScope }));
+    expect(container.textContent).toContain('Error loading YAML: boom');
+    expect(
+      app.errors
+        .take((record) => record.context?.domain === 'object-yaml')
+        .map(({ context }) => context?.scope)
+    ).toEqual([failedScope]);
 
-    saveResult = false;
-    await act(async () => {
-      saveResult = updatedSaveShortcut?.handler() ?? false;
-      await Promise.resolve();
-    });
-    expect(saveResult).toBe(true);
-    expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalled();
+    await view.show(tab({ scope: emptyScope }));
+    expect(container.textContent).toContain('No YAML content available');
 
-    await unmount();
-  });
-
-  it('ignores search shortcut when tab inactive', async () => {
-    const { unmount } = await renderYamlTab({ isActive: false });
-
-    const registration = searchShortcutMocks.useSearchShortcutTarget.mock.calls[
-      searchShortcutMocks.useSearchShortcutTarget.mock.calls.length - 1
-    ]?.[0] as { isActive: boolean } | undefined;
-    expect(registration?.isActive).toBe(false);
-
-    await unmount();
-  });
-
-  it('renders loading, error, and empty states appropriately', async () => {
-    snapshotState.current = { status: 'loading', data: { yaml: null }, error: null };
-    let render = await renderYamlTab();
-    expect(render.container.textContent).toContain('Loading YAML');
-    await render.unmount();
-
-    snapshotState.current = { status: 'error', data: { yaml: YAML }, error: localFailure('boom') };
-    render = await renderYamlTab();
-    expect(render.container.textContent).toContain('Error loading YAML: boom');
-    await render.unmount();
-
-    snapshotState.current = { status: 'ready', data: { yaml: '' }, error: null };
-    render = await renderYamlTab();
-    expect(render.container.textContent).toContain('No YAML content available');
-    await render.unmount();
-
-    const largeYaml = `kind: Pod\nmetadata:\n  name: demo\n${'a'.repeat(160000)}`;
-    snapshotState.current = { status: 'ready', data: { yaml: largeYaml }, error: null };
-    render = await renderYamlTab();
-    expect(render.container.textContent).toContain('Large manifest detected');
-    await render.unmount();
+    await view.show(tab({ scope: largeScope }));
+    expect(container.textContent).toContain('Large manifest detected');
   });
 });

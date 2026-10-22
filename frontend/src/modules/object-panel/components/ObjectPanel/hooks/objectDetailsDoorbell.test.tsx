@@ -1,161 +1,115 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/objectDetailsDoorbell.test.tsx
  *
- * The Details tab's change signal, through the real panel hook, orchestrator,
- * store, and stream manager. Only snapshot reads and the named-stream sockets
- * are faked (test-utils/refreshHarness).
+ * The Details tab's change signal, through the real panel hook, providers,
+ * orchestrator, store, and stream manager. Only the refresh HTTP API and the
+ * named-stream sockets are faked (test-utils/appState).
  */
 
 import { act, type ReactNode } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const { fetchSnapshotMock } = vi.hoisted(() => ({ fetchSnapshotMock: vi.fn() }));
-
-vi.mock('@/core/refresh/client', () => ({
-  fetchSnapshot: (...args: unknown[]) => fetchSnapshotMock(...args),
-  setMetricsActive: () => Promise.resolve(),
-}));
-
-vi.mock('@/core/logging/appLogsClient', () => ({
-  APP_LOG_SOURCES: new Proxy({}, { get: (_target, key) => String(key) }),
-  logAppLogsDebug: () => undefined,
-  logAppLogsInfo: () => undefined,
-  logAppLogsWarn: () => undefined,
-  logAppLogsError: () => undefined,
-}));
-
-import type { RefreshDomain } from '@/core/refresh/types';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  resetAppPreferencesCacheForTesting,
-  setAppPreferencesForTesting,
-} from '@/core/settings/appPreferences';
-import {
-  acknowledgeStream,
-  activeStreamSubscriptions,
-  flushRefreshWork,
-  installFakeStreamSockets,
-  markClusterReady,
-  resetRefreshHarness,
-  ringStream,
+  installAppStateHarness,
+  type MountedApp,
   setAutoRefresh,
-  streamKey,
-} from '@/test-utils/refreshHarness';
-import { testScope } from '@/test-utils/refreshScope';
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { type SnapshotRequest, snapshotResponse, streamKey } from '@/test-utils/appState/transport';
 import { useObjectPanelRefresh } from './useObjectPanelRefresh';
 
-const CLUSTER = 'details-doorbell';
-const scope = testScope(CLUSTER, 'team-a:apps/v1:Deployment:api');
-const otherScope = testScope(CLUSTER, 'team-a:apps/v1:Deployment:worker');
+const app = installAppStateHarness({ streams: 'manual' });
 
 let snapshotVersion = 0;
-const answerReads = () => {
-  fetchSnapshotMock.mockImplementation(
-    async (domain: RefreshDomain, options: { scope: string }) => {
-      snapshotVersion += 1;
-      return {
-        notModified: false,
-        etag: `v${snapshotVersion}`,
-        snapshot: {
-          domain,
-          scope: options.scope,
-          version: snapshotVersion,
-          checksum: `c${snapshotVersion}`,
-          generatedAt: Date.now(),
-          sequence: snapshotVersion,
-          payload: { kind: 'Deployment', details: { replicas: snapshotVersion } },
-          stats: { itemCount: 1, buildDurationMs: 0 },
-        },
-      };
+const answerDetailReads = () => {
+  app.snapshots.respond(({ domain, scope }: SnapshotRequest) => {
+    if (domain !== 'object-details') {
+      return undefined;
     }
-  );
+    snapshotVersion += 1;
+    return snapshotResponse({
+      domain,
+      scope,
+      version: snapshotVersion,
+      payload: { kind: 'Deployment', details: { replicas: snapshotVersion } },
+    });
+  });
 };
 
-const detailReads = (detailScope: string = scope): number =>
-  fetchSnapshotMock.mock.calls.filter(
-    ([domain, options]) =>
-      domain === 'object-details' && (options as { scope: string }).scope === detailScope
-  ).length;
+const detailReads = (detailScope: string): number =>
+  app.snapshots.reads('object-details').filter((read) => read.scope === detailScope).length;
 
 const settle = async () => {
-  await act(async () => {
-    await flushRefreshWork();
-    await vi.advanceTimersByTimeAsync(0);
-    await flushRefreshWork();
-  });
+  await app.settle();
 };
 
 const advance = async (ms: number) => {
   await act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
-    await flushRefreshWork();
   });
+  await app.settle();
 };
 
 // isOpen is false for a panel behind another tab of its dock group.
 const DetailsHarness = ({
-  detailScope = scope,
+  detailScope,
   isOpen = true,
 }: {
-  detailScope?: string;
+  detailScope: string;
   isOpen?: boolean;
 }) => {
   useObjectPanelRefresh({ detailScope, isOpen, resourceDeleted: false });
   return null;
 };
 
+const deploymentScope = (cluster: TestCluster, name: string): string =>
+  app.object(cluster, {
+    group: 'apps',
+    version: 'v1',
+    kind: 'Deployment',
+    namespace: 'team-a',
+    name,
+  }).scopes.detailScope ?? '';
+
 describe('object-details change signal', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let view: MountedApp;
+  let scope: string;
+  let otherScope: string;
 
-  beforeAll(() => {
-    installFakeStreamSockets();
-  });
-
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
-    resetAppPreferencesCacheForTesting();
-    setAppPreferencesForTesting({ autoRefreshEnabled: true });
     setAutoRefresh(true);
-    fetchSnapshotMock.mockReset();
-    answerReads();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+    answerDetailReads();
+    const dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['team-a']);
+    scope = deploymentScope(dev, 'api');
+    otherScope = deploymentScope(dev, 'worker');
+    view = await app.render(null);
   });
 
-  afterEach(async () => {
-    act(() => root.unmount());
-    container.remove();
-    resetRefreshHarness();
-    await vi.runOnlyPendingTimersAsync();
+  afterEach(() => {
     vi.useRealTimers();
   });
 
   const renderPanels = async (panels: ReactNode) => {
-    await act(async () => {
-      root.render(panels);
-    });
+    await view.show(panels);
   };
 
   it('refetches an open panel’s details when its object rings, without waiting for a poll', async () => {
-    markClusterReady(CLUSTER);
-    await renderPanels(<DetailsHarness />);
+    await renderPanels(<DetailsHarness detailScope={scope} />);
     await settle();
-    expect(activeStreamSubscriptions()).toContain(streamKey('object-details', scope));
-    acknowledgeStream('object-details', scope);
+    expect(app.streams.active()).toContain(streamKey('object-details', scope));
+    app.streams.acknowledge('object-details', scope);
     await settle();
-    const readsBeforeSignal = detailReads();
+    const readsBeforeSignal = detailReads(scope);
 
-    ringStream('object-details', scope, 'object', '42');
+    app.streams.ring('object-details', scope, 'object', '42');
     await advance(500);
 
     // The next poll is 10 s out; this read is the signal's.
-    expect(detailReads()).toBe(readsBeforeSignal + 1);
+    expect(detailReads(scope)).toBe(readsBeforeSignal + 1);
   });
 
   it('refreshes each open panel on its own signal and every 10 s, and keeps the other after one closes', async () => {
-    markClusterReady(CLUSTER);
     await renderPanels(
       <>
         <DetailsHarness detailScope={scope} />
@@ -163,18 +117,18 @@ describe('object-details change signal', () => {
       </>
     );
     await settle();
-    acknowledgeStream('object-details', scope);
-    acknowledgeStream('object-details', otherScope);
+    app.streams.acknowledge('object-details', scope);
+    app.streams.acknowledge('object-details', otherScope);
     await settle();
     const before = { first: detailReads(scope), other: detailReads(otherScope) };
 
-    ringStream('object-details', scope, 'object', '7');
+    app.streams.ring('object-details', scope, 'object', '7');
     await advance(500);
     expect(detailReads(scope)).toBe(before.first + 1);
     expect(detailReads(otherScope)).toBe(before.other);
 
     // A healthy stream does not stop the 10 s backstop, and nothing polls sooner.
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(9_000);
     expect(detailReads(scope)).toBe(0);
     expect(detailReads(otherScope)).toBe(0);
@@ -183,19 +137,18 @@ describe('object-details change signal', () => {
     expect(detailReads(otherScope)).toBe(1);
 
     await renderPanels(<DetailsHarness detailScope={otherScope} />);
-    fetchSnapshotMock.mockClear();
+    app.snapshots.clearReads();
     await advance(10_500);
     expect(detailReads(scope)).toBe(0);
     expect(detailReads(otherScope)).toBe(1);
   });
 
   it('polls nothing for a panel hidden behind another dock tab', async () => {
-    markClusterReady(CLUSTER);
-    await renderPanels(<DetailsHarness isOpen={false} />);
+    await renderPanels(<DetailsHarness detailScope={scope} isOpen={false} />);
     await settle();
     await advance(30_000);
 
     expect(detailReads(scope)).toBe(0);
-    expect(activeStreamSubscriptions()).not.toContain(streamKey('object-details', scope));
+    expect(app.streams.active()).not.toContain(streamKey('object-details', scope));
   });
 });

@@ -1,60 +1,64 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.test.tsx
+ *
+ * The Node Logs tab: source selection, reads and incremental refreshes of the
+ * node's logs, filtering and formats, the log buffer, copy/save, and keyboard
+ * shortcuts. Runs inside the real app shell (keyboard, zoom, preferences,
+ * data-access broker) over a faked backend (test-utils/appState); node logs
+ * reach it only through the FetchNodeLogs RPC.
+ */
+
 import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
-import { KeyboardProvider, useKeyboardSurface } from '@ui/shortcuts';
+import { useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { Clipboard } from '@wailsio/runtime';
-import { act, useRef } from 'react';
-import * as ReactDOM from 'react-dom/client';
+import { act, type ReactNode, useRef } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
-  resetAppPreferencesCacheForTesting,
-  setAppPreferencesForTesting,
+  setAutoRefreshEnabled,
+  setObjPanelLogsBufferMaxSize,
 } from '@/core/settings/appPreferences';
-import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
+import { objectPanelId } from '@/modules/object-panel/objectPanelRef';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import type { BackendArgs, BackendResult } from '@/test-utils/appState/transport';
 import { requireValue } from '@/test-utils/requireValue';
 import { useKeyboardContext } from '@/ui/shortcuts/context';
-import { resetLogViewerPrefsCacheForTesting } from '../Logs/logViewerPrefsCache';
 import NodeLogsTab from './NodeLogsTab';
-import type { fetchNodeLogs, NodeLogFetchResult } from './nodeLogsApi';
+import type { NodeLogSource } from './nodeLogsApi';
 
-const mockFetchNodeLogs = vi.fn<typeof fetchNodeLogs>();
-const handleInlineMock = vi.hoisted(() => vi.fn());
+type NodeLogResponse = BackendResult<'FetchNodeLogs'>;
+type NodeLogRequest = BackendArgs<'FetchNodeLogs'>[1];
 
-vi.mock('./nodeLogsApi', () => ({
-  fetchNodeLogs: (...args: Parameters<typeof fetchNodeLogs>) => mockFetchNodeLogs(...args),
-}));
+const app = installAppStateHarness();
 
-const reportOperationalErrorMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: {
-    handleInline: (...args: unknown[]) => handleInlineMock(...args),
-  },
-  reportOperationalError: (...args: unknown[]) => reportOperationalErrorMock(...args),
-}));
-
-vi.mock('@core/contexts/ZoomContext', () => ({
-  useZoom: () => ({ zoomLevel: 100 }),
-}));
+/** The last item, or undefined for an empty list. */
+const last = <T,>(items: readonly T[]): T | undefined => items[items.length - 1];
 
 describe('NodeLogsTab', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let dev: TestCluster;
+  let view: MountedApp;
 
-  const sources = [
+  const sources: NodeLogSource[] = [
     {
       id: 'journal/kubelet',
       label: 'journal / kubelet',
-      kind: 'journal' as const,
+      kind: 'journal',
       path: 'journal/kubelet',
     },
     {
       id: 'journal/containerd',
       label: 'journal / containerd',
-      kind: 'journal' as const,
+      kind: 'journal',
       path: 'journal/containerd',
     },
   ];
+  const nodeIdentity = { group: '', version: 'v1', kind: 'Node', namespace: '', name: 'node-a' };
+  const nodeRef = () => ({ clusterId: dev.clusterId, ...nodeIdentity });
 
   beforeAll(() => {
     if (!Element.prototype.scrollIntoView) {
@@ -63,57 +67,89 @@ describe('NodeLogsTab', () => {
   });
 
   beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    mockFetchNodeLogs.mockReset();
-    handleInlineMock.mockReset();
-    handleInlineMock.mockImplementation((error: unknown) => ({
-      message: error instanceof Error ? error.message : String(error),
-    }));
-    resetLogViewerPrefsCacheForTesting();
-    resetAppPreferencesCacheForTesting();
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default']);
     vi.mocked(Clipboard.SetText).mockReset().mockResolvedValue(undefined);
+    // Mirrors backend/preferences_settings.go UpdateAppPreferences.
+    app.backend.answer('UpdateAppPreferences', (request) => ({
+      settings: null,
+      changedKeys: (request.changes ?? []).map((change) => change.key),
+    }));
   });
 
   afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+    vi.useRealTimers();
   });
 
-  const renderTab = async (
-    props?: Partial<React.ComponentProps<typeof NodeLogsTab>>
-  ): Promise<void> => {
-    await act(async () => {
-      root.render(
-        <PanelLayoutTestProvider>
-          <KeyboardProvider>
-            <AppRegionNavigation />
-            <main data-app-region="content">
-              <NodeLogsTab
-                panelId="panel-1"
-                nodeName="node-a"
-                clusterId="alpha:ctx"
-                isActive
-                availability={{ allowed: true, pending: false }}
-                sources={sources}
-                {...props}
-              />
-            </main>
-          </KeyboardProvider>
-        </PanelLayoutTestProvider>
-      );
-      await Promise.resolve();
-      await Promise.resolve();
+  const container = () => view.container;
+
+  const sourceFor = (path: string) =>
+    sources.find((source) => source.path === path) ?? (sources[0] as NodeLogSource);
+
+  /**
+   * Mirrors backend/node_logs.go FetchNodeLogs: the requested source's content.
+   * Successive reads take successive answers; the last one repeats. An Error
+   * answer fails that read.
+   */
+  const answerNodeLogs = (
+    ...answers: Array<string | Error | ((request: NodeLogRequest) => Partial<NodeLogResponse>)>
+  ) => {
+    let read = 0;
+    app.backend.answer('FetchNodeLogs', (_target, request) => {
+      const answer = answers[Math.min(read, answers.length - 1)];
+      read += 1;
+      if (answer instanceof Error) {
+        throw answer;
+      }
+      const response = typeof answer === 'function' ? answer(request) : { content: answer };
+      return {
+        source: sourceFor(request.sourcePath),
+        sourcePath: request.sourcePath,
+        ...response,
+      };
     });
+  };
+
+  const nodeLogReads = () => app.backend.calls('FetchNodeLogs');
+
+  const tab = (props: Partial<React.ComponentProps<typeof NodeLogsTab>> = {}) => (
+    <NodeLogsTab
+      panelId={objectPanelId(app.object(dev, nodeIdentity).ref)}
+      nodeName="node-a"
+      clusterId={dev.clusterId}
+      isActive
+      availability={{ allowed: true, pending: false }}
+      sources={sources}
+      {...props}
+    />
+  );
+
+  // The tab sits in the object panel, inside the app's content region.
+  const showInApp = async (ui: ReactNode) => {
+    view = await app.render(null);
+    await view.show(
+      <>
+        <AppRegionNavigation />
+        <main data-app-region="content">{ui}</main>
+      </>
+    );
+  };
+
+  const renderTab = async (props?: Partial<React.ComponentProps<typeof NodeLogsTab>>) => {
+    await showInApp(tab(props));
+  };
+
+  const advance = async (ms: number) => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+    await app.settle();
   };
 
   // Opens the search row (filter box and search options) unless it is already open.
   const openSearch = async (): Promise<void> => {
     const button = requireValue(
-      container.querySelector<HTMLButtonElement>('button[aria-label="Search logs"]'),
+      container().querySelector<HTMLButtonElement>('button[aria-label="Search logs"]'),
       'expected the search button'
     );
     if (button.getAttribute('aria-expanded') === 'true') {
@@ -127,18 +163,15 @@ describe('NodeLogsTab', () => {
 
   const setFilterValue = async (value: string): Promise<void> => {
     await openSearch();
-    const filterInput = container.querySelector<HTMLInputElement>(
-      'input[aria-label="Filter node logs"]'
+    const filterInput = requireValue(
+      container().querySelector<HTMLInputElement>('input[aria-label="Filter node logs"]'),
+      'expected the filter box'
     );
     await act(async () => {
       const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
       setValue?.call(filterInput, value);
-      requireValue(filterInput, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new Event('change', { bubbles: true })
-      );
-      requireValue(filterInput, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new Event('input', { bubbles: true })
-      );
+      filterInput.dispatchEvent(new Event('change', { bubbles: true }));
+      filterInput.dispatchEvent(new Event('input', { bubbles: true }));
       await Promise.resolve();
     });
   };
@@ -147,7 +180,7 @@ describe('NodeLogsTab', () => {
   const chooseFilterMode = async (label: 'All' | 'Filtered' | 'Invert'): Promise<void> => {
     for (let step = 0; step < 3; step += 1) {
       const button = requireValue(
-        container.querySelector<HTMLButtonElement>('button[aria-label^="Filter mode:"]'),
+        container().querySelector<HTMLButtonElement>('button[aria-label^="Filter mode:"]'),
         'expected the filter mode button'
       );
       if (button.getAttribute('aria-label') === `Filter mode: ${label}`) {
@@ -171,7 +204,7 @@ describe('NodeLogsTab', () => {
   const showLogFormat = async (label: 'Pretty' | 'Table'): Promise<void> => {
     for (let step = 0; step < 3; step += 1) {
       const button = requireValue(
-        container.querySelector<HTMLButtonElement>('button[aria-label^="Log format:"]'),
+        container().querySelector<HTMLButtonElement>('button[aria-label^="Log format:"]'),
         'expected the format button'
       );
       if (button.getAttribute('aria-label') === `Log format: ${label}`) {
@@ -186,26 +219,33 @@ describe('NodeLogsTab', () => {
     throw new Error(`format ${label} was not reached`);
   };
 
-  const selectSource = async (label: string): Promise<void> => {
-    const trigger = container.querySelector('button[aria-label="Node log source"]');
+  const openSourcePicker = async (): Promise<void> => {
     await act(async () => {
-      requireValue(trigger, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
+      requireValue(
+        container().querySelector('button[aria-label="Node log source"]'),
+        'expected the source picker'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
+  };
 
+  const selectSource = async (label: string): Promise<void> => {
+    await openSourcePicker();
     const option = Array.from(document.body.querySelectorAll<HTMLElement>('.dropdown-option')).find(
       (node) => node.textContent?.includes(label)
     );
     await act(async () => {
-      requireValue(option, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+      requireValue(option, `expected the ${label} source`).dispatchEvent(
         new MouseEvent('click', { bubbles: true })
       );
       await Promise.resolve();
-      await Promise.resolve();
     });
+    await app.settle();
   };
+
+  const logText = () => container().querySelector('.logs-viewer-text')?.textContent;
+  const logLines = () =>
+    Array.from(container().querySelectorAll('.log-viewer-line'), (element) => element.textContent);
 
   const waitForAnimationFrames = async (count: number): Promise<void> => {
     await act(async () => {
@@ -215,43 +255,58 @@ describe('NodeLogsTab', () => {
     });
   };
 
-  it('shows a selection prompt instead of auto-loading the first source', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'line one\nline two',
-      },
+  /** Lays every element out as 500px of content in a 100px viewport. */
+  const withTallContent = async (run: () => Promise<void>) => {
+    const originals = ['scrollHeight', 'clientHeight'].map(
+      (property) =>
+        [property, Object.getOwnPropertyDescriptor(HTMLElement.prototype, property)] as const
+    );
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get: () => 500,
     });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get: () => 100,
+    });
+    try {
+      await run();
+    } finally {
+      for (const [property, original] of originals) {
+        if (original) {
+          Object.defineProperty(HTMLElement.prototype, property, original);
+        } else {
+          Reflect.deleteProperty(HTMLElement.prototype, property);
+        }
+      }
+    }
+  };
+
+  it('shows a selection prompt instead of auto-loading the first source', async () => {
+    answerNodeLogs('line one\nline two');
 
     await renderTab();
 
-    expect(mockFetchNodeLogs).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('Select a log source to view logs.');
+    expect(nodeLogReads()).toEqual([]);
+    expect(container().textContent).toContain('Select a log source to view logs.');
     expect(
-      container.querySelector('button[aria-label="Node log source"] .dropdown-value')?.textContent
+      container().querySelector('button[aria-label="Node log source"] .dropdown-value')?.textContent
     ).toBe('Select source');
   });
 
   // Arrow and page keys stay native on the focused output; Home and End are the
   // shared log shortcuts, which scroll the output to the top and bottom.
   it('tabs into raw output and keeps its scrolling keys working', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'first\nsecond',
-      },
-    });
+    answerNodeLogs('first\nsecond');
     await renderTab();
     await selectSource('kubelet');
     const output = requireValue(
-      container.querySelector<HTMLElement>('.logs-viewer-content'),
+      container().querySelector<HTMLElement>('.logs-viewer-content'),
       'node log output'
     );
-    const controls = Array.from(container.querySelectorAll<HTMLButtonElement>('.icon-bar button'));
+    const controls = Array.from(
+      container().querySelectorAll<HTMLButtonElement>('.icon-bar button')
+    );
     const previous = requireValue(controls[controls.length - 1], 'last log toolbar control');
     await act(async () => previous.focus());
     await act(async () =>
@@ -290,41 +345,21 @@ describe('NodeLogsTab', () => {
     expect(document.activeElement).toBe(previous);
   });
 
-  it('refetches when the selected source changes', async () => {
-    mockFetchNodeLogs.mockImplementation(
-      async (_clusterId: string, _nodeName: string, request: { sourcePath: string }) => ({
-        status: 'executed',
-        data: {
-          source: sources.find((source) => source.path === request.sourcePath) ?? sources[0],
-          sourcePath: request.sourcePath,
-          content: `content for ${request.sourcePath}`,
-        },
-      })
-    );
+  it('reads the selected source for the complete node, again when the source changes', async () => {
+    answerNodeLogs((request) => ({ content: `content for ${request.sourcePath}` }));
 
     await renderTab();
     await selectSource('kubelet');
     await selectSource('containerd');
 
-    expect(mockFetchNodeLogs).toHaveBeenLastCalledWith('alpha:ctx', 'node-a', {
-      sourcePath: 'journal/containerd',
-      tailBytes: 262144,
-    });
-    expect(container.querySelector('.logs-viewer-text')?.textContent).toContain(
-      'content for journal/containerd'
-    );
+    expect(last(nodeLogReads())).toEqual([
+      nodeRef(),
+      { sourcePath: 'journal/containerd', tailBytes: 262144 },
+    ]);
+    expect(logText()).toContain('content for journal/containerd');
   });
 
   it('renders node log sources as grouped tree-like dropdown options', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'line one',
-      },
-    });
-
     await renderTab({
       sources: [
         {
@@ -348,18 +383,11 @@ describe('NodeLogsTab', () => {
       ],
     });
 
-    const trigger = container.querySelector('button[aria-label="Node log source"]');
-    expect(trigger).toBeTruthy();
     expect(
-      container.querySelector('button[aria-label="Node log source"] .dropdown-value')?.textContent
+      container().querySelector('button[aria-label="Node log source"] .dropdown-value')?.textContent
     ).toBe('Select source');
 
-    await act(async () => {
-      requireValue(trigger, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    await openSourcePicker();
 
     const groupHeader = document.body.querySelector('.dropdown-group-header');
     expect(groupHeader?.textContent).toBe('aws-routed-eni');
@@ -373,36 +401,21 @@ describe('NodeLogsTab', () => {
   });
 
   it('filters rendered log lines client-side', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'info boot complete\nerror failed to reconcile',
-      },
-    });
+    answerNodeLogs('info boot complete\nerror failed to reconcile');
 
     await renderTab();
     await selectSource('kubelet');
     await filterLogsBy('error');
 
-    expect(container.querySelector('.logs-viewer-text')?.textContent).toBe(
-      'error failed to reconcile'
-    );
+    expect(logText()).toBe('error failed to reconcile');
+    expect(nodeLogReads()).toHaveLength(1);
   });
 
   // As in Container Logs, the shown/total count shows only while a filter narrows the logs.
   it('shows the log count only while a text filter is applied', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'info boot complete\nerror failed to reconcile',
-      },
-    });
+    answerNodeLogs('info boot complete\nerror failed to reconcile');
+    const strip = () => container().querySelector('[aria-label="Active log filters"]');
 
-    const strip = () => container.querySelector('[aria-label="Active log filters"]');
     await renderTab();
     expect(strip()).toBeNull();
     await selectSource('kubelet');
@@ -418,17 +431,10 @@ describe('NodeLogsTab', () => {
   // The search chips are Container Logs' chips: the text filter and each search
   // option that differs from its default. Clear all resets them all.
   it('shows the search chips and clears them all', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'info boot complete\nerror failed to reconcile',
-      },
-    });
+    answerNodeLogs('info boot complete\nerror failed to reconcile');
     const chipLabels = () =>
       Array.from(
-        container.querySelectorAll('[aria-label="Active log filters"] .active-filter-chip__label')
+        container().querySelectorAll('[aria-label="Active log filters"] .active-filter-chip__label')
       ).map((label) => label.textContent);
 
     await renderTab();
@@ -436,7 +442,7 @@ describe('NodeLogsTab', () => {
     await filterLogsBy('error');
     await act(async () => {
       requireValue(
-        container.querySelector<HTMLButtonElement>('button[aria-label^="Case-sensitive search"]'),
+        container().querySelector<HTMLButtonElement>('button[aria-label^="Case-sensitive search"]'),
         'expected the Match case button'
       ).click();
       await Promise.resolve();
@@ -445,55 +451,39 @@ describe('NodeLogsTab', () => {
 
     await act(async () => {
       requireValue(
-        container.querySelector<HTMLButtonElement>('button[aria-label="Clear all filters"]'),
+        container().querySelector<HTMLButtonElement>('button[aria-label="Clear all filters"]'),
         'expected Clear all'
       ).click();
       await Promise.resolve();
     });
-    expect(container.querySelector('[aria-label="Active log filters"]')).toBeNull();
+    expect(container().querySelector('[aria-label="Active log filters"]')).toBeNull();
     expect(
-      container.querySelector('button[aria-label^="Filter mode:"]')?.getAttribute('aria-label')
+      container().querySelector('button[aria-label^="Filter mode:"]')?.getAttribute('aria-label')
     ).toBe('Filter mode: All');
-    expect(container.textContent).toContain('info boot complete');
+    expect(container().textContent).toContain('info boot complete');
   });
 
   it('clears the text filter from the filter box and shows every line again', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'info boot complete\nerror failed to reconcile',
-      },
-    });
+    answerNodeLogs('info boot complete\nerror failed to reconcile');
 
     await renderTab();
     await selectSource('kubelet');
     await setFilterValue('error');
     const clearButton = requireValue(
-      container.querySelector<HTMLButtonElement>('button[aria-label="Clear filter"]'),
+      container().querySelector<HTMLButtonElement>('button[aria-label="Clear filter"]'),
       'clear filter button'
     );
     await act(async () => clearButton.click());
 
     expect(
-      container.querySelector<HTMLInputElement>('input[aria-label="Filter node logs"]')?.value
+      container().querySelector<HTMLInputElement>('input[aria-label="Filter node logs"]')?.value
     ).toBe('');
-    expect(container.querySelector('.logs-viewer-text')?.textContent).toBe(
-      'info boot completeerror failed to reconcile'
-    );
-    expect(container.querySelector('button[aria-label="Clear filter"]')).toBeNull();
+    expect(logText()).toBe('info boot completeerror failed to reconcile');
+    expect(container().querySelector('button[aria-label="Clear filter"]')).toBeNull();
   });
 
   it('can invert the filter from the filter mode button', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'info boot complete\nerror failed to reconcile',
-      },
-    });
+    answerNodeLogs('info boot complete\nerror failed to reconcile');
 
     await renderTab();
     await selectSource('kubelet');
@@ -501,100 +491,72 @@ describe('NodeLogsTab', () => {
 
     await chooseFilterMode('Invert');
 
-    expect(container.querySelector('.logs-viewer-text')?.textContent).toBe('info boot complete');
+    expect(logText()).toBe('info boot complete');
   });
 
   it('highlights matches without hiding other lines by default', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'info boot complete\nerror failed to reconcile',
-      },
-    });
+    answerNodeLogs('info boot complete\nerror failed to reconcile');
 
     await renderTab();
     await selectSource('kubelet');
     await setFilterValue('error');
 
     // All, the default, keeps every line and highlights the match.
-    const highlightedMatch = container.querySelector('mark.log-viewer-highlight');
+    const highlightedMatch = container().querySelector('mark.log-viewer-highlight');
     expect(highlightedMatch?.textContent).toBe('error');
-    expect(container.textContent).toContain('info boot complete');
+    expect(container().textContent).toContain('info boot complete');
   });
 
   it('highlights ANSI-colored node log text in the DOM renderer', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: '\u001b[31merror\u001b[0m failed to reconcile',
-      },
-    });
+    answerNodeLogs('\u001b[31merror\u001b[0m failed to reconcile');
 
     await renderTab();
     await selectSource('kubelet');
     await setFilterValue('error');
 
-    const highlightedMatch = container.querySelector('.log-viewer-line mark.log-viewer-highlight');
+    const highlightedMatch = container().querySelector(
+      '.log-viewer-line mark.log-viewer-highlight'
+    );
     expect(highlightedMatch?.textContent).toBe('error');
     expect(highlightedMatch?.closest('span[style*="color"]')).toBeTruthy();
-    expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
+    expect(container().querySelector('.read-only-terminal-surface')).toBeNull();
   });
 
   it('supports no-wrap for ANSI-colored node logs in the DOM renderer', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: '\u001b[31merror\u001b[0m failed to reconcile',
-      },
-    });
+    answerNodeLogs('\u001b[31merror\u001b[0m failed to reconcile');
 
     await renderTab();
     await selectSource('kubelet');
 
-    const wrapButton = container.querySelector<HTMLButtonElement>('button[aria-label="Wrap text"]');
-    expect(wrapButton).toBeTruthy();
-
+    const wrapButton = requireValue(
+      container().querySelector<HTMLButtonElement>('button[aria-label="Wrap text"]'),
+      'expected the Wrap text button'
+    );
     await act(async () => {
-      requireValue(wrapButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
+      wrapButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
 
-    expect(container.querySelector('.logs-viewer-text.no-wrap')).toBeTruthy();
-    expect(container.querySelector('.log-viewer-line span[style*="color"]')).toBeTruthy();
-    expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
+    expect(container().querySelector('.logs-viewer-text.no-wrap')).toBeTruthy();
+    expect(container().querySelector('.log-viewer-line span[style*="color"]')).toBeTruthy();
+    expect(container().querySelector('.read-only-terminal-surface')).toBeNull();
   });
 
   it('shows an invalid regex error only when the filter would hide lines', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'info boot complete\nerror failed to reconcile',
-      },
-    });
+    answerNodeLogs('info boot complete\nerror failed to reconcile');
 
     await renderTab();
     await selectSource('kubelet');
     await openSearch();
 
-    const regexButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Enable regular expression support for the text filter"]'
+    const regexButton = requireValue(
+      container().querySelector<HTMLButtonElement>(
+        'button[aria-label="Enable regular expression support for the text filter"]'
+      ),
+      'expected the regex button'
     );
-    expect(regexButton).toBeTruthy();
-
     await act(async () => {
-      requireValue(regexButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
+      regexButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
 
@@ -602,84 +564,62 @@ describe('NodeLogsTab', () => {
 
     // All only highlights matches, so the lines stay readable and the chip says
     // the expression is invalid.
-    expect(container.textContent).not.toContain('Enter a valid regular expression.');
-    expect(container.textContent).toContain('error failed to reconcile');
+    expect(container().textContent).not.toContain('Enter a valid regular expression.');
+    expect(container().textContent).toContain('error failed to reconcile');
     expect(
-      container.querySelector('[aria-label="Active log filters"] .active-filter-chip__label')
+      container().querySelector('[aria-label="Active log filters"] .active-filter-chip__label')
         ?.textContent
     ).toBe('Regex: [ (invalid expression)');
 
     await chooseFilterMode('Filtered');
-    expect(container.textContent).toContain('Enter a valid regular expression.');
-    expect(container.textContent).not.toContain('error failed to reconcile');
+    expect(container().textContent).toContain('Enter a valid regular expression.');
+    expect(container().textContent).not.toContain('error failed to reconcile');
   });
 
   it('can pretty-print JSON logs from the icon bar', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: '{"level":"info","message":"boot complete"}',
-      },
-    });
+    answerNodeLogs('{"level":"info","message":"boot complete"}');
 
     await renderTab();
     await selectSource('kubelet');
 
     await showLogFormat('Pretty');
 
-    const logLines = Array.from(container.querySelectorAll('.log-viewer-line')).map(
-      (element) => element.textContent
-    );
-    expect(logLines).toContain('{');
-    expect(logLines).toContain('  "message": "boot complete"');
-    expect(logLines).toContain('}');
+    expect(logLines()).toContain('{');
+    expect(logLines()).toContain('  "message": "boot complete"');
+    expect(logLines()).toContain('}');
   });
 
   it('can render parseable JSON logs as a table from the icon bar', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: '{"level":"info","message":"boot complete"}',
-      },
-    });
+    answerNodeLogs('{"level":"info","message":"boot complete"}');
 
     await renderTab();
     await selectSource('kubelet');
 
     await showLogFormat('Table');
 
-    expect(container.querySelector('.parsed-logs-table')).toBeTruthy();
-    expect(container.textContent).toContain('level');
-    expect(container.textContent).toContain('message');
-    expect(container.textContent).toContain('boot complete');
+    expect(container().querySelector('.parsed-logs-table')).toBeTruthy();
+    expect(container().textContent).toContain('level');
+    expect(container().textContent).toContain('message');
+    expect(container().textContent).toContain('boot complete');
   });
 
   it('exports parsed node columns as data, including metadata-like keys and nested values', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: JSON.stringify({
-          _pod: 'literal',
-          level: 'info',
-          count: 0,
-          enabled: false,
-          extra: { value: 'x' },
-          message: 'boot, complete',
-        }),
-      },
-    });
+    answerNodeLogs(
+      JSON.stringify({
+        _pod: 'literal',
+        level: 'info',
+        count: 0,
+        enabled: false,
+        extra: { value: 'x' },
+        message: 'boot, complete',
+      })
+    );
     await renderTab();
     await selectSource('kubelet');
     await showLogFormat('Table');
     await act(async () => {
       requireValue(
-        container.querySelector('button[aria-label="Download logs"]'),
+        container().querySelector('button[aria-label="Download logs"]'),
         'download control'
       ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -698,67 +638,46 @@ describe('NodeLogsTab', () => {
   });
 
   it('supports parsed-table row expansion and collapse like container logs', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: '{"level":"info","message":"boot complete"}',
-      },
-    });
+    answerNodeLogs('{"level":"info","message":"boot complete"}');
 
     await renderTab();
     await selectSource('kubelet');
 
     await showLogFormat('Table');
 
-    const row = container.querySelector<HTMLElement>('.parsed-logs-table .gridtable-row');
-    expect(row).toBeTruthy();
-    expect(row?.classList.contains('parsed-row-expanded')).toBe(false);
+    const row = requireValue(
+      container().querySelector<HTMLElement>('.parsed-logs-table .gridtable-row'),
+      'expected a parsed row'
+    );
+    expect(row.classList.contains('parsed-row-expanded')).toBe(false);
 
     await act(async () => {
-      requireValue(row, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
+      row.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
 
-    expect(row?.classList.contains('parsed-row-expanded')).toBe(true);
+    expect(row.classList.contains('parsed-row-expanded')).toBe(true);
 
     await act(async () => {
-      requireValue(row, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
+      row.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
 
-    expect(row?.classList.contains('parsed-row-expanded')).toBe(false);
+    expect(row.classList.contains('parsed-row-expanded')).toBe(false);
   });
 
-  // Same indicator as Container Logs: a warning icon beside the toolbar whose
-  // tooltip says what is shown, instead of a bar above the lines.
-  it('shows a truncated response as the buffer-full indicator beside the toolbar', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'recent log line',
-        truncated: true,
-      },
-    });
-
-    await renderTab();
-    await selectSource('kubelet');
-
-    expect(container.querySelector('.logs-viewer-warning-bar')).toBeNull();
-    const indicator = requireValue(
-      container.querySelector<HTMLElement>(
-        '.logs-viewer-controls [aria-label="Log buffer is full"]'
-      ),
-      'buffer-full indicator'
+  /** The buffer-full indicator's tooltip, or null when it is not shown. */
+  const bufferFullMessage = async (): Promise<string | null | undefined> => {
+    const indicator = container().querySelector<HTMLElement>(
+      '.logs-viewer-controls [aria-label="Log buffer is full"]'
     );
-    vi.useFakeTimers();
+    if (!indicator) {
+      return null;
+    }
+    const wasFake = vi.isFakeTimers();
+    if (!wasFake) {
+      vi.useFakeTimers();
+    }
     try {
       await act(async () => {
         indicator.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
@@ -766,31 +685,46 @@ describe('NodeLogsTab', () => {
       await act(async () => {
         vi.advanceTimersByTime(250);
       });
-      expect(document.body.querySelector('.tooltip')?.textContent).toBe(
-        'Log buffer is full. Only showing the most recent 1 log.'
-      );
+      const message = document.body.querySelector('.tooltip')?.textContent;
+      await act(async () => {
+        indicator.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+        vi.advanceTimersByTime(250);
+      });
+      return message;
     } finally {
-      vi.useRealTimers();
+      if (!wasFake) {
+        vi.useRealTimers();
+      }
     }
-  });
+  };
 
-  it('reports a node-log failure displayed inline', async () => {
-    mockFetchNodeLogs.mockRejectedValue(new Error('node log access denied'));
+  // Same indicator as Container Logs: a warning icon beside the toolbar whose
+  // tooltip says what is shown, instead of a bar above the lines.
+  it('shows a truncated response as the buffer-full indicator beside the toolbar', async () => {
+    answerNodeLogs(() => ({ content: 'recent log line', truncated: true }));
 
     await renderTab();
     await selectSource('kubelet');
 
-    expect(container.textContent).toContain('Error: node log access denied');
-    // Another source must stay selectable when this one cannot be read.
-    expect(container.querySelector('button[aria-label="Node log source"]')).not.toBeNull();
-    expect(handleInlineMock).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'node log access denied' }),
-      {
-        action: 'loadNodeLogs',
-        source: 'NodeLogsTab',
-        clusterId: 'alpha:ctx',
-      }
+    expect(container().querySelector('.logs-viewer-warning-bar')).toBeNull();
+    expect(await bufferFullMessage()).toBe(
+      'Log buffer is full. Only showing the most recent 1 log.'
     );
+  });
+
+  it('reports a node-log failure displayed inline', async () => {
+    answerNodeLogs(new Error('node log access denied'));
+
+    await renderTab();
+    await selectSource('kubelet');
+
+    expect(container().textContent).toContain('Error: node log access denied');
+    // Another source must stay selectable when this one cannot be read.
+    expect(container().querySelector('button[aria-label="Node log source"]')).not.toBeNull();
+    const reports = app.errors.take((record) => record.kinds.includes('inline'));
+    expect(reports.map((record) => record.context)).toEqual([
+      { action: 'loadNodeLogs', source: 'NodeLogsTab', clusterId: dev.clusterId },
+    ]);
   });
 
   it('shows a pending availability message before sources are known', async () => {
@@ -799,7 +733,7 @@ describe('NodeLogsTab', () => {
       sources: [],
     });
 
-    expect(container.textContent).toContain('Checking if logs are available for this node...');
+    expect(container().textContent).toContain('Checking if logs are available for this node...');
   });
 
   it('shows the unavailable message and omits the error line when no reason is provided', async () => {
@@ -808,8 +742,8 @@ describe('NodeLogsTab', () => {
       sources: [],
     });
 
-    expect(container.textContent).toContain('Logs are not available on this node');
-    expect(container.textContent).not.toContain('Error:');
+    expect(container().textContent).toContain('Logs are not available on this node');
+    expect(container().textContent).not.toContain('Error:');
   });
 
   it('shows the unavailable message and error line when a reason is provided', async () => {
@@ -822,375 +756,154 @@ describe('NodeLogsTab', () => {
       sources: [],
     });
 
-    expect(container.textContent).toContain('Logs are not available on this node');
-    expect(container.textContent).toContain(
+    expect(container().textContent).toContain('Logs are not available on this node');
+    expect(container().textContent).toContain(
       'Error: the server does not allow this method on the requested resource'
     );
   });
 
   it('defaults raw node logs to the newest visible content', async () => {
-    const originalScrollHeight = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      'scrollHeight'
-    );
-    const originalClientHeight = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      'clientHeight'
-    );
+    answerNodeLogs('line one\nline two\nline three');
 
-    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
-      configurable: true,
-      get: () => 500,
+    await withTallContent(async () => {
+      await renderTab();
+      await selectSource('kubelet');
+      await waitForAnimationFrames(2);
+
+      const content = requireValue(
+        container().querySelector<HTMLElement>('.logs-viewer-content'),
+        'node log output'
+      );
+      expect(content.scrollTop).toBe(500);
     });
-    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
-      configurable: true,
-      get: () => 100,
-    });
-
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'line one\nline two\nline three',
-      },
-    });
-
-    await renderTab();
-    await selectSource('kubelet');
-
-    await waitForAnimationFrames(2);
-
-    const content = container.querySelector<HTMLElement>('.logs-viewer-content');
-    expect(content).toBeTruthy();
-    expect(requireValue(content, 'expected test value in NodeLogsTab.test.tsx').scrollTop).toBe(
-      500
-    );
-
-    if (originalScrollHeight) {
-      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
-    } else {
-      Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight');
-    }
-    if (originalClientHeight) {
-      Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
-    } else {
-      Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
-    }
   });
 
   it('resets to the newest content when switching to a different node log source', async () => {
-    const originalScrollHeight = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      'scrollHeight'
-    );
-    const originalClientHeight = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      'clientHeight'
-    );
+    answerNodeLogs((request) => ({ content: `content for ${request.sourcePath}` }));
 
-    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
-      configurable: true,
-      get: () => 500,
-    });
-    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
-      configurable: true,
-      get: () => 100,
-    });
+    await withTallContent(async () => {
+      await renderTab();
+      await selectSource('kubelet');
 
-    mockFetchNodeLogs.mockImplementation(
-      async (_clusterId: string, _nodeName: string, request: { sourcePath: string }) => ({
-        status: 'executed',
-        data: {
-          source: sources.find((source) => source.path === request.sourcePath) ?? sources[0],
-          sourcePath: request.sourcePath,
-          content: `content for ${request.sourcePath}`,
-        },
-      })
-    );
-
-    await renderTab();
-    await selectSource('kubelet');
-
-    const content = container.querySelector<HTMLElement>('.logs-viewer-content');
-    expect(content).toBeTruthy();
-
-    await act(async () => {
-      requireValue(content, 'expected test value in NodeLogsTab.test.tsx').scrollTop = 40;
-      requireValue(content, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new Event('scroll', { bubbles: true })
+      const content = requireValue(
+        container().querySelector<HTMLElement>('.logs-viewer-content'),
+        'node log output'
       );
-      await Promise.resolve();
+      await act(async () => {
+        content.scrollTop = 40;
+        content.dispatchEvent(new Event('scroll', { bubbles: true }));
+        await Promise.resolve();
+      });
+
+      await selectSource('containerd');
+      await waitForAnimationFrames(6);
+
+      expect(content.scrollTop).toBe(500);
     });
-
-    const trigger = container.querySelector('button[aria-label="Node log source"]');
-    expect(trigger).toBeTruthy();
-    await selectSource('containerd');
-    await waitForAnimationFrames(6);
-
-    expect(requireValue(content, 'expected test value in NodeLogsTab.test.tsx').scrollTop).toBe(
-      500
-    );
-
-    if (originalScrollHeight) {
-      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
-    } else {
-      Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight');
-    }
-    if (originalClientHeight) {
-      Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
-    } else {
-      Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
-    }
   });
 
   it('clears the previous source logs and shows loading while a new source is fetching', async () => {
-    let secondSourceResolve: ((value: NodeLogFetchResult) => void) | null = null;
-    mockFetchNodeLogs
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          source: sources[0],
-          sourcePath: sources[0].path,
-          content: 'content for journal/kubelet',
-        },
-      })
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            secondSourceResolve = resolve;
-          })
-      );
+    answerNodeLogs((request) => ({ content: `content for ${request.sourcePath}` }));
 
     await renderTab();
     await selectSource('kubelet');
+    expect(logText()).toContain('content for journal/kubelet');
 
-    expect(container.querySelector('.logs-viewer-text')?.textContent).toContain(
-      'content for journal/kubelet'
-    );
+    const release = app.backend.hold('FetchNodeLogs');
+    await selectSource('containerd');
 
-    await act(async () => {
-      const trigger = container.querySelector('button[aria-label="Node log source"]');
-      requireValue(trigger, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    expect(container().textContent).toContain('Loading logs...');
+    expect(container().textContent).not.toContain('content for journal/kubelet');
 
-    const secondOption = Array.from(
-      document.body.querySelectorAll<HTMLElement>('.dropdown-option')
-    ).find((node) => node.textContent?.includes('containerd'));
-    expect(secondOption).toBeTruthy();
+    release();
+    await app.settle();
 
-    await act(async () => {
-      requireValue(secondOption, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
-        new MouseEvent('click', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toContain('Loading logs...');
-    expect(container.textContent).not.toContain('content for journal/kubelet');
-
-    await act(async () => {
-      secondSourceResolve?.({
-        status: 'executed',
-        data: {
-          source: sources[1],
-          sourcePath: sources[1].path,
-          content: 'content for journal/containerd',
-        },
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(container.querySelector('.logs-viewer-text')?.textContent).toContain(
-      'content for journal/containerd'
-    );
+    expect(logText()).toContain('content for journal/containerd');
   });
 
   it('keeps existing log content mounted during refresh', async () => {
     vi.useFakeTimers();
-    let refreshResolve: ((value: NodeLogFetchResult) => void) | null = null;
-    mockFetchNodeLogs
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          source: sources[0],
-          sourcePath: sources[0].path,
-          content: 'line one\nline two',
-        },
-      })
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            refreshResolve = resolve;
-          })
-      );
+    let nodeLog = 'line one\nline two';
+    answerNodeLogs(() => ({ content: nodeLog }));
 
-    try {
-      await renderTab();
-      await selectSource('kubelet');
+    await renderTab();
+    await selectSource('kubelet');
 
-      await act(async () => {
-        vi.advanceTimersByTime(5000);
-        await Promise.resolve();
-      });
+    const release = app.backend.hold('FetchNodeLogs');
+    await advance(5000);
 
-      expect(container.querySelector('.logs-viewer-text')?.textContent).toContain('line one');
-      expect(container.textContent).not.toContain('Loading logs...');
+    expect(nodeLogReads()).toHaveLength(2);
+    expect(logText()).toContain('line one');
+    expect(container().textContent).not.toContain('Loading logs...');
 
-      await act(async () => {
-        refreshResolve?.({
-          status: 'executed',
-          data: {
-            source: sources[0],
-            sourcePath: sources[0].path,
-            content: 'line one\nline two\nline three',
-          },
-        });
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(container.querySelector('.logs-viewer-text')?.textContent).toContain('line three');
-    } finally {
-      vi.useRealTimers();
-    }
+    nodeLog = 'line one\nline two\nline three';
+    release();
+    await app.settle();
+    expect(logText()).toContain('line three');
   });
 
   it('appends incremental refresh results using sinceTime with overlap dedupe', async () => {
     vi.useFakeTimers();
-    mockFetchNodeLogs
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          source: sources[0],
-          sourcePath: sources[0].path,
-          content: 'line one\nline two',
-        },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          source: sources[0],
-          sourcePath: sources[0].path,
-          content: 'line two\nline three',
-        },
-      });
+    answerNodeLogs('line one\nline two', 'line two\nline three');
 
-    try {
-      await renderTab();
-      await selectSource('kubelet');
+    await renderTab();
+    await selectSource('kubelet');
+    await advance(5000);
 
-      await act(async () => {
-        vi.advanceTimersByTime(5000);
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(mockFetchNodeLogs).toHaveBeenLastCalledWith(
-        'alpha:ctx',
-        'node-a',
-        expect.objectContaining({
-          sourcePath: 'journal/kubelet',
-          tailBytes: 262144,
-          sinceTime: expect.any(String),
-        }),
-        'background'
-      );
-      const logLines = Array.from(container.querySelectorAll('.log-viewer-line')).map(
-        (element) => element.textContent
-      );
-      expect(logLines).toEqual(['line one', 'line two', 'line three']);
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(last(nodeLogReads())).toEqual([
+      nodeRef(),
+      expect.objectContaining({
+        sourcePath: 'journal/kubelet',
+        tailBytes: 262144,
+        sinceTime: expect.any(String),
+      }),
+    ]);
+    expect(logLines()).toEqual(['line one', 'line two', 'line three']);
   });
 
   // A failed incremental read may be a since-time the node rejects; a full
   // read is the fallback, and only its failure is shown.
   it('falls back to a full read when an incremental refresh fails', async () => {
     vi.useFakeTimers();
-    mockFetchNodeLogs
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: { source: sources[0], sourcePath: sources[0].path, content: 'line one' },
-      })
-      .mockRejectedValueOnce(new Error('invalid sinceTime'))
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: { source: sources[0], sourcePath: sources[0].path, content: 'line one\nline two' },
-      });
+    answerNodeLogs('line one', new Error('invalid sinceTime'), 'line one\nline two');
 
-    try {
-      await renderTab();
-      await selectSource('kubelet');
-      await act(async () => {
-        vi.advanceTimersByTime(5000);
-        await Promise.resolve();
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+    await renderTab();
+    await selectSource('kubelet');
+    await advance(5000);
 
-      expect(mockFetchNodeLogs).toHaveBeenCalledTimes(3);
-      expect(mockFetchNodeLogs.mock.calls[2][2]).not.toHaveProperty(
-        'sinceTime',
-        expect.any(String)
-      );
-      const logLines = Array.from(container.querySelectorAll('.log-viewer-line')).map(
-        (element) => element.textContent
-      );
-      expect(logLines).toEqual(['line one', 'line two']);
-      expect(container.textContent).not.toContain('invalid sinceTime');
-    } finally {
-      vi.useRealTimers();
-    }
+    const reads = nodeLogReads();
+    expect(reads).toHaveLength(3);
+    expect(reads[1]?.[1]).toHaveProperty('sinceTime', expect.any(String));
+    expect(reads[2]?.[1]).not.toHaveProperty('sinceTime', expect.any(String));
+    expect(logLines()).toEqual(['line one', 'line two']);
+    expect(container().textContent).not.toContain('invalid sinceTime');
   });
 
-  it('keeps current node logs when a background refresh is blocked', async () => {
+  it('keeps current node logs when cluster data is paused before a background refresh', async () => {
     vi.useFakeTimers();
-    mockFetchNodeLogs.mockResolvedValueOnce({
-      status: 'executed',
-      data: {
-        source: sources[0],
-        sourcePath: sources[0].path,
-        content: 'line one\nline two',
-      },
+    answerNodeLogs('line one\nline two');
+
+    await renderTab();
+    await selectSource('kubelet');
+    await act(async () => {
+      setAutoRefreshEnabled(false);
     });
-    mockFetchNodeLogs.mockResolvedValueOnce({
-      status: 'blocked',
-      blockedReason: 'auto-refresh-disabled',
-    });
+    await advance(5000);
 
-    try {
-      await renderTab();
-      await selectSource('kubelet');
-
-      await act(async () => {
-        vi.advanceTimersByTime(5000);
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(container.querySelector('.logs-viewer-text')?.textContent).toContain('line two');
-      expect(container.textContent).not.toContain('Loading logs...');
-    } finally {
-      vi.useRealTimers();
-    }
+    // The broker blocks the background read, so the backend is not asked.
+    expect(nodeLogReads()).toHaveLength(1);
+    expect(logText()).toContain('line two');
+    expect(container().textContent).not.toContain('Loading logs...');
   });
 
   it('disables search and wrap until the source returns a log line', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: { source: sources[0], sourcePath: sources[0].path, content: '' },
-    });
+    answerNodeLogs('');
     await renderTab();
     await selectSource('kubelet');
 
     for (const label of ['Search logs', 'Wrap text']) {
       expect(
-        container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.disabled,
+        container().querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.disabled,
         label
       ).toBe(true);
     }
@@ -1202,43 +915,12 @@ describe('NodeLogsTab', () => {
     const numberedLines = (from: number, to: number) =>
       Array.from({ length: to - from + 1 }, (_, index) => `line ${from + index}`).join('\n');
     const countLabel = () =>
-      container.querySelector('[aria-label="Active log filters"] .logs-viewer-count')?.textContent;
-    const bufferFullMessage = async (): Promise<string | null | undefined> => {
-      const indicator = container.querySelector<HTMLElement>(
-        '.logs-viewer-controls [aria-label="Log buffer is full"]'
-      );
-      if (!indicator) {
-        return null;
-      }
-      vi.useFakeTimers();
-      try {
-        await act(async () => {
-          indicator.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-        });
-        await act(async () => {
-          vi.advanceTimersByTime(250);
-        });
-        const message = document.body.querySelector('.tooltip')?.textContent;
-        await act(async () => {
-          indicator.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
-          vi.advanceTimersByTime(250);
-        });
-        return message;
-      } finally {
-        vi.useRealTimers();
-      }
-    };
+      container().querySelector('[aria-label="Active log filters"] .logs-viewer-count')
+        ?.textContent;
 
     it('keeps only as many lines as the buffer setting allows', async () => {
       const bufferSize = OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE;
-      mockFetchNodeLogs.mockResolvedValue({
-        status: 'executed',
-        data: {
-          source: sources[0],
-          sourcePath: sources[0].path,
-          content: numberedLines(1, bufferSize + 200),
-        },
-      });
+      answerNodeLogs(numberedLines(1, bufferSize + 200));
 
       await renderTab();
       await selectSource('kubelet');
@@ -1251,23 +933,18 @@ describe('NodeLogsTab', () => {
     });
 
     it('trims to the newest lines at once when the buffer setting shrinks', async () => {
-      mockFetchNodeLogs.mockResolvedValue({
-        status: 'executed',
-        data: { source: sources[0], sourcePath: sources[0].path, content: numberedLines(1, 150) },
-      });
+      answerNodeLogs(numberedLines(1, 150));
 
       await renderTab();
       await selectSource('kubelet');
       expect(await bufferFullMessage()).toBeNull();
 
       await act(async () => {
-        setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 100 });
+        setObjPanelLogsBufferMaxSize(100);
       });
+      await app.settle();
 
-      const rows = Array.from(
-        container.querySelectorAll('.log-viewer-line'),
-        (row) => row.textContent
-      );
+      const rows = logLines();
       expect(rows[0]).toBe('line 51');
       expect(rows[rows.length - 1]).toBe('line 150');
       expect(await bufferFullMessage()).toBe(
@@ -1277,31 +954,12 @@ describe('NodeLogsTab', () => {
 
     it('still says the buffer is full after a refresh appends lines', async () => {
       vi.useFakeTimers();
-      mockFetchNodeLogs.mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          source: sources[0],
-          sourcePath: sources[0].path,
-          content: 'line 1\nline 2',
-          truncated: true,
-        },
-      });
-      mockFetchNodeLogs.mockResolvedValue({
-        status: 'executed',
-        data: { source: sources[0], sourcePath: sources[0].path, content: 'line 3' },
-      });
-      try {
-        await renderTab();
-        await selectSource('kubelet');
-        await act(async () => {
-          vi.advanceTimersByTime(5000);
-          await Promise.resolve();
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-      } finally {
-        vi.useRealTimers();
-      }
+      answerNodeLogs(() => ({ content: 'line 1\nline 2', truncated: true }), 'line 3');
+
+      await renderTab();
+      await selectSource('kubelet');
+      await advance(5000);
+      vi.useRealTimers();
       await filterLogsBy('line');
 
       expect(countLabel()).toBe('3/3 logs');
@@ -1313,81 +971,50 @@ describe('NodeLogsTab', () => {
 
   it('keeps the lines and reports a failed background refresh above them', async () => {
     vi.useFakeTimers();
-    mockFetchNodeLogs.mockResolvedValueOnce({
-      status: 'executed',
-      data: { source: sources[0], sourcePath: sources[0].path, content: 'line one\nline two' },
-    });
-    mockFetchNodeLogs.mockRejectedValue(new Error('kubelet unreachable'));
+    answerNodeLogs('line one\nline two', new Error('kubelet unreachable'));
 
-    try {
-      await renderTab();
-      await selectSource('kubelet');
-      await act(async () => {
-        vi.advanceTimersByTime(5000);
-        await Promise.resolve();
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+    await renderTab();
+    await selectSource('kubelet');
+    await advance(5000);
 
-      expect(container.querySelector('.logs-viewer-text')?.textContent).toContain('line two');
-      expect(container.querySelector('[aria-label="Log warnings"]')?.textContent).toContain(
-        'kubelet unreachable'
-      );
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(logText()).toContain('line two');
+    expect(container().querySelector('[aria-label="Log warnings"]')?.textContent).toContain(
+      'kubelet unreachable'
+    );
+    // The incremental read and its full-read fallback both failed; the tab
+    // reports the fallback's failure once.
+    expect(
+      app.errors
+        .take((record) => record.kinds.includes('inline'))
+        .map((record) => (record.error as Error).message)
+    ).toEqual(['kubelet unreachable']);
   });
 
   it('says so when a source returns no logs', async () => {
-    mockFetchNodeLogs.mockResolvedValue({
-      status: 'executed',
-      data: { source: sources[0], sourcePath: sources[0].path, content: '' },
-    });
+    answerNodeLogs('');
 
     await renderTab();
     await selectSource('kubelet');
 
-    expect(container.querySelector('.logs-viewer-text')?.textContent).toBe(
-      'No logs returned for this source.'
-    );
+    expect(logText()).toBe('No logs returned for this source.');
   });
 
   describe('keyboard shortcuts', () => {
     const shortcutHelp: {
       current: ReturnType<typeof useKeyboardContext>['getAvailableShortcuts'] | null;
-    } = {
-      current: null,
-    };
-    const nativeAction: {
-      current: ReturnType<typeof useKeyboardContext>['dispatchNativeAction'] | null;
     } = { current: null };
     const ShortcutHelpProbe = () => {
-      const keyboard = useKeyboardContext();
-      shortcutHelp.current = keyboard.getAvailableShortcuts;
-      nativeAction.current = keyboard.dispatchNativeAction;
+      shortcutHelp.current = useKeyboardContext().getAvailableShortcuts;
       return null;
     };
 
     const renderWithProbe = async (isActive = true) => {
-      await act(async () => {
-        root.render(
-          <PanelLayoutTestProvider>
-            <KeyboardProvider>
-              <ShortcutHelpProbe />
-              <NodeLogsTab
-                panelId="panel-1"
-                nodeName="node-a"
-                clusterId="alpha:ctx"
-                isActive={isActive}
-                availability={{ allowed: true, pending: false }}
-                sources={sources}
-              />
-            </KeyboardProvider>
-          </PanelLayoutTestProvider>
-        );
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+      await showInApp(
+        <>
+          <ShortcutHelpProbe />
+          {tab({ isActive })}
+        </>
+      );
     };
 
     const press = async (key: string, shiftKey = false) => {
@@ -1397,19 +1024,19 @@ describe('NodeLogsTab', () => {
       });
     };
 
+    // The application menu's Edit items reach the app as runtime events.
+    const menu = async (action: 'menu:selectAll' | 'menu:copy') => {
+      await act(async () => {
+        app.events.emit(action);
+        await Promise.resolve();
+      });
+    };
+
     const pressed = (label: string) =>
-      container.querySelector(`button[aria-label="${label}"]`)?.getAttribute('aria-pressed');
+      container().querySelector(`button[aria-label="${label}"]`)?.getAttribute('aria-pressed');
 
     beforeEach(() => {
-      reportOperationalErrorMock.mockReset();
-      mockFetchNodeLogs.mockResolvedValue({
-        status: 'executed',
-        data: {
-          source: sources[0],
-          sourcePath: sources[0].path,
-          content: 'info boot complete\nerror failed to reconcile',
-        },
-      });
+      answerNodeLogs('info boot complete\nerror failed to reconcile');
     });
 
     it('toggles search and display options and copies the shown logs', async () => {
@@ -1420,7 +1047,7 @@ describe('NodeLogsTab', () => {
       act(() => (document.activeElement as HTMLElement | null)?.blur());
 
       await press('i');
-      expect(container.querySelector('.logs-viewer-text')?.textContent).toBe('info boot complete');
+      expect(logText()).toBe('info boot complete');
       expect(pressed('Wrap text')).toBe('true');
       await press('w');
       expect(pressed('Wrap text')).toBe('false');
@@ -1453,30 +1080,31 @@ describe('NodeLogsTab', () => {
       await renderWithProbe();
       await selectSource('kubelet');
       const output = requireValue(
-        container.querySelector<HTMLElement>('.logs-viewer-content'),
+        container().querySelector<HTMLElement>('.logs-viewer-content'),
         'node log output'
       );
       await act(async () => output.focus());
       window.getSelection()?.removeAllRanges();
 
-      expect(nativeAction.current?.('selectAll')).toBe(true);
+      await menu('menu:selectAll');
       const selected = window.getSelection();
       expect(selected?.rangeCount).toBe(1);
       expect(output.contains(selected?.getRangeAt(0).commonAncestorContainer ?? null)).toBe(true);
 
-      expect(nativeAction.current?.('copy')).toBe(true);
-      expect(Clipboard.SetText).toHaveBeenCalledWith(expect.stringContaining('info boot complete'));
+      await menu('menu:copy');
+      expect(Clipboard.SetText).toHaveBeenLastCalledWith(
+        expect.stringContaining('info boot complete')
+      );
+      expect(Clipboard.SetText).not.toHaveBeenCalledWith(expect.stringContaining('Download'));
 
       const failure = new Error('clipboard denied');
       vi.mocked(Clipboard.SetText).mockRejectedValue(failure);
-      await act(async () => {
-        nativeAction.current?.('copy');
-        await Promise.resolve();
-      });
-      expect(reportOperationalErrorMock).toHaveBeenCalledWith(
-        failure,
-        expect.objectContaining({ action: 'copySelectedLogText' })
-      );
+      await menu('menu:copy');
+      await app.settle();
+      const reports = app.errors.take((record) => record.error === failure);
+      expect(reports.map((record) => [record.kinds, record.context?.action])).toEqual([
+        [['operational'], 'copySelectedLogText'],
+      ]);
     });
 
     it('reports a copy that fails instead of hiding it', async () => {
@@ -1486,17 +1114,16 @@ describe('NodeLogsTab', () => {
       await selectSource('kubelet');
 
       await press('c', true);
+      await app.settle();
 
-      expect(reportOperationalErrorMock).toHaveBeenCalledWith(
-        failure,
-        expect.objectContaining({ action: 'copyLogs' })
-      );
+      const reports = app.errors.take((record) => record.error === failure);
+      expect(reports.map((record) => record.context?.action)).toEqual(['copyLogs']);
     });
 
     describe('Escape while the search row is open', () => {
       const closeTab = vi.fn(() => true);
       // Stands in for the object panel, which closes its tab on Escape.
-      const ObjectPanelEscape = ({ children }: { children: React.ReactNode }) => {
+      const ObjectPanelEscape = ({ children }: { children: ReactNode }) => {
         const panelRef = useRef<HTMLDivElement>(null);
         useKeyboardSurface({
           kind: 'panel',
@@ -1509,26 +1136,7 @@ describe('NodeLogsTab', () => {
       };
 
       const renderInPanel = async () => {
-        await act(async () => {
-          root.render(
-            <PanelLayoutTestProvider>
-              <KeyboardProvider>
-                <ObjectPanelEscape>
-                  <NodeLogsTab
-                    panelId="panel-1"
-                    nodeName="node-a"
-                    clusterId="alpha:ctx"
-                    isActive
-                    availability={{ allowed: true, pending: false }}
-                    sources={sources}
-                  />
-                </ObjectPanelEscape>
-              </KeyboardProvider>
-            </PanelLayoutTestProvider>
-          );
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await showInApp(<ObjectPanelEscape>{tab()}</ObjectPanelEscape>);
         await selectSource('kubelet');
         await openSearch();
       };
@@ -1544,11 +1152,11 @@ describe('NodeLogsTab', () => {
 
       const searchButton = () =>
         requireValue(
-          container.querySelector<HTMLButtonElement>('button[aria-label="Search logs"]'),
+          container().querySelector<HTMLButtonElement>('button[aria-label="Search logs"]'),
           'expected the search button'
         );
       const filterInput = () =>
-        container.querySelector<HTMLInputElement>('input[aria-label="Filter node logs"]');
+        container().querySelector<HTMLInputElement>('input[aria-label="Filter node logs"]');
 
       beforeEach(() => closeTab.mockClear());
 
@@ -1570,7 +1178,7 @@ describe('NodeLogsTab', () => {
       it('closes the search row from the log output and leaves focus there', async () => {
         await renderInPanel();
         const output = requireValue(
-          container.querySelector<HTMLElement>('.logs-viewer-content'),
+          container().querySelector<HTMLElement>('.logs-viewer-content'),
           'node log output'
         );
         await act(async () => output.focus());

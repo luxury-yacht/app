@@ -85,6 +85,21 @@ export function resolveBuiltinGroupVersion(
   return {};
 }
 
+const BUILTIN_RESOURCE_KEYS: ReadonlySet<string> = new Set(
+  builtinResourceIdentityContract.resources.map(
+    (resource) => `${resource.group}/${resource.kind.toLowerCase()}`
+  )
+);
+
+/**
+ * Whether `group` and `kind` name a built-in resource. The kind matches in
+ * any case; the group must match exactly, so a custom resource that reuses a
+ * built-in kind name (an `example.com` Deployment) is not built-in.
+ */
+export function isBuiltinResource(group: string, kind: string): boolean {
+  return BUILTIN_RESOURCE_KEYS.has(`${group}/${kind.toLowerCase()}`);
+}
+
 /**
  * Parse a Kubernetes apiVersion string into its `{group, version}` parts.
  * Core resources use the version-only form ("v1"), grouped resources use

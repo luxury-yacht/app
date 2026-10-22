@@ -296,14 +296,29 @@ type YamlNoticeDiffProps = {
   toggleDiffExpansion: (key: string) => void;
 };
 
-const YamlDriftConflictNotice = ({
-  show,
+/**
+ * Why the draft is shown against a newer live object: the object changed, the
+ * object was deleted and recreated, or Reload & merge could not reconcile.
+ */
+type YamlDriftNoticeKind = 'changed' | 'replaced' | 'unmerged';
+
+const DRIFT_NOTICE_MESSAGES: Record<YamlDriftNoticeKind, string> = {
+  changed:
+    'The live object changed after you started editing. Your draft is unchanged. Reload & merge brings in those changes; Save patches only your edited fields onto the live object, like kubectl edit.',
+  replaced:
+    'The object was deleted and recreated after you started editing. Your draft is unchanged, but it cannot be merged into or saved over the new object.',
+  unmerged:
+    'Reload & merge could not reconcile your draft with the latest YAML. Your draft is unchanged. Save will still patch your edited fields onto the live object, like kubectl edit.',
+};
+
+const YamlDriftNotice = ({
+  kind,
   diff,
   diffKey,
   expandedDiffs,
   toggleDiffExpansion,
-}: YamlNoticeDiffProps & { show: boolean }) => {
-  if (!show) {
+}: YamlNoticeDiffProps & { kind: YamlDriftNoticeKind | null }) => {
+  if (!kind) {
     return null;
   }
   const diffView = buildYamlDiffView(
@@ -315,11 +330,7 @@ const YamlDriftConflictNotice = ({
   return (
     <>
       <div className="yaml-notice-header">
-        <p>
-          Reload &amp; merge could not reconcile your draft with the latest YAML. Your draft is
-          unchanged. Save will still patch your edited fields onto the live object, like kubectl
-          edit.
-        </p>
+        <p>{DRIFT_NOTICE_MESSAGES[kind]}</p>
         {diffView.toggle}
       </div>
       {diffView.content}
@@ -339,7 +350,7 @@ const YamlValidationNotice = ({
   actionError,
   actionDetails,
   protectedEditMessage,
-  showReloadMergeConflict,
+  driftNotice,
   ...diffProps
 }: YamlNoticeDiffProps & {
   isEditing: boolean;
@@ -347,17 +358,15 @@ const YamlValidationNotice = ({
   actionError: string | null;
   actionDetails: string[];
   protectedEditMessage: string | null;
-  showReloadMergeConflict: boolean;
+  driftNotice: YamlDriftNoticeKind | null;
 }) => {
-  const hasMessage = Boolean(
-    lintError || actionError || protectedEditMessage || showReloadMergeConflict
-  );
+  const hasMessage = Boolean(lintError || actionError || protectedEditMessage || driftNotice);
   if (!isEditing || !hasMessage) {
     return null;
   }
   return (
     <div className="yaml-validation-message">
-      <YamlDriftConflictNotice show={showReloadMergeConflict} {...diffProps} />
+      <YamlDriftNotice kind={driftNotice} {...diffProps} />
       {!!lintError && (
         <p>
           <ErrorSurface kind="validation" message={lintError} />
@@ -447,33 +456,55 @@ const runYamlEditShortcut = (
   return true;
 };
 
-const getYamlViewModel = ({
+type YamlDriftState = Pick<
+  ReturnType<typeof useYamlTransaction>,
+  'isEditing' | 'hasRemoteDrift' | 'driftForced' | 'backendDriftCurrentYaml' | 'objectReplaced'
+>;
+
+const resolveDriftNotice = ({
   isEditing,
+  hasRemoteDrift,
+  driftForced,
+  backendDriftCurrentYaml,
+  objectReplaced,
+}: YamlDriftState): YamlDriftNoticeKind | null => {
+  if (!isEditing) {
+    return null;
+  }
+  if (objectReplaced) {
+    return 'replaced';
+  }
+  if (driftForced || backendDriftCurrentYaml) {
+    return 'unmerged';
+  }
+  return hasRemoteDrift ? 'changed' : null;
+};
+
+const getYamlViewModel = ({
   draftYaml,
   displayYaml,
   lintError,
   hasServerYamlError,
   isSaving,
-  backendDriftCurrentYaml,
-  driftForced,
   postApplyNotice,
-}: {
-  isEditing: boolean;
+  ...drift
+}: YamlDriftState & {
   draftYaml: string;
   displayYaml: string | null | undefined;
   lintError: string | null;
   hasServerYamlError: boolean;
   isSaving: boolean;
-  backendDriftCurrentYaml: string | null;
-  driftForced: boolean;
   postApplyNotice: ReturnType<typeof useYamlTransaction>['postApplyNotice'];
 }) => {
+  const { isEditing, backendDriftCurrentYaml } = drift;
   const activeYaml = isEditing ? draftYaml : (displayYaml ?? '');
   const hasYamlError = Boolean(lintError) || hasServerYamlError;
   return {
     activeYaml,
     disableSave: isSaving || hasYamlError,
-    showReloadMergeConflict: Boolean(backendDriftCurrentYaml) || driftForced,
+    driftNotice: resolveDriftNotice(drift),
+    // The backend will not merge into a recreated object.
+    showReloadMerge: isEditing && drift.hasRemoteDrift && !drift.objectReplaced,
     driftDiffKey: backendDriftCurrentYaml ? 'drift-backend' : 'drift-live',
     postApplyDiffKey: postApplyNotice ? `post-apply-${postApplyNotice.kind}` : 'post-apply',
     isLargeManifest: activeYaml.length > LARGE_MANIFEST_THRESHOLD,
@@ -494,7 +525,7 @@ type YamlEditorSurfaceProps = {
   setProtectedEditMessage: (message: string | null) => void;
   isLargeManifest: boolean;
   yamlToolbarItems: IconBarItem[];
-  hasRemoteDrift: boolean;
+  showReloadMerge: boolean;
   reloadAndMerge: () => void;
   cancelEdit: () => void;
   pendingOwnershipConflicts: ReturnType<typeof useYamlTransaction>['pendingOwnershipConflicts'];
@@ -513,7 +544,7 @@ const YamlEditorSurface = ({
   setProtectedEditMessage,
   isLargeManifest,
   yamlToolbarItems,
-  hasRemoteDrift,
+  showReloadMerge,
   reloadAndMerge,
   cancelEdit,
   pendingOwnershipConflicts,
@@ -543,7 +574,7 @@ const YamlEditorSurface = ({
       toolbarActions={
         <>
           <IconBar items={yamlToolbarItems} />
-          {!!(isEditing && hasRemoteDrift) && (
+          {!!showReloadMerge && (
             <button
               className="button secondary"
               type="button"
@@ -628,6 +659,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     hasRemoteDrift,
     driftForced,
     backendDriftCurrentYaml,
+    objectReplaced,
     postApplyNotice,
     dismissPostApplyNotice,
     hasServerYamlError,
@@ -710,8 +742,10 @@ const YamlTab: React.FC<YamlTabProps> = ({
     lintError,
     hasServerYamlError,
     isSaving,
+    hasRemoteDrift,
     backendDriftCurrentYaml,
     driftForced,
+    objectReplaced,
     postApplyNotice,
   });
 
@@ -846,7 +880,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
           actionError={actionError}
           actionDetails={actionDetails}
           protectedEditMessage={protectedEditMessage}
-          showReloadMergeConflict={yamlView.showReloadMergeConflict}
+          driftNotice={yamlView.driftNotice}
           diff={driftDiff}
           diffKey={yamlView.driftDiffKey}
           expandedDiffs={expandedDiffs}
@@ -871,7 +905,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
           setProtectedEditMessage={setProtectedEditMessage}
           isLargeManifest={yamlView.isLargeManifest}
           yamlToolbarItems={yamlToolbarItems}
-          hasRemoteDrift={hasRemoteDrift}
+          showReloadMerge={yamlView.showReloadMerge}
           reloadAndMerge={handleReloadAndMerge}
           cancelEdit={handleCancelClick}
           pendingOwnershipConflicts={pendingOwnershipConflicts}

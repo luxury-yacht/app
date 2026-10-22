@@ -7,9 +7,12 @@
  */
 
 import type React from 'react';
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import {
   crdDescriptor,
   ingressClassDescriptor,
@@ -18,6 +21,8 @@ import {
 } from './descriptors/clusterresource';
 import { OverviewRenderer } from './OverviewRenderer';
 import type { OverviewDescriptor } from './schema';
+
+const app = installAppStateHarness();
 
 type DeepPartial<T> = T extends (...args: never[]) => unknown
   ? T
@@ -41,12 +46,6 @@ vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
   ),
 }));
 
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    objectData: { clusterId: 'test-cluster', clusterName: 'test' },
-  }),
-}));
-
 vi.mock('@shared/components/ObjectPanelLink', () => ({
   ObjectPanelLink: ({ children }: React.PropsWithChildren) => <a href="/object">{children}</a>,
 }));
@@ -64,34 +63,26 @@ const getValueForLabel = (container: HTMLElement, label: string) => {
 };
 
 describe('ClusterResourceOverview', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let view: MountedApp;
+  let dev: TestCluster;
+  let container: HTMLElement;
 
   const renderOverview = async <T,>(descriptor: OverviewDescriptor<T>, fixture: DeepPartial<T>) => {
     const data = fixture as T;
-    await act(async () => {
-      root.render(
-        <OverviewRenderer<T>
-          descriptor={descriptor}
-          data={data}
-          context={{ clusterId: 'test-cluster', clusterName: 'test' }}
-        />
-      );
-      await Promise.resolve();
-    });
+    await view.show(
+      <OverviewRenderer<T>
+        descriptor={descriptor}
+        data={data}
+        context={{ clusterId: dev.clusterId, clusterName: dev.clusterName }}
+      />
+    );
   };
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  beforeEach(async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default', 'team', 'prod', 'infra']);
+    view = await app.render(null);
+    container = view.container;
   });
 
   it('renders namespace workload summary and status', async () => {

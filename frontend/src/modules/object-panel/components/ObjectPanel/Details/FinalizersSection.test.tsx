@@ -1,38 +1,21 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/FinalizersSection.test.tsx
+ *
+ * Renders a terminating object's finalizers inside the real app shell: Remove goes through the
+ * real object action controller, its confirmation dialog, and the backend action. Only the
+ * backend boundary is faked (test-utils/appState).
+ */
+
 import type { CapabilityState } from '@modules/object-panel/components/ObjectPanel/types';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
-import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
 import FinalizersSection from './FinalizersSection';
 import type { NamespaceFinalizationDetails } from './objectDetailModel';
 
-const requestFinalizerRemovalMock = vi.hoisted(() => vi.fn());
-const controllerOptionsMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@core/contexts/ZoomContext', () => ({
-  useZoom: () => ({ zoomLevel: 100 }),
-}));
-
-vi.mock('@shared/hooks/useObjectActionController', () => ({
-  useObjectActionController: (options: unknown) => {
-    controllerOptionsMock(options);
-    return {
-      getMenuItems: vi.fn(() => []),
-      modals: null,
-      requestFinalizerRemoval: (...args: unknown[]) => requestFinalizerRemovalMock(...args),
-    };
-  },
-}));
-
-const objectData: ObjectPanelRef = {
-  clusterId: 'cluster-a',
-  group: '',
-  version: 'v1',
-  kind: 'Namespace',
-  namespace: '',
-  name: 'terminating',
-};
+const app = installAppStateHarness();
 
 const allowed: CapabilityState = { allowed: true, pending: false };
 
@@ -42,21 +25,23 @@ const textOf = (container: HTMLElement, selector: string): string[] =>
   );
 
 describe('FinalizersSection', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let view: MountedApp;
+  let container: HTMLElement;
+  let objectData: ObjectPanelRef;
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    requestFinalizerRemovalMock.mockReset();
-    controllerOptionsMock.mockReset();
-  });
-
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-    vi.useRealTimers();
+  beforeEach(async () => {
+    const dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default', 'terminating']);
+    objectData = {
+      clusterId: dev.clusterId,
+      group: '',
+      version: 'v1',
+      kind: 'Namespace',
+      namespace: '',
+      name: 'terminating',
+    };
+    view = await app.render(null);
+    container = view.container;
   });
 
   const renderSection = async ({
@@ -68,18 +53,15 @@ describe('FinalizersSection', () => {
     } as NamespaceFinalizationDetails | null,
   } = {}) => {
     const onAfterAction = vi.fn();
-    await act(async () => {
-      root.render(
-        <FinalizersSection
-          deletion={{ deletionTimestamp: '2026-08-09T12:34:56Z', finalizers }}
-          namespaceFinalization={namespaceFinalization}
-          objectData={objectData}
-          removalCapabilities={removalCapabilities}
-          onAfterAction={onAfterAction}
-        />
-      );
-      await Promise.resolve();
-    });
+    await view.show(
+      <FinalizersSection
+        deletion={{ deletionTimestamp: '2026-08-09T12:34:56Z', finalizers }}
+        namespaceFinalization={namespaceFinalization}
+        objectData={objectData}
+        removalCapabilities={removalCapabilities}
+        onAfterAction={onAfterAction}
+      />
+    );
     return onAfterAction;
   };
 
@@ -110,33 +92,69 @@ describe('FinalizersSection', () => {
     expect(container.textContent).not.toContain('You may force the removal');
   });
 
-  it('routes each row Remove button to the matching finalizer path', async () => {
-    await renderSection();
+  it('removes each row’s finalizer through its own API path after confirmation', async () => {
+    app.backend.answer('RunObjectAction', () => ({}));
+    const onAfterAction = await renderSection();
 
     const buttons = Array.from(
       container.querySelectorAll<HTMLButtonElement>('.deletion-remove-button')
     );
-    expect(buttons.map((button) => button.textContent)).toEqual(['Remove', 'Remove']);
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Remove finalizer example.com/metadata-cleanup',
+      'Remove finalizer kubernetes',
+    ]);
 
-    act(() => {
-      buttons[0]?.click();
-      buttons[1]?.click();
-    });
+    const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
+    const removeThroughDialog = async (button: HTMLButtonElement) => {
+      const removed = app.backend.calls('RunObjectAction').length;
+      await act(async () => {
+        button.click();
+      });
+      const confirm = requireValue(
+        Array.from(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? []).find(
+          (candidate) => candidate.textContent === 'Remove'
+        ),
+        'finalizer removal confirmation'
+      );
+      // Nothing is removed until the user confirms.
+      expect(app.backend.calls('RunObjectAction')).toHaveLength(removed);
+      await act(async () => {
+        confirm.click();
+      });
+      await app.settle();
+    };
 
-    expect(requestFinalizerRemovalMock).toHaveBeenNthCalledWith(
-      1,
-      objectData as ObjectActionData,
-      'example.com/metadata-cleanup',
-      'metadata.finalizers',
-      '2026-08-09T12:34:56Z'
-    );
-    expect(requestFinalizerRemovalMock).toHaveBeenNthCalledWith(
-      2,
-      objectData as ObjectActionData,
-      'kubernetes',
-      'spec.finalizers',
-      '2026-08-09T12:34:56Z'
-    );
+    await removeThroughDialog(buttons[0]);
+    await removeThroughDialog(buttons[1]);
+
+    const target = {
+      clusterId: objectData.clusterId,
+      group: '',
+      version: 'v1',
+      kind: 'Namespace',
+      namespace: '',
+      name: 'terminating',
+    };
+    expect(app.backend.calls('RunObjectAction')).toEqual([
+      [
+        {
+          action: 'removeFinalizer',
+          target,
+          finalizer: 'example.com/metadata-cleanup',
+          finalizerPath: 'metadata.finalizers',
+        },
+      ],
+      [
+        {
+          action: 'removeFinalizer',
+          target,
+          finalizer: 'kubernetes',
+          finalizerPath: 'spec.finalizers',
+        },
+      ],
+    ]);
+    expect(onAfterAction).toHaveBeenCalledTimes(2);
+    expect(dialog()).toBeNull();
   });
 
   it('uses the shared danger button treatment for Remove', async () => {

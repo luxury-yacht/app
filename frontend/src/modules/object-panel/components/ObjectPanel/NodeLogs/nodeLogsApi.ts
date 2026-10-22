@@ -157,3 +157,9 @@ export const fetchNodeLogs = async (
     data: result.data as NodeLogFetchResponse,
   };
 };
+
+/** Test helper to clear discovered node log sources between runs. */
+export const resetNodeLogDiscoveryCacheForTesting = (): void => {
+  nodeLogDiscoveryCache.clear();
+  nodeLogDiscoveryInflight.clear();
+};

@@ -1,5 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs.test.tsx
+ *
+ * The object panel's tab list and its number-key shortcuts, inside the app
+ * shell with the real keyboard provider and shortcut routing. Only the backend
+ * boundary is faked (test-utils/appState). The probe owns the active tab as
+ * ObjectPanel's panel state does, and keys are pressed on the document.
  */
 
 import { useObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs';
@@ -8,478 +13,343 @@ import type {
   PanelObjectData,
   ViewType,
 } from '@modules/object-panel/components/ObjectPanel/types';
-import type React from 'react';
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { requireValue } from '@/test-utils/requireValue';
+import { act, useState } from 'react';
+import { describe, expect, it } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 
-const hoistedShortcuts = vi.hoisted(() => ({
-  useShortcut: vi.fn(),
-  useShortcuts: vi.fn(),
-}));
+const app = installAppStateHarness();
 
-vi.mock('@ui/shortcuts', () => ({
-  useShortcut: (...args: unknown[]) => hoistedShortcuts.useShortcut(...args),
-  useShortcuts: (...args: unknown[]) => hoistedShortcuts.useShortcuts(...args),
-  useSearchShortcutTarget: () => undefined,
-}));
+const baseCapabilities: ComputedCapabilities = {
+  hasObjPanelLogs: true,
+  hasNodeLogs: false,
+  hasShell: false,
+  hasManifest: false,
+  hasValues: false,
+  canDelete: true,
+  canRestart: true,
+  canScale: true,
+  canEditYaml: true,
+  canTrigger: false,
+  canSuspend: false,
+};
+
+const deployment: ObjectIdentity = {
+  group: 'apps',
+  version: 'v1',
+  kind: 'Deployment',
+  namespace: 'team-a',
+  name: 'api',
+};
+const helmRelease: ObjectIdentity = {
+  group: 'helm.sh',
+  version: 'v3',
+  kind: 'HelmRelease',
+  namespace: 'team-a',
+  name: 'shop',
+};
+const node: ObjectIdentity = {
+  group: '',
+  version: 'v1',
+  kind: 'Node',
+  namespace: '',
+  name: 'node-1',
+};
+const pod: ObjectIdentity = {
+  group: '',
+  version: 'v1',
+  kind: 'Pod',
+  namespace: 'team-a',
+  name: 'api-123',
+};
+
+interface TabsProbeProps {
+  objectData: PanelObjectData | null;
+  capabilities?: ComputedCapabilities;
+  isHelmRelease?: boolean;
+  isEvent?: boolean;
+  isOpen?: boolean;
+  initialTab?: ViewType;
+}
+
+let shownLabels: string[] = [];
+
+function TabsProbe({
+  objectData,
+  capabilities = baseCapabilities,
+  isHelmRelease = false,
+  isEvent = false,
+  isOpen = true,
+  initialTab = 'details',
+}: Readonly<TabsProbeProps>) {
+  const [activeTab, setActiveTab] = useState<ViewType>(initialTab);
+  const { availableTabs } = useObjectPanelTabs({
+    capabilities,
+    objectData,
+    isHelmRelease,
+    isEvent,
+    isOpen,
+    setActiveTab,
+    currentTab: activeTab,
+  });
+  shownLabels = availableTabs.map((tab) => tab.label);
+  return <output data-active-tab={activeTab} />;
+}
 
 describe('useObjectPanelTabs', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-  const resultRef: { current: ReturnType<typeof useObjectPanelTabs> | null } = { current: null };
-  const setActiveTabMock = vi.fn();
+  let dev: TestCluster;
+  let view: MountedApp;
 
-  const baseCapabilities: ComputedCapabilities = {
-    hasObjPanelLogs: true,
-    hasNodeLogs: false,
-    hasShell: false,
-    hasManifest: false,
-    hasValues: false,
-    canDelete: true,
-    canRestart: true,
-    canScale: true,
-    canEditYaml: true,
-    canTrigger: false,
-    canSuspend: false,
+  const start = async () => {
+    shownLabels = [];
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['team-a']);
+    view = await app.render(null);
   };
 
-  const objectData: PanelObjectData = {
-    kind: 'Deployment',
-    name: 'api',
-    namespace: 'team-a',
-    clusterId: 'cluster-a',
-    group: 'apps',
-    version: 'v1',
-  };
+  /** The object in the test cluster, with complete identity. */
+  const inCluster = (identity: ObjectIdentity): PanelObjectData => app.object(dev, identity).ref;
 
-  const helmReleaseData: PanelObjectData = {
-    kind: 'HelmRelease',
-    name: 'shop',
-    namespace: 'team-a',
-    clusterId: 'cluster-a',
-    group: 'helm.sh',
-    version: 'v3',
-  };
+  const activeTab = () =>
+    view.container.querySelector('[data-active-tab]')?.getAttribute('data-active-tab');
 
-  const renderHook = async (
-    props?: Partial<Parameters<typeof useObjectPanelTabs>[0]>
-  ): Promise<ReturnType<typeof useObjectPanelTabs>> => {
-    const finalProps = {
-      capabilities: baseCapabilities,
-      objectData,
-      isHelmRelease: false,
-      isEvent: false,
-      isOpen: true,
-      setActiveTab: setActiveTabMock,
-      currentTab: 'details' as ViewType,
-      ...props,
-    } satisfies Parameters<typeof useObjectPanelTabs>[0];
-
-    const HookHarness: React.FC = () => {
-      resultRef.current = useObjectPanelTabs(finalProps);
-      return null;
-    };
-
+  const press = async (key: string) => {
     await act(async () => {
-      root.render(<HookHarness />);
-      await Promise.resolve();
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
     });
-
-    return requireValue(resultRef.current, 'expected test value in useObjectPanelTabs.test.tsx');
   };
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    resultRef.current = null;
-    setActiveTabMock.mockClear();
-    hoistedShortcuts.useShortcut.mockClear();
-    hoistedShortcuts.useShortcuts.mockClear();
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
 
   it('returns workload tabs excluding manifest/values for non-Helm resources', async () => {
-    const { availableTabs } = await renderHook();
-    const labels = availableTabs.map((tab) => tab.label);
-    expect(labels).toEqual(['Details', 'Map', 'Pods', 'Logs', 'Metrics', 'Events', 'YAML']);
+    await start();
+    await view.show(<TabsProbe objectData={inCluster(deployment)} />);
+
+    expect(shownLabels).toEqual(['Details', 'Map', 'Pods', 'Logs', 'Metrics', 'Events', 'YAML']);
   });
 
   it.each([
-    { kind: 'Node', group: '', version: 'v1', namespace: undefined },
-    { kind: 'Deployment', group: 'apps', version: 'v1', namespace: 'team-a' },
-    { kind: 'StatefulSet', group: 'apps', version: 'v1', namespace: 'team-a' },
-    { kind: 'DaemonSet', group: 'apps', version: 'v1', namespace: 'team-a' },
+    node,
+    deployment,
+    { ...deployment, kind: 'StatefulSet' },
+    { ...deployment, kind: 'DaemonSet' },
   ])('offers the Metrics tab for a $kind, which has live metrics', async (identity) => {
-    const { availableTabs } = await renderHook({
-      objectData: { ...identity, name: 'api', clusterId: 'cluster-a' },
-    });
-    expect(availableTabs.map((tab) => tab.label)).toContain('Metrics');
+    await start();
+    await view.show(<TabsProbe objectData={inCluster(identity)} />);
+
+    expect(shownLabels).toContain('Metrics');
   });
 
   it.each([
-    { kind: 'ReplicaSet', group: 'apps', version: 'v1' },
-    { kind: 'Job', group: 'batch', version: 'v1' },
-    { kind: 'ConfigMap', group: '', version: 'v1' },
+    { ...deployment, kind: 'ReplicaSet' },
+    { ...deployment, group: 'batch', kind: 'Job' },
+    { ...deployment, group: '', kind: 'ConfigMap' },
     // A custom resource that shares a built-in kind name has no metrics-server data.
-    { kind: 'Deployment', group: 'example.com', version: 'v1alpha1' },
+    { ...deployment, group: 'example.com', version: 'v1alpha1' },
   ])(
     'omits the Metrics tab for a $kind in "$group", which has no live metrics',
     async (identity) => {
-      const { availableTabs } = await renderHook({
-        objectData: { ...identity, name: 'api', namespace: 'team-a', clusterId: 'cluster-a' },
-      });
-      expect(availableTabs.map((tab) => tab.label)).not.toContain('Metrics');
+      await start();
+      await view.show(<TabsProbe objectData={inCluster(identity)} />);
+
+      expect(shownLabels).not.toContain('Metrics');
     }
   );
 
-  it.each(['Role', 'RoleBinding'])('offers the Map tab for %s', async (kind) => {
-    const { availableTabs } = await renderHook({
-      objectData: { ...objectData, kind, group: 'rbac.authorization.k8s.io' },
-    });
-    expect(availableTabs.map((tab) => tab.label)).toContain('Map');
-  });
-
   it('omits the Shell tab when capability is disabled', async () => {
-    const { availableTabs } = await renderHook({
-      objectData: {
-        kind: 'Pod',
-        name: 'api-123',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-      },
-    });
-    expect(availableTabs.map((tab) => tab.label)).toEqual([
-      'Details',
-      'Map',
-      'Logs',
-      'Metrics',
-      'Events',
-      'YAML',
-    ]);
+    await start();
+    await view.show(<TabsProbe objectData={inCluster(pod)} />);
+
+    expect(shownLabels).toEqual(['Details', 'Map', 'Logs', 'Metrics', 'Events', 'YAML']);
   });
 
   it('includes the Shell tab for pods when capability is available', async () => {
-    const { availableTabs } = await renderHook({
-      objectData: {
-        kind: 'Pod',
-        name: 'api-123',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-      },
-      capabilities: { ...baseCapabilities, hasShell: true },
-    });
-    expect(availableTabs.map((tab) => tab.label)).toEqual([
-      'Details',
-      'Map',
-      'Logs',
-      'Metrics',
-      'Events',
-      'YAML',
-      'Shell',
-    ]);
+    await start();
+    await view.show(
+      <TabsProbe
+        objectData={inCluster(pod)}
+        capabilities={{ ...baseCapabilities, hasShell: true }}
+      />
+    );
+
+    expect(shownLabels).toEqual(['Details', 'Map', 'Logs', 'Metrics', 'Events', 'YAML', 'Shell']);
   });
 
   it('includes the Shell tab for nodes when the node shell is available', async () => {
-    const { availableTabs } = await renderHook({
-      objectData: {
-        kind: 'Node',
-        name: 'node-1',
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-      },
-      capabilities: { ...baseCapabilities, hasObjPanelLogs: false, hasShell: true },
-    });
-    expect(availableTabs.map((tab) => tab.label)).toEqual([
-      'Details',
-      'Map',
-      'Pods',
-      'Metrics',
-      'Events',
-      'YAML',
-      'Shell',
-    ]);
-  });
+    await start();
+    await view.show(
+      <TabsProbe
+        objectData={inCluster(node)}
+        capabilities={{ ...baseCapabilities, hasObjPanelLogs: false, hasShell: true }}
+      />
+    );
 
-  it('includes map/manifest/values and omits events/yaml for Helm releases', async () => {
-    const { availableTabs } = await renderHook({
-      isHelmRelease: true,
-      objectData: helmReleaseData,
-      capabilities: { ...baseCapabilities, hasManifest: true, hasValues: true },
-    });
-    const labels = availableTabs.map((tab) => tab.label);
-    expect(labels).toEqual(['Details', 'Map', 'Logs', 'Manifest', 'Values']);
-  });
-
-  it('hides events and YAML tabs for Event objects', async () => {
-    const { availableTabs } = await renderHook({
-      isEvent: true,
-      objectData: { kind: 'Event', name: 'warning', namespace: 'team-a' },
-    });
-    const labels = availableTabs.map((tab) => tab.label);
-    expect(labels).toEqual(['Details', 'Logs']);
-  });
-
-  it('hides the Map tab for cluster webhook config objects', async () => {
-    const validating = await renderHook({
-      objectData: { kind: 'ValidatingWebhookConfiguration', name: 'admission-webhooks' },
-    });
-    expect(validating.availableTabs.map((tab) => tab.label)).toEqual([
-      'Details',
-      'Logs',
-      'Events',
-      'YAML',
-    ]);
-
-    const mutating = await renderHook({
-      objectData: { kind: 'MutatingWebhookConfiguration', name: 'mutation-webhooks' },
-    });
-    expect(mutating.availableTabs.map((tab) => tab.label)).toEqual([
-      'Details',
-      'Logs',
-      'Events',
-      'YAML',
-    ]);
-  });
-
-  it('hides the Map tab by default for unsupported object types', async () => {
-    const { availableTabs } = await renderHook({
-      objectData: { kind: 'GatewayClass', name: 'public-gateway' },
-    });
-
-    expect(availableTabs.map((tab) => tab.label)).toEqual(['Details', 'Logs', 'Events', 'YAML']);
-  });
-
-  it('keeps the Map tab for backend-supported object-map types', async () => {
-    for (const candidateObject of [
-      {
-        kind: 'IngressClass',
-        name: 'public',
-        clusterId: 'cluster-a',
-        group: 'networking.k8s.io',
-        version: 'v1',
-      },
-      {
-        kind: 'ClusterRole',
-        name: 'admin',
-        clusterId: 'cluster-a',
-        group: 'rbac.authorization.k8s.io',
-        version: 'v1',
-      },
-      {
-        kind: 'ClusterRoleBinding',
-        name: 'admin-binding',
-        clusterId: 'cluster-a',
-        group: 'rbac.authorization.k8s.io',
-        version: 'v1',
-      },
-    ]) {
-      const { availableTabs } = await renderHook({ objectData: candidateObject });
-      expect(availableTabs.map((tab) => tab.label)).toContain('Map');
-    }
-  });
-
-  it('keeps the Map tab for ConfigMaps and Secrets', async () => {
-    const configMap = await renderHook({
-      objectData: {
-        kind: 'ConfigMap',
-        name: 'app-config',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-      },
-    });
-    expect(configMap.availableTabs.map((tab) => tab.label)).toContain('Map');
-
-    const secret = await renderHook({
-      objectData: {
-        kind: 'Secret',
-        name: 'app-secret',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-      },
-    });
-    expect(secret.availableTabs.map((tab) => tab.label)).toContain('Map');
-  });
-
-  it('hides the Map tab for supported kinds when the object reference is incomplete', async () => {
-    const { availableTabs } = await renderHook({
-      objectData: { kind: 'Deployment', name: 'api', namespace: 'team-a' },
-    });
-
-    expect(availableTabs.map((tab) => tab.label)).toEqual([
-      'Details',
-      'Pods',
-      'Logs',
-      'Events',
-      'YAML',
-    ]);
-  });
-
-  it('shows the standard tabs for node objects', async () => {
-    const { availableTabs } = await renderHook({
-      objectData: {
-        kind: 'Node',
-        name: 'node-1',
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-      },
-      capabilities: { ...baseCapabilities, hasObjPanelLogs: false },
-    });
-    expect(availableTabs.map((tab) => tab.label)).toEqual([
-      'Details',
-      'Map',
-      'Pods',
-      'Metrics',
-      'Events',
-      'YAML',
-    ]);
+    expect(shownLabels).toEqual(['Details', 'Map', 'Pods', 'Metrics', 'Events', 'YAML', 'Shell']);
   });
 
   it('uses the Logs tab for node objects rather than a separate node logs tab', async () => {
-    const { availableTabs } = await renderHook({
-      objectData: {
-        kind: 'Node',
-        name: 'node-1',
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-      },
-      capabilities: { ...baseCapabilities, hasObjPanelLogs: true, hasNodeLogs: false },
-    });
-    expect(availableTabs.map((tab) => tab.label)).toEqual([
-      'Details',
-      'Map',
-      'Pods',
-      'Logs',
-      'Metrics',
-      'Events',
-      'YAML',
-    ]);
+    await start();
+    await view.show(
+      <TabsProbe
+        objectData={inCluster(node)}
+        capabilities={{ ...baseCapabilities, hasObjPanelLogs: true, hasNodeLogs: false }}
+      />
+    );
+
+    expect(shownLabels).toEqual(['Details', 'Map', 'Pods', 'Logs', 'Metrics', 'Events', 'YAML']);
+  });
+
+  it('includes map/manifest/values and omits events/yaml for Helm releases', async () => {
+    await start();
+    await view.show(
+      <TabsProbe
+        isHelmRelease
+        objectData={inCluster(helmRelease)}
+        capabilities={{ ...baseCapabilities, hasManifest: true, hasValues: true }}
+      />
+    );
+
+    expect(shownLabels).toEqual(['Details', 'Map', 'Logs', 'Manifest', 'Values']);
+  });
+
+  it('hides events and YAML tabs for Event objects', async () => {
+    await start();
+    await view.show(
+      <TabsProbe isEvent objectData={inCluster({ ...pod, kind: 'Event', name: 'warning' })} />
+    );
+
+    expect(shownLabels).toEqual(['Details', 'Logs']);
+  });
+
+  it.each(['ValidatingWebhookConfiguration', 'MutatingWebhookConfiguration'])(
+    'hides the Map tab for a %s, which the object map does not support',
+    async (kind) => {
+      await start();
+      await view.show(
+        <TabsProbe
+          objectData={inCluster({
+            group: 'admissionregistration.k8s.io',
+            version: 'v1',
+            kind,
+            namespace: '',
+            name: 'admission-webhooks',
+          })}
+        />
+      );
+
+      expect(shownLabels).toEqual(['Details', 'Logs', 'Events', 'YAML']);
+    }
+  );
+
+  it('hides the Map tab for custom resources', async () => {
+    await start();
+    await view.show(
+      <TabsProbe
+        objectData={inCluster({
+          group: 'example.com',
+          version: 'v1',
+          kind: 'Widget',
+          namespace: 'team-a',
+          name: 'gadget',
+        })}
+      />
+    );
+
+    expect(shownLabels).toEqual(['Details', 'Logs', 'Events', 'YAML']);
+  });
+
+  // Representative cluster-scoped, RBAC, and core kinds; objectPanelRef.test.ts owns the table.
+  it.each([
+    { group: 'networking.k8s.io', version: 'v1', kind: 'IngressClass', namespace: '' },
+    { group: 'rbac.authorization.k8s.io', version: 'v1', kind: 'RoleBinding', namespace: 'team-a' },
+    { group: '', version: 'v1', kind: 'ConfigMap', namespace: 'team-a' },
+  ])('keeps the Map tab for a $kind, which the object map supports', async (identity) => {
+    await start();
+    await view.show(<TabsProbe objectData={inCluster({ ...identity, name: 'public' })} />);
+
+    expect(shownLabels).toContain('Map');
+  });
+
+  it('hides the Map tab for supported kinds when the object reference is incomplete', async () => {
+    await start();
+    await view.show(
+      <TabsProbe objectData={{ kind: 'Deployment', name: 'api', namespace: 'team-a' }} />
+    );
+
+    expect(shownLabels).toEqual(['Details', 'Pods', 'Logs', 'Events', 'YAML']);
   });
 
   it('falls back to details when the active tab becomes unavailable', async () => {
-    await renderHook({
-      currentTab: 'logs',
-      capabilities: { ...baseCapabilities, hasObjPanelLogs: false },
-    });
-    expect(setActiveTabMock).toHaveBeenCalledWith('details');
+    await start();
+    await view.show(
+      <TabsProbe
+        objectData={inCluster(deployment)}
+        capabilities={{ ...baseCapabilities, hasObjPanelLogs: false }}
+        initialTab="logs"
+      />
+    );
+
+    expect(activeTab()).toBe('details');
   });
 
-  it('registers position-based shortcut keys matching visible tab order', async () => {
-    await renderHook();
+  describe('number-key shortcuts', () => {
+    it('switch to the visible tab at each position', async () => {
+      await start();
+      await view.show(<TabsProbe objectData={inCluster(deployment)} />);
 
-    // Escape closes the dockable object tab, not the inner Details/YAML/etc. tabs.
-    expect(hoistedShortcuts.useShortcut).not.toHaveBeenCalled();
-
-    // Tab shortcuts registered via useShortcuts (plural), keyed by position.
-    // Deployment tabs: Details, Map, Pods, Logs, Metrics, Events, YAML → keys 1–7.
-    const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
-      | Array<{ key: string; description: string }>
-      | undefined;
-    expect(tabShortcuts?.map((s) => s.key)).toEqual(['1', '2', '3', '4', '5', '6', '7']);
-    expect(tabShortcuts?.map((s) => s.description)).toEqual([
-      'Switch to Details tab',
-      'Switch to Map tab',
-      'Switch to Pods tab',
-      'Switch to Logs tab',
-      'Switch to Metrics tab',
-      'Switch to Events tab',
-      'Switch to YAML tab',
-    ]);
-  });
-
-  it('numbers shortcuts by position so hidden tabs do not leave gaps', async () => {
-    // Helm releases hide events/yaml/pods, showing: Details, Map, Logs, Manifest, Values.
-    await renderHook({
-      isHelmRelease: true,
-      objectData: helmReleaseData,
-      capabilities: { ...baseCapabilities, hasManifest: true, hasValues: true },
+      // Deployment tabs: Details, Map, Pods, Logs, Metrics, Events, YAML.
+      await press('4');
+      expect(activeTab()).toBe('logs');
+      await press('5');
+      expect(activeTab()).toBe('metrics');
+      await press('7');
+      expect(activeTab()).toBe('yaml');
+      await press('1');
+      expect(activeTab()).toBe('details');
     });
 
-    const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
-      | Array<{ key: string; description: string }>
-      | undefined;
-    expect(tabShortcuts?.map((s) => s.key)).toEqual(['1', '2', '3', '4', '5']);
-    expect(tabShortcuts?.map((s) => s.description)).toEqual([
-      'Switch to Details tab',
-      'Switch to Map tab',
-      'Switch to Logs tab',
-      'Switch to Manifest tab',
-      'Switch to Values tab',
-    ]);
-  });
+    it('leave no gap where a tab is hidden', async () => {
+      await start();
+      await view.show(
+        <TabsProbe
+          objectData={inCluster(deployment)}
+          capabilities={{ ...baseCapabilities, hasObjPanelLogs: false }}
+        />
+      );
 
-  it('omits shortcuts for hidden tabs instead of disabling them', async () => {
-    // Without logs capability: Details, Map, Pods, Metrics, Events, YAML → 6 shortcuts, no gap.
-    const { availableTabs } = await renderHook({
-      capabilities: { ...baseCapabilities, hasObjPanelLogs: false },
+      // Without Logs: Details, Map, Pods, Metrics, Events, YAML.
+      await press('4');
+      expect(activeTab()).toBe('metrics');
+      await press('7');
+      expect(activeTab()).toBe('metrics');
     });
 
-    expect(availableTabs.map((tab) => tab.label)).toEqual([
-      'Details',
-      'Map',
-      'Pods',
-      'Metrics',
-      'Events',
-      'YAML',
-    ]);
+    it("follow a Helm release's own tabs", async () => {
+      await start();
+      await view.show(
+        <TabsProbe
+          isHelmRelease
+          objectData={inCluster(helmRelease)}
+          capabilities={{ ...baseCapabilities, hasManifest: true, hasValues: true }}
+        />
+      );
 
-    const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
-      | Array<{ key: string; description: string }>
-      | undefined;
-    expect(tabShortcuts).toHaveLength(6);
-    // Key '2' now maps to Map (second visible tab), not to a disabled Logs shortcut.
-    expect(tabShortcuts?.[1]?.description).toBe('Switch to Map tab');
-  });
+      // Details, Map, Logs, Manifest, Values.
+      await press('4');
+      expect(activeTab()).toBe('manifest');
+      await press('5');
+      expect(activeTab()).toBe('values');
+    });
 
-  it('ignores tab shortcuts when the panel is closed', async () => {
-    await renderHook({ isOpen: false });
+    it('are ignored while the panel is closed', async () => {
+      await start();
+      await view.show(<TabsProbe objectData={inCluster(deployment)} isOpen={false} />);
 
-    const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
-      | Array<{ key: string; handler: () => boolean; enabled: boolean }>
-      | undefined;
-    expect(tabShortcuts?.[0]?.enabled).toBe(false);
-    expect(tabShortcuts?.[0]?.handler()).toBe(false);
-    expect(setActiveTabMock).not.toHaveBeenCalled();
-  });
+      await press('2');
 
-  it('fires tab change shortcuts matching visible tab positions', async () => {
-    await renderHook();
-
-    const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
-      | Array<{ key: string; handler: () => boolean }>
-      | undefined;
-
-    // Key '1' → Details (first visible tab).
-    expect(tabShortcuts?.[0]?.handler()).toBe(true);
-    expect(setActiveTabMock).toHaveBeenCalledWith('details');
-
-    // Key '4' → Logs (fourth visible tab for Deployment: Details, Map, Pods, Logs).
-    expect(tabShortcuts?.[3]?.handler()).toBe(true);
-    expect(setActiveTabMock).toHaveBeenCalledWith('logs');
-
-    // Key '5' → Metrics (fifth visible tab), then Events.
-    expect(tabShortcuts?.[4]?.handler()).toBe(true);
-    expect(setActiveTabMock).toHaveBeenCalledWith('metrics');
-    expect(tabShortcuts?.[5]?.handler()).toBe(true);
-    expect(setActiveTabMock).toHaveBeenCalledWith('events');
+      expect(activeTab()).toBe('details');
+    });
   });
 });

@@ -171,12 +171,11 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   }, [eventsScope, eventsSnapshot.data]);
 
   const buildEventObjectRefInput = useCallback(
-    (event: Pick<EventDisplay, 'objectUid' | 'involvedObject' | 'clusterId' | 'clusterName'>) =>
+    (event: Pick<EventDisplay, 'objectUid' | 'involvedObject' | 'clusterId'>) =>
       eventGridRelatedObjectInput(event, {
         selectedClusterId: objectData?.clusterId,
-        selectedClusterName: objectData?.clusterName,
       }),
-    [objectData?.clusterId, objectData?.clusterName]
+    [objectData?.clusterId]
   );
 
   const events = useMemo<EventDisplay[]>(

@@ -39,9 +39,8 @@ interface ClusterMeta {
 
 const TargetRefLink: React.FC<{
   targetRef: endpointslice.EndpointSliceAddress['targetRef'];
-  clusterName?: string;
-}> = ({ targetRef, clusterName }) => {
-  const objectRef = useResourceLinkReference(targetRef, clusterName);
+}> = ({ targetRef }) => {
+  const objectRef = useResourceLinkReference(targetRef);
   const target = targetRef?.ref ?? targetRef?.display;
   if (!target) {
     return null;
@@ -62,11 +61,7 @@ const AddressEntry: React.FC<{
   clusterMeta: ClusterMeta;
 }> = ({ address, clusterMeta }) => (
   <FlowEntry
-    title={
-      address.targetRef ? (
-        <TargetRefLink targetRef={address.targetRef} clusterName={clusterMeta.clusterName} />
-      ) : undefined
-    }
+    title={address.targetRef ? <TargetRefLink targetRef={address.targetRef} /> : undefined}
   >
     {address.ip}
     {!!address.nodeName && (

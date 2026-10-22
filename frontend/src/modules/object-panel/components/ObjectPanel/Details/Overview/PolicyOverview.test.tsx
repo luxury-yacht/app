@@ -2,13 +2,19 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/PolicyOverview.test.tsx
  *
  * Behavioral coverage for the Autoscaling & Policy Overview descriptors (HPA, PDB, ResourceQuota,
- * LimitRange) rendered through the generic OverviewRenderer.
+ * LimitRange) rendered through the generic OverviewRenderer inside the real app shell: related-object
+ * links open panels through the real panel owners. Only the backend boundary is faked
+ * (test-utils/appState).
  */
 
 import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import {
   hpaDescriptor,
   limitRangeDescriptor,
@@ -26,9 +32,7 @@ type DeepPartial<T> = T extends (...args: never[]) => unknown
       ? { [Key in keyof T]?: DeepPartial<T[Key]> }
       : T;
 
-const openWithObjectMock = vi.fn();
-const defaultClusterId = 'alpha:ctx';
-const context: OverviewContext = { clusterId: defaultClusterId, clusterName: 'alpha' };
+const app = installAppStateHarness();
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
@@ -43,17 +47,6 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ),
 }));
 
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    openWithObject: openWithObjectMock,
-    objectData: { clusterId: defaultClusterId, clusterName: 'alpha' },
-  }),
-}));
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
 const getValueForLabel = (container: HTMLElement, label: string) => {
   const labelElement = Array.from(container.querySelectorAll<HTMLElement>('.overview-label')).find(
     (el) => el.textContent?.trim() === label
@@ -62,32 +55,32 @@ const getValueForLabel = (container: HTMLElement, label: string) => {
 };
 
 describe('Policy Overview descriptors', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let view: MountedApp;
+  let dev: TestCluster;
+  let container: HTMLElement;
 
   const renderDescriptor = async <T,>(
     descriptor: OverviewDescriptor<T>,
     fixture: DeepPartial<T>
   ) => {
-    const data = fixture as T;
-    await act(async () => {
-      root.render(<OverviewRenderer<T> descriptor={descriptor} data={data} context={context} />);
-      await Promise.resolve();
-    });
+    const context: OverviewContext = { clusterId: dev.clusterId, clusterName: dev.clusterName };
+    await view.show(
+      <OverviewRenderer<T> descriptor={descriptor} data={fixture as T} context={context} />
+    );
   };
 
-  beforeEach(() => {
-    openWithObjectMock.mockReset();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
+  const click = async (element: Element | null | undefined) => {
+    await act(async () => {
+      element?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    container.remove();
+    await app.settle();
+  };
+
+  beforeEach(async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['prod']);
+    view = await app.render(null);
+    container = view.container;
   });
 
   it('renders HPA details and links to scale target', async () => {
@@ -132,17 +125,18 @@ describe('Policy Overview descriptors', () => {
 
     const targetLink = getValueForLabel(container, 'Target')?.querySelector('.object-panel-link');
     expect(targetLink).toBeTruthy();
-    act(() => {
-      targetLink?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+    await click(targetLink);
+    expect(view.openPanels()).toEqual([
+      {
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        group: 'apps',
+        version: 'v1',
         kind: 'Deployment',
-        name: 'api',
         namespace: 'prod',
-        clusterId: defaultClusterId,
-      })
-    );
+        name: 'api',
+      },
+    ]);
     // New format shows Current, Min, Max on separate lines
     const replicasContent = getValueForLabel(container, 'Replicas');
     expect(replicasContent?.textContent).toContain('Current:');
@@ -255,7 +249,9 @@ describe('Policy Overview descriptors', () => {
       ).toMatch(/^AlwaysAllow/);
     });
 
-    it('opens a disrupted pod in its own cluster', async () => {
+    // The producer links disrupted pods in the budget's own cluster and namespace
+    // (backend/resources/poddisruptionbudget/model.go DisruptedPodsFromMap).
+    it('opens a disrupted pod with its complete identity', async () => {
       await renderDescriptor(pdbDescriptor, {
         ...pdb,
         maxUnavailable: '1',
@@ -266,7 +262,7 @@ describe('Policy Overview descriptors', () => {
           {
             pod: {
               ref: {
-                clusterId: 'beta:ctx',
+                clusterId: dev.clusterId,
                 group: '',
                 version: 'v1',
                 kind: 'Pod',
@@ -284,19 +280,18 @@ describe('Policy Overview descriptors', () => {
         '.object-panel-link'
       );
       expect(link?.textContent).toBe('web-0');
-      act(() => {
-        link?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      });
-      expect(openWithObjectMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          clusterId: 'beta:ctx',
+      await click(link);
+      expect(view.openPanels()).toEqual([
+        {
+          clusterId: dev.clusterId,
+          clusterName: dev.clusterName,
           group: '',
           version: 'v1',
           kind: 'Pod',
           namespace: 'prod',
           name: 'web-0',
-        })
-      );
+        },
+      ]);
     });
   });
 

@@ -35,6 +35,8 @@ interface GenericOverviewProps {
   /** Called after a successful restart/scale/trigger/suspend so the panel can refetch. */
   onAfterAction?: () => void;
   portForwardAvailable?: boolean;
+  /** Replicas the scale action starts from: the detail's desired count, 0 for unscalable kinds. */
+  desiredReplicas: number;
   /** The active detail tagged with its type; a registered type renders through its descriptor. */
   activeDetail?: ObjectDetail | null;
   [key: string]: unknown; // Allow any additional fields for generic resources
@@ -55,22 +57,6 @@ function renderDescriptorOverview<K extends ObjectDetailType>(
 type OverviewProps = GenericOverviewProps;
 
 const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
-
-const parseDesiredReplicaCount = (value: unknown): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return clampReplicas(value);
-  }
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const segments = trimmed.split('/');
-  const candidate = Number.parseInt(segments[segments.length - 1]?.trim() ?? '', 10);
-  return Number.isFinite(candidate) ? clampReplicas(candidate) : null;
-};
 
 const Overview: React.FC<OverviewProps> = (props) => {
   const { objectData, panelId } = useObjectPanel();
@@ -186,11 +172,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
         })
     : undefined;
 
-  const currentScaleReplicas =
-    parseDesiredReplicaCount(props.desiredReplicas) ??
-    parseDesiredReplicaCount(props.replicas) ??
-    parseDesiredReplicaCount(props.ready) ??
-    0;
+  const currentScaleReplicas = clampReplicas(props.desiredReplicas);
 
   // Build object data for ActionsMenu. Group/version come from the panel's
   // objectData (the source of truth) so CRD permission lookups in

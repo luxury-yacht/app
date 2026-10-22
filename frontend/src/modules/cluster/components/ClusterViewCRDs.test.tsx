@@ -95,10 +95,6 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
   }),
 }));
 
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
 vi.mock('@core/backend-api', () => ({
   RunObjectAction: vi.fn(),
 }));

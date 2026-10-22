@@ -14,7 +14,6 @@ export interface EventObjectReferenceInput {
   involvedObject?: ResourceLink | null;
   objectUid?: string | null;
   clusterId?: string | null;
-  clusterName?: string | null;
 }
 
 const normalizeOptional = (value: string | null | undefined): string | undefined => {
@@ -32,7 +31,7 @@ export function buildEventObjectReference(
     return undefined;
   }
   try {
-    return resourceLinkToObjectReference(input.involvedObject, input.clusterName);
+    return resourceLinkToObjectReference(input.involvedObject);
   } catch {
     return undefined;
   }

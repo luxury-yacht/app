@@ -143,10 +143,6 @@ vi.mock('@/hooks/useTableSort', () => ({
   }),
 }));
 
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
 // Single-namespace network tables are query-backed now, so the table renders the typed query rows.
 // Mock the typed-query data path (and its readiness gates) so the query can settle in tests.
 vi.mock('@/core/data-access', () => ({

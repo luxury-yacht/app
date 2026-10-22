@@ -5,7 +5,7 @@ import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { resourceLinkToObjectReference } from '@shared/utils/resourceLinkIdentity';
 import type React from 'react';
-import type { OverviewContext, OverviewDescriptor } from '../schema';
+import type { OverviewDescriptor } from '../schema';
 
 type EventDetails = events.EventDetails;
 
@@ -26,17 +26,13 @@ const resourceLinkLabel = (link?: resourcemodel.ResourceLink | null): string | u
 };
 
 const renderResourceLink = (
-  link: resourcemodel.ResourceLink | null | undefined,
-  context: OverviewContext
+  link: resourcemodel.ResourceLink | null | undefined
 ): React.ReactNode => {
   const label = resourceLinkLabel(link);
   if (!link || !label) {
     return undefined;
   }
-  const objectRef = resourceLinkToObjectReference(
-    link as unknown as ResourceLink,
-    context.clusterName
-  );
+  const objectRef = resourceLinkToObjectReference(link as unknown as ResourceLink);
   return objectRef ? <ObjectPanelLink objectRef={objectRef}>{label}</ObjectPanelLink> : label;
 };
 
@@ -50,7 +46,7 @@ export const eventDescriptor: OverviewDescriptor<EventDetails> = {
         field: 'involvedObject',
         label: EVENT_LABELS.object,
         hidden: (d) => !resourceLinkLabel(d.involvedObject),
-        render: (d, context) => renderResourceLink(d.involvedObject, context),
+        render: (d) => renderResourceLink(d.involvedObject),
       },
       {
         field: 'involvedObjectFieldPath',
@@ -111,7 +107,7 @@ export const eventDescriptor: OverviewDescriptor<EventDetails> = {
         field: 'relatedObject',
         label: EVENT_LABELS.relatedObject,
         hidden: (d) => !resourceLinkLabel(d.relatedObject),
-        render: (d, context) => renderResourceLink(d.relatedObject, context),
+        render: (d) => renderResourceLink(d.relatedObject),
       },
       {
         field: 'relatedObjectFieldPath',

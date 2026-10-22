@@ -48,7 +48,6 @@ const modalProps: { current: ConfirmationProps } = {
 const openWithObjectMock = vi.fn();
 const sortHandlerMock = vi.fn();
 const useTableSortMock = vi.fn();
-const useShortNamesMock = vi.fn();
 const runObjectActionMock = vi.fn();
 const useBrowseCatalogMock = vi.hoisted(() => vi.fn());
 const useHydratedCustomCatalogRowsMock = vi.hoisted(() => vi.fn());
@@ -149,10 +148,6 @@ vi.mock('@modules/browse/hooks/useBrowseCatalog', () => ({
 
 vi.mock('@modules/browse/hooks/useHydratedCustomCatalogRows', () => ({
   useHydratedCustomCatalogRows: (...args: unknown[]) => useHydratedCustomCatalogRowsMock(...args),
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => useShortNamesMock(),
 }));
 
 vi.mock('@core/backend-api', () => ({
@@ -297,7 +292,6 @@ describe('NsViewCustom', () => {
       sortConfig: { key: 'name', direction: 'asc' },
       handleSort: sortHandlerMock,
     }));
-    useShortNamesMock.mockReturnValue(false);
     useBrowseCatalogMock.mockReturnValue(browseCatalogResult());
     useHydratedCustomCatalogRowsMock.mockImplementation(
       (_clusterId: string, items: CatalogItem[]) => items.map(catalogItemToCustomResourceData)
@@ -863,9 +857,7 @@ describe('NsViewCustom', () => {
     expect(modalProps.current?.isOpen).toBe(false);
   });
 
-  it('adjusts column sizing when short names are enabled', async () => {
-    useShortNamesMock.mockReturnValue(true);
-
+  it('keys rows by cluster and full object identity', async () => {
     await renderComponent({
       showNamespaceColumn: true,
     });

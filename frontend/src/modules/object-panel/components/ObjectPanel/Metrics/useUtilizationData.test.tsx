@@ -1,8 +1,14 @@
-import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
-import type React from 'react';
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/useUtilizationData.test.tsx
+ *
+ * The Metrics tab's utilization bars through the real live-metrics read, refresh
+ * store, and orchestrator inside the app shell. The panel's metrics collector
+ * holds the lease, as ObjectPanel mounts it; only the backend boundary is faked
+ * (test-utils/appState): each kind's base table scope as the backend serves it,
+ * with live usage joined at serve.
+ */
+
+import { describe, expect, it } from 'vitest';
 import {
   makeClusterNodeSnapshotEntry,
   makeClusterNodeSnapshotPayload,
@@ -11,90 +17,87 @@ import {
   makePodSnapshotEntry,
   makePodSnapshotPayload,
 } from '@/core/refresh/refreshContractTestBuilders';
-import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
+import { buildClusterRefreshScope, buildRefreshScope } from '@/core/refresh/scopeSelector';
 import type { ObjectDetail } from '@/core/refresh/types';
+import {
+  buildObjectPanelRef,
+  type ObjectPanelRef,
+  objectPanelId,
+} from '@/modules/object-panel/objectPanelRef';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { objectDetailOf } from '@/test-utils/objectDetail';
+import { usePanelMetricsCollector } from './usePanelMetricsCollector';
 import { type UtilizationData, useUtilizationData } from './useUtilizationData';
 
 const MIB = 1024 ** 2;
 const GIB = 1024 ** 3;
 
-const refreshMocks = vi.hoisted(() => ({
-  acquireScopedDomainLease: vi.fn(),
-  releaseScopedDomainLease: vi.fn(),
-  fetchScopedDomain: vi.fn<(...args: unknown[]) => Promise<void>>(() => Promise.resolve()),
-}));
+const app = installAppStateHarness();
 
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: {
-    acquireScopedDomainLease: (...args: unknown[]) =>
-      refreshMocks.acquireScopedDomainLease(...args),
-    releaseScopedDomainLease: (...args: unknown[]) =>
-      refreshMocks.releaseScopedDomainLease(...args),
-    fetchScopedDomain: refreshMocks.fetchScopedDomain,
-  },
-}));
+// The poller's freshness for usage joined at serve.
+const polled = { stale: false, successCount: 1, failureCount: 0 };
 
-interface HookProps {
-  objectData: ObjectPanelRef;
-  detail: ObjectDetail | null | undefined;
+let utilization: UtilizationData | null = null;
+
+function CollectorProbe({ panel }: Readonly<{ panel: ObjectPanelRef }>) {
+  usePanelMetricsCollector(objectPanelId(panel), panel, true);
+  return null;
 }
 
-const renderUtilizationHook = async (initialProps: HookProps) => {
-  const propsRef = { current: initialProps };
-  const latest = { current: null as UtilizationData | null };
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
+function UtilizationProbe({
+  panel,
+  detail,
+}: Readonly<{ panel: ObjectPanelRef; detail: ObjectDetail | null }>) {
+  utilization = useUtilizationData({ objectData: panel, detail });
+  return null;
+}
 
-  const Harness: React.FC = () => {
-    latest.current = useUtilizationData(propsRef.current);
-    return <div data-testid="hook-output" data-cpu={latest.current?.cpu?.usage ?? ''} />;
-  };
-
-  await act(async () => {
-    root.render(<Harness />);
-    await Promise.resolve();
+const namespaceScope = (
+  domain: 'pods' | 'namespace-workloads',
+  cluster: TestCluster,
+  namespace: string
+) =>
+  buildRefreshScope(domain, {
+    clusterId: cluster.clusterId,
+    selector: { kind: 'namespace', namespace },
   });
-
-  return {
-    latest,
-    rerender: async (nextProps: Partial<HookProps>) => {
-      propsRef.current = { ...propsRef.current, ...nextProps };
-      await act(async () => {
-        root.render(<Harness />);
-        await Promise.resolve();
-      });
-    },
-    cleanup: () => {
-      act(() => root.unmount());
-      container.remove();
-    },
-  };
-};
 
 describe('useUtilizationData', () => {
-  beforeEach(() => {
-    refreshMocks.acquireScopedDomainLease.mockClear();
-    refreshMocks.releaseScopedDomainLease.mockClear();
-    refreshMocks.fetchScopedDomain.mockClear();
-  });
+  let dev: TestCluster;
+  let view: MountedApp;
 
-  afterEach(() => {
-    resetAllScopedDomainStates('pods');
-    resetAllScopedDomainStates('namespace-workloads');
-    resetAllScopedDomainStates('nodes');
-  });
+  const start = async (identity: ObjectIdentity) => {
+    utilization = null;
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['team-a']);
+    view = await app.render(null);
+    return buildObjectPanelRef(app.object(dev, identity).ref);
+  };
 
-  it('updates Pod utilization from the pods scoped domain without a detail DTO change', async () => {
-    const objectData = {
-      clusterId: 'cluster-a',
+  // The panel's details alone, then with its collector leasing live metrics.
+  const showDetailsOnly = (panel: ObjectPanelRef, detail: ObjectDetail | null) =>
+    view.show(<UtilizationProbe panel={panel} detail={detail} />);
+  const showCollecting = (panel: ObjectPanelRef, detail: ObjectDetail | null) =>
+    view.show(
+      <>
+        <CollectorProbe panel={panel} />
+        <UtilizationProbe panel={panel} detail={detail} />
+      </>
+    );
+
+  it('shows Pod details until live usage arrives, without leasing metrics itself', async () => {
+    const panel = await start({
       group: '',
       version: 'v1',
       kind: 'Pod',
       namespace: 'team-a',
       name: 'api',
-    };
+    });
     const detail = objectDetailOf('pod', {
       cpuUsage: '100m',
       cpuRequest: '50m',
@@ -103,237 +106,151 @@ describe('useUtilizationData', () => {
       memRequest: '64Mi',
       memLimit: '256Mi',
     });
-    const hook = await renderUtilizationHook({ objectData, detail });
+    app.snapshots.serve(
+      'pods',
+      namespaceScope('pods', dev, 'team-a'),
+      makePodSnapshotPayload({
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        rows: [
+          makePodSnapshotEntry({
+            clusterId: dev.clusterId,
+            name: 'api',
+            namespace: 'team-a',
+            cpuUsageMilli: 220,
+            cpuRequestMilli: 75,
+            cpuLimitMilli: 750,
+            memoryUsageBytes: 256 * MIB,
+            memoryRequestBytes: 96 * MIB,
+            memoryLimitBytes: 512 * MIB,
+          }),
+        ],
+        metrics: polled,
+      })
+    );
 
-    expect(hook.latest.current).toMatchObject({
-      cpu: { usage: 100 },
-      memory: { usage: 128 * MIB },
-    });
+    await showDetailsOnly(panel, detail);
+    expect(app.snapshots.reads('pods')).toEqual([]);
+    expect(utilization).toMatchObject({ cpu: { usage: 100 }, memory: { usage: 128 * MIB } });
 
-    await act(async () => {
-      // The pods rows arrive with live usage joined at serve; payload.metrics
-      // carries the poller freshness for that joined usage.
-      setScopedDomainState('pods', 'cluster-a|namespace:team-a', (previous) => ({
-        ...previous,
-        status: 'ready',
-        scope: 'cluster-a|namespace:team-a',
-        data: makePodSnapshotPayload({
-          clusterId: 'cluster-a',
-          rows: [
-            makePodSnapshotEntry({
-              name: 'api',
-              namespace: 'team-a',
-              node: 'node-a',
-              status: 'Running',
-              ready: '1/1',
-              restarts: 0,
-              age: '1m',
-              ownerKind: 'Deployment',
-              ownerName: 'api',
-              cpuUsageMilli: 220,
-              cpuRequestMilli: 75,
-              cpuLimitMilli: 750,
-              memoryUsageBytes: 256 * MIB,
-              memoryRequestBytes: 96 * MIB,
-              memoryLimitBytes: 512 * MIB,
-            }),
-          ],
-          metrics: { stale: false, successCount: 1, failureCount: 0 },
-        }),
-      }));
-      await Promise.resolve();
-    });
+    await showCollecting(panel, detail);
 
-    expect(hook.latest.current).toMatchObject({
+    expect(utilization).toMatchObject({
       cpu: { usage: 220, request: 75, limit: 750 },
       memory: { usage: 256 * MIB, request: 96 * MIB, limit: 512 * MIB },
     });
-
-    hook.cleanup();
   });
 
-  it('updates Deployment utilization from namespace-workloads rows', async () => {
-    const deploymentRef = {
-      clusterId: 'cluster-a',
+  it('updates Deployment utilization and pod counts from namespace-workloads rows', async () => {
+    const panel = await start({
       group: 'apps',
       version: 'v1',
       kind: 'Deployment',
       namespace: 'team-a',
       name: 'api',
-    };
+    });
     const detail = objectDetailOf('deployment', {
-      podMetricsSummary: {
-        cpuUsage: '100m',
-        cpuRequest: '50m',
-        cpuLimit: '500m',
-        memUsage: '128Mi',
-        memRequest: '64Mi',
-        memLimit: '256Mi',
-        pods: 1,
-        readyPods: 1,
-      },
+      podMetricsSummary: { cpuUsage: '100m', memUsage: '128Mi', pods: 1, readyPods: 1 },
     });
-    const hook = await renderUtilizationHook({ objectData: deploymentRef, detail });
+    app.snapshots.serve(
+      'namespace-workloads',
+      namespaceScope('namespace-workloads', dev, 'team-a'),
+      makeNamespaceWorkloadSnapshotPayload({
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        rows: [
+          makeNamespaceWorkloadSummary({
+            clusterId: dev.clusterId,
+            name: 'api',
+            namespace: 'team-a',
+            ready: '2/3',
+            cpuUsageMilli: 320,
+            cpuRequestMilli: 160,
+            cpuLimitMilli: 800,
+            memoryUsageBytes: 384 * MIB,
+            memoryRequestBytes: 192 * MIB,
+            memoryLimitBytes: 768 * MIB,
+          }),
+        ],
+        metrics: polled,
+      })
+    );
 
-    expect(hook.latest.current).toMatchObject({
-      cpu: { usage: 100 },
-      podCount: 1,
-      readyPodCount: 1,
-    });
+    await showDetailsOnly(panel, detail);
+    expect(utilization).toMatchObject({ cpu: { usage: 100 }, podCount: 1, readyPodCount: 1 });
 
-    await act(async () => {
-      setScopedDomainState('namespace-workloads', 'cluster-a|namespace:team-a', (previous) => ({
-        ...previous,
-        status: 'ready',
-        scope: 'cluster-a|namespace:team-a',
-        data: makeNamespaceWorkloadSnapshotPayload({
-          clusterId: 'cluster-a',
-          rows: [
-            makeNamespaceWorkloadSummary({
-              name: 'api',
-              namespace: 'team-a',
-              ready: '2/3',
-              status: 'Available',
-              restarts: 0,
-              age: '2m',
-              cpuUsageMilli: 320,
-              cpuRequestMilli: 160,
-              cpuLimitMilli: 800,
-              memoryUsageBytes: 384 * MIB,
-              memoryRequestBytes: 192 * MIB,
-              memoryLimitBytes: 768 * MIB,
-            }),
-          ],
-          metrics: { stale: false, successCount: 1, failureCount: 0 },
-        }),
-      }));
-      await Promise.resolve();
-    });
+    await showCollecting(panel, detail);
 
-    expect(hook.latest.current).toMatchObject({
+    expect(utilization).toMatchObject({
       cpu: { usage: 320, request: 160, limit: 800 },
       memory: { usage: 384 * MIB, request: 192 * MIB, limit: 768 * MIB },
       podCount: 3,
       readyPodCount: 2,
     });
-
-    hook.cleanup();
   });
 
-  it.each(['DaemonSet', 'StatefulSet'] as const)(
-    'updates %s utilization from namespace-workloads metric rows',
-    async (kind) => {
-      const objectData = {
-        clusterId: 'cluster-a',
-        group: 'apps',
-        version: 'v1',
+  it("takes a workload's own row when another kind in its namespace shares its name", async () => {
+    const panel = await start({
+      group: 'apps',
+      version: 'v1',
+      kind: 'DaemonSet',
+      namespace: 'team-a',
+      name: 'api',
+    });
+    const workloadRow = (kind: string, resource: string, cpuUsageMilli: number) =>
+      makeNamespaceWorkloadSummary({
+        clusterId: dev.clusterId,
         kind,
-        namespace: 'team-a',
+        resource,
         name: 'api',
-      };
-      const detail = objectDetailOf(kind === 'DaemonSet' ? 'daemonset' : 'statefulset', {
-        podMetricsSummary: {
-          cpuUsage: '100m',
-          cpuRequest: '50m',
-          cpuLimit: '500m',
-          memUsage: '128Mi',
-          memRequest: '64Mi',
-          memLimit: '256Mi',
-          pods: 1,
-          readyPods: 1,
-        },
+        namespace: 'team-a',
+        ready: '1/2',
+        cpuUsageMilli,
       });
-      const hook = await renderUtilizationHook({ objectData, detail });
+    app.snapshots.serve(
+      'namespace-workloads',
+      namespaceScope('namespace-workloads', dev, 'team-a'),
+      makeNamespaceWorkloadSnapshotPayload({
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        rows: [
+          workloadRow('Deployment', 'deployments', 999),
+          workloadRow('DaemonSet', 'daemonsets', 320),
+        ],
+        metrics: polled,
+      })
+    );
 
-      await act(async () => {
-        setScopedDomainState('namespace-workloads', 'cluster-a|namespace:team-a', (previous) => ({
-          ...previous,
-          status: 'ready',
-          scope: 'cluster-a|namespace:team-a',
-          data: makeNamespaceWorkloadSnapshotPayload({
-            clusterId: 'cluster-a',
-            rows: [
-              makeNamespaceWorkloadSummary({
-                kind,
-                name: 'api',
-                namespace: 'team-a',
-                ready: '1/2',
-                status: 'Available',
-                restarts: 0,
-                age: '2m',
-                cpuUsageMilli: 320,
-                cpuRequestMilli: 160,
-                cpuLimitMilli: 800,
-                memoryUsageBytes: 384 * MIB,
-                memoryRequestBytes: 192 * MIB,
-                memoryLimitBytes: 768 * MIB,
-              }),
-            ],
-            metrics: { stale: false, successCount: 1, failureCount: 0 },
-          }),
-        }));
-        await Promise.resolve();
-      });
+    await showCollecting(panel, null);
 
-      expect(hook.latest.current).toMatchObject({
-        cpu: { usage: 320, request: 160, limit: 800 },
-        memory: { usage: 384 * MIB, request: 192 * MIB, limit: 768 * MIB },
-        podCount: 2,
-        readyPodCount: 1,
-      });
-
-      hook.cleanup();
-    }
-  );
+    expect(utilization).toMatchObject({ cpu: { usage: 320 }, podCount: 2, readyPodCount: 1 });
+  });
 
   it('updates Node utilization from nodes metric rows', async () => {
-    const objectData = {
-      clusterId: 'cluster-a',
+    const panel = await start({
       group: '',
       version: 'v1',
       kind: 'Node',
+      namespace: '',
       name: 'node-a',
-    };
-    const detail = objectDetailOf('node', {
-      cpuUsage: '100m',
-      cpuCapacity: '4',
-      cpuAllocatable: '3800m',
-      cpuRequests: '1',
-      cpuLimits: '2',
-      memoryUsage: '1Gi',
-      memoryCapacity: '16Gi',
-      memoryAllocatable: '15Gi',
-      memRequests: '4Gi',
-      memLimits: '8Gi',
-      podsCount: 8,
-      podsCapacity: '110',
-      podsAllocatable: '100',
     });
-    const hook = await renderUtilizationHook({ objectData, detail });
+    const detail = objectDetailOf('node', { cpuUsage: '100m', memoryUsage: '1Gi', podsCount: 8 });
+    app.snapshots.serve(
+      'nodes',
+      buildClusterRefreshScope('nodes', dev.clusterId),
+      makeClusterNodeSnapshotPayload({
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        rows: [makeClusterNodeSnapshotEntry({ clusterId: dev.clusterId, name: 'node-a' })],
+        metrics: polled,
+      })
+    );
 
-    await act(async () => {
-      setScopedDomainState('nodes', 'cluster-a|', (previous) => ({
-        ...previous,
-        status: 'ready',
-        scope: 'cluster-a|',
-        data: makeClusterNodeSnapshotPayload({
-          clusterId: 'cluster-a',
-          rows: [makeClusterNodeSnapshotEntry()],
-          metrics: { stale: false, successCount: 1, failureCount: 0 },
-        }),
-      }));
-      await Promise.resolve();
-    });
+    await showCollecting(panel, detail);
 
-    expect(hook.latest.current).toMatchObject({
+    expect(utilization).toMatchObject({
       mode: 'nodeMetrics',
-      cpu: {
-        usage: 1200,
-        capacity: 8000,
-        allocatable: 7600,
-        request: 2000,
-        limit: 4000,
-      },
+      cpu: { usage: 1200, capacity: 8000, allocatable: 7600, request: 2000, limit: 4000 },
       memory: {
         usage: 5 * GIB,
         capacity: 32 * GIB,
@@ -343,52 +260,26 @@ describe('useUtilizationData', () => {
       },
       pods: { count: '18', capacity: '110', allocatable: '100' },
     });
-
-    hook.cleanup();
   });
 
   it('gives ReplicaSets no utilization, even when their details carry usage', async () => {
-    const hook = await renderUtilizationHook({
-      objectData: {
-        clusterId: 'cluster-a',
-        group: 'apps',
-        version: 'v1',
-        kind: 'ReplicaSet',
-        namespace: 'team-a',
-        name: 'api-7c9d',
-      },
-      detail: objectDetailOf('replicaset', {
+    const panel = await start({
+      group: 'apps',
+      version: 'v1',
+      kind: 'ReplicaSet',
+      namespace: 'team-a',
+      name: 'api-7c9d',
+    });
+
+    await showCollecting(
+      panel,
+      objectDetailOf('replicaset', {
         isActive: true,
-        podMetricsSummary: {
-          cpuUsage: '100m',
-          memUsage: '128Mi',
-          pods: 1,
-          readyPods: 1,
-        },
-      }),
-    });
+        podMetricsSummary: { cpuUsage: '100m', memUsage: '128Mi', pods: 1, readyPods: 1 },
+      })
+    );
 
-    expect(hook.latest.current).toBeNull();
-
-    hook.cleanup();
-  });
-
-  it('never leases metrics itself: the panel collector owns the lease', async () => {
-    const hook = await renderUtilizationHook({
-      objectData: {
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-        kind: 'Pod',
-        namespace: 'team-a',
-        name: 'api',
-      },
-      detail: objectDetailOf('pod', { cpuUsage: '100m', memUsage: '128Mi' }),
-    });
-    expect(refreshMocks.acquireScopedDomainLease).not.toHaveBeenCalled();
-    expect(refreshMocks.fetchScopedDomain).not.toHaveBeenCalled();
-    expect(hook.latest.current).toMatchObject({ cpu: { usage: 100 } });
-
-    hook.cleanup();
+    expect(utilization).toBeNull();
+    expect(app.snapshots.reads('namespace-workloads')).toEqual([]);
   });
 });

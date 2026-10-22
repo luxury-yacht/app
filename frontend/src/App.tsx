@@ -5,7 +5,7 @@
  * Composes top-level providers, routes, and layout.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef } from 'react';
 import '@styles/index.css';
 import './App.css';
 import { AuthErrorProvider } from '@core/contexts/AuthErrorContext';
@@ -56,9 +56,11 @@ import {
 import { applyAppearanceOverrides, resolveAppearanceMode } from '@/utils/appearanceMode';
 
 /**
- * AppContent - The main app content that uses the contexts
+ * AppContent - The main app content that uses the contexts. It owns
+ * window-level wiring (permission cluster, theme, menus, shortcuts) and renders
+ * the layout passed as children.
  */
-function AppContent() {
+function AppContent({ children }: Readonly<{ children: ReactNode }>) {
   const viewState = useViewState();
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
   const { resetZoom, zoomIn, zoomOut } = useZoom();
@@ -217,15 +219,17 @@ function AppContent() {
         isSettingsOpen={viewState.isSettingsOpen}
       />
       <TextContextMenu />
-      <AppLayout />
+      {children}
     </ApplicationMenuCommandProvider>
   );
 }
 
 /**
- * App - The root component that sets up all providers
+ * AppShell - Every workspace provider plus AppContent's window wiring, in
+ * production order. App renders AppLayout inside it; the frontend test harness
+ * renders the surface under test inside the same shell.
  */
-function App() {
+export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <AppErrorBoundary>
       <ErrorProvider>
@@ -237,7 +241,7 @@ function App() {
                   <FavoritesProvider>
                     <PanelLifecycleGuardProvider>
                       <WorkspacePanelCoordinator>
-                        <AppContent />
+                        <AppContent>{children}</AppContent>
                       </WorkspacePanelCoordinator>
                     </PanelLifecycleGuardProvider>
                   </FavoritesProvider>
@@ -248,6 +252,17 @@ function App() {
         </ZoomProvider>
       </ErrorProvider>
     </AppErrorBoundary>
+  );
+}
+
+/**
+ * App - The workspace window root
+ */
+function App() {
+  return (
+    <AppShell>
+      <AppLayout />
+    </AppShell>
   );
 }
 

@@ -8,7 +8,14 @@ guard against regression.
 - **Status:** John approved the plan on 2026-10-22, with every recommended
   answer, including Q11 and Q12. That followed
   [review round 1](#review-round-1-2026-10-22) and
-  [review round 2](#review-round-2-2026-10-22). Phase 0 is in progress.
+  [review round 2](#review-round-2-2026-10-22). Phase 0 is implemented
+  (uncommitted) and its gates pass; see
+  [Phase 0 progress](#phase-0-progress-2026-10-22-uncommitted). The Phase 1
+  pilot (John's decision A) is implemented (uncommitted); see
+  [Phase 1 pilot](#phase-1-pilot-2026-10-22-uncommitted). After the pilot,
+  John raised the end-state runtime budget to +60% (2026-10-22). The rest of
+  Phase 1 is implemented (uncommitted), with decisions open for John; see
+  [Phase 1 completion](#phase-1-completion-2026-10-22-uncommitted).
 - **Base:** `main` at `2ba0fb8a` (Feed cutover #402). Line numbers are from that
   commit.
 - **Paths:** relative to `frontend/src/` unless they start with `frontend/`,
@@ -16,6 +23,744 @@ guard against regression.
 - **Measurements** were taken on 2026-10-22 on John's Mac with Vitest 5.0.5,
   Biome 2.6.2, and Node v25.9.0. Scratch probes were deleted afterwards, and the
   tree was clean before and after (`git status --short` was empty).
+
+## Phase 0 progress (2026-10-22, uncommitted)
+
+Implemented on top of `88c97765`. Gates still open are listed under
+"Pending".
+
+### What exists
+
+- **Production changes.** These are the Phase 0 rows of
+  [Production changes](#production-changes-complete-list).
+  - `App.tsx` exports `AppShell({ children })`, and `App` is
+    `<AppShell><AppLayout /></AppShell>`.
+  - New `windowBootstrap.ts` holds the extracted steps:
+    `createWindowPreparation`, `disposeWindowPreparation`,
+    `prepareWindow(config, preparation)`, `loadWindowRoot(descriptor)`, and
+    `renderWindowRoot(container, element, rootOptions)`. Step 5 is split into
+    `loadWindowRoot` and `renderWindowRoot`, so provider mode can render the
+    shell without the root-module import.
+  - `main.ts` uses one catch path: it disposes the preparation and then fails
+    the opening transfer.
+  - No new reset hook was needed in Phase 0.
+- **Harness** (`frontend/src/test-utils/appState/`):
+  - `transport.ts`: RPC on `Call.ByName`, runtime events (adding the missing
+    `Events.Emit`), `Window.Name`, the `_wails` marker, JSON streams, a
+    programmable `/api/v2` server (`serve`, `fail`, `respond`, `clearReads`,
+    and manual-refresh jobs), and `matchMedia`.
+  - `errorCapture.ts`: every reporting path from
+    [Error capture](#error-capture-every-reporting-path).
+  - `moduleState.ts`: the ledger reset.
+  - `harness.tsx`:
+    - `installAppStateHarness({ windowName, streams })`;
+    - fixtures `cluster`, `showCluster`, `object`, `namespaces`,
+      `preferences`, and `denyPermissions`;
+    - `render` (provider mode) and `mountApp` (full app);
+    - `view.show` and `view.owners`, and `settle`;
+    - owner-level inputs `markClusterReady`, `setAutoRefresh`, and
+      `flushRefreshWork`.
+  - Strict RPCs: an unanswered call fails teardown even when the caller
+    swallows the rejection. 25 RPCs are answered by default.
+- **Migrated.** All four former `refreshHarness` users moved; the module is
+  deleted.
+  - `inactiveClusterDemand.test.tsx` lost its five owner stubs and now runs
+    two real open clusters.
+  - `orchestrator.demand.test.ts` now asserts that each of five failure flows
+    tells the user exactly once (the log-once rule). The harness surfaced
+    these toasts.
+- **Pruned.** 22 dead `@/hooks/useShortNames` mocks were deleted, along with
+  their helpers. In `NsViewCustom.test.tsx`, a test titled "adjusts column
+  sizing when short names are enabled" asserted only row keys; it is retitled
+  "keys rows by cluster and full object identity".
+- **Guard.**
+  - `frontend/biome-plugins/no-owned-state-mocks.grit`, generated from the
+    owner set (155 alias forms, 74 relative tails).
+  - Registered with a baseline of 175 files.
+  - Against all 1,322 existing `vi.mock` specifiers: 0 false positives, and 8
+    misses, which are exactly the documented generic relative tails.
+- **Harness contract tests:**
+  - `harness.isolation.test.tsx`: 10 cases;
+  - `harness.bootstrap.test.tsx`: 6;
+  - `harness.errors.test.tsx`: 7;
+  - `main.test.ts`: +4 partial-failure cases.
+
+### Findings while building
+
+- **Leases acquired before the workspace connects a cluster are pruned.**
+  Child effects run before ancestor effects, so a surface that leases in the
+  first commit is wiped by `KubeconfigProvider`'s `setConnectedClusters([])`
+  (`KubeconfigContext.tsx:274-279`, `orchestrator.ts:984-1004`). Production
+  avoids this, because routes render only for open clusters
+  (`AppLayout.tsx:148-150`) and panels come from state. The harness mirrors
+  that with `view.show`, which shows a surface after startup.
+- **Unacknowledged streams fall back to polling.** With no ACK, both clusters
+  polled `namespaces` about every 2 s. The backend acknowledges subscriptions,
+  so the harness auto-acknowledges by default. `streams: 'manual'` keeps
+  explicit ACKs for suites that test stream health: the orchestrator demand
+  and doorbell suites.
+- **The ledger red check.** Each reset was disabled in turn, and the
+  isolation rows were rerun:
+  - Only the preference cache leaked: without
+    `resetAppPreferencesCacheForTesting`, "starts paused" fails.
+  - The workspace store and permission store re-initialize on every mount;
+    the permission store also resets on `kubeconfig:changing`
+    (`permissionStore.ts:1160-1162`). Their rows stayed green with every reset
+    disabled, so they guard against a future cross-mount cache rather than a
+    current one.
+- **Biome 2.6.2.** The unanchored include `src/**/*.test.{ts,tsx}` also fires
+  in-project: the guard probes passed with it. The anchored form stays for
+  consistency.
+- **Vitest caches mocked modules across `vi.resetModules()`.** A per-test
+  failing factory therefore needs `vi.doMock`, with the default re-registered
+  in `beforeEach`. See the `main.test.ts` root-import failure case.
+
+### Mutation evidence
+
+Each mutation was made in a scratchpad copy and restored, never with git
+stash. Pre-migration means the stubbed suite.
+
+| ID | Mutation | Result |
+| --- | --- | --- |
+| M5 | `FavoritesProvider` outside `KubernetesProvider` | Harness isolation suite red, 10 of 10. The stubbed `App.menu.test.tsx` stays green. |
+| M9 | Hydration deferred until after the first render | 3 paused-start cases red: stream `REQUEST`s were sent. A first attempt that kept hydration concurrent stayed green; it did not actually reorder with instant fakes. |
+| M10 | `onEvent` without the sender filter | "ignores an event addressed to another window" red |
+| M11 | Capture reduced to toast listeners only | 4 error-capture cases red, including both boundary cases |
+| M12 | Opening transfer recorded after step 4 | `main.test.ts` step-4 failure case red |
+| — | Polls with `stream-signal` intent (bypasses the healthy-stream gate) | `inactiveClusterDemand` red: 30 inactive reads |
+
+Guard proofs:
+
+- **Removing one baseline line** (`ClusterViewNodes.test.tsx`): `biome lint`
+  exits 1, with 7 diagnostics, all in that file.
+- **Restored tree:** exit 0.
+
+### Runtime after Phase 0, and the budget decision
+
+**Measured.** Full `vitest run`, 4 workers, same machine and command as the
+baseline:
+
+| | Wall | Tests | Failures |
+| --- | ---: | ---: | ---: |
+| Baseline | 75.4 s | 5,372 | 0 |
+| Phase 0 | 79.5 s | 5,405 | 0 |
+
+Phase 0 adds +4.1 s (+5.4%).
+
+- **Per-test cost of a bootstrapped `StrictMode` mount** (JSON reporter):
+
+  | Mode | Median | Max |
+  | --- | ---: | ---: |
+  | Provider (isolation suite) | 23 ms | 68 ms |
+  | Provider (errors suite) | 19 ms | 64 ms |
+  | Full app (bootstrap suite; includes 5 min of fake time and a manual refresh) | 74 ms | 305 ms |
+
+- **Migrated suites before and after** (per-file test time):
+
+  | Suite | Before | After |
+  | --- | ---: | ---: |
+  | `inactiveClusterDemand` | 0.015 s | 0.073 s |
+  | `objectDetailsDoorbell` | 0.034 s | 0.187 s |
+  | `objectYamlScopeSharing` | 0.024 s | 0.084 s |
+  | `orchestrator.demand` | 0.104 s | 0.123 s |
+
+**Re-projection (exceeds the budget).** The 175 baseline suites hold 2,392
+tests:
+
+- 85 suites (1,062 tests) need full-app mode by the eligibility rule (the
+  pilot found that rule too broad; see its finding 2);
+- 90 suites (1,330 tests) can use provider mode.
+
+The projection assumes one mount per test and no consolidation. It charges
+0.074–0.12 s per full-app test, 0.025 s per provider test, and the probe's
+import cost per file. That comes to +38 to +51 s wall, or **+51% to +67%**,
+against the approved +20%.
+
+**Decision (John, 2026-10-22): option A.** Phase 1 starts as a measured
+pilot: migrate about 10 object-panel suites with consolidation, and profile
+the harness's own cost (the `settle` loop, `StrictMode` double effects, the
+full-app route import). The budget is then set from real data. The rejected
+options were B (raise the budget to at most +60% now) and C (tier-1 suites
+only).
+
+### Gates on the final Phase 0 tree
+
+- **`mise exec -- wails3 task qc:prerelease`: exit 0.** It ran docs, fmt,
+  bindings, vet and staticcheck, `test:race`, Biome lint and lint-fix,
+  typecheck, frontend tests (5,404 passed, 1 skipped), knip, and trivy. The
+  formatter only reordered imports and rewrapped lines in the new files; the
+  tests ran after formatting.
+- **Complexity** at 12 or lower for every changed or new function
+  (`npm run complexity`). The fetch router in `transport.ts` scored 14 and was
+  split.
+- **Coverage** (diagnostic):
+
+  | | Before | After |
+  | --- | ---: | ---: |
+  | Statements | 91.18% | 90.87% |
+  | Branches | 81.78% | 81.43% |
+  | `App.tsx` statements | 55% | 62.3% |
+  | `main.ts` statements | 91.2% | 95.2% |
+
+  New modules: `windowBootstrap.ts` 92.6%, `transport.ts` 89.1%,
+  `harness.tsx` 95.2%, `errorCapture.ts` 92.9%, `moduleState.ts` 100%.
+  - No file lost covered statements, apart from the deleted
+    `refreshHarness.ts` and the code moved out of `main.ts`.
+  - The percentage dips because full-app mounts now load modules that every
+    suite used to mock: `AppDebugOverlays.tsx` (19%), `AppLayout.tsx` (56%),
+    and `KubeconfigsSection.tsx` (0%). v8 counts only files a test loads, so
+    those were never in the denominator before. The dip is reported, not
+    chased.
+- **Native checks.** John approved temporarily swapping the persisted
+  selection, because it named a production cluster.
+  - **Setup.** `settings.json` was backed up and set to
+    `~/.kube/dev-stg-clusters:dev-cluster` with auto-refresh off, then
+    restored byte-for-byte (SHA-256 verified).
+  - **Run.** `EXTRA_TAGS=mcp wails3 dev`, driven through the Wails MCP server.
+  - **Workspace window.** `workspace-1` booted on `dev-cluster` with the
+    persisted pause applied: connectivity `data-status="inactive"`,
+    "Auto-refresh paused", and the Overview rendered. Re-enabling auto-refresh
+    from the connectivity popover made it Ready.
+  - **Panel window.** From Nodes, the `dev-cluster-worker` link opened a
+    docked panel. "Undock panel to floating window" opened the native window
+    `panel-1`, which booted through the panel bootstrap: it is visible (its
+    ready acknowledgement committed), it has no bootstrap error, and its
+    Details show the node (Kind Node, Ready). The workspace had 0 docked
+    panels left.
+  - **Not run.** Cluster switching (only the approved `dev-cluster` was
+    opened) and the failed-bootstrap disposal, which cannot be triggered
+    natively without fault injection; `main.test.ts` covers it.
+  - **Side effect.** The run rewrote `persistence.json` `clusterTabs.order` to
+    the single dev-cluster entry. That file was not backed up, so its prior
+    value is unknown.
+  - **Leftover tag.** `bin/luxury-yacht` and `bin/Luxury Yacht.dev.app` keep
+    the `mcp` tag until the next build; do not launch them directly.
+
+### Pending
+
+- **Phase 1 pilot** (decision A): done; see
+  [Phase 1 pilot](#phase-1-pilot-2026-10-22-uncommitted).
+
+## Phase 1 pilot (2026-10-22, uncommitted)
+
+Decision A's measured pilot, built on the Phase 0 tree. It fed the budget
+decision ([Budget decision](#budget-decision-john-2026-10-22)).
+
+### What changed
+
+- **Production.** These are the Phase 1 rows of
+  [Production changes](#production-changes-complete-list).
+  - `PanelWindowApp.tsx` exports `PanelWindowShell({ descriptor, children })`,
+    which holds the window's hooks and provider chain. `PanelWindowSurface`
+    renders `children` after its content div, inside its
+    `DockablePanelProvider`. `PanelWindowApp` is
+    `<PanelWindowShell descriptor={descriptor} />`.
+  - `PanelWindowApp.tsx` exports `resetAcknowledgedPanelTransfersForTesting()`
+    next to `acknowledgedTransfers`. The ledger calls it.
+- **Harness.**
+  - Panel-window mount mode: `app.panelWindow(cluster, { name, transferId })`,
+    then `render` mounts `PanelWindowShell` through the panel bootstrap.
+  - A panel directory fake. It answers `OpenPanelWorkspaceObject`,
+    `ClosePanelWorkspaceObject`, and `GetPanelWorkspace`
+    (`internal/appwindow/workspace.go:114-147`), plus `BeginPanelWindowOpen`
+    and the ready acknowledgement (`internal/appwindow/registry.go:229-261`,
+    `:513-536`):
+    - the group stays in place while its window opens;
+    - the window's acknowledgement moves the group into it;
+    - it then sends `panel-window:opened` addressed to the source window
+      (Wails `WebviewWindow.EmitEvent` sets `Sender` to the window name);
+    - it rings `panel-workspace:changed`.
+  - `view.openPanels()` returns the open panels with complete identity.
+  - `app.startScreen(cluster)` serves what the full app's start screen reads.
+  - Two builders in `refreshContractTestBuilders.ts`.
+- **Migrated.** Nine suites, with 18 owner `vi.mock` calls deleted. Their
+  baseline lines are gone, leaving 166. `biome lint src` exits 0, and a probe
+  owner mock added to `DockableTabBar.test.tsx` is rejected.
+
+  | Suite | Mode | Tests before → after | Notes |
+  | --- | --- | --- | --- |
+  | `ConfigMapOverview` | provider | 2 → 2 | |
+  | `SecretOverview` | provider | 3 → 1 | Two duplicate `renderUsedByLinks` consumer tests removed |
+  | `PodOverview` | provider | 3 → 3 | Asserts the real lowercase-kind targets |
+  | `JobOverview` | provider | 3 → 3 | |
+  | `WorkloadOverview` | provider | 9 → 9 | |
+  | `ClusterResourceOverview` | provider | 10 → 10 | |
+  | `EventsTab` | provider | 12 → 12 | Two clusters, plus a panel-window case |
+  | `DockableTabBar` | provider | 4 → 4 | |
+  | `DockablePanel` | provider | 17 → 17 | |
+
+  New suites and rows:
+  - `Details/Overview/overviewLinks.test.tsx`: full app, 1 test. A link in an
+    opened ConfigMap panel opens the pod's panel with complete identity.
+  - `core/panel-windows/panelWindowFloat.test.tsx`: full app, 2 tests.
+    Undocking freezes the window, and the real guard registry releases it
+    both when the new window is ready and when the backend refuses.
+  - The transfer-id row in `harness.isolation.test.tsx`: 2 tests.
+
+  Child-component stubs (`ResourceHeader`, `ResourceMetadata`, `Tooltip`)
+  stay, as [Not in scope of the guard](#not-in-scope-of-the-guard) allows.
+
+### Mutation evidence
+
+Each mutation was made in a scratchpad copy and restored, never with git
+stash. Pre-migration means the stubbed suite.
+
+| ID | Mutation | Result |
+| --- | --- | --- |
+| M1 | As written: `openWithObject` skips `hydrateClusterMeta` and the identity assertion | Green before and after. A second hydration on the same path masks it (`ObjectPanelStateContext.tsx:359`). M1′ replaces it. |
+| M1′ | `panelTargetSnapshot` drops the namespace | `overviewLinks` red: the link never renders (`expected undefined to be defined`). The stubbed `ConfigMapOverview` stays green, 2 of 2. |
+| M2a | `handlePanelWindowOpened` calls `releaseTransfer` unbound | `panelWindowFloat` ready case red: `TypeError: Cannot read properties of undefined (reading '#transfers')`. The stubbed `WorkspacePanelCoordinator.test.tsx` stays green, 43 of 43. |
+| M2b | The refusal `.catch` calls `releaseTransfer` unbound | Refusal case red: the window stays frozen (`expected true to be false`), plus an unhandled rejection. The stub stays green, 43 of 43. |
+| — | No `acknowledgedTransfers` reset | Transfer-id row red (`expected [] to deeply equal [['panel-1','t-1']]`). Green with the reset, in file order, shuffled, and each test alone. |
+
+### Findings
+
+1. **M1 as written is not a valid mutation.** `openWithObject` hydrates and
+   asserts (`useObjectPanel.ts:226-227`), and `onRowClick` hydrates again
+   (`ObjectPanelStateContext.tsx:359`). This is not a defect; the catalog row
+   now points to M1′.
+2. **The full-app eligibility list was too broad.**
+   - Overview descriptor suites render `OverviewRenderer`, and `EventsTab`
+     takes `objectData` as a prop (`EventsTab.tsx:119`). Neither reads
+     `CurrentObjectPanelContext`.
+   - The direct readers are:
+     - `Overview/index.tsx:76` and the Helm descriptor
+       (`descriptors/helm.tsx:53`);
+     - `PodsTab.tsx:77`, `JobsTab.tsx:63`, and `YamlTab.tsx:596`;
+     - `ResourceHeader.tsx:28`;
+     - `useObjectActionController.tsx:447`, for `panelId`.
+   - The pilot's Overview suites keep `ResourceHeader` stubbed, so their
+     assertions do not depend on the context, and they are provider-eligible.
+     All 7 pilot suites that the old rule sent to full-app mode were
+     provider-eligible.
+   - `NamespaceResourcesProvider` provides no context value. It issues the
+     namespace permission query and renders its children
+     (`NsResourcesContext.tsx:39-60`). Routes depend on that side effect.
+   - [Mount modes](#mount-modes-and-eligibility) is updated to match.
+3. **Child stubs hide fixtures with incomplete identity.** With isolation off,
+   stubs leaked between files, so the real header and metadata rendered
+   fixtures that have no `clusterId`. The app threw `Object identity for
+   Namespace/default is missing required field "clusterId"`. A suite that
+   drops those stubs must supply complete identity.
+4. **EventsTab related-object references take the panel's cluster.**
+   `eventGridRelatedObjectInput` receives `objectData`'s cluster id and name
+   (`EventsTab.tsx:173-180`). A catalog-resolved reference has no
+   `clusterName`. The suite asserts today's behavior. For John: whether an
+   object's events can involve an object in another cluster [assumed: no].
+5. **Stream stops linger 500 ms** (`resourceStreamManager.ts:58`). Suites that
+   assert an unsubscribe advance fake timers past it.
+
+### Runtime
+
+Full suite, with the same command as the baseline (`/usr/bin/time`, JSON
+reporter, 4 workers). Per-file time is the reporter's start-to-end for `src/`
+files, which excludes import (the baseline's method).
+
+| Run | Wall | Tests | Per-file sum | p95 | Max |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Baseline | 75.4 s | 5,372 | 46.5 s | 0.33 s | 2.93 s |
+| Phase 0 | 79.5 s | 5,405 | 47.0 s | 0.35 s | 2.90 s |
+| Pilot | 79.0 s | 5,408 | 51.4 s | 0.44 s | 2.96 s |
+
+- **Overall.** Wall time is +3.6 s (+4.7%) over the baseline, and within noise
+  of Phase 0.
+- **Pilot suites.** They add 3.6 s of per-file time (0.75 s → 4.34 s). The
+  slowest migrated file is `DockablePanel.test.tsx` at 0.98 s for 17 tests,
+  within the 1.0 s p95 limit.
+- **Per-test cost.**
+  - Provider mode: a 27–73 ms mean per file, which is +36 ms per test over the
+    stubbed suites (0.75 s for 63 tests became 2.96 s for 61).
+  - Full app: the first test in a file takes about 0.6 s (`overviewLinks`
+    621 ms, `panelWindowFloat` 605 ms); later tests take about 0.16 s
+    (162 ms).
+
+**Profile.** Scratch instrumentation of the harness, 3 runs per setting,
+restored afterwards:
+
+| Step | `StrictMode` on | `StrictMode` off |
+| --- | ---: | ---: |
+| Full-app mount, cold | 311 ms | 249 ms |
+| Full-app mount, warm (second, third) | 106 ms, 62 ms | 91 ms, 57 ms |
+| Provider mount | 10 ms | 8 ms |
+| Idle `settle()` | 3–4 ms | 3–4 ms |
+
+- **Route import** is the largest fixed cost. A cold full-app mount costs
+  about 0.22 s more than a warm one, once per file. Vitest reports import at
+  26% and environment setup at 27% of the pilot set's duration.
+- **`StrictMode`** costs about 20% of a mount.
+- **The settle loop.** The pilot and harness suites make 177 settle calls:
+  - 3 turns: 1.05 s;
+  - 1 turn: 0.66 s, with all 89 tests still passing;
+  - 0 turns: 2 tests fail (the overview link, and "reads only the visible
+    overview").
+
+  One turn saves about 2 ms per call.
+- **A shared module cache** (`--no-isolate`) halves the pilot set's wall time
+  (4.4 s → 2.2 s). But 5 of 6 runs failed 1–9 tests, because child stubs
+  leaked between files (finding 3). It is viable only for suites with no
+  `vi.mock` at all. It also lets module state cross files, so the ledger would
+  have to be complete.
+
+**Re-projection.** 166 baseline suites remain. The model uses the pilot's
+constants:
+- +36 ms per provider-mode test;
+- +0.15 s per full-app test;
+- +0.22 s per full-app file.
+
+It divides CPU by 4 workers, which assumes balanced workers [assumed]; wall
+noise between runs is about ±3 s.
+
+- **The plan's split** (after the pilot: 78 full-app suites with about 1,020
+  tests, and 88 provider suites with about 1,310 tests): about 217 s of CPU,
+  or about +54 s wall. That reaches about 133 s, **+77%** over the baseline.
+- **A corrected split.** If about half the full-app suites turn out
+  provider-eligible, as the pilot's did [assumed; Phase 1 recounts suite by
+  suite]: about 151 s of CPU, or about +38 s wall. That reaches about 117 s,
+  **+55%**.
+- **Consolidation** removed 2 of 63 tests (3%) in the pilot. It will not close
+  the gap.
+
+**Harness-only reductions:**
+- the settle loop at 1 turn: about −3 s wall, projected;
+- `StrictMode` off: about −20% of mount cost. Not recommended, because it
+  drops the double-effect checks;
+- a shared module cache: about −50% on the pilot set. It needs suites with no
+  stubs at all.
+
+### Budget decision (John, 2026-10-22)
+
+- **John raised the end-state budget** to at most +60% wall (at most 120 s),
+  replacing the approved +20%. This was the recommendation. The measured
+  projection is +55% to +77%, so +20% is not reachable at full fidelity.
+- **Keep** the per-file p95 limit of 1.0 s, `StrictMode`, isolation, one mount
+  per test, and the settle loop at 3 turns. The loop's cost is about 1–2% of
+  the projected total, and its extra turns guard negative assertions.
+- **Checkpoint after Phase 1.** Phase 1 holds most of the suites that
+  genuinely need full-app mode: `ObjectPanel`, `DetailsTab`, `YamlTab`,
+  `PodsTab`, `JobsTab`, `IdentityPanel`, and `PanelWindowApp`. If its measured
+  delta extrapolates above +60%, try a separate Vitest project with a shared
+  module cache for stub-free harness suites, before raising the budget again.
+
+### Gates on the pilot tree
+
+- **`mise exec -- wails3 task qc:prerelease`: exit 0.**
+  - The first run failed at typecheck: the harness read the nullable
+    `group.tabs` (a Go nil slice). That was fixed, and the second run passed
+    every stage.
+  - Frontend: 545 files and 5,407 tests passed, 1 skipped. knip and trivy are
+    clean.
+  - The gate changed no file (hashes compared before and after).
+  - `qc:docs` passes on the final plan.
+- **Complexity** is at 12 or lower in every changed file (`npm run
+  complexity`): `PanelWindowApp.tsx`, the harness modules, the migrated and
+  new suites, `windowBootstrap.ts`, `main.ts`, and `App.tsx`.
+- **Coverage** (diagnostic), Phase 0 → pilot:
+
+  | | Phase 0 | Pilot |
+  | --- | ---: | ---: |
+  | Statements | 90.87% | 90.93% |
+  | Branches | 81.43% | 81.52% |
+  | `PanelWindowApp.tsx` statements | 81.0% | 82.9% |
+  | `harness.tsx` statements | 95.2% | 93.9% |
+
+  `App.tsx` stays at 62.3% (baseline 55%), below the 80% target. Its 23
+  uncovered statements are `AppContent` callbacks that fire only on
+  application-menu, debug-toggle, and sidebar-resize input (lines 98–205 in
+  the coverage report). The Phase 3 shell and menu suites drive them.
+- **Biome guard:** `biome lint src` exits 0 with the 9 baseline lines
+  removed. `check-biome-boundaries.test.mjs` passes, 57 of 57.
+
+### Pending
+
+- **John:** finding 4.
+- **Native check** of `PanelWindowShell`: a panel window opens through a
+  transfer. It needs John's approval to swap the persisted selection again,
+  which names a production cluster. The float test covers the source window's
+  side.
+- **Phase 1 remainder:** done; see
+  [Phase 1 completion](#phase-1-completion-2026-10-22-uncommitted).
+
+## Phase 1 completion (2026-10-22, uncommitted)
+
+The rest of Phase 1, built on the pilot tree. 61 of the 62 Phase 1 suites run
+on the harness. `Logs/LogViewer.benchmark.test.tsx` keeps its stubs and its
+baseline line until John decides ([Pending](#pending-2)).
+
+### What changed
+
+- **Production.** Four reset hooks, each next to its state and called only by
+  the ledger (`test-utils/appState/moduleState.ts`). Each has a
+  repeated-identity row in `harness.isolation.test.tsx` that was red before
+  the hook and green after it: in file order, shuffled, and alone.
+
+  | Module | State | Red before the hook: test 2 saw test 1's |
+  | --- | --- | --- |
+  | `core/panel-windows/publicationQueue.ts` | The two `PanelPublicationQueue` singletons | Refused close, retried by its own window-close flush |
+  | `…/Helm/helmValuesViewCache.ts` | Values view by panel id | `'merged'` view |
+  | `…/NodeLogs/nodeLogsApi.ts` | Discovery cache and in-flight map (`:41-42`) | Cached discovery |
+  | `modules/object-panel/objectPanelTabRequests.ts` | `pendingTabByPanel` (`:11`) | Pending `'shell'` request |
+
+- **Harness.**
+  - Teardown awaits work still in flight from `show`, `settle`, and
+    `selectCluster`. Before, one test's un-awaited `onClose` draw ran into the
+    next (`DockablePanel.lifetime` tests 3–7 were red).
+  - `view.selectCluster(cluster)` switches the workspace through the
+    kubeconfig owner.
+  - `backend.hold(method)` parks calls until released. An answer given during
+    the hold stays in place after the release (`harness.transport.test.tsx`,
+    red before).
+  - The directory fake mirrors three more Go paths:
+    - re-opening a listed panel sends the focus request to the window that
+      holds it, and rings `panel-workspace:changed`
+      (`internal/appwindow/workspace.go:137-141`, `:168-180`);
+    - `CloseClusterView` (`backend/workspace_cluster_close.go`). It throws for
+      a cluster with open panel windows, which no suite needs yet;
+    - the ready acknowledgement moves the panels into the new window and
+      sends `panel-window:opened` (`internal/appwindow/registry.go:513-536`).
+  - `Window.Get(name).Focus()` is faked, and `app.focusedWindows()` lists the
+    calls. Before, `focusWindow` threw inside `focusBlocker`.
+  - `app.panelWindow(cluster, { name, transferId, tabs })` seeds the window's
+    group.
+  - `app.permissions(decide)` answers `QueryPermissions` in Go's shape. A
+    namespaced query resolves from the namespace's rules: allowed is `ssrr`,
+    denied is `denied` with "no matching rule"
+    (`backend/resource_gateway_permissions.go:262-273`). A cluster-wide query
+    goes to an access review: `ssar`, with the API server's reason
+    (`backend/capabilities/service.go:221`). Before, a denial came back as `ssar` with
+    no reason. `denyPermissions` also matches subresource and name.
+  - `WorkspacePanelHost` hosts open panels in provider mode, the way
+    `AppLayout` does: the dock's panel layer, and one `DockablePanel` per open
+    panel at its mount target, inside its cluster's lifecycle surface
+    (`ui/layout/AppLayout.tsx:316-370`, `ObjectPanel.tsx:332`). Five suites
+    use it. It is a copy of production composition, which
+    [Real owners](#real-owners-production-composition-not-a-copy) rules out;
+    see [Pending](#pending-2).
+- **Migrated:** 52 suites, plus the benchmark, which has not moved. 173 owner
+  `vi.mock` calls were deleted, which with the pilot's 18 makes 191 of
+  Phase 1's 195. Every remaining `vi.mock` in these suites stubs a child
+  component or a library: header, metadata, tooltip, and dropdown components,
+  `GridTable`, `ObjectMap`, chart pieces, tab contents, CodeMirror, and
+  xterm.
+
+  | Area | Suites | Full app | Tests before → after | Owner mocks deleted |
+  | --- | ---: | ---: | --- | ---: |
+  | `core/panel-windows` | 7 | 0 | 108 → 98 | 36 |
+  | `PanelWindowApp` (panel-window mode) | 1 | 0 | 9 → 10 | 14 |
+  | `ui/dockable` | 7 | 0 | 98 → 98 | 8 |
+  | Details and Overview descriptors | 12 | 2 | 87 → 87 | 19 |
+  | `ObjectPanel`, panel state, open, identity | 5 | 3 | 77 → 75 | 36 |
+  | Panel hooks | 5 | 1 | 65 → 61 | 11 |
+  | Metrics | 4 | 0 | 30 → 24 | 5 |
+  | Pods, Jobs, Map, and YAML tabs | 5 | 2 | 82 → 77 | 27 |
+  | Logs, node logs, shell, and Helm tabs | 7 | 0 | 194 → 190 | 17 |
+  | **Total** | **53** | **8** | **750 → 720** | **173** |
+
+  - **Full-app suites** (8): `Overview/index`, `HelmOverview`, `ObjectPanel`,
+    `ObjectPanel.groupContext`, `IdentityPanel`, `useObjectPanelLogsCapability`,
+    `PodsTab`, and `JobsTab`. Each reads `CurrentObjectPanelContext`, or
+    depends on the panel's own namespace permission query
+    (`ObjectPanel.tsx:152`; see
+    [Mount modes](#mount-modes-and-eligibility)).
+  - **Other modes:** 5 suites mount a panel window: `PanelWindowApp`,
+    `WorkspacePanelSync`, `MapTab`, and, besides the full app, `PodsTab` and
+    `JobsTab`. `panelTabActions` and `nodeLogsApi` use the harness without a
+    mount. The rest use provider mode.
+  - **Consolidation** removed 30 tests (4%). Each removed test duplicated
+    another or asserted a state the app cannot reach (finding 7).
+    `WorkspacePanelCoordinator`'s header names the suites that now hold its
+    duplicates.
+  - **Guard:** 49 baseline lines removed, leaving 117. `biome lint src` exits
+    0, and `tsc --noEmit` reports 0 errors.
+
+### Mutation evidence
+
+Mutations were made in place and restored from a scratchpad copy in the same
+command; checksums matched afterwards. None used git stash.
+
+| ID | Mutation | Result on the final tree |
+| --- | --- | --- |
+| M1′ | `panelTargetSnapshot` drops the namespace | Red in 26 files (122 tests), including `ConfigMapOverview`, whose stubbed version stayed green in the pilot, `ObjectPanel` (19), `PodsTab` (21), `WorkspacePanelCoordinator` (15), and `useObjectPanel` (4). |
+| M2a | `handlePanelWindowOpened` calls `releaseTransfer` unbound | Red in the migrated `WorkspacePanelCoordinator` (2 tests) and `panelWindowFloat` (1): `TypeError: Cannot read properties of undefined (reading '#transfers')`. The stubbed suite stayed green, 43 of 43. |
+| M2b | The refusal `.catch` calls `releaseTransfer` unbound | Red in `WorkspacePanelCoordinator` ("docks the panel on the right when the native window cannot open") and `panelWindowFloat` (the window stays frozen), plus unhandled rejections. |
+| — | Each reset hook removed | Its isolation row is red (table above). |
+
+### Findings
+
+1. **The YAML tab sees no live changes while editing, unless another
+   consumer leases its scope.**
+   - Editing releases the tab's `object-yaml` lease (`yamlTransaction.ts:554`,
+     `enabled: isActive && !isEditing`). The last release disables the scope
+     (`orchestrator.ts:537-556`), and a fetch of a disabled scope resets it
+     (`:1283-1285`).
+   - So the drift check (`yamlTransaction.ts:687`) and "Reload & merge" work
+     only while the object diff (`ui/modals/useObjectDiffYaml.ts`) leases the
+     same scope. Without that consumer, all 5 drift and merge tests fail.
+   - The stubbed suite pushed snapshots into the editing tab directly.
+   - **Resolved (2026-10-22, uncommitted).** John chose the Headlamp model
+     after a survey of other tools' source: the tab keeps watching while
+     editing, never touches the draft, and shows drift with a diff and
+     Reload & merge. Drift ignores status and server-managed churn (the field
+     policy's semantic compare). A replaced object (new uid, or an
+     `ObjectUIDMismatch` save conflict) shows the diff without a merge,
+     because the backend refuses one. The contract is in
+     `docs/architecture/yaml-editing.md` (invariant 6).
+2. **Alt+click on a pod owner in a custom API group.** `getViewForKind` keys on
+   the kind alone (`kindViewMap.ts:87`). A `Deployment` in
+   `operators.example.io` goes to the built-in Workloads table, which cannot
+   contain it. A kind with no view does nothing (`useNavigateToView.ts:38`),
+   although `kindViewMap.ts:8` says callers fall back to Browse.
+3. **A resource link can carry another cluster's name.**
+   `resourceLinkToObjectReference(link, clusterName)` attaches the caller's
+   cluster name to whatever `clusterId` the link carries
+   (`resourceLinkIdentity.ts:101-108`), and hydration keeps a given name
+   (`ObjectPanelStateContext.tsx:334-350`). Latent today: the PDB producer
+   always links within its own cluster
+   (`backend/resources/poddisruptionbudget/model.go:36`). The same pattern is
+   at `storage.tsx:188` and `useResourceLinkReference.ts:42`.
+4. **Opening an object in a cluster the window does not display does nothing,
+   silently.** `openPanel` returns before any RPC
+   (`WorkspacePanelSync.tsx:214-218`), so `useObjectPanel`'s report
+   (`useObjectPanel.ts:126-133`) is unreachable from `openWithObject`. The
+   stubbed suite asserted that report.
+5. **The Overview's replica-string fallback is unreachable.** The Details tab
+   always passes a numeric `desiredReplicas` (`objectDetailModel.ts:138`,
+   `:215`, `:235`), so the `replicas` and `ready` fallbacks
+   (`Overview/index.tsx:189-193`) never run. Candidate dead code.
+6. **Wording:** a transfer refused while the window is frozen for a cluster
+   close warns "Wait for the panel move to finish."
+   (`panelLifecycleGuards.tsx:93`).
+7. **Fixtures that passed only because of stubs.** Each now uses a state the
+   app can reach:
+   - Map tab: `GatewayClass` is map-supported (`objectMap: true` in
+     `backend/resourcecontract/builtin-resource-identities.json`). The
+     webhook case hid the Map tab for the wrong reason.
+   - Capabilities: restart allowed while YAML edit is denied cannot happen;
+     both check `patch` on the object (`backend/objectaction/catalog.go:113`,
+     `useObjectPanelCapabilities.ts:138`).
+   - Pods: rows from another cluster, and a panel cluster that differs from
+     the selection. The pods query is per cluster, and `openWithObject`
+     switches to the panel's cluster.
+   - `ObjectPanel`: one panel re-rendered with another identity. A panel id
+     derives from identity, so a new identity is always a new panel. The
+     deleted-marker check now ignores the group's hidden hosts
+     (`DockablePanelGroup.tsx:562-566`).
+   - `IdentityPanel`: a `partialReason` field that the snapshot type lacks
+     (`types.generated.ts:648-672`). Go reports partial data as `issues`
+     (`backend/refresh/snapshot/table_query_issues.go:76-83`).
+   - Cluster ids such as `'Cluster-A'` and `'test-cluster'`, which never
+     open panels in the real app.
+8. **`StrictMode` double reads** (dev only): `FindCatalogObjectByUID` runs
+   twice per mount, and a panel's metrics series is read twice on show.
+   Effect cleanup is correct.
+9. **Observed, not traced:** `requestRefreshDomain` with reason `'user'` for
+   an unleased `pods` scope issued no read.
+
+**Harness gaps** that later phases may need:
+- A stream's connection cannot be held, so a domain's `initialising` window
+  (`orchestrator.ts:355-359`) is not observable. `IdentityPanel`'s warm-up test
+  was dropped.
+- `snapshots.respond` holds one responder; `PodsTab` builds its own
+  dispatcher.
+- No helper serves a panel's reads by kind. A Deployment panel also needs
+  `IsWorkloadHPAManaged` and its namespace's pods and workloads; a Node panel
+  needs `nodes`, `object-maintenance`, and `DiscoverNodeLogs`. Four suites
+  write this out.
+- No helper selects a panel's sub-tab or reads the active one.
+- No panel-metrics buffer fake; three suites fake it in-file.
+- Clusters must be declared before the mount, because `GetKubeconfigs` is
+  read once.
+- jsdom lacks `scrollIntoView` (`Sidebar.tsx:934`) and `elementsFromPoint`.
+  Suites shim them locally; a shared shim belongs next to `matchMedia` in
+  `transport.ts`.
+- Named container-log streams. Only the benchmark needs them.
+
+### Runtime
+
+Same command and method as the pilot. The script reproduces the baseline's
+and the pilot's rows from their reports.
+
+| Run | Wall | Tests | Per-file sum | p95 | Max |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Baseline | 75.4 s | 5,372 | 46.5 s | 0.33 s | 2.93 s |
+| Pilot | 79.0 s | 5,408 | 51.4 s | 0.44 s | 2.96 s |
+| Phase 1 | 82.0 s | 5,387 | 80.1 s | 0.70 s | 4.98 s |
+
+- **Overall:** +6.6 s wall (+8.7%) over the baseline, within the +60% budget.
+- **Phase 1 suites:** 8.7 s → 43.4 s of per-file time, for 813 → 781 tests.
+  Full-app tests cost +157 ms each (8 suites); the rest +30 ms each.
+- **Checkpoint.** Phases 2–4 hold 121 suites and 1,648 baseline tests. At
+  Phase 1's mix (about 10% of tests in full-app mode), they add about 70 s of
+  CPU, or about +18 s wall on 4 workers [assumed balanced, as in the pilot].
+  That reaches about 100 s, **+32%**. The budget breaks even when about half
+  of those tests need full-app mode. The trigger is not met, so the shared
+  module cache waits. Phase 2 re-checks once its suites are classified.
+- **Per-file limit: missed.** Over the 64 Phase 1 files the p95 is 2.39 s
+  (limit 1.0 s): 11 files take over 1 s, and 4 over 2 s. Every one of them is
+  long because of its test count, not slow tests:
+
+  | File | Time | Tests | Mean per test | Mode |
+  | --- | ---: | ---: | ---: | --- |
+  | `Logs/LogViewer.test.tsx` | 4.98 s | 91 | 55 ms | provider (1.14 s before) |
+  | `ObjectPanel.test.tsx` | 3.88 s | 30 | 129 ms | full app |
+  | `Pods/PodsTab.test.tsx` | 3.40 s | 22 | 155 ms | full app |
+  | `NodeLogs/NodeLogsTab.test.tsx` | 2.39 s | 42 | 57 ms | provider (1.23 s before) |
+
+  The slowest single test is 0.5 s. Splitting a file adds import cost without
+  reducing the total. Remedies 1–3 are spent (consolidation, and the pilot's
+  harness profile), so by step 4 this goes to John
+  ([Pending](#pending-2)).
+
+### Gates on the final tree
+
+- **`mise exec -- wails3 task qc:prerelease`: exit 0.** Every stage ran: docs,
+  fmt, bindings, vet, race, lint, typecheck, frontend tests (546 files and
+  5,386 tests passed, 1 skipped), knip, and trivy. Hashes of every changed
+  file were compared before and after; the gate changed none. Only this plan
+  differs, edited during the run.
+- **Complexity** is 12 or lower in all 73 files checked (`npm run
+  complexity`): the four reset-hook modules, `PanelWindowApp.tsx`, the
+  harness modules, and every Phase 1 suite.
+- **Biome guard:** `biome lint src` exits 0 with 117 baseline lines.
+  `check-biome-boundaries.test.mjs` passes, 57 of 57. With the benchmark's
+  line removed, the guard reports its 3 owner mocks. `tsc --noEmit`
+  reports 0 errors.
+- **Isolation:** `harness.isolation.test.tsx` passes, 20 of 20, in file
+  order and shuffled. All 64 Phase 1 files and the harness suites pass
+  shuffled together: 67 files, 817 tests (seed `1792704605997`).
+- **Coverage** (diagnostic), pilot → Phase 1:
+
+  | | Pilot | Phase 1 |
+  | --- | ---: | ---: |
+  | Statements | 90.93% | 91.26% |
+  | Branches | 81.52% | 81.86% |
+  | `PanelWindowApp.tsx` statements | 82.9% | 82.9% |
+  | `nodeLogsApi.ts` statements | 84.6% | 95.2% |
+  | `objectPanelTabRequests.ts` statements | 92.3% | 92.9% |
+  | `harness.tsx` statements | 93.9% | 94.8% |
+
+  `publicationQueue.ts` and `helmValuesViewCache.ts` are at 100%. `App.tsx`
+  stays at 62.3%, for the reason the pilot recorded.
+
+### Pending
+
+- **John:**
+  - **The benchmark.** Under the harness, `StrictMode` raises its medians
+    (10,000 parsed JSON lines: 13.1 ms → 23 ms), and the follow-up and
+    measured-cells columns were lost. The options are a harness option without
+    `StrictMode` plus named streams, or an exemption for `*.benchmark.test.*`.
+    Until then its baseline line stays.
+  - **The per-file limit.** Replace it with a per-test mean (for example
+    60 ms in provider mode and 200 ms in full-app mode), or keep it and split
+    the four files. Recommended: replace it, since only wall time costs
+    anything.
+  - **`WorkspacePanelHost`.** Recommended: extract `AppLayout`'s object-panel
+    host into an exported component, as with `AppShell`, so the harness
+    renders the real one. That is a production change and needs a native
+    check.
+  - Finding 2, and pilot finding 4.
+- **Native check** of `PanelWindowShell` (unchanged from the pilot).
+- **Follow-ups:** findings 3–6, and the harness gaps as later phases need
+  them.
 
 ## Problem
 
@@ -299,8 +1044,10 @@ error in place of the app (`:84-96`, `:102-119`).
 The harness must not skip or re-implement these steps.
 
 - **Phase 0 production change.** Extract steps 1–4 from `main.ts` into an
-  exported `prepareWindow(config, preparation)`, and step 5 into
-  `renderWindowRoot(…)`. `main.ts` calls both and keeps its order.
+  exported `prepareWindow(config, preparation)`. Split step 5 into
+  `loadWindowRoot(descriptor)` (the dynamic root import) and
+  `renderWindowRoot(container, element, rootOptions)`. `main.ts` calls all
+  three and keeps its order. These live in `windowBootstrap.ts`.
 - **Partial state lives in a caller-owned `preparation` record.** It holds:
   - `openingPanel`, which `prepareWindow` sets as soon as the descriptor
     resolves, as `main.ts:46-53` does today;
@@ -476,24 +1223,36 @@ file order, and with `--sequence.shuffle`.
 | Transfer id `t-1` (panel window) | ready acknowledged | ready acknowledged again | a second `AcknowledgePanelWindowReady` call. This is red until `acknowledgedTransfers` is reset, which is the proof the reset works. |
 | Window name | paused preference | running preference | the first render follows test 2's preference |
 | Window identity | panel window `panel-1` | workspace `main` | events addressed to `main` are delivered |
+| Panel publication queue | a close the backend refuses | the window closes | no retry of test 1's close |
+| Helm release panel id | the user picks the merged values view | nothing | the default values view |
+| Node `worker-1` | log sources found | no log sources | test 2's discovery |
+| Pod panel id | a session asks for the shell tab | nothing | no pending tab request |
 
 Phase 0 adds the cluster, object, window-name, and window-identity rows. Phase 1
-adds the transfer row together with the `acknowledgedTransfers` reset. Each
+adds the transfer row together with the `acknowledgedTransfers` reset, and
+the last four rows with their resets. Each
 later phase adds a row for every owner it migrates whose state is keyed by
 identity.
 
 ### Mount modes and eligibility
 
-- **Full-app mode** renders `<App/>` through `renderWindowRoot` and navigates
-  through the bridge or the UI. It is required for any surface under a
-  route-owned or panel-owned provider. Today those are:
-  - `NamespaceResourcesProvider` (`ui/layout/AppLayout.tsx:119-132`);
+- **Full-app mode** renders the root from `loadWindowRoot` through
+  `renderWindowRoot`, and navigates through the UI. The bridge is
+  provider-mode only. It is required for any surface whose assertions depend
+  on a route-owned or panel-owned provider. Today those are:
+  - `NamespaceResourcesProvider` (`ui/layout/AppLayout.tsx:119-132`). It
+    provides no context value; it issues the namespace permission query
+    (`NsResourcesContext.tsx:39-60`), which permission-gated UI depends on.
   - `CurrentObjectPanelContext`, which `ObjectPanel` provides
-    (`modules/object-panel/components/ObjectPanel/ObjectPanel.tsx:316-370`)
-    for every tab and Overview component.
-
-  Phase 0 confirms the list by grepping providers under `AppLayout`'s routes
-  and `ObjectPanel`.
+    (`modules/object-panel/components/ObjectPanel/ObjectPanel.tsx:316-370`).
+    It is read directly only by the Overview root, the Helm descriptor,
+    `PodsTab`, `JobsTab`, `YamlTab`, `ResourceHeader`, and
+    `useObjectActionController` (pilot finding 2). Descriptor suites that
+    render `OverviewRenderer` with `ResourceHeader` stubbed, and tabs that
+    take `objectData` as a prop, are provider-eligible.
+  - The panel's own namespace permission query (`ObjectPanel.tsx:152`). A
+    workload's Pod-level checks resolve from it, so suites whose assertions
+    depend on those checks need the real panel (Phase 1 completion).
 - **Provider mode** renders `<AppShell>{ui}</AppShell>` for eligible
   surfaces: hooks, owner suites, and components whose production ancestors,
   between the shell's layout slot and the surface, add no provider that the
@@ -633,9 +1392,10 @@ This phase comes first: it has the most suites and the most tier-1 suites
   `WorkspacePanelSync`. They assert backend calls such as
   `AcknowledgePanelTransfer` and `PublishDockedPanels` through the RPC record.
 - **Object-panel suites open panels through the real `openWithObject`** and
-  assert the opened panel's full identity. Tabs and Overview components read
-  `CurrentObjectPanelContext`, which `ObjectPanel` provides, so these suites
-  use full-app mode ([eligibility](#mount-modes-and-eligibility)).
+  assert the opened panel's full identity. Suites whose subject reads
+  `CurrentObjectPanelContext` use full-app mode; the rest use provider mode
+  ([eligibility](#mount-modes-and-eligibility); the pilot corrected the
+  reader list).
   - The 13 Overview descriptor suites mostly stub `useObjectPanel` only, to
     capture link clicks. Consolidate them to one representative link test, plus
     per-kind cases where the kind actually branches (from notes: Overview is
@@ -715,8 +1475,9 @@ analysis, and native checks. Anything outside it is a non-goal.
 | 0 | `main.ts` | Extract `prepareWindow(config, preparation)` and `renderWindowRoot(…)`; add the caller-owned `preparation` record | None on success: same steps in the same order |
 | 0 | `main.ts` | After a failed bootstrap, dispose the peer-preference subscription | **Behavior change** on the failure path only |
 | 0 and later | Modules the ledger marks "new reset hook" | A narrowly named `reset…ForTesting` export next to the state | None: test-only entry point |
-| 1 | `PanelWindowApp.tsx` | Extract `PanelWindowShell({ descriptor, children })` | None: provider and effect order unchanged |
-| 1 | `PanelWindowApp.tsx` | A reset hook for `acknowledgedTransfers` | None: test-only entry point |
+| 1 | `PanelWindowApp.tsx` | Extract `PanelWindowShell({ descriptor, children })` (done in the pilot) | None: provider and effect order unchanged |
+| 1 | `PanelWindowApp.tsx` | A reset hook for `acknowledgedTransfers` (done in the pilot: `resetAcknowledgedPanelTransfersForTesting`) | None: test-only entry point |
+| 1 | `publicationQueue.ts`, `helmValuesViewCache.ts`, `nodeLogsApi.ts`, `objectPanelTabRequests.ts` | A reset hook each (done; see [Phase 1 completion](#phase-1-completion-2026-10-22-uncommitted)) | None: test-only entry points |
 
 ### What stays a pure unit test (non-goals)
 
@@ -842,7 +1603,7 @@ not yet observed:
 
 | ID | Mutation | Hidden today by | Phase |
 | --- | --- | --- | :-: |
-| M1 | `openWithObject` skips `hydrateClusterMeta` and `assertObjectRefHasRequiredIdentity` (`useObjectPanel.ts:226-227`) | The `useObjectPanel` stub (59 suites) | 1 |
+| M1 | `openWithObject` skips `hydrateClusterMeta` and `assertObjectRefHasRequiredIdentity` (`useObjectPanel.ts:226-227`). The pilot found it masked by a second hydration; M1′ (`panelTargetSnapshot` drops the namespace) replaces it. | The `useObjectPanel` stub (59 suites) | 1 |
 | M2 | The coordinator calls a guard-registry method unbound (the #401 class) | The `vi.fn` registry (`WorkspacePanelCoordinator.test.tsx:209-220`) | 1 |
 | M3 | A view builds its refresh scope from `selectedKubeconfig` (selection) instead of `selectedClusterId` | The stub sets both to `'path:context'` (`ClusterViewNodes.test.tsx:155-162`) | 2 |
 | M4 | Unnamed capability descriptors skip the namespace permission query (the Node Shell class) | The `@/core/capabilities` stub (29 suites) | 2 |
@@ -867,7 +1628,8 @@ not yet observed:
   (median 0.06 s, p95 0.68 s). These numbers come from the JSON reporter's
   per-file start and end times, which exclude import.
 
-**Projection** [not measured]:
+**Projection** [not measured; superseded by the Phase 1 pilot's
+re-projection]:
 
 - **Mount mode split.** About 100 of the 183 suites need full-app mode: most
   of Phase 1's object-panel suites, Phase 2's views, and part of Phase 3. See
@@ -882,10 +1644,15 @@ not yet observed:
   both modes and recomputes the projection. If the new projection exceeds the
   budget, the numbers go to John (Q8) before Phase 1 starts.
 
-**Budget** (recommended, Q8):
+**Budget** (Q8). John raised the end state from +20% to +60% after the
+Phase 1 pilot measured that +20% is not reachable at full fidelity (2026-10-22;
+see [Budget decision](#budget-decision-john-2026-10-22)):
 
-- **End state:** wall time at most 20% above the baseline (at most 90 s) on
+- **End state:** wall time at most 60% above the baseline (at most 120 s) on
   the same machine, configuration, and command.
+- **Checkpoint after Phase 1:** if its measured delta extrapolates above
+  +60%, try a shared module cache for stub-free harness suites before
+  raising the budget again.
 - **Per migrated file:** p95 test time at most 1.0 s. Any migrated file over
   2 s states why.
 - **Each phase** reports its wall-time delta and per-file distribution, from
@@ -988,8 +1755,10 @@ execute, so an increase is expected [assumed].
      harness stays in the baseline only with John's approval and a recorded
      reason.
 8. **Runtime budget.**
-   - **Recommended:** at most +20% wall time (at most 90 s) at the end, and
-     p95 at most 1.0 s per migrated file.
+   - **Recommended and approved:** at most +20% wall time (at most 90 s) at
+     the end, and p95 at most 1.0 s per migrated file.
+   - **Revised (John, 2026-10-22, after the Phase 1 pilot):** at most +60%
+     wall time (at most 120 s); the p95 limit is unchanged.
 9. **Delivery.**
    - **Recommended:** one change per phase. Phase 0 alone first, so the
      harness API is reviewed against real migrated suites before the bulk
