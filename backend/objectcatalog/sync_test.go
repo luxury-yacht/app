@@ -19,6 +19,7 @@ import (
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -1261,6 +1262,19 @@ func (*blockingIngestSource) PartitionReadinessFor(schema.GroupVersionResource) 
 	return nil
 }
 
-func (*controlledIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
-	return nil
+func (s *controlledIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
+	return clusterWidePartition(s.synced.Load())
+}
+
+func (s orderedIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
+	return clusterWidePartition(s.synced())
+}
+
+// clusterWidePartition is the readiness the ingest manager reports for an
+// unscoped store: one cluster-wide partition, Ready once it has synced.
+func clusterWidePartition(synced bool) []ingest.PartitionReadiness {
+	if !synced {
+		return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessPending}}
+	}
+	return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessReady}}
 }

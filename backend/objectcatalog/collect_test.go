@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -111,6 +112,9 @@ func TestServiceSyncCollectsResources(t *testing.T) {
 type fakeCatalogIngestSource struct {
 	rows   map[schema.GroupVersionResource][]interface{}
 	synced map[schema.GroupVersionResource]bool
+	// partitions overrides the readiness a synced store reports: one Ready
+	// cluster-wide partition, as the ingest manager reports for it.
+	partitions map[schema.GroupVersionResource][]ingest.PartitionReadiness
 }
 
 func (f *fakeCatalogIngestSource) CatalogRows(gvr schema.GroupVersionResource) []interface{} {
@@ -219,7 +223,7 @@ func TestCollectViaIngestServesCutKindSummaries(t *testing.T) {
 	svc := NewService(Dependencies{IngestSource: source, ClusterID: "c1"}, nil)
 
 	// Namespace-scoped request to team-a returns only the team-a summary, byte-identical.
-	summaries, handled, err := svc.collectViaIngest(desc, []string{"team-a"}, nil)
+	summaries, handled, err := svc.collectViaIngest(context.Background(), desc, []string{"team-a"}, nil)
 	if err != nil || !handled {
 		t.Fatalf("collectViaIngest handled=%v err=%v, want handled=true err=nil", handled, err)
 	}
@@ -231,10 +235,64 @@ func TestCollectViaIngestServesCutKindSummaries(t *testing.T) {
 	}
 
 	// An all-namespaces request returns both, proving no scoping when none requested.
-	all, handled, err := svc.collectViaIngest(desc, nil, nil)
+	all, handled, err := svc.collectViaIngest(context.Background(), desc, nil, nil)
 	if err != nil || !handled || len(all) != 2 {
 		t.Fatalf("all-namespaces collectViaIngest handled=%v err=%v len=%d, want true/nil/2", handled, err, len(all))
 	}
+}
+
+// A static kind's store holds only its watched partitions. A partition the
+// permission filter skipped (LIST allowed, WATCH denied) is collected with
+// LIST, as it was before the kind moved to ingest, rows restored into it from
+// spill are not served as watched, and a reconcile of the watched partition
+// keeps the LIST-collected rows.
+func TestCollectViaIngestListsPartitionsWithoutAWatch(t *testing.T) {
+	gvr := schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}
+	_, static := catalogIngestGVRs[gvr]
+	require.True(t, static, "HPAs must be collected from their owned reflector")
+	desc := builtinDescriptor(gvr.Group, gvr.Version, "HorizontalPodAutoscaler", gvr.Resource, true)
+	stored := func(namespace, name string) Summary {
+		return summaryFromObject("c1", desc, &metav1.PartialObjectMetadata{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name, ResourceVersion: "1"},
+		})
+	}
+	source := &fakeCatalogIngestSource{
+		rows: map[schema.GroupVersionResource][]interface{}{gvr: {stored("watchable", "watched"), stored("list-only", "restored")}},
+		partitions: map[schema.GroupVersionResource][]ingest.PartitionReadiness{gvr: {
+			{Namespace: "watchable", State: refresh.ResourceReadinessReady},
+			{Namespace: "list-only", State: refresh.ResourceReadinessUnavailable},
+		}},
+	}
+	listed := &unstructured.Unstructured{}
+	listed.SetGroupVersionKind(schema.GroupVersionKind{Group: "autoscaling", Version: "v2", Kind: "HorizontalPodAutoscaler"})
+	listed.SetNamespace("list-only")
+	listed.SetName("listed")
+	listed.SetResourceVersion("2")
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{gvr: "HorizontalPodAutoscalerList"}, listed)
+	scope := []string{"watchable", "list-only"}
+	svc := NewService(Dependencies{
+		Common: common.Dependencies{DynamicClient: dyn}, IngestSource: source, ClusterID: "c1", AllowedNamespaces: scope,
+	}, &Options{PageSize: 200, ListWorkers: 2})
+	names := func(summaries []Summary) []string {
+		out := make([]string, 0, len(summaries))
+		for _, summary := range summaries {
+			out = append(out, summary.Ref.Name)
+		}
+		return out
+	}
+
+	summaries, handled, err := svc.collectViaIngest(context.Background(), desc, scope, nil)
+	require.True(t, handled)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"watched", "listed"}, names(summaries))
+
+	registerDesc(svc, desc)
+	svc.replaceIngestCatalogSummaries(gvr, summaries)
+	svc.syncMu.Lock()
+	svc.reconcileCurrentIngestSource(gvr)
+	svc.syncMu.Unlock()
+	require.ElementsMatch(t, []string{"watched", "listed"}, names(svc.Query(QueryOptions{}).Items))
 }
 
 // TestCollectViaIngestAlwaysHandlesCutKind proves a cut kind's collect is ALWAYS
@@ -253,14 +311,14 @@ func TestCollectViaIngestAlwaysHandlesCutKind(t *testing.T) {
 		rows: map[schema.GroupVersionResource][]interface{}{cutGVR: {}},
 	}
 	svc := NewService(Dependencies{IngestSource: source}, nil)
-	if summaries, handled, err := svc.collectViaIngest(cutDesc, nil, nil); !handled || err != nil || len(summaries) != 0 {
+	if summaries, handled, err := svc.collectViaIngest(context.Background(), cutDesc, nil, nil); !handled || err != nil || len(summaries) != 0 {
 		t.Fatalf("cut kind collectViaIngest handled=%v err=%v len=%d, want true/nil/0", handled, err, len(summaries))
 	}
 
 	// A kind the registry does not own (a custom resource) is not handled by the static
 	// ingest path; the dynamic/list path serves it.
 	uncutDesc := builtinDescriptor("example.com", "v1", "Widget", "widgets", true)
-	if _, handled, _ := svc.collectViaIngest(uncutDesc, nil, nil); handled {
+	if _, handled, _ := svc.collectViaIngest(context.Background(), uncutDesc, nil, nil); handled {
 		t.Fatal("uncut kind must not be handled by ingest")
 	}
 }
@@ -279,7 +337,7 @@ func TestCollectViaIngestReportsUnsyncedStaticCutKind(t *testing.T) {
 	}
 	svc := NewService(Dependencies{IngestSource: source}, nil)
 
-	summaries, handled, err := svc.collectViaIngest(cutDesc, nil, nil)
+	summaries, handled, err := svc.collectViaIngest(context.Background(), cutDesc, nil, nil)
 	if !handled {
 		t.Fatal("unsynced static cut kind must still be handled by ingest")
 	}
@@ -733,6 +791,12 @@ func (*fakeCatalogIngestSource) SubscribeBundleSink(schema.GroupVersionResource,
 	return func() {}
 }
 
-func (*fakeCatalogIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
-	return nil
+func (f *fakeCatalogIngestSource) PartitionReadinessFor(gvr schema.GroupVersionResource) []ingest.PartitionReadiness {
+	if partitions, ok := f.partitions[gvr]; ok {
+		return partitions
+	}
+	if !f.HasSyncedFor(gvr) {
+		return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessPending}}
+	}
+	return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessReady}}
 }

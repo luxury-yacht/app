@@ -55,7 +55,7 @@ type Route struct {
 	ItemGVK schema.GroupVersionKind
 }
 
-// APIServer answers LIST and WATCH for its routes from an object tracker, and
+// APIServer answers GET, LIST and WATCH for its routes from an object tracker, and
 // SelfSubjectAccessReviews from its access policy. Every write is stamped with
 // the next resourceVersion and recorded, so a watch from a resourceVersion
 // replays every later change, as the Kubernetes API does.
@@ -296,9 +296,10 @@ func metaOf(t testing.TB, obj runtime.Object) metav1.Object {
 	return accessor
 }
 
-// routeFor parses a REST path into its route and namespace. Paths are the
-// /api/v1/... (core) and /apis/<group>/<version>/... shapes client-go builds.
-func (s *APIServer) routeFor(path string) (Route, string, bool) {
+// routeFor parses a REST path into its route, namespace, and object name (""
+// for a collection). Paths are the /api/v1/... (core) and
+// /apis/<group>/<version>/... shapes client-go builds.
+func (s *APIServer) routeFor(path string) (Route, string, string, bool) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	var group, version string
 	var rest []string
@@ -308,14 +309,20 @@ func (s *APIServer) routeFor(path string) (Route, string, bool) {
 	case len(parts) >= 4 && parts[0] == "apis":
 		group, version, rest = parts[1], parts[2], parts[3:]
 	default:
-		return Route{}, "", false
+		return Route{}, "", "", false
 	}
-	namespace, resource := "", rest[0]
-	if len(rest) >= 3 && rest[0] == "namespaces" {
+	namespace, resource, name := "", rest[0], ""
+	switch {
+	case len(rest) >= 3 && rest[0] == "namespaces":
 		namespace, resource = rest[1], rest[2]
+		if len(rest) >= 4 {
+			name = rest[3]
+		}
+	case len(rest) >= 2:
+		name = rest[1]
 	}
 	route, ok := s.routes[group+"/"+version+"/"+resource]
-	return route, namespace, ok
+	return route, namespace, name, ok
 }
 
 func (s *APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -323,7 +330,7 @@ func (s *APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.serveAccessReview(w, r)
 		return
 	}
-	route, namespace, ok := s.routeFor(r.URL.Path)
+	route, namespace, name, ok := s.routeFor(r.URL.Path)
 	if !ok {
 		http.Error(w, "unknown resource: "+r.URL.Path, http.StatusNotFound)
 		return
@@ -332,11 +339,14 @@ func (s *APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	encoder := codecs.LegacyCodec(route.ItemGVK.GroupVersion())
-	if r.URL.Query().Get("watch") != "true" {
+	switch {
+	case name != "":
+		s.serveGet(w, route, namespace, name, encoder)
+	case r.URL.Query().Get("watch") != "true":
 		s.serveList(w, route, namespace, encoder)
-		return
+	default:
+		s.serveWatch(w, r, route, namespace, encoder)
 	}
-	s.serveWatch(w, r, route, namespace, encoder)
 }
 
 // waitForGap holds a request until an open watch gap ends.
@@ -385,6 +395,32 @@ func (s *APIServer) list(route Route, namespace string) (runtime.Object, int64, 
 		listMeta.SetResourceVersion(strconv.FormatInt(s.revision, 10))
 	}
 	return list, s.revision, nil
+}
+
+// serveGet answers a GET of one object, or 404 when the tracker has none.
+func (s *APIServer) serveGet(w http.ResponseWriter, route Route, namespace, name string, encoder runtime.Encoder) {
+	s.mu.Lock()
+	obj, err := s.tracker.Get(route.GVR, namespace, name)
+	s.mu.Unlock()
+	if apierrors.IsNotFound(err) {
+		status := apierrors.NewNotFound(route.GVR.GroupResource(), name).ErrStatus
+		status.APIVersion, status.Kind = "v1", "Status"
+		setJSONContentType(w)
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(&status)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	data, err := runtime.Encode(encoder, obj)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	setJSONContentType(w)
+	_, _ = w.Write(data)
 }
 
 func (s *APIServer) serveList(w http.ResponseWriter, route Route, namespace string, encoder runtime.Encoder) {

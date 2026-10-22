@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/luxury-yacht/app/backend/refresh/ingest/ingesttest"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 )
 
@@ -102,4 +104,41 @@ func TestEventAggregatesReadTheEventsStore(t *testing.T) {
 	require.Equal(t, "team-a", recent[0].ObjectNamespace)
 	require.Equal(t, "pod-uid", recent[0].ObjectUID)
 	require.NotNil(t, recent[0].InvolvedObject)
+}
+
+// A re-warm restores the Attention findings and resumes the Events watch. A
+// Warning Event deleted while the cluster was Cold must take its restored
+// finding with it, though the resumed watch delivers only the delete; with no
+// changes the restored finding stays.
+func TestAttentionRewarmFollowsEventsChangedWhileCold(t *testing.T) {
+	warning := func() *corev1.Event {
+		event := tableEvent("node-a.1", "default", "Node", "")
+		event.Type = corev1.EventTypeWarning
+		event.Reason = "NodeNotReady"
+		return event
+	}
+	start := func(t *testing.T) (*ingesttest.APIServer, string) {
+		t.Helper()
+		server := newReflectorAPIServer(t)
+		server.Create(t, warning())
+		before := newReflectorHarness(t, server, "")
+		require.Eventually(t, func() bool {
+			return slices.Equal([]string{"Event/node-a.1"}, attentionRefNames(t, before))
+		}, 5*time.Second, 20*time.Millisecond)
+		return server, before.spill(t)
+	}
+
+	t.Run("no changes while Cold", func(t *testing.T) {
+		server, spill := start(t)
+		after := newReflectorHarness(t, server, spill)
+		require.Equal(t, []string{"Event/node-a.1"}, attentionRefNames(t, after))
+	})
+	t.Run("deleted while Cold, watch resumes", func(t *testing.T) {
+		server, spill := start(t)
+		server.Delete(t, warning())
+		after := newReflectorHarness(t, server, spill)
+		require.Eventually(t, func() bool {
+			return len(attentionRefNames(t, after)) == 0
+		}, 5*time.Second, 20*time.Millisecond, "the restored finding outlived its deleted Event")
+	})
 }

@@ -97,7 +97,8 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
     definitions, the discovery hook, Helm releases). Partition relists deliver
     per-key deletes.
   - `RestoreBundles` installs spilled rows without fanning them to sinks. A
-    sink that needs the full set and has no spill of its own implements
+    sink that needs the full set and does not spill it itself (an owner index,
+    or the source records behind Attention's spilled findings) implements
     `BundleSeeder`. Its seed arrives under the write lock, before any live
     delta.
 - **Settled is not knowledge.** Two signals look complete without being so:

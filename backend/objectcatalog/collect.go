@@ -30,7 +30,7 @@ import (
 func (s *Service) collectResource(ctx context.Context, desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, error) {
 	// Built-in kinds' Summaries come from their owned reflectors' stores (projected
 	// at intake), for every namespace scope.
-	if summaries, handled, err := s.collectViaIngest(desc, namespaces, agg); handled {
+	if summaries, handled, err := s.collectViaIngest(ctx, desc, namespaces, agg); handled {
 		return summaries, err
 	}
 	if planCollectionSource(desc).source == collectionSourceSkip {

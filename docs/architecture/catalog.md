@@ -106,7 +106,9 @@ and the catalog does not subscribe to their rows.
   translate its group/resource to the catalog descriptor for query identity.
   Streaming consumes catalog signals; catalog never reads stream-manager caches.
 - Subscribe before initial collection. Read only synced namespace partitions
-  from ingest; pending or LIST-only partitions use catalog's paginated LIST with
+  from ingest, for built-in and runtime-discovered kinds alike (a built-in
+  kind first waits for its store to settle); pending, degraded, or LIST-only
+  partitions use catalog's paginated LIST with
   `ResourceFetchCallTimeout` per request, renewed per page and retry. The
   multi-namespace collection has no overall deadline; caller cancellation
   still stops it.

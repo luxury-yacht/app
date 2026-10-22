@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -16,11 +17,52 @@ func (s *Service) collectViaDynamicIngest(ctx context.Context, desc Descriptor, 
 	if !ok {
 		return nil, false, nil
 	}
-	pending := pendingDynamicNamespaces(source, listTargets(desc, namespaces))
-	rows := s.dynamicCatalogSummaries(source, desc, namespaces)
+	return s.collectIngestPartitions(ctx, desc, namespaces, ingestPartitions{rows: source.Rows, ready: source.ReadyNamespaces}, agg)
+}
+
+// ingestPartitions is one read of an ingest source's catalog rows and the
+// namespaces whose watch has synced ("" = every namespace). A row outside them
+// is not a watched row: it was restored from spill, or it belongs to a
+// partition the permission filter skipped.
+type ingestPartitions struct {
+	rows  []interface{}
+	ready []string
+}
+
+// staticIngestPartitions reads a built-in kind's rows with the namespaces whose
+// partitions report Ready.
+func staticIngestPartitions(source IngestSource, gvr schema.GroupVersionResource) ingestPartitions {
+	ready := make([]string, 0)
+	for _, part := range source.PartitionReadinessFor(gvr) {
+		if part.State == refresh.ResourceReadinessReady {
+			ready = append(ready, part.Namespace)
+		}
+	}
+	return ingestPartitions{rows: source.CatalogRows(gvr), ready: ready}
+}
+
+func (p ingestPartitions) watched(namespace string) bool {
+	return slices.Contains(p.ready, "") || slices.Contains(p.ready, namespace)
+}
+
+func (p ingestPartitions) pending(targets []string) []string {
+	pending := make([]string, 0, len(targets))
+	for _, namespace := range targets {
+		if !p.watched(namespace) {
+			pending = append(pending, namespace)
+		}
+	}
+	return pending
+}
+
+// collectIngestPartitions serves the watched partitions from the ingest rows
+// and LISTs every other requested target: a not-yet-watched or LIST-only
+// partition must be collected, not interpreted as empty. Each API page has its
+// own budget, independent of reflector retries.
+func (s *Service) collectIngestPartitions(ctx context.Context, desc Descriptor, namespaces []string, partitions ingestPartitions, agg *streamingAggregator) ([]Summary, bool, error) {
+	pending := partitions.pending(listTargets(desc, namespaces))
+	rows := s.watchedCatalogSummaries(partitions, desc, namespaces)
 	if len(pending) > 0 {
-		// A not-yet-watched or LIST-only partition must be collected, not interpreted
-		// as empty. Each API page has its own budget, independent of reflector retries.
 		listed, err := s.listResourceTargets(ctx, desc, pending, nil)
 		if err != nil {
 			return nil, true, err
@@ -33,25 +75,11 @@ func (s *Service) collectViaDynamicIngest(ctx context.Context, desc Descriptor, 
 	return emitSummaries(agg, rows, nil, true)
 }
 
-func pendingDynamicNamespaces(source ingest.DynamicCatalogSnapshot, targets []string) []string {
-	pending := make([]string, 0, len(targets))
-	for _, namespace := range targets {
-		if !dynamicNamespaceReady(source, namespace) {
-			pending = append(pending, namespace)
-		}
-	}
-	return pending
-}
-
-func dynamicNamespaceReady(source ingest.DynamicCatalogSnapshot, namespace string) bool {
-	return slices.Contains(source.ReadyNamespaces, "") || slices.Contains(source.ReadyNamespaces, namespace)
-}
-
-func (s *Service) dynamicCatalogSummaries(source ingest.DynamicCatalogSnapshot, desc Descriptor, namespaces []string) []Summary {
-	rows := catalogSummaries(source.Rows, requestedNamespaceSet(desc, namespaces))
+func (s *Service) watchedCatalogSummaries(partitions ingestPartitions, desc Descriptor, namespaces []string) []Summary {
+	rows := catalogSummaries(partitions.rows, requestedNamespaceSet(desc, namespaces))
 	selected := rows[:0]
 	for _, row := range rows {
-		if row.Ref.ClusterID != s.clusterID || !dynamicNamespaceReady(source, row.Ref.Namespace) {
+		if row.Ref.ClusterID != s.clusterID || !partitions.watched(row.Ref.Namespace) {
 			continue
 		}
 		// A reflector can serve another CRD version; catalog identity continues to
@@ -64,26 +92,39 @@ func (s *Service) dynamicCatalogSummaries(source ingest.DynamicCatalogSnapshot, 
 // The caller owns syncMu. Read the current source only after taking publication
 // ownership, so queued events from retired versions cannot overwrite replacements.
 func (s *Service) reconcileCurrentIngestSource(gvr schema.GroupVersionResource) {
-	source, dynamic := s.deps.IngestSource.ReadDynamicCatalogSource(gvr.GroupResource())
-	if !dynamic {
-		s.replaceIngestCatalogSummariesLocked(gvr, catalogSummaries(s.deps.IngestSource.CatalogRows(gvr), nil))
+	partitions, live := s.currentIngestPartitions(gvr)
+	if !live {
+		// The source was retired (its CRD was deleted): drop its rows.
+		s.replaceIngestCatalogSummariesLocked(gvr, nil)
 		return
 	}
 	desc, ok := s.resolveIngestDescriptor(gvr)
-	if !ok || len(source.ReadyNamespaces) == 0 {
+	if !ok || len(partitions.ready) == 0 {
 		return
 	}
-	rows := s.dynamicCatalogSummaries(source, desc, s.scopeNamespaces())
+	rows := s.watchedCatalogSummaries(partitions, desc, s.scopeNamespaces())
 	// A watch baseline replaces only synced partitions. Retain LIST-only and
 	// pending partitions until their own catalog collection succeeds.
 	s.mu.RLock()
 	for _, existing := range s.catalogIndex.items {
-		if summaryMatchesDescriptor(existing, desc) && !dynamicNamespaceReady(source, existing.Ref.Namespace) {
+		if summaryMatchesDescriptor(existing, desc) && !partitions.watched(existing.Ref.Namespace) {
 			rows = append(rows, existing)
 		}
 	}
 	s.mu.RUnlock()
 	s.replaceIngestCatalogSummariesLocked(gvr, rows)
+}
+
+// currentIngestPartitions reads gvr's live source: a runtime-discovered source,
+// or a built-in kind's store. It reports false when neither exists.
+func (s *Service) currentIngestPartitions(gvr schema.GroupVersionResource) (ingestPartitions, bool) {
+	if source, dynamic := s.deps.IngestSource.ReadDynamicCatalogSource(gvr.GroupResource()); dynamic {
+		return ingestPartitions{rows: source.Rows, ready: source.ReadyNamespaces}, true
+	}
+	if _, builtin := catalogIngestGVRs[gvr]; builtin {
+		return staticIngestPartitions(s.deps.IngestSource, gvr), true
+	}
+	return ingestPartitions{}, false
 }
 
 func dynamicSummaryIdentity(row Summary, desc Descriptor) Summary {

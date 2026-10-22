@@ -45,7 +45,7 @@ type NamespaceChangeNotifier struct {
 	ingest  namespacePodIngestSource
 	tracker *NamespaceWorkloadTracker
 
-	events         eventStore
+	events         namespaceEventSource
 	eventsExpected bool
 
 	bell doorbell.Bell
@@ -265,8 +265,7 @@ func (n *NamespaceChangeNotifier) eventFlushReasons(eventDirty bool) ([]string, 
 	if !needEventSignature {
 		return nil, eventReady
 	}
-	counts, state := namespaceWarningEventRollups(n.events, n.eventsExpected)
-	signature := warningEventRollupSignature(counts, state)
+	signature := namespaceWarningEventRollups(n.events, n.eventsExpected).signature()
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.lastEventReady = eventReady

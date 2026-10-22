@@ -16,7 +16,9 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/doorbell"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
@@ -44,6 +46,16 @@ func (f *fakeNamespaceIngest) RawHasSyncedFor(gvr schema.GroupVersionResource) b
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.synced
+}
+
+// PartitionReadinessFor reports an unscoped store's one cluster-wide partition,
+// Ready once it has synced, as the ingest manager does.
+func (f *fakeNamespaceIngest) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
+	state := refresh.ResourceReadinessPending
+	if f.RawHasSyncedFor(EventGVR) {
+		state = refresh.ResourceReadinessReady
+	}
+	return []ingest.PartitionReadiness{{State: state}}
 }
 func (f *fakeNamespaceIngest) PermissionSkippedFor(schema.GroupVersionResource) bool {
 	return false

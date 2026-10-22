@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 )
 
@@ -23,6 +24,19 @@ func (s projectingEventStore) Rows(gvr schema.GroupVersionResource) []interface{
 
 func (s projectingEventStore) RawHasSyncedFor(gvr schema.GroupVersionResource) bool {
 	return gvr == EventGVR && s.store.HasSynced()
+}
+
+// PartitionReadinessFor reports the one cluster-wide partition an unscoped
+// events store has, as the ingest manager does: Ready once it has synced.
+func (s projectingEventStore) PartitionReadinessFor(gvr schema.GroupVersionResource) []ingest.PartitionReadiness {
+	if gvr != EventGVR {
+		return nil
+	}
+	state := refresh.ResourceReadinessPending
+	if s.store.HasSynced() {
+		state = refresh.ResourceReadinessReady
+	}
+	return []ingest.PartitionReadiness{{Namespace: "", State: state}}
 }
 
 // newEventStore lists events into a store through the production events

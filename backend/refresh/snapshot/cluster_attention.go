@@ -1347,16 +1347,32 @@ func (s attentionBundleSink) DeleteBundle(bundle ingest.Bundle) {
 }
 
 func (s attentionBundleSink) ReplaceBundles(bundles []ingest.Bundle) {
+	s.index.ReplaceSource(s.owner, attentionRecordsFromBundles(s.source, bundles))
+}
+
+// SeedBundles rebuilds the owner's source records from the bundles restored
+// from spill. Attention restores its findings from its own spill, but expiry
+// and deletes need the source record behind each finding, and a resumed watch
+// delivers no relist to rebuild them. Restored bundles do not prove which
+// objects were deleted since, so saved ignores are kept.
+func (s attentionBundleSink) SeedBundles(bundles []ingest.Bundle) {
+	s.index.replaceSource(s.owner, attentionRecordsFromBundles(s.source, bundles), false)
+}
+
+func attentionRecordsFromBundles(source attentionSource, bundles []ingest.Bundle) []attentionSourceRecord {
 	records := make([]attentionSourceRecord, 0, len(bundles))
 	for _, bundle := range bundles {
-		if record, ok := attentionRecordFromBundle(s.source, bundle); ok {
+		if record, ok := attentionRecordFromBundle(source, bundle); ok {
 			records = append(records, record)
 		}
 	}
-	s.index.ReplaceSource(s.owner, records)
+	return records
 }
 
-var _ ingest.BundleReplacer = attentionBundleSink{}
+var (
+	_ ingest.BundleReplacer = attentionBundleSink{}
+	_ ingest.BundleSeeder   = attentionBundleSink{}
+)
 
 // fillEventAttentionRecord fills an Event's attention fields from its slim fact
 // and its catalog Summary's lifecycle. The finding's display namespace is the

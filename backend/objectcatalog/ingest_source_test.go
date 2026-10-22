@@ -16,6 +16,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/kindspec"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/events"
@@ -100,7 +101,7 @@ func TestRegisterIngestCatalogSinksRebuildsCacheOnce(t *testing.T) {
 
 func TestConcurrentIngestUpdatesBothReachCatalog(t *testing.T) {
 	rows := make(map[schema.GroupVersionResource][]interface{})
-	svc := NewService(Dependencies{IngestSource: replayIngestSource{rows: rows}}, nil)
+	svc := NewService(Dependencies{IngestSource: replayIngestSource{rows: rows}, ClusterID: "cluster-a"}, nil)
 	gvr := schema.GroupVersionResource{Version: "v1", Resource: "pods"}
 	desc := Descriptor{Kind: "Pod", Version: "v1", Resource: "pods", Group: gvr.Group, Namespaced: true}
 	svc.catalogIndex.setResource(gvr.String(), desc)
@@ -157,7 +158,7 @@ func TestContendedIngestReplaceReconcilesAuthoritativeRows(t *testing.T) {
 	gvr := schema.GroupVersionResource{Version: "v1", Resource: "pods"}
 	desc := Descriptor{Kind: "Pod", Version: "v1", Resource: "pods", Group: gvr.Group, Namespaced: true}
 	row := Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "latest"}}
-	svc := NewService(Dependencies{IngestSource: replayIngestSource{rows: map[schema.GroupVersionResource][]interface{}{gvr: {row}}}}, nil)
+	svc := NewService(Dependencies{IngestSource: replayIngestSource{rows: map[schema.GroupVersionResource][]interface{}{gvr: {row}}}, ClusterID: "cluster-a"}, nil)
 	svc.catalogIndex.setResource(gvr.String(), desc)
 	svc.syncMu.Lock()
 	svc.replaceIngestCatalogSummaries(gvr, nil)
@@ -207,8 +208,10 @@ func (replayIngestSource) SubscribeBundleSink(schema.GroupVersionResource, inges
 	return func() {}
 }
 
+// PartitionReadinessFor reports the one Ready cluster-wide partition the ingest
+// manager reports for a synced, unscoped store.
 func (replayIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
-	return nil
+	return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessReady}}
 }
 
 // subscriptionRecordingSource records which kinds the catalog subscribes to.

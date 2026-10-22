@@ -15,6 +15,7 @@
 package objectcatalog
 
 import (
+	"context"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -59,16 +60,15 @@ func collectedIngestGVRs() map[schema.GroupVersionResource]struct{} {
 	return out
 }
 
-// collectViaIngest serves a cut kind's full collect from the ingest manager's
-// CatalogRows (Summaries projected at intake) instead of a shared/dynamic lister.
-// It returns handled=false (so the caller falls through to the next source) only
-// when the kind is not ingest-owned or no ingest source is configured. For a cut
-// kind it ALWAYS handles the collect, so the catalog never falls through to the
-// shared factory for a GVR the factory no longer registers. Static cut kinds
-// report an incomplete collect until their own ingest store has synced/settled.
-// Summaries for a namespaced kind are filtered to the requested namespaces,
-// matching the lister path's per-namespace scope.
-func (s *Service) collectViaIngest(desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, bool, error) {
+// collectViaIngest serves a built-in kind's full collect from its owned
+// reflector's CatalogRows (Summaries projected at intake). It returns
+// handled=false (so the caller falls through to the next source) only when the
+// kind is not collected from ingest or no ingest source is configured. A
+// built-in kind reports an incomplete collect until its store has settled;
+// after that, partitions without a synced watch (skipped by the permission
+// filter, or degraded) are collected with LIST, like a dynamic source's.
+// Summaries for a namespaced kind are filtered to the requested namespaces.
+func (s *Service) collectViaIngest(ctx context.Context, desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, bool, error) {
 	source := s.deps.IngestSource
 	if source == nil {
 		return nil, false, nil
@@ -81,8 +81,7 @@ func (s *Service) collectViaIngest(desc Descriptor, namespaces []string, agg *st
 	if !source.HasSyncedFor(gvr) {
 		return nil, true, fmt.Errorf("catalog ingest store for %s is not synced", gvr)
 	}
-	summaries := catalogSummaries(source.CatalogRows(gvr), requestedNamespaceSet(desc, namespaces))
-	return emitSummaries(agg, summaries, nil, true)
+	return s.collectIngestPartitions(ctx, desc, namespaces, staticIngestPartitions(source, gvr), agg)
 }
 
 // catalogSummaries keeps only catalog projections in the requested namespace set.

@@ -40,7 +40,7 @@ type NamespaceBuilder struct {
 	// eventsExpected is true only when the identity may list and watch
 	// Events. A denied source is unavailable, while an allowed source that has
 	// not synced yet is loading.
-	events         eventStore
+	events         namespaceEventSource
 	eventsExpected bool
 	ingest         namespacePodIngestSource
 	tracker        *NamespaceWorkloadTracker
@@ -291,7 +291,7 @@ func wireNamespaceEvents(
 	eventsExpected bool,
 ) {
 	events, ok := ingestManager.(interface {
-		eventStore
+		namespaceEventSource
 		AddBundleSink(gvr schema.GroupVersionResource, sink ingest.BundleSink) bool
 	})
 	if !eventsExpected || !ok || !events.AddBundleSink(EventGVR, namespaceEventSink{notifier: notifier}) {
@@ -365,15 +365,14 @@ func (s namespaceQuotaNotifierSink) DeleteBundle(ingest.Bundle)     { s.notifier
 func (s namespaceQuotaNotifierSink) ReplaceBundles([]ingest.Bundle) { s.notifier.QuotaChanged() }
 
 type namespaceBuildInputs struct {
-	meta               ClusterMeta
-	namespaces         []*corev1.Namespace
-	scopeStatuses      map[string]NamespaceScopeStatus
-	workloadReadiness  NamespaceWorkloadReadiness
-	workloadRollups    namespaceWorkloadRollups
-	warningEvents      map[string]int
-	warningEventsState NamespaceSignalState
-	quotaRollups       map[string]namespaceQuotaRollup
-	quotaState         NamespaceSignalState
+	meta              ClusterMeta
+	namespaces        []*corev1.Namespace
+	scopeStatuses     map[string]NamespaceScopeStatus
+	workloadReadiness NamespaceWorkloadReadiness
+	workloadRollups   namespaceWorkloadRollups
+	warningEvents     warningEventRollup
+	quotaRollups      map[string]namespaceQuotaRollup
+	quotaState        NamespaceSignalState
 }
 
 // Build returns the namespace snapshot payload.
@@ -386,18 +385,17 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	sortNamespaces(namespaces)
 	workloadReadiness := b.workloadTrackerReadiness()
 	workloadRollups := namespaceWorkloadRollupsFromIngest(b.ingest)
-	warningEvents, warningEventsState := b.warningEventRollups()
+	warningEvents := b.warningEventRollups()
 	quotaRollups, quotaState := namespaceQuotaRollupsFromIngest(b.ingest)
 	inputs := namespaceBuildInputs{
-		meta:               meta,
-		namespaces:         namespaces,
-		scopeStatuses:      scopeStatuses,
-		workloadReadiness:  workloadReadiness,
-		workloadRollups:    workloadRollups,
-		warningEvents:      warningEvents,
-		warningEventsState: warningEventsState,
-		quotaRollups:       quotaRollups,
-		quotaState:         quotaState,
+		meta:              meta,
+		namespaces:        namespaces,
+		scopeStatuses:     scopeStatuses,
+		workloadReadiness: workloadReadiness,
+		workloadRollups:   workloadRollups,
+		warningEvents:     warningEvents,
+		quotaRollups:      quotaRollups,
+		quotaState:        quotaState,
 	}
 	items, version := b.buildNamespaceSummaries(inputs)
 	return b.namespaceSnapshot(scope, inputs, items, version), nil
@@ -478,8 +476,8 @@ func (b *NamespaceBuilder) buildNamespaceSummaries(inputs namespaceBuildInputs) 
 			HasWorkloads:               facts.HasWorkloads,
 			WorkloadsUnknown:           !facts.WorkloadsKnown,
 			UnhealthyWorkloads:         inputs.workloadRollups.unhealthy[ns.Name],
-			WarningEvents:              inputs.warningEvents[ns.Name],
-			WarningEventsState:         inputs.warningEventsState,
+			WarningEvents:              inputs.warningEvents.counts[ns.Name],
+			WarningEventsState:         inputs.warningEvents.state(ns.Name),
 			CPURequestsMilli:           reservations.cpuRequestsMilli,
 			CPULimitsMilli:             reservations.cpuLimitsMilli,
 			MemoryRequestsBytes:        reservations.memoryRequestsBytes,
@@ -520,7 +518,7 @@ func (b *NamespaceBuilder) namespaceSnapshot(
 		// 304 Not Modified and the client keeps a stale (e.g. the first, pre-sync) snapshot.
 		SourceVersions: map[string]string{
 			"workloads":      workloadRollupSignature(inputs.workloadRollups, inputs.workloadReadiness),
-			"warning-events": warningEventRollupSignature(inputs.warningEvents, inputs.warningEventsState),
+			"warning-events": inputs.warningEvents.signature(),
 			"quota-pressure": namespaceQuotaRollupSignature(inputs.quotaRollups, inputs.quotaState),
 		},
 	}
@@ -533,42 +531,96 @@ func (b *NamespaceBuilder) namespaceSnapshot(
 	return snapshot
 }
 
-func (b *NamespaceBuilder) warningEventRollups() (map[string]int, NamespaceSignalState) {
+// namespaceEventSource is the owned events store the namespace list counts
+// warnings from, with the partition readiness that says which namespaces its
+// watch covers.
+type namespaceEventSource interface {
+	eventStore
+	partitionReadinessReporter
+}
+
+// warningEventRollup is one read of the Warning Event counts per involved
+// namespace and the Event partitions behind them. A scoped identity may read
+// Events in only some namespaces, so availability is per namespace.
+type warningEventRollup struct {
+	counts     map[string]int
+	partitions []ingest.PartitionReadiness
+}
+
+func (b *NamespaceBuilder) warningEventRollups() warningEventRollup {
 	return namespaceWarningEventRollups(b.events, b.eventsExpected)
 }
 
-func namespaceWarningEventRollups(events eventStore, eventsExpected bool) (map[string]int, NamespaceSignalState) {
-	counts := make(map[string]int)
+func namespaceWarningEventRollups(events namespaceEventSource, eventsExpected bool) warningEventRollup {
+	rollup := warningEventRollup{counts: make(map[string]int)}
 	if !eventsExpected || events == nil {
-		return counts, NamespaceSignalUnavailable
+		return rollup
 	}
-	if !eventsStoreSynced(events) {
-		return counts, NamespaceSignalLoading
-	}
+	rollup.partitions = events.PartitionReadinessFor(EventGVR)
+	available := make(map[string]bool)
 	visitStoredEvents(events, func(_ ingest.Bundle, fact *EventFact) {
-		if !strings.EqualFold(fact.Type, corev1.EventTypeWarning) {
+		namespace := strings.TrimSpace(fact.InvolvedNamespace)
+		if namespace == "" || !strings.EqualFold(fact.Type, corev1.EventTypeWarning) {
 			return
 		}
-		if namespace := strings.TrimSpace(fact.InvolvedNamespace); namespace != "" {
-			counts[namespace]++
+		counted, known := available[namespace]
+		if !known {
+			counted = rollup.state(namespace) == NamespaceSignalAvailable
+			available[namespace] = counted
+		}
+		if counted {
+			rollup.counts[namespace]++
 		}
 	})
-	return counts, NamespaceSignalAvailable
+	return rollup
 }
 
-func warningEventRollupSignature(counts map[string]int, state NamespaceSignalState) string {
-	names := make([]string, 0, len(counts))
-	for namespace := range counts {
+// state reports namespace's warning-event availability from the Event
+// partitions covering it. Every covering partition must be Ready for the count
+// to be authoritative, and a namespace no partition covers has no Event watch.
+func (r warningEventRollup) state(namespace string) NamespaceSignalState {
+	state := NamespaceSignalUnavailable
+	for _, part := range r.partitions {
+		if part.Namespace != "" && part.Namespace != namespace {
+			continue
+		}
+		switch part.State {
+		case refresh.ResourceReadinessUnavailable:
+			return NamespaceSignalUnavailable
+		case refresh.ResourceReadinessReady:
+			if state == NamespaceSignalUnavailable {
+				state = NamespaceSignalAvailable
+			}
+		default:
+			state = NamespaceSignalLoading
+		}
+	}
+	return state
+}
+
+// signature changes whenever a count or a partition's readiness changes, so the
+// namespace list re-delivers either.
+func (r warningEventRollup) signature() string {
+	partitions := make([]string, 0, len(r.partitions))
+	for _, part := range r.partitions {
+		partitions = append(partitions, part.Namespace+"="+strconv.Itoa(int(part.State)))
+	}
+	sort.Strings(partitions)
+	names := make([]string, 0, len(r.counts))
+	for namespace := range r.counts {
 		names = append(names, namespace)
 	}
 	sort.Strings(names)
 	h := fnv.New64a()
-	_, _ = h.Write([]byte(state))
-	_, _ = h.Write([]byte{0})
+	for _, partition := range partitions {
+		_, _ = h.Write([]byte(partition))
+		_, _ = h.Write([]byte{0})
+	}
+	_, _ = h.Write([]byte{1})
 	for _, namespace := range names {
 		_, _ = h.Write([]byte(namespace))
 		_, _ = h.Write([]byte{'='})
-		_, _ = h.Write([]byte(strconv.Itoa(counts[namespace])))
+		_, _ = h.Write([]byte(strconv.Itoa(r.counts[namespace])))
 		_, _ = h.Write([]byte{0})
 	}
 	return strconv.FormatUint(h.Sum64(), 16)

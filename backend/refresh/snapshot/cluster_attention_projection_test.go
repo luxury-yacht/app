@@ -14,6 +14,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func TestAttentionRecordFromBundleUsesCatalogIdentityAndTypedSummary(t *testing.T) {
@@ -209,4 +210,53 @@ func TestClusterAttentionDomainDelegatesOpenKindPermissionsToCatalog(t *testing.
 	config, exists := registry.Get(clusterAttentionDomainName)
 	require.True(t, exists)
 	require.False(t, config.RuntimePolicyExempt)
+}
+
+// A re-warm restores Attention findings from their own spill, but the source
+// records behind them come only from the restored Events. Seeding the sink
+// rebuilds them: an Event that expired while the cluster was Cold loses its
+// finding, and a later delete of a live Event clears its finding.
+func TestAttentionEventSinkSeedRebuildsRestoredSources(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "cluster-a"}
+	spilledAt := time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC)
+	warning := func(name string, observed time.Time) ingest.Bundle {
+		return eventBundleOf(t, meta, &corev1.Event{
+			ObjectMeta:     metav1.ObjectMeta{Name: name, Namespace: "default", UID: "uid-" + types.UID(name)},
+			InvolvedObject: corev1.ObjectReference{APIVersion: "v1", Kind: "Node", Name: "node-a"},
+			Reason:         "NodeNotReady",
+			Type:           corev1.EventTypeWarning,
+			LastTimestamp:  metav1.NewTime(observed),
+		})
+	}
+	expiring := warning("expiring", spilledAt.Add(-2*time.Hour))
+	live := warning("live", spilledAt)
+	owner := EventGVR.String()
+	findingNames := func(index *clusterAttentionIndex) []string {
+		names := make([]string, 0)
+		for _, finding := range index.Snapshot() {
+			names = append(names, finding.Ref.Name)
+		}
+		return names
+	}
+
+	original := newTestAttentionIndex(meta, func() time.Time { return spilledAt })
+	original.registerOwnerKind(owner, "Event")
+	attentionBundleSink{index: original, owner: owner, source: attentionSourceEvent}.ReplaceBundles([]ingest.Bundle{expiring, live})
+	require.ElementsMatch(t, []string{"expiring", "live"}, findingNames(original))
+	spillPath := t.TempDir() + "/attention.spill"
+	require.NoError(t, original.SpillTo(spillPath))
+	original.stopForTest()
+
+	// The cluster re-warms 23 hours later: the expiring Event is now past the
+	// lookback, the live one is not.
+	restored := newTestAttentionIndex(meta, func() time.Time { return spilledAt.Add(23 * time.Hour) })
+	t.Cleanup(restored.stopForTest)
+	restored.registerOwnerKind(owner, "Event")
+	require.NoError(t, restored.RestoreFrom(spillPath))
+	sink := attentionBundleSink{index: restored, owner: owner, source: attentionSourceEvent}
+	sink.SeedBundles([]ingest.Bundle{expiring, live})
+	require.Equal(t, []string{"live"}, findingNames(restored))
+
+	sink.DeleteBundle(live)
+	require.Empty(t, findingNames(restored))
 }

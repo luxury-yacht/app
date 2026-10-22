@@ -127,7 +127,8 @@ type BundleReplacer interface {
 }
 
 // BundleSeeder is an optional BundleSink extension for a consumer that needs the
-// full source set and keeps no spill of its own (an owner index, for example).
+// full source set and does not spill it itself (an owner index, or the source
+// records behind Attention's spilled findings).
 // RestoreBundles hands it every restored Bundle, under the store's write lock,
 // after the rows and indexes are installed. Restore runs before the reflector
 // starts, so the seed precedes every live delta. Like any sink, a seeder must

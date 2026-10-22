@@ -61,7 +61,9 @@ RoleBindings (issue #243) and doubles as a noise/perf scope on large clusters.
     sink feeds the namespace notifier; its signature ignores Normal-event churn
     and advances the `warning-events` source clock only when a visible count or
     source state changes. Under a scope, Events partition per configured
-    namespace like every owned namespaced kind.
+    namespace like every owned namespaced kind, and each namespace's state
+    comes from its own partition: a namespace without Event access reads
+    `unavailable`, not an authoritative zero.
   - ResourceQuota ingest retains only a compact aggregate (namespace + highest
     used percentage). Rows expose quota count, strongest percentage, explicit
     source state, and backend-owned pressure (`warning` at 80%, `critical` at
