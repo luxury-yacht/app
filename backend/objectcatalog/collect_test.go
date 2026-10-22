@@ -146,11 +146,15 @@ func (f *fakeCatalogIngestSource) Tracks(gvr schema.GroupVersionResource) bool {
 	return ok
 }
 
+// A bulk replay replaces only its own kind: the ConfigMap store's rows
+// replace the catalog's ConfigMaps and leave other kinds alone.
 func TestIngestCatalogSinkBulkReplaceScopesGVR(t *testing.T) {
 	now := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
-	svc := NewService(Dependencies{Now: func() time.Time { return now }}, nil)
 	cmGVR := schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
 	secGVR := schema.GroupVersionResource{Version: "v1", Resource: "secrets"}
+	stored := map[schema.GroupVersionResource][]interface{}{}
+	svc := NewService(Dependencies{Now: func() time.Time { return now }, IngestSource: replayIngestSource{rows: stored}}, nil)
+	defer svc.stopIngestReconciliation()
 	cmDesc := Descriptor{Group: cmGVR.Group, Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespaced: true, Scope: ScopeNamespace}
 	secDesc := Descriptor{Group: secGVR.Group, Version: "v1", Kind: "Secret", Resource: "secrets", Namespaced: true, Scope: ScopeNamespace}
 	svc.resources = map[string]Descriptor{
@@ -164,32 +168,27 @@ func TestIngestCatalogSinkBulkReplaceScopesGVR(t *testing.T) {
 		catalogKey(cmDesc, oldCM.Ref.Namespace, oldCM.Ref.Name): oldCM,
 	}
 	svc.catalogIndex.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
-
 	sink := ingestCatalogSink{service: svc, gvr: cmGVR}
-	bulk, ok := interface{}(sink).(ingest.Replacer)
-	if !ok {
-		t.Fatal("ingest catalog sink must support bulk replace")
+	replay := func(rows ...interface{}) {
+		stored[cmGVR] = rows
+		sink.Replace(rows)
+		waitForIngestReconciliation(t, svc)
 	}
-	newCM := Summary{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespace: "default", Name: "cm-new"}, Scope: ScopeNamespace}
-	bulk.Replace([]interface{}{newCM})
-
-	if _, ok := svc.items[catalogKey(cmDesc, "default", "cm-old")]; ok {
-		t.Fatal("old ConfigMap summary survived bulk replace")
-	}
-	if _, ok := svc.items[catalogKey(cmDesc, "default", "cm-new")]; !ok {
-		t.Fatal("new ConfigMap summary missing after bulk replace")
-	}
-	if _, ok := svc.items[catalogKey(secDesc, "default", "sec-a")]; !ok {
-		t.Fatal("Secret summary was removed by ConfigMap bulk replace")
+	present := func(desc Descriptor, name string) bool {
+		svc.mu.RLock()
+		defer svc.mu.RUnlock()
+		_, ok := svc.items[catalogKey(desc, "default", name)]
+		return ok
 	}
 
-	bulk.Replace(nil)
-	if _, ok := svc.items[catalogKey(cmDesc, "default", "cm-new")]; ok {
-		t.Fatal("ConfigMap summary survived empty bulk replace")
-	}
-	if _, ok := svc.items[catalogKey(secDesc, "default", "sec-a")]; !ok {
-		t.Fatal("Secret summary was removed by empty ConfigMap bulk replace")
-	}
+	replay(Summary{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespace: "default", Name: "cm-new"}, Scope: ScopeNamespace})
+	require.False(t, present(cmDesc, "cm-old"), "old ConfigMap summary survived bulk replace")
+	require.True(t, present(cmDesc, "cm-new"), "new ConfigMap summary missing after bulk replace")
+	require.True(t, present(secDesc, "sec-a"), "Secret summary was removed by ConfigMap bulk replace")
+
+	replay()
+	require.False(t, present(cmDesc, "cm-new"), "ConfigMap summary survived empty bulk replace")
+	require.True(t, present(secDesc, "sec-a"), "Secret summary was removed by empty ConfigMap bulk replace")
 }
 
 // TestCollectViaIngestServesCutKindSummaries proves a cut kind's collect is served
@@ -244,8 +243,8 @@ func TestCollectViaIngestServesCutKindSummaries(t *testing.T) {
 // A static kind's store holds only its watched partitions. A partition the
 // permission filter skipped (LIST allowed, WATCH denied) is collected with
 // LIST, as it was before the kind moved to ingest, rows restored into it from
-// spill are not served as watched, and a reconcile of the watched partition
-// keeps the LIST-collected rows.
+// spill are not served as watched, and neither a reconcile of the watched
+// partition nor a bulk replay of the store drops the LIST-collected rows.
 func TestCollectViaIngestListsPartitionsWithoutAWatch(t *testing.T) {
 	gvr := schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}
 	_, static := catalogIngestGVRs[gvr]
@@ -292,6 +291,13 @@ func TestCollectViaIngestListsPartitionsWithoutAWatch(t *testing.T) {
 	svc.syncMu.Lock()
 	svc.reconcileCurrentIngestSource(gvr)
 	svc.syncMu.Unlock()
+	require.ElementsMatch(t, []string{"watched", "listed"}, names(svc.Query(QueryOptions{}).Items))
+
+	// A subscription replay or a relist delivers the store's rows in bulk; it
+	// must reconcile by partition too, not replace the kind with them.
+	defer svc.stopIngestReconciliation()
+	ingestCatalogSink{service: svc, gvr: gvr}.Replace(source.CatalogRows(gvr))
+	waitForIngestReconciliation(t, svc)
 	require.ElementsMatch(t, []string{"watched", "listed"}, names(svc.Query(QueryOptions{}).Items))
 }
 

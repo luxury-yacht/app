@@ -916,11 +916,29 @@ func supersededAttentionObject(ignored, live resourcemodel.ResourceRef) bool {
 
 func (i *clusterAttentionIndex) deleteSourceLocked(owner, key string) {
 	state, exists := i.sources[key]
-	if !exists || state.owner != owner {
+	if !exists {
+		i.deleteRestoredFindingLocked(owner, key)
+		return
+	}
+	if state.owner != owner {
 		return
 	}
 	delete(i.sources, key)
 	delete(i.owners[owner], key)
+	i.applyHealthFindingLocked(key, nil)
+}
+
+// deleteRestoredFindingLocked removes a finding restored from spill that has
+// no source record, because its store could not rebuild one on restore, when
+// the owner reports the object deleted.
+func (i *clusterAttentionIndex) deleteRestoredFindingLocked(owner, key string) {
+	finding, exists := i.healthFindings[key]
+	if !exists {
+		return
+	}
+	if _, ownedKind := i.ownerKinds[owner][finding.Ref.Kind]; !ownedKind {
+		return
+	}
 	i.applyHealthFindingLocked(key, nil)
 }
 
@@ -1354,9 +1372,26 @@ func (s attentionBundleSink) ReplaceBundles(bundles []ingest.Bundle) {
 // from spill. Attention restores its findings from its own spill, but expiry
 // and deletes need the source record behind each finding, and a resumed watch
 // delivers no relist to rebuild them. Restored bundles do not prove which
-// objects were deleted since, so saved ignores are kept.
+// objects were deleted since, so saved ignores are kept. A store that drops
+// the Table half after intake (workloads, nodes) keeps too little to rebuild a
+// record, so its restored findings are left as they are.
 func (s attentionBundleSink) SeedBundles(bundles []ingest.Bundle) {
+	for _, bundle := range bundles {
+		if !attentionBundleCarriesSource(s.source, bundle) {
+			return
+		}
+	}
 	s.index.replaceSource(s.owner, attentionRecordsFromBundles(s.source, bundles), false)
+}
+
+// attentionBundleCarriesSource reports whether a stored bundle still holds
+// the half attentionRecordFromBundle reads for source: the Event's slim fact,
+// or every other source's Table row.
+func attentionBundleCarriesSource(source attentionSource, bundle ingest.Bundle) bool {
+	if source == attentionSourceEvent {
+		return bundle.Aggregate != nil
+	}
+	return bundle.Table != nil
 }
 
 func attentionRecordsFromBundles(source attentionSource, bundles []ingest.Bundle) []attentionSourceRecord {

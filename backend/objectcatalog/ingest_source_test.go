@@ -154,15 +154,16 @@ func TestConcurrentIngestUpdatesBothReachCatalog(t *testing.T) {
 	}
 }
 
-func TestContendedIngestReplaceReconcilesAuthoritativeRows(t *testing.T) {
+// A bulk replay is reconciled from the store's authoritative rows after the
+// store callback returns, and a retired catalog starts no more reconciliation.
+func TestIngestReplayReconcilesAuthoritativeRows(t *testing.T) {
 	gvr := schema.GroupVersionResource{Version: "v1", Resource: "pods"}
 	desc := Descriptor{Kind: "Pod", Version: "v1", Resource: "pods", Group: gvr.Group, Namespaced: true}
 	row := Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "latest"}}
 	svc := NewService(Dependencies{IngestSource: replayIngestSource{rows: map[schema.GroupVersionResource][]interface{}{gvr: {row}}}, ClusterID: "cluster-a"}, nil)
 	svc.catalogIndex.setResource(gvr.String(), desc)
-	svc.syncMu.Lock()
-	svc.replaceIngestCatalogSummaries(gvr, nil)
-	svc.syncMu.Unlock()
+	sink := ingestCatalogSink{service: svc, gvr: gvr}
+	sink.Replace(nil)
 	deadline := time.After(time.Second)
 	for {
 		svc.mu.RLock()
@@ -173,19 +174,35 @@ func TestContendedIngestReplaceReconcilesAuthoritativeRows(t *testing.T) {
 		}
 		select {
 		case <-deadline:
-			t.Fatal("contended Replace never reconciled authoritative rows")
+			t.Fatal("the replay never reconciled authoritative rows")
 		case <-time.After(time.Millisecond):
 		}
 	}
 	svc.stopIngestReconciliation()
-	svc.syncMu.Lock()
-	svc.replaceIngestCatalogSummaries(gvr, nil)
-	svc.syncMu.Unlock()
+	sink.Replace(nil)
 	svc.ingestPendingMu.Lock()
 	defer svc.ingestPendingMu.Unlock()
 	if svc.ingestDrainDone != nil || len(svc.ingestPending) != 0 {
 		t.Fatal("retired catalog spawned another reconciliation")
 	}
+}
+
+// waitForIngestReconciliation waits until queued replays have reconciled.
+func waitForIngestReconciliation(t *testing.T, svc *Service) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		svc.ingestPendingMu.Lock()
+		defer svc.ingestPendingMu.Unlock()
+		return svc.ingestDrainDone == nil && len(svc.ingestPending) == 0
+	}, time.Second, time.Millisecond)
+}
+
+// replaceIngestCatalogSummaries publishes a bulk replacement of gvr's rows the
+// way the partition-aware reconcile does, under the catalog's sync lock.
+func (s *Service) replaceIngestCatalogSummaries(gvr schema.GroupVersionResource, rows []Summary) {
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+	s.replaceIngestCatalogSummariesLocked(gvr, rows)
 }
 
 func (replayIngestSource) ReadDynamicCatalogSource(schema.GroupResource) (ingest.DynamicCatalogSnapshot, bool) {

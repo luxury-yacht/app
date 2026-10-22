@@ -83,15 +83,17 @@ and the catalog does not subscribe to their rows.
   namespace/kind counts, and finalizer findings before broadcasting. Recreation
   removes the prior UID. Only full collection and initial source replay replace
   the query baseline; replay defers publication and signals until every kind
-  has replayed.
+  has replayed, then reconciles every kind by partition and publishes once.
 - Hold the catalog read lock across a query's page, counts, and facets so they
   describe one publication (a publisher may wait on a running query). Source
   callbacks and query-engine operations never take these locks in reverse.
 - Ingest callbacks may run with their source store write-locked, so they never
-  wait for the catalog sync/publication lock (full sync reads those stores). On
-  contention, coalesce reconciliation by GVR, take publication ownership, then
-  reread the authoritative kind store — for incremental changes and whole-kind
-  replacement, including changes after a full sync collected that kind.
+  wait for the catalog sync/publication lock (full sync reads those stores). A
+  whole-kind delivery (replay or relist) always, and an incremental change on
+  contention, coalesces reconciliation by GVR, takes publication ownership,
+  then rereads the authoritative kind store by partition, including changes
+  after a full sync collected that kind. A whole-kind delivery carries only the
+  watched partitions, so it never replaces the kind's rows directly.
   Shutdown drains this worker before signaling completion.
 
 ## Watch-to-query ordering

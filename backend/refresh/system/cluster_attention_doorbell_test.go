@@ -142,3 +142,33 @@ func TestAttentionRewarmFollowsEventsChangedWhileCold(t *testing.T) {
 		}, 5*time.Second, 20*time.Millisecond, "the restored finding outlived its deleted Event")
 	})
 }
+
+// Node and workload stores keep no Table half after intake, so a re-warm
+// cannot rebuild their Attention source records from the restored rows. Their
+// restored findings must survive an unchanged re-warm, and deleting the object
+// while the watch resumes must still clear its finding.
+func TestAttentionRewarmKeepsFindingsItCannotRebuild(t *testing.T) {
+	notReady := func() *corev1.Node {
+		return &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-a", UID: "node-a-uid"},
+			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionFalse, Reason: "KubeletNotReady"},
+			}},
+		}
+	}
+	server := newReflectorAPIServer(t)
+	server.Create(t, notReady())
+	before := newReflectorHarness(t, server, "")
+	require.Eventually(t, func() bool {
+		return slices.Equal([]string{"Node/node-a"}, attentionRefNames(t, before))
+	}, 5*time.Second, 20*time.Millisecond)
+	spill := before.spill(t)
+
+	after := newReflectorHarness(t, server, spill)
+	require.Equal(t, []string{"Node/node-a"}, attentionRefNames(t, after), "an unchanged re-warm dropped the node's finding")
+
+	server.Delete(t, notReady())
+	require.Eventually(t, func() bool {
+		return len(attentionRefNames(t, after)) == 0
+	}, 5*time.Second, 20*time.Millisecond, "the restored node finding outlived its deleted node")
+}

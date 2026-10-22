@@ -50,6 +50,7 @@ func TestGatewayChangesReachCatalogThroughIngest(t *testing.T) {
 			}
 
 			svc := newTestWatchService()
+			svc.clusterID = "c1" // the cluster the ingest rows are stamped with
 			svc.deps.IngestSource = mgr
 			desc := Descriptor{Group: gvr.Group, Version: gvr.Version, Resource: gvr.Resource, Kind: identity.Kind, Namespaced: identity.Namespaced, Scope: ScopeNamespace}
 			if !desc.Namespaced {

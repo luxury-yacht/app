@@ -165,15 +165,6 @@ func (s *Service) publishIngestSummary(desc Descriptor, summary Summary, deleted
 	}
 }
 
-func (s *Service) replaceIngestCatalogSummaries(gvr schema.GroupVersionResource, rows []Summary) {
-	if !s.syncMu.TryLock() {
-		s.queueIngestReconciliation(gvr)
-		return
-	}
-	defer s.syncMu.Unlock()
-	s.replaceIngestCatalogSummariesLocked(gvr, rows)
-}
-
 func (s *Service) replaceIngestCatalogSummariesLocked(gvr schema.GroupVersionResource, rows []Summary) {
 	desc, ok := s.resolveIngestDescriptor(gvr)
 	if !ok {
@@ -250,8 +241,12 @@ func (s ingestCatalogSink) Delete(row interface{}) {
 	s.service.applyIngestCatalogSummary(s.gvr, summary, true)
 }
 
-func (s ingestCatalogSink) Replace(rows []interface{}) {
-	s.service.replaceIngestCatalogSummaries(s.gvr, catalogSummaries(rows, nil))
+// Replace receives the store's whole row set on a subscription replay or a
+// relist. Those rows cover only the watched partitions (plus rows restored
+// into skipped ones), so the kind is reconciled by partition from its store
+// rather than replaced with them.
+func (s ingestCatalogSink) Replace([]interface{}) {
+	s.service.queueIngestReconciliation(s.gvr)
 }
 
 // Coalesce contention by kind, then reread its authoritative store after the
@@ -273,6 +268,14 @@ func (s *Service) queueIngestReconciliation(gvr schema.GroupVersionResource) {
 	done := make(chan struct{})
 	s.ingestDrainDone = done
 	go s.drainIngestReconciliation(done)
+}
+
+// dropPendingIngestReconciliation drops the queued kinds, for a caller that
+// owns syncMu and reconciles them itself.
+func (s *Service) dropPendingIngestReconciliation() {
+	s.ingestPendingMu.Lock()
+	defer s.ingestPendingMu.Unlock()
+	s.ingestPending = nil
 }
 
 func (s *Service) drainIngestReconciliation(done chan struct{}) {

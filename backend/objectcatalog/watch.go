@@ -243,8 +243,10 @@ func (s *Service) registerIngestCatalogSinks() func() {
 			// No ingest source means no sinks were registered, so there is nothing to detach.
 		}
 	}
-	// Registering a sink replays the source under its store lock. Defer publication
-	// until every kind is registered, then replace the query baseline once.
+	// Registering a sink replays the source under its store lock, and the replay
+	// queues a partition-aware reconcile of its kind. Defer publication until
+	// every kind is registered, reconcile every kind here, then replace the query
+	// baseline once. The queued work is dropped: this pass covers it.
 	s.suspendPublication.Store(true)
 	detach := make([]func(), 0, len(catalogIngestGVRs))
 	for gvr := range catalogIngestGVRs {
@@ -252,6 +254,10 @@ func (s *Service) registerIngestCatalogSinks() func() {
 	}
 	s.syncMu.Lock()
 	defer s.syncMu.Unlock()
+	s.dropPendingIngestReconciliation()
+	for gvr := range catalogIngestGVRs {
+		s.reconcileCurrentIngestSource(gvr)
+	}
 	s.mu.Lock()
 	s.cacheRebuilds.Add(1)
 	s.catalogIndex.rebuildCacheFromItems(s.items, s.catalogIndex.descriptors())
