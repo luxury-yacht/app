@@ -1504,6 +1504,65 @@ describe('ResourceStreamManager', () => {
     expect(manager.getHealthStatus('namespace-config', storeScope)).not.toBe('healthy');
   });
 
+  test('changes inside the resync cooldown latch exactly one trailing resync', async () => {
+    // Helm writes a release's Secrets in a burst (pending, superseded,
+    // deployed). Each rings a complete-resync domain; a change that lands in
+    // the cooldown of the previous resync must still reach the view.
+    vi.useFakeTimers();
+    installWindowTimers();
+    const manager = new ResourceStreamManager();
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'namespace-helm',
+        scope: 'namespace:default',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { rows: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+    const helmChanged = () =>
+      manager.handleMessage(
+        JSON.stringify({
+          clusterId: 'cluster-a',
+          type: 'MODIFIED',
+          domain: 'namespace-helm',
+          scope: 'namespace:default',
+        })
+      );
+    const streamRevision = () =>
+      getScopedDomainState('namespace-helm', storeScope).streamRevision ?? 0;
+
+    manager.start('namespace-helm', storeScope);
+    await flushPromises();
+    vi.advanceTimersByTime(1100);
+
+    helmChanged();
+    await flushPromises();
+    const resyncsAfterFirst = manager.getTelemetrySummary().resyncCount;
+    const revisionAfterFirst = streamRevision();
+    expect(resyncsAfterFirst).toBe(1);
+
+    vi.advanceTimersByTime(20);
+    helmChanged();
+    helmChanged();
+    await flushPromises();
+    expect(manager.getTelemetrySummary().resyncCount).toBe(resyncsAfterFirst);
+
+    vi.advanceTimersByTime(1000);
+    await flushPromises();
+    expect(manager.getTelemetrySummary().resyncCount).toBe(resyncsAfterFirst + 1);
+    expect(streamRevision()).toBeGreaterThan(revisionAfterFirst);
+
+    vi.advanceTimersByTime(5000);
+    await flushPromises();
+    expect(manager.getTelemetrySummary().resyncCount).toBe(resyncsAfterFirst + 1);
+  });
+
   test('stops subscriptions and closes the socket on kubeconfig change cleanup', async () => {
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', '');

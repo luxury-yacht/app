@@ -127,6 +127,12 @@ The authored domain contract declares which clocks can change a payload:
 - Signals that collide with an in-flight read latch exactly one trailing
   `stream-signal` read (`latchTrailingStreamSignal`); never drop them or
   repeatedly abort-and-replace.
+- A stream resync follows the same rule. A non-forced resync requested during
+  another resync or inside the resync cooldown latches one trailing resync,
+  which runs when the cooldown ends (`latchTrailingResync`,
+  `resourceStreamProtocol.ts`). Complete-resync domains such as
+  `namespace-helm` depend on this: a Helm upgrade rings several times within
+  milliseconds, and only the last ring carries the final status.
 - A healthy transport does not prove every collection supplies changes. A
   table's declared source must carry Kubernetes changes through the actual
   snapshot owner to the signal that table consumes, at any object count; prove
