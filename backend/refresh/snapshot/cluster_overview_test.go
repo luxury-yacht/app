@@ -516,8 +516,7 @@ func TestClusterOverviewBuilderSkipsOptionalCachesUntilSynced(t *testing.T) {
 	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
 	require.True(t, ok)
 	// The cut workload kinds' ingest stores are not synced in the fake source (default
-	// false), so the workload counts are zero — the ingest equivalent of the prior
-	// informer-not-synced gate.
+	// false), so the workload counts are zero.
 	require.Zero(t, payload.Overview.TotalDeployments)
 	require.Zero(t, payload.Overview.TotalStatefulSets)
 	require.Zero(t, payload.Overview.TotalDaemonSets)
@@ -634,7 +633,7 @@ func TestClusterOverviewListBuilderIncludesOptionalCountsAndRecentEvents(t *test
 }
 
 // An identity without node access (issue #244) still gets an overview: the
-// informer path drops the node contribution and records the denied source so
+// feed path drops the node contribution and records the denied source so
 // the frontend can mark the affected cards instead of rendering zeros.
 func TestClusterOverviewBuilderMarksRuntimeDeniedNodes(t *testing.T) {
 	now := time.Now()
@@ -678,7 +677,7 @@ func TestClusterOverviewBuilderMarksRuntimeDeniedNodes(t *testing.T) {
 	require.Equal(t, []string{"core/nodes"}, payload.Overview.UnavailableResources)
 }
 
-// Runtime-denied pods and namespaces degrade the same way on the informer path.
+// Runtime-denied pods and namespaces degrade the same way on the feed path.
 func TestClusterOverviewBuilderMarksRuntimeDeniedPodsAndNamespaces(t *testing.T) {
 	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-a", ResourceVersion: "5"}}
 	pod := &corev1.Pod{

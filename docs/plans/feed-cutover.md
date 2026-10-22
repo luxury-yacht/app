@@ -185,9 +185,8 @@ stores, tables, catalog, object map, and caches that consumers read.
     docs updated (catalog, object-map workflow, data-freshness, kind registry).
   - `informer.Factory` is deleted. Its permission tracking moved to
     `permissions.Grants` (`backend/refresh/permissions/grants.go`), with the
-    preflight, gate, revalidation, and stream permission checks. The
-    `informer` package keeps only the managed-fields transform and the
-    WatchList switch. `system.Config.ResyncInterval` and
+    preflight, gate, revalidation, and stream permission checks.
+    `system.Config.ResyncInterval` and
     `config.RefreshResyncInterval` are gone.
   - The hub is ingest-only (`ingestHub`, Q1): `Start` launches the reflectors
     without waiting, `HasSynced` reports every tracked store settled (health
@@ -207,8 +206,17 @@ stores, tables, catalog, object map, and caches that consumers read.
     code (`typed_table_test_feed_test.go`): the old list projection resolved by
     the per-build store engine. Domain tests feed maintained stores through each
     kind's `StreamRow`.
-  - Not done (unrelated dead code found on the way): many `testsupport` lister
-    helpers were already unused at HEAD.
+  - Follow-ups (done): the `informer` package is gone; its managed-fields
+    transform and WatchList switch live in `ingest` (`managed_fields.go`,
+    `watchlist_config.go`). Informer names are gone: `refresh.FeedHub`
+    (`WithFeedHub`, `SetFeedHub`), `config.RefreshSync*`,
+    `ObjectCatalogReflectorPromotionThreshold`, `waitForFeedSync`, and the
+    telemetry wire field `maxSyncWaitMs` (was `maxInformerSyncWaitMs`; the
+    Diagnostics "Sync wait" detail reads it). The health endpoint reports
+    "owned reflectors not yet synced", and the sync-timeout error reads
+    "refresh feed not synced". Comments no longer describe the deleted
+    factory. Unused `testsupport` helpers (25 typed listers and the CRD, HPA,
+    pod-metrics, and selection helpers) are deleted.
 - **Validation (2026-10-21, after Phases 7–8):** `mise exec -- wails3 task
   qc:prerelease` passed (docs, fmt, bindings, vet, staticcheck, race, lint,
   typecheck, frontend tests, knip, trivy). The first run failed once on

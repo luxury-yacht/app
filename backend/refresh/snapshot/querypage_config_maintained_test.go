@@ -57,7 +57,7 @@ func newNamespaceIndexer() cache.Indexer {
 	})
 }
 
-// TestConfigMaintainedStoreIngestion proves the informer-fed store reflects
+// TestConfigMaintainedStoreIngestion proves the reflector-fed store reflects
 // Add/Update/Delete (incl. tombstone), tracks the max resourceVersion, and projects
 // rows identically to a direct BuildStreamSummary.
 func TestConfigMaintainedStoreIngestion(t *testing.T) {

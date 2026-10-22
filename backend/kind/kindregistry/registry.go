@@ -108,7 +108,7 @@ var All = []kindspec.Descriptor{
 }
 
 // StreamDescriptors returns every directly-streamed kind's stream descriptor, in
-// registry order. Resource-stream loops this to register informers and project
+// registry order. Resource-stream loops this to register reflectors and project
 // rows; it never names a kind itself.
 func StreamDescriptors() []streamspec.Descriptor {
 	out := make([]streamspec.Descriptor, 0, len(All))

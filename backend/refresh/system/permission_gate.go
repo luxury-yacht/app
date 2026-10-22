@@ -47,13 +47,13 @@ type listDomainConfig struct {
 
 // listWatchDomainConfig describes a list/watch gated domain registration with an optional list fallback.
 type listWatchDomainConfig struct {
-	name             string
-	issueResource    string
-	logGroup         string
-	logResource      string
-	checks           []listWatchCheck
-	registerInformer func() error
-	fallbackChecks   []listCheck
+	name              string
+	issueResource     string
+	logGroup          string
+	logResource       string
+	checks            []listWatchCheck
+	registerListWatch func() error
+	fallbackChecks    []listCheck
 	// fallbackAllowAny lets the list fallback register when ANY fallback check
 	// passes (each resource qualifies on its own), instead of requiring all of
 	// them. Used by ModeAny domains whose builder degrades per resource.
@@ -228,7 +228,7 @@ func (g *permissionGate) registerListWatchDomain(ctx context.Context, cfg listWa
 
 	listOK, watchOK := g.allListWatchAllowed(results)
 	if len(errs) == 0 && listOK && watchOK {
-		return cfg.registerInformer()
+		return cfg.registerListWatch()
 	}
 
 	if cfg.registerFallback != nil && len(cfg.fallbackChecks) > 0 {

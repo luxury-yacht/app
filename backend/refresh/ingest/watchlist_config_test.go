@@ -1,4 +1,4 @@
-package informer
+package ingest
 
 import (
 	"context"
@@ -93,25 +93,25 @@ func TestDisableWatchListMakesReflectorListBeforeWatch(t *testing.T) {
 
 func TestDisableWatchListRejectsFeatureGateOverrideFailures(t *testing.T) {
 	t.Run("read-only feature gates", func(t *testing.T) {
-		err := disableWatchList(readOnlyClientFeatureGates{})
+		err := disableWatchListGate(readOnlyClientFeatureGates{})
 		if err == nil {
-			t.Fatal("disableWatchList succeeded with read-only feature gates")
+			t.Fatal("disableWatchListGate succeeded with read-only feature gates")
 		}
 	})
 
 	t.Run("setter error", func(t *testing.T) {
-		err := disableWatchList(&testClientFeatureGates{enabled: true, err: errors.New("locked")})
+		err := disableWatchListGate(&testClientFeatureGates{enabled: true, err: errors.New("locked")})
 		if err == nil {
-			t.Fatal("disableWatchList succeeded when the feature-gate setter failed")
+			t.Fatal("disableWatchListGate succeeded when the feature-gate setter failed")
 		}
 	})
 
 	t.Run("override did not stick", func(t *testing.T) {
 		gates := &testClientFeatureGates{enabled: true}
 		setter := stickyEnabledFeatureGates{testClientFeatureGates: gates}
-		err := disableWatchList(setter)
+		err := disableWatchListGate(setter)
 		if err == nil {
-			t.Fatal("disableWatchList succeeded while WatchList remained enabled")
+			t.Fatal("disableWatchListGate succeeded while WatchList remained enabled")
 		}
 	})
 }

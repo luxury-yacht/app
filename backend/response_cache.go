@@ -8,7 +8,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 )
 
-// responseCache stores short-lived GET responses for non-informer endpoints.
+// responseCache stores short-lived GET responses for endpoints the refresh feed does not serve.
 type responseCache struct {
 	mu         sync.RWMutex
 	ttl        time.Duration

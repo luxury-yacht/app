@@ -2,11 +2,11 @@
  * backend/kind/streamspec/descriptor.go
  *
  * The per-kind stream Descriptor: everything resource-stream needs to register a
- * kind's informer and project its events into rows, with no per-kind code in the
+ * kind's reflector and project its events into rows, with no per-kind code in the
  * stream manager. Each kind owns its Descriptor (in resources/<kind>/streamdescriptor.go)
  * and a registry aggregates them; the manager loops the registry and never names a kind.
  *
- * This package imports only leaves (streamrows + client-go informer/cache + metav1)
+ * This package imports only leaves (streamrows + apimachinery metav1/schema)
  * and NO kind packages, so kinds can declare a Descriptor without an import cycle.
  */
 
@@ -40,7 +40,7 @@ type Descriptor struct {
 }
 
 // GVR returns the descriptor's GroupVersionResource. It is the single source the
-// snapshot/ingest wiring uses to key a kind's informer, maintained-store sink, and
+// snapshot/ingest wiring uses to key a kind's reflector, maintained-store sink, and
 // ingest-owned membership, so no caller re-assembles the GVR by hand.
 func (d Descriptor) GVR() schema.GroupVersionResource {
 	return schema.GroupVersionResource{Group: d.Group, Version: d.Version, Resource: d.Resource}

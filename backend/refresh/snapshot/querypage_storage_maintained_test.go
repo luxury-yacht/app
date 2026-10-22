@@ -49,7 +49,7 @@ func storageDescriptor(t *testing.T, resource string) streamspec.Descriptor {
 	return streamspec.Descriptor{}
 }
 
-// TestStorageMaintainedStoreIngestion proves the informer-fed store reflects
+// TestStorageMaintainedStoreIngestion proves the reflector-fed store reflects
 // Add/Update/Delete (incl. tombstone), tracks the max resourceVersion, and projects
 // rows identically to a direct BuildStreamSummary.
 func TestStorageMaintainedStoreIngestion(t *testing.T) {

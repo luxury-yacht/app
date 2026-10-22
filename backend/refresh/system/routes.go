@@ -14,7 +14,7 @@ type MuxConfig struct {
 	ManualQueue     refresh.ManualQueue
 	Telemetry       telemetry.Summarizer
 	Metrics         refresh.ClusterMetricsDemandController
-	HealthHub       refresh.InformerHub
+	HealthHub       refresh.FeedHub
 }
 
 type singleClusterMetricsDemandController struct {

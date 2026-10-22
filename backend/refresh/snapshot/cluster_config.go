@@ -24,7 +24,7 @@ const clusterConfigDomainName = "cluster-config"
 // the shared typed-table domain skeleton (typed_table_domain.go).
 type ClusterConfigBuilder struct {
 	available kindAvailability
-	// maintained, when set, is an informer-fed store the builder serves rows from
+	// maintained, when set, is a reflector-fed store the builder serves rows from
 	// instead of listing + re-projecting per request. nil falls back to the list path.
 	maintained *typedMaintainedStore[ClusterConfigEntry]
 }

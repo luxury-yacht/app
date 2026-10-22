@@ -115,7 +115,7 @@ func TestDeniedPermissionRevalidationReviewsEachScopeOncePerCacheWindow(t *testi
 }
 
 type permissionRevalidationHub struct {
-	fakeInformerHub
+	fakeFeedHub
 	stopped chan struct{}
 }
 

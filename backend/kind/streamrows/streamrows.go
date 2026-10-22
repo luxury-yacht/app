@@ -493,7 +493,7 @@ func NewResourceRef(meta ClusterMeta, identity resourcekind.Identity, obj metav1
 }
 
 // NewResourceMetadata projects the label and annotation maps used by table
-// metadata columns. Informer objects are immutable snapshots, so retaining the
+// metadata columns. Watch-delivered objects are immutable snapshots, so retaining the
 // maps avoids cloning every key/value pair into the table row store.
 func NewResourceMetadata(obj metav1.Object) *resourcemodel.ResourceTableMetadata {
 	if obj == nil {

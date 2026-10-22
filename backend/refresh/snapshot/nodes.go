@@ -28,7 +28,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// nodeDomainIngestSource is everything the informer-backed nodes domain still reads from the
+// nodeDomainIngestSource is everything the feed-backed nodes domain still reads from the
 // ingest manager AFTER the node OWN-rows moved to the maintained store: the cut pod kind's
 // projected aggregation rows (podAggregateIngestSource) and the node store RV for the version
 // watermark (nodeIngestSource — only StoreResourceVersion is still read here; the node-sync
@@ -294,7 +294,7 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 	}
 
 	// The list fallback projects its typed pods to the same PodAggregate rows the
-	// informer path reads from ingest, so the shared aggregation stays byte-equivalent.
+	// feed path reads from ingest, so the shared aggregation stays byte-equivalent.
 	// WorkloadKind is unused by the nodes domain, so a nil RS lister is correct here.
 	// Pod RVs fold into the version watermark for the same reason the ingest path
 	// folds the pod store RV: pod changes alter served aggregates and must

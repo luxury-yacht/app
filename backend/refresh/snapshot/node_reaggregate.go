@@ -1,8 +1,8 @@
 /*
  * backend/refresh/snapshot/node_reaggregate.go
  *
- * The Node kind's intake/serve split. Node is an owned-reflector ingest kind: the typed
- * node informer is never instantiated, so the node's OWN fields are projected at intake
+ * The Node kind's intake/serve split. Node is an owned-reflector ingest kind that keeps
+ * no typed node, so the node's OWN fields are projected at intake
  * into a NodeSummary (buildNodeOwnSummary, the Table half) and the per-node pod-aggregate
  * join + metrics overlay are re-joined at SERVE (reaggregateNodeSummary).
  *

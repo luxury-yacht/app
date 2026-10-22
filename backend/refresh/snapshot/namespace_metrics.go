@@ -63,7 +63,7 @@ type NamespaceMetricsSnapshot struct {
 }
 
 // NamespaceMetricsBuilder projects the latest shared poller sample without
-// reading namespace objects, informers, or ingest stores.
+// reading namespace objects or ingest stores.
 type NamespaceMetricsBuilder struct {
 	clusterMeta ClusterMeta
 	metrics     metrics.Provider

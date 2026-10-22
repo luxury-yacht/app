@@ -28,7 +28,7 @@ func crdForMaintained(name, group, scope, rv string) *apiextv1.CustomResourceDef
 }
 
 // TestClusterCRDBuilderMaintainedMatchesListPath is the cluster-crds maintained-store
-// cutover gate: a builder serving from the informer-fed maintained store must produce the
+// cutover gate: a builder serving from the reflector-fed maintained store must produce the
 // byte-identical ClusterCRDSnapshot the list path produces, across window + query scopes
 // (sort, search, kind filter). The maintained path differs only in row SOURCE.
 func TestClusterCRDBuilderMaintainedMatchesListPath(t *testing.T) {

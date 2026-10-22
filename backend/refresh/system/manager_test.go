@@ -91,22 +91,22 @@ func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T)
 	require.NotNil(t, grants)
 }
 
-func TestHealthHandlerReflectsInformerSync(t *testing.T) {
-	t.Run("returns 503 when informer not synced", func(t *testing.T) {
+func TestHealthHandlerReflectsFeedSync(t *testing.T) {
+	t.Run("returns 503 when the feed has not synced", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/healthz/refresh", nil)
 		rec := httptest.NewRecorder()
 
-		HealthHandler(fakeInformerHub{synced: false})(rec, req)
+		HealthHandler(fakeFeedHub{synced: false})(rec, req)
 
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
-		require.Contains(t, rec.Body.String(), "informers not yet synced")
+		require.Contains(t, rec.Body.String(), "owned reflectors not yet synced")
 	})
 
-	t.Run("returns 200 when informer synced", func(t *testing.T) {
+	t.Run("returns 200 when the feed has synced", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/healthz/refresh", nil)
 		rec := httptest.NewRecorder()
 
-		HealthHandler(fakeInformerHub{synced: true})(rec, req)
+		HealthHandler(fakeFeedHub{synced: true})(rec, req)
 
 		require.Equal(t, http.StatusOK, rec.Code)
 		require.Equal(t, "ok", rec.Body.String())
@@ -121,17 +121,17 @@ func (p noopObjectDetailProvider) FetchObjectDetails(context.Context, schema.Gro
 	return snapshot.ObjectDetail{}, p.err
 }
 
-type fakeInformerHub struct {
+type fakeFeedHub struct {
 	synced bool
 }
 
-func (h fakeInformerHub) Start(context.Context) error { return nil }
+func (h fakeFeedHub) Start(context.Context) error { return nil }
 
-func (h fakeInformerHub) HasSynced(context.Context) bool { return h.synced }
+func (h fakeFeedHub) HasSynced(context.Context) bool { return h.synced }
 
-func (h fakeInformerHub) ResourcesSettled([]string) bool { return h.synced }
+func (h fakeFeedHub) ResourcesSettled([]string) bool { return h.synced }
 
-func (fakeInformerHub) Shutdown() error { return nil }
+func (fakeFeedHub) Shutdown() error { return nil }
 
 // NewSubsystem is the tuple-unpacking convenience over NewSubsystemWithServices,
 // kept in test scope: production uses NewSubsystemWithServices directly.

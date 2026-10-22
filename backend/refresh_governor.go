@@ -391,7 +391,7 @@ func (a *RefreshCoordinator) rewarmCooledClusterSubsystem(clusterID string) {
 // cluster — stop its feeds and swap its maintained stores to off-heap mmap-backed columns,
 // keeping the subsystem registered so it still serves Build queries — and only falls back to a
 // full teardown (heap fully reclaimed, blank until re-warm) if cooling fails at any step. Either
-// way the cluster's informer/metrics heap is reclaimed.
+// way the cluster's reflector/metrics heap is reclaimed.
 func (e *refreshGovernorExecutor) teardown(clusterID string) bool {
 	a := e.refresh
 	if a == nil {
@@ -433,7 +433,7 @@ const (
 	// One complete cache-bypass overview attempt gets the same bound used by
 	// buildColdPreparationSnapshot. Only sustained memory pressure may trade the
 	// settled retained baseline for a full teardown after this grace expires.
-	coldPreparationPressureGrace = config.RefreshInformerSyncTimeout + 5*time.Second
+	coldPreparationPressureGrace = config.RefreshSyncTimeout + 5*time.Second
 )
 
 func (a *RefreshCoordinator) shouldForceColdTeardown(subsystem *system.Subsystem) (time.Duration, uint64, bool) {
@@ -533,14 +533,14 @@ func buildColdPreparationSnapshot(
 	domainName string,
 	scope string,
 ) (*refresh.Snapshot, error) {
-	attemptCtx, cancel := context.WithTimeout(ctx, config.RefreshInformerSyncTimeout+5*time.Second)
+	attemptCtx, cancel := context.WithTimeout(ctx, config.RefreshSyncTimeout+5*time.Second)
 	defer cancel()
 	return service.Build(refresh.WithCacheBypass(attemptCtx), domainName, scope)
 }
 
 // coolClusterToMmapServing transitions a cluster to the Cold-tier SERVING state: it stops the
 // feeds, swaps the maintained stores to off-heap mmap-backed columns, installs a cooled
-// (always-settled) informer hub so the SnapshotBuilder keeps serving, marks the subsystem
+// (always-settled) feed hub so the SnapshotBuilder keeps serving, marks the subsystem
 // cooled, stops the object catalog, and reclaims the freed heap. On ANY cooling error it falls
 // back to the existing full teardown so a cluster is never left half-cooled.
 func (a *RefreshCoordinator) coolClusterToMmapServing(clusterID string) {
@@ -587,7 +587,7 @@ func (a *RefreshCoordinator) installCooledStores(clusterID string, subsystem *sy
 	}
 	// Producers have stopped; the frozen stores must no longer wait on their old sync gate.
 	if svc, ok := subsystem.SnapshotService.(*snapshot.Service); ok {
-		svc.SetInformerHub(system.NewCooledInformerHub())
+		svc.SetFeedHub(system.NewCooledFeedHub())
 	}
 	subsystem.Cooled = true
 	return nil

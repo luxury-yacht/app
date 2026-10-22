@@ -41,10 +41,10 @@ type Service struct {
 	flights             snapshotBuildFlights
 	sequence            uint64
 	cluster             ClusterMeta
-	informerHubMu       sync.RWMutex
-	informerHub         refresh.InformerHub
+	feedHubMu           sync.RWMutex
+	feedHub             refresh.FeedHub
 	domainReadiness     map[string][]string
-	informerSyncTimeout time.Duration
+	syncTimeout         time.Duration
 	cacheMu             sync.RWMutex
 	cache               map[string]cacheEntry
 	cacheTTL            time.Duration
@@ -60,10 +60,10 @@ type Service struct {
 	generationRequestID uint64
 }
 
-// errInformerSyncTimeout marks snapshot builds rejected because the refresh
-// informer caches never reported synced within the configured deadline — for
-// example when one informer's watch is RBAC-forbidden and can never complete.
-var errInformerSyncTimeout = errors.New("refresh informer caches not synced")
+// errFeedSyncTimeout marks snapshot builds rejected because the refresh feed
+// never reported synced within the configured deadline — for example when one
+// reflector's watch is RBAC-forbidden and can never complete.
+var errFeedSyncTimeout = errors.New("refresh feed not synced")
 
 var errServiceRetired = errors.New("snapshot service retired")
 
@@ -95,16 +95,16 @@ func newService(
 		access = domainpermissions.NewRuntimeAccess()
 	}
 	return &Service{
-		registry:            reg,
-		telemetry:           recorder,
-		cluster:             meta,
-		cache:               make(map[string]cacheEntry),
-		cacheTTL:            config.SnapshotCacheTTL,
-		epoch:               newSourceVersionEpoch(meta),
-		informerSyncTimeout: config.RefreshInformerSyncTimeout,
-		permissionChecker:   checker,
-		runtimeAccess:       access,
-		generationRequests:  make(map[uint64]context.CancelFunc),
+		registry:           reg,
+		telemetry:          recorder,
+		cluster:            meta,
+		cache:              make(map[string]cacheEntry),
+		cacheTTL:           config.SnapshotCacheTTL,
+		epoch:              newSourceVersionEpoch(meta),
+		syncTimeout:        config.RefreshSyncTimeout,
+		permissionChecker:  checker,
+		runtimeAccess:      access,
+		generationRequests: make(map[uint64]context.CancelFunc),
 	}
 }
 
@@ -119,45 +119,44 @@ func (s *Service) WithLogger(logger applog.Logger) *Service {
 	return s
 }
 
-// WithInformerHub makes snapshot builds wait until the refresh informer caches
-// are synced. Without this guard, early table requests can cache empty lister
+// WithFeedHub makes snapshot builds wait until the refresh feed's stores are
+// synced. Without this guard, early table requests can cache empty store
 // results before the first authoritative Kubernetes list has completed.
-func (s *Service) WithInformerHub(hub refresh.InformerHub) *Service {
+func (s *Service) WithFeedHub(hub refresh.FeedHub) *Service {
 	if s == nil {
 		return s
 	}
-	s.SetInformerHub(hub)
+	s.SetFeedHub(hub)
 	return s
 }
 
-// SetInformerHub swaps the sync-gate hub at runtime. The governor's Cold-tier serving
-// transition uses it: after a cooled cluster's manager + informer factory are shut down, the
-// original hub's HasSynced reports false (factory.Shutdown clears its synced flag), which would
-// block every cooled Build until timeout. A cooled cluster's data is frozen and resident in
-// its mmap-backed stores, so its readiness gate must report settled immediately — the cool path
-// installs an always-synced hub here. Guarded so it never races an in-flight Build's hub read.
-func (s *Service) SetInformerHub(hub refresh.InformerHub) {
+// SetFeedHub swaps the sync-gate hub at runtime. The governor's Cold-tier serving
+// transition uses it: after a cooled cluster's manager and reflectors are stopped, its data is
+// frozen and resident in its mmap-backed stores, so its readiness gate must report settled
+// immediately rather than follow the stopped feed — the cool path installs an always-synced
+// hub here. Guarded so it never races an in-flight Build's hub read.
+func (s *Service) SetFeedHub(hub refresh.FeedHub) {
 	if s == nil {
 		return
 	}
-	s.informerHubMu.Lock()
-	s.informerHub = hub
-	s.informerHubMu.Unlock()
+	s.feedHubMu.Lock()
+	s.feedHub = hub
+	s.feedHubMu.Unlock()
 }
 
-// currentInformerHub reads the live hub under the lock, so a runtime swap (SetInformerHub)
+// currentFeedHub reads the live hub under the lock, so a runtime swap (SetFeedHub)
 // is visible to an in-flight Build's poll loop without racing.
-func (s *Service) currentInformerHub() refresh.InformerHub {
-	s.informerHubMu.RLock()
-	defer s.informerHubMu.RUnlock()
-	return s.informerHub
+func (s *Service) currentFeedHub() refresh.FeedHub {
+	s.feedHubMu.RLock()
+	defer s.feedHubMu.RUnlock()
+	return s.feedHub
 }
 
-// WithDomainReadiness narrows the informer sync gate per domain: a declared
-// domain waits only on its own resources' informers (canonical
+// WithDomainReadiness narrows the feed sync gate per domain: a declared
+// domain waits only on its own resources' reflectors (canonical
 // permissions.ResourceKey format), so one slow watch no longer delays every
 // other domain's first snapshot. Domains absent from the map keep the
-// conservative factory-wide gate.
+// conservative whole-feed gate.
 func (s *Service) WithDomainReadiness(readiness map[string][]string) *Service {
 	if s == nil {
 		return s
@@ -266,9 +265,9 @@ func (s *Service) prepareBuildRequest(ctx context.Context, domainName, scope str
 	if err != nil {
 		return nil, snapshotBuildRequestPlan{}, err
 	}
-	syncWait, err := s.waitForInformerSync(ctx, domainName)
+	syncWait, err := s.waitForFeedSync(ctx, domainName)
 	if err != nil {
-		s.recordInformerSyncFailure(domainName, scope, syncWait, err)
+		s.recordFeedSyncFailure(domainName, scope, syncWait, err)
 		return nil, snapshotBuildRequestPlan{}, err
 	}
 	readiness := s.resourceReadiness(domainName)
@@ -301,16 +300,16 @@ func (s *Service) resourceReadiness(domainName string) map[string]refresh.Resour
 	if !scoped || len(keys) == 0 {
 		return nil
 	}
-	reporter, ok := s.currentInformerHub().(refresh.ResourceReadinessReporter)
+	reporter, ok := s.currentFeedHub().(refresh.ResourceReadinessReporter)
 	if !ok {
 		return nil
 	}
 	return reporter.ResourceReadiness(keys)
 }
 
-func (s *Service) recordInformerSyncFailure(domainName, scope string, syncWait time.Duration, err error) {
-	if errors.Is(err, errInformerSyncTimeout) {
-		s.recordTelemetry(telemetry.SnapshotRecord{Domain: domainName, Scope: scope, Duration: 0, Err: err, Truncated: false, TotalItems: 0, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: 0, InformerSyncWaitMs: syncWait.Milliseconds()})
+func (s *Service) recordFeedSyncFailure(domainName, scope string, syncWait time.Duration, err error) {
+	if errors.Is(err, errFeedSyncTimeout) {
+		s.recordTelemetry(telemetry.SnapshotRecord{Domain: domainName, Scope: scope, Duration: 0, Err: err, Truncated: false, TotalItems: 0, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: 0, SyncWaitMs: syncWait.Milliseconds()})
 	}
 }
 
@@ -376,7 +375,7 @@ func (s *Service) finalizeBuiltSnapshot(snapshot *refresh.Snapshot, start time.T
 }
 
 func (s *Service) recordBuildFailure(plan snapshotBuildRequestPlan, duration time.Duration, err error) {
-	s.recordTelemetry(telemetry.SnapshotRecord{Domain: plan.domain, Scope: plan.scope, Duration: duration, Err: err, Truncated: false, TotalItems: 0, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: duration.Milliseconds(), InformerSyncWaitMs: plan.syncWait.Milliseconds()})
+	s.recordTelemetry(telemetry.SnapshotRecord{Domain: plan.domain, Scope: plan.scope, Duration: duration, Err: err, Truncated: false, TotalItems: 0, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: duration.Milliseconds(), SyncWaitMs: plan.syncWait.Milliseconds()})
 
 }
 
@@ -385,30 +384,30 @@ func (s *Service) recordBuildSuccess(
 	snapshot *refresh.Snapshot,
 	duration time.Duration,
 ) {
-	s.recordTelemetry(telemetry.SnapshotRecord{Domain: plan.domain, Scope: plan.scope, Duration: duration, Err: nil, Truncated: snapshot.Stats.Truncated, TotalItems: snapshot.Stats.TotalItems, Warnings: snapshot.Stats.Warnings, BatchIndex: snapshot.Stats.BatchIndex, TotalBatches: snapshot.Stats.TotalBatches, BatchSize: snapshot.Stats.BatchSize, IsFinal: snapshot.Stats.IsFinalBatch, TimeToFirstBatchMs: snapshot.Stats.TimeToFirstRowMs, InformerSyncWaitMs: plan.syncWait.Milliseconds()})
+	s.recordTelemetry(telemetry.SnapshotRecord{Domain: plan.domain, Scope: plan.scope, Duration: duration, Err: nil, Truncated: snapshot.Stats.Truncated, TotalItems: snapshot.Stats.TotalItems, Warnings: snapshot.Stats.Warnings, BatchIndex: snapshot.Stats.BatchIndex, TotalBatches: snapshot.Stats.TotalBatches, BatchSize: snapshot.Stats.BatchSize, IsFinal: snapshot.Stats.IsFinalBatch, TimeToFirstBatchMs: snapshot.Stats.TimeToFirstRowMs, SyncWaitMs: plan.syncWait.Milliseconds()})
 
 }
 
-// waitForInformerSync blocks until the domain's informers have settled, returning the
+// waitForFeedSync blocks until the domain's reflectors have settled, returning the
 // elapsed wait so the caller can record it as telemetry. The wait is the initial-LIST
-// gating cost a cold-start Build pays before any rows can be served; once the informers
+// gating cost a cold-start Build pays before any rows can be served; once the reflectors
 // have synced it returns ~0 immediately. The returned duration is reported even on the
 // error paths so a timeout's full wait is still attributed to the domain.
-func (s *Service) waitForInformerSync(ctx context.Context, domainName string) (time.Duration, error) {
+func (s *Service) waitForFeedSync(ctx context.Context, domainName string) (time.Duration, error) {
 	if s == nil {
 		return 0, nil
 	}
-	if s.currentInformerHub() == nil {
+	if s.currentFeedHub() == nil {
 		return 0, nil
 	}
 	start := time.Now()
-	// A domain with declared readiness resources waits only on those informers;
-	// undeclared domains keep the conservative factory-wide gate. The hub is re-read
+	// A domain with declared readiness resources waits only on those reflectors;
+	// undeclared domains keep the conservative whole-feed gate. The hub is re-read
 	// on every poll, not captured once, so a runtime swap (the Cold-tier cooled-hub
 	// install) is observed by an already-blocked Build.
 	keys, scoped := s.domainReadiness[domainName]
 	settled := func() bool {
-		hub := s.currentInformerHub()
+		hub := s.currentFeedHub()
 		if hub == nil {
 			return true
 		}
@@ -420,23 +419,23 @@ func (s *Service) waitForInformerSync(ctx context.Context, domainName string) (t
 	if settled() {
 		return time.Since(start), nil
 	}
-	timeout := s.informerSyncTimeout
+	timeout := s.syncTimeout
 	if timeout <= 0 {
-		timeout = config.RefreshInformerSyncTimeout
+		timeout = config.RefreshSyncTimeout
 	}
-	// Bound the wait: a single informer whose watch can never complete (for
+	// Bound the wait: a single reflector whose watch can never complete (for
 	// example an RBAC-forbidden resource) keeps the sync gate closed forever,
 	// and the caller's context may carry no deadline.
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
-	ticker := time.NewTicker(config.RefreshInformerSyncPollInterval)
+	ticker := time.NewTicker(config.RefreshSyncPollInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return time.Since(start), fmt.Errorf("refresh informer caches not synced: %w", ctx.Err())
+			return time.Since(start), fmt.Errorf("refresh feed not synced: %w", ctx.Err())
 		case <-deadline.C:
-			return time.Since(start), fmt.Errorf("%w after %s; the cluster API may be unreachable or a watch may be unauthorized", errInformerSyncTimeout, timeout)
+			return time.Since(start), fmt.Errorf("%w after %s; the cluster API may be unreachable or a watch may be unauthorized", errFeedSyncTimeout, timeout)
 		case <-ticker.C:
 			if settled() {
 				return time.Since(start), nil

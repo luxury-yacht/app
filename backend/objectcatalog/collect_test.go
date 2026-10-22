@@ -239,9 +239,8 @@ func TestCollectViaIngestServesCutKindSummaries(t *testing.T) {
 
 // TestCollectViaIngestAlwaysHandlesCutKind proves a cut kind's collect is ALWAYS
 // served by ingest — even with no rows yet — so the catalog never falls through to
-// the shared factory for a GVR the factory no longer registers (which would lazily
-// create an unstarted informer). An uncut GVR is not handled, so the factory/list
-// path still serves it.
+// a LIST for a kind its owned reflector feeds. An uncut GVR is not handled, so the
+// list path still serves it.
 func TestCollectViaIngestAlwaysHandlesCutKind(t *testing.T) {
 	var cutGVR schema.GroupVersionResource
 	for gvr := range catalogIngestGVRs {

@@ -178,10 +178,10 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 
 	descriptorSources := collectDescriptorSources(ctx, namespaceNetworkDomainName, b.available)
 
-	// All own-rows come from the one Sink/informer-fed store: the four cut kinds' Table halves
+	// All own-rows come from the one Sink-fed store: the four cut kinds' Table halves
 	// (gated by their per-request availability) plus Gateway-API rows whose descriptor source
 	// still permits serving. Retained rows must follow current permission/readiness decisions,
-	// even when their informer was allowed at registration. A nil store (a unit test
+	// even when their reflector was allowed at registration. A nil store (a unit test
 	// with no store wired) yields no own-rows — the SAME no-fallback contract nodes/workloads use;
 	// the network tests seed the store via the Sink (seedNetworkMaintained).
 	var ownRows []NetworkSummary

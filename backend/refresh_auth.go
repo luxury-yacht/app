@@ -34,7 +34,7 @@ func (a *RefreshCoordinator) teardownClusterSubsystem(clusterID string) {
 	subsystem.RetireSnapshotServing()
 
 	// Spill this cluster's stores to disk now that the subsystem is quiescent, so a re-warm
-	// re-paints them fast before its informers re-sync (the heap they hold is reclaimed by the
+	// re-paints them fast before its reflectors re-sync (the heap they hold is reclaimed by the
 	// governor's Cold action right after this returns). The maintained query stores give the
 	// instant warm-paint; the ingest stores (+ their RV) let each reflector resume from a
 	// delta instead of a full re-LIST.

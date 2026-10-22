@@ -11,7 +11,7 @@ import (
 // Prototype #2 (plan §Risks): the engine's incremental index + facet maintenance
 // must equal a from-scratch recompute after ANY sequence of Upsert/Delete — the
 // gate against the "delete-old/insert-new key-swap silently corrupts" failure mode
-// (Risk #2). A maintained store fed by informer events applies exactly these
+// (Risk #2). A maintained store fed by reflector events applies exactly these
 // incremental ops, so this is its correctness foundation.
 
 // groundTruth is the naive model: hold every row, recompute each query from scratch

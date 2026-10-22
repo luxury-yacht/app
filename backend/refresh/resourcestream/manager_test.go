@@ -464,7 +464,7 @@ func TestJobBundleArrivalHealsPreviouslyProjectedCronJobPod(t *testing.T) {
 // TestManagerReplicaSetAddHealsRacedPodOwnerRows is the regression test for the
 // empty Deployment Pods tab: a pod projected BEFORE its ReplicaSet was observed
 // keeps OwnerKind=ReplicaSet, so the Deployment workload scope does not serve it.
-// When the RS informer delivers the ReplicaSet, the manager must heal the stored
+// When the RS reflector delivers the ReplicaSet, the manager must heal the stored
 // bundle. The pods store's ring for the healed row is covered end to end by
 // system.TestReplicaSetHealRingsHealedPodScopes.
 // healReplicaSet delivers a ReplicaSet's projected bundle to the heal sink, as

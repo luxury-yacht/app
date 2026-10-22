@@ -64,7 +64,7 @@ func TestIngestAvailabilityResolvesKindsFromIngestStore(t *testing.T) {
 // TestIngestAvailabilityRespectsRegistrationPermission proves the access-gated
 // availability is byte-equivalent: a cut kind DENIED at registration is unavailable
 // even though its ingest store exists — the registration permission gate still applies,
-// exactly as when the indexer came from a permitted typed informer.
+// exactly as when the indexer came from a permitted typed source.
 func TestIngestAvailabilityRespectsRegistrationPermission(t *testing.T) {
 	domainName := namespaceQuotasDomainName
 	cut := kindregistry.StreamDescriptorsForDomain(domainName)
@@ -181,7 +181,7 @@ func TestStreamlessKindsAreBespoke(t *testing.T) {
 
 // TestIngestAvailabilityWithNoIngestManagerIsUnavailable proves the documented edge:
 // with no ingest manager wired (e.g. a unit test), a cut kind has no ingest store, so
-// the gate reports it unavailable rather than fabricating a typed informer.
+// the gate reports it unavailable rather than fabricating a typed source.
 func TestIngestAvailabilityWithNoIngestManagerIsUnavailable(t *testing.T) {
 	domainName := namespaceQuotasDomainName
 	cut := kindregistry.StreamDescriptorsForDomain(domainName)

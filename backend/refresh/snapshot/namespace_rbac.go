@@ -24,7 +24,7 @@ const namespaceRBACDomainName = "namespace-rbac"
 // (typed_table_domain.go).
 type NamespaceRBACBuilder struct {
 	available kindAvailability
-	// maintained, when set, is an informer-fed store the builder serves rows from
+	// maintained, when set, is a reflector-fed store the builder serves rows from
 	// instead of listing + re-projecting per request. nil falls back to the list path.
 	maintained *typedMaintainedStore[RBACSummary]
 }
@@ -75,8 +75,8 @@ func namespaceRBACDomainSpec() typedTableDomainSpec[RBACSummary] {
 }
 
 // RegisterNamespaceRBACDomain registers the namespace RBAC domain. The kinds it
-// serves, their informers, and their row builders all come from the shared stream
-// descriptor registry; only informers for permitted resources are registered, so
+// serves, their reflectors, and their row builders all come from the shared stream
+// descriptor registry; only permitted resources are read, so
 // denied resources are skipped gracefully.
 //
 // Role, RoleBinding, and ServiceAccount feed the maintained store from their owned

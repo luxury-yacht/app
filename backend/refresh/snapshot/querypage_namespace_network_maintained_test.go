@@ -107,7 +107,7 @@ func TestNamespaceNetworkMaintainedGatewayRowsRespectCurrentAccess(t *testing.T)
 }
 
 // TestNamespaceNetworkBuilderMaintainedMatchesIngestSource is the namespace-network maintained-
-// store cutover gate: a builder serving every own-row from the Sink/informer-fed maintained
+// store cutover gate: a builder serving every own-row from the Sink-fed maintained
 // store — the four cut kinds' Table halves via the Sink plus the uncut Gateway-API rows via
 // store.ingest — must produce the byte-identical NamespaceNetworkSnapshot a builder serving the
 // same projected rows produces. Both builders are wired identically and seeded from the same

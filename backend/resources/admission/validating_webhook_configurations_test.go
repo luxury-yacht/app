@@ -27,7 +27,7 @@ func TestValidatingWebhookDetailsPreserveSelectorsAndIsolateSourceMetadata(t *te
 	require.Equal(t, "platform", detail.Webhooks[0].NamespaceSelector.MatchExpressions[0].Values[0])
 	require.Empty(t, detail.Webhooks[0].ReinvocationPolicy)
 
-	// These builders can consume informer-owned objects; detail edits cannot alter them.
+	// These builders can consume feed-owned objects; detail edits cannot alter them.
 	projected := NewService(common.Dependencies{}).buildValidatingWebhookConfigurationDetails(config)
 	projected.Labels["team"] = "changed"
 	projected.Annotations["owner"] = "changed"

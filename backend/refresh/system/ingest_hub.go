@@ -1,7 +1,7 @@
 /*
  * backend/refresh/system/ingest_hub.go
  *
- * ingestHub is the refresh.InformerHub over the owned reflectors: it starts
+ * ingestHub is the refresh.FeedHub over the owned reflectors: it starts
  * them with the refresh manager and answers readiness per declared resource
  * from the ingest manager.
  */
@@ -28,7 +28,7 @@ type ingestHubManager interface {
 	ResourceReadinessFor(schema.GroupVersionResource) refresh.ResourceReadiness
 }
 
-// ingestHub adapts the ingest manager to refresh.InformerHub.
+// ingestHub adapts the ingest manager to refresh.FeedHub.
 type ingestHub struct {
 	ingest ingestHubManager
 
@@ -47,7 +47,7 @@ func newIngestHub(ingestManager ingestHubManager) *ingestHub {
 	return &ingestHub{ingest: ingestManager, ownedResources: resources}
 }
 
-var _ refresh.InformerHub = (*ingestHub)(nil)
+var _ refresh.FeedHub = (*ingestHub)(nil)
 
 // Start launches the owned reflectors and returns without waiting for them:
 // a domain waits on the resources it declares through ResourcesSettled, so one
@@ -109,20 +109,20 @@ func (h *ingestHub) Shutdown() error {
 	return nil
 }
 
-// cooledInformerHub is the readiness gate a cooled (Cold-tier serving) subsystem installs on
+// cooledFeedHub is the readiness gate a cooled (Cold-tier serving) subsystem installs on
 // its SnapshotService. Cooling stops the manager and the owned reflectors, so the frozen
 // stores must no longer wait on the live hub's sync gate (installCooledStores,
 // backend/refresh_governor.go). A cooled cluster's data is frozen and resident in its
 // mmap-backed maintained stores, so its sync gate must report settled immediately. Its
 // lifecycle methods are no-ops: there is nothing to start or shut down.
-type cooledInformerHub struct{}
+type cooledFeedHub struct{}
 
-// NewCooledInformerHub returns the always-settled readiness gate for a cooled subsystem.
-func NewCooledInformerHub() refresh.InformerHub { return cooledInformerHub{} }
+// NewCooledFeedHub returns the always-settled readiness gate for a cooled subsystem.
+func NewCooledFeedHub() refresh.FeedHub { return cooledFeedHub{} }
 
-var _ refresh.InformerHub = cooledInformerHub{}
+var _ refresh.FeedHub = cooledFeedHub{}
 
-func (cooledInformerHub) Start(context.Context) error    { return nil }
-func (cooledInformerHub) HasSynced(context.Context) bool { return true }
-func (cooledInformerHub) ResourcesSettled([]string) bool { return true }
-func (cooledInformerHub) Shutdown() error                { return nil }
+func (cooledFeedHub) Start(context.Context) error    { return nil }
+func (cooledFeedHub) HasSynced(context.Context) bool { return true }
+func (cooledFeedHub) ResourcesSettled([]string) bool { return true }
+func (cooledFeedHub) Shutdown() error                { return nil }

@@ -125,7 +125,7 @@ func quotasDescriptor(t *testing.T, resource string) streamspec.Descriptor {
 	return streamspec.Descriptor{}
 }
 
-// TestQuotasMaintainedStoreIngestion proves the informer-fed store reflects
+// TestQuotasMaintainedStoreIngestion proves the reflector-fed store reflects
 // Add/Update/Delete (incl. tombstone), tracks the max resourceVersion, and projects
 // rows identically to a direct BuildStreamSummary.
 func TestQuotasMaintainedStoreIngestion(t *testing.T) {

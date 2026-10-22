@@ -1,4 +1,4 @@
-package informer
+package ingest
 
 import (
 	"testing"
@@ -20,7 +20,7 @@ func TestStripManagedFieldsRemovesOnlyManagedFields(t *testing.T) {
 		},
 		Spec: corev1.PodSpec{NodeName: "node-1"},
 	}
-	out, err := StripManagedFields(pod)
+	out, err := stripManagedFields(pod)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestStripManagedFieldsRemovesOnlyManagedFields(t *testing.T) {
 
 func TestStripManagedFieldsNonAccessorIsNoOp(t *testing.T) {
 	in := "not-a-k8s-object"
-	out, err := StripManagedFields(in)
+	out, err := stripManagedFields(in)
 	if err != nil {
 		t.Fatalf("non-accessor input must not error: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestStripManagedFieldsDropsLastAppliedConfigOnly(t *testing.T) {
 			"keep-me": "yes",
 		},
 	}}
-	out, _ := StripManagedFields(pod)
+	out, _ := stripManagedFields(pod)
 	got := out.(*corev1.Pod).Annotations
 	if _, ok := got["kubectl.kubernetes.io/last-applied-configuration"]; ok {
 		t.Fatal("last-applied-configuration not stripped")

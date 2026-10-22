@@ -208,7 +208,7 @@ func (c *permissionRequestCollector) addRegistration(registration domainRegistra
 }
 
 // domainReadinessResources returns, per registered domain, the canonical
-// resource keys (permissions.ResourceKey format) whose informers must settle
+// resource keys (permissions.ResourceKey format) whose reflectors must settle
 // before the domain's snapshots build. The set is the union of the shared
 // permission composition (runtime + stream) and the registration's own
 // gate/preflight checks — every place a domain already declares the resources
@@ -302,8 +302,8 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 		"namespaces":        namespacesRegistration(ctx, deps),
 		"namespace-metrics": namespaceMetricsRegistration(deps),
 
-		// Cluster overview degrades per resource (issue #244): the informer path
-		// needs only the namespaces informer — nodes, pods, and the workload
+		// Cluster overview degrades per resource (issue #244): the feed path
+		// needs only the namespaces reflector — nodes, pods, and the workload
 		// counts come from ingest stores that are permission-skipped when the
 		// identity cannot read them, and the builder marks those sources
 		// unavailable in the payload. Identities without namespaces watch fall
@@ -318,7 +318,7 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			checks: []listWatchCheck{
 				{group: "", resource: "namespaces"},
 			},
-			registerInformer: func() error {
+			registerListWatch: func() error {
 				return snapshot.RegisterClusterOverviewDomain(
 					deps.registry,
 					deps.cfg.KubernetesClient,
@@ -341,7 +341,7 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 					deps.serverHost,
 				)
 			},
-			fallbackLog:  "Registering cluster overview domain using list fallback due to missing informer permissions",
+			fallbackLog:  "Registering cluster overview domain using list fallback due to missing list/watch permissions",
 			deniedReason: "cluster overview requires nodes, pods, or namespaces",
 		}),
 
@@ -363,7 +363,7 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 				{group: "", resource: "nodes"},
 				{group: "", resource: "pods"},
 			},
-			registerInformer: func() error {
+			registerListWatch: func() error {
 				return snapshot.RegisterNodeDomain(
 					deps.registry,
 					deps.metricsProvider,
@@ -384,7 +384,7 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 					deps.bell,
 				)
 			},
-			fallbackLog:  "Registering nodes domain using list fallback due to missing informer permissions",
+			fallbackLog:  "Registering nodes domain using list fallback due to missing list/watch permissions",
 			deniedReason: "core/nodes (and pods)",
 		}),
 
@@ -410,7 +410,7 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			checks: []listWatchCheck{
 				{group: "apiextensions.k8s.io", resource: "customresourcedefinitions"},
 			},
-			registerInformer: func() error {
+			registerListWatch: func() error {
 				return snapshot.RegisterClusterCRDDomain(
 					deps.registry,
 					clusterMeta,
@@ -453,7 +453,7 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			checks: []listWatchCheck{
 				{group: "", resource: "persistentvolumes"},
 			},
-			registerInformer: func() error {
+			registerListWatch: func() error {
 				return snapshot.RegisterClusterStorageDomain(
 					deps.registry,
 					clusterMeta,
@@ -806,8 +806,8 @@ func namespacesRegistration(ctx context.Context, deps registrationDeps) domainRe
 		checks: []listWatchCheck{
 			{group: "", resource: "namespaces"},
 		},
-		registerInformer: registerScopedOrUnscoped,
-		deniedReason:     coreNamespacesPermissionResource,
+		registerListWatch: registerScopedOrUnscoped,
+		deniedReason:      coreNamespacesPermissionResource,
 	})
 }
 

@@ -20,7 +20,7 @@ import (
 // TestSwapRefreshSubsystemStopsPrevious pins the auth-rebuild replacement
 // contract: storing a rebuilt subsystem for a cluster must STOP the previous
 // one. Overwriting the map entry used to leak the old subsystem entirely — its
-// informers, reflectors, and namespace notifier kept running on stale
+// reflectors and namespace notifier kept running on stale
 // transports (observed live as duplicate namespaces-doorbell broadcasts to a
 // subscriber-less manager).
 func TestSwapRefreshSubsystemStopsPrevious(t *testing.T) {

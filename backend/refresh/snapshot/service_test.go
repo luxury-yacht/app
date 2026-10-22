@@ -30,16 +30,16 @@ func testClusterMeta() ClusterMeta {
 	return ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}
 }
 
-type fakeInformerHub struct {
+type fakeFeedHub struct {
 	mu        sync.RWMutex
 	synced    bool
 	pending   map[string]bool
 	readiness map[string]refresh.ResourceReadiness
 }
 
-func (h *fakeInformerHub) Start(context.Context) error { return nil }
+func (h *fakeFeedHub) Start(context.Context) error { return nil }
 
-func (h *fakeInformerHub) HasSynced(context.Context) bool {
+func (h *fakeFeedHub) HasSynced(context.Context) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.synced
@@ -47,7 +47,7 @@ func (h *fakeInformerHub) HasSynced(context.Context) bool {
 
 // ResourcesSettled mirrors the factory semantics: a key blocks only while
 // explicitly marked pending; unknown keys are settled.
-func (h *fakeInformerHub) ResourcesSettled(keys []string) bool {
+func (h *fakeFeedHub) ResourcesSettled(keys []string) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for _, key := range keys {
@@ -58,9 +58,9 @@ func (h *fakeInformerHub) ResourcesSettled(keys []string) bool {
 	return true
 }
 
-func (h *fakeInformerHub) Shutdown() error { return nil }
+func (h *fakeFeedHub) Shutdown() error { return nil }
 
-func (h *fakeInformerHub) ResourceReadiness(keys []string) map[string]refresh.ResourceReadiness {
+func (h *fakeFeedHub) ResourceReadiness(keys []string) map[string]refresh.ResourceReadiness {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	result := make(map[string]refresh.ResourceReadiness, len(keys))
@@ -70,13 +70,13 @@ func (h *fakeInformerHub) ResourceReadiness(keys []string) map[string]refresh.Re
 	return result
 }
 
-func (h *fakeInformerHub) setSynced(synced bool) {
+func (h *fakeFeedHub) setSynced(synced bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.synced = synced
 }
 
-func (h *fakeInformerHub) setPending(key string, pending bool) {
+func (h *fakeFeedHub) setPending(key string, pending bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.pending == nil {
@@ -85,7 +85,7 @@ func (h *fakeInformerHub) setPending(key string, pending bool) {
 	h.pending[key] = pending
 }
 
-func (h *fakeInformerHub) setReadiness(key string, readiness refresh.ResourceReadiness) {
+func (h *fakeFeedHub) setReadiness(key string, readiness refresh.ResourceReadiness) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.readiness == nil {
@@ -110,10 +110,10 @@ func TestServiceBuildCarriesResourceReadinessAndInvalidatesItsCacheIdentity(t *t
 			}, nil
 		},
 	}))
-	hub := &fakeInformerHub{synced: true}
+	hub := &fakeFeedHub{synced: true}
 	hub.setReadiness(key, refresh.ResourceReadinessDegraded)
 	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil).
-		WithInformerHub(hub).
+		WithFeedHub(hub).
 		WithDomainReadiness(map[string][]string{"demo-readiness": {key}})
 
 	first, err := service.Build(context.Background(), "demo-readiness", "cluster-a|")
@@ -127,12 +127,12 @@ func TestServiceBuildCarriesResourceReadinessAndInvalidatesItsCacheIdentity(t *t
 	require.Equal(t, 2, builds, "a ready source must not reuse a degraded cached snapshot")
 }
 
-// TestServiceSetInformerHubSwapsSyncGate proves the cool path can swap a Service's informer
+// TestServiceSetFeedHubSwapsSyncGate proves the cool path can swap a Service's feed
 // hub at runtime: a Build gated by a NOT-yet-synced hub starts blocked, then once
-// SetInformerHub installs an always-synced hub (the cooled-cluster contract — its frozen data
+// SetFeedHub installs an always-synced hub (the cooled-cluster contract — its frozen data
 // is resident, so the sync gate must report settled immediately), the same Build proceeds.
 // The swap and the in-flight Build's hub read run concurrently, so -race proves no data race.
-func TestServiceSetInformerHubSwapsSyncGate(t *testing.T) {
+func TestServiceSetFeedHubSwapsSyncGate(t *testing.T) {
 	reg := domain.New()
 	require.NoError(t, reg.Register(refresh.DomainConfig{
 		Name: "demo",
@@ -141,9 +141,9 @@ func TestServiceSetInformerHubSwapsSyncGate(t *testing.T) {
 		},
 	}))
 
-	pending := &fakeInformerHub{} // synced == false: the sync gate stays closed
-	service := NewServiceWithPermissions(reg, telemetry.NewRecorder(), testClusterMeta(), nil).WithInformerHub(pending)
-	service.informerSyncTimeout = time.Second
+	pending := &fakeFeedHub{} // synced == false: the sync gate stays closed
+	service := NewServiceWithPermissions(reg, telemetry.NewRecorder(), testClusterMeta(), nil).WithFeedHub(pending)
+	service.syncTimeout = time.Second
 
 	done := make(chan error, 1)
 	go func() {
@@ -159,13 +159,13 @@ func TestServiceSetInformerHubSwapsSyncGate(t *testing.T) {
 	}
 
 	// Swap in a cooled hub that always reports synced — concurrently with the in-flight Build.
-	service.SetInformerHub(alwaysSyncedHub{})
+	service.SetFeedHub(alwaysSyncedHub{})
 
 	select {
 	case err := <-done:
 		require.NoError(t, err, "Build proceeds once a synced hub is installed")
 	case <-time.After(2 * time.Second):
-		t.Fatal("Build did not proceed after SetInformerHub installed a synced hub")
+		t.Fatal("Build did not proceed after SetFeedHub installed a synced hub")
 	}
 }
 
@@ -178,10 +178,10 @@ func (alwaysSyncedHub) HasSynced(context.Context) bool { return true }
 func (alwaysSyncedHub) ResourcesSettled([]string) bool { return true }
 func (alwaysSyncedHub) Shutdown() error                { return nil }
 
-// TestServiceBuildRecordsInformerSyncWait proves a Build that blocks in the informer
+// TestServiceBuildRecordsFeedSyncWait proves a Build that blocks in the feed
 // sync gate (the initial-LIST gating cost) records the wait it paid as the domain's
-// MaxInformerSyncWaitMs telemetry, so the cold-start cost is visible in diagnostics.
-func TestServiceBuildRecordsInformerSyncWait(t *testing.T) {
+// MaxSyncWaitMs telemetry, so the cold-start cost is visible in diagnostics.
+func TestServiceBuildRecordsFeedSyncWait(t *testing.T) {
 	reg := domain.New()
 	require.NoError(t, reg.Register(refresh.DomainConfig{
 		Name: "demo",
@@ -191,9 +191,9 @@ func TestServiceBuildRecordsInformerSyncWait(t *testing.T) {
 	}))
 
 	recorder := telemetry.NewRecorder()
-	hub := &fakeInformerHub{} // synced == false: the sync gate stays closed
-	service := NewServiceWithPermissions(reg, recorder, testClusterMeta(), nil).WithInformerHub(hub)
-	service.informerSyncTimeout = 2 * time.Second
+	hub := &fakeFeedHub{} // synced == false: the sync gate stays closed
+	service := NewServiceWithPermissions(reg, recorder, testClusterMeta(), nil).WithFeedHub(hub)
+	service.syncTimeout = 2 * time.Second
 
 	done := make(chan error, 1)
 	go func() {
@@ -214,8 +214,8 @@ func TestServiceBuildRecordsInformerSyncWait(t *testing.T) {
 
 	summary := recorder.SnapshotSummary()
 	require.Len(t, summary.Snapshots, 1)
-	require.GreaterOrEqual(t, summary.Snapshots[0].MaxInformerSyncWaitMs, int64(100),
-		"the ~120ms sync-gate wait must be recorded as MaxInformerSyncWaitMs")
+	require.GreaterOrEqual(t, summary.Snapshots[0].MaxSyncWaitMs, int64(100),
+		"the ~120ms sync-gate wait must be recorded as MaxSyncWaitMs")
 }
 
 // TestServiceDoesNotCacheNotReadyNamespaceSnapshots pins the cache rule for the fast
@@ -427,7 +427,7 @@ func TestServiceDoesNotCacheMetricSourceDomains(t *testing.T) {
 	}
 }
 
-func TestServiceBuildWaitsForInformerSyncBeforeBuilding(t *testing.T) {
+func TestServiceBuildWaitsForFeedSyncBeforeBuilding(t *testing.T) {
 	reg := domain.New()
 	built := make(chan struct{})
 	if err := reg.Register(refresh.DomainConfig{
@@ -444,8 +444,8 @@ func TestServiceBuildWaitsForInformerSyncBeforeBuilding(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	hub := &fakeInformerHub{}
-	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil).WithInformerHub(hub)
+	hub := &fakeFeedHub{}
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil).WithFeedHub(hub)
 	done := make(chan error, 1)
 	go func() {
 		_, err := service.Build(context.Background(), "nodes", "")
@@ -454,10 +454,10 @@ func TestServiceBuildWaitsForInformerSyncBeforeBuilding(t *testing.T) {
 
 	select {
 	case <-built:
-		t.Fatal("snapshot built before informer caches synced")
+		t.Fatal("snapshot built before the feed synced")
 	case err := <-done:
-		t.Fatalf("Build returned before informer caches synced: %v", err)
-	case <-time.After(config.RefreshInformerSyncPollInterval * 2):
+		t.Fatalf("Build returned before the feed synced: %v", err)
+	case <-time.After(config.RefreshSyncPollInterval * 2):
 	}
 
 	hub.setSynced(true)
@@ -468,11 +468,11 @@ func TestServiceBuildWaitsForInformerSyncBeforeBuilding(t *testing.T) {
 			t.Fatalf("Build returned error: %v", err)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("Build did not complete after informer caches synced")
+		t.Fatal("Build did not complete after the feed synced")
 	}
 }
 
-func TestServiceBuildFailsWhenInformerSyncTimesOut(t *testing.T) {
+func TestServiceBuildFailsWhenFeedSyncTimesOut(t *testing.T) {
 	reg := domain.New()
 	built := false
 	if err := reg.Register(refresh.DomainConfig{
@@ -486,9 +486,9 @@ func TestServiceBuildFailsWhenInformerSyncTimesOut(t *testing.T) {
 	}
 
 	rec := telemetry.NewRecorder()
-	hub := &fakeInformerHub{}
-	service := NewServiceWithPermissions(reg, rec, testClusterMeta(), nil).WithInformerHub(hub)
-	service.informerSyncTimeout = 50 * time.Millisecond
+	hub := &fakeFeedHub{}
+	service := NewServiceWithPermissions(reg, rec, testClusterMeta(), nil).WithFeedHub(hub)
+	service.syncTimeout = 50 * time.Millisecond
 
 	done := make(chan error, 1)
 	go func() {
@@ -499,17 +499,17 @@ func TestServiceBuildFailsWhenInformerSyncTimesOut(t *testing.T) {
 	select {
 	case err := <-done:
 		if err == nil {
-			t.Fatal("expected informer sync timeout error")
+			t.Fatal("expected feed sync timeout error")
 		}
-		if !errors.Is(err, errInformerSyncTimeout) {
-			t.Fatalf("expected informer sync timeout error, got %v", err)
+		if !errors.Is(err, errFeedSyncTimeout) {
+			t.Fatalf("expected feed sync timeout error, got %v", err)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("Build hung past the informer sync timeout")
+		t.Fatal("Build hung past the feed sync timeout")
 	}
 
 	if built {
-		t.Fatal("snapshot builder must not run when informer caches never sync")
+		t.Fatal("snapshot builder must not run when the feed never syncs")
 	}
 
 	summary := rec.SnapshotSummary()
@@ -539,33 +539,33 @@ func TestServiceBuildGatesOnDeclaredDomainResources(t *testing.T) {
 	registerEchoDomain(t, reg, "pods")
 	registerEchoDomain(t, reg, "catalog")
 
-	hub := &fakeInformerHub{}
+	hub := &fakeFeedHub{}
 	hub.setPending("core/pods", true)
 	// Factory-wide flag stays false the whole test: mapped domains must not
 	// consult it.
 	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil).
-		WithInformerHub(hub).
+		WithFeedHub(hub).
 		WithDomainReadiness(map[string][]string{
 			"nodes":   {"core/nodes"},
 			"pods":    {"core/pods"},
 			"catalog": {},
 		})
-	service.informerSyncTimeout = 50 * time.Millisecond
+	service.syncTimeout = 50 * time.Millisecond
 
 	// A domain whose declared resources are settled builds immediately even
-	// while an unrelated informer is pending and the factory-wide flag is false.
+	// while an unrelated reflector is pending and the whole-feed flag is false.
 	if _, err := service.Build(context.Background(), "nodes", ""); err != nil {
-		t.Fatalf("nodes build should not wait on unrelated informers: %v", err)
+		t.Fatalf("nodes build should not wait on unrelated reflectors: %v", err)
 	}
 
-	// A mapped domain with no informer dependencies never waits.
+	// A mapped domain with no reflector dependencies never waits.
 	if _, err := service.Build(context.Background(), "catalog", ""); err != nil {
 		t.Fatalf("catalog build with no declared resources should not wait: %v", err)
 	}
 
 	// A domain whose own resource is pending still times out.
-	if _, err := service.Build(context.Background(), "pods", ""); !errors.Is(err, errInformerSyncTimeout) {
-		t.Fatalf("expected pods build to fail with informer sync timeout, got %v", err)
+	if _, err := service.Build(context.Background(), "pods", ""); !errors.Is(err, errFeedSyncTimeout) {
+		t.Fatalf("expected pods build to fail with feed sync timeout, got %v", err)
 	}
 
 	// Once its own resource settles, the domain builds.
@@ -579,15 +579,15 @@ func TestServiceBuildUnmappedDomainKeepsFactoryWideGate(t *testing.T) {
 	reg := domain.New()
 	registerEchoDomain(t, reg, "object-yaml")
 
-	hub := &fakeInformerHub{}
+	hub := &fakeFeedHub{}
 	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil).
-		WithInformerHub(hub).
+		WithFeedHub(hub).
 		WithDomainReadiness(map[string][]string{"nodes": {"core/nodes"}})
-	service.informerSyncTimeout = 50 * time.Millisecond
+	service.syncTimeout = 50 * time.Millisecond
 
 	// Domains without a readiness declaration keep today's conservative
 	// factory-wide gate.
-	if _, err := service.Build(context.Background(), "object-yaml", ""); !errors.Is(err, errInformerSyncTimeout) {
+	if _, err := service.Build(context.Background(), "object-yaml", ""); !errors.Is(err, errFeedSyncTimeout) {
 		t.Fatalf("expected unmapped domain to keep the factory-wide gate, got %v", err)
 	}
 

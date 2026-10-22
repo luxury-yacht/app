@@ -18,7 +18,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/k8sretry"
 )
 
-// ListWatchChecker gates informer access based on RBAC permissions.
+// ListWatchChecker gates reflector access based on RBAC permissions.
 // Implementations return true only when the identity can both list and watch the resource.
 type ListWatchChecker interface {
 	CanListWatch(group, resource string) bool

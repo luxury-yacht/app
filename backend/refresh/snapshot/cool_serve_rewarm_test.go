@@ -40,7 +40,7 @@ func coolServeFixture(t *testing.T, hpas []*autoscalingv2.HorizontalPodAutoscale
 
 	// The Service starts with a NOT-synced hub (a live cluster's gate); cooling installs an
 	// always-synced cooled hub so a cooled Build still serves.
-	svc := NewServiceWithPermissions(reg, telemetry.NewRecorder(), meta, nil).WithInformerHub(&fakeInformerHub{synced: true})
+	svc := NewServiceWithPermissions(reg, telemetry.NewRecorder(), meta, nil).WithFeedHub(&fakeFeedHub{synced: true})
 	return reg, svc
 }
 
@@ -93,7 +93,7 @@ func TestCoolServeRewarmRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, closers, 1)
 	require.FileExists(t, filepath.Join(dir, namespaceAutoscalingDomainName+".qcm"))
-	svc.SetInformerHub(alwaysSyncedHub{})
+	svc.SetFeedHub(alwaysSyncedHub{})
 
 	// (a) The cooled cluster serves the SAME payload — now from the mmap-backed store.
 	after := autoscalingPayload(t, svc, scope)

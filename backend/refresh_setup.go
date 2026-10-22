@@ -201,7 +201,7 @@ func (a *RefreshCoordinator) buildRefreshSubsystems(
 		return nil, nil, errors.New("no kubeconfig selections available")
 	}
 
-	// Subsystem construction (informer wiring, permission preflight, spill restore)
+	// Subsystem construction (reflector wiring, permission preflight, spill restore)
 	// is the expensive per-cluster step; build the selections concurrently so N
 	// clusters do not pay it serially. Outcomes are assembled in selection order, so
 	// clusterOrder is exactly what the serial loop produced. Per-cluster internal
@@ -311,7 +311,7 @@ func (a *RefreshCoordinator) buildRefreshSubsystemForSelection(
 		return nil, err
 	}
 
-	// Evict cached detail/YAML/helm responses on informer and ingest changes,
+	// Evict cached detail/YAML/helm responses on ingest changes,
 	// then ring the object-details doorbell.
 	a.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
 

@@ -646,7 +646,7 @@ describe('DiagnosticsPanel component', () => {
     expect(markup).toContain('Cluster Overview');
     // Sync wait and Metrics are detail fields now, not columns. Nodes carries
     // the joined-usage freshness block on its base payload, so Metrics reflects
-    // it directly; with no informer-sync telemetry there is no Sync wait entry.
+    // it directly; with no sync-wait telemetry there is no Sync wait entry.
     const nodesDetails = await expandScopeRow(rendered.container, 'Nodes');
     expect(nodesDetails['Sync wait']).toBeUndefined();
     expect(nodesDetails.Metrics).toBe('OK (2 polls)');
@@ -1564,7 +1564,7 @@ describe('DiagnosticsPanel component', () => {
     resourceStreamSpy.mockRestore();
   });
 
-  test('renders the recorded informer-sync-gate wait in the Sync Wait column', async () => {
+  test('renders the recorded sync-gate wait in the Sync Wait column', async () => {
     const clusterScope = testScope('cluster-a', '');
     mockKubeconfigState.selectedClusterId = 'cluster-a';
 
@@ -1585,7 +1585,7 @@ describe('DiagnosticsPanel component', () => {
             successCount: 1,
             failureCount: 0,
             // Cold-start build blocked 1500ms on the initial-LIST gate.
-            maxInformerSyncWaitMs: 1500,
+            maxSyncWaitMs: 1500,
           },
         ],
         metrics: {

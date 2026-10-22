@@ -384,8 +384,8 @@ func TestSnapshotAndAggregateDomainRegistrationContracts(t *testing.T) {
 		"no fallback: denial must serve the permission-denied domain, not a degraded list")
 	require.Equal(t, "core/namespaces", namespaces.listWatch.deniedReason)
 
-	// Cluster overview degrades per resource (issue #244): the informer path is
-	// gated only on namespaces (the one informer the builder still owns — nodes,
+	// Cluster overview degrades per resource (issue #244): the feed path is
+	// gated only on namespaces (the one list+watch the builder still requires — nodes,
 	// pods, and workload counts come from permission-skip-safe ingest stores),
 	// and the list fallback registers when ANY primary resource is listable, so
 	// an identity without node access still gets a partial overview.
@@ -403,7 +403,7 @@ func TestSnapshotAndAggregateDomainRegistrationContracts(t *testing.T) {
 	}, overview.listWatch.fallbackChecks)
 	require.True(t, overview.listWatch.fallbackAllowAny,
 		"any listable primary resource must be enough for the list fallback")
-	require.NotNil(t, overview.listWatch.registerInformer)
+	require.NotNil(t, overview.listWatch.registerListWatch)
 	require.NotNil(t, overview.listWatch.registerFallback)
 	require.Equal(t, "cluster overview requires nodes, pods, or namespaces", overview.listWatch.deniedReason)
 }
@@ -884,9 +884,9 @@ func TestDomainReadinessResourcesUnionsDeclaredContracts(t *testing.T) {
 }
 
 // Every domain declares which object feeds it waits on. A domain left out
-// would fall back to the shared informer factory's gate, which stops
-// covering a kind as soon as that kind moves to an owned reflector, so its
-// first build could serve an unsynced feed as empty. Domains whose payload
+// would fall back to the whole-feed gate, which waits on every kind (so one
+// slow watch delays it) yet skips on-demand dynamic reflectors (so its first
+// build could serve one of those unsynced as empty). Domains whose payload
 // reads no object feed (catalog service, live GETs, metrics, maintenance)
 // declare an empty set and build without waiting.
 func TestEveryDomainDeclaresItsFeedReadiness(t *testing.T) {

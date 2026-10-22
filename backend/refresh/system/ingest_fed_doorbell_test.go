@@ -575,7 +575,7 @@ func TestPodOwnerChangeRingsPreviousOwnerScopes(t *testing.T) {
 }
 
 // A pod projected before its ReplicaSet was known keeps the ReplicaSet as its
-// collapsed owner. When the ReplicaSet informer delivers it, the heal rewrites
+// collapsed owner. When the ReplicaSet reflector delivers it, the heal rewrites
 // the stored pod and the pods store rings the Deployment's Pods window.
 func TestReplicaSetHealRingsHealedPodScopes(t *testing.T) {
 	h := newIngestHarness(t)

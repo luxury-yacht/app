@@ -120,7 +120,7 @@ func TestHandlerStopClosesActiveAndFutureSessions(t *testing.T) {
 // Every error frame carries its status, so the client acts on the reason.
 func TestSessionSendErrorCarriesStatus(t *testing.T) {
 	session := newSession(stubConn{}, Config{Logger: applog.Noop, ClusterID: "cluster-1", ClusterName: "cluster-a", StreamName: "resources", SendReset: true})
-	session.sendError("cluster-1", "pods", "namespace:default", errors.New("informer exploded"))
+	session.sendError("cluster-1", "pods", "namespace:default", errors.New("watch exploded"))
 	session.handleSubscribe(ClientMessage{Type: MessageTypeRequest, ClusterID: "cluster-1"})
 
 	for _, want := range []errorstatus.Reason{errorstatus.ReasonUnknown, errorstatus.ReasonBadRequest} {

@@ -9,13 +9,12 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 )
 
-// TestCooledInformerHubAlwaysSettled proves the cooled-cluster readiness gate reports synced
-// unconditionally: a cooled subsystem has shut its manager + informer factory (so the live
-// hub would report NOT synced), but its data is frozen and resident in the mmap-backed stores,
+// TestCooledFeedHubAlwaysSettled proves the cooled-cluster readiness gate reports synced
+// unconditionally: a cooled subsystem has stopped its manager and reflectors, but its data is frozen and resident in the mmap-backed stores,
 // so the snapshot sync gate must let every Build through immediately. Its lifecycle methods are
 // no-ops (there is nothing to start or shut down).
-func TestCooledInformerHubAlwaysSettled(t *testing.T) {
-	var hub refresh.InformerHub = NewCooledInformerHub()
+func TestCooledFeedHubAlwaysSettled(t *testing.T) {
+	var hub refresh.FeedHub = NewCooledFeedHub()
 	require.True(t, hub.HasSynced(context.Background()))
 	require.True(t, hub.ResourcesSettled([]string{"core/pods", "apps/deployments"}))
 	require.True(t, hub.ResourcesSettled(nil))

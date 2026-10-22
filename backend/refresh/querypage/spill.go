@@ -57,9 +57,9 @@ func RestoreStore[R any](r io.Reader, schema Schema[R]) (*Store[R], error) {
 // rebuilding each row's index/facet/match-cache entry incrementally — the same per-row
 // path Upsert always takes. Unlike RestoreStore it loads into an existing store,
 // preserving its schema and any wiring that already references it (a maintained store's
-// informer handlers / ingest sink), which is what the governor's warm-restore on re-warm
+// ingest sink), which is what the governor's warm-restore on re-warm
 // needs: the store is built+wired first, then pre-painted from disk before the fresh
-// informers feed. Rows already present are overwritten by UID; rows absent from the spill
+// reflectors feed it. Rows already present are overwritten by UID; rows absent from the spill
 // are left untouched, so a later reconciling sync removes any that no longer exist
 // upstream.
 func (s *Store[R]) RestoreFrom(r io.Reader) error {

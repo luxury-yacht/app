@@ -47,7 +47,7 @@ func autoscalingDescriptor(t *testing.T, resource string) streamspec.Descriptor 
 	return streamspec.Descriptor{}
 }
 
-// TestAutoscalingMaintainedStoreIngestion proves the informer-fed store reflects
+// TestAutoscalingMaintainedStoreIngestion proves the reflector-fed store reflects
 // Add/Update/Delete (incl. tombstone), tracks the max resourceVersion, and projects
 // rows identically to a direct BuildStreamSummary.
 func TestAutoscalingMaintainedStoreIngestion(t *testing.T) {

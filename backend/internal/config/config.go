@@ -26,24 +26,24 @@ const (
 
 // Refresh subsystem settings.
 const (
-	// RefreshInformerSyncPollInterval is the poll frequency used while waiting for informer caches to sync.
-	// This is purely local to our code. While we are waiting for a set of informers to report HasSynced() == true,
-	// we poll them on that short interval so the refresh snapshot builder can unblock as soon as their caches
+	// RefreshSyncPollInterval is the poll frequency used while waiting for reflector stores to sync.
+	// This is purely local to our code. While we are waiting for a set of stores to report HasSynced() == true,
+	// we poll them on that short interval so the refresh snapshot builder can unblock as soon as they
 	// are ready. Once they are synced, the poller stops.
-	RefreshInformerSyncPollInterval = 50 * time.Millisecond
+	RefreshSyncPollInterval = 50 * time.Millisecond
 
-	// RefreshInformerSyncTimeout bounds how long a snapshot build waits for informer caches
-	// to sync. A single informer whose watch can never complete (for example an
+	// RefreshSyncTimeout bounds how long a snapshot build waits for reflector stores
+	// to sync. A single reflector whose watch can never complete (for example an
 	// RBAC-forbidden resource) would otherwise hang every snapshot for the cluster forever.
-	RefreshInformerSyncTimeout = 30 * time.Second
+	RefreshSyncTimeout = 30 * time.Second
 
-	// RefreshInformerSyncDeadline bounds how long a single informer may take to reach
+	// RefreshSyncDeadline bounds how long a single reflector may take to reach
 	// its initial sync after Start before it is marked DEGRADED and excluded from the
 	// "all settled" readiness gate. Without this deadline, an unavailable API or a hung
 	// initial LIST for one GVR would block the whole cluster's readiness forever. A
-	// degraded informer is logged once and keeps retrying in the background; it stops
+	// degraded reflector is logged once and keeps retrying in the background; it stops
 	// gating readiness so the rest of the cluster becomes usable.
-	RefreshInformerSyncDeadline = 15 * time.Second
+	RefreshSyncDeadline = 15 * time.Second
 
 	// RefreshMetricsInterval determines the cadence for the metrics poller (node/pod metrics).
 	RefreshMetricsInterval = 5 * time.Second
@@ -57,7 +57,7 @@ const (
 	// SnapshotCacheTTL controls how long snapshot builds are cached to avoid redundant work.
 	SnapshotCacheTTL = 5 * time.Second
 
-	// ResponseCacheTTL controls how long non-informer resource GETs are cached.
+	// ResponseCacheTTL controls how long resource GETs the refresh feed does not serve are cached.
 	// Keep this short to reduce staleness while still cutting repeated requests.
 	ResponseCacheTTL = 10 * time.Second
 
@@ -154,7 +154,7 @@ const (
 	// PermissionReviewRetryMaxBackoff caps retry delays for authorization reviews.
 	PermissionReviewRetryMaxBackoff = time.Second
 
-	// PermissionPrimeTimeout bounds permission priming calls before informer registration.
+	// PermissionPrimeTimeout bounds permission priming calls before reflector registration.
 	PermissionPrimeTimeout = 10 * time.Second
 
 	// PermissionPreflightTimeout bounds permission preflight calls during refresh setup.
@@ -378,8 +378,8 @@ const (
 	// ObjectCatalogEvictionTTL controls how long missing catalog entries are retained.
 	ObjectCatalogEvictionTTL = 10 * time.Minute
 
-	// ObjectCatalogInformerPromotionThreshold controls when resources are promoted to informer-backed updates.
-	ObjectCatalogInformerPromotionThreshold = 5000
+	// ObjectCatalogReflectorPromotionThreshold controls when listed dynamic resources are promoted to an owned reflector.
+	ObjectCatalogReflectorPromotionThreshold = 5000
 
 	// ObjectCatalogStreamingBatchSize controls catalog streaming batch size.
 	ObjectCatalogStreamingBatchSize = 100

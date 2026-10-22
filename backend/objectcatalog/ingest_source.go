@@ -229,7 +229,7 @@ func (s *Service) resolveIngestDescriptor(gvr schema.GroupVersionResource) (Desc
 // ingestCatalogSink adapts the catalog's incremental summary apply to an ingest
 // Catalog-half Sink. The reflector delivers the already-projected Summary on
 // Upsert/Delete (never the source object), so the sink keys off the Summary itself —
-// exactly the data the shared-informer watch handler used to derive from the object.
+// so no source object is needed.
 type ingestCatalogSink struct {
 	service *Service
 	gvr     schema.GroupVersionResource

@@ -16,13 +16,13 @@ import (
 // Manager coordinates the refresh subsystem once initialized.
 type Manager struct {
 	registry        Registry
-	informerHub     InformerHub
+	feedHub         FeedHub
 	snapshotService SnapshotBuilder
 	metricsPoller   MetricsPoller
 	manualQueue     ManualQueue
 	mu              sync.RWMutex
 	started         bool
-	// runCancel stops informers/metrics/manual queue without requiring callers to hold the parent cancel.
+	// runCancel stops reflectors/metrics/manual queue without requiring callers to hold the parent cancel.
 	runCancel context.CancelFunc
 }
 
@@ -48,20 +48,20 @@ type DomainConfig struct {
 	RuntimePolicyExempt bool
 }
 
-// InformerHub exposes informer lifecycle hooks used by the refresh manager.
-type InformerHub interface {
+// FeedHub exposes the feed's lifecycle hooks used by the refresh manager.
+type FeedHub interface {
 	Start(ctx context.Context) error
 	HasSynced(ctx context.Context) bool
-	// ResourcesSettled reports whether the informers backing the supplied
+	// ResourcesSettled reports whether the reflectors backing the supplied
 	// canonical resource keys (permissions.ResourceKey format) have synced or
-	// terminally failed. Keys with no informer are settled.
+	// terminally failed. Keys with no reflector are settled.
 	ResourcesSettled(keys []string) bool
 	Shutdown() error
 }
 
 // ResourceReadiness describes whether one declared Kubernetes resource can
 // currently provide authoritative data to a snapshot builder. It is separate
-// from InformerHub.ResourcesSettled: a source may stop blocking subsystem
+// from FeedHub.ResourcesSettled: a source may stop blocking subsystem
 // liveness after the sync deadline while its initial LIST is still retrying.
 type ResourceReadiness uint8
 
@@ -92,7 +92,7 @@ func (state ResourceReadiness) String() string {
 }
 
 // ResourceReadinessReporter is the optional data-availability side of an
-// InformerHub. The base lifecycle interface remains small for retained/Cold and
+// FeedHub. The base lifecycle interface remains small for retained/Cold and
 // test hubs; live hubs implement this reporter so snapshot builds can remain
 // honest after a liveness deadline degrades an unsynced source.
 type ResourceReadinessReporter interface {
@@ -185,24 +185,24 @@ type SnapshotStats struct {
 }
 
 // NewManager constructs a Manager with the supplied collaborators.
-func NewManager(reg Registry, hub InformerHub, svc SnapshotBuilder, poller MetricsPoller, queue ManualQueue) *Manager {
+func NewManager(reg Registry, hub FeedHub, svc SnapshotBuilder, poller MetricsPoller, queue ManualQueue) *Manager {
 	return &Manager{
 		registry:        reg,
-		informerHub:     hub,
+		feedHub:         hub,
 		snapshotService: svc,
 		metricsPoller:   poller,
 		manualQueue:     queue,
 	}
 }
 
-// Start boots the informer hub and captures the metrics poller context once.
+// Start boots the feed hub and captures the metrics poller context once.
 func (m *Manager) Start(ctx context.Context) error {
 	runCtx, started := m.startContext(ctx)
 	if started {
 		return nil
 	}
-	if m.informerHub != nil {
-		if err := m.informerHub.Start(runCtx); err != nil {
+	if m.feedHub != nil {
+		if err := m.feedHub.Start(runCtx); err != nil {
 			return err
 		}
 	}
@@ -290,7 +290,7 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 	m.runCancel = nil
 	m.mu.Unlock()
 
-	// Cancelling the run context stops informer factories and pollers that rely on it.
+	// Cancelling the run context stops reflectors and pollers that rely on it.
 	if cancel != nil {
 		cancel()
 	}
@@ -301,8 +301,8 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 			firstErr = err
 		}
 	}
-	if m.informerHub != nil {
-		if err := m.informerHub.Shutdown(); err != nil && firstErr == nil {
+	if m.feedHub != nil {
+		if err := m.feedHub.Shutdown(); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}

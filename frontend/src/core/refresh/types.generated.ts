@@ -2232,7 +2232,7 @@ export interface TelemetrySnapshotStatus {
   lastBatchSize?: number;
   isFinalBatch?: boolean;
   timeToFirstBatchMs?: number;
-  maxInformerSyncWaitMs?: number;
+  maxSyncWaitMs?: number;
 }
 
 export interface TelemetryStreamStatus {
@@ -3072,7 +3072,7 @@ const telemetrySummarySchema: RefreshContractSchema = { kind: 'object', fields: 
     lastBatchSize: { optional: true, schema: { kind: 'number' } },
     isFinalBatch: { optional: true, schema: { kind: 'boolean' } },
     timeToFirstBatchMs: { optional: true, schema: { kind: 'number' } },
-    maxInformerSyncWaitMs: { optional: true, schema: { kind: 'number' } },
+    maxSyncWaitMs: { optional: true, schema: { kind: 'number' } },
   } }, nullable: true } },
   clusterMetrics: { optional: false, schema: { kind: 'array', items: { kind: 'object', fields: {
     clusterId: { optional: false, schema: { kind: 'string' } },

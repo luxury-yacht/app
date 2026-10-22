@@ -102,7 +102,7 @@ type ObjectMapSnapshotPayload struct {
 }
 
 // objectMapPermissionChecker reports whether the current cluster credentials may
-// list+watch a resource. *informer.Factory satisfies it. object-map uses it to
+// list+watch a resource. *permissions.Grants satisfies it. object-map uses it to
 // skip, with a warning, resources the user cannot see.
 type objectMapPermissionChecker interface {
 	CanListWatch(group, resource string) bool
@@ -341,8 +341,7 @@ func (idx *objectMapIndex) collectTypedCollector(src objectMapTypedSource, colle
 }
 
 // collectIngestNodes adds an object-map record per projected node for an
-// ingest-owned kind, read from the ingest source instead of a shared-informer
-// lister. The projected node already carries the identity, status, action facts,
+// ingest-owned kind, read from the ingest source. The projected node already carries the identity, status, action facts,
 // owners, labels, and pre-resolved edges the object-map needs — all computed from
 // the source object's own fields at intake — so the record is byte-equivalent to
 // the lister path's record except that obj is nil (the source object was dropped).

@@ -90,7 +90,7 @@ func clusterConfigAvailableAll() map[string]bool {
 	return available
 }
 
-// TestClusterConfigMaintainedStoreIngestion proves the informer-fed store reflects
+// TestClusterConfigMaintainedStoreIngestion proves the reflector-fed store reflects
 // Add/Update/Delete (incl. tombstone), tracks the max resourceVersion, and projects
 // rows identically to a direct BuildStreamSummary. The domain is cluster-scoped, so
 // objects carry no namespace and the store is queried for all rows (""). It feeds a

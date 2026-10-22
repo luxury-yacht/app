@@ -69,7 +69,7 @@ func TestInvalidateResponseCacheForGVKEvictsOnlyTheExactGVK(t *testing.T) {
 // TestIngestResponseCacheSinkEvictsOnUpsertAndDelete proves the owned-reflector
 // invalidation path: a cut kind's ingest Catalog-half sink evicts the cached detail
 // entry on both Upsert (the resource changed) and Delete (the resource was removed),
-// exactly as the shared-informer handler did — but fed the projected Summary, not the
+// fed the projected Summary, not the
 // typed object.
 func TestIngestResponseCacheSinkEvictsOnUpsertAndDelete(t *testing.T) {
 	gateway := newResourceGatewayFixture().gateway

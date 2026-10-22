@@ -86,7 +86,7 @@ func (a *RefreshCoordinator) runRefreshGenerationManager(
 		a.logger.Warn(fmt.Sprintf("Refresh manager for cluster %s stopped: %v", clusterID, err), logsources.Refresh, clusterID, clusterName)
 		return
 	}
-	// Start blocks until the factory-backed informer caches settle. Remove rows
+	// Start blocks until the reflector stores settle. Remove rows
 	// restored from spill when their objects disappeared while the app was closed.
 	if registry != nil {
 		registry.ReconcileMaintainedStores()
@@ -272,8 +272,7 @@ func (a *RefreshCoordinator) stopRefreshGenerationProducers(clusterID string, su
 	if a == nil || subsystem == nil {
 		return
 	}
-	// Catalog sync and its bridges retain this generation's informer and ingest
-	// producers. Join them first, without touching a replacement's catalog.
+	// Catalog sync and its bridges retain this generation's ingest producers. Join them first, without touching a replacement's catalog.
 	a.stopObjectCatalogEntry(a.removeObjectCatalogEntry(clusterID, subsystem))
 	runtime := a.takeRefreshGenerationRuntime(subsystem)
 	subsystem.CancelColdPreparation()

@@ -119,7 +119,7 @@ type networkIndexers struct {
 // supplied test indexers. Service, EndpointSlice, Ingress, and NetworkPolicy are cut to
 // the ingest path: their availability resolves to the shared sentinel indexer (a non-nil
 // empty indexer) when the test supplies one, so the descriptor source gate marks them
-// Available without a typed informer — exactly as factoryIndexers does in production. Their
+// Available without a typed indexer. Their
 // ROWS come from the builder's ingest source, not here.
 func networkCollectIndexer(idx networkIndexers) func(streamspec.Descriptor) cache.Indexer {
 	return func(d streamspec.Descriptor) cache.Indexer {
@@ -149,7 +149,7 @@ func networkCollectIndexer(idx networkIndexers) func(streamspec.Descriptor) cach
 
 // rbacCollectIndexer returns a collectIndexer that resolves the RBAC stream
 // descriptors to the supplied test indexers (nil = kind unavailable), so the
-// descriptor-driven NamespaceRBACBuilder can be tested without an informer factory.
+// descriptor-driven NamespaceRBACBuilder can be tested without an ingest manager.
 func rbacCollectIndexer(roleIdx, bindingIdx, saIdx cache.Indexer) func(streamspec.Descriptor) cache.Indexer {
 	return func(d streamspec.Descriptor) cache.Indexer {
 		switch d.Resource {

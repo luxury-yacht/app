@@ -4,7 +4,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// objectAs decodes an informer event payload to the requested type, unwrapping
+// objectAs decodes a watch event payload to the requested type, unwrapping
 // delete tombstones.
 func objectAs[T any](obj interface{}) (T, bool) {
 	if typed, ok := obj.(T); ok {

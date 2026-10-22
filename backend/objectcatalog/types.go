@@ -256,19 +256,19 @@ type TelemetryRecorder interface {
 
 // Options tunes catalog behaviour; zero values fall back to sensible defaults.
 type Options struct {
-	ResyncInterval             time.Duration // interval between resyncs
-	FailedSyncRetryInterval    time.Duration // short retry after a failed/incomplete sync (default config.ObjectCatalogFailedSyncRetryInterval)
-	SourceSyncWaitTimeout      time.Duration // maximum wait per sync for informers and tracked ingest stores before collecting partial data (default config.RefreshInformerSyncDeadline)
-	ListRequestTimeout         time.Duration // budget for one API LIST request, independently renewed for each page and retry
-	PageSize                   int           // number of items per page
-	ListWorkers                int           // number of workers for listing resources
-	NamespaceWorkers           int           // number of workers for processing namespaces
-	InformerPromotionThreshold int           // threshold for promoting informers
-	EvictionTTL                time.Duration // time-to-live for evicted items
-	StreamingBatchSize         int           // number of items per streaming batch
-	StreamingFlushInterval     time.Duration // interval between streaming flushes
-	EnableReactiveUpdates      bool          // enables informer-driven incremental updates (default true)
-	QueryStore                 Querier       // optional query execution backend; defaults to in-memory catalog index
+	ResyncInterval              time.Duration // interval between resyncs
+	FailedSyncRetryInterval     time.Duration // short retry after a failed/incomplete sync (default config.ObjectCatalogFailedSyncRetryInterval)
+	SourceSyncWaitTimeout       time.Duration // maximum wait per sync for tracked ingest stores before collecting partial data (default config.RefreshSyncDeadline)
+	ListRequestTimeout          time.Duration // budget for one API LIST request, independently renewed for each page and retry
+	PageSize                    int           // number of items per page
+	ListWorkers                 int           // number of workers for listing resources
+	NamespaceWorkers            int           // number of workers for processing namespaces
+	ReflectorPromotionThreshold int           // item count at which a listed dynamic resource is promoted to an owned reflector
+	EvictionTTL                 time.Duration // time-to-live for evicted items
+	StreamingBatchSize          int           // number of items per streaming batch
+	StreamingFlushInterval      time.Duration // interval between streaming flushes
+	EnableReactiveUpdates       bool          // enables reflector-driven incremental updates (default true)
+	QueryStore                  Querier       // optional query execution backend; defaults to in-memory catalog index
 }
 
 // QueryOptions controls catalog queries executed against the in-memory cache.

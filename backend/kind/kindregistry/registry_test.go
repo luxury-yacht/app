@@ -9,7 +9,7 @@ import "testing"
 // everywhere:
 //
 //   - object map + stream-summary: backend/refresh/snapshot/registry_drift_test.go
-//   - object catalog sources:      backend/objectcatalog/informer_registry_test.go
+//   - object catalog sources:      backend/objectcatalog/catalog_source_test.go
 //   - response-cache invalidation: backend/response_cache_invalidation_registry_test.go
 //   - resource-stream descriptors: backend/refresh/resourcestream/stream_registration_registry_test.go
 //

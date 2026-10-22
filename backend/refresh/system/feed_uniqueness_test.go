@@ -9,7 +9,7 @@ import (
 )
 
 // Each built-in kind reaches the cluster through one feed: its owned
-// reflector. The subsystem has no shared informer factory, so no second
+// reflector. The subsystem has one feed technology, so no second
 // watch can double a kind's API load and memory.
 func TestEachKindIsFedByItsOwnedReflector(t *testing.T) {
 	h := newIngestHarness(t)

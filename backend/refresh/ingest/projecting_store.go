@@ -3,9 +3,9 @@
 // ONLY the projection, fed by a reflector that borrows client-go's List/Watch/
 // relist machinery.
 //
-// Today client-go's typed informers cache the full typed object (*corev1.Pod,
-// …) while the maintained stores additionally hold projected rows — double
-// storage. ProjectingStore collapses that: the source object is projected the
+// client-go's typed informers cache the full typed object (*corev1.Pod, …), so
+// a maintained store beside them holds a second copy as projected rows.
+// ProjectingStore avoids that double storage: the source object is projected the
 // moment it lands and is then droppable, so the store holds the projected row
 // alone. It is wired into the live refresh subsystem via IngestManager
 // (system.NewSubsystemWithServices -> ingest.NewIngestManager), which feeds the
@@ -156,7 +156,7 @@ type ProjectingStore struct {
 
 	// catalogSinks receive each row's Catalog half incrementally, on the same
 	// Upsert/Delete events, so the object catalog stays current for an ingest-owned
-	// kind without reading the (now-absent) shared informer. They are registered and
+	// kind without a second watch. They are registered and
 	// fanned exactly like sinks, but carry the Catalog half rather than the Table half.
 	catalogSinks []Sink
 

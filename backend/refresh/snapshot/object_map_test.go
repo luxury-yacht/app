@@ -45,9 +45,9 @@ type allowAllPermissions struct{}
 
 func (allowAllPermissions) CanListWatch(string, string) bool { return true }
 
-// newObjectMapTestBuilder builds an objectMapBuilder whose typed listers are backed
-// by a started+synced informer factory over the fake clientset, mirroring how
-// RegisterObjectMapDomain wires the production builder.
+// newObjectMapTestBuilder builds an objectMapBuilder fed by fake ingest rows. A
+// started+synced informer factory over the fake clientset is only the test's object
+// source; production reads the same projected rows from the owned reflectors.
 func newObjectMapTestBuilder(t *testing.T, client kubernetes.Interface) *objectMapBuilder {
 	t.Helper()
 	shared := informers.NewSharedInformerFactory(client, 0)
@@ -95,7 +95,7 @@ func newObjectMapTestBuilder(t *testing.T, client kubernetes.Interface) *objectM
 		ingest: newFakeObjectMapIngestSource(t, shared),
 	}
 	// The object catalog is seeded with a Summary for every object the map collects,
-	// mirroring production: the catalog is fed from the SAME ingest/informer source the
+	// mirroring production: the catalog is fed from the SAME ingest source the
 	// object map reads, so every collected record collides (by node id) with a
 	// catalog-seeded record that addCatalog adds first. Wiring it here means the whole
 	// object-map suite exercises that merge path — without it no test reproduced the
@@ -135,7 +135,7 @@ func objectMapCatalogService(t *testing.T, shared informers.SharedInformerFactor
 }
 
 // fakeObjectMapIngestSource projects the ingest-owned kinds' object-map nodes from
-// the started shared informer cache, exactly as a production ingest reflector would
+// the test's started informer cache, exactly as a production ingest reflector would
 // (same collector Status/ActionFacts + same ObjectMapEdges). It lets the object-map
 // tests exercise the cut path without standing up a real reflector.
 type fakeObjectMapIngestSource struct {
@@ -273,10 +273,10 @@ func TestObjectMapBuildDoesNotListHPAFromKubernetes(t *testing.T) {
 
 	_, err := builder.Build(ctx, "default:apps/v1:Deployment:web?maxNodes=100")
 	require.NoError(t, err)
-	require.Equal(t, before, countActionsWithVerb(client.Actions(), "list"), "object-map builds must read the existing HPA informer cache")
+	require.Equal(t, before, countActionsWithVerb(client.Actions(), "list"), "object-map builds must read HPAs from the feed, never LIST them")
 }
 
-func TestObjectMapBuildsPrimaryV2HPASeedFromV2Informer(t *testing.T) {
+func TestObjectMapBuildsPrimaryV2HPASeedFromV2Feed(t *testing.T) {
 	client := fake.NewSimpleClientset(objectMapFixtureObjects()...)
 	builder := newObjectMapTestBuilder(t, client)
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
@@ -287,7 +287,7 @@ func TestObjectMapBuildsPrimaryV2HPASeedFromV2Informer(t *testing.T) {
 	assertEdge(t, payload, "HorizontalPodAutoscaler", "web", "Deployment", "web", "scales")
 }
 
-func TestObjectMapPreservesV2HPAConditionStatusFromInformer(t *testing.T) {
+func TestObjectMapPreservesV2HPAConditionStatusFromFeed(t *testing.T) {
 	client := fake.NewSimpleClientset(
 		deploymentFixture("default", "web", "deploy-uid", "", ""),
 		&autoscalingv2.HorizontalPodAutoscaler{
@@ -390,9 +390,9 @@ func TestObjectMapEnforcesVersionedSeedScope(t *testing.T) {
 	}
 }
 
-// Typed specs are now sourced from the shared informer caches, so object-map no
-// longer hard-fails on a transient typed-list error — like every other
-// lister-backed domain it serves whatever the cache holds. Resources the user
+// Typed specs come from the feed, so object-map does not hard-fail on a
+// transient typed-list error — like every other feed-backed domain it serves
+// whatever the store holds. Resources the user
 // cannot list are skipped via the CanListWatch permission gate (below) rather
 // than via a per-build list error.
 func TestObjectMapSkipsResourceWithoutPermission(t *testing.T) {

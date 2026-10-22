@@ -32,8 +32,7 @@ func unreachableKube(t *testing.T) kubernetes.Interface {
 // TestIngestManagerDegradesUnsyncedStoreAfterDeadline pins the readiness contract that
 // keeps a single never-syncing cut kind from blocking the whole subsystem: HasSynced()
 // must report settled once the sync deadline passes, even though no store ever synced,
-// so refresh.Manager.Start stops blocking on waitForIngestSynced (and the metrics
-// poller it gates can start). Mirrors the informer factory's stateSettled (issue #225).
+// so the whole-feed readiness gate opens (issue #225).
 func TestIngestManagerDegradesUnsyncedStoreAfterDeadline(t *testing.T) {
 	mgr := NewIngestManager(testMeta, unreachableKube(t), nil, nil)
 	if len(mgr.entries) == 0 {
@@ -64,8 +63,7 @@ func TestIngestManagerDegradesUnsyncedStoreAfterDeadline(t *testing.T) {
 // permission filter denies must be skipped at Start — its reflector is never launched,
 // and it is excluded from the readiness gate IMMEDIATELY (settled-as-skipped), not after
 // the sync deadline. Without this, a denied kind's reflector 403-retries forever and the
-// whole subsystem waits out the deadline before it can come up. Mirrors the informer
-// factory's permission-skip (factory.go CanListWatch gate). The deadline here is set very
+// whole subsystem waits out the deadline before it can come up. The deadline here is set very
 // long so the only way the denied kind can be settled is via the skip, not a degrade.
 func TestIngestManagerSkipsDeniedKindsAtStart(t *testing.T) {
 	mgr := NewIngestManager(testMeta, unreachableKube(t), nil, nil)

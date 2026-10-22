@@ -399,7 +399,7 @@ func TestManualRefreshRejectsCrossOriginPreflight(t *testing.T) {
 
 func TestTelemetrySummary(t *testing.T) {
 	recorder := telemetry.NewRecorder()
-	recorder.RecordSnapshot(telemetry.SnapshotRecord{Domain: "nodes", Scope: "", ClusterID: "test-cluster", ClusterName: "test", Duration: 50 * time.Millisecond, Err: nil, Truncated: false, TotalItems: 0, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: 50, InformerSyncWaitMs: 0})
+	recorder.RecordSnapshot(telemetry.SnapshotRecord{Domain: "nodes", Scope: "", ClusterID: "test-cluster", ClusterName: "test", Duration: 50 * time.Millisecond, Err: nil, Truncated: false, TotalItems: 0, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: 50, SyncWaitMs: 0})
 	recorder.RecordMetrics(25*time.Millisecond, time.Now(), nil, 0, true)
 
 	svc := snapshotService()
@@ -571,7 +571,7 @@ func TestSnapshotEndpointAnswersWithFailureStatus(t *testing.T) {
 		},
 		{
 			name:       "unclassified failure",
-			err:        errors.New("informer exploded"),
+			err:        errors.New("watch exploded"),
 			wantCode:   http.StatusInternalServerError,
 			wantReason: errorstatus.ReasonUnknown,
 		},

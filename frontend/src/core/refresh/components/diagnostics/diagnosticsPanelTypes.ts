@@ -32,7 +32,7 @@ export interface DiagnosticsRow {
   lastUpdatedTooltip: string;
   telemetryTooltip?: string;
   duration?: string;
-  // Formatted peak informer-sync-gate wait (initial-LIST gating cost) for this
+  // Formatted peak feed-sync-gate wait (initial-LIST gating cost) for this
   // domain; '—' / undefined when no wait was recorded.
   syncWait?: string;
   telemetrySuccess?: number;

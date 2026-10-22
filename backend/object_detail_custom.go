@@ -13,7 +13,7 @@ import (
 )
 
 // Custom enrichments use the discovered GVR and the live GET authorization on
-// every request. They do not enter the informer-invalidated built-in detail cache.
+// every request. They do not enter the feed-invalidated built-in detail cache.
 func (p *objectDetailProvider) fetchDiscoveredResourceDetails(ctx context.Context, resolved resolvedObjectDetailContext, gvk schema.GroupVersionKind, namespace, name string) (snapshot.ObjectDetail, error) {
 	if !resolved.scoped {
 		return snapshot.ObjectDetail{}, fmt.Errorf("cluster scope is required")

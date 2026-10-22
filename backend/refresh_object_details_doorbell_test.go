@@ -97,7 +97,7 @@ func newDetailsSignalSubsystem(t *testing.T) (*workspaceCoordinatorTestFixture, 
 	return app, clusterID, subsystem
 }
 
-// Only Kubernetes clients are fake: subsystem construction, informers, ingest
+// Only Kubernetes clients are fake: subsystem construction, reflectors, ingest
 // stores and sinks, response-cache eviction, and the outbound doorbell are the
 // production path. Ingest-owned kinds are written to their stores directly, as
 // their reflectors would.

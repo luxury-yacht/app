@@ -9,7 +9,7 @@
  * resync, so without this heal those rows would keep the unresolved owner until
  * the pod's next watch event — leaving the Deployment's workload-scoped pods
  * query empty and its doorbell silent. The resource-stream manager applies the
- * heal from the ReplicaSet informer's event handler via
+ * heal from the ReplicaSet store's bundle sink via
  * ProjectingStore.RewriteBundlesByIndex.
  *
  * The rewrite mirrors, field for field, what a fresh projection with a synced

@@ -2,7 +2,6 @@ package testsupport
 
 import (
 	"github.com/luxury-yacht/app/backend/resources/common"
-	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -13,17 +12,13 @@ import (
 type DependenciesOption func(*dependenciesBuilder)
 
 type dependenciesBuilder struct {
-	logger              common.Logger
-	kubeClient          kubernetes.Interface
-	metricsClient       metricsclient.Interface
-	setMetrics          func(metricsclient.Interface)
-	dynamicClient       dynamic.Interface
-	apiExtClient        apiextensionsclientset.Interface
-	restConfig          *rest.Config
-	ensureClient        common.EnsureClientFunc
-	ensureAPIExtensions common.EnsureAPIExtensionsFunc
-	selectedKubeconfig  string
-	selectedContext     string
+	logger        common.Logger
+	kubeClient    kubernetes.Interface
+	metricsClient metricsclient.Interface
+	setMetrics    func(metricsclient.Interface)
+	dynamicClient dynamic.Interface
+	restConfig    *rest.Config
+	ensureClient  common.EnsureClientFunc
 }
 
 // WithDepsLogger sets the logger used by resource services.
@@ -61,13 +56,6 @@ func WithDepsDynamicClient(client dynamic.Interface) DependenciesOption {
 	}
 }
 
-// WithDepsAPIExtensions injects the apiextensions client.
-func WithDepsAPIExtensions(client apiextensionsclientset.Interface) DependenciesOption {
-	return func(b *dependenciesBuilder) {
-		b.apiExtClient = client
-	}
-}
-
 // WithDepsRestConfig sets the REST config.
 func WithDepsRestConfig(config *rest.Config) DependenciesOption {
 	return func(b *dependenciesBuilder) {
@@ -82,21 +70,6 @@ func WithDepsEnsureClient(fn common.EnsureClientFunc) DependenciesOption {
 	}
 }
 
-// WithDepsEnsureAPIExtensions overrides the API extensions ensure callback.
-func WithDepsEnsureAPIExtensions(fn common.EnsureAPIExtensionsFunc) DependenciesOption {
-	return func(b *dependenciesBuilder) {
-		b.ensureAPIExtensions = fn
-	}
-}
-
-// WithDepsSelection seeds the kubeconfig/context selection metadata.
-func WithDepsSelection(configPath, contextName string) DependenciesOption {
-	return func(b *dependenciesBuilder) {
-		b.selectedKubeconfig = configPath
-		b.selectedContext = contextName
-	}
-}
-
 // NewResourceDependencies returns a fully-populated Dependencies bundle suitable for resource services.
 func NewResourceDependencies(opts ...DependenciesOption) common.Dependencies {
 	builder := dependenciesBuilder{
@@ -104,9 +77,6 @@ func NewResourceDependencies(opts ...DependenciesOption) common.Dependencies {
 			// The default test dependency does not retain a metrics client.
 		},
 		ensureClient: func(string) error { return nil },
-		ensureAPIExtensions: func(string) error {
-			return nil
-		},
 	}
 	for _, opt := range opts {
 		opt(&builder)
@@ -118,11 +88,8 @@ func NewResourceDependencies(opts ...DependenciesOption) common.Dependencies {
 		MetricsClient:       builder.metricsClient,
 		SetMetricsClient:    builder.setMetrics,
 		DynamicClient:       builder.dynamicClient,
-		APIExtensionsClient: builder.apiExtClient,
 		RestConfig:          builder.restConfig,
 		EnsureClient:        builder.ensureClient,
-		EnsureAPIExtensions: builder.ensureAPIExtensions,
-		SelectedKubeconfig:  builder.selectedKubeconfig,
-		SelectedContext:     builder.selectedContext,
+		EnsureAPIExtensions: func(string) error { return nil },
 	}
 }

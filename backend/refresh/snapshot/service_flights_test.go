@@ -196,9 +196,9 @@ func TestServiceCancelInFlightStopsReadinessWaitAndAllowsFreshBuild(t *testing.T
 			return &refresh.Snapshot{Domain: "readiness-build", Scope: scope}, nil
 		},
 	}))
-	hub := &fakeInformerHub{}
-	service := NewServiceWithPermissions(registry, nil, testClusterMeta(), nil).WithInformerHub(hub)
-	service.informerSyncTimeout = 5 * time.Second
+	hub := &fakeFeedHub{}
+	service := NewServiceWithPermissions(registry, nil, testClusterMeta(), nil).WithFeedHub(hub)
+	service.syncTimeout = 5 * time.Second
 
 	firstResult := make(chan snapshotBuildResult, 1)
 	go func() {

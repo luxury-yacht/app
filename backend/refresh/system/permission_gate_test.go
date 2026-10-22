@@ -57,13 +57,13 @@ func TestRegisterListWatchDomainFallbackAllowAnyRegistersOnSingleAllowedResource
 		nil,
 	)
 
-	informerRegistered := false
+	listWatchRegistered := false
 	fallbackRegistered := false
 	err := gate.registerListWatchDomain(context.Background(), listWatchDomainConfig{
 		name:   "test-overview",
 		checks: []listWatchCheck{{group: "", resource: "namespaces"}},
-		registerInformer: func() error {
-			informerRegistered = true
+		registerListWatch: func() error {
+			listWatchRegistered = true
 			return nil
 		},
 		fallbackChecks: []listCheck{
@@ -80,7 +80,7 @@ func TestRegisterListWatchDomainFallbackAllowAnyRegistersOnSingleAllowedResource
 	})
 
 	require.NoError(t, err)
-	require.False(t, informerRegistered)
+	require.False(t, listWatchRegistered)
 	require.True(t, fallbackRegistered, "one allowed fallback resource must be enough with fallbackAllowAny")
 	require.False(t, registry.IsPermissionDenied("test-overview"))
 }
@@ -97,7 +97,7 @@ func TestRegisterListWatchDomainFallbackAllowAnyToleratesOtherResourceErrors(t *
 	err := gate.registerListWatchDomain(context.Background(), listWatchDomainConfig{
 		name:   "test-overview",
 		checks: []listWatchCheck{{group: "", resource: "namespaces"}},
-		registerInformer: func() error {
+		registerListWatch: func() error {
 			return nil
 		},
 		fallbackChecks: []listCheck{
@@ -126,7 +126,7 @@ func TestRegisterListWatchDomainFallbackAllowAnyDeniesWhenNothingAllowed(t *test
 	err := gate.registerListWatchDomain(context.Background(), listWatchDomainConfig{
 		name:   "test-overview",
 		checks: []listWatchCheck{{group: "", resource: "namespaces"}},
-		registerInformer: func() error {
+		registerListWatch: func() error {
 			return nil
 		},
 		fallbackChecks: []listCheck{
@@ -181,7 +181,7 @@ func TestRegisterListWatchDomainFallbackDefaultStillRequiresAllResources(t *test
 	err := gate.registerListWatchDomain(context.Background(), listWatchDomainConfig{
 		name:   "test-nodes",
 		checks: []listWatchCheck{{group: "", resource: "nodes"}, {group: "", resource: "pods"}},
-		registerInformer: func() error {
+		registerListWatch: func() error {
 			return nil
 		},
 		fallbackChecks: []listCheck{

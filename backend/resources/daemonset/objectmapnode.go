@@ -8,8 +8,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ObjectMapNode declares how the object map collects this kind from the shared
-// informer cache and projects each object into a graph node.
+// ObjectMapNode declares how this kind's owned reflector projects each object
+// into an object-map graph node at intake.
 var ObjectMapNode = objectmapnode.Collector{
 	Identity: Identity,
 	Status: func(clusterID string, obj metav1.Object) *objectmap.Status {

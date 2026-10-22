@@ -5,7 +5,7 @@ package system
 // docs/architecture/data-layer.md, "Lifecycle & governor").
 //
 //   - Foreground: the cluster the user is viewing — full ingestion.
-//   - Background: recently-viewed, kept warm with informers live, up to a small
+//   - Background: recently-viewed, kept warm with reflectors live, up to a small
 //     LRU budget so a tab-switch back is instant.
 //
 // Metrics demand is independent of governor tier and follows active frontend

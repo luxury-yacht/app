@@ -12,7 +12,7 @@ import (
 // rollout) into one doorbell per window for every Events doorbell.
 const eventDoorbellDebounce = 500 * time.Millisecond
 
-// changeKeyDebouncer coalesces change keys recorded from informer goroutines
+// changeKeyDebouncer coalesces change keys recorded from reflector goroutines
 // into one ring per debounce window. Its timer is a generation callback, so
 // stopping the cluster generation cancels a pending flush and waits for a
 // running one.

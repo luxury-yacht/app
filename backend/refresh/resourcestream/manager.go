@@ -132,7 +132,7 @@ func (s *subscription) markResyncing() bool {
 	return atomic.CompareAndSwapUint32(&s.resyncing, 0, 1)
 }
 
-// Manager fans out informer updates to named-stream subscribers.
+// Manager fans out feed updates to named-stream subscribers.
 type Manager struct {
 	clusterMeta snapshot.ClusterMeta
 	logger      containerlogsstream.Logger

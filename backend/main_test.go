@@ -15,7 +15,7 @@ func TestMain(m *testing.M) {
 		// The subprocess models an external helper writing directly to stderr.
 		os.Exit(m.Run())
 	}
-	// Production installs these before any Kubernetes client or informer can
+	// Production installs these before any Kubernetes client or reflector can
 	// start. Mirror that process boundary for tests so a later startup test never
 	// replaces stderr while another test's background reflector is logging.
 	errorcapture.Init()

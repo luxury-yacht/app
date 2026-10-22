@@ -810,7 +810,7 @@ const buildDomainTelemetryDetails = (params: {
     telemetrySuccess: telemetryInfo?.successCount,
     telemetryFailure: telemetryInfo?.failureCount,
     durationLabel: formatTelemetryMilliseconds(telemetryInfo?.lastDurationMs),
-    syncWaitLabel: formatTelemetryMilliseconds(telemetryInfo?.maxInformerSyncWaitMs),
+    syncWaitLabel: formatTelemetryMilliseconds(telemetryInfo?.maxSyncWaitMs),
     streamHealth,
     streamActive: resolveStreamActive(isResourceStreamDomain, streamTelemetry, streamHealth),
     streamHealthy: streamHealth?.status === 'healthy',

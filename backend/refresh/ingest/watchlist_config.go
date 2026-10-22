@@ -1,4 +1,4 @@
-package informer
+package ingest
 
 import (
 	"fmt"
@@ -14,16 +14,16 @@ type clientFeatureGateSetter interface {
 
 var logWatchListDisabled sync.Once
 
-// DisableWatchList restores the classic informer startup sequence: one complete
+// DisableWatchList restores the classic reflector startup sequence: one complete
 // LIST followed by the long-lived WATCH. It must run before reflectors are
 // constructed. Set is used instead of the environment variable because
 // client-go may cache all feature-gate environment values while constructing
 // the Kubernetes client, before the refresh subsystem exists.
 func DisableWatchList() error {
-	return disableWatchList(clientfeatures.FeatureGates())
+	return disableWatchListGate(clientfeatures.FeatureGates())
 }
 
-func disableWatchList(gates clientfeatures.Gates) error {
+func disableWatchListGate(gates clientfeatures.Gates) error {
 	setter, ok := gates.(clientFeatureGateSetter)
 	if !ok {
 		return fmt.Errorf("client-go feature gates %T cannot disable %s", gates, clientfeatures.WatchListClient)
@@ -35,7 +35,7 @@ func disableWatchList(gates clientfeatures.Gates) error {
 		return fmt.Errorf("client-go %s remained enabled after override", clientfeatures.WatchListClient)
 	}
 	logWatchListDisabled.Do(func() {
-		klog.Infof("WatchListClient override applied: disabled — using LIST followed by WATCH for informer startup")
+		klog.Infof("WatchListClient override applied: disabled — using LIST followed by WATCH for reflector startup")
 	})
 	return nil
 }

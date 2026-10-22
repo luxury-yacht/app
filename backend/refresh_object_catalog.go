@@ -154,7 +154,7 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 	if target.meta.ID == "" {
 		return fmt.Errorf("cluster identifier missing")
 	}
-	// Cold clusters deliberately have no live informer/ingest producers. Starting
+	// Cold clusters deliberately have no live ingest producers. Starting
 	// their catalogs would run discovery and capability checks, then repeatedly try
 	// to collect from stores whose feeds the governor intentionally stopped.
 	if a.governorKeepsClusterCold(target.meta.ID) {
@@ -230,8 +230,8 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 			close(done)
 		}()
 		// No cache wait here: the service starts immediately so discovery and the
-		// RBAC preflight overlap the informer factory's initial sync; sync() itself
-		// waits for its sources just before the collect (deps.InformerReadiness above).
+		// RBAC preflight overlap the reflectors' initial sync; sync() itself waits for
+		// its ingest sources just before the collect.
 		if err := svc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			a.logger.Warn(fmt.Sprintf("Object catalog terminated unexpectedly: %v", err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 		}

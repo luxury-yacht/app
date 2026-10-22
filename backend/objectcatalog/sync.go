@@ -537,7 +537,7 @@ func (run *catalogSync) waitForCaches(ctx context.Context) error {
 	}
 	waitTimer := time.NewTimer(run.service.opts.SourceSyncWaitTimeout)
 	defer waitTimer.Stop()
-	ticker := time.NewTicker(config.RefreshInformerSyncPollInterval)
+	ticker := time.NewTicker(config.RefreshSyncPollInterval)
 	defer ticker.Stop()
 	for {
 		select {

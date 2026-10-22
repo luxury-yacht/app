@@ -83,8 +83,7 @@ type ClusterOverviewBuilder struct {
 }
 
 // workloadIngestCount returns the number of projected catalog rows in the cut workload
-// kind's ingest store, or 0 when the store has not synced yet (the ingest equivalent of the
-// prior informerSynced gate) or no ingest source is wired (a unit test / list fallback).
+// kind's ingest store, or 0 when the store has not synced yet or no ingest source is wired (a unit test / list fallback).
 func (b *ClusterOverviewBuilder) workloadIngestCount(gvr schema.GroupVersionResource) int {
 	if b.ingest == nil || !b.ingest.HasSyncedFor(gvr) {
 		return 0
@@ -205,8 +204,8 @@ type RecentEvent struct {
 
 // RegisterClusterOverviewDomain wires the cluster-overview domain into the registry.
 // Pods is cut to the ingest path: the per-pod aggregation reads the projected
-// PodAggregate rows from the ingest manager instead of a typed pod lister, so the pod
-// informer is never instantiated. ingestManager may be nil in a unit test, in which
+// PodAggregate rows from the ingest manager instead of a typed pod lister, so no typed
+// pod is kept. ingestManager may be nil in a unit test, in which
 // case no pods are aggregated.
 func RegisterClusterOverviewDomain(
 	reg *domain.Registry,
@@ -248,7 +247,7 @@ type ClusterOverviewListBuilder struct {
 	serverHost string
 }
 
-// RegisterClusterOverviewDomainList registers a list-based fallback builder when informers are unavailable.
+// RegisterClusterOverviewDomainList registers a list-based fallback builder when list+watch is denied.
 func RegisterClusterOverviewDomainList(reg *domain.Registry, client kubernetes.Interface, provider metrics.Provider, serverHost string) error {
 	if reg == nil {
 		return fmt.Errorf("cluster overview: registry is nil")
@@ -691,14 +690,14 @@ func clusterOverviewMetricsSnapshot(meta metrics.Metadata) ClusterOverviewMetric
 	return snapshot
 }
 
-func (b *ClusterOverviewBuilder) waitForInformerSync(ctx context.Context) error {
+func (b *ClusterOverviewBuilder) waitForIngestSync(ctx context.Context) error {
 	if len(b.requiredIngestGVRs) == 0 {
 		return nil
 	}
 	if b.synced.Load() == 1 {
 		return nil
 	}
-	ticker := time.NewTicker(config.RefreshInformerSyncPollInterval)
+	ticker := time.NewTicker(config.RefreshSyncPollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -910,7 +909,7 @@ func (a *clusterOverviewAccumulator) applyExtras(extras clusterOverviewExtras) {
 
 // Build assembles the overview from ready, permitted sources.
 func (b *ClusterOverviewBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	if err := b.waitForInformerSync(ctx); err != nil {
+	if err := b.waitForIngestSync(ctx); err != nil {
 		return nil, err
 	}
 	availability := b.clusterOverviewAvailability(ctx)
@@ -920,9 +919,8 @@ func (b *ClusterOverviewBuilder) Build(ctx context.Context, scope string) (*refr
 	}
 
 	// Nodes are cut to the ingest path: the per-node overview facts come from the projected
-	// node store, gated on the store having synced (the ingest equivalent of the prior node
-	// informer HasSynced gate, so an unsynced store contributes no nodes rather than a partial
-	// count; a permission-skipped store settles empty). Pods likewise come from the ingest
+	// node store, gated on the store having synced (an unsynced store contributes no nodes
+	// rather than a partial count; a permission-skipped store settles empty). Pods likewise come from the ingest
 	// store: the projected PodAggregate rows plus the store's latest RV as the pod version
 	// watermark. A runtime-denied source is dropped even when its store still holds rows.
 	nodeFacts := b.clusterOverviewNodeFacts(availability.nodes)

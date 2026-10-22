@@ -161,7 +161,7 @@ func newApplicationLifecycle(
 // windows start. Interactive startup waits for WindowRuntimeReady.
 func (a *ApplicationLifecycle) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	// Process-global Kubernetes logging must be installed before any owner can
-	// start a client or informer. Both installers are idempotent.
+	// start a client or reflector. Both installers are idempotent.
 	errorcapture.Init()
 	errorcapture.InstallUnhandledErrorDedup()
 	a.cleanupStaleAppStateWrites()

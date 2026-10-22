@@ -12,7 +12,7 @@ permission gate, or streamed table registration. Contract rules live in
 | Selection changes and subsystem swaps | `backend/refresh_update.go`, `backend/refresh_subsystems.go` |
 | Teardown and auth recovery | `backend/refresh_recovery.go` |
 | Domain registration | `domainRegistrations()` in `backend/refresh/system/registrations.go` (dependencies set order) |
-| Informers | `backend/refresh/informer/factory.go` |
+| Owned reflectors (feed) | `backend/refresh/ingest/manager.go`; readiness hub in `backend/refresh/system/ingest_hub.go` |
 | Snapshot builders | `backend/refresh/snapshot` |
 | Per-cluster streams; aggregate routing | `backend/refresh/system/streams.go`; `backend/refresh_setup.go` |
 | Handler publication | `backend/refresh_transport.go`; `internal/bootstrap` registers streams before the sole Wails service |

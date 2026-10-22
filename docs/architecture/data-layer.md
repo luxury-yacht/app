@@ -10,9 +10,9 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
 - **Store + query engine:** `backend/refresh/querypage/` (owned columnar
   `Store[R]` and the `Query → Page` engine).
 - **Ingestion:** `backend/refresh/ingest/` (owned-reflector LIST+WATCH with
-  projection at intake) for every built-in kind; `backend/refresh/informer/`
-  (permission checks, projection transform, startup transport policy; it
-  caches no objects).
+  projection at intake, the managed-fields transform, and the startup transport
+  policy) for every built-in kind; `backend/refresh/permissions/` (list/watch
+  grants).
 - **Serve + maintained stores:** `backend/refresh/snapshot/querypage_typed.go`
   (`resolveTypedSnapshotPageViaStore`, `resolveMaintainedDirect`,
   `typedMaintainedStore`); `backend/objectcatalog/` for Browse.
@@ -70,18 +70,18 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
 - **Project at intake.** `ingest.IngestManager` (`ingest/manager.go`) runs
   client-go reflectors for List/Watch/relist/RV handling and feeds a
   `ProjectingStore` (`ingest/projecting_store.go`) that keeps only the projected
-  bundle. `informer.StripManagedFields` (`informer/projection.go`, a
-  `WithTransform` on every factory) drops `managedFields` before any cache; it
-  is the main memory lever.
+  bundle. `stripManagedFields` (`ingest/managed_fields.go`, applied by every
+  projecting store before its projector) drops `managedFields` before
+  projection; it is the main memory lever.
 - **Locking:** `IngestManager.mu` is a leaf lock that guards only the entries
   map and is never held across a store call; sink delivery runs under the
   store write lock.
-- **LIST+WATCH is the startup transport.** `informer/watchlist_config.go`
+- **LIST+WATCH is the startup transport.** `ingest/watchlist_config.go`
   disables client-go's beta WatchList gate before reflectors are built. A
   capability probe is insufficient: a proxy can deliver the terminal bookmark
   while streaming a large initial collection too slowly for an interactive app.
 - **Sync deadline is liveness only.** A per-GVR deadline
-  (`informer/factory.go`) degrades a hung GVR instead of wedging the cluster;
+  (`IngestManager.entrySettled`) degrades a hung GVR instead of wedging the cluster;
   until the source completes a real initial list, dependent snapshots report
   partial/inexact data with a syncing issue, never an authoritative empty
   result.

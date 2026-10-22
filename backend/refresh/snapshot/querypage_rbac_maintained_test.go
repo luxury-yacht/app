@@ -57,7 +57,7 @@ func rbacDescriptor(t *testing.T, resource string) streamspec.Descriptor {
 	return streamspec.Descriptor{}
 }
 
-// TestRBACMaintainedStoreIngestion proves the informer-fed store reflects
+// TestRBACMaintainedStoreIngestion proves the reflector-fed store reflects
 // Add/Update/Delete (incl. tombstone), tracks the max resourceVersion, and projects
 // rows identically to a direct BuildStreamSummary.
 func TestRBACMaintainedStoreIngestion(t *testing.T) {

@@ -1,7 +1,7 @@
 /*
  * backend/objectcatalog/collect.go
  *
- * Catalog collection and informer integration.
+ * Catalog collection and owned-reflector integration.
  */
 
 package objectcatalog
@@ -262,7 +262,7 @@ func (s *Service) namespaceWorkerLimit(targetCount int) int {
 // maybePromote retains the existing threshold policy for dynamic resources whose
 // CRD definition is not visible. Confirmed CRDs are admitted independently of count.
 func (s *Service) maybePromote(desc Descriptor, itemCount int) {
-	if s.opts.InformerPromotionThreshold <= 0 || itemCount < s.opts.InformerPromotionThreshold {
+	if s.opts.ReflectorPromotionThreshold <= 0 || itemCount < s.opts.ReflectorPromotionThreshold {
 		return
 	}
 	source := s.deps.IngestSource
@@ -291,7 +291,7 @@ func (s *Service) buildSummary(desc Descriptor, item metav1.Object) Summary {
 // Service's buildSummary delegates here so the same projection serves both the
 // live collect path and the ingest Catalog-half projector (SummaryProjector), which
 // runs before any Service exists. Keeping it one function guarantees the ingest
-// path's Summaries are byte-identical to the shared-informer collect path's.
+// path's Summaries are byte-identical to the paged LIST collect path's.
 func summaryFromObject(clusterID string, desc Descriptor, item metav1.Object) Summary {
 	creationTimestamp := ""
 	if ts := item.GetCreationTimestamp(); !ts.IsZero() {

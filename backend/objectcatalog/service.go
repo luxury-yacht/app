@@ -97,8 +97,8 @@ type Service struct {
 
 	startOnce sync.Once
 	doneCh    chan struct{}
-	// sourceSyncTimeoutWarnOnce prevents a permanently unsettled informer factory
-	// or ingest manager from repeating the same warning on every catalog resync.
+	// sourceSyncTimeoutWarnOnce prevents a permanently unsettled ingest manager
+	// from repeating the same warning on every catalog resync.
 	sourceSyncTimeoutWarnOnce sync.Once
 
 	now func() time.Time
@@ -140,18 +140,18 @@ func NewService(deps Dependencies, opts *Options) *Service {
 
 func defaultServiceOptions() Options {
 	return Options{
-		ResyncInterval:             config.ObjectCatalogResyncInterval,
-		FailedSyncRetryInterval:    config.ObjectCatalogFailedSyncRetryInterval,
-		SourceSyncWaitTimeout:      config.RefreshInformerSyncDeadline,
-		ListRequestTimeout:         config.ResourceFetchCallTimeout,
-		PageSize:                   config.ObjectCatalogPageSize,
-		ListWorkers:                adjustedListWorkers(),
-		NamespaceWorkers:           config.ObjectCatalogNamespaceWorkers,
-		InformerPromotionThreshold: config.ObjectCatalogInformerPromotionThreshold,
-		EvictionTTL:                config.ObjectCatalogEvictionTTL,
-		StreamingBatchSize:         config.ObjectCatalogStreamingBatchSize,
-		StreamingFlushInterval:     config.ObjectCatalogStreamingFlushInterval,
-		EnableReactiveUpdates:      true,
+		ResyncInterval:              config.ObjectCatalogResyncInterval,
+		FailedSyncRetryInterval:     config.ObjectCatalogFailedSyncRetryInterval,
+		SourceSyncWaitTimeout:       config.RefreshSyncDeadline,
+		ListRequestTimeout:          config.ResourceFetchCallTimeout,
+		PageSize:                    config.ObjectCatalogPageSize,
+		ListWorkers:                 adjustedListWorkers(),
+		NamespaceWorkers:            config.ObjectCatalogNamespaceWorkers,
+		ReflectorPromotionThreshold: config.ObjectCatalogReflectorPromotionThreshold,
+		EvictionTTL:                 config.ObjectCatalogEvictionTTL,
+		StreamingBatchSize:          config.ObjectCatalogStreamingBatchSize,
+		StreamingFlushInterval:      config.ObjectCatalogStreamingFlushInterval,
+		EnableReactiveUpdates:       true,
 	}
 }
 
@@ -166,7 +166,7 @@ func applyServiceOptions(target, source *Options) {
 	applyPositiveInt(&target.PageSize, source.PageSize)
 	applyPositiveInt(&target.ListWorkers, source.ListWorkers)
 	applyPositiveInt(&target.NamespaceWorkers, source.NamespaceWorkers)
-	applyPositiveInt(&target.InformerPromotionThreshold, source.InformerPromotionThreshold)
+	applyPositiveInt(&target.ReflectorPromotionThreshold, source.ReflectorPromotionThreshold)
 	applyPositiveDuration(&target.EvictionTTL, source.EvictionTTL)
 	applyPositiveInt(&target.StreamingBatchSize, source.StreamingBatchSize)
 	applyPositiveDuration(&target.StreamingFlushInterval, source.StreamingFlushInterval)

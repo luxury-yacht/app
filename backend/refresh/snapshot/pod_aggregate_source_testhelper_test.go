@@ -245,7 +245,7 @@ func (s fakePodAggregateSource) withNodes(meta ClusterMeta, nodeRV string, nodes
 }
 
 // newFakePodAggregateSource projects the supplied typed pods to PodAggregate rows the
-// same way the pod ingest projector does, so a domain test feeds the informer-backed
+// same way the pod ingest projector does, so a domain test feeds the feed-backed
 // builder exactly the rows ingest would supply for those pods. rsLister resolves the
 // metrics-bucketing WorkloadKind (pass nil for domains that never read it).
 func newFakePodAggregateSource(rsLister appslisters.ReplicaSetLister, pods ...*corev1.Pod) fakePodAggregateSource {

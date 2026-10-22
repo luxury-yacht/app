@@ -34,7 +34,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/doorbell"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
@@ -110,11 +109,11 @@ type Subsystem struct {
 	// app_refresh_setup) once the aggregate service exists.
 	NamespacesDoorbell *NamespacesDoorbellObserver
 
-	// Cooled marks a subsystem in the governor's Cold-tier SERVING state: its informers,
+	// Cooled marks a subsystem in the governor's Cold-tier SERVING state: its reflectors,
 	// metrics poller, and permission revalidation are stopped (heap reclaimed) and its
 	// maintained stores have been swapped to off-heap mmap-backed columns, but it stays
 	// registered and serves Build queries from those stores (its SnapshotService runs a
-	// cooled, always-settled informer hub). A cooled subsystem is non-nil but NOT live:
+	// cooled, always-settled feed hub). A cooled subsystem is non-nil but NOT live:
 	// the governor re-warm path detects this and rebuilds a fresh, live subsystem.
 	Cooled bool
 
@@ -240,7 +239,7 @@ func newPermissionInfrastructure(cfg Config) (*permissions.Checker, *permissions
 	if len(cfg.AllowedNamespaces) > 0 {
 		runtimePerms.SetScope(cfg.AllowedNamespaces, scopedResourcePredicate())
 	}
-	if err := informer.DisableWatchList(); err != nil {
+	if err := ingest.DisableWatchList(); err != nil {
 		return nil, nil, fmt.Errorf("configure reflector startup transport: %w", err)
 	}
 	return runtimePerms, permissions.NewGrants(runtimePerms), nil
@@ -401,7 +400,7 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 		clusterMeta,
 		runtimePerms,
 	).WithLogger(applog.ClusterScoped(cfg.Logger, cfg.ClusterID, cfg.ClusterName)).
-		WithInformerHub(hub)
+		WithFeedHub(hub)
 	containerLogsHandler, resourceManager, err := registerStreamHandlers(streamDeps{
 		cfg:         cfg,
 		telemetry:   telemetryRecorder,
@@ -571,11 +570,11 @@ func ingestPermissionFilter(checker *permissions.Checker) func(group, resource, 
 }
 
 // HealthHandler returns an HTTP handler compatible with /healthz/refresh.
-func HealthHandler(hub refresh.InformerHub) http.HandlerFunc {
+func HealthHandler(hub refresh.FeedHub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if hub == nil || !hub.HasSynced(r.Context()) {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("informers not yet synced"))
+			_, _ = w.Write([]byte("owned reflectors not yet synced"))
 			return
 		}
 		w.WriteHeader(http.StatusOK)

@@ -5,7 +5,7 @@
  * ProjectingStore + client-go reflector per built-in kind, holding ONLY
  * projected bundles, never the typed object. It is generic over the kind registry:
  * it loops kindregistry.StreamDescriptors(), and the only per-group code is the
- * finite group/version -> RESTClient mapping every typed informer needs anyway.
+ * finite group/version -> RESTClient mapping every typed client needs anyway.
  *
  * Runtime-discovered sources use the same projected stores and permission-filtered
  * partitions. CRD reconciliation and threshold admission for other dynamic APIs
@@ -33,7 +33,6 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
 
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apiextensionsscheme "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/scheme"
@@ -120,8 +119,7 @@ type entry struct {
 	// degraded latches true when this kind's store has not synced within the manager's
 	// sync deadline, so a single never-syncing reflector (RBAC denial, hung initial LIST,
 	// projection error) is excluded from the readiness gate instead of blocking it
-	// forever — mirroring the informer factory's per-informer degrade (issue #225,
-	// informer/factory.go stateSettled). The reflector keeps retrying LIST+WATCH in the
+	// forever (issue #225). The reflector keeps retrying LIST+WATCH in the
 	// background, so the store still delivers data if it later syncs.
 	degraded atomic.Bool
 
@@ -233,8 +231,8 @@ type IngestManager struct {
 	namespacedGVR map[schema.GroupVersionResource]bool
 }
 
-// NewIngestManager builds an IngestManager for the cluster identified by meta,
-// mirroring the clients the informer factory takes. apiext and gateway may be
+// NewIngestManager builds an IngestManager for the cluster identified by meta.
+// apiext and gateway may be
 // nil; descriptors the cluster cannot serve are skipped (logged once, see
 // sourceFor). It builds — but does not start — a reflector + store per remaining
 // kind. Start runs them.
@@ -255,7 +253,7 @@ func NewIngestManager(
 		apiext:        apiext,
 		gateway:       gateway,
 		entries:       make(map[schema.GroupVersionResource]*entry),
-		syncDeadline:  config.RefreshInformerSyncDeadline,
+		syncDeadline:  config.RefreshSyncDeadline,
 		now:           time.Now,
 		scope:         append([]string(nil), allowedNamespaces...),
 		namespacedGVR: namespaced,
@@ -430,7 +428,7 @@ func catalogProjectionFor(project CatalogProjector) ProjectFunc {
 // cleanup here covers LIST, WatchList, and subsequent watch updates uniformly.
 func newIngestProjectingStore(project ProjectFunc) *ProjectingStore {
 	return NewProjectingStore(func(obj interface{}) (interface{}, error) {
-		transformed, err := informer.StripManagedFields(obj)
+		transformed, err := stripManagedFields(obj)
 		if err != nil {
 			return nil, err
 		}
@@ -477,7 +475,7 @@ func metaObjectOf(obj interface{}) (metav1.Object, error) {
 
 // restClientFor maps a descriptor's API group/version to the matching typed group
 // client's RESTClient. This is the one finite, group-keyed switch the design
-// allows: every typed informer builds its ListWatch from exactly this client.
+// allows: every built-in reflector builds its ListWatch from exactly this client.
 // It returns false when no client is available for the group (e.g. a nil Gateway
 // or apiextensions client), so the caller skips that kind.
 func (m *IngestManager) restClientFor(group, version string) (rest.Interface, bool) {
@@ -833,12 +831,11 @@ func (m *IngestManager) Stop() {
 	m.mu.Unlock()
 }
 
-// HasSynced reports whether every kind's store has SETTLED — synced or degraded past
-// the sync deadline. It is the readiness gate the composite hub blocks on; gating it
-// on raw sync alone let a single never-syncing reflector (RBAC denial, hung initial LIST,
-// projection error) wedge the whole subsystem's readiness — and, because Manager.Start
-// blocks on it before starting the metrics poller, wedge metrics too. The deadline
-// degrade mirrors the informer factory's stateSettled (issue #225).
+// HasSynced reports whether every kind's store has SETTLED — synced, permission-skipped,
+// or degraded past the sync deadline. The feed hub's HasSynced reads it for the health
+// endpoint and the whole-feed snapshot gate; gating it on raw sync alone would let a single
+// never-syncing reflector (RBAC denial, hung initial LIST, projection error) wedge the
+// whole subsystem's readiness (issue #225).
 func (m *IngestManager) HasSynced() bool {
 	for _, e := range m.entriesSnapshot() {
 		if e.onDemand.Load() {
@@ -983,8 +980,7 @@ func (m *IngestManager) AddBundleSink(gvr schema.GroupVersionResource, sink Bund
 }
 
 // AddCatalogSink registers a Catalog-half sink for gvr's store so the object catalog
-// is fed the kind's Summary incrementally as the reflector mutates it, without
-// reading the shared informer. It is a no-op when the manager has no entry for gvr.
+// is fed the kind's Summary incrementally as the reflector mutates it. It is a no-op when the manager has no entry for gvr.
 // It must be called before Start so no mutation is missed. Reports whether an entry
 // was found.
 func (m *IngestManager) AddCatalogSink(gvr schema.GroupVersionResource, sink Sink) bool {

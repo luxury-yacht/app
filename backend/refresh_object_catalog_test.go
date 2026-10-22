@@ -207,11 +207,10 @@ func TestCatalogWaitsForRebuiltIngestStoreBeforeFirstCollection(t *testing.T) {
 		"catalog should complete its first collection after the ingest store syncs")
 }
 
-// The shared factory always starts cluster-wide ReplicaSet, HPA and Event
-// informers. A namespace-only identity is forbidden from all three, so those
-// informers never sync. Catalog startup must still publish the rows the identity
-// can read instead of waiting forever for caches that can never fill.
-func TestCatalogStartsForNamespaceScopedIdentityDeniedClusterWideInformers(t *testing.T) {
+// A namespace-only identity is forbidden from the cluster-wide ReplicaSet, HPA
+// and Event lists. Catalog startup must still publish the rows the identity can
+// read instead of waiting forever for stores that can never fill.
+func TestCatalogStartsForNamespaceScopedIdentityDeniedClusterWideReflectors(t *testing.T) {
 	const namespace = "team-a"
 	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
 	app.Refresh.allowedNamespaces = func(string) ([]string, error) { return []string{namespace}, nil }
@@ -390,7 +389,7 @@ func TestCatalogStopsOnlyWithOwningGeneration(t *testing.T) {
 	select {
 	case <-entry.done:
 	default:
-		t.Fatal("catalog survived retirement of its informer generation")
+		t.Fatal("catalog survived retirement of its feed generation")
 	}
 }
 

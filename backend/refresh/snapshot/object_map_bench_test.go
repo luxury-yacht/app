@@ -45,7 +45,7 @@ const (
 
 // BenchmarkObjectMapBuild times one object-map build per iteration against a
 // synthetic cluster fed from the same sources production reads: ingest
-// projections for ingest-owned kinds, informer caches for ReplicaSets and HPAs,
+// projections for ingest-owned kinds, ReplicaSets, and HPAs,
 // and one prebuilt object catalog. Fixture construction stays outside the
 // timed loop. Set OBJECT_MAP_BENCH_LARGE=1 to add the 50k-Pod cluster.
 func BenchmarkObjectMapBuild(b *testing.B) {
