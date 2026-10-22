@@ -6,11 +6,18 @@
   - Cluster tabs you are not looking at no longer refresh in the background. A tab's data refreshes when you return to it.
   - The "Refresh background clusters" setting is removed.
 - YAML editing:
-  - While you edit, the YAML tab now warns when someone else changes the object, shows how your draft differs from it, and offers Reload & merge. Status-only updates do not trigger the warning.
-  - If the object is deleted and recreated while you edit, or your save finds it replaced, the tab shows how your draft differs from the new object instead of offering a merge.
+  - While you edit, the YAML tab now shows when someone else changes the object: a table lists each changed field, with its value when you started, now, and in your draft. Status-only updates are ignored.
+  - When someone else changed a field you also edited, you choose Use theirs or Keep mine before saving, so nobody's change is overwritten by accident. Merge into draft brings in their other changes.
+  - If the object is deleted and recreated while you edit, you can copy your draft and start editing the new object.
 - Scrollbar tweaks. They are wider and higher-contrast. They appear only while scrolling or when the pointer is over the scroll area, and fade out shortly after scrolling stops.
 
 ### Fixed
+
+- In dark mode, the Cancel button in the YAML tab's "Take ownership of managed fields?" dialog was nearly invisible. It now uses the standard button style.
+- Object links:
+  - Alt+click now goes to the view that lists the object. Storage classes, ingress classes, and webhook configurations open the cluster Config view, and pod disruption budgets open Quotas. Custom resources open the Custom view, even when their kind name matches a built-in kind, and built-in kinds with no list (such as Leases) open Browse. Before, some of these went to the wrong view or did nothing.
+  - Opening an object whose cluster is not open in the window now says so. Before, nothing happened.
+  - A panel opened from a link to an object in another cluster now shows that cluster's name.
 
 - The Diagnostics panel no longer closes when you switch cluster tabs.
 - Closing the app window a floating panel is docking into no longer leaves that panel window unresponsive for up to 15 seconds.

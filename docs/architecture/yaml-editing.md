@@ -53,13 +53,24 @@ backend and object panel. Editor mechanics: [YAML editor](../frontend/yaml-edito
      under the field policy's semantic compare. Status, resourceVersion, uid,
      managedFields, and the other server-managed fields are ignored, so
      controller churn is not drift.
-   - A drifted object shows the draft's diff against the live YAML and offers
-     Reload & Merge: an in-process three-way merge (`overwrite=false`) that
-     never writes. Unresolvable overlap returns a `MergeConflict` with the
-     live YAML for manual review.
+   - A drifted object shows a field table (`yamlDriftFields.ts`): each field
+     someone else changed, with its value when editing began, now, and in the
+     draft. Named list items are keyed by name.
+   - A conflict is a field the draft also changed, to a different value.
+     - Use theirs copies the live value into the draft; Keep mine keeps the
+       draft's.
+     - Save waits until every conflict has a choice. A kept choice lasts only
+       while the live value is unchanged.
+   - Merge into draft is Reload & Merge: an in-process three-way merge
+     (`overwrite=false`) that never writes.
+     - It is disabled while a conflict is undecided or kept, since it would
+       stop on that field. Saving still keeps others' changes to fields the
+       draft did not edit.
+     - Unresolvable overlap returns a `MergeConflict` with the live YAML.
    - A replaced object (a live uid that differs from the baseline's, or an
-     `ObjectUIDMismatch` conflict from Apply) shows the diff without Reload &
-     Merge, because the merge refuses a different object.
+     `ObjectUIDMismatch` conflict from Apply) offers Copy draft and Edit the
+     new object. It offers no merge (the merge refuses a different object),
+     and Save is disabled.
    - Conflicts (UID mismatch, merge conflict, failed merge precondition) are
      `yamlConflict` results on the Apply, Merge and ownership-check responses,
      never errors, so the live YAML cannot reach toasts, history, or

@@ -13,6 +13,7 @@
  * view. Keyboard and Edit-menu routing lives in YamlTab.shortcuts.test.tsx.
  */
 
+import { Clipboard } from '@wailsio/runtime';
 import React, { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parse as parseYaml } from 'yaml';
@@ -453,6 +454,38 @@ const buttonWithText = (text: string) =>
   );
 
 /**
+ * The drift notice's row for `field`: its value when editing began, now, and in
+ * the draft, and whether it is marked as a conflict.
+ */
+const driftRow = (field: string) => {
+  const row = Array.from(
+    view.container.querySelectorAll<HTMLTableRowElement>('.yaml-drift-notice tbody tr')
+  ).find((candidate) => candidate.cells[0]?.textContent?.startsWith(field));
+  return (
+    row && {
+      values: Array.from(row.cells)
+        .slice(1, 4)
+        .map((cell) => cell.textContent?.trim()),
+      conflict: Boolean(row.querySelector('.status-chip')),
+    }
+  );
+};
+
+/** Clicks `text` on the choice line for the conflicting `field`. */
+const clickRowButton = async (field: string, text: string) => {
+  const line = Array.from(view.container.querySelectorAll('.yaml-drift-notice-conflict')).find(
+    (candidate) => candidate.textContent?.startsWith(field)
+  );
+  const button = requireValue(
+    Array.from(line?.querySelectorAll('button') ?? []).find((candidate) =>
+      candidate.textContent?.includes(text)
+    ),
+    `expected the ${text} button on ${field}`
+  );
+  await activate(() => button.click());
+};
+
+/**
  * Serves `yaml` as the object's live YAML and lets the tab's next poll read it
  * (`object-yaml` polls every 5 s: core/refresh/types.generated.ts). Needs fake
  * timers from before the render.
@@ -511,6 +544,8 @@ beforeEach(() => {
   scope = requireValue(app.object(dev, pod).scopes.detailScope, 'expected the pod scope');
   serveYaml(YAML);
   answerOwnership([]);
+  // The Wails runtime's Clipboard.SetText resolves once the text is copied.
+  vi.mocked(Clipboard.SetText).mockReset().mockResolvedValue(undefined);
   codeMirrorState.value = '';
   codeMirrorState.editorView.state.selection = { main: { from: 0, to: 0 }, ranges: [] };
   codeMirrorState.editorView.dispatch = vi.fn();
@@ -884,17 +919,21 @@ describe('YamlTab', () => {
     vi.useFakeTimers();
     answerApply('791');
     answerLiveYaml(LATER_MUTATED_YAML);
-    const { container } = await renderYamlTab();
+    await renderYamlTab();
     await editTo(UPDATED_YAML);
 
     // Another client changes the object while the user edits.
     await pollLiveYaml(LATER_MUTATED_YAML);
 
     expect(codeMirrorState.value).toBe(UPDATED_YAML);
-    expect(container.querySelector('.yaml-drift-diff')?.textContent).toContain(
-      'restartPolicy: Always'
-    );
-    expect(buttonWithText('Reload & merge')).toBeDefined();
+    // The other client's change is listed field by field, next to the draft's value.
+    expect(driftRow('spec.restartPolicy')).toEqual({
+      values: ['—', 'Always', '—'],
+      conflict: false,
+    });
+    // Both sides changed the image to the same value: no conflict.
+    expect(driftRow('containers[demo].image')?.conflict).toBe(false);
+    expect(buttonWithText('Merge into draft')?.disabled).toBe(false);
     expect(getIconButton('Save YAML')?.disabled).toBe(false);
 
     await save();
@@ -910,8 +949,55 @@ describe('YamlTab', () => {
     // A controller updates only the status, which bumps the resourceVersion.
     await pollLiveYaml(`${YAML.replace('"123"', '"124"')}\nstatus:\n  phase: Running`);
 
-    expect(container.querySelector('.yaml-drift-diff')).toBeNull();
-    expect(buttonWithText('Reload & merge')).toBeUndefined();
+    expect(container.querySelector('.yaml-drift-notice')).toBeNull();
+    expect(buttonWithText('Merge into draft')).toBeUndefined();
+  });
+
+  it('asks for a choice on a field both sides changed, and uses theirs in the draft', async () => {
+    vi.useFakeTimers();
+    await renderYamlTab();
+    await editTo(UPDATED_YAML.replace('image: demo:v2', 'image: demo:v3'));
+
+    // Someone else sets the image to v2 while the draft sets it to v3.
+    await pollLiveYaml(LATER_MUTATED_YAML);
+
+    expect(driftRow('containers[demo].image')).toEqual({
+      values: ['demo:v1', 'demo:v2', 'demo:v3'],
+      conflict: true,
+    });
+    expect(getIconButton('Save YAML')?.disabled).toBe(true);
+    expect(buttonWithText('Merge into draft')?.disabled).toBe(true);
+
+    await clickRowButton('containers[demo].image', 'Use theirs');
+
+    expect(parseYaml(codeMirrorState.value).spec.containers[0].image).toBe('demo:v2');
+    expect(driftRow('containers[demo].image')?.conflict).toBe(false);
+    expect(getIconButton('Save YAML')?.disabled).toBe(false);
+    expect(buttonWithText('Merge into draft')?.disabled).toBe(false);
+  });
+
+  it('saves your value over theirs once you keep it, but merges nothing', async () => {
+    vi.useFakeTimers();
+    answerApply('791');
+    answerLiveYaml(LATER_MUTATED_YAML);
+    await renderYamlTab();
+    const draft = UPDATED_YAML.replace('image: demo:v2', 'image: demo:v3');
+    await editTo(draft);
+    await pollLiveYaml(LATER_MUTATED_YAML);
+
+    await clickRowButton('containers[demo].image', 'Keep mine');
+
+    expect(codeMirrorState.value).toBe(draft);
+    // The merge would stop on the kept field.
+    expect(buttonWithText('Merge into draft')?.disabled).toBe(true);
+    expect(getIconButton('Save YAML')?.disabled).toBe(false);
+
+    await save();
+
+    expect(applyCalls()).toHaveLength(1);
+    expect(parseYaml(requireValue(applyCalls()[0], 'apply')[1].yaml).spec.containers[0].image).toBe(
+      'demo:v3'
+    );
   });
 
   it('finishes a save normally when a live change lands while the save is in flight', async () => {
@@ -942,7 +1028,7 @@ describe('YamlTab', () => {
     expect(container.querySelector('.yaml-post-apply-notice-stale')).toBeNull();
   });
 
-  it('shows the diff without offering a merge when the object is recreated during the edit', async () => {
+  it('offers to copy the draft and edit the new object when it is recreated during the edit', async () => {
     vi.useFakeTimers();
     serveYaml(VERIFIED_APPLIED_YAML_WITH_UID);
     const { container } = await renderYamlTab();
@@ -952,9 +1038,19 @@ describe('YamlTab', () => {
     await pollLiveYaml(REPLACEMENT_POD_YAML);
 
     expect(codeMirrorState.value).toContain('image: demo:v3');
-    expect(container.querySelector('.yaml-drift-diff')?.textContent).toContain('pod-uid-2');
-    // backend/object_yaml_reload_merge.go refuses to merge into a replaced object.
-    expect(buttonWithText('Reload & merge')).toBeUndefined();
+    expect(container.querySelector('.yaml-drift-notice')).not.toBeNull();
+    // backend/object_yaml_reload_merge.go refuses to merge into a replaced object,
+    // and the save would be refused too.
+    expect(buttonWithText('Merge into draft')).toBeUndefined();
+    expect(getIconButton('Save YAML')?.disabled).toBe(true);
+
+    await clickText('Copy draft');
+    expect(Clipboard.SetText).toHaveBeenLastCalledWith(codeMirrorState.value);
+
+    await clickText('Edit the new object');
+    expect(parseYaml(codeMirrorState.value).metadata.uid).toBe('pod-uid-2');
+    expect(container.querySelector('.yaml-drift-notice')).toBeNull();
+    expect(getIconButton('Save YAML')?.disabled).toBe(false);
   });
 
   it.each(['before', 'after'] as const)(
@@ -982,7 +1078,7 @@ describe('YamlTab', () => {
         serveYaml(current);
       }
 
-      await clickText('Reload & merge');
+      await clickText('Merge into draft');
 
       expect(app.backend.calls('MergeObjectYamlWithLatest')).toHaveLength(1);
       const [clusterId, request] = requireValue(
@@ -1141,7 +1237,7 @@ describe('YamlTab', () => {
     expect(takeReports('saveObjectYAML')).toEqual([['inline']]);
   });
 
-  it('keeps the draft and shows the replacement, without a merge, when the save finds the object replaced', async () => {
+  it('keeps the draft and lists the replacement’s changes, without a merge, when the save finds the object replaced', async () => {
     // backend/object_yaml_mutation.go checks the uid the editor tracked, and
     // returns the live object's YAML without its uid (sanitizeForUpdate).
     const yamlConflict = {
@@ -1154,22 +1250,19 @@ describe('YamlTab', () => {
     app.backend.answer('CheckObjectYamlOwnership', () => ({ conflicts: [], yamlConflict }));
     app.backend.answer('ApplyObjectYaml', () => ({ resourceVersion: '', yamlConflict }));
     serveYaml(VERIFIED_APPLIED_YAML_WITH_UID);
-    const { container } = await renderYamlTab();
+    await renderYamlTab();
     const draft = VERIFIED_APPLIED_YAML_WITH_UID.replace('image: demo:v2', 'image: demo:v3');
     await editTo(draft);
 
     await save();
 
     expect(applyCalls()).toHaveLength(1);
-    expect(container.textContent).toContain('object identity changed since editing began');
-    expect(container.textContent).toContain('uid changed');
-    expect(getIconButton('Save YAML')).not.toBeNull();
     expect(codeMirrorState.value).toBe(draft);
     expect(app.backend.calls('GetObjectYAMLByGVK')).toEqual([]);
-    expect(container.querySelector('.yaml-drift-diff')?.textContent).toContain(
-      'restartPolicy: Always'
-    );
-    expect(buttonWithText('Reload & merge')).toBeUndefined();
+    expect(driftRow('spec.restartPolicy')?.values).toEqual(['—', 'Always', '—']);
+    expect(buttonWithText('Copy draft')).toBeDefined();
+    expect(buttonWithText('Merge into draft')).toBeUndefined();
+    expect(getIconButton('Save YAML')?.disabled).toBe(true);
   });
 
   it('shows a reload-merge conflict with the live YAML without reporting an error', async () => {
@@ -1189,7 +1282,7 @@ describe('YamlTab', () => {
     await editTo(UPDATED_YAML);
     await openObjectDiffReading(LATER_MUTATED_YAML);
 
-    await clickText('Reload & merge');
+    await clickText('Merge into draft');
 
     expect(container.textContent).toContain('conflicting live changes');
     expect(container.textContent).toContain('spec.containers');
@@ -1203,7 +1296,7 @@ describe('YamlTab', () => {
     await editTo(UPDATED_YAML);
     await openObjectDiffReading(LATER_MUTATED_YAML);
 
-    await clickText('Reload & merge');
+    await clickText('Merge into draft');
 
     expect(container.textContent).toContain('merge backend unavailable');
     expect(takeReports('reloadAndMerge')).toEqual([['inline']]);

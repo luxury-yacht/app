@@ -391,19 +391,19 @@ describe('strict CSS cascade contracts', () => {
   });
 });
 
+const productionSources = () =>
+  ['src', 'styles'].flatMap((root) =>
+    readdirSync(resolve(process.cwd(), root), { recursive: true })
+      .map((path) => `${root}/${String(path)}`)
+      .filter((path) => /\.(css|tsx?)$/.test(path) && !/\.(test|stories)\.tsx?$/.test(path))
+      .map((path) => ({ path, text: readProjectFile(path) }))
+  );
+
 // An undefined custom property makes its declaration invalid at computed-value
 // time, so the property silently falls back to inherited or initial (error
 // statuses lost their red, bordered controls drew no border), or to a fallback
 // tuned for one theme (a cream warning box in dark mode).
 describe('CSS custom property references', () => {
-  const productionSources = () =>
-    ['src', 'styles'].flatMap((root) =>
-      readdirSync(resolve(process.cwd(), root), { recursive: true })
-        .map((path) => `${root}/${String(path)}`)
-        .filter((path) => /\.(css|tsx?)$/.test(path) && !/\.(test|stories)\.tsx?$/.test(path))
-        .map((path) => ({ path, text: readProjectFile(path) }))
-    );
-
   it('reads only custom properties that a stylesheet or inline style defines', () => {
     const sources = productionSources();
     // Stylesheet declarations (`--name:`) and inline-style keys or
@@ -426,5 +426,39 @@ describe('CSS custom property references', () => {
     );
 
     expect(undefinedReads).toEqual([]);
+  });
+});
+
+// A `button` variant with no rule keeps the browser's default button paint: in
+// dark mode a near-white pill with near-white text (the YAML tab's Reload &
+// merge and the confirmation dialog's secondary action both rendered that way).
+describe('button variant classes', () => {
+  it('uses only button variants that a stylesheet styles', () => {
+    const sources = productionSources();
+    const styled = new Set(
+      sources
+        .filter(({ path }) => path.endsWith('.css'))
+        .flatMap(({ text }) =>
+          Array.from(text.matchAll(/\.button\.([a-z-]+)/g), (match) => match[1])
+        )
+    );
+    // Literal `className="button <variant>"`, and variant props and their
+    // defaults (`confirmButtonClass="danger"`, `secondaryActionButtonClass = 'x'`).
+    const variantPatterns = [
+      /className=["'`]button ([a-z-]+)/g,
+      /ButtonClass\s*=?\s*["']([a-z-]+)["']/g,
+    ];
+    const unstyled = sources
+      .filter(({ path }) => path.endsWith('.tsx'))
+      .flatMap(({ path, text }) =>
+        text.split('\n').flatMap((line, index) =>
+          variantPatterns
+            .flatMap((pattern) => Array.from(line.matchAll(pattern), (match) => String(match[1])))
+            .filter((variant) => !styled.has(variant))
+            .map((variant) => `${variant} at ${path}:${index + 1}`)
+        )
+      );
+
+    expect(unstyled).toEqual([]);
   });
 });

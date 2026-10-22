@@ -221,3 +221,69 @@
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* Drift while editing: a warning, not an error. Built on the notice frame. */
+.yaml-drift-notice {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  color: var(--color-text);
+  font-size: 0.85rem;
+}
+
+.yaml-drift-notice-headline {
+  font-weight: var(--font-weight-medium);
+}
+
+.yaml-drift-notice .yaml-drift-notice-sub {
+  margin-top: 0.25rem;
+  color: var(--color-text-secondary);
+}
+
+.yaml-drift-notice-table {
+  margin-top: 0.5rem;
+  overflow-x: auto;
+}
+
+.yaml-drift-notice-table .confirmation-modal-details-table {
+  font-size: 0.8rem;
+}
+
+.yaml-drift-notice-table .confirmation-modal-details-table th {
+  white-space: nowrap;
+}
+
+.yaml-drift-notice-table .confirmation-modal-details-table td {
+  vertical-align: middle;
+}
+
+.yaml-drift-notice-mine {
+  color: var(--color-text);
+}
+
+.yaml-drift-notice-conflict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.yaml-drift-notice-conflict-field {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
+.yaml-drift-notice-kept {
+  color: var(--color-text-secondary);
+}
+
+.yaml-drift-notice-more {
+  margin-top: 0.5rem;
+}
+
+.yaml-drift-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}

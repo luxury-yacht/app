@@ -87,6 +87,15 @@ same slot.
   descriptors (keeping discovery gates). Fresh selection requests reveal the
   destination even when discovery arrives later; mounting with a restored
   selection and unrelated refreshes preserve manual collapse.
+- Alt-click goes to the view that lists the object, resolved from its API
+  group, kind, and scope (`utils/kindViewMap.ts`), in this order:
+  - its resource family's view;
+  - the built-in view whose refresh domain lists that group and kind;
+  - Browse, for a built-in kind no view lists;
+  - the Custom view, for any other custom resource, even one that reuses a
+    built-in kind name.
+  The built-in table mirrors the kinds each domain declares in
+  `backend/refresh/snapshot`; change both together.
 
 ## Cluster Attention
 

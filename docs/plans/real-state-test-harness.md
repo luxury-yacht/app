@@ -609,6 +609,12 @@ command; checksums matched afterwards. None used git stash.
    `operators.example.io` goes to the built-in Workloads table, which cannot
    contain it. A kind with no view does nothing (`useNavigateToView.ts:38`),
    although `kindViewMap.ts:8` says callers fall back to Browse.
+   **Resolved (2026-10-22, uncommitted).** John chose an identity-checked map
+   over registry-generated destinations. The table is keyed by group and kind
+   and mirrors each backend domain's declared kinds. That corrected three
+   wrong entries (StorageClass, PodDisruptionBudget, VerticalPodAutoscaler)
+   and added the cluster Config kinds. Other custom resources go to Custom,
+   and unlisted built-ins go to Browse (`docs/frontend/navigation.md`).
 3. **A resource link can carry another cluster's name.**
    `resourceLinkToObjectReference(link, clusterName)` attaches the caller's
    cluster name to whatever `clusterId` the link carries
@@ -617,15 +623,23 @@ command; checksums matched afterwards. None used git stash.
    always links within its own cluster
    (`backend/resources/poddisruptionbudget/model.go:36`). The same pattern is
    at `storage.tsx:188` and `useResourceLinkReference.ts:42`.
+   **Resolved (2026-10-22, uncommitted).** Hydration names the cluster from
+   its id among the window's open clusters, and the link builders no longer
+   take a cluster name.
 4. **Opening an object in a cluster the window does not display does nothing,
    silently.** `openPanel` returns before any RPC
    (`WorkspacePanelSync.tsx:214-218`), so `useObjectPanel`'s report
    (`useObjectPanel.ts:126-133`) is unreachable from `openWithObject`. The
    stubbed suite asserted that report.
+   **Resolved (2026-10-22, uncommitted).** `openTarget` checks before claiming
+   and warns the user ("Cluster not open"). The unreachable operational report
+   is gone.
 5. **The Overview's replica-string fallback is unreachable.** The Details tab
    always passes a numeric `desiredReplicas` (`objectDetailModel.ts:138`,
    `:215`, `:235`), so the `replicas` and `ready` fallbacks
-   (`Overview/index.tsx:189-193`) never run. Candidate dead code.
+   (`Overview/index.tsx:189-193`) never run.
+   **Removed (2026-10-22, uncommitted),** along with the now-unused `replicas`
+   prop and action-state field.
 6. **Wording:** a transfer refused while the window is frozen for a cluster
    close warns "Wait for the panel move to finish."
    (`panelLifecycleGuards.tsx:93`).
@@ -757,9 +771,9 @@ and the pilot's rows from their reports.
     host into an exported component, as with `AppShell`, so the harness
     renders the real one. That is a production change and needs a native
     check.
-  - Finding 2, and pilot finding 4.
+  - Pilot finding 4.
 - **Native check** of `PanelWindowShell` (unchanged from the pilot).
-- **Follow-ups:** findings 3–6, and the harness gaps as later phases need
+- **Follow-ups:** finding 6, and the harness gaps as later phases need
   them.
 
 ## Problem

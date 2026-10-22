@@ -6,6 +6,7 @@
  * in yamlTransaction.
  */
 
+import { writeClipboardText } from '@core/desktop-runtime';
 import { useOptionalObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { useCurrentObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
@@ -15,6 +16,7 @@ import { WrapTextIcon } from '@shared/components/icons/LogIcons';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import { StatusChip } from '@shared/components/StatusChip';
 import { YamlEditor, type YamlEditorHandle } from '@shared/components/yaml';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useShortcut } from '@ui/shortcuts';
@@ -34,16 +36,13 @@ import {
   YamlSaveIcon,
 } from '@shared/components/icons/YamlIcons';
 import { failureMessage } from '@/core/refresh/refreshFailure';
+import type { DriftField } from './yamlDriftFields';
 import { resolveProtectedYamlRanges } from './yamlFieldPolicy';
 import { getYamlPanelBlockReason } from './yamlPanelGuard';
 import { INACTIVE_SCOPE, LARGE_MANIFEST_THRESHOLD, YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
 import type { YamlTabProps } from './yamlTabTypes';
 import { prepareDraftYaml } from './yamlTabUtils';
-import {
-  buildYamlTransactionDiff,
-  useYamlTransaction,
-  type YamlTransactionDiffResult,
-} from './yamlTransaction';
+import { useYamlTransaction, type YamlTransactionDiffResult } from './yamlTransaction';
 
 const buildYamlDiffView = (
   diff: YamlTransactionDiffResult | null,
@@ -132,6 +131,7 @@ const buildYamlEditItems = ({
   isEditing,
   isSaving,
   disableSave,
+  saveBlockedReason,
   canEdit,
   editDisabledReason,
   cancelEdit,
@@ -141,6 +141,8 @@ const buildYamlEditItems = ({
   isEditing: boolean;
   isSaving: boolean;
   disableSave: boolean;
+  /** Shown as Save's title while drift keeps it unavailable. */
+  saveBlockedReason: string | null;
   canEdit: boolean;
   editDisabledReason: string | null;
   cancelEdit: () => void;
@@ -163,7 +165,7 @@ const buildYamlEditItems = ({
         id: 'save-yaml',
         icon: <YamlSaveIcon width={16} height={16} />,
         onClick: saveYaml,
-        title: isSaving ? 'Saving YAML' : 'Save YAML',
+        title: isSaving ? 'Saving YAML' : (saveBlockedReason ?? 'Save YAML'),
         ariaLabel: 'Save YAML',
         disabled: disableSave,
       },
@@ -297,50 +299,199 @@ type YamlNoticeDiffProps = {
 };
 
 /**
- * Why the draft is shown against a newer live object: the object changed, the
- * object was deleted and recreated, or Reload & merge could not reconcile.
+ * Why the draft is shown against a newer live object: someone else changed it,
+ * it was deleted and recreated, or Merge into draft stopped on a field.
  */
 type YamlDriftNoticeKind = 'changed' | 'replaced' | 'unmerged';
 
-const DRIFT_NOTICE_MESSAGES: Record<YamlDriftNoticeKind, string> = {
-  changed:
-    'The live object changed after you started editing. Your draft is unchanged. Reload & merge brings in those changes; Save patches only your edited fields onto the live object, like kubectl edit.',
-  replaced:
-    'The object was deleted and recreated after you started editing. Your draft is unchanged, but it cannot be merged into or saved over the new object.',
-  unmerged:
-    'Reload & merge could not reconcile your draft with the latest YAML. Your draft is unchanged. Save will still patch your edited fields onto the live object, like kubectl edit.',
+const DRIFT_ROW_LIMIT = 8;
+const ABSENT_VALUE = '—';
+
+const driftHeadline = (kind: YamlDriftNoticeKind, saveFailed: boolean): string => {
+  if (kind === 'replaced') {
+    return saveFailed
+      ? 'Save failed: this object was deleted and recreated.'
+      : 'This object was deleted and recreated.';
+  }
+  return kind === 'unmerged'
+    ? 'Merge into draft stopped on a field both versions changed.'
+    : 'Someone else changed this object while you were editing.';
 };
 
+type YamlDriftChoiceProps = {
+  isSaving: boolean;
+  onChooseTheirs: (field: DriftField) => void;
+  onKeepMine: (field: DriftField) => void;
+};
+
+// One line per conflict, under the table, so the choice stays visible however
+// wide the values make the table.
+const DriftConflictChoice = ({
+  field,
+  kept,
+  isSaving,
+  onChooseTheirs,
+  onKeepMine,
+}: YamlDriftChoiceProps & { field: DriftField; kept: boolean }) => (
+  <div className="yaml-drift-notice-conflict">
+    <span className="yaml-drift-notice-conflict-field" title={field.key}>
+      {field.label}
+    </span>
+    <button
+      type="button"
+      className="button generic"
+      disabled={isSaving}
+      onClick={() => onChooseTheirs(field)}
+    >
+      Use theirs
+    </button>
+    {kept ? (
+      <span className="yaml-drift-notice-kept">Keeping yours</span>
+    ) : (
+      <button
+        type="button"
+        className="button generic"
+        disabled={isSaving}
+        onClick={() => onKeepMine(field)}
+      >
+        Keep mine
+      </button>
+    )}
+  </div>
+);
+
+const DriftFieldTable = ({ fields }: { fields: DriftField[] }) => (
+  <div className="yaml-drift-notice-table">
+    <table className="confirmation-modal-details-table">
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>When you started</th>
+          <th>Now</th>
+          <th>Your draft</th>
+        </tr>
+      </thead>
+      <tbody>
+        {fields.map((field) => (
+          <tr key={field.key}>
+            <td className="monospace" title={field.key}>
+              {field.label}{' '}
+              {!!field.conflict && <StatusChip variant="warning">Conflict</StatusChip>}
+            </td>
+            <td className="monospace">{field.started ?? ABSENT_VALUE}</td>
+            <td className="monospace">{field.now ?? ABSENT_VALUE}</td>
+            <td className="monospace yaml-drift-notice-mine">{field.draft ?? ABSENT_VALUE}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
+type YamlDriftNoticeProps = YamlDriftChoiceProps & {
+  kind: YamlDriftNoticeKind | null;
+  saveFailed: boolean;
+  fields: DriftField[];
+  keptFieldKeys: ReadonlySet<string>;
+  mergeBlockedReason: string | null;
+  onMerge: () => void;
+  onDiscard: () => void;
+  onCopyDraft: () => void;
+  onEditNewObject: () => void;
+};
+
+const DriftNoticeActions = ({
+  replaced,
+  isSaving,
+  mergeBlockedReason,
+  onMerge,
+  onDiscard,
+  onCopyDraft,
+  onEditNewObject,
+}: Pick<
+  YamlDriftNoticeProps,
+  'isSaving' | 'mergeBlockedReason' | 'onMerge' | 'onDiscard' | 'onCopyDraft' | 'onEditNewObject'
+> & { replaced: boolean }) => (
+  <div className="yaml-drift-notice-actions">
+    {replaced ? (
+      <>
+        <button type="button" className="button generic" onClick={onCopyDraft}>
+          Copy draft
+        </button>
+        <button type="button" className="button action" onClick={onEditNewObject}>
+          Edit the new object
+        </button>
+      </>
+    ) : (
+      <>
+        <button type="button" className="button generic" disabled={isSaving} onClick={onDiscard}>
+          Discard my draft
+        </button>
+        <button
+          type="button"
+          className="button action"
+          disabled={isSaving || Boolean(mergeBlockedReason)}
+          title={mergeBlockedReason ?? undefined}
+          onClick={onMerge}
+        >
+          Merge into draft
+        </button>
+      </>
+    )}
+  </div>
+);
+
+/** The drift notice: what changed, field by field, and what the user can do. */
 const YamlDriftNotice = ({
   kind,
-  diff,
-  diffKey,
-  expandedDiffs,
-  toggleDiffExpansion,
-}: YamlNoticeDiffProps & { kind: YamlDriftNoticeKind | null }) => {
+  saveFailed,
+  fields,
+  keptFieldKeys,
+  isSaving,
+  onChooseTheirs,
+  onKeepMine,
+  ...actions
+}: YamlDriftNoticeProps) => {
+  const [showAll, setShowAll] = useState(false);
   if (!kind) {
     return null;
   }
-  const diffView = buildYamlDiffView(
-    diff,
-    diffKey,
-    Boolean(expandedDiffs[diffKey]),
-    toggleDiffExpansion
-  );
+  const replaced = kind === 'replaced';
+  const visibleFields = showAll ? fields : fields.slice(0, DRIFT_ROW_LIMIT);
   return (
-    <>
-      <div className="yaml-notice-header">
-        <p>{DRIFT_NOTICE_MESSAGES[kind]}</p>
-        {diffView.toggle}
-      </div>
-      {diffView.content}
-      {!!diff?.tooLarge && (
-        <p className="yaml-drift-warning">
-          {diff.tooLargeMessage ?? 'This diff is too large to display in the current view.'} Reload
-          the YAML to review the latest version before retrying.
+    <div className="yaml-post-apply-notice yaml-drift-notice" role="status" aria-live="polite">
+      <p className="yaml-drift-notice-headline">{driftHeadline(kind, saveFailed)}</p>
+      {!!replaced && (
+        <p className="yaml-drift-notice-sub">
+          Your draft belongs to the old object, so it can’t be saved. Copy it if you need it, then
+          edit the new object.
         </p>
       )}
-    </>
+      {visibleFields.length > 0 && <DriftFieldTable fields={visibleFields} />}
+      {fields.length > DRIFT_ROW_LIMIT && (
+        <button
+          type="button"
+          className="button generic yaml-drift-notice-more"
+          onClick={() => setShowAll((current) => !current)}
+        >
+          {showAll ? 'Show fewer' : `Show all ${fields.length}`}
+        </button>
+      )}
+      {!replaced &&
+        fields
+          .filter((field) => field.conflict)
+          .map((field) => (
+            <DriftConflictChoice
+              key={field.key}
+              field={field}
+              kept={keptFieldKeys.has(field.key)}
+              isSaving={isSaving}
+              onChooseTheirs={onChooseTheirs}
+              onKeepMine={onKeepMine}
+            />
+          ))}
+      <DriftNoticeActions replaced={replaced} isSaving={isSaving} {...actions} />
+    </div>
   );
 };
 
@@ -350,23 +501,19 @@ const YamlValidationNotice = ({
   actionError,
   actionDetails,
   protectedEditMessage,
-  driftNotice,
-  ...diffProps
-}: YamlNoticeDiffProps & {
+}: {
   isEditing: boolean;
   lintError: string | null;
   actionError: string | null;
   actionDetails: string[];
   protectedEditMessage: string | null;
-  driftNotice: YamlDriftNoticeKind | null;
 }) => {
-  const hasMessage = Boolean(lintError || actionError || protectedEditMessage || driftNotice);
+  const hasMessage = Boolean(lintError || actionError || protectedEditMessage);
   if (!isEditing || !hasMessage) {
     return null;
   }
   return (
     <div className="yaml-validation-message">
-      <YamlDriftNotice kind={driftNotice} {...diffProps} />
       {!!lintError && (
         <p>
           <ErrorSurface kind="validation" message={lintError} />
@@ -486,6 +633,7 @@ const getYamlViewModel = ({
   lintError,
   hasServerYamlError,
   isSaving,
+  saveBlockedReason,
   postApplyNotice,
   ...drift
 }: YamlDriftState & {
@@ -494,18 +642,16 @@ const getYamlViewModel = ({
   lintError: string | null;
   hasServerYamlError: boolean;
   isSaving: boolean;
+  saveBlockedReason: string | null;
   postApplyNotice: ReturnType<typeof useYamlTransaction>['postApplyNotice'];
 }) => {
-  const { isEditing, backendDriftCurrentYaml } = drift;
+  const { isEditing } = drift;
   const activeYaml = isEditing ? draftYaml : (displayYaml ?? '');
   const hasYamlError = Boolean(lintError) || hasServerYamlError;
   return {
     activeYaml,
-    disableSave: isSaving || hasYamlError,
+    disableSave: isSaving || hasYamlError || Boolean(saveBlockedReason),
     driftNotice: resolveDriftNotice(drift),
-    // The backend will not merge into a recreated object.
-    showReloadMerge: isEditing && drift.hasRemoteDrift && !drift.objectReplaced,
-    driftDiffKey: backendDriftCurrentYaml ? 'drift-backend' : 'drift-live',
     postApplyDiffKey: postApplyNotice ? `post-apply-${postApplyNotice.kind}` : 'post-apply',
     isLargeManifest: activeYaml.length > LARGE_MANIFEST_THRESHOLD,
   };
@@ -525,8 +671,6 @@ type YamlEditorSurfaceProps = {
   setProtectedEditMessage: (message: string | null) => void;
   isLargeManifest: boolean;
   yamlToolbarItems: IconBarItem[];
-  showReloadMerge: boolean;
-  reloadAndMerge: () => void;
   cancelEdit: () => void;
   pendingOwnershipConflicts: ReturnType<typeof useYamlTransaction>['pendingOwnershipConflicts'];
   confirmOwnershipAndSave: () => Promise<void>;
@@ -544,8 +688,6 @@ const YamlEditorSurface = ({
   setProtectedEditMessage,
   isLargeManifest,
   yamlToolbarItems,
-  showReloadMerge,
-  reloadAndMerge,
   cancelEdit,
   pendingOwnershipConflicts,
   confirmOwnershipAndSave,
@@ -571,21 +713,7 @@ const YamlEditorSurface = ({
           ? 'Large manifest detected. Editor performance may be reduced while editing.'
           : null
       }
-      toolbarActions={
-        <>
-          <IconBar items={yamlToolbarItems} />
-          {!!showReloadMerge && (
-            <button
-              className="button secondary"
-              type="button"
-              onClick={reloadAndMerge}
-              disabled={isSaving}
-            >
-              Reload &amp; merge
-            </button>
-          )}
-        </>
-      }
+      toolbarActions={<IconBar items={yamlToolbarItems} />}
       onEscape={() => runYamlEditShortcut(isEditing, isSaving, cancelEdit)}
     />
     <ConfirmationModal
@@ -660,6 +788,13 @@ const YamlTab: React.FC<YamlTabProps> = ({
     driftForced,
     backendDriftCurrentYaml,
     objectReplaced,
+    driftFields,
+    keptFieldKeys,
+    saveBlockedReason,
+    mergeBlockedReason,
+    chooseTheirs,
+    keepMine,
+    editNewObject,
     postApplyNotice,
     dismissPostApplyNotice,
     hasServerYamlError,
@@ -721,20 +856,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
     }
   }, [effectiveYamlContent, showManagedFields]);
 
-  const driftDiff = useMemo(() => {
-    if (backendDriftCurrentYaml) {
-      return buildYamlTransactionDiff(backendDriftCurrentYaml, draftYaml);
-    }
-    if (!isEditing || (!hasRemoteDrift && !driftForced)) {
-      return null;
-    }
-    const latestYaml = displayYaml ?? '';
-    if (!latestYaml) {
-      return null;
-    }
-    return buildYamlTransactionDiff(latestYaml, draftYaml);
-  }, [backendDriftCurrentYaml, displayYaml, draftYaml, driftForced, hasRemoteDrift, isEditing]);
-
   const yamlView = getYamlViewModel({
     isEditing,
     draftYaml,
@@ -742,12 +863,19 @@ const YamlTab: React.FC<YamlTabProps> = ({
     lintError,
     hasServerYamlError,
     isSaving,
+    saveBlockedReason,
     hasRemoteDrift,
     backendDriftCurrentYaml,
     driftForced,
     objectReplaced,
     postApplyNotice,
   });
+
+  const handleCopyDraft = useCallback(() => {
+    void writeClipboardText(draftYaml).catch((error: unknown) =>
+      errorHandler.handle(error, { action: 'copyYamlDraft' })
+    );
+  }, [draftYaml]);
 
   const toggleDiffExpansion = useCallback((diffKey: string) => {
     setExpandedDiffs((current) => ({
@@ -839,6 +967,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
         toggleLineWrapping: handleToggleLineWrapping,
         isSaving,
         disableSave: yamlView.disableSave,
+        saveBlockedReason,
         canEdit,
         editDisabledReason,
         cancelEdit: handleCancelClick,
@@ -856,6 +985,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       handleToggleManagedFields,
       isEditing,
       isSaving,
+      saveBlockedReason,
       showManagedFields,
       wrapLines,
     ]
@@ -874,17 +1004,26 @@ const YamlTab: React.FC<YamlTabProps> = ({
   return (
     <div className="object-panel-tab-content">
       <div className="yaml-display">
+        <YamlDriftNotice
+          kind={yamlView.driftNotice}
+          saveFailed={hasServerYamlError}
+          fields={driftFields}
+          keptFieldKeys={keptFieldKeys}
+          isSaving={isSaving}
+          mergeBlockedReason={mergeBlockedReason}
+          onChooseTheirs={chooseTheirs}
+          onKeepMine={keepMine}
+          onMerge={handleReloadAndMerge}
+          onDiscard={handleCancelClick}
+          onCopyDraft={handleCopyDraft}
+          onEditNewObject={editNewObject}
+        />
         <YamlValidationNotice
           isEditing={isEditing}
           lintError={lintError}
           actionError={actionError}
           actionDetails={actionDetails}
           protectedEditMessage={protectedEditMessage}
-          driftNotice={yamlView.driftNotice}
-          diff={driftDiff}
-          diffKey={yamlView.driftDiffKey}
-          expandedDiffs={expandedDiffs}
-          toggleDiffExpansion={toggleDiffExpansion}
         />
         <YamlPostApplyNoticeView
           isEditing={isEditing}
@@ -905,8 +1044,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
           setProtectedEditMessage={setProtectedEditMessage}
           isLargeManifest={yamlView.isLargeManifest}
           yamlToolbarItems={yamlToolbarItems}
-          showReloadMerge={yamlView.showReloadMerge}
-          reloadAndMerge={handleReloadAndMerge}
           cancelEdit={handleCancelClick}
           pendingOwnershipConflicts={pendingOwnershipConflicts}
           confirmOwnershipAndSave={confirmOwnershipAndSave}
