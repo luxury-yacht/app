@@ -48,6 +48,34 @@ func (r replayIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionR
 func (r replayIngestSource) HasSyncedFor(schema.GroupVersionResource) bool { return true }
 func (r replayIngestSource) Tracks(schema.GroupVersionResource) bool       { return true }
 
+// Registration reconciles every built-in kind itself and drops their queued
+// work, but a custom resource queued at the same time must stay queued: here a
+// deleted CRD's reconcile must still clear its rows once the worker reaches it.
+func TestRegistrationKeepsQueuedCustomResourceReconciliation(t *testing.T) {
+	widgetGVR := schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"}
+	widget := Descriptor{Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets", Namespaced: true, Scope: ScopeNamespace}
+	svc := NewService(Dependencies{IngestSource: replayIngestSource{rows: map[schema.GroupVersionResource][]interface{}{}}, ClusterID: "cluster-a"}, nil)
+	registerDesc(svc, widget)
+	svc.replaceIngestCatalogSummaries(widgetGVR, []Summary{{
+		Ref:   resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets", Namespace: "default", Name: "stale"},
+		Scope: ScopeNamespace,
+	}})
+	require.Equal(t, 1, svc.Query(QueryOptions{}).TotalItems)
+
+	// The drain worker is busy with another kind when the retired Widget
+	// source's reconcile is queued.
+	done := make(chan struct{})
+	svc.ingestPendingMu.Lock()
+	svc.ingestPending = map[schema.GroupVersionResource]struct{}{widgetGVR: {}}
+	svc.ingestDrainDone = done
+	svc.ingestPendingMu.Unlock()
+
+	svc.registerIngestCatalogSinks()
+	svc.drainIngestReconciliation(done)
+
+	require.Zero(t, svc.Query(QueryOptions{}).TotalItems, "registration dropped the queued Widget reconcile")
+}
+
 // TestRegisterIngestCatalogSinksRebuildsCacheOnce pins the batched registration:
 // every cut kind's replay lands in the catalog index, but the O(all-items) published
 // cache rebuild + broadcast happens exactly ONCE for the whole registration loop —

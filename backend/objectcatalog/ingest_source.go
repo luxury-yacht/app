@@ -270,12 +270,15 @@ func (s *Service) queueIngestReconciliation(gvr schema.GroupVersionResource) {
 	go s.drainIngestReconciliation(done)
 }
 
-// dropPendingIngestReconciliation drops the queued kinds, for a caller that
-// owns syncMu and reconciles them itself.
-func (s *Service) dropPendingIngestReconciliation() {
+// dropPendingIngestReconciliation removes the queued kinds in gvrs, for a
+// caller that owns syncMu and reconciles them itself. Other queued kinds, such
+// as custom resources, stay queued for the drain worker.
+func (s *Service) dropPendingIngestReconciliation(gvrs map[schema.GroupVersionResource]struct{}) {
 	s.ingestPendingMu.Lock()
 	defer s.ingestPendingMu.Unlock()
-	s.ingestPending = nil
+	for gvr := range gvrs {
+		delete(s.ingestPending, gvr)
+	}
 }
 
 func (s *Service) drainIngestReconciliation(done chan struct{}) {

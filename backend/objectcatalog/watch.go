@@ -246,7 +246,8 @@ func (s *Service) registerIngestCatalogSinks() func() {
 	// Registering a sink replays the source under its store lock, and the replay
 	// queues a partition-aware reconcile of its kind. Defer publication until
 	// every kind is registered, reconcile every kind here, then replace the query
-	// baseline once. The queued work is dropped: this pass covers it.
+	// baseline once. The built-in kinds' queued work is dropped because this pass
+	// covers it; queued custom resources stay for the drain worker.
 	s.suspendPublication.Store(true)
 	detach := make([]func(), 0, len(catalogIngestGVRs))
 	for gvr := range catalogIngestGVRs {
@@ -254,7 +255,7 @@ func (s *Service) registerIngestCatalogSinks() func() {
 	}
 	s.syncMu.Lock()
 	defer s.syncMu.Unlock()
-	s.dropPendingIngestReconciliation()
+	s.dropPendingIngestReconciliation(catalogIngestGVRs)
 	for gvr := range catalogIngestGVRs {
 		s.reconcileCurrentIngestSource(gvr)
 	}
