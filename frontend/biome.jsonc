@@ -263,6 +263,19 @@
       }
     },
     {
+      // Temporary: Biome 2.6 made this rule recommended, and existing test probes and harnesses are
+      // defined inside test bodies and render helpers. The cleanup is tracked in docs/todo.md;
+      // remove this override when it lands. Production code stays under the rule.
+      "includes": ["src/**/*.test.*"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noComponentHookFactories": "off"
+          }
+        }
+      }
+    },
+    {
       // The backend API facade is the one boundary allowed to import generated Wails bindings.
       "includes": ["src/core/backend-api/**"],
       "linter": {

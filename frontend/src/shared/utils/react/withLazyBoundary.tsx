@@ -8,7 +8,13 @@
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { errorHandler } from '@utils/errorHandler';
-import React, { Component, type ComponentType, lazy, type ReactNode } from 'react';
+import React, {
+  Component,
+  type ComponentType,
+  type LazyExoticComponent,
+  lazy,
+  type ReactNode,
+} from 'react';
 
 // Simple inline ErrorBoundary
 class ErrorBoundary extends Component<
@@ -72,8 +78,15 @@ export function withLazyBoundary<P extends object>(
   importFn: () => Promise<{ default: ComponentType<P> }>,
   loadingMessage?: string | null
 ) {
-  const LazyComponent = lazy(importFn);
+  return wrapLazyBoundary(lazy(importFn), loadingMessage);
+}
 
+// Taking the lazy component as a parameter keeps this a conventional higher-order component,
+// which Biome's noComponentHookFactories rule allows.
+function wrapLazyBoundary<P extends object>(
+  LazyComponent: LazyExoticComponent<ComponentType<P>>,
+  loadingMessage: string | null | undefined
+) {
   const WrappedComponent = (props: P) => (
     <ErrorBoundary>
       <React.Suspense

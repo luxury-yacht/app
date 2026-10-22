@@ -1,45 +1,6 @@
-- In the Workloads view, we have two panes, one for workloads and one for pods. Clicking a workload filters the pods pane to only show pods owned by that workload. I want the same two-pane view for Nodes.
-    - Clicking a node filters the pods pane to that node's pods across all namespaces.
-    - With no node selected, the pane shows all pods in the cluster, as the Workloads pane shows all pods in the namespace.
-- In the pods pane (not the Pods view), remove the Namespaces, Owner, and Node dropdowns.
-    - The selected row is the only thing that filters the pane. It lasts only while you stay on the view.
-    - Coming back to the view starts unfiltered. Favorites don't save the selection, and Owner filters already saved in favorites are dropped.
-    - The pane must never be filtered without a visible highlighted row.
-- Status: items 1 and 2 are implemented. Nodes favorites save both panes; existing ones keep their Nodes settings. The rendered check in the running app is still to do.
-- Add the Pods view back, with the full set of filter controls.
-    - Pod "Go to Table View" and other jumps to a pod's row land in the Pods view, not the pods pane.
-    - Old favorites and links that point to `pods` open the Pods view instead of Workloads.
-    - Status: implemented, including the Cluster Overview ready-Pod count opening it. The rendered check in the running app is still to do.
-- In the Sidebar, in the Namespaces section, only Events and Map stay at the top level. Everything else goes in the "Resources" expandable section:
-    - Events
-    - Map
-    - Resources
-        - Browse
-        - Workloads (remains the default)
-        - Pods
-        - Autoscaling
-        - Config
-        - Network
-        - Quotas
-        - RBAC
-        - Storage
-    - Extensions
-        - Custom Resources
-        - etc...
-- In the Sidebar, the cluster section follows the same rule, except Identities stays at the top level:
-    - Overview
-    - Attention
-    - Events
-    - Identities
-    - Resources
-        - Browse
-        - Config
-        - Namespaces
-        - Nodes
-        - RBAC
-        - Storage
-    - Extensions
-        - CRDs
-        - etc...
-- Resources starts expanded in both sections. Extensions starts collapsed. Installs that already saved a Resources state keep it.
-- Status: the sidebar is implemented except Pods, which comes with the Pods view. The rendered check in the running app is still to do.
+- Clean up test probes for Biome's `noComponentHookFactories` rule, then remove its test-file override in `frontend/biome.jsonc`.
+    - Biome 2.6.2 made the rule recommended. On 2026-10-21 it reported 277 errors in 107 test files, so it was turned off for `src/**/*.test.*` to keep the gate green. Production code stays under the rule.
+    - Most errors are probe or harness components defined inside `it`/`describe` bodies or render helpers. 172 of them only capture a hook result, and 24 files have their own copy of a local `renderHook` helper. The options are one shared `renderHook` test helper plus moving the rest to module level, or moving every probe to module level.
+    - Seven tests call a render helper twice on the same root, so React remounts the hook instead of rerendering it. Decide per test whether it should rerender or unmount between calls: `useObjectPanelCapabilities.test.tsx:163` and `:647` (cluster switch), `useObjectPanelTabs.test.tsx:236` and `:295`, `useLogKeyboardShortcuts.test.tsx:129`, `useLogPresentation.test.tsx:150`, `ApplicationMenuShortcuts.test.tsx:122`.
+    - Mocks named like components (`IsWindows` in `wailsDragRuntime.test.helpers.ts`, the constructors in `ShellTab.test.tsx`) pass the rule as `vi.fn(() => …)` or an anonymous `function`.
+    - `--only` runs the rule even where the config turns it off. To count the remaining errors, temporarily remove the override and run `biome lint --reporter=summary .` from `frontend/`.
