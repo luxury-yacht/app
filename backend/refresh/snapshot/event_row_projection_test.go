@@ -38,14 +38,14 @@ func TestEventSurfacesSendEmptyDisplayFieldsRaw(t *testing.T) {
 	require.Equal(t, "", namespaceRow.Source, "namespace events source")
 	require.Equal(t, "", namespaceRow.Message, "namespace events message")
 
-	objectRow := convertObjectEvent(meta, *untypedEvent("web.1", "Pod", "prod", "web"))
+	objectRow := convertObjectEvent(meta, eventRecordOf(meta, untypedEvent("web.1", "Pod", "prod", "web")))
 	require.Equal(t, "", objectRow.EventType, "object events type")
 	require.Equal(t, "", objectRow.Source, "object events source")
 	require.Equal(t, "", objectRow.Message, "object events message")
 
 	warning := untypedEvent("web.2", "Pod", "prod", "web")
 	warning.Type = corev1.EventTypeWarning
-	recent := buildRecentEvents([]*corev1.Event{warning}, meta)
+	recent := buildRecentEvents([]eventRecord{eventRecordOf(meta, warning)}, meta)
 	require.Len(t, recent, 1)
 	require.Equal(t, "", recent[0].Message, "overview message must not repeat the reason")
 }

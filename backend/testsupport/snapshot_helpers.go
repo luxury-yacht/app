@@ -5,7 +5,6 @@ import (
 
 	admissionv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -13,13 +12,11 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 
-	apiextlisters "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	admissionlisters "k8s.io/client-go/listers/admissionregistration/v1"
 	appslisters "k8s.io/client-go/listers/apps/v1"
-	autoscalinglisters "k8s.io/client-go/listers/autoscaling/v1"
 	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	discoverylisters "k8s.io/client-go/listers/discovery/v1"
@@ -77,29 +74,14 @@ func NewReplicaSetLister(t testing.TB, replicaSets ...*appsv1.ReplicaSet) appsli
 	return appslisters.NewReplicaSetLister(newNamespacedIndexer(t, replicaSets))
 }
 
-// NewNamespaceLister constructs a namespace lister backed by an indexer containing the supplied namespaces.
-func NewNamespaceLister(t testing.TB, namespaces ...*corev1.Namespace) corelisters.NamespaceLister {
-	return corelisters.NewNamespaceLister(newClusterIndexer(t, namespaces))
-}
-
 // NewNodeLister constructs a node lister backed by an indexer containing the supplied nodes.
 func NewNodeLister(t testing.TB, nodes ...*corev1.Node) corelisters.NodeLister {
 	return corelisters.NewNodeLister(newClusterIndexer(t, nodes))
 }
 
-// NewEventLister constructs an event lister backed by an indexer containing the supplied events.
-func NewEventLister(t testing.TB, events ...*corev1.Event) corelisters.EventLister {
-	return corelisters.NewEventLister(newNamespacedIndexer(t, events))
-}
-
 // NewConfigMapLister constructs a ConfigMap lister backed by an indexer containing the supplied config maps.
 func NewConfigMapLister(t testing.TB, configMaps ...*corev1.ConfigMap) corelisters.ConfigMapLister {
 	return corelisters.NewConfigMapLister(newNamespacedIndexer(t, configMaps))
-}
-
-// NewSecretLister constructs a Secret lister backed by an indexer containing the supplied secrets.
-func NewSecretLister(t testing.TB, secrets ...*corev1.Secret) corelisters.SecretLister {
-	return corelisters.NewSecretLister(newNamespacedIndexer(t, secrets))
 }
 
 // NewServiceLister constructs a Service lister backed by an indexer containing the supplied services.
@@ -143,11 +125,6 @@ func NewPodDisruptionBudgetLister(
 	budgets ...*policyv1.PodDisruptionBudget,
 ) policylisters.PodDisruptionBudgetLister {
 	return policylisters.NewPodDisruptionBudgetLister(newNamespacedIndexer(t, budgets))
-}
-
-// NewHorizontalPodAutoscalerLister constructs an HPA lister backed by an indexer.
-func NewHorizontalPodAutoscalerLister(t testing.TB, hpas ...*autoscalingv1.HorizontalPodAutoscaler) autoscalinglisters.HorizontalPodAutoscalerLister {
-	return autoscalinglisters.NewHorizontalPodAutoscalerLister(newNamespacedIndexer(t, hpas))
 }
 
 // NewDeploymentLister constructs a Deployment lister backed by an indexer.
@@ -215,11 +192,6 @@ func NewPersistentVolumeLister(t testing.TB, volumes ...*corev1.PersistentVolume
 	return corelisters.NewPersistentVolumeLister(newClusterIndexer(t, volumes))
 }
 
-// NewCRDLister constructs a CustomResourceDefinition lister backed by an indexer containing the supplied CRDs.
-func NewCRDLister(t testing.TB, crds ...*apiextensionsv1.CustomResourceDefinition) apiextlisters.CustomResourceDefinitionLister {
-	return apiextlisters.NewCustomResourceDefinitionLister(newClusterIndexer(t, crds))
-}
-
 // NewClusterRoleLister constructs a cluster role lister backed by an indexer containing the supplied roles.
 func NewClusterRoleLister(t testing.TB, roles ...*rbacv1.ClusterRole) rbaclisters.ClusterRoleLister {
 	return rbaclisters.NewClusterRoleLister(newClusterIndexer(t, roles))
@@ -228,4 +200,23 @@ func NewClusterRoleLister(t testing.TB, roles ...*rbacv1.ClusterRole) rbaclister
 // NewClusterRoleBindingLister constructs a cluster role binding lister backed by an indexer containing the supplied bindings.
 func NewClusterRoleBindingLister(t testing.TB, bindings ...*rbacv1.ClusterRoleBinding) rbaclisters.ClusterRoleBindingLister {
 	return rbaclisters.NewClusterRoleBindingLister(newClusterIndexer(t, bindings))
+}
+
+// ReplicaSetOwnerLookup adapts a ReplicaSet lister to the owner lookup pod
+// projection takes: the ReplicaSet's controlling owner reference, and whether
+// the ReplicaSet exists. A nil lister yields a nil lookup (no source).
+func ReplicaSetOwnerLookup(lister appslisters.ReplicaSetLister) func(namespace, name string) (metav1.OwnerReference, bool) {
+	if lister == nil {
+		return nil
+	}
+	return func(namespace, name string) (metav1.OwnerReference, bool) {
+		rs, err := lister.ReplicaSets(namespace).Get(name)
+		if err != nil {
+			return metav1.OwnerReference{}, false
+		}
+		if controller := metav1.GetControllerOfNoCopy(rs); controller != nil {
+			return *controller, true
+		}
+		return metav1.OwnerReference{}, true
+	}
 }

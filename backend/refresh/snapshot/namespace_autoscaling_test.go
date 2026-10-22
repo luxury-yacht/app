@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -19,13 +19,13 @@ func TestBuildSnapshotPopulatesTargetAPIVersion(t *testing.T) {
 	// Two HPAs targeting different-group CRDs that happen to share Kind
 	// and namespace+name. Without TargetAPIVersion the frontend cannot
 	// tell them apart.
-	ackHPA := &autoscalingv1.HorizontalPodAutoscaler{
+	ackHPA := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "ack-hpa",
 			Namespace: "default",
 		},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
 				Kind:       "DBCluster",
 				Name:       "primary",
 				APIVersion: "rds.services.k8s.aws/v1alpha1",
@@ -33,13 +33,13 @@ func TestBuildSnapshotPopulatesTargetAPIVersion(t *testing.T) {
 			MaxReplicas: 5,
 		},
 	}
-	cnpgHPA := &autoscalingv1.HorizontalPodAutoscaler{
+	cnpgHPA := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cnpg-hpa",
 			Namespace: "default",
 		},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
 				Kind:       "DBCluster",
 				Name:       "primary",
 				APIVersion: "postgresql.cnpg.io/v1",
@@ -47,13 +47,13 @@ func TestBuildSnapshotPopulatesTargetAPIVersion(t *testing.T) {
 			MaxReplicas: 3,
 		},
 	}
-	builtinHPA := &autoscalingv1.HorizontalPodAutoscaler{
+	builtinHPA := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "deploy-hpa",
 			Namespace: "default",
 		},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
 				Kind:       "Deployment",
 				Name:       "web",
 				APIVersion: "apps/v1",
@@ -62,9 +62,7 @@ func TestBuildSnapshotPopulatesTargetAPIVersion(t *testing.T) {
 		},
 	}
 
-	builder := &NamespaceAutoscalingBuilder{
-		collectIndexer: autoscalingCollectIndexer(testsupport.NewNamespacedIndexer(t, ackHPA, cnpgHPA, builtinHPA)),
-	}
+	builder := namespaceAutoscalingBuilderFor(ClusterMeta{}, autoscalingCollectIndexer(testsupport.NewNamespacedIndexer(t, ackHPA, cnpgHPA, builtinHPA)))
 	snap, err := builder.Build(context.Background(), "namespace:default")
 	if err != nil {
 		t.Fatalf("Build returned error: %v", err)

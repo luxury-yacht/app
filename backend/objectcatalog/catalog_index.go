@@ -152,11 +152,6 @@ func (idx *catalogIndex) setResource(gvr string, desc Descriptor) {
 	idx.resources[gvr] = desc
 }
 
-func (idx *catalogIndex) resource(gvr string) (Descriptor, bool) {
-	desc, ok := idx.resources[gvr]
-	return desc, ok
-}
-
 func (idx *catalogIndex) resourceForGroupResource(group, resource string) (string, *Descriptor) {
 	for gvr, desc := range idx.resources {
 		if desc.Group == group && desc.Resource == resource {

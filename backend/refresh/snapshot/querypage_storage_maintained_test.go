@@ -90,7 +90,7 @@ func TestStorageMaintainedStoreIngestion(t *testing.T) {
 
 // TestStorageMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the live
 // ingest cutover: fed the projected StreamRow through the ingest Sink (the live
-// reflector path PersistentVolumeClaim now takes via IngestOwned), the maintained
+// reflector path PersistentVolumeClaim now takes), the maintained
 // store's rows must equal exactly what the list path produces, for every namespace
 // scope. The sink delivers the bundle's Table half directly.
 func TestStorageMaintainedStoreSinkMatchesListPath(t *testing.T) {
@@ -184,8 +184,8 @@ func TestNamespaceStorageBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 
 	collect := storageCollectIndexer(pvcIdx)
-	listBuilder := &NamespaceStorageBuilder{collectIndexer: collect}
-	maintainedBuilder := &NamespaceStorageBuilder{collectIndexer: collect, maintained: maintained}
+	listBuilder := newTypedTableListOracle(namespaceStorageDomainSpec(), collect)
+	maintainedBuilder := &NamespaceStorageBuilder{available: availableFromIndexers(collect), maintained: maintained}
 
 	scopes := []string{
 		"namespace:default",

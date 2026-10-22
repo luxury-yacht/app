@@ -2,9 +2,8 @@
  * backend/refresh/ingest/manager.go
  *
  * IngestManager owns the owned-reflector ingestion path for one cluster: a
- * ProjectingStore + client-go reflector per built-in streamed kind, replacing
- * what the typed SharedInformerFactory does today — but holding ONLY projected
- * stream Summaries, never the typed object. It is generic over the kind registry:
+ * ProjectingStore + client-go reflector per built-in kind, holding ONLY
+ * projected bundles, never the typed object. It is generic over the kind registry:
  * it loops kindregistry.StreamDescriptors(), and the only per-group code is the
  * finite group/version -> RESTClient mapping every typed informer needs anyway.
  *
@@ -37,6 +36,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	apiextensionsscheme "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
@@ -56,6 +56,20 @@ import (
 // gatewayGroup is the API group whose example objects and REST client come from
 // the Gateway API client rather than the core kube client.
 const gatewayGroup = "gateway.networking.k8s.io"
+
+// GatewaySource is the Gateway API client plus the kinds discovery reports as
+// served. A Gateway kind gets a reflector only when Presence serves it, so a
+// partial install never LISTs an unserved resource. A nil source disables every
+// Gateway kind.
+type GatewaySource struct {
+	Client   gatewayversioned.Interface
+	Presence interface{ Has(kind string) bool }
+}
+
+// serves reports whether the source can watch kind.
+func (g *GatewaySource) serves(kind string) bool {
+	return g != nil && g.Client != nil && g.Presence != nil && g.Presence.Has(kind)
+}
 
 // apiextensionsGroup is the API group served by the apiextensions client.
 const apiextensionsGroup = "apiextensions.k8s.io"
@@ -172,19 +186,18 @@ type IngestManager struct {
 	meta    streamrows.ClusterMeta
 	kube    kubernetes.Interface
 	apiext  apiextensionsclientset.Interface
-	gateway gatewayversioned.Interface
+	gateway *GatewaySource
 	// dynamic serves runtime-discovered resources. Registry sources use their typed
 	// group clients; a nil dynamic client disables admission of discovered sources.
 	dynamic dynamic.Interface
 
-	entries                map[schema.GroupVersionResource]*entry
-	dynamicAdmissions      map[schema.GroupResource]*dynamicAdmission
-	dynamicGeneration      uint64
-	dynamicListeners       map[uint64]*dynamicSubscription
-	nextDynamicListener    uint64
-	dynamicCatalogSink     Sink
-	definitions            *dynamicDefinitions
-	definitionRegistration cache.ResourceEventHandlerRegistration
+	entries             map[schema.GroupVersionResource]*entry
+	dynamicAdmissions   map[schema.GroupResource]*dynamicAdmission
+	dynamicGeneration   uint64
+	dynamicListeners    map[uint64]*dynamicSubscription
+	nextDynamicListener uint64
+	dynamicCatalogSink  Sink
+	definitions         *dynamicDefinitions
 
 	mu      sync.Mutex
 	cancel  context.CancelFunc
@@ -222,15 +235,14 @@ type IngestManager struct {
 
 // NewIngestManager builds an IngestManager for the cluster identified by meta,
 // mirroring the clients the informer factory takes. apiext and gateway may be
-// nil; descriptors whose group has no available client are skipped (logged
-// once), as are descriptors whose GVK the client-go (or Gateway API) scheme does
-// not know. It builds — but does not start — a reflector + store per remaining
+// nil; descriptors the cluster cannot serve are skipped (logged once, see
+// sourceFor). It builds — but does not start — a reflector + store per remaining
 // kind. Start runs them.
 func NewIngestManager(
 	meta streamrows.ClusterMeta,
 	kube kubernetes.Interface,
 	apiext apiextensionsclientset.Interface,
-	gateway gatewayversioned.Interface,
+	gateway *GatewaySource,
 	allowedNamespaces ...string,
 ) *IngestManager {
 	namespaced := make(map[schema.GroupVersionResource]bool)
@@ -269,23 +281,36 @@ func (m *IngestManager) partitionNamespaces(gvr schema.GroupVersionResource) []s
 // whose GVK the scheme cannot instantiate, so a nil Gateway client or an unknown
 // kind never panics or blocks the rest.
 func (m *IngestManager) addDescriptor(desc streamspec.Descriptor) {
-	gvr := desc.GVR()
 	gvk := schema.GroupVersionKind{Group: desc.Group, Version: desc.Version, Kind: desc.Kind}
-
-	restClient, ok := m.restClientFor(desc.Group, desc.Version)
+	restClient, example, ok := m.sourceFor(gvk)
 	if !ok {
-		klog.V(2).Infof("ingest: no client for %s/%s (kind %s); skipping (logged once)", desc.Group, desc.Version, desc.Kind)
 		return
+	}
+	e := &entry{desc: desc}
+	e.store = newIngestProjectingStore(projectionFor(m.meta, e))
+	m.installReflector(e, desc.GVR(), gvk, restClient, example)
+}
+
+// sourceFor resolves the REST client and example object a kind's reflector
+// needs. It reports false (logged once) when the cluster cannot serve the kind:
+// a Gateway kind discovery did not find, a group with no available client, or a
+// GVK no scheme knows. The caller then builds no entry for the kind.
+func (m *IngestManager) sourceFor(gvk schema.GroupVersionKind) (rest.Interface, apiruntime.Object, bool) {
+	if gvk.Group == gatewayGroup && !m.gateway.serves(gvk.Kind) {
+		klog.V(2).Infof("ingest: %s is not served by this cluster; skipping (logged once)", gvk.String())
+		return nil, nil, false
+	}
+	restClient, ok := m.restClientFor(gvk.Group, gvk.Version)
+	if !ok {
+		klog.V(2).Infof("ingest: no client for %s; skipping (logged once)", gvk.String())
+		return nil, nil, false
 	}
 	example, ok := exampleObjectFor(gvk)
 	if !ok {
 		klog.V(2).Infof("ingest: scheme does not know %s; skipping (logged once)", gvk.String())
-		return
+		return nil, nil, false
 	}
-
-	e := &entry{desc: desc}
-	e.store = newIngestProjectingStore(projectionFor(m.meta, e))
-	m.installReflector(e, gvr, gvk, restClient, example)
+	return restClient, example, true
 }
 
 // installReflector wires the per-namespace ListWatches + reflectors for an
@@ -319,17 +344,11 @@ func (m *IngestManager) installReflector(e *entry, gvr schema.GroupVersionResour
 // synthesis + live notify); every other reflector passes false so the redundant Table half
 // is dropped once fanned to the maintained store. It must be called before Start so the
 // reflector is included when reflectors launch. It is a no-op (returns false) when the
-// kind's group has no client, the scheme cannot instantiate its GVK, or an entry for gvr
-// already exists (the generic loop already added it — preventing a double reflector).
+// cluster cannot serve the kind (see sourceFor) or an entry for gvr already exists (the
+// generic loop already added it — preventing a double reflector).
 func (m *IngestManager) RegisterReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project ProjectFunc, retainTable bool) bool {
-	restClient, ok := m.restClientFor(gvk.Group, gvk.Version)
+	restClient, example, ok := m.sourceFor(gvk)
 	if !ok {
-		klog.V(2).Infof("ingest: no client for %s/%s (kind %s); skipping reflector (logged once)", gvk.Group, gvk.Version, gvk.Kind)
-		return false
-	}
-	example, ok := exampleObjectFor(gvk)
-	if !ok {
-		klog.V(2).Infof("ingest: scheme does not know %s; skipping reflector (logged once)", gvk.String())
 		return false
 	}
 	m.mu.Lock()
@@ -494,10 +513,10 @@ func (m *IngestManager) restClientFor(group, version string) (rest.Interface, bo
 		}
 		return m.apiext.ApiextensionsV1().RESTClient(), true
 	case gatewayGroup:
-		if m.gateway == nil {
+		if m.gateway == nil || m.gateway.Client == nil {
 			return nil, false
 		}
-		return m.gateway.GatewayV1().RESTClient(), true
+		return m.gateway.Client.GatewayV1().RESTClient(), true
 	default:
 		return nil, false
 	}
@@ -513,6 +532,11 @@ func exampleObjectFor(gvk schema.GroupVersionKind) (apiruntime.Object, bool) {
 	}
 	if gvk.Group == gatewayGroup {
 		if obj, err := gatewayscheme.Scheme.New(gvk); err == nil {
+			return obj, true
+		}
+	}
+	if gvk.Group == apiextensionsGroup {
+		if obj, err := apiextensionsscheme.Scheme.New(gvk); err == nil {
 			return obj, true
 		}
 	}
@@ -780,8 +804,7 @@ func (m *IngestManager) Stop() {
 	m.runDone = nil
 	m.dynamicAdmissions = nil
 	m.dynamicListeners = nil
-	definitions, registration := m.definitions, m.definitionRegistration
-	m.definitionRegistration = nil
+	definitions := m.definitions
 	dynamicEntries := make([]*entry, 0)
 	for _, e := range m.entries {
 		if e.dynamic != nil {
@@ -793,8 +816,9 @@ func (m *IngestManager) Stop() {
 	if cancel != nil {
 		cancel()
 	}
-	if definitions != nil && registration != nil {
-		_ = definitions.informer.RemoveEventHandler(registration)
+	if definitions != nil {
+		// Drain queued lifecycle work; the stopped manager admits nothing.
+		definitions.lifecycle.Stop()
 	}
 	for _, e := range dynamicEntries {
 		e.dynamic.cancel()

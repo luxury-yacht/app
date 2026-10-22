@@ -16,13 +16,10 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
-	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
-// Descriptor is the registry entry for one directly-streamed built-in kind served
-// by the shared informer factory.
+// Descriptor is the registry entry for one directly-streamed built-in kind, fed
+// by its owned ingest reflector.
 type Descriptor struct {
 	Group         string
 	Version       string
@@ -40,13 +37,6 @@ type Descriptor struct {
 	// cross-object snapshot aggregates. It is retained independently of StreamRow,
 	// whose Table half is normally dropped after sink fan-out for ingest-owned kinds.
 	AggregateRow func(obj metav1.Object) any
-
-	// Informer returns the kind's informer from the shared factory. Kinds served by
-	// the shared factory set this; Gateway-API kinds set GatewayInformer instead.
-	Informer func(factory informers.SharedInformerFactory) cache.SharedIndexInformer
-
-	// GatewayInformer returns the kind's informer from the Gateway-API factory.
-	GatewayInformer func(factory gatewayinformers.SharedInformerFactory) cache.SharedIndexInformer
 }
 
 // GVR returns the descriptor's GroupVersionResource. It is the single source the

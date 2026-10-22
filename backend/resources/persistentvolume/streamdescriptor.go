@@ -11,8 +11,6 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
 )
 
 // StreamDescriptor registers PersistentVolume for resource streaming (cluster-storage).
@@ -25,8 +23,5 @@ var StreamDescriptor = streamspec.Descriptor{
 	ClusterScoped: !Identity.Namespaced,
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*corev1.PersistentVolume))
-	},
-	Informer: func(factory informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return factory.Core().V1().PersistentVolumes().Informer()
 	},
 }

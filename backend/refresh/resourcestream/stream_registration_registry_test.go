@@ -25,12 +25,12 @@ func TestStreamRegistryMatchesContract(t *testing.T) {
 // silently lost its Stream descriptor (it would then disappear from its live table
 // and snapshot). This pins the exact set of directly-streamed kinds. Workloads
 // (Pod/Deployment/ReplicaSet/StatefulSet/DaemonSet/Job/CronJob), Service,
-// EndpointSlice, Node, Namespace, and CustomResourceDefinition are intentionally
-// absent — they stream via bespoke/aggregating paths, not the generic descriptor.
+// EndpointSlice, Node, and Namespace are intentionally absent — they stream via
+// bespoke/aggregating paths, not the generic descriptor.
 func TestStreamDescriptorKindsDoNotDrift(t *testing.T) {
 	want := []string{
 		"BackendTLSPolicy", "ClusterRole", "ClusterRoleBinding", "ConfigMap",
-		"GRPCRoute", "Gateway", "GatewayClass", "HTTPRoute", "HorizontalPodAutoscaler",
+		"CustomResourceDefinition", "GRPCRoute", "Gateway", "GatewayClass", "HTTPRoute", "HorizontalPodAutoscaler",
 		"Ingress", "IngressClass", "LimitRange", "ListenerSet",
 		"MutatingWebhookConfiguration", "NetworkPolicy", "PersistentVolume",
 		"PersistentVolumeClaim", "PodDisruptionBudget", "ReferenceGrant",

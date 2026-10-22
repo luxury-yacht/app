@@ -60,11 +60,10 @@ func TestCatalogFlagsArgoCDApplicationProblems(t *testing.T) {
 			Scope: apiextensionsv1.NamespaceScoped, Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{Name: gvr.Version, Served: true, Storage: true}},
 		},
 	}
-	_, err := clients.apiextensionsClient.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, definition, metav1.CreateOptions{})
-	require.NoError(t, err)
+	server := crdAPIServer(t, []string{"applications", "customresourcedefinitions"}, definition)
 	subsystem, err := system.NewSubsystemWithServices(context.Background(), system.Config{
-		KubernetesClient: kube, APIExtensionsClient: clients.apiextensionsClient, DynamicClient: dynamic,
-		ClusterID: target.meta.ID, ClusterName: target.meta.Name, Logger: app.AppLogs.Logger(), ResyncInterval: time.Minute,
+		KubernetesClient: server.Client(t), APIExtensionsClient: server.APIExtensionsClient(t), DynamicClient: dynamic,
+		ClusterID: target.meta.ID, ClusterName: target.meta.Name, Logger: app.AppLogs.Logger(),
 		ObjectDetailsProvider: app.Resources.objectDetailProvider(), NodeMaintenanceStore: app.NodeMaintenanceStore,
 	})
 	require.NoError(t, err)
@@ -75,10 +74,8 @@ func TestCatalogFlagsArgoCDApplicationProblems(t *testing.T) {
 		cancel()
 		subsystem.ResourceStream.Stop()
 		subsystem.IngestManager.Stop()
-		_ = subsystem.InformerFactory.Shutdown()
 	})
 	subsystem.IngestManager.Start(ctx)
-	require.NoError(t, subsystem.InformerFactory.Start(ctx))
 	require.NoError(t, app.Refresh.startObjectCatalogForTarget(target))
 	service := app.Refresh.objectCatalogServiceForCluster(target.meta.ID)
 	require.Eventually(t, func() bool {

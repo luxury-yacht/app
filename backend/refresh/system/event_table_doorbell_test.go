@@ -1,112 +1,24 @@
 package system
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes/fake"
-	clienttesting "k8s.io/client-go/testing"
 
-	"github.com/luxury-yacht/app/backend/internal/applog"
-	"github.com/luxury-yacht/app/backend/nodemaintenance"
-	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/ingest/ingesttest"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
-	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 )
 
-// eventTableHarness composes the real owners behind the Cluster Events and
-// Namespace Events tables: a shared Events informer feeding the maintained
-// stores, the doorbell wiring production uses, the resource-stream manager the
-// frontend subscribes to, and a snapshot service the signal-triggered refetch
-// reads from.
-type eventTableHarness struct {
-	client   *fake.Clientset
-	service  *snapshot.Service
-	manager  *resourcestream.Manager
-	registry *domain.Registry
-}
+// The Cluster Events and Namespace Events tables are fed by the owned events
+// reflector: these tests run the production subsystem against an API server,
+// so every write travels LIST/WATCH → store → table sink → doorbell.
 
-func newEventTableHarness(t *testing.T, resync time.Duration) *eventTableHarness {
-	t.Helper()
-	return newEventTableHarnessWith(t, resync, nil, nil)
-}
-
-// newEventTableHarnessWith seeds the cluster with objects and runs beforeStart
-// (for example a spill restore) after registration but before the informers start.
-func newEventTableHarnessWith(
-	t *testing.T,
-	resync time.Duration,
-	objects []runtime.Object,
-	beforeStart func(*domain.Registry),
-) *eventTableHarness {
-	t.Helper()
-	meta := snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}
-	client := fake.NewClientset(objects...)
-	factory := informers.NewSharedInformerFactory(client, resync)
-	reg := domain.New()
-	service := snapshot.NewServiceWithPermissions(reg, nil, meta, nil)
-	manager := resourcestream.NewManager(nil, nil, meta, service.InvalidateDomainCache)
-	_, err := snapshot.RegisterClusterEventsDomain(reg, factory, meta, manager)
-	require.NoError(t, err)
-	_, err = snapshot.RegisterNamespaceEventsDomain(reg, factory, meta, manager)
-	require.NoError(t, err)
-
-	if beforeStart != nil {
-		beforeStart(reg)
-	}
-
-	stop := make(chan struct{})
-	t.Cleanup(func() {
-		manager.Stop()
-		close(stop)
-	})
-	factory.Start(stop)
-	factory.WaitForCacheSync(stop)
-	return &eventTableHarness{client: client, service: service, manager: manager, registry: reg}
-}
-
-func (h *eventTableHarness) subscribe(t *testing.T, domainName, scope string) *resourcestream.Subscription {
-	t.Helper()
-	selector, err := resourcestream.ParseStreamSelector("c1", domainName, scope)
-	require.NoError(t, err)
-	sub, err := h.manager.SubscribeSelector(selector)
-	require.NoError(t, err)
-	return sub
-}
-
-// rowNames reads the table the way a signal-triggered refetch does.
-func (h *eventTableHarness) rowNames(t *testing.T, domainName, scope string) []string {
-	t.Helper()
-	snap, err := h.service.Build(context.Background(), domainName, "c1|"+scope)
-	require.NoError(t, err)
-	var names []string
-	switch payload := snap.Payload.(type) {
-	case snapshot.NamespaceEventsSnapshot:
-		for _, row := range payload.Rows {
-			names = append(names, row.Ref.Name)
-		}
-	case snapshot.ClusterEventsSnapshot:
-		for _, row := range payload.Rows {
-			names = append(names, row.Ref.Name)
-		}
-	default:
-		t.Fatalf("unexpected %s payload %T", domainName, snap.Payload)
-	}
-	return names
-}
-
-func tableEvent(name, eventNamespace, objectKind, objectNamespace, rv string) *corev1.Event {
+func tableEvent(name, eventNamespace, objectKind, objectNamespace string) *corev1.Event {
 	return &corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: eventNamespace, ResourceVersion: rv},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: eventNamespace},
 		InvolvedObject: corev1.ObjectReference{
 			APIVersion: "v1", Kind: objectKind, Namespace: objectNamespace, Name: "obj-" + name,
 		},
@@ -155,7 +67,8 @@ func requireQuiet(t *testing.T, window time.Duration, subs map[string]*resources
 // Namespaces, a cluster-scoped event rings the cluster table, a delete rings
 // like an add, and the refetch each ring triggers sees the change.
 func TestEventTableDoorbellsReachEveryViewedScopeAfterTheStoreApplies(t *testing.T) {
-	h := newEventTableHarness(t, 0)
+	server := newReflectorAPIServer(t)
+	h := newReflectorHarness(t, server, "")
 	prod := h.subscribe(t, "namespace-events", "namespace:prod")
 	all := h.subscribe(t, "namespace-events", "namespace:all")
 	other := h.subscribe(t, "namespace-events", "namespace:other")
@@ -166,10 +79,8 @@ func TestEventTableDoorbellsReachEveryViewedScopeAfterTheStoreApplies(t *testing
 	require.Empty(t, h.rowNames(t, "namespace-events", "namespace:prod"))
 	require.Empty(t, h.rowNames(t, "cluster-events", ""))
 
-	ctx := context.Background()
-	podEvent := tableEvent("web.1", "prod", "Pod", "prod", "10")
-	_, err := h.client.CoreV1().Events("prod").Create(ctx, podEvent, metav1.CreateOptions{})
-	require.NoError(t, err)
+	podEvent := tableEvent("web.1", "prod", "Pod", "prod")
+	server.Create(t, podEvent)
 
 	requireEventDoorbell(t, prod, "namespace-events", "namespace:prod")
 	requireEventDoorbell(t, all, "namespace-events", "namespace:all")
@@ -180,9 +91,7 @@ func TestEventTableDoorbellsReachEveryViewedScopeAfterTheStoreApplies(t *testing
 		"cluster events":    cluster,
 	})
 
-	nodeEvent := tableEvent("node-a.1", "default", "Node", "", "11")
-	_, err = h.client.CoreV1().Events("default").Create(ctx, nodeEvent, metav1.CreateOptions{})
-	require.NoError(t, err)
+	server.Create(t, tableEvent("node-a.1", "default", "Node", ""))
 
 	requireEventDoorbell(t, cluster, "cluster-events", "")
 	require.Equal(t, []string{"node-a.1"}, h.rowNames(t, "cluster-events", ""))
@@ -191,7 +100,7 @@ func TestEventTableDoorbellsReachEveryViewedScopeAfterTheStoreApplies(t *testing
 		"all namespaces": all,
 	})
 
-	require.NoError(t, h.client.CoreV1().Events("prod").Delete(ctx, "web.1", metav1.DeleteOptions{}))
+	server.Delete(t, podEvent)
 
 	requireEventDoorbell(t, prod, "namespace-events", "namespace:prod")
 	requireEventDoorbell(t, all, "namespace-events", "namespace:all")
@@ -199,70 +108,83 @@ func TestEventTableDoorbellsReachEveryViewedScopeAfterTheStoreApplies(t *testing
 	require.Empty(t, h.rowNames(t, "namespace-events", "namespace:prod"))
 }
 
-// Informer resyncs re-deliver every cached Event with an unchanged
-// resourceVersion. Those echoes carry no change, so they must not ring.
-func TestEventTableDoorbellsIgnoreInformerResyncEchoes(t *testing.T) {
-	h := newEventTableHarness(t, time.Second)
+// A relist after a watch gap re-delivers every Event. Only the scopes whose
+// rows changed may ring: Events are the highest-churn kind, and an unchanged
+// relist must not refetch every open Events table.
+func TestEventTableRelistRingsOnlyTheScopesItChanged(t *testing.T) {
+	server := newReflectorAPIServer(t)
+	podEvent := tableEvent("web.1", "prod", "Pod", "prod")
+	server.Create(t, podEvent)
+	server.Create(t, tableEvent("db.1", "data", "Pod", "data"))
+	server.Create(t, tableEvent("node-a.1", "default", "Node", ""))
+	h := newReflectorHarness(t, server, "")
+	require.Equal(t, []string{"db.1", "web.1"}, h.rowNames(t, "namespace-events", "namespace:all"))
 	prod := h.subscribe(t, "namespace-events", "namespace:prod")
-	all := h.subscribe(t, "namespace-events", "namespace:all")
+	data := h.subscribe(t, "namespace-events", "namespace:data")
 	cluster := h.subscribe(t, "cluster-events", "")
+	// Drain the debounced rings of the initial list.
+	collect(prod, 750*time.Millisecond)
+	collect(data, 10*time.Millisecond)
+	collect(cluster, 10*time.Millisecond)
 
-	ctx := context.Background()
-	_, err := h.client.CoreV1().Events("prod").Create(ctx, tableEvent("web.1", "prod", "Pod", "prod", "10"), metav1.CreateOptions{})
-	require.NoError(t, err)
-	_, err = h.client.CoreV1().Events("default").Create(ctx, tableEvent("node-a.1", "default", "Node", "", "11"), metav1.CreateOptions{})
-	require.NoError(t, err)
+	server.WatchGap(t, func() { server.Delete(t, podEvent) })
+
 	requireEventDoorbell(t, prod, "namespace-events", "namespace:prod")
-	requireEventDoorbell(t, all, "namespace-events", "namespace:all")
-	requireEventDoorbell(t, cluster, "cluster-events", "")
-
-	// At least two one-second resyncs re-deliver both events.
-	requireQuiet(t, 2500*time.Millisecond, map[string]*resourcestream.Subscription{
-		"namespace prod": prod,
-		"all namespaces": all,
-		"cluster events": cluster,
+	require.Empty(t, h.rowNames(t, "namespace-events", "namespace:prod"))
+	requireQuiet(t, 1500*time.Millisecond, map[string]*resourcestream.Subscription{
+		"unchanged namespace":     data,
+		"unchanged cluster table": cluster,
 	})
-
-	// A real update still rings after the echoes were suppressed.
-	updated := tableEvent("web.1", "prod", "Pod", "prod", "12")
-	updated.Reason = "BackOff"
-	_, err = h.client.CoreV1().Events("prod").Update(ctx, updated, metav1.UpdateOptions{})
-	require.NoError(t, err)
-	requireEventDoorbell(t, prod, "namespace-events", "namespace:prod")
-	requireEventDoorbell(t, all, "namespace-events", "namespace:all")
 }
 
-// Rows restored from a spill for Events that expired while the app was closed
-// or the cluster was Cold are swept by Reconcile once the informers sync. The
-// tables must hear that removal, or the expired rows stay on screen until the
-// next real event in their scope.
-func TestEventTableDoorbellsRingWhenReconcileDropsRestoredRows(t *testing.T) {
-	spillDir := t.TempDir()
-	before := newEventTableHarnessWith(t, 0, []runtime.Object{
-		tableEvent("web.1", "prod", "Pod", "prod", "10"),
-		tableEvent("node-a.1", "default", "Node", "", "11"),
-	}, nil)
-	require.Equal(t, []string{"web.1"}, before.rowNames(t, "namespace-events", "namespace:all"))
-	require.Equal(t, []string{"node-a.1"}, before.rowNames(t, "cluster-events", ""))
-	require.NoError(t, before.registry.SpillMaintainedStores(spillDir))
+// A re-warm restores both tables from their spill and resumes the Events
+// watch. Events that existed at the spill keep their rows with no Event
+// changes; Events deleted while the cluster was Cold leave no rows behind,
+// whether the watch resumes or the expired version forces a relist.
+func TestEventTablesRewarmServeTheLiveEvents(t *testing.T) {
+	newEvents := func() (*corev1.Event, *corev1.Event) {
+		return tableEvent("web.1", "prod", "Pod", "prod"), tableEvent("node-a.1", "default", "Node", "")
+	}
+	start := func(t *testing.T) (*ingesttest.APIServer, string) {
+		t.Helper()
+		server := newReflectorAPIServer(t)
+		podEvent, nodeEvent := newEvents()
+		server.Create(t, podEvent)
+		server.Create(t, nodeEvent)
+		before := newReflectorHarness(t, server, "")
+		require.Equal(t, []string{"web.1"}, before.rowNames(t, "namespace-events", "namespace:all"))
+		require.Equal(t, []string{"node-a.1"}, before.rowNames(t, "cluster-events", ""))
+		return server, before.spill(t)
+	}
 
-	// Both Events expired before the next start; only the spill still has them.
-	after := newEventTableHarnessWith(t, 0, nil, func(reg *domain.Registry) {
-		require.NoError(t, reg.RestoreMaintainedStores(spillDir))
+	t.Run("no changes while Cold", func(t *testing.T) {
+		server, spill := start(t)
+		after := newReflectorHarness(t, server, spill)
+		require.Equal(t, []string{"web.1"}, after.rowNames(t, "namespace-events", "namespace:all"))
+		require.Equal(t, []string{"node-a.1"}, after.rowNames(t, "cluster-events", ""))
 	})
-	prod := after.subscribe(t, "namespace-events", "namespace:prod")
-	all := after.subscribe(t, "namespace-events", "namespace:all")
-	cluster := after.subscribe(t, "cluster-events", "")
-	require.Equal(t, []string{"web.1"}, after.rowNames(t, "namespace-events", "namespace:all"),
-		"the restored row is served until Reconcile runs")
-
-	after.registry.ReconcileMaintainedStores()
-
-	requireEventDoorbell(t, prod, "namespace-events", "namespace:prod")
-	requireEventDoorbell(t, all, "namespace-events", "namespace:all")
-	requireEventDoorbell(t, cluster, "cluster-events", "")
-	require.Empty(t, after.rowNames(t, "namespace-events", "namespace:all"))
-	require.Empty(t, after.rowNames(t, "cluster-events", ""))
+	t.Run("deleted while Cold, watch resumes", func(t *testing.T) {
+		server, spill := start(t)
+		podEvent, nodeEvent := newEvents()
+		server.Delete(t, podEvent)
+		server.Delete(t, nodeEvent)
+		after := newReflectorHarness(t, server, spill)
+		require.Eventually(t, func() bool {
+			return len(after.rowNames(t, "namespace-events", "namespace:all")) == 0 && len(after.rowNames(t, "cluster-events", "")) == 0
+		}, 5*time.Second, 20*time.Millisecond)
+	})
+	t.Run("deleted while Cold, version expired", func(t *testing.T) {
+		server, spill := start(t)
+		podEvent, nodeEvent := newEvents()
+		server.WatchGap(t, func() {
+			server.Delete(t, podEvent)
+			server.Delete(t, nodeEvent)
+		})
+		after := newReflectorHarness(t, server, spill)
+		require.Eventually(t, func() bool {
+			return len(after.rowNames(t, "namespace-events", "namespace:all")) == 0 && len(after.rowNames(t, "cluster-events", "")) == 0
+		}, 5*time.Second, 20*time.Millisecond)
+	})
 }
 
 // The production constructor must give both event tables the subsystem's
@@ -270,49 +192,17 @@ func TestEventTableDoorbellsRingWhenReconcileDropsRestoredRows(t *testing.T) {
 // lose their doorbell. Silence after teardown is pinned by
 // TestGenerationStopWaitsForRunningProducerCallbacks.
 func TestSubsystemWiresAndStopsEventTableDoorbells(t *testing.T) {
-	kube := fake.NewClientset()
-	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
-		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
-		attrs := review.Spec.ResourceAttributes
-		review.Status.Allowed = attrs != nil && attrs.Resource == "events"
-		return true, review, nil
-	})
-	subsystem, err := NewSubsystemWithServices(t.Context(), Config{
-		KubernetesClient: kube, APIExtensionsClient: apiextensionsfake.NewClientset(),
-		DynamicClient: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), ClusterID: "c1",
-		Logger: applog.Noop, ObjectDetailsProvider: noopObjectDetailProvider{},
-		NodeMaintenanceStore: nodemaintenance.NewStore(5), ResyncInterval: time.Minute,
-	})
-	require.NoError(t, err)
-	ctx, cancel := context.WithCancel(t.Context())
-	t.Cleanup(func() {
-		cancel()
-		subsystem.ResourceStream.Stop()
-		subsystem.IngestManager.Stop()
-		_ = subsystem.InformerFactory.Shutdown()
-	})
+	server := newReflectorAPIServer(t)
+	h := newReflectorHarness(t, server, "")
+	all := h.subscribe(t, "namespace-events", "namespace:all")
+	cluster := h.subscribe(t, "cluster-events", "")
 
-	require.NoError(t, subsystem.InformerFactory.Start(ctx))
-	selector, err := resourcestream.ParseStreamSelector("c1", "namespace-events", "namespace:all")
-	require.NoError(t, err)
-	all, err := subsystem.ResourceStream.SubscribeSelector(selector)
-	require.NoError(t, err)
-	defer all.Cancel()
-
-	_, err = kube.CoreV1().Events("prod").Create(context.Background(), tableEvent("web.1", "prod", "Pod", "prod", "10"), metav1.CreateOptions{})
-	require.NoError(t, err)
+	server.Create(t, tableEvent("web.1", "prod", "Pod", "prod"))
 	requireEventDoorbell(t, all, "namespace-events", "namespace:all")
-
-	clusterSelector, err := resourcestream.ParseStreamSelector("c1", "cluster-events", "")
-	require.NoError(t, err)
-	cluster, err := subsystem.ResourceStream.SubscribeSelector(clusterSelector)
-	require.NoError(t, err)
-	defer cluster.Cancel()
-	_, err = kube.CoreV1().Events("default").Create(context.Background(), tableEvent("node-a.1", "default", "Node", "", "11"), metav1.CreateOptions{})
-	require.NoError(t, err)
+	server.Create(t, tableEvent("node-a.1", "default", "Node", ""))
 	requireEventDoorbell(t, cluster, "cluster-events", "")
 
-	subsystem.ResourceStream.Stop()
+	h.subsystem.ResourceStream.Stop()
 	select {
 	case reason := <-all.Drops:
 		require.Equal(t, resourcestream.DropReasonClosed, reason)

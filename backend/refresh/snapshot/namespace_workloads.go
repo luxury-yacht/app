@@ -6,7 +6,6 @@ package snapshot
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -15,12 +14,8 @@ import (
 
 	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
 
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	informers "k8s.io/client-go/informers"
-	autoscalinglisters "k8s.io/client-go/listers/autoscaling/v1"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
@@ -33,6 +28,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
@@ -72,7 +68,9 @@ type NamespaceWorkloadsBuilder struct {
 	includeDaemonSets   bool
 	includeJobs         bool
 	includeCronJobs     bool
-	hpaLister           autoscalinglisters.HorizontalPodAutoscalerLister
+	// hpaSource supplies the HPA scale targets the rows join at serve; nil leaves
+	// every row's HPA ownership unknown.
+	hpaSource hpaTargetSource
 	// metrics supplies the poller usage joined onto the served rows AT SERVE — usage is
 	// never written to the maintained store, so a metric tick cannot re-project stored
 	// rows. nil (a unit test) serves the no-data marker.
@@ -103,6 +101,15 @@ type NamespaceWorkloadsBuilder struct {
 // version watermark. *ingest.IngestManager satisfies it.
 type podWorkloadsIngestSource interface {
 	Rows(gvr schema.GroupVersionResource) []interface{}
+	StoreResourceVersion(gvr schema.GroupVersionResource) string
+}
+
+// hpaTargetSource supplies the HPA store's projected scale targets, its
+// partitions' availability, and its resourceVersion for the version watermark.
+// *ingest.IngestManager satisfies it.
+type hpaTargetSource interface {
+	ingestPartitionSource
+	AggregateRows(gvr schema.GroupVersionResource) []interface{}
 	StoreResourceVersion(gvr schema.GroupVersionResource) string
 }
 
@@ -181,27 +188,24 @@ func feedWorkloadStoreFromIngest(ingestManager *ingest.IngestManager, maintained
 
 func RegisterNamespaceWorkloadsDomain(
 	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
 	provider metrics.Provider,
 	perms NamespaceWorkloadsPermissions,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
 	bell doorbell.Bell,
 ) error {
-	if factory == nil {
-		return fmt.Errorf("shared informer factory is nil")
-	}
 	maintained := newTypedMaintainedStore(clusterMeta, workloadsQuerypageSchema(), workloadTableQueryAdapter())
 	feedWorkloadStoreFromIngest(ingestManager, maintained, bell)
 	builder := &NamespaceWorkloadsBuilder{
-		// HPA lister is always wired — it's informational and doesn't block on missing perms.
-		hpaLister: factory.Autoscaling().V1().HorizontalPodAutoscalers().Lister(),
 		// workloadIngest supplies only the workload stores' RVs for the version watermark; the
 		// own-rows come from the Sink-fed maintained store.
 		workloadIngest:      ingestManager,
 		workloadsMaintained: maintained,
 		metrics:             provider,
 		perBuild:            &perBuildStoreCache[WorkloadSummary]{},
+	}
+	if ingestManager != nil {
+		builder.hpaSource = ingestManager
 	}
 	if perms.IncludePods {
 		// Pods is cut to the ingest path: the per-owner aggregation and standalone-pod
@@ -263,13 +267,13 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 		}
 	}
 
-	// List HPAs to mark workloads that are managed by an autoscaler. If this
-	// coverage is unavailable, leave ownership unknown instead of emitting false.
-	hpas, hpaErr := b.listHPAs(namespace)
+	// Mark workloads an HPA manages only when the HPA data covering this
+	// namespace is complete; otherwise ownership stays unknown, not false.
+	hpaKnown := ingestRowsComplete(b.hpaSource, HPAGVR, namespace)
 
 	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), namespaceWorkloadSnapshotInputs{
 		query: query, podAggregates: podAggregates, podSummaries: podSummaries, ownRows: ownRows,
-		hpas: hpas, hpaKnown: hpaErr == nil, podUsage: podUsage, metricsMetadata: metricsMetadata, issues: issues,
+		hpaTargets: b.hpaTargets(namespace, hpaKnown), hpaKnown: hpaKnown, podUsage: podUsage, metricsMetadata: metricsMetadata, issues: issues,
 	})
 }
 
@@ -288,7 +292,7 @@ type namespaceWorkloadSnapshotInputs struct {
 	podAggregates   []streamrows.PodAggregate
 	podSummaries    map[string]streamrows.PodSummary
 	ownRows         []WorkloadSummary
-	hpas            []*autoscalingv1.HorizontalPodAutoscaler
+	hpaTargets      []hpapkg.ScaleTarget
 	hpaKnown        bool
 	podUsage        map[string]metrics.PodUsage
 	metricsMetadata metrics.Metadata
@@ -298,8 +302,9 @@ type namespaceWorkloadSnapshotInputs struct {
 func (b *NamespaceWorkloadsBuilder) buildSnapshot(meta ClusterMeta, scope string, inputs namespaceWorkloadSnapshotInputs) (*refresh.Snapshot, error) {
 	items, version := assembleWorkloadRows(workloadRowInputs{
 		podAggregates: inputs.podAggregates, podSummaries: inputs.podSummaries, ownRows: inputs.ownRows,
-		hpas: inputs.hpas, hpaKnown: inputs.hpaKnown, podUsage: inputs.podUsage,
+		hpaTargets: inputs.hpaTargets, hpaKnown: inputs.hpaKnown, podUsage: inputs.podUsage,
 		workloadIngestVersion: maxIngestStoreVersion(b.workloadIngest, DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR),
+		hpaIngestVersion:      b.hpaVersion(inputs.hpaKnown),
 		podIngestVersion:      ingestStoreVersion(b.podIngest, PodGVR),
 	})
 	// Sort ONLY for the window branch, which truncates input order. The query
@@ -348,22 +353,25 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(meta ClusterMeta, scope string
 // into its workload (never its own row), regardless of whether that workload is in the emitted set.
 // workloadIngestVersion/podIngestVersion are the
 // cut stores' watermarks, folded into the returned version only when a workload / standalone-pod
-// row is actually emitted (matching the prior per-object RV fold).
+// row is actually emitted (matching the prior per-object RV fold). hpaIngestVersion is folded
+// whenever a row carries a known HPA ownership flag, so an HPA change refreshes cached pages.
 type workloadRowInputs struct {
 	podAggregates         []streamrows.PodAggregate
 	podSummaries          map[string]streamrows.PodSummary
 	ownRows               []WorkloadSummary
-	hpas                  []*autoscalingv1.HorizontalPodAutoscaler
+	hpaTargets            []hpapkg.ScaleTarget
 	hpaKnown              bool
 	podUsage              map[string]metrics.PodUsage
 	workloadIngestVersion uint64
 	podIngestVersion      uint64
+	hpaIngestVersion      uint64
 }
 
 func assembleWorkloadRows(inputs workloadRowInputs) ([]WorkloadSummary, uint64) {
 	assembler := workloadRowAssembler{
-		hpaTargets:   buildHPATargetSet(inputs.hpas),
+		hpaTargets:   buildHPATargetSet(inputs.hpaTargets),
 		hpaKnown:     inputs.hpaKnown,
+		hpaVersion:   inputs.hpaIngestVersion,
 		podUsage:     inputs.podUsage,
 		podSummaries: inputs.podSummaries,
 		podsByOwner:  groupPodAggregatesByOwner(inputs.podAggregates),
@@ -378,6 +386,7 @@ func assembleWorkloadRows(inputs workloadRowInputs) ([]WorkloadSummary, uint64) 
 type workloadRowAssembler struct {
 	hpaTargets   map[string]struct{}
 	hpaKnown     bool
+	hpaVersion   uint64
 	podUsage     map[string]metrics.PodUsage
 	podSummaries map[string]streamrows.PodSummary
 	podsByOwner  map[string][]streamrows.PodAggregate
@@ -400,6 +409,9 @@ func (a *workloadRowAssembler) append(summary WorkloadSummary) {
 	if a.hpaKnown {
 		_, managed := a.hpaTargets[workloadHPATargetKey(summary)]
 		summary.HPAManaged = &managed
+		if a.hpaVersion > a.version {
+			a.version = a.hpaVersion
+		}
 	}
 	a.items = append(a.items, summary)
 }
@@ -720,33 +732,43 @@ func workloadPodReadyStatus(pods []streamrows.PodAggregate, fallbackReady, fallb
 	return fmt.Sprintf("%d/%d", readyPods, totalPods)
 }
 
-// listHPAs lists HorizontalPodAutoscalers in the given namespace (or all if empty).
-func (b *NamespaceWorkloadsBuilder) listHPAs(namespace string) ([]*autoscalingv1.HorizontalPodAutoscaler, error) {
-	if b.hpaLister == nil {
-		return nil, errors.New("hpa lister unavailable")
+// hpaTargets returns the HPA scale targets in namespace ("" = all namespaces),
+// or nil when the HPA data is incomplete and ownership must stay unknown.
+func (b *NamespaceWorkloadsBuilder) hpaTargets(namespace string, known bool) []hpapkg.ScaleTarget {
+	if !known {
+		return nil
 	}
-	if namespace == "" {
-		return b.hpaLister.List(labels.Everything())
+	var targets []hpapkg.ScaleTarget
+	for _, raw := range b.hpaSource.AggregateRows(HPAGVR) {
+		target, ok := raw.(hpapkg.ScaleTarget)
+		if ok && (namespace == "" || target.Namespace == namespace) {
+			targets = append(targets, target)
+		}
 	}
-	return b.hpaLister.HorizontalPodAutoscalers(namespace).List(labels.Everything())
+	return targets
+}
+
+// hpaVersion is the HPA store's resourceVersion watermark while its data is
+// known, so an HPA change advances the snapshot version.
+func (b *NamespaceWorkloadsBuilder) hpaVersion(known bool) uint64 {
+	if !known {
+		return 0
+	}
+	return ingestStoreVersion(b.hpaSource, HPAGVR)
 }
 
 // buildHPATargetSet returns a set of full GVK + namespace/name keys for
 // workloads targeted by a HorizontalPodAutoscaler.
-func buildHPATargetSet(hpas []*autoscalingv1.HorizontalPodAutoscaler) map[string]struct{} {
-	targets := make(map[string]struct{}, len(hpas))
-	for _, hpa := range hpas {
-		if hpa == nil {
+func buildHPATargetSet(targets []hpapkg.ScaleTarget) map[string]struct{} {
+	set := make(map[string]struct{}, len(targets))
+	for _, target := range targets {
+		gvk := schema.FromAPIVersionAndKind(target.APIVersion, target.Kind)
+		if gvk.Empty() || strings.TrimSpace(target.Name) == "" {
 			continue
 		}
-		ref := hpa.Spec.ScaleTargetRef
-		gvk := schema.FromAPIVersionAndKind(ref.APIVersion, ref.Kind)
-		if gvk.Empty() || strings.TrimSpace(ref.Name) == "" {
-			continue
-		}
-		targets[hpaTargetKey(gvk.Group, gvk.Version, gvk.Kind, hpa.Namespace, ref.Name)] = struct{}{}
+		set[hpaTargetKey(gvk.Group, gvk.Version, gvk.Kind, target.Namespace, target.Name)] = struct{}{}
 	}
-	return targets
+	return set
 }
 
 func workloadHPATargetKey(summary WorkloadSummary) string {

@@ -132,11 +132,10 @@ The authored domain contract declares which clocks can change a payload:
   snapshot owner to the signal that table consumes, at any object count; prove
   it with real state owners, not separate mocked producer and consumer tests.
 - A store's own mutation path is the only place its domain rings. A
-  maintained store rings from its informer handler or ingest sink after its
-  querypage mutation returns (`backend/refresh/snapshot/store_doorbell.go`).
-  client-go runs each informer handler on its own goroutine, so a second
-  handler on the same informer could ring before the store holds the change;
-  `resourcestream` registers no ringing handler or sink. Its ReplicaSet and Job
+  maintained store rings from its ingest sink after its querypage mutation
+  returns (`backend/refresh/snapshot/store_doorbell.go`; the Events tables
+  through their debounced notifier, `event_ingest.go`). `resourcestream`
+  registers no ringing handler or sink. Its ReplicaSet and Job
   owner heals only rewrite pod bundles, which the pods store then publishes.
   A LIST-fallback domain has no maintained store, so the ingest store of the
   kind it lists rings it: the Nodes fallback (no pod access) rings from the node
@@ -149,12 +148,12 @@ The authored domain contract declares which clocks can change a payload:
   domain and every derived domain, so a row that leaves a scope (a pod whose
   owner changes) refreshes the window it left. Object rings carry a complete
   `Ref`; derived rings carry none. Namespaced tables ring both
-  `namespace:<name>` and `namespace:all`; Events tables use the `changed` hook
-  of `registerMaintainedInformerHandler`.
-- Only real changes ring. Adds, real updates, and deletes ring; informer
-  resync echoes (unchanged `resourceVersion`,
-  `backend/refresh/snapshot/informer_echo.go`) still apply but do not ring.
-  Reconcile on re-warm rings every row it removes.
+  `namespace:<name>` and `namespace:all`; the Events tables ring the
+  involved-object namespace of every row they add, change, or remove.
+- Only real changes ring. Reflectors run without resync; a re-delivered row
+  with an unchanged `resourceVersion` (`ResourceVersionUnchanged`,
+  `backend/refresh/snapshot/util.go`) still applies but does not ring. An
+  Events relist rings only the namespaces whose rows it changed.
 - A relist rings each affected scope once, after its commit. `ProjectingStore`
   brackets `Replace` and `ReplacePartition` with `RelistBoundary`, and each
   source registration's sink collects its own relist's scopes: a namespace

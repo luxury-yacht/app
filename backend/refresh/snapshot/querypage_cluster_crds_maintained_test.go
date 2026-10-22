@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	apiextlisters "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 
@@ -46,10 +45,10 @@ func TestClusterCRDBuilderMaintainedMatchesListPath(t *testing.T) {
 	maintained := newTypedMaintainedStore(meta, crdsQuerypageSchema(), clusterCRDTableQueryAdapter())
 	for _, c := range crds {
 		require.NoError(t, indexer.Add(c))
-		maintained.upsertRow(apiextensions.BuildStreamSummary(meta, c), c)
+		maintained.ingest(apiextensions.StreamDescriptor, c)
 	}
-	listBuilder := &ClusterCRDBuilder{crdLister: apiextlisters.NewCustomResourceDefinitionLister(indexer)}
-	maintainedBuilder := &ClusterCRDBuilder{maintained: maintained}
+	listBuilder := newTypedTableListOracle(clusterCRDDomainSpec(), clusterCRDCollectIndexer(indexer))
+	maintainedBuilder := &ClusterCRDBuilder{available: availableFromIndexers(clusterCRDCollectIndexer(indexer)), maintained: maintained}
 
 	scopes := []string{
 		"",

@@ -103,14 +103,14 @@ resource views remain the place to browse and operate on full inventories.
   cluster-scoped objects.
 - A row combines one object's active typed causes and carries its complete
   cluster/GVR identity; Kind and Name links open it. Any RBAC-visible catalog
-  object can appear; Events keep their informer-owned path.
+  object can appear; Events come from the events store, not the catalog.
 - Findings is a backend-owned typed query facet. A row may publish several
   finding type IDs; values OR within Findings and AND with Kind, Namespace,
   Severity, and other filters. Labels come from the centralized finding
   policy; requests and persisted filters use stable type IDs.
 - A per-cluster maintained query store holds findings, updated incrementally
-  from existing Pod, workload, and Node reflector bundles and the shared Event
-  informer; a domain-owned timer advances grace periods and event expiry. The
+  from the Pod, workload, Node, and Event reflector bundles; a domain-owned
+  timer advances grace periods and event expiry. The
   `attention` stream clock is the only change signal (catalog subset changes
   update the index, which rings it); the frontend refetches the current page
   and polls only as the stream-down fallback.

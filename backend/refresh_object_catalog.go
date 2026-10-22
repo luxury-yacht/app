@@ -167,25 +167,17 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 	}
 
 	subsystem := a.getRefreshSubsystem(target.meta.ID)
-	if subsystem == nil || subsystem.InformerFactory == nil {
-		return fmt.Errorf("refresh subsystem informers unavailable")
+	if subsystem == nil || subsystem.IngestManager == nil {
+		return fmt.Errorf("refresh subsystem ingest unavailable")
 	}
 
 	commonDeps := a.clusterRuntime.resourceDependenciesForSelection(target.selection, clients, target.meta.ID)
 	telemetryRecorder := a.catalogTelemetryRecorder(subsystem)
 	deps := objectcatalog.Dependencies{
-		Common:                       commonDeps,
-		Logger:                       applog.ClusterScoped(a.logger, target.meta.ID, target.meta.Name),
-		Telemetry:                    telemetryRecorder,
-		InformerFactory:              subsystem.InformerFactory.SharedInformerFactory(),
-		APIExtensionsInformerFactory: subsystem.InformerFactory.APIExtensionsInformerFactory(),
-		GatewayInformerFactory:       subsystem.InformerFactory.GatewayInformerFactory(),
-		PermissionChecker:            subsystem.InformerFactory,
-		// The factory's settle contract, not raw client-go cache sync: an informer
-		// whose watch is forbidden or past the sync deadline must not hold the
-		// catalog's first collection forever.
-		InformerReadiness: subsystem.InformerFactory,
-		IngestSource:      subsystem.IngestManager,
+		Common:       commonDeps,
+		Logger:       applog.ClusterScoped(a.logger, target.meta.ID, target.meta.Name),
+		Telemetry:    telemetryRecorder,
+		IngestSource: subsystem.IngestManager,
 		CapabilityFactory: func() *capabilities.Service {
 			return capabilities.NewService(capabilities.Dependencies{
 				Common:             commonDeps,

@@ -83,3 +83,10 @@ func copyStringMap(in map[string]string) map[string]string {
 	}
 	return out
 }
+
+// ResourceVersionUnchanged is the echo rule for any re-delivered object or row:
+// the same non-empty resourceVersion. An empty old version proves nothing, so
+// it counts as a change.
+func ResourceVersionUnchanged(oldVersion, newVersion string) bool {
+	return oldVersion != "" && oldVersion == newVersion
+}

@@ -30,8 +30,8 @@ type podWorkloadsIndexReader interface {
 	RowsByIndex(gvr schema.GroupVersionResource, indexName string, values []string) []interface{}
 }
 
-// podAggregateIngestSource supplies the projected per-pod aggregation rows for the cut
-// pod kind, whose objects are no longer cached by the shared informer factory.
+// podAggregateIngestSource supplies the projected per-pod aggregation rows from the
+// owned pod reflector, which keeps no typed Pod.
 // *ingest.IngestManager satisfies it (its AggregateRows returns the Bundle Aggregate
 // halves; StoreResourceVersion returns the store's latest list/watch RV). It is the
 // read path the informer-backed aggregation domains use instead of a typed pod lister,

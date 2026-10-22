@@ -9,6 +9,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
+	"github.com/luxury-yacht/app/backend/testsupport"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	appslisters "k8s.io/client-go/listers/apps/v1"
@@ -36,6 +37,10 @@ type fakePodAggregateSource struct {
 	nodeBundles []ingest.Bundle
 	nodeSynced  bool
 	nodeRV      string
+	// eventBundles are the events store's projected bundles, returned for EventGVR via
+	// Rows; eventsSynced gates the cluster-overview recent-events read.
+	eventBundles []ingest.Bundle
+	eventsSynced bool
 	// permissionSkipped marks GVRs whose reflector the ingest permission filter
 	// skipped at Start (identity cannot list+watch), so a test can drive the
 	// cluster-overview permission-unavailable marking.
@@ -72,17 +77,31 @@ func (s fakePodAggregateSource) StoreResourceVersion(gvr schema.GroupVersionReso
 }
 
 // Rows returns the cut node kind's projected bundles for NodeGVR (the nodes domain reads the
-// Table-half own-rows and the cluster-overview reads the Aggregate-half facts through it), or
-// nil otherwise.
+// Table-half own-rows and the cluster-overview reads the Aggregate-half facts through it), the
+// events store's bundles for EventGVR, or nil otherwise.
 func (s fakePodAggregateSource) Rows(gvr schema.GroupVersionResource) []interface{} {
-	if gvr != NodeGVR {
+	var bundles []ingest.Bundle
+	switch gvr {
+	case NodeGVR:
+		bundles = s.nodeBundles
+	case EventGVR:
+		bundles = s.eventBundles
+	default:
 		return nil
 	}
-	out := make([]interface{}, 0, len(s.nodeBundles))
-	for _, b := range s.nodeBundles {
+	out := make([]interface{}, 0, len(bundles))
+	for _, b := range bundles {
 		out = append(out, b)
 	}
 	return out
+}
+
+// withEvents returns a copy of the source whose events store holds bundles and
+// reports synced as given.
+func (s fakePodAggregateSource) withEvents(synced bool, bundles ...ingest.Bundle) fakePodAggregateSource {
+	s.eventBundles = bundles
+	s.eventsSynced = synced
+	return s
 }
 
 // CatalogRows returns the supplied workload catalog rows for a cut workload GVR (used by
@@ -112,6 +131,8 @@ func (s fakePodAggregateSource) HasSyncedFor(gvr schema.GroupVersionResource) bo
 		return true
 	case NodeGVR:
 		return s.nodeSynced
+	case EventGVR:
+		return s.eventsSynced
 	case ResourceQuotaGVR:
 		return s.quotaSynced
 	default:
@@ -233,7 +254,7 @@ func newFakePodAggregateSource(rsLister appslisters.ReplicaSetLister, pods ...*c
 		if pod == nil {
 			continue
 		}
-		aggregates = append(aggregates, projectPodAggregate(pod, PodOwnerSources{ReplicaSets: rsLister}))
+		aggregates = append(aggregates, projectPodAggregate(pod, PodOwnerSources{ReplicaSetOwner: testsupport.ReplicaSetOwnerLookup(rsLister)}))
 	}
 	return fakePodAggregateSource{aggregates: aggregates}
 }
@@ -297,9 +318,9 @@ func newFakePodWorkloadsIngestSource(meta ClusterMeta, rsLister appslisters.Repl
 		if pod == nil {
 			continue
 		}
-		aggregate := projectPodAggregate(pod, PodOwnerSources{ReplicaSets: rsLister})
+		aggregate := projectPodAggregate(pod, PodOwnerSources{ReplicaSetOwner: testsupport.ReplicaSetOwnerLookup(rsLister)})
 		bundles = append(bundles, ingest.Bundle{
-			Table:     podres.BuildStreamSummary(streamMeta, pod, rsLister, nil),
+			Table:     podres.BuildStreamSummary(streamMeta, pod, testsupport.ReplicaSetOwnerLookup(rsLister), nil),
 			Aggregate: aggregate,
 			Indexes:   podAggregateBundleIndexes(aggregate),
 		})

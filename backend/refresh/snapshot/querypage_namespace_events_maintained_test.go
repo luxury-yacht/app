@@ -8,8 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
 )
 
 // nsEventObj builds the common case where Event and involved-object namespaces match.
@@ -34,16 +32,9 @@ func nsEventObjWithNamespaces(name, eventNamespace, objectNamespace, kind, reaso
 func TestNamespaceEventsBuilderFiltersByInvolvedObjectNamespace(t *testing.T) {
 	meta := ClusterMeta{}
 	event := nsEventObjWithNamespaces("mismatch.1", "events-ns", "object-ns", "Pod", "Started", "3", 5)
-	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
-	require.NoError(t, indexer.Add(event))
-	maintained := newTypedMaintainedStore(meta, namespaceEventsQuerypageSchema(), namespacedEventTableQueryAdapter())
-	summary, ok := projectNamespaceEventSummary(meta, event)
-	require.True(t, ok)
-	maintained.upsertRow(summary, event)
-
 	builders := map[string]*NamespaceEventsBuilder{
-		"list":       {eventLister: corelisters.NewEventLister(indexer)},
-		"maintained": {maintained: maintained},
+		"projected": namespaceEventsProjectedBuilder(meta, event),
+		"sink-fed":  namespaceEventsBuilderFor(t, meta, event),
 	}
 	for name, builder := range builders {
 		objectSnapshot, err := builder.Build(context.Background(), "namespace:object-ns")
@@ -56,9 +47,9 @@ func TestNamespaceEventsBuilderFiltersByInvolvedObjectNamespace(t *testing.T) {
 	}
 }
 
-// TestNamespaceEventsBuilderMaintainedMatchesListPath is the namespace-events maintained-store
-// cutover gate: a builder serving from the informer-fed store must produce the byte-identical
-// NamespaceEventsSnapshot the list path produces across all-namespaces + per-namespace +
+// TestNamespaceEventsBuilderMaintainedMatchesListPath is the namespace-events sink gate: a
+// builder serving from the store its events sink fills must produce the byte-identical
+// NamespaceEventsSnapshot a store of directly projected rows produces across all-namespaces + per-namespace +
 // query scopes. The open involved-object kind set is served via rowsInNamespace (namespace
 // filter only).
 func TestNamespaceEventsBuilderMaintainedMatchesListPath(t *testing.T) {
@@ -71,16 +62,8 @@ func TestNamespaceEventsBuilderMaintainedMatchesListPath(t *testing.T) {
 		clusterEventObj("node.4", "6", "NodeReady", "ready", 1),
 	}
 
-	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
-	maintained := newTypedMaintainedStore(meta, namespaceEventsQuerypageSchema(), namespacedEventTableQueryAdapter())
-	for _, e := range events {
-		require.NoError(t, indexer.Add(e))
-		if summary, ok := projectNamespaceEventSummary(meta, e); ok {
-			maintained.upsertRow(summary, e)
-		}
-	}
-	listBuilder := &NamespaceEventsBuilder{eventLister: corelisters.NewEventLister(indexer)}
-	maintainedBuilder := &NamespaceEventsBuilder{maintained: maintained}
+	listBuilder := namespaceEventsProjectedBuilder(meta, events...)
+	maintainedBuilder := namespaceEventsBuilderFor(t, meta, events...)
 
 	scopes := []string{
 		"namespace:all",

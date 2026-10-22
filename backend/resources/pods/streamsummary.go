@@ -20,7 +20,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	appslisters "k8s.io/client-go/listers/apps/v1"
 )
 
 // JobControllerOwnerLookup resolves a directly owning Job to its controlling
@@ -33,12 +32,17 @@ const appsAPIVersion = "apps/v1"
 // BuildStreamSummary builds the pod row, resolving controller ancestry from the
 // supplied ReplicaSet lister and Job lookup. The row carries no usage; the snapshot
 // joins the current metrics sample onto served copies.
-func BuildStreamSummary(meta streamrows.ClusterMeta, pod *corev1.Pod, rsLister appslisters.ReplicaSetLister, jobOwnerLookup JobControllerOwnerLookup) streamrows.PodSummary {
+func BuildStreamSummary(meta streamrows.ClusterMeta, pod *corev1.Pod, rsOwners ReplicaSetOwnerLookup, jobOwnerLookup JobControllerOwnerLookup) streamrows.PodSummary {
 	if pod == nil {
 		return streamrows.PodSummary{}
 	}
-	return buildPodRow(meta, pod, buildReplicaSetDeploymentMapForPod(pod, rsLister), jobOwnerLookup)
+	return buildPodRow(meta, pod, buildReplicaSetDeploymentMapForPod(pod, rsOwners), jobOwnerLookup)
 }
+
+// ReplicaSetOwnerLookup returns a ReplicaSet's controlling owner reference, and
+// whether the ReplicaSet is known. A known ReplicaSet with no controller
+// returns a zero reference.
+type ReplicaSetOwnerLookup func(namespace, name string) (metav1.OwnerReference, bool)
 
 // BuildStreamSummaryFromRSMap builds the pod row with a pre-built ReplicaSet->
 // Deployment owner map (the full-snapshot path shares one map across all pods).
@@ -139,20 +143,20 @@ func computeResourceTotals(pod *corev1.Pod) (cpuReq, cpuLim, memReq, memLim int6
 	return cpuReq, cpuLim, memReq, memLim
 }
 
-func buildReplicaSetDeploymentMapForPod(pod *corev1.Pod, rsLister appslisters.ReplicaSetLister) map[string]string {
+func buildReplicaSetDeploymentMapForPod(pod *corev1.Pod, rsOwners ReplicaSetOwnerLookup) map[string]string {
 	result := make(map[string]string)
-	if pod == nil || rsLister == nil {
+	if pod == nil || rsOwners == nil {
 		return result
 	}
 	for _, owner := range pod.OwnerReferences {
 		if !isControllerKind(owner, appsAPIVersion, "ReplicaSet") {
 			continue
 		}
-		rs, err := rsLister.ReplicaSets(pod.Namespace).Get(owner.Name)
-		if err != nil {
+		rsController, known := rsOwners(pod.Namespace, owner.Name)
+		if !known {
 			continue
 		}
-		if name, ok := deploymentControllerName(rs.OwnerReferences); ok {
+		if name, ok := deploymentControllerName([]metav1.OwnerReference{rsController}); ok {
 			result[owner.Name] = name
 		}
 	}

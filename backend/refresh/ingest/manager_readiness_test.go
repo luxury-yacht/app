@@ -8,6 +8,8 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -228,5 +230,33 @@ func TestIngestManagerResourceReadinessClassifiesConcreteStoreStates(t *testing.
 	require.Equal(t, []PartitionReadiness{{State: refresh.ResourceReadinessReady}}, mgr.PartitionReadinessFor(gvr))
 	if got := mgr.ResourceReadinessFor(gvr); got != refresh.ResourceReadinessReady {
 		t.Fatalf("synced readiness = %s, want ready", got)
+	}
+}
+
+// A store restored from spill is marked synced before Start applies the
+// permission filter. If its source is then denied, the store still reports
+// raw sync, so only partition readiness can tell a consumer that its rows are
+// not an authoritative set.
+func TestRestoredStoreDeniedAtStartReportsUnavailablePartitions(t *testing.T) {
+	spill := t.TempDir()
+	before := NewIngestManager(testMeta, unreachableKube(t), nil, nil)
+	configMaps := schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
+	store := before.StoreFor(configMaps)
+	require.NotNil(t, store)
+	require.NoError(t, store.Replace([]interface{}{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "default", ResourceVersion: "7"}}}, "7"))
+	require.NoError(t, before.SpillStores(spill))
+
+	after := NewIngestManager(testMeta, unreachableKube(t), nil, nil)
+	after.RestoreStores(spill)
+	after.SetPermissionFilter(func(string, string, string) bool { return false })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	after.Start(ctx)
+
+	require.True(t, after.RawHasSyncedFor(configMaps), "restore marks the store synced")
+	parts := after.PartitionReadinessFor(configMaps)
+	require.NotEmpty(t, parts)
+	for _, part := range parts {
+		require.Equal(t, refresh.ResourceReadinessUnavailable, part.State)
 	}
 }

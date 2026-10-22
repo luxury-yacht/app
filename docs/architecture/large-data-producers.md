@@ -95,6 +95,6 @@ windows, visibly `Local Partial`.
   `involvedObject` link, never guessing group or version from the kind. Without
   an openable link, the Events tables, Events tab, and Recent Events fall back
   to a catalog lookup by UID; the Event detail panel shows it as text.
-- Reconcile reports rows swept after a spill restore through the same doorbell
-  as informer deletes, so rows for Events that expired while the cluster was
-  Cold leave the tables.
+- After a re-warm, the resumed watch or the relist removes rows for Events that
+  expired while the cluster was Cold, and rings their scopes through the same
+  doorbell as any delete.

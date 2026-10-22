@@ -1,41 +1,42 @@
 package ingest
 
 import (
-	"github.com/luxury-yacht/app/backend/kind/kindregistry"
-	"github.com/luxury-yacht/app/backend/kind/kindspec"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 )
 
 // ReconcileCustomResourceDefinition selects a served API source and retains a
 // healthy predecessor when the definition is incomplete.
-func (m *IngestManager) ReconcileCustomResourceDefinition(crd *apiextensionsv1.CustomResourceDefinition, preferredVersion string, project func(DynamicCatalogSpec) CatalogProjector) bool {
-	spec, ok := customResourceSpec(crd, preferredVersion)
+func (m *IngestManager) ReconcileCustomResourceDefinition(definition apiextensions.Definition, preferredVersion string, project func(DynamicCatalogSpec) CatalogProjector) bool {
+	spec, ok := customResourceSpec(definition, preferredVersion)
 	if !ok || project == nil {
 		return false
 	}
 	return m.ReconcileDynamicCatalogSource(spec, project(spec))
 }
 
-func customResourceSpec(crd *apiextensionsv1.CustomResourceDefinition, preferredVersion string) (DynamicCatalogSpec, bool) {
-	if crd == nil || crd.UID == "" || crd.Spec.Group == "" || crd.Spec.Names.Plural == "" || crd.Spec.Names.Kind == "" {
+func customResourceSpec(definition apiextensions.Definition, preferredVersion string) (DynamicCatalogSpec, bool) {
+	if definition.UID == "" || definition.Group == "" || definition.Names.Plural == "" || definition.Names.Kind == "" {
 		return DynamicCatalogSpec{}, false
 	}
-	if crd.Spec.Scope != apiextensionsv1.NamespaceScoped && crd.Spec.Scope != apiextensionsv1.ClusterScoped {
+	if definition.Scope != apiextensionsv1.NamespaceScoped && definition.Scope != apiextensionsv1.ClusterScoped {
 		return DynamicCatalogSpec{}, false
 	}
-	version := servedCustomResourceVersion(crd.Spec.Versions, preferredVersion)
-	if version == "" || registeredCustomResourceSource(crd) {
+	version := servedCustomResourceVersion(definition.Versions, preferredVersion)
+	if version == "" || registeredCustomResourceSource(definition) {
 		return DynamicCatalogSpec{}, false
 	}
 	return DynamicCatalogSpec{
-		GVR:        schema.GroupVersionResource{Group: crd.Spec.Group, Version: version, Resource: crd.Spec.Names.Plural},
-		GVK:        schema.GroupVersionKind{Group: crd.Spec.Group, Version: version, Kind: crd.Spec.Names.Kind},
-		Namespaced: crd.Spec.Scope == apiextensionsv1.NamespaceScoped, DefinitionUID: crd.UID,
+		GVR:        schema.GroupVersionResource{Group: definition.Group, Version: version, Resource: definition.Names.Plural},
+		GVK:        schema.GroupVersionKind{Group: definition.Group, Version: version, Kind: definition.Names.Kind},
+		Namespaced: definition.Scope == apiextensionsv1.NamespaceScoped, DefinitionUID: definition.UID,
 	}, true
 }
 
-func servedCustomResourceVersion(versions []apiextensionsv1.CustomResourceDefinitionVersion, preferred string) string {
+func servedCustomResourceVersion(versions []apiextensions.DefinitionVersion, preferred string) string {
 	selected := ""
 	for _, version := range versions {
 		if !version.Served || version.Name == "" {
@@ -51,35 +52,34 @@ func servedCustomResourceVersion(versions []apiextensionsv1.CustomResourceDefini
 	return selected
 }
 
-// Match registry source facets and served versions, rather than maintaining a
-// second list of first-class Gateway CRDs in the dynamic lifecycle.
-func registeredCustomResourceSource(crd *apiextensionsv1.CustomResourceDefinition) bool {
+// Match registry ownership and served versions, rather than maintaining a
+// second list of first-class CRD-backed kinds (Gateway API) in the dynamic
+// lifecycle.
+func registeredCustomResourceSource(definition apiextensions.Definition) bool {
 	for _, descriptor := range kindregistry.All {
 		identity := descriptor.Identity
-		if identity.Group != crd.Spec.Group || identity.Resource != crd.Spec.Names.Plural || identity.Kind != crd.Spec.Names.Kind {
+		if identity.Group != definition.Group || identity.Resource != definition.Names.Plural || identity.Kind != definition.Names.Kind {
 			continue
 		}
-		if descriptor.IngestOwned || descriptor.CatalogSource == kindspec.CatalogShared || descriptor.CatalogSource == kindspec.CatalogGateway || descriptor.CatalogSource == kindspec.CatalogAPIExtensions {
-			if servedCustomResourceVersion(crd.Spec.Versions, identity.Version) == identity.Version {
-				return true
-			}
+		if servedCustomResourceVersion(definition.Versions, identity.Version) == identity.Version {
+			return true
 		}
 	}
 	return false
 }
 
 // RemoveCustomResourceDefinition retires the matching CRD incarnation only.
-func (m *IngestManager) RemoveCustomResourceDefinition(crd *apiextensionsv1.CustomResourceDefinition) {
-	if crd == nil || crd.UID == "" {
+func (m *IngestManager) RemoveCustomResourceDefinition(definition apiextensions.Definition) {
+	if definition.UID == "" {
 		return
 	}
-	gr := schema.GroupResource{Group: crd.Spec.Group, Resource: crd.Spec.Names.Plural}
+	gr := schema.GroupResource{Group: definition.Group, Resource: definition.Names.Plural}
 	m.mu.Lock()
-	if pending := m.dynamicAdmissions[gr]; pending != nil && pending.spec.DefinitionUID == crd.UID {
+	if pending := m.dynamicAdmissions[gr]; pending != nil && pending.spec.DefinitionUID == definition.UID {
 		delete(m.dynamicAdmissions, gr)
 	}
 	e := m.entryForGroupResourceLocked(gr)
-	if e == nil || e.dynamic == nil || e.dynamic.spec.DefinitionUID != crd.UID {
+	if e == nil || e.dynamic == nil || e.dynamic.spec.DefinitionUID != definition.UID {
 		m.mu.Unlock()
 		return
 	}

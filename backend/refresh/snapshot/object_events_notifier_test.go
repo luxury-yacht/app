@@ -91,14 +91,14 @@ func newObjectEventsNotifierForTest(recorder *objectEventsBroadcastRecorder) *Ob
 	return notifier
 }
 
-// An event delivery must ring the doorbell for exactly the involved object's
+// An events-store change must ring the doorbell for exactly the involved object's
 // scope: same identity matches, sibling objects and other namespaces do not.
 func TestObjectEventsNotifierBroadcastsToMatchingScope(t *testing.T) {
 	recorder := &objectEventsBroadcastRecorder{}
 	notifier := newObjectEventsNotifierForTest(recorder)
 	defer notifier.stopForTest()
 
-	notifier.EventChanged(podEvent("team-a", "web-1"))
+	notifier.UpsertBundle(eventBundleOf(t, ClusterMeta{}, podEvent("team-a", "web-1")))
 	waitForObjectEventsBroadcasts(t, recorder, 1)
 
 	matches := recorder.lastMatcher()
@@ -110,20 +110,20 @@ func TestObjectEventsNotifierBroadcastsToMatchingScope(t *testing.T) {
 
 // Cluster-scoped objects: the scope carries the __cluster__ sentinel, the
 // event's involved object carries an empty namespace — they must meet on the
-// same index key.
+// same key. A deleted Event rings like a changed one.
 func TestObjectEventsNotifierMatchesClusterScopedObjects(t *testing.T) {
 	recorder := &objectEventsBroadcastRecorder{}
 	notifier := newObjectEventsNotifierForTest(recorder)
 	defer notifier.stopForTest()
 
-	notifier.EventChanged(&corev1.Event{
+	notifier.DeleteBundle(eventBundleOf(t, ClusterMeta{}, &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "node.evt"},
 		InvolvedObject: corev1.ObjectReference{
 			APIVersion: "v1",
 			Kind:       "Node",
 			Name:       "node-1",
 		},
-	})
+	}))
 	waitForObjectEventsBroadcasts(t, recorder, 1)
 
 	matches := recorder.lastMatcher()
@@ -138,9 +138,9 @@ func TestObjectEventsNotifierCoalescesBursts(t *testing.T) {
 	notifier := newObjectEventsNotifierForTest(recorder)
 	defer notifier.stopForTest()
 
-	notifier.EventChanged(podEvent("team-a", "web-1"))
-	notifier.EventChanged(podEvent("team-a", "web-2"))
-	notifier.EventChanged(podEvent("team-a", "web-1"))
+	notifier.UpsertBundle(eventBundleOf(t, ClusterMeta{}, podEvent("team-a", "web-1")))
+	notifier.UpsertBundle(eventBundleOf(t, ClusterMeta{}, podEvent("team-a", "web-2")))
+	notifier.UpsertBundle(eventBundleOf(t, ClusterMeta{}, podEvent("team-a", "web-1")))
 	waitForObjectEventsBroadcasts(t, recorder, 1)
 	time.Sleep(120 * time.Millisecond)
 	require.Equal(t, 1, recorder.count(), "burst must coalesce into one broadcast")
@@ -155,7 +155,7 @@ func TestObjectEventsNotifierStopSilencesBroadcasts(t *testing.T) {
 	recorder := &objectEventsBroadcastRecorder{}
 	notifier := newObjectEventsNotifierForTest(recorder)
 
-	notifier.EventChanged(podEvent("team-a", "web-1"))
+	notifier.UpsertBundle(eventBundleOf(t, ClusterMeta{}, podEvent("team-a", "web-1")))
 	notifier.stopForTest()
 	time.Sleep(120 * time.Millisecond)
 	require.Equal(t, 0, recorder.count())

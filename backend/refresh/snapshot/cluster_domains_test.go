@@ -85,15 +85,13 @@ func TestClusterConfigBuilder(t *testing.T) {
 		},
 	}
 
-	builder := &ClusterConfigBuilder{
-		collectIndexer: clusterConfigCollectIndexer(
-			testsupport.NewClusterIndexer(t, storageClass),
-			testsupport.NewClusterIndexer(t, ingressClass),
-			nil,
-			testsupport.NewClusterIndexer(t, validatingWebhook),
-			testsupport.NewClusterIndexer(t, mutatingWebhook),
-		),
-	}
+	builder := clusterConfigBuilderFor(ClusterMeta{}, clusterConfigCollectIndexer(
+		testsupport.NewClusterIndexer(t, storageClass),
+		testsupport.NewClusterIndexer(t, ingressClass),
+		nil,
+		testsupport.NewClusterIndexer(t, validatingWebhook),
+		testsupport.NewClusterIndexer(t, mutatingWebhook),
+	))
 
 	// GatewayClass is omitted from the allowed set so it does not appear among the
 	// available kinds (the indexer is nil and the runtime permission denies it).
@@ -144,12 +142,10 @@ func TestClusterConfigBuilderCapsLargeSnapshots(t *testing.T) {
 		})
 	}
 
-	builder := &ClusterConfigBuilder{
-		collectIndexer: clusterConfigCollectIndexer(
-			testsupport.NewClusterIndexer(t, classes...),
-			nil, nil, nil, nil,
-		),
-	}
+	builder := clusterConfigBuilderFor(ClusterMeta{}, clusterConfigCollectIndexer(
+		testsupport.NewClusterIndexer(t, classes...),
+		nil, nil, nil, nil,
+	))
 
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
@@ -169,13 +165,11 @@ func TestClusterConfigBuilderQueryReportsPartialAllowedResources(t *testing.T) {
 		},
 		Spec: networkingv1.IngressClassSpec{Controller: "nginx.org/ingress-controller"},
 	}
-	builder := &ClusterConfigBuilder{
-		collectIndexer: clusterConfigCollectIndexer(
-			nil,
-			testsupport.NewClusterIndexer(t, ingressClass),
-			nil, nil, nil,
-		),
-	}
+	builder := clusterConfigBuilderFor(ClusterMeta{}, clusterConfigCollectIndexer(
+		nil,
+		testsupport.NewClusterIndexer(t, ingressClass),
+		nil, nil, nil,
+	))
 	ctx := domainpermissions.WithAllowedResources(context.Background(), clusterConfigDomainName, domainpermissions.AllowedResources{
 		"networking.k8s.io/ingressclasses": false,
 	})
@@ -214,9 +208,7 @@ func TestClusterStorageBuilder(t *testing.T) {
 		},
 	}
 
-	builder := &ClusterStorageBuilder{
-		collectIndexer: clusterStorageCollectIndexer(testsupport.NewClusterIndexer(t, pv)),
-	}
+	builder := clusterStorageBuilderFor(ClusterMeta{}, clusterStorageCollectIndexer(testsupport.NewClusterIndexer(t, pv)))
 
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
@@ -240,10 +232,6 @@ func TestClusterStorageBuilder(t *testing.T) {
 	require.NotEmpty(t, entry.Age)
 }
 
-func TestClusterStorageDomainPreservesListErrorPrefix(t *testing.T) {
-	require.Equal(t, "cluster storage: failed to list persistent volumes", clusterStorageDomainSpec().listErrorPrefix)
-}
-
 func TestClusterStorageBuilderCapsLargeSnapshots(t *testing.T) {
 	pvs := make([]*corev1.PersistentVolume, 0, config.SnapshotClusterStorageEntryLimit+1)
 	for i := 0; i < config.SnapshotClusterStorageEntryLimit+1; i++ {
@@ -255,9 +243,7 @@ func TestClusterStorageBuilderCapsLargeSnapshots(t *testing.T) {
 		})
 	}
 
-	builder := &ClusterStorageBuilder{
-		collectIndexer: clusterStorageCollectIndexer(testsupport.NewClusterIndexer(t, pvs...)),
-	}
+	builder := clusterStorageBuilderFor(ClusterMeta{}, clusterStorageCollectIndexer(testsupport.NewClusterIndexer(t, pvs...)))
 
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
@@ -291,9 +277,7 @@ func TestClusterCRDBuilder(t *testing.T) {
 		},
 	}
 
-	builder := &ClusterCRDBuilder{
-		crdLister: testsupport.NewCRDLister(t, crd),
-	}
+	builder := clusterCRDBuilderFor(ClusterMeta{}, clusterCRDCollectIndexer(testsupport.NewClusterIndexer(t, crd)))
 
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
@@ -339,9 +323,7 @@ func TestClusterCRDBuilderCapsLargeSnapshots(t *testing.T) {
 		})
 	}
 
-	builder := &ClusterCRDBuilder{
-		crdLister: testsupport.NewCRDLister(t, crds...),
-	}
+	builder := clusterCRDBuilderFor(ClusterMeta{}, clusterCRDCollectIndexer(testsupport.NewClusterIndexer(t, crds...)))
 
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)

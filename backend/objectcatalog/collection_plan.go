@@ -5,17 +5,13 @@ import "k8s.io/apimachinery/pkg/runtime/schema"
 type collectionSourceKind string
 
 const (
-	collectionSourceSkip                  collectionSourceKind = "skip"
-	collectionSourceSharedInformer        collectionSourceKind = "shared-informer"
-	collectionSourceGatewayInformer       collectionSourceKind = "gateway-informer"
-	collectionSourceAPIExtensionsInformer collectionSourceKind = "apiextensions-informer"
-	collectionSourceDynamicList           collectionSourceKind = "dynamic-list"
+	collectionSourceSkip        collectionSourceKind = "skip"
+	collectionSourceDynamicList collectionSourceKind = "dynamic-list"
 )
 
 type collectionSourcePlan struct {
 	groupResource schema.GroupResource
 	source        collectionSourceKind
-	watchable     bool
 	promotable    bool
 }
 
@@ -30,27 +26,9 @@ func planCollectionSourceForGroupResource(gr schema.GroupResource) collectionSou
 		promotable:    true,
 	}
 
-	switch gr {
-	case schema.GroupResource{Group: "", Resource: "endpoints"}:
+	if gr == (schema.GroupResource{Group: "", Resource: "endpoints"}) {
 		plan.source = collectionSourceSkip
 		plan.promotable = false
-	case schema.GroupResource{Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions"}:
-		plan.source = collectionSourceAPIExtensionsInformer
-		plan.watchable = true
-		plan.promotable = false
-	default:
-		if _, ok := sharedInformerGroupResources[gr]; ok {
-			plan.source = collectionSourceSharedInformer
-			_, plan.watchable = watchInformerGroupResources[gr]
-			plan.promotable = false
-			return plan
-		}
-		if _, ok := gatewayInformerGroupResources[gr]; ok {
-			plan.source = collectionSourceGatewayInformer
-			plan.watchable = true
-			plan.promotable = false
-			return plan
-		}
 	}
 
 	return plan

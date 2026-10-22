@@ -11,7 +11,6 @@ import (
 	appconfig "github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
-	informerpkg "github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
@@ -19,7 +18,6 @@ import (
 	"k8s.io/client-go/rest"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
-	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
 // setClusterClientLocked commits one client-map entry and its workspace
@@ -421,20 +419,19 @@ func (a *ClusterRuntimeManager) buildClusterClientsWithManager(
 	authFailedOnInit := a.clusterAuthFailedOnPreflight(ctx, dependencies.client, config, clusterAuthMgr, meta)
 
 	return &clusterClients{
-		meta:                   meta,
-		kubeconfigPath:         selection.Path,
-		kubeconfigContext:      selection.Context,
-		client:                 dependencies.client,
-		gatewayClient:          dependencies.gatewayClient,
-		gatewayInformerFactory: dependencies.gatewayInformerFactory,
-		gatewayAPIPresence:     dependencies.gatewayAPIPresence,
-		apiextensionsClient:    dependencies.apiextensionsClient,
-		dynamicClient:          dependencies.dynamicClient,
-		metricsClient:          dependencies.metricsClient,
-		restConfig:             config,
-		rateLimiter:            config.RateLimiter.(*mutableKubernetesRateLimiter),
-		authManager:            clusterAuthMgr,
-		authFailedOnInit:       authFailedOnInit,
+		meta:                meta,
+		kubeconfigPath:      selection.Path,
+		kubeconfigContext:   selection.Context,
+		client:              dependencies.client,
+		gatewayClient:       dependencies.gatewayClient,
+		gatewayAPIPresence:  dependencies.gatewayAPIPresence,
+		apiextensionsClient: dependencies.apiextensionsClient,
+		dynamicClient:       dependencies.dynamicClient,
+		metricsClient:       dependencies.metricsClient,
+		restConfig:          config,
+		rateLimiter:         config.RateLimiter.(*mutableKubernetesRateLimiter),
+		authManager:         clusterAuthMgr,
+		authFailedOnInit:    authFailedOnInit,
 	}, nil
 }
 
@@ -460,19 +457,18 @@ func (a *ClusterRuntimeManager) buildClusterClientDependencies(
 	}
 
 	metrics := a.buildMetricsClient(typedConfig, meta)
-	gatewayPresence, gatewayClient, gatewayInformerFactory, err := a.buildGatewayClients(ctx, config, clientset, meta)
+	gatewayPresence, gatewayClient, err := a.buildGatewayClients(ctx, config, clientset, meta)
 	if err != nil {
 		return builtClusterClientDependencies{}, err
 	}
 
 	return builtClusterClientDependencies{
-		client:                 clientset,
-		gatewayClient:          gatewayClient,
-		gatewayInformerFactory: gatewayInformerFactory,
-		gatewayAPIPresence:     gatewayPresence,
-		apiextensionsClient:    apiextensionsClient,
-		dynamicClient:          dynamicClient,
-		metricsClient:          metrics,
+		client:              clientset,
+		gatewayClient:       gatewayClient,
+		gatewayAPIPresence:  gatewayPresence,
+		apiextensionsClient: apiextensionsClient,
+		dynamicClient:       dynamicClient,
+		metricsClient:       metrics,
 	}, nil
 }
 
@@ -490,25 +486,20 @@ func (a *ClusterRuntimeManager) buildGatewayClients(
 	config *rest.Config,
 	clientset kubernetes.Interface,
 	meta ClusterMeta,
-) (*gatewayapi.Presence, gatewayversioned.Interface, gatewayinformers.SharedInformerFactory, error) {
+) (*gatewayapi.Presence, gatewayversioned.Interface, error) {
 	presence, discoverErr := gatewayapi.DiscoverViaDiscovery(ctx, clientset.Discovery())
 	if discoverErr != nil {
 		a.logger.Warn(fmt.Sprintf("Gateway API discovery failed for cluster %s: %v", meta.Name, discoverErr), logsources.KubernetesClient, meta.ID, meta.Name)
 	}
 	if !presence.AnyPresent() {
-		return presence, nil, nil, nil
+		return presence, nil, nil
 	}
 
 	client, err := gatewayversioned.NewForConfig(config)
 	if err != nil {
-		return gatewayapi.EmptyPresence(), nil, nil, fmt.Errorf("failed to create gateway api clientset: %w", err)
+		return gatewayapi.EmptyPresence(), nil, fmt.Errorf("failed to create gateway api clientset: %w", err)
 	}
-	factory := gatewayinformers.NewSharedInformerFactoryWithOptions(
-		client,
-		appconfig.RefreshResyncInterval,
-		gatewayinformers.WithTransform(informerpkg.StripManagedFields),
-	)
-	return presence, client, factory, nil
+	return presence, client, nil
 }
 
 func (a *ClusterRuntimeManager) clusterAuthFailedOnPreflight(

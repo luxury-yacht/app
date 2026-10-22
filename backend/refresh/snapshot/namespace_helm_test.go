@@ -20,8 +20,10 @@ import (
 	releasetime "helm.sh/helm/v3/pkg/time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	"github.com/luxury-yacht/app/backend/testsupport"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 )
 
 func newHelmRelease(name, namespace string, version int, status release.Status, now time.Time) *release.Release {
@@ -70,7 +72,7 @@ func helmReleaseSecret(t *testing.T, rls *release.Release) *corev1.Secret {
 				"status":  rls.Info.Status.String(),
 			},
 		},
-		Type: helmReleaseSecretType,
+		Type: "helm.sh/release.v1",
 		Data: map[string][]byte{"release": []byte(encoded)},
 	}
 }
@@ -87,17 +89,39 @@ func corruptHelmSecret(name, namespace string, version int, status release.Statu
 				"status":  status.String(),
 			},
 		},
-		Type: helmReleaseSecretType,
+		Type: "helm.sh/release.v1",
 		Data: map[string][]byte{"release": []byte("not-base64!!!")},
 	}
 }
 
+// helmSecretBundle is the Secret's ingest bundle, projected as the Secrets
+// reflector projects it.
+func helmSecretBundle(secret *corev1.Secret) ingest.Bundle {
+	if secret.ResourceVersion == "" {
+		secret = secret.DeepCopy()
+		secret.ResourceVersion = "1"
+	}
+	return ingest.Bundle{
+		Catalog:   objectcatalog.SummaryProjector("", secretpkg.Identity)(secret),
+		Aggregate: secretpkg.StreamDescriptor.AggregateRow(secret),
+	}
+}
+
+// fedHelmBuilder is a builder whose release feed received the Secrets.
+func fedHelmBuilder(t *testing.T, secrets ...*corev1.Secret) (*NamespaceHelmBuilder, *helmReleaseFeed) {
+	t.Helper()
+	builder := newNamespaceHelmBuilder(ClusterMeta{})
+	feed := newHelmReleaseFeed(builder.maintained, ClusterMeta{}, nil)
+	for _, secret := range secrets {
+		feed.UpsertBundle(helmSecretBundle(secret))
+	}
+	return builder, feed
+}
+
 func syncedHelmBuilder(t *testing.T, secrets ...*corev1.Secret) *NamespaceHelmBuilder {
 	t.Helper()
-	return &NamespaceHelmBuilder{
-		secretLister:  testsupport.NewSecretLister(t, secrets...),
-		secretsSynced: func() bool { return true },
-	}
+	builder, _ := fedHelmBuilder(t, secrets...)
+	return builder
 }
 
 func TestNamespaceHelmBuilder(t *testing.T) {
@@ -120,7 +144,6 @@ func TestNamespaceHelmBuilder(t *testing.T) {
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	require.Equal(t, namespaceHelmDomainName, snapshot.Domain)
-	require.Equal(t, uint64(2), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
 	require.True(t, ok)
@@ -140,16 +163,13 @@ func TestNamespaceHelmBuilder(t *testing.T) {
 	require.NotEmpty(t, entry.Updated)
 }
 
-func TestMapHelmReleasesCarriesCanonicalRef(t *testing.T) {
-	releases := []*release.Release{
-		newHelmRelease("app", "default", 2, release.StatusDeployed, time.Now()),
-	}
-	rows, _ := mapHelmReleases(releases, "default", ClusterMeta{ClusterID: "cluster-a"})
-	require.Len(t, rows, 1)
+func TestMapHelmReleaseCarriesCanonicalRef(t *testing.T) {
+	row, ok := mapHelmRelease(newHelmRelease("app", "default", 2, release.StatusDeployed, time.Now()), "default", ClusterMeta{ClusterID: "cluster-a"})
+	require.True(t, ok)
 	require.Equal(t, resourcemodel.ResourceRef{
 		ClusterID: "cluster-a", Group: "helm.sh", Version: "v3", Kind: "HelmRelease",
 		Resource: "releases", Namespace: "default", Name: "app",
-	}, rows[0].Ref)
+	}, row.Ref)
 }
 
 func TestNamespaceHelmBuilderAllNamespaces(t *testing.T) {
@@ -235,21 +255,4 @@ func TestNamespaceHelmBuilderSkipsCorruptLatestRecord(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 1)
 	require.Equal(t, "healthy", payload.Rows[0].Ref.Name)
-}
-
-// See TestClusterEventsBuilderWaitsForCacheSync: an unsynced secrets informer
-// must not produce a confident empty page; the build waits and errors on
-// deadline.
-func TestNamespaceHelmBuilderWaitsForCacheSync(t *testing.T) {
-	builder := &NamespaceHelmBuilder{
-		secretLister:  testsupport.NewSecretLister(t),
-		secretsSynced: func() bool { return false },
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
-	snapshot, err := builder.Build(ctx, "namespace:default")
-	require.Error(t, err)
-	require.Nil(t, snapshot)
 }

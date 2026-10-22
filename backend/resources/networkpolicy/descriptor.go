@@ -8,15 +8,12 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
-	CatalogSource:   kindspec.CatalogShared,
 	DetailCacheable: true,
-	// IngestOwned: the NetworkPolicy typed informer is never instantiated. NetworkPolicy is
-	// plain object→row (no cross-kind join), so the generic ingest loop builds its reflector
-	// from the Stream descriptor and feeds the namespace-network table + catalog + object-map
-	// from the projected bundle, like configmap/storageclass.
-	IngestOwned: true,
-	Stream:      &StreamDescriptor,
-	Collector:   &ObjectMapNode,
-	Edges:       ObjectMapEdges,
-	Binding:     &DetailBinding,
+	// NetworkPolicy is plain object→row (no cross-kind join), so the generic ingest loop
+	// builds its reflector from the Stream descriptor and feeds the namespace-network table +
+	// catalog + object-map from the projected bundle, like configmap/storageclass.
+	Stream:    &StreamDescriptor,
+	Collector: &ObjectMapNode,
+	Edges:     ObjectMapEdges,
+	Binding:   &DetailBinding,
 }

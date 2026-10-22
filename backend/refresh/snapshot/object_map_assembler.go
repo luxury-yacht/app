@@ -13,24 +13,19 @@ type objectMapAssembler struct {
 	index *objectMapIndex
 }
 
-func (b *objectMapBuilder) newObjectMapAssembler(ctx context.Context) (*objectMapAssembler, error) {
+func (b *objectMapBuilder) newObjectMapAssembler(ctx context.Context) *objectMapAssembler {
 	meta := ClusterMetaFromContext(ctx)
 	index := newObjectMapIndex(meta, b.allowedNamespaces)
 	index.catalog = b.catalog()
 	index.collectTyped(objectMapTypedSource{
-		shared:      b.shared,
 		permissions: b.permissions,
 		ingest:      b.ingest,
 	})
-	index.collectGatewayTyped(b.gatewayShared, b.gatewayPresence, b.permissions)
-	if err := index.listError(); err != nil {
-		return nil, err
-	}
-	index.enrichActionFacts()
+	index.enrichActionFacts(b.ingest)
 	return &objectMapAssembler{
 		meta:  meta,
 		index: index,
-	}, nil
+	}
 }
 
 func (a *objectMapAssembler) buildObjectSnapshot(scope string, opts objectMapOptions) (*refresh.Snapshot, error) {

@@ -88,11 +88,10 @@ func TestRuntimeAccessKeepsOptionalAttentionSourcesWhenAllAreDenied(t *testing.T
 	}
 }
 
-// The namespace-helm domain reads from the CLUSTER-WIDE helm-storage factory,
-// so its runtime policy must stay a cluster-wide check under a namespace
-// scope (docs/architecture/namespace-scope.md): a per-namespace secrets grant must
-// not register a domain whose source can only 403.
-func TestRuntimeAccessHelmPolicyStaysClusterWideUnderScope(t *testing.T) {
+// The namespace-helm domain reads Helm releases from the Secrets ingest
+// partitions, so under a namespace scope a per-namespace secrets grant
+// registers it, exactly like namespace-config (docs/architecture/namespace-scope.md).
+func TestRuntimeAccessHelmPolicyFollowsTheNamespaceScope(t *testing.T) {
 	access := NewRuntimeAccess()
 	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(_ context.Context, _, _, _, namespace string) (bool, error) {
 		// Allowed per-namespace, denied cluster-wide.
@@ -102,13 +101,9 @@ func TestRuntimeAccessHelmPolicyStaysClusterWideUnderScope(t *testing.T) {
 		return resource == "secrets" || resource == "configmaps"
 	})
 
-	decision, err := access.Check(context.Background(), "namespace-helm", checker)
-	require.NoError(t, err)
-	require.False(t, decision.Allowed, "cluster-wide helm source denied ⇒ domain denied, even with per-namespace grants")
-
-	// A domain whose source IS scoped (ingest-owned kinds) registers on the
-	// strength of the per-namespace grant.
-	decision, err = access.Check(context.Background(), "namespace-config", checker)
-	require.NoError(t, err)
-	require.True(t, decision.Allowed)
+	for _, domainName := range []string{"namespace-helm", "namespace-config"} {
+		decision, err := access.Check(context.Background(), domainName, checker)
+		require.NoError(t, err)
+		require.True(t, decision.Allowed, "%s must register on per-namespace grants", domainName)
+	}
 }

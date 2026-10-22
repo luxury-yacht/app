@@ -10,7 +10,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	eventres "github.com/luxury-yacht/app/backend/resources/events"
-	"github.com/luxury-yacht/app/backend/testsupport"
 	types "k8s.io/apimachinery/pkg/types"
 )
 
@@ -36,7 +35,7 @@ func TestProjectNamespaceEventSummaryCarriesCanonicalEventRef(t *testing.T) {
 	require.Equal(t, eventres.BuildResourceModel("cluster-a", event).Ref, row.Ref)
 	require.Equal(t, event.Labels, row.Metadata.Labels)
 	require.Equal(t, event.Annotations, row.Metadata.Annotations)
-	objectRow := convertObjectEvent(ClusterMeta{ClusterID: "cluster-a"}, *event)
+	objectRow := convertObjectEvent(ClusterMeta{ClusterID: "cluster-a"}, eventRecordOf(ClusterMeta{ClusterID: "cluster-a"}, event))
 	require.Equal(t, event.Labels, objectRow.Metadata.Labels)
 	require.Equal(t, event.Annotations, objectRow.Metadata.Annotations)
 }
@@ -83,9 +82,7 @@ func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {
 		LastTimestamp: metav1.NewTime(now.Add(-30 * time.Minute)),
 	}
 
-	builder := &NamespaceEventsBuilder{
-		eventLister: testsupport.NewEventLister(t, eventNew, eventOld),
-	}
+	builder := namespaceEventsBuilderFor(t, ClusterMeta{}, eventNew, eventOld)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
 	require.NoError(t, err)
@@ -146,9 +143,7 @@ func TestNamespaceEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 		LastTimestamp: timestamp,
 	}
 
-	builder := &NamespaceEventsBuilder{
-		eventLister: testsupport.NewEventLister(t, lowRV, highRV),
-	}
+	builder := namespaceEventsBuilderFor(t, ClusterMeta{}, lowRV, highRV)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
 	require.NoError(t, err)

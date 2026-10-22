@@ -11,8 +11,6 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
 )
 
 // StreamDescriptor registers ResourceQuota for resource streaming (namespace-quotas).
@@ -27,8 +25,5 @@ var StreamDescriptor = streamspec.Descriptor{
 	},
 	AggregateRow: func(obj metav1.Object) any {
 		return BuildAggregate(obj.(*corev1.ResourceQuota))
-	},
-	Informer: func(factory informers.SharedInformerFactory) cache.SharedIndexInformer {
-		return factory.Core().V1().ResourceQuotas().Informer()
 	},
 }

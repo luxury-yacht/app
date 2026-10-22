@@ -1,10 +1,11 @@
 package ingest
 
 import (
-	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/luxury-yacht/app/backend/refresh/ingest/ingesttest"
 )
 
 // managerCallbackBundleSink mirrors the pods live-stream notify sink
@@ -60,10 +61,8 @@ func TestSinkRegistrationDoesNotDeadlockWithSinkManagerCallback(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			server := newTrackerAPIServer(t)
-			httpSrv := httptest.NewServer(server)
-			defer httpSrv.Close()
-			kube := newKubeClientFor(t, httpSrv)
+			server := ingesttest.NewAPIServer(t)
+			kube := server.Client(t)
 
 			// No Start: entries + stores exist from construction, no reflectors run,
 			// so the test drives the store's Replace deterministically.

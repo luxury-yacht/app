@@ -32,8 +32,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes/fake"
 )
 
 const (
@@ -88,7 +86,6 @@ type objectMapBenchFixture struct {
 	pods         int
 	catalogRows  int
 	collectorFor map[schema.GroupVersionResource]objectmapnode.Collector
-	shared       informers.SharedInformerFactory
 	summaries    []objectcatalog.Summary
 }
 
@@ -98,8 +95,6 @@ func newObjectMapBenchFixture(b testing.TB, pods int) *objectMapBenchFixture {
 		ingest:       &fakeObjectMapIngestSource{rows: map[schema.GroupVersionResource][]interface{}{}},
 		pods:         pods,
 		collectorFor: map[schema.GroupVersionResource]objectmapnode.Collector{},
-		// Never started: listers read the indexers populated below.
-		shared: informers.NewSharedInformerFactory(fake.NewSimpleClientset(), 0),
 	}
 	for _, collector := range objectMapCollectors {
 		fixture.collectorFor[collector.Identity.GVR()] = collector
@@ -114,7 +109,6 @@ func newObjectMapBenchFixture(b testing.TB, pods int) *objectMapBenchFixture {
 	fixture.catalogRows = len(fixture.summaries)
 	catalog := fixture.catalog
 	fixture.builder = &objectMapBuilder{
-		shared:         fixture.shared,
 		permissions:    allowAllPermissions{},
 		ingest:         fixture.ingest,
 		catalogService: func() *objectcatalog.Service { return catalog },
@@ -173,33 +167,17 @@ func (f *objectMapBenchFixture) nodeFor(ns string, workload, replica int) string
 	return fmt.Sprintf("node-%d", (len(ns)*7+workload*13+replica)%nodes)
 }
 
-// add routes an object to the source production reads it from and records its
-// catalog row: ingest projections for ingest-owned kinds, informer indexers for
-// the shared-informer kinds the map lists.
+// add projects an object the way its owned reflector does and records its
+// catalog row.
 func (f *objectMapBenchFixture) add(b testing.TB, identity resourcekind.Identity, obj metav1.Object) {
 	gvr := identity.GVR()
 	f.addCatalogRow(identity, obj)
-	if _, owned := objectMapIngestOwnedGVRs[gvr]; owned {
-		collector, ok := f.collectorFor[gvr]
-		if !ok {
-			b.Fatalf("no object-map collector for ingest-owned %s", gvr)
-		}
-		project := objectmapnode.NewNodeProjector(collector.Status, collector.ActionFacts, objectMapEdgeBuilders[identity.Kind])
-		f.ingest.rows[gvr] = append(f.ingest.rows[gvr], project(objectMapBenchClusterID, obj))
-		return
+	collector, ok := f.collectorFor[gvr]
+	if !ok {
+		b.Fatalf("no object-map collector for %s", gvr)
 	}
-	var err error
-	switch typed := obj.(type) {
-	case *appsv1.ReplicaSet:
-		err = f.shared.Apps().V1().ReplicaSets().Informer().GetIndexer().Add(typed)
-	case *autoscalingv2.HorizontalPodAutoscaler:
-		err = f.shared.Autoscaling().V2().HorizontalPodAutoscalers().Informer().GetIndexer().Add(typed)
-	default:
-		b.Fatalf("no informer source for %s", gvr)
-	}
-	if err != nil {
-		b.Fatal(err)
-	}
+	project := objectmapnode.NewNodeProjector(collector.Status, collector.ActionFacts, objectMapEdgeBuilders[identity.Kind])
+	f.ingest.rows[gvr] = append(f.ingest.rows[gvr], project(objectMapBenchClusterID, obj))
 }
 
 func (f *objectMapBenchFixture) addCatalogRow(identity resourcekind.Identity, obj metav1.Object) {

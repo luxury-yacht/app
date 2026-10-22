@@ -12,7 +12,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/job"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
-	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -25,7 +24,6 @@ func TestNamespaceWorkloadsBuilderDoesNotPublishUnsyncedPodsAsAuthoritativelyEmp
 	builder := &NamespaceWorkloadsBuilder{
 		includePods:         true,
 		includeDeployments:  true,
-		hpaLister:           testsupport.NewHorizontalPodAutoscalerLister(t),
 		workloadsMaintained: newTypedMaintainedStore(meta, workloadsQuerypageSchema(), workloadTableQueryAdapter()),
 		perBuild:            &perBuildStoreCache[WorkloadSummary]{},
 	}

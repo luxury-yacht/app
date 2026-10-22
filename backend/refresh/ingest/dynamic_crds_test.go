@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
+
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -34,7 +36,7 @@ func TestDeniedDynamicWatchRemainsVisibleToReadiness(t *testing.T) {
 	mgr := newStartedDynamicManager(t.Context(), newWidgetDynamicClient(gvr, gvr.GroupVersion().WithKind("Widget")))
 	t.Cleanup(mgr.Stop)
 	mgr.SetPermissionFilter(func(_, _, _ string) bool { return false })
-	require.True(t, mgr.ReconcileCustomResourceDefinition(crd, "v1", dynamicTestProjector))
+	require.True(t, mgr.ReconcileCustomResourceDefinition(apiextensions.BuildDefinition(crd), "v1", dynamicTestProjector))
 	require.True(t, mgr.PermissionSkippedFor(gvr), "denied dynamic sources must retain their permission state")
 	require.Equal(t, refresh.ResourceReadinessUnavailable, mgr.ResourceReadinessFor(gvr))
 	require.Equal(t, []PartitionReadiness{{Namespace: "", State: refresh.ResourceReadinessUnavailable}}, mgr.PartitionReadinessFor(gvr))
@@ -57,7 +59,7 @@ func TestCRDSourceUsesServedPreferredVersion(t *testing.T) {
 		newDynUnstructured(selected.GroupVersion().WithKind("Widget"), "allowed", "visible", "1"))
 	m := newStartedDynamicManager(ctx, dyn)
 	defer m.Stop()
-	require.True(t, m.ReconcileCustomResourceDefinition(crd, "v3", dynamicTestProjector))
+	require.True(t, m.ReconcileCustomResourceDefinition(apiextensions.BuildDefinition(crd), "v3", dynamicTestProjector))
 	require.Eventually(t, func() bool { return m.HasSyncedFor(selected) }, time.Second, time.Millisecond)
 	require.Equal(t, []interface{}{dynCatRow{Namespace: "allowed", Name: "visible"}}, m.CatalogRows(selected))
 	for _, action := range dyn.Actions() {
@@ -74,19 +76,19 @@ func TestCRDRecreationIgnoresDeletionFromPreviousUID(t *testing.T) {
 	dyn := newWidgetDynamicClient(gvr, gvr.GroupVersion().WithKind("Widget"), newDynUnstructured(gvr.GroupVersion().WithKind("Widget"), "default", "visible", "1"))
 	m := newStartedDynamicManager(ctx, dyn)
 	defer m.Stop()
-	require.True(t, m.ReconcileCustomResourceDefinition(crd, "v1", dynamicTestProjector))
+	require.True(t, m.ReconcileCustomResourceDefinition(apiextensions.BuildDefinition(crd), "v1", dynamicTestProjector))
 	require.Eventually(t, func() bool { return m.HasSyncedFor(gvr) }, time.Second, time.Millisecond)
 	replacement := crd.DeepCopy()
 	replacement.UID = "definition-b"
-	require.True(t, m.ReconcileCustomResourceDefinition(replacement, "v1", dynamicTestProjector))
+	require.True(t, m.ReconcileCustomResourceDefinition(apiextensions.BuildDefinition(replacement), "v1", dynamicTestProjector))
 	require.Eventually(t, func() bool { return m.HasSyncedFor(gvr) }, time.Second, time.Millisecond)
-	m.RemoveCustomResourceDefinition(crd)
+	m.RemoveCustomResourceDefinition(apiextensions.BuildDefinition(crd))
 	require.True(t, m.Tracks(gvr), "a late delete for the old definition must not retire the replacement")
 	require.Len(t, m.CatalogRows(gvr), 1)
-	m.RemoveCustomResourceDefinition(replacement)
+	m.RemoveCustomResourceDefinition(apiextensions.BuildDefinition(replacement))
 	require.False(t, m.Tracks(gvr))
 	require.Empty(t, m.CatalogRows(gvr))
-	m.RemoveCustomResourceDefinition(replacement)
+	m.RemoveCustomResourceDefinition(apiextensions.BuildDefinition(replacement))
 }
 
 func TestCRDScopeReplacementChangesWatchPartitions(t *testing.T) {
@@ -100,7 +102,7 @@ func TestCRDScopeReplacementChangesWatchPartitions(t *testing.T) {
 	m := newStartedDynamicManager(ctx, dyn)
 	defer m.Stop()
 	m.scope = []string{"team-a", "team-b"}
-	require.True(t, m.ReconcileCustomResourceDefinition(crd, "v1", dynamicTestProjector))
+	require.True(t, m.ReconcileCustomResourceDefinition(apiextensions.BuildDefinition(crd), "v1", dynamicTestProjector))
 	require.Eventually(t, func() bool { return m.HasSyncedFor(gvr) }, time.Second, time.Millisecond)
 	require.Len(t, m.CatalogRows(gvr), 2)
 	require.NoError(t, dyn.Tracker().Delete(gvr, "team-a", "a"))
@@ -110,7 +112,7 @@ func TestCRDScopeReplacementChangesWatchPartitions(t *testing.T) {
 	replacement.UID = "cluster-scoped-definition"
 	replacement.Spec.Scope = apiextensionsv1.ClusterScoped
 	dyn.ClearActions()
-	require.True(t, m.ReconcileCustomResourceDefinition(replacement, "v1", dynamicTestProjector))
+	require.True(t, m.ReconcileCustomResourceDefinition(apiextensions.BuildDefinition(replacement), "v1", dynamicTestProjector))
 	require.Eventually(t, func() bool { return m.HasSyncedFor(gvr) }, time.Second, time.Millisecond)
 	require.Equal(t, []interface{}{dynCatRow{Name: "cluster-object"}}, m.CatalogRows(gvr))
 	for _, action := range dyn.Actions() {
@@ -128,10 +130,10 @@ func TestIncompleteCRDDefinitionRetainsLiveSource(t *testing.T) {
 	dyn := newWidgetDynamicClient(gvr, gvk, newDynUnstructured(gvk, "default", "visible", "1"))
 	m := newStartedDynamicManager(ctx, dyn)
 	defer m.Stop()
-	require.True(t, m.ReconcileCustomResourceDefinition(crd, "v1", dynamicTestProjector))
+	require.True(t, m.ReconcileCustomResourceDefinition(apiextensions.BuildDefinition(crd), "v1", dynamicTestProjector))
 	require.Eventually(t, func() bool { return m.HasSyncedFor(gvr) }, time.Second, time.Millisecond)
 	crd.Spec.Versions[0].Served = false
-	require.False(t, m.ReconcileCustomResourceDefinition(crd, "v1", dynamicTestProjector))
+	require.False(t, m.ReconcileCustomResourceDefinition(apiextensions.BuildDefinition(crd), "v1", dynamicTestProjector))
 	require.True(t, m.HasSyncedFor(gvr))
 	require.Len(t, m.CatalogRows(gvr), 1)
 }
@@ -147,7 +149,7 @@ func TestCRDSourceKeepsRegisteredGatewayOwnership(t *testing.T) {
 	dyn := newWidgetDynamicClient(gvr, gvr.GroupVersion().WithKind("Gateway"))
 	m := newStartedDynamicManager(ctx, dyn)
 	defer m.Stop()
-	require.False(t, m.ReconcileCustomResourceDefinition(crd, "v1", dynamicTestProjector))
+	require.False(t, m.ReconcileCustomResourceDefinition(apiextensions.BuildDefinition(crd), "v1", dynamicTestProjector))
 	require.False(t, m.Tracks(gvr))
 	require.Empty(t, dyn.Actions(), "registered Gateway sources must not gain a second dynamic watcher")
 }

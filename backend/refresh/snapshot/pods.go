@@ -246,11 +246,9 @@ const podDomainName = "pods"
 
 // RegisterPodDomain registers the pods snapshot domain.
 //
-// Pods is an owned-reflector ingest kind (IngestOwned): the typed pod informer is
-// never instantiated. The per-cluster maintained store of pod rows
-// is fed by the pod reflector's Table-half ingest Sink — the bespoke pod projector
-// (NewPodIngestProjector) builds the same object-state PodSummary the old informer
-// handler did, so the store rows are byte-identical. With no typed lister, the builder serves EVERY
+// The per-cluster maintained store of pod rows is fed by the owned pod reflector's
+// Table-half ingest Sink — the bespoke pod projector (NewPodIngestProjector) builds
+// the object-state PodSummary at intake. With no typed lister, the builder serves EVERY
 // scope (namespace/node/workload) from the store rows, which carry the resolved Node
 // and owner the scope filters need. ingestManager may be nil in a unit test, in which
 // case the store has no feed.

@@ -14,7 +14,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
 
@@ -42,9 +41,8 @@ func permissionGateFixture(t *testing.T, allow map[string]bool, errOn map[string
 	})
 
 	checker := permissions.NewChecker(client, "test-cluster", time.Minute)
-	factory := informer.New(context.Background(), client, nil, 0, checker)
 	registry := domain.New()
-	gate := newPermissionGate(registry, factory,
+	gate := newPermissionGate(registry, permissions.NewGrants(checker),
 		func(domain, resource string, errs ...error) {},
 		func(domain, group, resource string) {})
 	return gate, registry

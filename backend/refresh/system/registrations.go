@@ -11,7 +11,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/doorbell"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
@@ -22,12 +21,12 @@ const coreNamespacesPermissionResource = "core/namespaces"
 
 // registrationDeps bundles dependencies needed to register refresh domains.
 type registrationDeps struct {
-	registry        *domain.Registry      // Domain registry for managing domain lifecycles
-	informerFactory *informer.Factory     // Factory for creating informers
-	ingestManager   *ingest.IngestManager // Owned-reflector ingestion for cut kinds
-	metricsProvider metrics.Provider      // Provider for collecting metrics
-	cfg             Config                // Configuration settings
-	serverHost      string                // Hostname of the server
+	registry         *domain.Registry      // Domain registry for managing domain lifecycles
+	permissionGrants *permissions.Grants   // List/watch checks the generation records
+	ingestManager    *ingest.IngestManager // Owned-reflector ingestion for cut kinds
+	metricsProvider  metrics.Provider      // Provider for collecting metrics
+	cfg              Config                // Configuration settings
+	serverHost       string                // Hostname of the server
 	// bell is the cluster generation's doorbell; every producer registered here
 	// rings it and schedules its timers through it.
 	bell doorbell.Bell
@@ -54,6 +53,10 @@ type domainRegistration struct {
 	// domain serves synthesized names) — the permission gate must always
 	// match the data source's actual scope.
 	skipRuntimePolicy bool
+	// feedIndependent marks a domain whose payload reads no object feed (the
+	// catalog service, live GETs, metrics, the maintenance store). It declares
+	// an empty readiness set, so its builds never wait on feed sync.
+	feedIndependent bool
 }
 
 // registerDomains registers refresh domains in a fixed order to preserve behavior.
@@ -143,9 +146,9 @@ func registrationKindCount(registration domainRegistration) int {
 // preflightRequests collects permission requests used to prime permission caches.
 // It merges requirements from the registration table, the shared domain access
 // contract, and any extra requests such as metrics.
-func preflightRequests(registrations []domainRegistration, extra []informer.PermissionRequest) []informer.PermissionRequest {
+func preflightRequests(registrations []domainRegistration, extra []permissions.Request) []permissions.Request {
 	collector := permissionRequestCollector{
-		requests: make([]informer.PermissionRequest, 0, len(extra)),
+		requests: make([]permissions.Request, 0, len(extra)),
 		seen:     make(map[string]struct{}),
 	}
 	collector.addAll(extra)
@@ -158,7 +161,7 @@ func preflightRequests(registrations []domainRegistration, extra []informer.Perm
 }
 
 type permissionRequestCollector struct {
-	requests []informer.PermissionRequest
+	requests []permissions.Request
 	seen     map[string]struct{}
 }
 
@@ -168,10 +171,10 @@ func (c *permissionRequestCollector) add(group, resource, verb string) {
 		return
 	}
 	c.seen[key] = struct{}{}
-	c.requests = append(c.requests, informer.PermissionRequest{Group: group, Resource: resource, Verb: verb})
+	c.requests = append(c.requests, permissions.Request{Group: group, Resource: resource, Verb: verb})
 }
 
-func (c *permissionRequestCollector) addAll(requests []informer.PermissionRequest) {
+func (c *permissionRequestCollector) addAll(requests []permissions.Request) {
 	for _, request := range requests {
 		c.add(request.Group, request.Resource, request.Verb)
 	}
@@ -209,8 +212,8 @@ func (c *permissionRequestCollector) addRegistration(registration domainRegistra
 // before the domain's snapshots build. The set is the union of the shared
 // permission composition (runtime + stream) and the registration's own
 // gate/preflight checks — every place a domain already declares the resources
-// it reads. Domains with no declaration anywhere are omitted and keep the
-// conservative factory-wide sync gate.
+// it reads. A feed-independent domain maps to an empty set and never waits.
+// TestEveryDomainDeclaresItsFeedReadiness keeps every domain declared.
 func domainReadinessResources(registrations []domainRegistration) map[string][]string {
 	compositions := domainpermissions.CompositionByDomain()
 	result := make(map[string][]string, len(registrations))
@@ -221,7 +224,7 @@ func domainReadinessResources(registrations []domainRegistration) map[string][]s
 			resources.addComposition(composition.Stream)
 		}
 		resources.addRegistration(registration)
-		if len(resources) == 0 {
+		if len(resources) == 0 && !registration.feedIndependent {
 			continue
 		}
 		result[registration.name] = resources.sorted()
@@ -318,7 +321,6 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			registerInformer: func() error {
 				return snapshot.RegisterClusterOverviewDomain(
 					deps.registry,
-					deps.informerFactory.SharedInformerFactory(),
 					deps.cfg.KubernetesClient,
 					deps.metricsProvider,
 					deps.serverHost,
@@ -345,10 +347,10 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 
 		"cluster-attention": clusterAttentionRegistration(deps, runtimeAccess),
 
-		"catalog": withSkipUnless(directRegistration("catalog", func() error {
+		"catalog": withSkipUnless(feedIndependentRegistration("catalog", func() error {
 			return snapshot.RegisterCatalogDomain(deps.registry, catalogConfig)
 		}), func() bool { return deps.cfg.ObjectCatalogService != nil }),
-		"catalog-diff": withSkipUnless(directRegistration("catalog-diff", func() error {
+		"catalog-diff": withSkipUnless(feedIndependentRegistration("catalog-diff", func() error {
 			return snapshot.RegisterCatalogDiffDomain(deps.registry, catalogConfig)
 		}), func() bool { return deps.cfg.ObjectCatalogService != nil }),
 
@@ -389,10 +391,8 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 		"cluster-config": accessListRegistration(runtimeAccess, listDomainConfig{
 			name: "cluster-config",
 			register: func(allowed domainpermissions.AllowedResources) error {
-				return snapshot.RegisterClusterConfigDomainWithGatewayAPI(
+				return snapshot.RegisterClusterConfigDomain(
 					deps.registry,
-					deps.informerFactory.SharedInformerFactory(),
-					deps.informerFactory.GatewayInformerFactory(),
 					allowed,
 					clusterMeta,
 					deps.ingestManager,
@@ -413,15 +413,15 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			registerInformer: func() error {
 				return snapshot.RegisterClusterCRDDomain(
 					deps.registry,
-					deps.informerFactory.APIExtensionsInformerFactory(),
 					clusterMeta,
+					deps.ingestManager,
 					deps.bell,
 				)
 			},
 		}),
 
 		"cluster-events": directRegistration("cluster-events", func() error {
-			_, err := snapshot.RegisterClusterEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), clusterMeta, deps.bell)
+			_, err := snapshot.RegisterClusterEventsDomain(deps.registry, deps.ingestManager, clusterMeta, deps.bell)
 			return err
 		}),
 
@@ -437,7 +437,6 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterClusterRBACDomain(
 					deps.registry,
-					deps.informerFactory.SharedInformerFactory(),
 					allowed,
 					clusterMeta,
 					deps.ingestManager,
@@ -457,7 +456,6 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			registerInformer: func() error {
 				return snapshot.RegisterClusterStorageDomain(
 					deps.registry,
-					deps.informerFactory.SharedInformerFactory(),
 					clusterMeta,
 					deps.ingestManager,
 					deps.bell,
@@ -471,7 +469,6 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterNamespaceWorkloadsDomain(
 					deps.registry,
-					deps.informerFactory.SharedInformerFactory(),
 					deps.metricsProvider,
 					snapshot.NamespaceWorkloadsPermissions{
 						IncludePods:         allowed.Allows("", "pods"),
@@ -490,8 +487,8 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 		"namespace-autoscaling": directRegistration("namespace-autoscaling", func() error {
 			return snapshot.RegisterNamespaceAutoscalingDomain(
 				deps.registry,
-				deps.informerFactory.SharedInformerFactory(),
 				clusterMeta,
+				deps.ingestManager,
 				deps.bell,
 			)
 		}),
@@ -500,7 +497,6 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterNamespaceConfigDomain(
 					deps.registry,
-					deps.informerFactory.SharedInformerFactory(),
 					allowed,
 					clusterMeta,
 					deps.ingestManager,
@@ -510,13 +506,13 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 		}),
 
 		"namespace-events": directRegistration("namespace-events", func() error {
-			_, err := snapshot.RegisterNamespaceEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), clusterMeta, deps.bell)
+			_, err := snapshot.RegisterNamespaceEventsDomain(deps.registry, deps.ingestManager, clusterMeta, deps.bell)
 			return err
 		}),
 		"namespace-helm": directRegistration("namespace-helm", func() error {
 			return snapshot.RegisterNamespaceHelmDomain(
 				deps.registry,
-				deps.informerFactory.HelmStorage(),
+				deps.ingestManager,
 				clusterMeta,
 				deps.bell,
 			)
@@ -524,10 +520,8 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 		"namespace-network": accessListRegistration(runtimeAccess, listDomainConfig{
 			name: "namespace-network",
 			register: func(allowed domainpermissions.AllowedResources) error {
-				return snapshot.RegisterNamespaceNetworkDomainWithGatewayAPI(
+				return snapshot.RegisterNamespaceNetworkDomain(
 					deps.registry,
-					deps.informerFactory.SharedInformerFactory(),
-					deps.informerFactory.GatewayInformerFactory(),
 					allowed,
 					clusterMeta,
 					deps.ingestManager,
@@ -540,7 +534,6 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterNamespaceQuotasDomain(
 					deps.registry,
-					deps.informerFactory.SharedInformerFactory(),
 					allowed,
 					clusterMeta,
 					deps.ingestManager,
@@ -554,7 +547,6 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterNamespaceRBACDomain(
 					deps.registry,
-					deps.informerFactory.SharedInformerFactory(),
 					allowed,
 					clusterMeta,
 					deps.ingestManager,
@@ -566,7 +558,6 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 		"namespace-storage": directRegistration("namespace-storage", func() error {
 			return snapshot.RegisterNamespaceStorageDomain(
 				deps.registry,
-				deps.informerFactory.SharedInformerFactory(),
 				clusterMeta,
 				deps.ingestManager,
 				deps.bell,
@@ -583,37 +574,36 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			)
 		}),
 
-		"object-details": directRegistration("object-details", func() error {
+		"object-details": feedIndependentRegistration("object-details", func() error {
 			return snapshot.RegisterObjectDetailsDomain(
 				deps.registry,
 				deps.cfg.ObjectDetailsProvider,
 			)
 		}),
-		"object-yaml": withSkipUnless(directRegistration("object-yaml", func() error {
+		"object-yaml": withSkipUnless(feedIndependentRegistration("object-yaml", func() error {
 			return snapshot.RegisterObjectYAMLDdomain(deps.registry, yamlProvider)
 		}), func() bool { return yamlOK }),
-		"object-helm-manifest": withSkipUnless(directRegistration("object-helm-manifest", func() error {
+		"object-helm-manifest": withSkipUnless(feedIndependentRegistration("object-helm-manifest", func() error {
 			return snapshot.RegisterObjectHelmManifestDomain(deps.registry, helmProvider)
 		}), func() bool { return helmOK }),
-		"object-helm-values": withSkipUnless(directRegistration("object-helm-values", func() error {
+		"object-helm-values": withSkipUnless(feedIndependentRegistration("object-helm-values", func() error {
 			return snapshot.RegisterObjectHelmValuesDomain(deps.registry, helmProvider)
 		}), func() bool { return helmOK }),
 		"object-events": directRegistration("object-events", func() error {
-			_, err := snapshot.RegisterObjectEventsDomain(deps.registry, deps.cfg.KubernetesClient, deps.informerFactory.SharedInformerFactory(), deps.bell)
+			_, err := snapshot.RegisterObjectEventsDomain(deps.registry, deps.cfg.KubernetesClient, deps.ingestManager, deps.bell)
 			return err
 		}),
 		"object-map": directRegistration("object-map", func() error {
 			return snapshot.RegisterObjectMapDomain(
 				deps.registry,
 				snapshot.ObjectMapDomainConfig{
-					Shared: deps.informerFactory.SharedInformerFactory(), Permissions: deps.informerFactory,
-					GatewayShared: deps.informerFactory.GatewayInformerFactory(), GatewayPresence: deps.cfg.GatewayAPIPresence,
+					Permissions:    deps.permissionGrants,
 					CatalogService: deps.cfg.ObjectCatalogService, IngestSource: deps.ingestManager,
 					AllowedNamespaces: deps.cfg.AllowedNamespaces, HelmManifests: helmProvider,
 				},
 			)
 		}),
-		"object-maintenance": directRegistration("object-maintenance", func() error {
+		"object-maintenance": feedIndependentRegistration("object-maintenance", func() error {
 			return snapshot.RegisterNodeMaintenanceDomain(deps.registry, deps.cfg.NodeMaintenanceStore)
 		}),
 	}
@@ -669,7 +659,6 @@ func clusterAttentionRegistration(deps registrationDeps, access domainpermission
 		register: func(allowed domainpermissions.AllowedResources) error {
 			index, err := snapshot.RegisterClusterAttentionDomain(
 				deps.registry,
-				deps.informerFactory.SharedInformerFactory(),
 				snapshot.ClusterAttentionPermissions{
 					IncludePods:         allowed.Allows("", "pods"),
 					IncludeDeployments:  allowed.Allows("apps", "deployments"),
@@ -782,10 +771,9 @@ func listChecksFromRegistrationPlan(plan domainpermissions.RegistrationAccessPla
 // the scope exists for. Unscoped clusters keep the fail-fast list+watch gate.
 func namespacesRegistration(ctx context.Context, deps registrationDeps) domainRegistration {
 	registerScopedOrUnscoped := func() error {
-		eventsExpected := deps.informerFactory != nil && deps.informerFactory.CanListWatchWithContext(ctx, "", "events")
+		eventsExpected := deps.permissionGrants != nil && deps.permissionGrants.CanListWatchWithContext(ctx, "", "events")
 		notifier, err := snapshot.RegisterNamespaceDomain(
 			deps.registry,
-			deps.informerFactory.SharedInformerFactory(),
 			deps.ingestManager,
 			snapshot.NamespaceDomainOptions{
 				AllowedNamespaces: deps.cfg.AllowedNamespaces,
@@ -834,11 +822,20 @@ func namespaceMetricsRegistration(deps registrationDeps) domainRegistration {
 			)
 		},
 		skipRuntimePolicy: true,
+		feedIndependent:   true,
 	}
 }
 
 func listWatchRegistration(cfg listWatchDomainConfig) domainRegistration {
 	return domainRegistration{name: cfg.name, listWatch: &cfg}
+}
+
+// feedIndependentRegistration is directRegistration for a domain that reads no
+// object feed.
+func feedIndependentRegistration(name string, register func() error) domainRegistration {
+	registration := directRegistration(name, register)
+	registration.feedIndependent = true
+	return registration
 }
 
 func withSkipUnless(registration domainRegistration, available func() bool) domainRegistration {

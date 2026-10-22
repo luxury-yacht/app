@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/lifecycle"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
@@ -281,11 +280,9 @@ func (a *RefreshCoordinator) buildRefreshSubsystemForSelection(
 		KubernetesClient:           clients.client,
 		MetricsClient:              clients.metricsClient,
 		RestConfig:                 clients.restConfig,
-		ResyncInterval:             config.RefreshResyncInterval,
 		MetricsInterval:            a.resolveMetricsInterval(),
 		APIExtensionsClient:        clients.apiextensionsClient,
 		GatewayClient:              clients.gatewayClient,
-		GatewayInformerFactory:     clients.gatewayInformerFactory,
 		GatewayAPIPresence:         clients.gatewayAPIPresence,
 		DynamicClient:              clients.dynamicClient,
 		ObjectDetailsProvider:      a.resources.objectDetailProvider(),

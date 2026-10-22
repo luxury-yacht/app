@@ -117,7 +117,7 @@ func TestClusterStorageMaintainedStoreMatchesListPath(t *testing.T) {
 
 // TestClusterStorageMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the
 // live ingest cutover: fed the projected StreamRow through the ingest Sink (the live
-// reflector path PersistentVolume now takes via IngestOwned), the maintained store's
+// reflector path PersistentVolume now takes), the maintained store's
 // rows must equal exactly what the list path produces.
 func TestClusterStorageMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
@@ -172,8 +172,8 @@ func TestClusterStorageBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 
 	collect := clusterStorageCollectIndexer(pvIdx)
-	listBuilder := &ClusterStorageBuilder{collectIndexer: collect}
-	maintainedBuilder := &ClusterStorageBuilder{collectIndexer: collect, maintained: maintained}
+	listBuilder := newTypedTableListOracle(clusterStorageDomainSpec(), collect)
+	maintainedBuilder := &ClusterStorageBuilder{available: availableFromIndexers(collect), maintained: maintained}
 
 	scopes := []string{
 		"",

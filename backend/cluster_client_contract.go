@@ -15,7 +15,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
-	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/credentialerrors"
@@ -23,18 +22,17 @@ import (
 
 // clusterClients stores Kubernetes clients scoped to a specific cluster selection.
 type clusterClients struct {
-	meta                   ClusterMeta
-	kubeconfigPath         string
-	kubeconfigContext      string
-	client                 kubernetes.Interface
-	gatewayClient          gatewayversioned.Interface
-	gatewayInformerFactory gatewayinformers.SharedInformerFactory
-	gatewayAPIPresence     common.GatewayAPIPresence
-	apiextensionsClient    apiextensionsclientset.Interface
-	dynamicClient          dynamic.Interface
-	metricsClient          *metricsclient.Clientset
-	restConfig             *rest.Config
-	rateLimiter            *mutableKubernetesRateLimiter
+	meta                ClusterMeta
+	kubeconfigPath      string
+	kubeconfigContext   string
+	client              kubernetes.Interface
+	gatewayClient       gatewayversioned.Interface
+	gatewayAPIPresence  common.GatewayAPIPresence
+	apiextensionsClient apiextensionsclientset.Interface
+	dynamicClient       dynamic.Interface
+	metricsClient       *metricsclient.Clientset
+	restConfig          *rest.Config
+	rateLimiter         *mutableKubernetesRateLimiter
 	// authManager provides per-cluster auth state tracking and recovery.
 	// Each cluster has its own auth manager so that auth failures in one
 	// cluster don't affect other clusters.
@@ -49,13 +47,12 @@ type clusterClients struct {
 }
 
 type builtClusterClientDependencies struct {
-	client                 kubernetes.Interface
-	gatewayClient          gatewayversioned.Interface
-	gatewayInformerFactory gatewayinformers.SharedInformerFactory
-	gatewayAPIPresence     *gatewayapi.Presence
-	apiextensionsClient    apiextensionsclientset.Interface
-	dynamicClient          dynamic.Interface
-	metricsClient          *metricsclient.Clientset
+	client              kubernetes.Interface
+	gatewayClient       gatewayversioned.Interface
+	gatewayAPIPresence  *gatewayapi.Presence
+	apiextensionsClient apiextensionsclientset.Interface
+	dynamicClient       dynamic.Interface
+	metricsClient       *metricsclient.Clientset
 }
 
 type clusterClientBuilder func(

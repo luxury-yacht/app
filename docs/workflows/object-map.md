@@ -54,8 +54,8 @@ frontend code owns visibility, layout, rendering, and interaction state.
   into the snapshot package.
 - Ingest-owned kinds register node projectors before reflectors start so the
   initial intake includes map data.
-- Collected records (shared informers and ingest projections) are the only
-  source of their fields. The object catalog supplies objects the map doesn't
+- Collected records (ingest projections) are the only source of their
+  fields. The object catalog supplies objects the map doesn't
   collect, such as a custom resource that owns a ReplicaSet. Those are looked
   up by UID or complete identity when a relationship needs them; a build
   never copies the whole catalog. A UID names one object whatever its served

@@ -1,53 +1,15 @@
 package backend
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	cgofake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
-	"github.com/luxury-yacht/app/backend/refresh/permissions"
-	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
-
-var (
-	configMapCacheIdentity = resourcekind.Identity{Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespaced: true}
-	secretCacheIdentity    = resourcekind.Identity{Version: "v1", Kind: "Secret", Resource: "secrets", Namespaced: true}
-	podCacheIdentity       = resourcekind.Identity{Version: "v1", Kind: "Pod", Resource: "pods", Namespaced: true}
-)
-
-func TestInvalidateResponseCacheForObjectEvictsDetailAndYAML(t *testing.T) {
-	gateway := newResourceGatewayFixture().gateway
-	gateway.responseCache = newResponseCache(time.Minute, 10)
-	selectionKey := "cluster-a"
-
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "demo",
-			Namespace: "default",
-		},
-	}
-
-	detailKey := liveDetailCacheKey("ConfigMap", "default", "demo")
-	gateway.seedResponseCache(selectionKey, detailKey, "detail")
-
-	gateway.invalidateResponseCacheForObjectEvent(
-		selectionKey, configMapCacheIdentity, configMap,
-		responseCacheInvalidationUpdate, responseCacheInvalidationGuard{},
-	)
-
-	if _, ok := gateway.responseCacheLookup(selectionKey, detailKey); ok {
-		t.Fatalf("expected detail cache entry to be evicted")
-	}
-}
 
 // TestInvalidateResponseCacheEvictsHeaderMetadata proves an object change drops
 // the cached header metadata too, not just the detail. The header metadata
@@ -74,162 +36,6 @@ func TestInvalidateResponseCacheEvictsHeaderMetadata(t *testing.T) {
 	}
 	if _, ok := gateway.responseCacheLookup(selectionKey, headerKey); ok {
 		t.Fatalf("expected header-metadata cache entry to be evicted")
-	}
-}
-
-func TestInvalidateResponseCacheForObjectEvictsHelmCaches(t *testing.T) {
-	gateway := newResourceGatewayFixture().gateway
-	gateway.responseCache = newResponseCache(time.Minute, 10)
-	selectionKey := "cluster-a"
-
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "sh.helm.release.v1.demo.v1",
-			Namespace: "default",
-		},
-		Type: corev1.SecretType(helmReleaseSecretType),
-	}
-
-	releaseKey := objectDetailCacheKey("HelmRelease", "default", "demo")
-	manifestKey := objectDetailCacheKey("HelmManifest", "default", "demo")
-	valuesKey := objectDetailCacheKey("HelmValues", "default", "demo")
-
-	gateway.seedResponseCache(selectionKey, releaseKey, "details")
-	gateway.seedResponseCache(selectionKey, manifestKey, "manifest")
-	gateway.seedResponseCache(selectionKey, valuesKey, "values")
-
-	gateway.invalidateResponseCacheForObjectEvent(
-		selectionKey, secretCacheIdentity, secret,
-		responseCacheInvalidationUpdate, responseCacheInvalidationGuard{},
-	)
-
-	if _, ok := gateway.responseCacheLookup(selectionKey, releaseKey); ok {
-		t.Fatalf("expected helm release cache entry to be evicted")
-	}
-	if _, ok := gateway.responseCacheLookup(selectionKey, manifestKey); ok {
-		t.Fatalf("expected helm manifest cache entry to be evicted")
-	}
-	if _, ok := gateway.responseCacheLookup(selectionKey, valuesKey); ok {
-		t.Fatalf("expected helm values cache entry to be evicted")
-	}
-}
-
-func TestRegisterHelmCacheInvalidationEvictsViaHelmStorageInformer(t *testing.T) {
-	gateway := newResourceGatewayFixture().gateway
-	gateway.responseCache = newResponseCache(time.Minute, 10)
-	selectionKey := "cluster-a"
-
-	releaseKey := objectDetailCacheKey("HelmRelease", "default", "demo")
-	manifestKey := objectDetailCacheKey("HelmManifest", "default", "demo")
-	gateway.seedResponseCache(selectionKey, releaseKey, "details")
-	gateway.seedResponseCache(selectionKey, manifestKey, "manifest")
-
-	// Build the production helm-storage source from a fake client and register the
-	// Helm cache eviction on it, proving the cut-config path (no shared configmap/
-	// secret informer) still evicts the Helm cache on a release secret change.
-	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
-		return true, nil
-	})
-	client := cgofake.NewClientset()
-	factory := informer.New(context.Background(), client, nil, time.Minute, checker)
-	registerHelmCacheInvalidation(factory.HelmStorage(), responseCacheEvictionTargets{gateway: gateway, selectionKey: selectionKey})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := factory.Start(ctx); err != nil {
-		t.Fatalf("factory start: %v", err)
-	}
-
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "sh.helm.release.v1.demo.v1",
-			Namespace: "default",
-			Labels:    map[string]string{"owner": "helm"},
-		},
-		Type: corev1.SecretType(helmReleaseSecretType),
-	}
-	if _, err := client.CoreV1().Secrets("default").Create(ctx, secret, metav1.CreateOptions{}); err != nil {
-		t.Fatalf("create release secret: %v", err)
-	}
-
-	// The informer delivers the add asynchronously; poll until the eviction lands.
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		_, releaseStillCached := gateway.responseCacheLookup(selectionKey, releaseKey)
-		_, manifestStillCached := gateway.responseCacheLookup(selectionKey, manifestKey)
-		if !releaseStillCached && !manifestStillCached {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("expected helm release/manifest cache evicted via helm-storage informer (release=%v manifest=%v)", releaseStillCached, manifestStillCached)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
-func TestInvalidateResponseCacheSkipsWarmupAddsForOldObjects(t *testing.T) {
-	gateway := newResourceGatewayFixture().gateway
-	gateway.responseCache = newResponseCache(time.Minute, 10)
-	selectionKey := "cluster-a"
-
-	now := time.Now()
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "demo",
-			Namespace:         "default",
-			CreationTimestamp: metav1.NewTime(now.Add(-2 * time.Minute)),
-		},
-	}
-
-	detailKey := liveDetailCacheKey("ConfigMap", "default", "demo")
-	gateway.seedResponseCache(selectionKey, detailKey, "detail")
-
-	guard := responseCacheInvalidationGuard{
-		hasSynced: func() bool { return false },
-		now:       func() time.Time { return now },
-	}
-	gateway.invalidateResponseCacheForObjectEvent(
-		selectionKey,
-		configMapCacheIdentity,
-		configMap,
-		responseCacheInvalidationAdd,
-		guard,
-	)
-
-	if _, ok := gateway.responseCacheLookup(selectionKey, detailKey); !ok {
-		t.Fatalf("expected detail cache entry to remain during warm-up add")
-	}
-}
-
-func TestInvalidateResponseCacheEvictsPodDetailsOnUpdate(t *testing.T) {
-	gateway := newResourceGatewayFixture().gateway
-	gateway.responseCache = newResponseCache(time.Minute, 10)
-	selectionKey := "cluster-a"
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "demo",
-			Namespace: "default",
-		},
-	}
-
-	detailKey := liveDetailCacheKey("Pod", "default", "demo")
-	gateway.seedResponseCache(selectionKey, detailKey, "detail")
-
-	guard := responseCacheInvalidationGuard{
-		hasSynced: func() bool { return true },
-		now:       time.Now,
-	}
-	gateway.invalidateResponseCacheForObjectEvent(
-		selectionKey,
-		podCacheIdentity,
-		pod,
-		responseCacheInvalidationUpdate,
-		guard,
-	)
-
-	if _, ok := gateway.responseCacheLookup(selectionKey, detailKey); ok {
-		t.Fatalf("expected pod detail cache entry to be evicted after an update")
 	}
 }
 

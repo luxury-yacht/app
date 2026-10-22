@@ -10,6 +10,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 // Typed fixtures enter through the production projector and sink before serving.
@@ -19,7 +20,7 @@ func newTestPodBuilder(t testing.TB, meta ClusterMeta, pods corelisters.PodListe
 	objects, err := pods.List(labels.Everything())
 	require.NoError(t, err)
 	maintained := newTypedMaintainedStore(meta, podQuerypageSchema(), podTableQueryAdapter())
-	source := ingest.NewProjectingStore(NewPodIngestProjector(meta, PodOwnerSources{ReplicaSets: replicaSets}))
+	source := ingest.NewProjectingStore(NewPodIngestProjector(meta, PodOwnerSources{ReplicaSetOwner: testsupport.ReplicaSetOwnerLookup(replicaSets)}))
 	source.SetRetainTable(true)
 	source.AddSink(unpublishedSink(maintained, ""))
 	for _, pod := range objects {

@@ -1,17 +1,9 @@
 package snapshot
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
-	"io"
 	"sort"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"helm.sh/helm/v3/pkg/release"
@@ -20,29 +12,14 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/doorbell"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/helm"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
+	"github.com/luxury-yacht/app/backend/resources/secret"
 )
 
 const namespaceHelmDomainName = "namespace-helm"
-
-// helmReleaseSecretType marks the secrets helm's storage driver writes (one
-// secret per release revision).
-const helmReleaseSecretType corev1.SecretType = "helm.sh/release.v1"
-
-// helmDecodeCacheLimit bounds the decoded-release memo; past it the cache is
-// rebuilt from scratch (release counts this high are not a realistic working
-// set, this is purely a leak guard).
-const helmDecodeCacheLimit = 4096
-
-// helmOwnerSelector narrows the lister scan to helm storage records.
-var helmOwnerSelector = labels.SelectorFromSet(labels.Set{"owner": "helm"})
 
 // NamespaceHelmSnapshot payload returned to the frontend.
 type NamespaceHelmSnapshot struct {
@@ -87,158 +64,42 @@ func helmQuerypageSchema() querypage.Schema[NamespaceHelmSummary] {
 	return querypageSchemaFromAdapter(helmTableQueryAdapter(), lowerTrimAll(namespaceHelmQueryCapabilities().SortableFields))
 }
 
-// HelmStorageSource supplies the full typed helm-release Secrets the namespace-helm
-// builder decodes. ConfigMap/Secret are cut to the ingest path so the shared
-// informer factory no longer caches them as typed objects; the dedicated
-// label-filtered (owner=helm) helm-storage source holds the release subset instead.
-// *informer.HelmStorageSource satisfies it.
-type HelmStorageSource interface {
-	SecretLister() corelisters.SecretLister
-	SecretsHasSynced() cache.InformerSynced
-	SecretInformer() cache.SharedIndexInformer
-}
-
 // helmAvailableKinds is the single-kind availability set the maintained store filters by:
 // every helm row's Kind is the synthesized "HelmRelease".
 var helmAvailableKinds = map[string]bool{"HelmRelease": true}
 
-// RegisterNamespaceHelmDomain registers the namespace helm domain. It serves from a
-// maintained store of synthesized HelmRelease rows: a handler on the helm-storage Secret
-// informer re-aggregates a release (its latest non-superseded revision) on every revision
-// secret event, so Build reads rows from RAM instead of listing + decoding every request.
-// The handler is registered before the helm-storage factory starts, so the sync gate
-// guarantees the store is populated before serve.
+// RegisterNamespaceHelmDomain registers the namespace helm domain. It serves
+// synthesized HelmRelease rows from a maintained store that a sink on the
+// Secrets ingest store keeps current (namespace_helm_feed.go), so Build reads
+// rows from RAM instead of decoding release Secrets per request.
+// ingestManager is nil in unit tests that feed the store directly.
+//
+// The store is not spilled. A re-warm rebuilds it from the restored Secrets
+// bundles, which the feed receives as a seed.
 func RegisterNamespaceHelmDomain(
 	reg *domain.Registry,
-	helmStorage HelmStorageSource,
+	ingestManager *ingest.IngestManager,
 	clusterMeta ClusterMeta,
 	bell doorbell.Bell,
 ) error {
-	if helmStorage == nil {
-		return fmt.Errorf("helm storage source is nil")
+	builder := newNamespaceHelmBuilder(clusterMeta)
+	if ingestManager != nil {
+		ingestManager.AddBundleSink(secret.Identity.GVR(), newHelmReleaseFeed(builder.maintained, clusterMeta, bell))
 	}
-	builder := &NamespaceHelmBuilder{
-		secretLister:  helmStorage.SecretLister(),
-		secretsSynced: helmStorage.SecretsHasSynced(),
-		meta:          clusterMeta,
-	}
-	// Feed a maintained store only when the helm-storage secret informer exists (the
-	// identity can list+watch helm secrets). When it is nil — the permission gate denied
-	// secrets — the builder falls back to the list path over the (empty) lister, exactly
-	// as before the maintained-store cutover, rather than registering a handler on nil.
-	if informer := helmStorage.SecretInformer(); informer != nil {
-		builder.maintained = newTypedMaintainedStore(clusterMeta, helmQuerypageSchema(), helmTableQueryAdapter())
-		if _, err := informer.AddEventHandler(storeHandlerFuncs(builder.applyReleaseSecret, func(before, after metav1.Object, kind doorbell.MessageType) {
-			builder.publishReleaseSecret(bell, before, after)
-		})); err != nil {
-			return err
-		}
-	}
-	// NOTE: helm is intentionally NOT registered for spill/restore. Its rows are HelmReleases
-	// synthesized from revision secrets by the bespoke reaggregate handler; reconciling a
-	// release deleted while Cold would need a per-release sweep the handler does not express.
-	// Re-warm re-synthesizes the releases from the secret informer's initial relist (correct,
-	// just no warm-paint) — the value (few releases) does not justify a bespoke reconcile.
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceHelmDomainName,
 		BuildSnapshot: builder.Build,
 	})
 }
 
-// applyReleaseSecret re-aggregates the release a revision secret belongs to, and
-// the release it belonged to before when an update moved it to another release.
-func (b *NamespaceHelmBuilder) applyReleaseSecret(before, after interface{}) {
-	previous, hadPrevious := helmReleaseSecretKey(before)
-	current, hasCurrent := helmReleaseSecretKey(after)
-	if hasCurrent {
-		b.reaggregateRelease(current.namespace, current.name, current.secret)
-	}
-	if hadPrevious && (!hasCurrent || previous.namespace != current.namespace || previous.name != current.name) {
-		b.reaggregateRelease(previous.namespace, previous.name, previous.secret)
-	}
-}
-
-// publishReleaseSecret rings the Helm table after its store applied a revision
-// secret change: a complete-resync signal for the releases' namespaces.
-func (b *NamespaceHelmBuilder) publishReleaseSecret(bell doorbell.Bell, before, after metav1.Object) {
-	var scopes []string
-	var ref *resourcemodel.ResourceRef
-	for _, obj := range []metav1.Object{before, after} {
-		key, ok := helmReleaseSecretKey(obj)
-		if !ok {
-			continue
-		}
-		scopes = append(scopes, namespaceDoorbellScopes(key.namespace)...)
-		releaseRef := resourcemodel.NewResourceRef(helm.ReleaseRef(b.meta.ClusterID, key.namespace, key.name))
-		ref = &releaseRef
-	}
-	if len(scopes) == 0 {
-		return
-	}
-	bell.Ring(doorbell.Change{
-		Domain: namespaceHelmDomainName,
-		Source: doorbell.SourceObject,
-		Target: doorbell.Scopes(scopes...),
-		Type:   doorbell.MessageTypeComplete,
-		Ref:    ref,
-	})
-}
-
-type helmReleaseKey struct {
-	namespace, name string
-	secret          *corev1.Secret
-}
-
-// helmReleaseSecretKey identifies the release a Helm revision secret stores.
-func helmReleaseSecretKey(obj interface{}) (helmReleaseKey, bool) {
-	secret, ok := maintainedUnwrap(obj).(*corev1.Secret)
-	if !ok || secret == nil || secret.Type != helmReleaseSecretType || secret.Labels["name"] == "" {
-		return helmReleaseKey{}, false
-	}
-	return helmReleaseKey{namespace: secret.Namespace, name: secret.Labels["name"], secret: secret}, true
-}
-
-// reaggregateRelease recomputes the synthesized HelmRelease row for one release from its
-// revision secrets and upserts it, or deletes the row when no current (non-superseded)
-// revision remains — the incremental form of the list path's per-(namespace,name)
-// aggregation. source is the triggering secret, used as the version watermark.
-func (b *NamespaceHelmBuilder) reaggregateRelease(namespace, name string, source *corev1.Secret) {
-	rls := b.latestReleaseFor(namespace, name)
-	if rls == nil {
-		b.maintained.deleteRow(NamespaceHelmSummary{Ref: resourcemodel.ResourceRef{Namespace: namespace, Name: name}})
-		return
-	}
-	if summary, ok := mapHelmRelease(rls, "", b.meta); ok {
-		b.maintained.upsertRow(summary, source)
-	}
-}
-
-// NamespaceHelmBuilder renders Helm releases straight from the shared secrets
-// informer — helm stores every release revision as a typed secret, so the
-// already-synced cache replaces what used to be live per-namespace Helm SDK
-// list calls (one client bootstrap + API round-trip per namespace, plus a
-// cluster-wide re-list for every namespace without releases).
+// NamespaceHelmBuilder serves the Helm releases table from its maintained
+// store of synthesized HelmRelease rows.
 type NamespaceHelmBuilder struct {
-	secretLister  corelisters.SecretLister
-	secretsSynced cache.InformerSynced
-
-	// maintained is the informer-fed store of synthesized HelmRelease rows (production);
-	// meta is the cluster identity the re-aggregation projects with. A builder without a
-	// maintained store takes the list path (the direct-builder unit tests).
 	maintained *typedMaintainedStore[NamespaceHelmSummary]
-	meta       ClusterMeta
-
-	// decodeCache memoizes decoded release payloads by secret identity so
-	// repeat builds (pagination, per-keystroke filter queries) skip the
-	// gzip+json work. Keyed by namespace/name (unique per revision secret),
-	// validated by resourceVersion.
-	decodeMu    sync.Mutex
-	decodeCache map[string]decodedHelmRelease
 }
 
-type decodedHelmRelease struct {
-	resourceVersion string
-	release         *release.Release
+func newNamespaceHelmBuilder(meta ClusterMeta) *NamespaceHelmBuilder {
+	return &NamespaceHelmBuilder{maintained: newTypedMaintainedStore(meta, helmQuerypageSchema(), helmTableQueryAdapter())}
 }
 
 func (b *NamespaceHelmBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
@@ -253,34 +114,14 @@ func (b *NamespaceHelmBuilder) Build(ctx context.Context, scope string) (*refres
 		return nil, err
 	}
 
-	// Wait out the informer's initial sync (bounded by the request context)
-	// instead of listing an unsynced cache: the first request after connect is
-	// slower, never wrong. See ClusterEventsBuilder.Build.
-	if b.secretsSynced != nil && !cache.WaitForCacheSync(ctx.Done(), b.secretsSynced) {
-		return nil, fmt.Errorf("helm release cache has not finished syncing")
-	}
-
 	namespaceFilter := parsedScope.Namespace
 	if parsedScope.AllNamespaces {
 		namespaceFilter = ""
 	}
 
-	var summaries []NamespaceHelmSummary
-	var version uint64
-	if b.maintained != nil {
-		// Serve the synthesized rows straight from the informer-fed store (re-aggregated
-		// at intake) instead of listing + decoding every request.
-		summaries = b.maintained.rows(namespaceFilter, helmAvailableKinds)
-		version = b.maintained.snapshotVersion()
-	} else {
-		releases, listErr := b.listReleases(namespaceFilter)
-		if listErr != nil {
-			return nil, listErr
-		}
-		summaries, version = mapHelmReleases(releases, namespaceFilter, meta)
-	}
-	// The lister + latest-revision map yield no particular order; builds must
-	// be deterministic for stable snapshot checksums.
+	summaries := b.maintained.rows(namespaceFilter, helmAvailableKinds)
+	version := b.maintained.snapshotVersion()
+	// Builds must be deterministic for stable snapshot checksums.
 	sort.Slice(summaries, func(i, j int) bool {
 		if summaries[i].Ref.Namespace == summaries[j].Ref.Namespace {
 			return summaries[i].Ref.Name < summaries[j].Ref.Name
@@ -315,171 +156,6 @@ func (b *NamespaceHelmBuilder) Build(ctx context.Context, scope string) (*refres
 		},
 		Stats: resolved.Stats,
 	}, nil
-}
-
-// listReleases returns the current state of every release in the namespace
-// (cluster-wide when namespace is empty). It groups the revision secrets per
-// (namespace, name) and resolves each group through latestRelease, so the list path
-// and the maintained-store re-aggregation share the EXACT current-revision selection.
-func (b *NamespaceHelmBuilder) listReleases(namespace string) ([]*release.Release, error) {
-	var (
-		secrets []*corev1.Secret
-		err     error
-	)
-	if namespace == "" {
-		secrets, err = b.secretLister.List(helmOwnerSelector)
-	} else {
-		secrets, err = b.secretLister.Secrets(namespace).List(helmOwnerSelector)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	type releaseKey struct{ namespace, name string }
-	groups := make(map[releaseKey][]*corev1.Secret)
-	for _, secret := range secrets {
-		if secret == nil || secret.Type != helmReleaseSecretType {
-			continue
-		}
-		name := secret.Labels["name"]
-		if name == "" {
-			continue
-		}
-		key := releaseKey{namespace: secret.Namespace, name: name}
-		groups[key] = append(groups[key], secret)
-	}
-
-	releases := make([]*release.Release, 0, len(groups))
-	for _, group := range groups {
-		if rls := b.latestRelease(group); rls != nil {
-			releases = append(releases, rls)
-		}
-	}
-	return releases, nil
-}
-
-// latestRelease selects the latest revision among a single release's revision secrets
-// and decodes it, or returns nil when none is current: the newest revision marked
-// superseded/uninstalled is history (not fallen back to a prior revision — matching the
-// list path), and a corrupt record is skipped (helm's own list is similarly tolerant).
-func (b *NamespaceHelmBuilder) latestRelease(secrets []*corev1.Secret) *release.Release {
-	var latest *corev1.Secret
-	latestVersion := -1
-	for _, secret := range secrets {
-		if secret == nil || secret.Type != helmReleaseSecretType {
-			continue
-		}
-		version, err := strconv.Atoi(secret.Labels["version"])
-		if err != nil {
-			continue
-		}
-		if version > latestVersion {
-			latestVersion = version
-			latest = secret
-		}
-	}
-	if latest == nil {
-		return nil
-	}
-	switch latest.Labels["status"] {
-	case "superseded", "uninstalled":
-		return nil
-	}
-	rls, err := b.decodeReleaseSecret(latest)
-	if err != nil {
-		return nil
-	}
-	return rls
-}
-
-// latestReleaseFor resolves the current release for one (namespace, name) from the
-// label-filtered secret lister — the single-release form listReleases applies per group,
-// used by the maintained store's incremental re-aggregation.
-func (b *NamespaceHelmBuilder) latestReleaseFor(namespace, name string) *release.Release {
-	secrets, err := b.secretLister.Secrets(namespace).List(helmOwnerSelector)
-	if err != nil {
-		return nil
-	}
-	matching := make([]*corev1.Secret, 0, len(secrets))
-	for _, secret := range secrets {
-		if secret != nil && secret.Labels["name"] == name {
-			matching = append(matching, secret)
-		}
-	}
-	return b.latestRelease(matching)
-}
-
-func (b *NamespaceHelmBuilder) decodeReleaseSecret(secret *corev1.Secret) (*release.Release, error) {
-	cacheKey := secret.Namespace + "/" + secret.Name
-	b.decodeMu.Lock()
-	cached, ok := b.decodeCache[cacheKey]
-	b.decodeMu.Unlock()
-	if ok && cached.resourceVersion == secret.ResourceVersion {
-		return cached.release, nil
-	}
-
-	rls, err := decodeHelmRelease(secret.Data["release"])
-	if err != nil {
-		return nil, err
-	}
-
-	b.decodeMu.Lock()
-	if b.decodeCache == nil || len(b.decodeCache) >= helmDecodeCacheLimit {
-		b.decodeCache = make(map[string]decodedHelmRelease)
-	}
-	b.decodeCache[cacheKey] = decodedHelmRelease{resourceVersion: secret.ResourceVersion, release: rls}
-	b.decodeMu.Unlock()
-	return rls, nil
-}
-
-// decodeHelmRelease mirrors helm v3's storage record format
-// (storage/driver/util.go): base64 text wrapping an optionally-gzipped JSON
-// release.
-func decodeHelmRelease(data []byte) (*release.Release, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("helm release record is empty")
-	}
-	decoded, err := base64.StdEncoding.DecodeString(string(data))
-	if err != nil {
-		return nil, err
-	}
-	if len(decoded) > 3 && bytes.Equal(decoded[:3], []byte{0x1f, 0x8b, 0x08}) {
-		reader, err := gzip.NewReader(bytes.NewReader(decoded))
-		if err != nil {
-			return nil, err
-		}
-		defer reader.Close()
-		if decoded, err = io.ReadAll(reader); err != nil {
-			return nil, err
-		}
-	}
-	var rls release.Release
-	if err := json.Unmarshal(decoded, &rls); err != nil {
-		return nil, err
-	}
-	return &rls, nil
-}
-
-func mapHelmReleases(
-	releases []*release.Release,
-	namespaceFilter string,
-	meta ClusterMeta,
-) ([]NamespaceHelmSummary, uint64) {
-	summaries := make([]NamespaceHelmSummary, 0, len(releases))
-	var version uint64
-
-	for _, release := range releases {
-		summary, ok := mapHelmRelease(release, namespaceFilter, meta)
-		if !ok {
-			continue
-		}
-		summaries = append(summaries, summary)
-		if v := uint64(release.Version); v > version {
-			version = v
-		}
-	}
-
-	return summaries, version
 }
 
 func mapHelmRelease(release *release.Release, namespaceFilter string, meta ClusterMeta) (NamespaceHelmSummary, bool) {

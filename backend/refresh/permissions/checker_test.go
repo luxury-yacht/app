@@ -413,25 +413,6 @@ func TestCheckerScopeOnlyAppliesToPredicateResources(t *testing.T) {
 	require.Equal(t, []string{""}, namespaces)
 }
 
-func TestCheckerCanClusterWideBypassesScope(t *testing.T) {
-	var namespaces []string
-	var mu sync.Mutex
-	checker := NewCheckerWithReview("cluster-a", time.Minute, func(_ context.Context, _, _, _ string, namespace string) (bool, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		namespaces = append(namespaces, namespace)
-		return true, nil
-	})
-	checker.SetScope([]string{"prod"}, scopeAppliesToPods)
-
-	decision, err := checker.CanClusterWide(context.Background(), "", "pods", "list")
-	require.NoError(t, err)
-	require.True(t, decision.Allowed)
-	mu.Lock()
-	defer mu.Unlock()
-	require.Equal(t, []string{""}, namespaces)
-}
-
 func TestCheckerCanInNamespaceCachesPerNamespace(t *testing.T) {
 	callCount := 0
 	checker := NewCheckerWithReview("cluster-a", time.Minute, func(_ context.Context, _, _, _ string, _ string) (bool, error) {

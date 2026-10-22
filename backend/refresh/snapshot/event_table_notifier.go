@@ -8,9 +8,8 @@ import (
 
 // EventTableChangeNotifier rings one event table's doorbell (cluster-events or
 // namespace-events) after that table's maintained store has applied an Event
-// change. It is fed by the store's own informer handler, so a refetch the
-// doorbell triggers always reads the post-change store; a separate informer
-// handler would race the store's listener.
+// change. It is fed by the table's own events sink, after the sink applies the
+// change, so a refetch the doorbell triggers always reads the post-change store.
 //
 // Keys are involved-object namespaces ("" for a cluster-scoped object), which
 // is the scope a table row is served under. Bursts coalesce on the same

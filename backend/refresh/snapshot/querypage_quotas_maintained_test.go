@@ -254,8 +254,8 @@ func TestNamespaceQuotasBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 
 	collect := quotasCollectIndexer(quotaIdx, limitIdx, pdbIdx)
-	listBuilder := &NamespaceQuotasBuilder{collectIndexer: collect}
-	maintainedBuilder := &NamespaceQuotasBuilder{collectIndexer: collect, maintained: maintained}
+	listBuilder := newTypedTableListOracle(namespaceQuotasDomainSpec(), collect)
+	maintainedBuilder := &NamespaceQuotasBuilder{available: availableFromIndexers(collect), maintained: maintained}
 
 	scopes := []string{
 		"namespace:default",

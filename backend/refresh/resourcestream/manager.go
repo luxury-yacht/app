@@ -21,7 +21,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/doorbell"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/ringbuffer"
@@ -158,7 +157,8 @@ type Manager struct {
 	buffers     map[string]*updateBuffer
 	sequences   map[string]uint64
 
-	jobPodOwnerHealSink *ingest.AsyncBundleSink
+	jobPodOwnerHealSink        *ingest.AsyncBundleSink
+	replicaSetPodOwnerHealSink *ingest.AsyncBundleSink
 }
 
 // NewManager returns a cluster generation's resource stream: the doorbell every
@@ -189,18 +189,15 @@ func NewManager(
 // It runs during subsystem construction, after the permission preflight has
 // primed the checks it makes and before the sources start. Table changes ring
 // from their own stores, not from here.
-func (m *Manager) RegisterSources(factory *informer.Factory, ingestManager *ingest.IngestManager) {
-	if m == nil || factory == nil {
+func (m *Manager) RegisterSources(permissionChecker permissions.ListWatchChecker, ingestManager *ingest.IngestManager) {
+	if m == nil || permissionChecker == nil {
 		return
 	}
-	m.permissions = factory
+	m.permissions = permissionChecker
 	if ingestManager != nil {
 		m.podIngest = ingestManager
 	}
-	if factory.SharedInformerFactory() == nil {
-		return
-	}
-	m.registerOwnerHeals(factory, ingestManager)
+	m.registerOwnerHeals(ingestManager)
 }
 
 // Stop ends the generation: it rejects new rings and producer callbacks, waits
@@ -211,8 +208,10 @@ func (m *Manager) Stop() {
 		return
 	}
 	m.generation.Stop()
-	if m.jobPodOwnerHealSink != nil {
-		m.jobPodOwnerHealSink.Stop()
+	for _, sink := range []*ingest.AsyncBundleSink{m.jobPodOwnerHealSink, m.replicaSetPodOwnerHealSink} {
+		if sink != nil {
+			sink.Stop()
+		}
 	}
 	m.stopped.Store(true)
 	m.mu.Lock()

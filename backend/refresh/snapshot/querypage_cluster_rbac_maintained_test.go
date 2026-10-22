@@ -126,7 +126,7 @@ func TestClusterRBACMaintainedStoreMatchesListPath(t *testing.T) {
 
 // TestClusterRBACMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the live
 // ingest cutover: fed the projected StreamRow through the ingest Sink (the live
-// reflector path ClusterRole/ClusterRoleBinding now take via IngestOwned), the
+// reflector path ClusterRole/ClusterRoleBinding now take), the
 // maintained store's rows must equal exactly what the list path produces.
 func TestClusterRBACMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
@@ -198,8 +198,8 @@ func TestClusterRBACBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 
 	collect := clusterRBACCollectIndexer(roleIdx, bindingIdx)
-	listBuilder := &ClusterRBACBuilder{collectIndexer: collect}
-	maintainedBuilder := &ClusterRBACBuilder{collectIndexer: collect, maintained: maintained}
+	listBuilder := newTypedTableListOracle(clusterRBACDomainSpec(), collect)
+	maintainedBuilder := &ClusterRBACBuilder{available: availableFromIndexers(collect), maintained: maintained}
 
 	scopes := []string{
 		"",

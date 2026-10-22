@@ -383,22 +383,6 @@ func TestClusterAttentionIndexRestoredRowsReconcilePerOwnerKind(t *testing.T) {
 	require.Equal(t, "Node", rows[0].Ref.Kind)
 }
 
-func TestClusterAttentionReconcileDoesNotPruneEventIgnoresBeforeInformerSync(t *testing.T) {
-	index := newTestAttentionIndex(ClusterMeta{ClusterID: "c-1"}, time.Now)
-	t.Cleanup(index.stopForTest)
-	ref := attentionTestRef("Event", "default", "warning-1")
-	index.registerOwnerKind("events", "Event")
-	index.SetIgnoreRules(AttentionIgnoreRules{ObjectFindings: []AttentionObjectFindingIgnore{{
-		Ref: ref, FindingType: "warning-event",
-	}}})
-	index.eventRows = func() []attentionSourceRecord { return nil }
-	index.eventRowsSynced = func() bool { return false }
-
-	index.Reconcile()
-
-	require.Len(t, index.IgnoreRules().ObjectFindings, 1)
-}
-
 func TestClusterAttentionIndexReconcileRemovesRestoredRowsForUnavailableOwner(t *testing.T) {
 	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}

@@ -207,9 +207,9 @@ func TestEveryTypedResourceDomainEmbedsTheNormalizedEnvelope(t *testing.T) {
 
 // TestTypedTableDomainSkeletonUsesCanonicalEnvelope backs the
 // buildTypedTableSnapshot delegation marker accepted above: the shared skeleton
-// must itself construct envelopes through the canonical resolvers on both its
-// maintained-store and list branches. If the skeleton ever stops doing so, the
-// delegating domains' guarantee would silently vanish — this pins it.
+// must itself construct envelopes through the canonical maintained-store
+// resolver. If the skeleton ever stops doing so, the delegating domains'
+// guarantee would silently vanish — this pins it.
 func TestTypedTableDomainSkeletonUsesCanonicalEnvelope(t *testing.T) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "typed_table_domain.go", nil, 0)
@@ -217,18 +217,16 @@ func TestTypedTableDomainSkeletonUsesCanonicalEnvelope(t *testing.T) {
 		t.Fatalf("parse typed_table_domain.go: %v", err)
 	}
 	usesMaintained := false
-	usesStore := false
 	ast.Inspect(file, func(n ast.Node) bool {
 		fn, ok := n.(*ast.FuncDecl)
 		if !ok || fn.Name.Name != "buildTypedTableSnapshot" {
 			return true
 		}
 		usesMaintained = bodyCallsFunc(fn.Body, "resolveMaintainedDirect")
-		usesStore = bodyCallsFunc(fn.Body, "resolveTypedSnapshotPageViaStore")
 		return false
 	})
-	if !usesMaintained || !usesStore {
-		t.Fatalf("buildTypedTableSnapshot must construct envelopes via resolveMaintainedDirect (got %v) and resolveTypedSnapshotPageViaStore (got %v)", usesMaintained, usesStore)
+	if !usesMaintained {
+		t.Fatal("buildTypedTableSnapshot must construct envelopes via resolveMaintainedDirect")
 	}
 }
 

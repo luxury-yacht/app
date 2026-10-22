@@ -125,7 +125,7 @@ func TestDaemonSetNoEligibleNodesProjectsConsistentlyIntoAttention(t *testing.T)
 	require.Equal(t, meta.ClusterID, evaluation.Finding.Ref.ClusterID)
 }
 
-func TestAttentionRecordFromEventUsesEventIdentityNotInvolvedObjectIdentity(t *testing.T) {
+func TestAttentionRecordFromEventBundleUsesEventIdentityNotInvolvedObjectIdentity(t *testing.T) {
 	observedAt := time.Date(2026, time.July, 16, 11, 0, 0, 0, time.UTC)
 	event := &corev1.Event{
 		ObjectMeta:     metav1.ObjectMeta{Name: "checkout.abc", Namespace: "payments", UID: "event-uid"},
@@ -134,7 +134,7 @@ func TestAttentionRecordFromEventUsesEventIdentityNotInvolvedObjectIdentity(t *t
 		LastTimestamp: metav1.NewTime(observedAt),
 	}
 
-	record, ok := attentionRecordFromEvent(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, event)
+	record, ok := attentionRecordFromBundle(attentionSourceEvent, eventBundleOf(t, ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, event))
 	require.True(t, ok)
 	require.Equal(t, "Event", record.Ref.Kind)
 	require.Equal(t, "events", record.Ref.Resource)
@@ -146,7 +146,7 @@ func TestAttentionRecordFromEventUsesEventIdentityNotInvolvedObjectIdentity(t *t
 		return observedAt.Add(time.Hour)
 	})
 	t.Cleanup(index.stopForTest)
-	index.UpsertSource("events", record)
+	index.UpsertSource(EventGVR.String(), record)
 	rows := index.Snapshot()
 	require.Len(t, rows, 1)
 	require.Equal(t, "payments", rows[0].Ref.Namespace)
@@ -161,7 +161,7 @@ func TestAttentionFindingForClusterScopedEventHasNoDisplayNamespace(t *testing.T
 		LastTimestamp: metav1.NewTime(observedAt),
 	}
 
-	record, ok := attentionRecordFromEvent(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, event)
+	record, ok := attentionRecordFromBundle(attentionSourceEvent, eventBundleOf(t, ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, event))
 	require.True(t, ok)
 	require.Equal(t, "default", record.Ref.Namespace, "event identity must retain the Event object's namespace")
 
@@ -169,7 +169,7 @@ func TestAttentionFindingForClusterScopedEventHasNoDisplayNamespace(t *testing.T
 		return observedAt.Add(time.Hour)
 	})
 	t.Cleanup(index.stopForTest)
-	index.UpsertSource("events", record)
+	index.UpsertSource(EventGVR.String(), record)
 
 	rows := index.Snapshot()
 	require.Len(t, rows, 1)
@@ -189,7 +189,7 @@ func TestDeletingEventWithFinalizerAppearsWithoutWarningEventStatus(t *testing.T
 		LastTimestamp: metav1.NewTime(now.Add(-time.Hour)),
 	}
 
-	record, ok := attentionRecordFromEvent(ClusterMeta{ClusterID: "cluster-a"}, event)
+	record, ok := attentionRecordFromBundle(attentionSourceEvent, eventBundleOf(t, ClusterMeta{ClusterID: "cluster-a"}, event))
 	require.True(t, ok)
 	evaluation := evaluateEventAttention(record, now)
 	require.NotNil(t, evaluation.Finding)
@@ -201,7 +201,7 @@ func TestDeletingEventWithFinalizerAppearsWithoutWarningEventStatus(t *testing.T
 func TestClusterAttentionDomainDelegatesOpenKindPermissionsToCatalog(t *testing.T) {
 	registry := domain.New()
 	index, err := RegisterClusterAttentionDomain(
-		registry, nil, ClusterAttentionPermissions{}, ClusterMeta{ClusterID: "cluster-a"}, nil, ClusterAttentionOptions{},
+		registry, ClusterAttentionPermissions{}, ClusterMeta{ClusterID: "cluster-a"}, nil, ClusterAttentionOptions{},
 		newRecordingBell(),
 	)
 	require.NoError(t, err)

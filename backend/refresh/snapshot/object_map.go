@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	clusterrolepkg "github.com/luxury-yacht/app/backend/resources/clusterrole"
 
@@ -28,16 +27,11 @@ import (
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/informers"
-	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
 const (
@@ -109,35 +103,25 @@ type ObjectMapSnapshotPayload struct {
 
 // objectMapPermissionChecker reports whether the current cluster credentials may
 // list+watch a resource. *informer.Factory satisfies it. object-map uses it to
-// skip resources the user cannot see (matching the old live-list Forbidden skip)
-// and to avoid lazily registering an unstarted informer for a denied
-// cluster-scoped type.
+// skip, with a warning, resources the user cannot see.
 type objectMapPermissionChecker interface {
 	CanListWatch(group, resource string) bool
 }
 
-// objectMapRowsProvider supplies the projected object-map nodes for ingest-owned
-// (cut) kinds, whose objects are no longer cached by the shared informer factory.
-// *ingest.IngestManager satisfies it. The object map reads cut kinds' nodes from
-// here and uncut kinds from the shared informer listers.
+// objectMapRowsProvider supplies each kind's projected object-map nodes and its
+// partitions' availability. *ingest.IngestManager satisfies it.
 type objectMapRowsProvider interface {
+	ingestPartitionSource
 	ObjectMapRows(gvr schema.GroupVersionResource) []interface{}
 }
 
 type objectMapBuilder struct {
-	gatewayShared   gatewayinformers.SharedInformerFactory
-	gatewayPresence objectMapGatewayPresenceChecker
-	catalogService  func() *objectcatalog.Service
-	// shared supplies typed listers backed by the factory's already-synced
-	// informer caches, so the graph is assembled from memory instead of ~21 live
-	// cluster-wide LIST calls per refresh.
-	shared      informers.SharedInformerFactory
-	permissions objectMapPermissionChecker
-	// ingest supplies projected object-map nodes for ingest-owned (cut) kinds. nil
-	// when no kind in the build is ingest-owned (e.g. a unit test with no cut kinds).
+	catalogService func() *objectcatalog.Service
+	permissions    objectMapPermissionChecker
+	// ingest supplies every kind's projected object-map nodes; nil in a unit test
+	// with no nodes.
 	ingest objectMapRowsProvider
-	// allowedNamespaces is the cluster's namespace scope. Informer-backed
-	// collectors filter their cluster-wide caches to this set.
+	// allowedNamespaces is the cluster's namespace scope.
 	allowedNamespaces []string
 	// helmManifests reads Helm release manifests for release-scoped maps; nil
 	// when the cluster has no Helm content provider.
@@ -146,7 +130,6 @@ type objectMapBuilder struct {
 
 // objectMapTypedSource carries everything collectTyped needs for one build.
 type objectMapTypedSource struct {
-	shared      informers.SharedInformerFactory
 	permissions objectMapPermissionChecker
 	// ingest supplies projected nodes for ingest-owned kinds; nil when none.
 	ingest objectMapRowsProvider
@@ -154,10 +137,6 @@ type objectMapTypedSource struct {
 
 func (s objectMapTypedSource) allowed(group, resource string) bool {
 	return s.permissions == nil || s.permissions.CanListWatch(group, resource)
-}
-
-type objectMapGatewayPresenceChecker interface {
-	Has(kind string) bool
 }
 
 type objectMapScopeKind int
@@ -179,40 +158,28 @@ type objectMapOptions struct {
 
 type objectMapRecord struct {
 	ref               ObjectMapReference
-	obj               metav1.Object
 	creationTimestamp string
 	status            *ObjectMapStatus
 	actionFacts       *ObjectMapActionFacts
 	owners            []metav1.OwnerReference
 	labels            map[string]string
-	// ingestEdges holds the kind's already-resolved relationship edges for an
-	// ingest-owned (cut) record, whose source object was dropped at intake. The edge
-	// builder uses these instead of re-deriving from obj (which is nil here). nil for
-	// uncut records, which derive edges from obj via objectMapEdgeBuilders.
+	// ingestEdges holds the record's relationship edges, resolved at intake.
 	ingestEdges []objectmapspec.Edge
-	// presented marks a record the object map presents as a node even though its
-	// source object is absent (an ingest-owned record). Uncut records carry obj and
-	// are presented via that; this flag is the equivalent presence signal for cut
-	// records in the namespace-map node filter.
+	// presented marks a record the object map presents as a node: one collected
+	// from a reflector, as opposed to one the catalog supplied on demand.
 	presented bool
 }
 
 type objectMapIndex struct {
 	meta ClusterMeta
-	// scope is the cluster's namespace scope. Informer-backed collectors filter
-	// their cached namespaced objects to it. Empty means cluster-wide.
-	scope      []string
-	records    map[string]*objectMapRecord
-	byUID      map[string]*objectMapRecord
-	byIdent    map[string]*objectMapRecord
-	warnings   []string
-	listErrors []string
-	// listedGVRs records the shared-informer kinds this build listed without
-	// error, so joins that need a kind's complete set can tell a missing kind
-	// from an empty one.
-	listedGVRs map[schema.GroupVersionResource]struct{}
+	// scope is the cluster's namespace scope. Empty means cluster-wide.
+	scope    []string
+	records  map[string]*objectMapRecord
+	byUID    map[string]*objectMapRecord
+	byIdent  map[string]*objectMapRecord
+	warnings []string
 	// collectedResources records every collector kind this build read without
-	// skipping it (shared informer, ingest, or Gateway API), so a Helm release
+	// skipping it, so a Helm release
 	// map only calls an object missing when its kind was actually read.
 	collectedResources map[schema.GroupResource]struct{}
 	// selectorTargets is built by buildAllEdges once collection is complete.
@@ -241,10 +208,7 @@ const (
 // ingestSource supplies the projected object-map nodes for ingest-owned (cut) kinds;
 // it may be nil when no kind is cut over to the ingest path.
 type ObjectMapDomainConfig struct {
-	Shared            informers.SharedInformerFactory
 	Permissions       objectMapPermissionChecker
-	GatewayShared     gatewayinformers.SharedInformerFactory
-	GatewayPresence   objectMapGatewayPresenceChecker
 	CatalogService    func() *objectcatalog.Service
 	IngestSource      objectMapRowsProvider
 	AllowedNamespaces []string
@@ -254,14 +218,8 @@ type ObjectMapDomainConfig struct {
 }
 
 func RegisterObjectMapDomain(reg *domain.Registry, config ObjectMapDomainConfig) error {
-	if config.Shared == nil {
-		return fmt.Errorf("shared informer factory is required for object map domain")
-	}
 	builder := &objectMapBuilder{
-		gatewayShared:     config.GatewayShared,
-		gatewayPresence:   config.GatewayPresence,
 		catalogService:    config.CatalogService,
-		shared:            config.Shared,
 		permissions:       config.Permissions,
 		ingest:            config.IngestSource,
 		allowedNamespaces: append([]string(nil), config.AllowedNamespaces...),
@@ -285,10 +243,7 @@ func (b *objectMapBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		return b.buildHelmReleaseSnapshot(ctx, scope, opts)
 	}
 
-	assembler, err := b.newObjectMapAssembler(ctx)
-	if err != nil {
-		return nil, err
-	}
+	assembler := b.newObjectMapAssembler(ctx)
 	if opts.scopeKind == objectMapScopeNamespace {
 		return assembler.buildNamespaceSnapshot(scope, opts)
 	}
@@ -349,81 +304,40 @@ func parseBoundedInt(raw string, fallback, minValue, maxValue int) int {
 
 func newObjectMapIndex(meta ClusterMeta, allowedNamespaces []string) *objectMapIndex {
 	return &objectMapIndex{
-		meta:       meta,
-		scope:      append([]string(nil), allowedNamespaces...),
-		records:    make(map[string]*objectMapRecord),
-		byUID:      make(map[string]*objectMapRecord),
-		byIdent:    make(map[string]*objectMapRecord),
-		listedGVRs: make(map[schema.GroupVersionResource]struct{}),
+		meta:    meta,
+		scope:   append([]string(nil), allowedNamespaces...),
+		records: make(map[string]*objectMapRecord),
+		byUID:   make(map[string]*objectMapRecord),
+		byIdent: make(map[string]*objectMapRecord),
 
 		collectedResources: make(map[schema.GroupResource]struct{}),
 	}
 }
 
 func (idx *objectMapIndex) collectTyped(src objectMapTypedSource) {
-	if idx == nil || src.shared == nil {
+	if idx == nil {
 		return
 	}
-	// Each kind declares how it is listed (from the factory's already-synced
-	// informer cache) and projected, in its own package; this loops the registry
-	// and names no kind. The permission gate skips resources the user cannot
-	// list+watch, preserving the old live-list Forbidden skip and, for cluster-
-	// scoped types, avoiding a blind .Lister() on an unstarted informer.
+	// Each kind's nodes are projected at intake by its owned reflector; this
+	// loops the registry and names no kind. The permission gate skips resources
+	// the user cannot list+watch.
 	for _, collector := range objectMapCollectors {
-		if !idx.collectTypedCollector(src, collector) {
-			return
-		}
+		idx.collectTypedCollector(src, collector)
 	}
 }
 
-func (idx *objectMapIndex) collectTypedCollector(src objectMapTypedSource, collector objectmapnode.Collector) bool {
+// collectTypedCollector adds one kind's projected nodes, or a warning when the
+// user may not list+watch it.
+func (idx *objectMapIndex) collectTypedCollector(src objectMapTypedSource, collector objectmapnode.Collector) {
 	identity := collector.Identity
 	if !src.allowed(identity.Group, identity.Resource) {
 		idx.warnSkippedPermission(identity.Resource)
-		return true
+		return
 	}
-	// Ingest-owned (cut) kinds are no longer cached by the shared factory; their
-	// projected object-map nodes come from the ingest source instead of a lister.
-	if _, cut := objectMapIngestOwnedGVRs[identity.GVR()]; cut {
-		if src.ingest != nil {
-			idx.collectedResources[identity.GVR().GroupResource()] = struct{}{}
-		}
-		idx.collectIngestNodes(identity, src.ingest)
-		return true
+	if src.ingest != nil {
+		idx.collectedResources[identity.GVR().GroupResource()] = struct{}{}
 	}
-	items, err := collector.List(src.shared)
-	if idx.skipListError(identity.Resource, err) {
-		return !idx.hasListError()
-	}
-	idx.listedGVRs[identity.GVR()] = struct{}{}
-	idx.collectedResources[identity.GVR().GroupResource()] = struct{}{}
-	idx.addTypedCollectorItems(collector, items)
-	return true
-}
-
-func objectMapRecordFromObject(identity resourcekind.Identity, obj metav1.Object) *objectMapRecord {
-	return &objectMapRecord{
-		ref:               refFromObject(obj, identity.Group, identity.Version, identity.Kind, identity.Resource, obj.GetNamespace()),
-		obj:               obj,
-		creationTimestamp: objectCreationTimestamp(obj),
-		owners:            obj.GetOwnerReferences(),
-		labels:            copyStringMap(obj.GetLabels()),
-	}
-}
-
-func (idx *objectMapIndex) addTypedCollectorItems(collector objectmapnode.Collector, items []metav1.Object) {
-	for _, obj := range items {
-		// Shared informers are cluster-wide; keep namespaced objects in scope.
-		if collector.Identity.Namespaced && !idx.namespaceAllowed(obj.GetNamespace()) {
-			continue
-		}
-		record := objectMapRecordFromObject(collector.Identity, obj)
-		record.status = collector.Status(idx.meta.ClusterID, obj)
-		if collector.ActionFacts != nil {
-			record.actionFacts = collector.ActionFacts(obj)
-		}
-		idx.addRecord(record)
-	}
+	idx.collectIngestNodes(identity, src.ingest)
 }
 
 // collectIngestNodes adds an object-map record per projected node for an
@@ -481,73 +395,6 @@ func (idx *objectMapIndex) warnOnce(warning string) {
 	}
 }
 
-func (idx *objectMapIndex) collectGatewayTyped(
-	factory gatewayinformers.SharedInformerFactory,
-	presence objectMapGatewayPresenceChecker,
-	permissions objectMapPermissionChecker,
-) {
-	if idx == nil || factory == nil {
-		return
-	}
-	for _, collector := range objectMapGatewayCollectors {
-		if idx.collectGatewayCollector(factory, presence, permissions, collector) {
-			return
-		}
-	}
-}
-
-func (idx *objectMapIndex) collectGatewayCollector(
-	factory gatewayinformers.SharedInformerFactory,
-	presence objectMapGatewayPresenceChecker,
-	permissions objectMapPermissionChecker,
-	collector objectmapnode.GatewayCollector,
-) bool {
-	if !gatewayKindPresent(presence, collector.Identity.Kind) {
-		return false
-	}
-	if permissions != nil && !permissions.CanListWatch(collector.Identity.Group, collector.Identity.Resource) {
-		idx.warnSkippedPermission(collector.Identity.Resource)
-		return false
-	}
-	items, err := idx.listGatewayCollectorItems(factory, collector)
-	if idx.skipListError(collector.Identity.Resource, err) {
-		return idx.hasListError()
-	}
-	idx.collectedResources[collector.Identity.GVR().GroupResource()] = struct{}{}
-	idx.addGatewayCollectorItems(collector, items)
-	return false
-}
-
-func (idx *objectMapIndex) listGatewayCollectorItems(factory gatewayinformers.SharedInformerFactory, collector objectmapnode.GatewayCollector) ([]metav1.Object, error) {
-	generic, err := factory.ForResource(collector.Identity.GVR())
-	if err != nil {
-		return nil, err
-	}
-	listed, err := generic.Lister().List(labels.Everything())
-	if err != nil {
-		return nil, err
-	}
-	items := make([]metav1.Object, 0, len(listed))
-	for _, raw := range listed {
-		obj, err := meta.Accessor(raw)
-		if err != nil {
-			return nil, err
-		}
-		if !collector.Identity.Namespaced || idx.namespaceAllowed(obj.GetNamespace()) {
-			items = append(items, obj)
-		}
-	}
-	return items, nil
-}
-
-func (idx *objectMapIndex) addGatewayCollectorItems(collector objectmapnode.GatewayCollector, items []metav1.Object) {
-	for _, obj := range items {
-		record := objectMapRecordFromObject(collector.Identity, obj)
-		record.status = collector.Status(idx.meta.ClusterID, obj)
-		idx.addRecord(record)
-	}
-}
-
 func (idx *objectMapIndex) namespaceAllowed(namespace string) bool {
 	if len(idx.scope) == 0 {
 		return true
@@ -558,33 +405,6 @@ func (idx *objectMapIndex) namespaceAllowed(namespace string) bool {
 		}
 	}
 	return false
-}
-
-func gatewayKindPresent(presence objectMapGatewayPresenceChecker, kind string) bool {
-	return presence == nil || presence.Has(kind)
-}
-
-func (idx *objectMapIndex) skipListError(resource string, err error) bool {
-	if err == nil {
-		return false
-	}
-	if apierrors.IsForbidden(err) || apierrors.IsNotFound(err) {
-		idx.warnings = append(idx.warnings, fmt.Sprintf("skipped %s: %v", resource, err))
-		return true
-	}
-	idx.listErrors = append(idx.listErrors, fmt.Sprintf("%s: %v", resource, err))
-	return true
-}
-
-func (idx *objectMapIndex) hasListError() bool {
-	return idx != nil && len(idx.listErrors) > 0
-}
-
-func (idx *objectMapIndex) listError() error {
-	if idx == nil || len(idx.listErrors) == 0 {
-		return nil
-	}
-	return fmt.Errorf("object-map typed resource list failed: %s", strings.Join(idx.listErrors, "; "))
 }
 
 // addRecord indexes a collected record. Each collected kind lists an object
@@ -681,40 +501,43 @@ func objectMapRecordIdentityKey(ref ObjectMapReference) string {
 	return objectMapIdentityKey(ref.Namespace, ref.Group, ref.Version, ref.Kind, ref.Name)
 }
 
-func (idx *objectMapIndex) enrichActionFacts() {
+// enrichActionFacts marks each scalable workload HPA-managed or not. "Not
+// managed" is reported only where the HPA data covering the workload's
+// namespace is complete; elsewhere the fact stays unknown.
+func (idx *objectMapIndex) enrichActionFacts(hpaSource ingestPartitionSource) {
 	if idx == nil {
 		return
 	}
-	// Without the complete HPA set, "no HPA targets this workload" is unknown.
-	if _, listed := idx.listedGVRs[hpapkg.Identity.GVR()]; !listed {
+	if _, collected := idx.collectedResources[HPAGVR.GroupResource()]; !collected {
 		return
 	}
-	idx.applyHPAManagedActionFacts(idx.hpaManagedActionTargets())
+	known := func(namespace string) bool { return ingestRowsComplete(hpaSource, HPAGVR, namespace) }
+	idx.applyHPAManagedActionFacts(idx.hpaManagedActionTargets(), known)
 }
 
+// hpaManagedActionTargets resolves every HPA's scale target through the HPA's
+// projected "scales" edge.
 func (idx *objectMapIndex) hpaManagedActionTargets() map[string]struct{} {
 	managedTargets := make(map[string]struct{})
 	for _, record := range idx.records {
-		if record == nil {
+		if record == nil || record.ref.Group != HPAGVR.Group || record.ref.Kind != hpapkg.Identity.Kind {
 			continue
 		}
-		hpa, ok := record.obj.(*autoscalingv2.HorizontalPodAutoscaler)
-		if !ok {
-			continue
+		for _, edge := range idx.recordEdges(record) {
+			if edge.Type != objectmapspec.EdgeScales {
+				continue
+			}
+			if target := idx.recordForResourceLink(edge.Link); target != nil {
+				managedTargets[objectMapActionTargetKey(target.ref)] = struct{}{}
+			}
 		}
-		facts := hpapkg.BuildFacts(idx.meta.ClusterID, hpa)
-		target := idx.recordForResourceLink(facts.ScaleTarget)
-		if target == nil {
-			continue
-		}
-		managedTargets[objectMapActionTargetKey(target.ref)] = struct{}{}
 	}
 	return managedTargets
 }
 
-func (idx *objectMapIndex) applyHPAManagedActionFacts(managedTargets map[string]struct{}) {
+func (idx *objectMapIndex) applyHPAManagedActionFacts(managedTargets map[string]struct{}, known func(namespace string) bool) {
 	for _, record := range idx.records {
-		if record == nil || !isObjectMapScalableWorkload(record.ref) {
+		if record == nil || !isObjectMapScalableWorkload(record.ref) || !known(record.ref.Namespace) {
 			continue
 		}
 		_, managed := managedTargets[objectMapActionTargetKey(record.ref)]
@@ -1061,7 +884,7 @@ func objectMapTraversalNeighbor(edge ObjectMapEdge, reverse bool) string {
 // presents. A collector-added record carries its source object; an ingest-owned
 // record carries no object but is flagged presented. Either signal qualifies it.
 func isNamespaceMapSupportedRecord(record *objectMapRecord) bool {
-	return record != nil && (record.obj != nil || record.presented)
+	return record != nil && record.presented
 }
 
 func compareObjectMapRefs(a, b ObjectMapReference) int {
@@ -1141,17 +964,9 @@ func objectMapEdgePresentation(edge objectmapspec.Edge) (string, string) {
 	return label, tracedBy
 }
 
-// recordEdges returns a record's relationship edges: the pre-resolved ingestEdges
-// for an ingest-owned (cut) record whose source object was dropped at intake, or the
-// registry edge builder's output derived from the record's source object otherwise.
+// recordEdges returns a record's relationship edges, resolved at intake.
 func (idx *objectMapIndex) recordEdges(record *objectMapRecord) []objectmapspec.Edge {
-	if record.presented && record.obj == nil {
-		return record.ingestEdges
-	}
-	if build := objectMapEdgeBuilders[record.ref.Kind]; build != nil {
-		return build(idx.meta.ClusterID, record.obj)
-	}
-	return nil
+	return record.ingestEdges
 }
 
 func (idx *objectMapIndex) resolveOwner(child *objectMapRecord, owner metav1.OwnerReference) *objectMapRecord {
@@ -1305,39 +1120,6 @@ func refFromCatalog(meta ClusterMeta, item objectcatalog.Summary) ObjectMapRefer
 		Name:        item.Ref.Name,
 		UID:         item.Ref.UID,
 	}
-}
-
-// refFromObject builds an object-map reference from any Kubernetes object's metadata.
-// It takes the metav1.Object accessor interface so both concrete *metav1.ObjectMeta
-// (from the HPA collector) and the typed objects the registry collectors list
-// satisfy it.
-func refFromObject(meta metav1.Object, group, version, kind, resource, namespace string) ObjectMapReference {
-	ref := ObjectMapReference{
-		Group:     group,
-		Version:   version,
-		Kind:      kind,
-		Resource:  resource,
-		Namespace: namespace,
-	}
-	if meta != nil {
-		ref.Name = meta.GetName()
-		ref.UID = string(meta.GetUID())
-		if ref.Namespace == "" {
-			ref.Namespace = meta.GetNamespace()
-		}
-	}
-	return ref
-}
-
-func objectCreationTimestamp(meta metav1.Object) string {
-	if meta == nil {
-		return ""
-	}
-	created := meta.GetCreationTimestamp()
-	if created.IsZero() {
-		return ""
-	}
-	return created.UTC().Format(time.RFC3339)
 }
 
 func objectMapNodeID(ref ObjectMapReference) string {

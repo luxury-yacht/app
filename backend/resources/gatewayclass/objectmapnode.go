@@ -8,7 +8,7 @@ import (
 )
 
 // ObjectMapNode declares this Gateway-API kind's object-map projection.
-var ObjectMapNode = objectmapnode.GatewayCollector{
+var ObjectMapNode = objectmapnode.Collector{
 	Identity: Identity,
 	Status: func(clusterID string, obj metav1.Object) *objectmap.Status {
 		return ObjectMapStatus(clusterID, *obj.(*gatewayv1.GatewayClass))

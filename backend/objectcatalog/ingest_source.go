@@ -1,13 +1,11 @@
 /*
  * backend/objectcatalog/ingest_source.go
  *
- * The catalog's side of the owned-reflector ingest cutover. For ingest-owned (cut)
- * kinds the shared informer factory no longer caches the typed object, so the
- * catalog reads those kinds two ways from the ingest manager instead:
+ * The catalog reads built-in kinds two ways from their owned reflectors:
  *
  *   - the full collect path reads CatalogRows(gvr) (Summaries projected at intake);
  *   - incremental updates arrive through a Catalog-half ingest Sink that applies the
- *     same per-object summary set/delete the shared-informer watch handler did.
+ *     per-object summary set/delete.
  *
  * SummaryProjector is registered with the ingest manager (before it starts) so the
  * Catalog half of each cut kind's bundle is the exact Summary the live collect path
@@ -23,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/kindspec"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 )
@@ -44,22 +43,20 @@ func SummaryProjector(clusterID string, identity resourcekind.Identity) func(met
 	}
 }
 
-// catalogIngestOwnedGVRs is the set of GVRs cut over to the ingest path, derived
-// from the single kind registry's IngestOwned facet. The catalog reads these from
-// the ingest manager rather than the shared informer; flipping the facet on the next
-// domain's kinds adds them here automatically.
-var catalogIngestOwnedGVRs = kindregistry.IngestOwnedGVRs()
+// catalogIngestGVRs is the set of built-in GVRs the catalog collects from their
+// owned reflectors: every registry kind except those the catalog excludes
+// (CatalogNone). Events are excluded, so their row volume never reaches the
+// catalog's sink.
+var catalogIngestGVRs = collectedIngestGVRs()
 
-// isIngestOwned reports whether a GroupResource is served by the ingest path. The
-// catalog keys its collect/watch plans by GroupResource, so this resolves the cut
-// set's GVRs to their GroupResource for membership.
-func isIngestOwned(gr schema.GroupResource) bool {
-	for gvr := range catalogIngestOwnedGVRs {
-		if gvr.GroupResource() == gr {
-			return true
+func collectedIngestGVRs() map[schema.GroupVersionResource]struct{} {
+	out := make(map[schema.GroupVersionResource]struct{})
+	for _, descriptor := range kindregistry.All {
+		if descriptor.CatalogSource != kindspec.CatalogNone {
+			out[descriptor.Identity.GVR()] = struct{}{}
 		}
 	}
-	return false
+	return out
 }
 
 // collectViaIngest serves a cut kind's full collect from the ingest manager's
@@ -77,7 +74,7 @@ func (s *Service) collectViaIngest(desc Descriptor, namespaces []string, agg *st
 		return nil, false, nil
 	}
 	gvr := desc.GVR()
-	_, staticCut := catalogIngestOwnedGVRs[gvr]
+	_, staticCut := catalogIngestGVRs[gvr]
 	if !staticCut {
 		return nil, false, nil
 	}

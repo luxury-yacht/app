@@ -93,6 +93,10 @@ func (m *IngestManager) dynamicAdmissionNeedsReplacement(request *dynamicAdmissi
 	if m.dynamicAdmissions[gr] != request || m.runDone != request.runDone || lifecycle.Context(request.runDone).Err() != nil {
 		return false
 	}
+	if !m.definitionCurrentLocked(request.spec) {
+		delete(m.dynamicAdmissions, gr)
+		return false
+	}
 	if dynamicEntryNeedsReplacement(m.entryForGroupResourceLocked(gr), &dynamicSource{spec: request.spec, namespaces: allowed}) {
 		return true
 	}
@@ -150,7 +154,7 @@ func (m *IngestManager) admitDynamicEntry(request *dynamicAdmission, e *entry) (
 		return nil, nil, false
 	}
 	delete(m.dynamicAdmissions, gr)
-	if m.runDone != request.runDone || lifecycle.Context(request.runDone).Err() != nil {
+	if m.runDone != request.runDone || lifecycle.Context(request.runDone).Err() != nil || !m.definitionCurrentLocked(request.spec) {
 		return nil, nil, false
 	}
 	previous := m.entryForGroupResourceLocked(gr)

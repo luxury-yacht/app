@@ -8,6 +8,8 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 
 	"github.com/stretchr/testify/require"
@@ -31,6 +33,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/cache"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
@@ -85,12 +88,10 @@ func newObjectMapTestBuilder(t *testing.T, client kubernetes.Interface) *objectM
 	defer cancel()
 	shared.WaitForCacheSync(syncCtx.Done())
 	builder := &objectMapBuilder{
-		shared:      shared,
 		permissions: allowAllPermissions{},
-		// Ingest-owned (cut) kinds are no longer read from the shared listers; project
-		// their object-map nodes through the same registry collector + edges the
-		// production ingest path uses, so the test stays byte-equivalent to a real
-		// reflector feeding the object map.
+		// Every kind's nodes are projected through the same registry collector +
+		// edges the production reflectors use, so the test stays byte-equivalent
+		// to real reflectors feeding the object map.
 		ingest: newFakeObjectMapIngestSource(t, shared),
 	}
 	// The object catalog is seeded with a Summary for every object the map collects,
@@ -126,7 +127,7 @@ func objectMapCatalogService(t *testing.T, shared informers.SharedInformerFactor
 		if collector.Identity.Namespaced {
 			scope = objectcatalog.ScopeNamespace
 		}
-		for _, obj := range fakeIngestCollectorItems(t, collector, shared, collector.Identity.GVR()) {
+		for _, obj := range fakeIngestCollectorItems(t, shared, collector.Identity.GVR()) {
 			summaries = append(summaries, objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Group: collector.Identity.Group, Version: collector.Identity.Version, Kind: collector.Identity.Kind, Resource: collector.Identity.Resource, Namespace: obj.GetNamespace(), Name: obj.GetName(), UID: string(obj.GetUID())}, Scope: scope})
 		}
 	}
@@ -139,6 +140,8 @@ func objectMapCatalogService(t *testing.T, shared informers.SharedInformerFactor
 // tests exercise the cut path without standing up a real reflector.
 type fakeObjectMapIngestSource struct {
 	rows map[schema.GroupVersionResource][]interface{}
+	// readiness overrides a kind's partition states; every other kind is Ready.
+	readiness map[schema.GroupVersionResource][]ingest.PartitionReadiness
 }
 
 func newFakeObjectMapIngestSource(t *testing.T, shared informers.SharedInformerFactory) *fakeObjectMapIngestSource {
@@ -146,13 +149,7 @@ func newFakeObjectMapIngestSource(t *testing.T, shared informers.SharedInformerF
 	src := &fakeObjectMapIngestSource{rows: map[schema.GroupVersionResource][]interface{}{}}
 	for _, collector := range objectMapCollectors {
 		gvr := collector.Identity.GVR()
-		if _, cut := objectMapIngestOwnedGVRs[gvr]; !cut {
-			continue
-		}
-		// Pod's collector.List intentionally returns nil (its production object-map nodes
-		// come from the ingest reflector, not the shared informer), so list pods from the
-		// shared factory directly here to stand in for what the reflector would project.
-		items := fakeIngestCollectorItems(t, collector, shared, gvr)
+		items := fakeIngestCollectorItems(t, shared, gvr)
 		projector := objectmapnode.NewNodeProjector(
 			collector.Status,
 			collector.ActionFacts,
@@ -167,37 +164,36 @@ func newFakeObjectMapIngestSource(t *testing.T, shared informers.SharedInformerF
 	return src
 }
 
-// fakeIngestCollectorItems lists a cut kind's objects from the shared factory for the
-// fake ingest source. Pod's collector.List is a no-op (production reads pod nodes from
-// the reflector), so pods are listed straight from the pod lister; every other cut kind
-// uses its collector.List as before.
-func fakeIngestCollectorItems(t *testing.T, collector objectmapnode.Collector, shared informers.SharedInformerFactory, gvr schema.GroupVersionResource) []metav1.Object {
+// fakeIngestCollectorItems lists a kind's fixture objects from the started shared
+// factory, standing in for what the kind's owned reflector would project. Kinds
+// the core factory does not serve (Gateway API) are fed by
+// addObjectMapGatewayObjects.
+func fakeIngestCollectorItems(t *testing.T, shared informers.SharedInformerFactory, gvr schema.GroupVersionResource) []metav1.Object {
 	t.Helper()
-	if gvr == PodGVR {
-		pods, err := shared.Core().V1().Pods().Lister().List(labels.Everything())
-		if err != nil {
-			t.Fatalf("fake ingest source list pods: %v", err)
-		}
-		return objectmapnode.Objects(pods)
+	generic, err := shared.ForResource(gvr)
+	if err != nil {
+		return nil
 	}
-	if gvr == NodeGVR {
-		// Node's collector.List intentionally returns nil too (production reads node nodes
-		// from the ingest reflector), so list nodes from the shared factory directly here.
-		nodes, err := shared.Core().V1().Nodes().Lister().List(labels.Everything())
-		if err != nil {
-			t.Fatalf("fake ingest source list nodes: %v", err)
-		}
-		return objectmapnode.Objects(nodes)
-	}
-	items, err := collector.List(shared)
+	listed, err := generic.Lister().List(labels.Everything())
 	if err != nil {
 		t.Fatalf("fake ingest source list %s: %v", gvr, err)
+	}
+	items := make([]metav1.Object, 0, len(listed))
+	for _, raw := range listed {
+		items = append(items, raw.(metav1.Object))
 	}
 	return items
 }
 
 func (s *fakeObjectMapIngestSource) ObjectMapRows(gvr schema.GroupVersionResource) []interface{} {
 	return s.rows[gvr]
+}
+
+func (s *fakeObjectMapIngestSource) PartitionReadinessFor(gvr schema.GroupVersionResource) []ingest.PartitionReadiness {
+	if parts, ok := s.readiness[gvr]; ok {
+		return parts
+	}
+	return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessReady}}
 }
 
 // denyPermissions denies CanListWatch for the named resources, for tests that
@@ -929,7 +925,7 @@ func TestObjectMapBuildsGatewayAPIRelationships(t *testing.T) {
 		t.Fatalf("gateway fixture did not seed fake client: count=%d err=%v", len(list.Items), err)
 	}
 	builder := newObjectMapTestBuilder(t, client)
-	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
+	addObjectMapGatewayObjects(t, builder, gatewayClient)
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
 	snap, err := builder.Build(ctx, "default:gateway.networking.k8s.io/v1:Gateway:edge?maxNodes=100")
@@ -974,13 +970,13 @@ func TestObjectMapBuildDoesNotListGatewayAPIFromKubernetes(t *testing.T) {
 	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
 	gatewayClient := newObjectMapGatewayClient(t)
 	builder := newObjectMapTestBuilder(t, client)
-	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
+	addObjectMapGatewayObjects(t, builder, gatewayClient)
 	before := countActionsWithVerb(gatewayClient.Actions(), "list")
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
 	_, err := builder.Build(ctx, "default:gateway.networking.k8s.io/v1:Gateway:edge?maxNodes=100")
 	require.NoError(t, err)
-	require.Equal(t, before, countActionsWithVerb(gatewayClient.Actions(), "list"), "object-map builds must read the existing Gateway informer cache")
+	require.Equal(t, before, countActionsWithVerb(gatewayClient.Actions(), "list"), "object-map builds must read the projected Gateway nodes, not list the API")
 }
 
 func countActionsWithVerb(actions []k8stesting.Action, verb string) int {
@@ -993,11 +989,11 @@ func countActionsWithVerb(actions []k8stesting.Action, verb string) int {
 	return count
 }
 
-func TestObjectMapNamespaceScopeSkipsGatewayInformerWithoutClusterWidePermission(t *testing.T) {
+func TestObjectMapSkipsGatewayKindWithoutPermission(t *testing.T) {
 	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
 	gatewayClient := newObjectMapGatewayClient(t)
 	builder := newObjectMapTestBuilder(t, client)
-	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
+	addObjectMapGatewayObjects(t, builder, gatewayClient)
 	builder.allowedNamespaces = []string{"default"}
 	builder.permissions = denyPermissions{denied: map[string]bool{"gateways": true}}
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
@@ -1013,7 +1009,7 @@ func TestObjectMapBuildsGatewayAPIPolicyAndGrantRelationships(t *testing.T) {
 	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
 	gatewayClient := newObjectMapGatewayClient(t)
 	builder := newObjectMapTestBuilder(t, client)
-	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
+	addObjectMapGatewayObjects(t, builder, gatewayClient)
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
 	snap, err := builder.Build(ctx, "default:/v1:Service:web?maxNodes=100")
@@ -1032,7 +1028,7 @@ func TestObjectMapNamespaceGraphIncludesGatewayAPIResources(t *testing.T) {
 	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
 	gatewayClient := newObjectMapGatewayClient(t)
 	builder := newObjectMapTestBuilder(t, client)
-	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
+	addObjectMapGatewayObjects(t, builder, gatewayClient)
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
 	snap, err := builder.Build(ctx, "namespace:default?maxNodes=100")
@@ -1470,13 +1466,25 @@ func newObjectMapGatewayClient(t *testing.T) *gatewayfake.Clientset {
 	return client
 }
 
-func startObjectMapGatewayFactory(t *testing.T, client *gatewayfake.Clientset) gatewayinformers.SharedInformerFactory {
+// addObjectMapGatewayObjects projects every Gateway API object the fake client
+// serves into the builder's ingest source, exactly as the owned Gateway
+// reflectors do in production (same collector Status and edges).
+func addObjectMapGatewayObjects(t *testing.T, builder *objectMapBuilder, client *gatewayfake.Clientset) {
 	t.Helper()
+	source, ok := builder.ingest.(*fakeObjectMapIngestSource)
+	require.True(t, ok, "builder ingest source is %T", builder.ingest)
 	factory := gatewayinformers.NewSharedInformerFactory(client, 0)
-	for _, collector := range objectMapGatewayCollectors {
+	var collectors []objectmapnode.Collector
+	for _, collector := range objectMapCollectors {
+		if collector.Identity.Group == gatewayv1.GroupName {
+			collectors = append(collectors, collector)
+		}
+	}
+	listers := make(map[schema.GroupVersionResource]cache.GenericLister, len(collectors))
+	for _, collector := range collectors {
 		generic, err := factory.ForResource(collector.Identity.GVR())
 		require.NoError(t, err)
-		generic.Informer()
+		listers[collector.Identity.GVR()] = generic.Lister()
 	}
 	stop := make(chan struct{})
 	t.Cleanup(func() { close(stop) })
@@ -1486,7 +1494,14 @@ func startObjectMapGatewayFactory(t *testing.T, client *gatewayfake.Clientset) g
 	for _, synced := range factory.WaitForCacheSync(syncCtx.Done()) {
 		require.True(t, synced)
 	}
-	return factory
+	for _, collector := range collectors {
+		listed, err := listers[collector.Identity.GVR()].List(labels.Everything())
+		require.NoError(t, err)
+		projector := objectmapnode.NewNodeProjector(collector.Status, collector.ActionFacts, objectMapEdgeBuilders[collector.Identity.Kind])
+		for _, raw := range listed {
+			source.rows[collector.Identity.GVR()] = append(source.rows[collector.Identity.GVR()], projector("cluster-a", raw.(metav1.Object)))
+		}
+	}
 }
 
 func podDisruptionBudgetFixture(namespace, name, uid string) *policyv1.PodDisruptionBudget {
@@ -1708,64 +1723,4 @@ func stringPtr(value string) *string {
 func objectNamePtr(value string) *gatewayv1.ObjectName {
 	name := gatewayv1.ObjectName(value)
 	return &name
-}
-
-// ReplicaSets come from the cluster-wide shared informer, so a namespace-scoped
-// build must filter them to the scope like the Gateway API and HPA collectors.
-func TestObjectMapScopedCollectionFiltersReplicaSets(t *testing.T) {
-	client := fake.NewSimpleClientset(
-		replicaSetFixture("default", "web-rs", "rs-web-uid", "web", "deploy-web-uid"),
-		replicaSetFixture("outside", "outside-rs", "rs-outside-uid", "outside", "deploy-outside-uid"),
-	)
-	builder := newObjectMapTestBuilder(t, client)
-	builder.allowedNamespaces = []string{"default"}
-	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
-
-	inScope, err := builder.Build(ctx, "namespace:default?maxNodes=100")
-	require.NoError(t, err)
-	assertNode(t, inScope.Payload.(ObjectMapSnapshotPayload), "ReplicaSet", "web-rs")
-
-	outOfScope, err := builder.Build(ctx, "namespace:outside?maxNodes=100")
-	require.NoError(t, err)
-	assertMissingNode(t, outOfScope.Payload.(ObjectMapSnapshotPayload), "ReplicaSet", "outside-rs")
-}
-
-func TestObjectMapScopedGatewayCollectionFiltersInformerCache(t *testing.T) {
-	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
-	gatewayClient := newObjectMapGatewayClient(t)
-	gatewayClient.PrependReactor("list", "gateways", func(k8stesting.Action) (bool, runtime.Object, error) {
-		return true, &gatewayv1.GatewayList{Items: []gatewayv1.Gateway{
-			{
-				ObjectMeta: metav1.ObjectMeta{Name: "edge", Namespace: "default", UID: types.UID("gateway-edge-uid")},
-			},
-			{
-				ObjectMeta: metav1.ObjectMeta{Name: "outside", Namespace: "outside", UID: types.UID("gateway-outside-uid")},
-			},
-		}}, nil
-	})
-
-	builder := newObjectMapTestBuilder(t, client)
-	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
-	builder.allowedNamespaces = []string{"default", "team-b"}
-	// Count only list actions: the informers' initial lists have completed by
-	// WaitForCacheSync, but their WATCH registrations land asynchronously and
-	// can arrive inside the Build window — irrelevant to the contract under
-	// test, which is that Build itself must not LIST Gateway API resources.
-	countGatewayListActions := func() int {
-		count := 0
-		for _, action := range gatewayClient.Actions() {
-			if action.GetVerb() == "list" {
-				count++
-			}
-		}
-		return count
-	}
-	before := countGatewayListActions()
-	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
-	snap, err := builder.Build(ctx, "default:gateway.networking.k8s.io/v1:Gateway:edge?maxNodes=100")
-	require.NoError(t, err)
-	require.Equal(t, before, countGatewayListActions(), "object-map builds must not list Gateway API resources")
-	payload := snap.Payload.(ObjectMapSnapshotPayload)
-	assertNode(t, payload, "Gateway", "edge")
-	assertMissingNode(t, payload, "Gateway", "outside")
 }

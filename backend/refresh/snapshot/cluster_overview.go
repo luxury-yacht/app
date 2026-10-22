@@ -12,20 +12,16 @@ import (
 	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
 	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
 	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	versioned "k8s.io/apimachinery/pkg/version"
-	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	appslisters "k8s.io/client-go/listers/apps/v1"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -33,6 +29,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -51,8 +48,11 @@ type clusterOverviewIngestSource interface {
 	StoreResourceVersion(gvr schema.GroupVersionResource) string
 	CatalogRows(gvr schema.GroupVersionResource) []interface{}
 	HasSyncedFor(gvr schema.GroupVersionResource) bool
+	// RawHasSyncedFor reports a store's actual initial list; recent events wait for it.
+	RawHasSyncedFor(gvr schema.GroupVersionResource) bool
 	// Rows returns the whole per-object bundle for a GVR in one consistent store read; the
-	// overview reads the node store's Aggregate halves (nodeOverviewFact) through it.
+	// overview reads the node store's Aggregate halves (nodeOverviewFact) and the events
+	// store through it.
 	Rows(gvr schema.GroupVersionResource) []interface{}
 	// PermissionSkippedFor reports whether the gvr's reflector was permission-skipped at
 	// Start (the identity cannot list+watch the kind). The overview marks such a source
@@ -61,27 +61,23 @@ type clusterOverviewIngestSource interface {
 	PermissionSkippedFor(gvr schema.GroupVersionResource) bool
 }
 
-// ClusterOverviewBuilder constructs aggregated cluster statistics using informer caches.
-// Pods, nodes, and the four counted workload kinds (Deployment/StatefulSet/DaemonSet/CronJob)
-// are cut to the ingest path: the per-pod aggregation reads the projected PodAggregate rows,
-// the node summary reads projected node facts, and the workload counts read projected catalog
-// rows from the ingest source, so none of those informers is instantiated. Required ingest
-// stores and the namespace informer gate this domain's build.
+// ClusterOverviewBuilder constructs aggregated cluster statistics from the ingest stores:
+// the per-pod aggregation reads the projected PodAggregate rows, the node summary reads
+// projected node facts, the workload counts read projected catalog rows, and the namespace
+// count reads the namespace store, and recent events read the events store. The required
+// ingest stores gate this domain's build.
 type ClusterOverviewBuilder struct {
-	client          kubernetes.Interface
-	ingest          clusterOverviewIngestSource
-	namespaceLister corelisters.NamespaceLister
-	eventLister     corelisters.EventLister
-	metrics         metrics.Provider
-	serverHost      string
+	client     kubernetes.Interface
+	ingest     clusterOverviewIngestSource
+	namespaces namespaceSource
+	metrics    metrics.Provider
+	serverHost string
 
 	versionMu      sync.RWMutex
 	cachedVersion  string
 	versionFetched time.Time
 
-	hasSyncedFns   []cache.InformerSynced
-	eventHasSynced cache.InformerSynced
-	synced         atomic.Uint32
+	synced atomic.Uint32
 
 	requiredIngestGVRs []schema.GroupVersionResource
 }
@@ -214,7 +210,6 @@ type RecentEvent struct {
 // case no pods are aggregated.
 func RegisterClusterOverviewDomain(
 	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
 	client kubernetes.Interface,
 	provider metrics.Provider,
 	serverHost string,
@@ -223,32 +218,21 @@ func RegisterClusterOverviewDomain(
 	if reg == nil {
 		return fmt.Errorf("cluster overview: registry is nil")
 	}
-	if factory == nil {
-		return fmt.Errorf("cluster overview: shared informer factory is nil")
-	}
 	if client == nil {
 		return fmt.Errorf("cluster overview: kubernetes client is nil")
 	}
 
-	namespaceInformer := factory.Core().V1().Namespaces()
-	eventInformer := factory.Core().V1().Events()
-
 	builder := &ClusterOverviewBuilder{
-		client:          client,
-		ingest:          ingestManager,
-		namespaceLister: namespaceInformer.Lister(),
-		eventLister:     eventInformer.Lister(),
-		metrics:         provider,
-		serverHost:      serverHost,
-		// Pod readiness, the node overview facts, and the workload counts are gated by the
-		// ingest stores' HasSynced (read per-build via HasSyncedFor / workloadIngestCount /
-		// the pod aggregate read), not an informer HasSynced here — those informers no longer
-		// exist. Only the namespace cache still gates this domain's build via an informer.
-		hasSyncedFns: []cache.InformerSynced{
-			namespaceInformer.Informer().HasSynced,
-		},
-		eventHasSynced:     eventInformer.Informer().HasSynced,
-		requiredIngestGVRs: []schema.GroupVersionResource{PodGVR, NodeGVR},
+		client:     client,
+		ingest:     ingestManager,
+		metrics:    provider,
+		serverHost: serverHost,
+		// Pod readiness, the node overview facts, the workload counts, and the namespace
+		// list read the ingest stores, gated per build by their HasSynced.
+		requiredIngestGVRs: []schema.GroupVersionResource{PodGVR, NodeGVR, NamespaceGVR},
+	}
+	if ingestManager != nil {
+		builder.namespaces = ingestNamespaces{ingest: ingestManager}
 	}
 
 	return reg.Register(refresh.DomainConfig{
@@ -454,8 +438,13 @@ func (d *clusterOverviewListData) listEvents(ctx context.Context, client kuberne
 	if err != nil {
 		return err
 	}
-	events := buildRecentEvents(parallel.CopyToPointers(resp.Items), ClusterMetaFromContext(ctx))
-	d.recentEvents = events
+	meta := ClusterMetaFromContext(ctx)
+	project := newEventRecordProjector(meta.ClusterID)
+	records := make([]eventRecord, 0, len(resp.Items))
+	for i := range resp.Items {
+		records = append(records, project(&resp.Items[i]))
+	}
+	d.recentEvents = buildRecentEvents(records, meta)
 	return nil
 }
 
@@ -463,14 +452,14 @@ func projectClusterOverviewPods(
 	pods []*corev1.Pod,
 	replicaSets []*appsv1.ReplicaSet,
 ) ([]streamrows.PodAggregate, uint64) {
-	rsLister := replicaSetListerFromSlice(replicaSets)
+	rsOwners := replicaSetOwnersFromSlice(replicaSets)
 	aggregates := make([]streamrows.PodAggregate, 0, len(pods))
 	var version uint64
 	for _, pod := range pods {
 		if pod == nil {
 			continue
 		}
-		aggregates = append(aggregates, projectPodAggregate(pod, PodOwnerSources{ReplicaSets: rsLister}))
+		aggregates = append(aggregates, projectPodAggregate(pod, PodOwnerSources{ReplicaSetOwner: rsOwners}))
 		version = maxSnapshotVersion(version, pod)
 	}
 	return aggregates, version
@@ -703,7 +692,7 @@ func clusterOverviewMetricsSnapshot(meta metrics.Metadata) ClusterOverviewMetric
 }
 
 func (b *ClusterOverviewBuilder) waitForInformerSync(ctx context.Context) error {
-	if len(b.hasSyncedFns) == 0 && len(b.requiredIngestGVRs) == 0 {
+	if len(b.requiredIngestGVRs) == 0 {
 		return nil
 	}
 	if b.synced.Load() == 1 {
@@ -726,14 +715,6 @@ func (b *ClusterOverviewBuilder) waitForInformerSync(ctx context.Context) error 
 }
 
 func (b *ClusterOverviewBuilder) requiredSourcesSynced() bool {
-	for _, fn := range b.hasSyncedFns {
-		if fn == nil {
-			continue
-		}
-		if !fn() {
-			return false
-		}
-	}
 	for _, gvr := range b.requiredIngestGVRs {
 		if b.ingest == nil || !b.ingest.HasSyncedFor(gvr) {
 			return false
@@ -856,23 +837,19 @@ func buildWorkloadResourceUsage(podAggregates []streamrows.PodAggregate, podUsag
 	}
 }
 
-// replicaSetListerFromSlice builds a ReplicaSet lister backed by an in-memory indexer
-// over the supplied slice. The cluster-overview list fallback uses it to resolve a
-// pod's metrics-bucketing workload kind through projectPodAggregate (which needs a
-// lister, not a slice) — so the fallback's WorkloadKind resolution matches the informer
-// path's exactly, from the RS list the fallback already fetched.
-func replicaSetListerFromSlice(replicaSets []*appsv1.ReplicaSet) appslisters.ReplicaSetLister {
-	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
+// replicaSetOwnersFromSlice builds the ReplicaSet owner lookup over the supplied
+// slice. The cluster-overview list fallback uses it to resolve a pod's
+// metrics-bucketing workload kind through projectPodAggregate, so the fallback's
+// WorkloadKind resolution matches the ingest path's exactly, from the RS list the
+// fallback already fetched.
+func replicaSetOwnersFromSlice(replicaSets []*appsv1.ReplicaSet) podres.ReplicaSetOwnerLookup {
+	index := NewReplicaSetOwnerIndex()
 	for _, rs := range replicaSets {
-		if rs == nil {
-			continue
+		if rs != nil {
+			index.UpsertBundle(ingest.Bundle{Aggregate: projectReplicaSetOwner(rs)})
 		}
-		// Add cannot fail for a well-formed object with the standard key func; a
-		// malformed object would simply be omitted, leaving its pods' WorkloadKind
-		// unresolved — the same outcome the map path had for an absent RS.
-		_ = indexer.Add(rs)
 	}
-	return appslisters.NewReplicaSetLister(indexer)
+	return index.Lookup
 }
 
 func countPodStatusPresentation(overview *ClusterOverviewPayload, presentation string) {
@@ -931,10 +908,6 @@ func (a *clusterOverviewAccumulator) applyExtras(extras clusterOverviewExtras) {
 	a.overview.UnavailableResources = extras.unavailableResources
 }
 
-func informerSynced(fn cache.InformerSynced) bool {
-	return fn == nil || fn()
-}
-
 // Build assembles the overview from ready, permitted sources.
 func (b *ClusterOverviewBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	if err := b.waitForInformerSync(ctx); err != nil {
@@ -978,9 +951,8 @@ func (b *ClusterOverviewBuilder) collectClusterOverviewListerInputs(ctx context.
 	inputs := clusterOverviewListerInputs{extras: clusterOverviewExtras{recentEvents: make([]RecentEvent, 0)}}
 	tasks := []func(context.Context) error{
 		func(context.Context) error {
-			var err error
-			inputs.namespaces, err = b.listClusterOverviewNamespaces(availability.namespaces)
-			return err
+			inputs.namespaces = b.listClusterOverviewNamespaces(availability.namespaces)
+			return nil
 		},
 		func(context.Context) error {
 			inputs.extras.totalDeployments = b.workloadIngestCount(DeploymentGVR)
@@ -1010,22 +982,19 @@ func (b *ClusterOverviewBuilder) collectClusterOverviewListerInputs(ctx context.
 	return inputs, nil
 }
 
-func (b *ClusterOverviewBuilder) listClusterOverviewNamespaces(allowed bool) ([]*corev1.Namespace, error) {
-	if b.namespaceLister == nil || !allowed {
-		return nil, nil
+func (b *ClusterOverviewBuilder) listClusterOverviewNamespaces(allowed bool) []*corev1.Namespace {
+	if b.namespaces == nil || !allowed {
+		return nil
 	}
-	return b.namespaceLister.List(labels.Everything())
+	return b.namespaces.Namespaces()
 }
 
 func (b *ClusterOverviewBuilder) listClusterOverviewRecentEvents(ctx context.Context) ([]RecentEvent, error) {
-	if b.eventLister == nil || !informerSynced(b.eventHasSynced) {
+	if b.ingest == nil || !eventsStoreSynced(b.ingest) {
 		return []RecentEvent{}, nil
 	}
-	events, err := b.eventLister.List(labels.Everything())
-	if err != nil {
-		return nil, err
-	}
-	return buildRecentEvents(events, ClusterMetaFromContext(ctx)), nil
+	keep := recentWarningEvent(time.Now())
+	return buildRecentEvents(storedEventRecords(b.ingest, keep), ClusterMetaFromContext(ctx)), nil
 }
 
 func (b *ClusterOverviewBuilder) clusterOverviewNodeFacts(allowed bool) []nodeOverviewFact {
@@ -1042,26 +1011,28 @@ func (b *ClusterOverviewBuilder) clusterOverviewPodInputs(allowed bool) ([]strea
 	return podAggregatesFromIngest(b.ingest), ingestStoreVersion(b.ingest, PodGVR)
 }
 
+// recentWarningEvent keeps the Warning events observed within the Recent
+// Events lookback before now.
+func recentWarningEvent(now time.Time) func(*EventFact) bool {
+	cutoff := now.Add(-config.SnapshotClusterOverviewRecentEventsLookback)
+	return func(fact *EventFact) bool {
+		return strings.EqualFold(fact.Type, corev1.EventTypeWarning) && !fact.lastObserved().Before(cutoff)
+	}
+}
+
 // buildRecentEvents filters events down to recent warnings and packages the
 // subset consumed by the Cluster Overview "Recent Events" section.
-func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
-	cutoff := time.Now().Add(-config.SnapshotClusterOverviewRecentEventsLookback)
-	filtered := make([]*corev1.Event, 0, len(events))
-	for _, evt := range events {
-		if evt == nil {
-			continue
+func buildRecentEvents(records []eventRecord, meta ClusterMeta) []RecentEvent {
+	keep := recentWarningEvent(time.Now())
+	filtered := make([]eventRecord, 0, len(records))
+	for _, record := range records {
+		if keep(record.fact) {
+			filtered = append(filtered, record)
 		}
-		if !strings.EqualFold(evt.Type, corev1.EventTypeWarning) {
-			continue
-		}
-		if eventres.EventTimestamp(evt).Time.Before(cutoff) {
-			continue
-		}
-		filtered = append(filtered, evt)
 	}
 
 	sort.Slice(filtered, func(i, j int) bool {
-		return compareEventOrder(filtered[i], filtered[j]) < 0
+		return compareEventRecordOrder(filtered[i], filtered[j]) < 0
 	})
 
 	if len(filtered) > config.SnapshotClusterOverviewRecentEventsLimit {
@@ -1069,20 +1040,20 @@ func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
 	}
 
 	out := make([]RecentEvent, 0, len(filtered))
-	for _, evt := range filtered {
-		facts := eventres.BuildFacts(meta.ClusterID, evt)
+	for _, record := range filtered {
+		fact := record.fact
 		out = append(out, RecentEvent{
 			ClusterID:       meta.ClusterID,
 			ClusterName:     meta.ClusterName,
-			InvolvedObject:  facts.InvolvedObject,
-			EventUID:        string(evt.UID),
-			Reason:          strings.TrimSpace(evt.Reason),
-			Message:         facts.Message,
-			Timestamp:       eventres.EventTimestamp(evt).UnixMilli(),
-			ObjectKind:      evt.InvolvedObject.Kind,
-			ObjectName:      evt.InvolvedObject.Name,
-			ObjectNamespace: evt.InvolvedObject.Namespace,
-			ObjectUID:       string(evt.InvolvedObject.UID),
+			InvolvedObject:  eventres.ObjectLink(meta.ClusterID, fact.involvedObject()),
+			EventUID:        record.summary.Ref.UID,
+			Reason:          strings.TrimSpace(fact.Reason),
+			Message:         strings.TrimSpace(fact.Message),
+			Timestamp:       fact.lastObserved().UnixMilli(),
+			ObjectKind:      fact.InvolvedKind,
+			ObjectName:      fact.InvolvedName,
+			ObjectNamespace: fact.InvolvedNamespace,
+			ObjectUID:       fact.InvolvedUID,
 		})
 	}
 	return out

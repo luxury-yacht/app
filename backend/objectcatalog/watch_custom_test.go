@@ -5,19 +5,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// A startup burst larger than the former object queue must converge by rereading
-// the authoritative ingest projection after baseline publication, without LIST.
+// A startup burst larger than the former 8192-event object queue must converge
+// by rereading the authoritative ingest projection after baseline publication,
+// without LIST.
 func TestCustomResourceStartupBurstCoalescesWithoutFullSync(t *testing.T) {
 	mgr, svc, desc := dynamicCatalogFixture(t, "c1")
 	dyn := svc.deps.Common.DynamicClient
 	unsubscribe := mgr.SubscribeDynamicCatalogChanges(svc.applyDynamicCatalogChange)
 	defer unsubscribe()
-	objects := config.ObjectCatalogWatchPendingBufferSize + 1
+	objects := 8193
 	func() {
 		svc.syncMu.Lock()
 		defer svc.syncMu.Unlock()

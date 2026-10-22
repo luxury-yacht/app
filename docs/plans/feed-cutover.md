@@ -3,8 +3,8 @@
 Status: **approved by John on 2026-10-20** with the recommended answers to
 Q1–Q6, Q8, and Q9. Q7 is open: John names the dev cluster and decides on the
 restricted kind cluster before any step that needs a cluster. Revised on
-2026-10-21 for seven review findings across three rounds (§9.1). Nothing here is
-implemented.
+2026-10-21 for seven review findings across three rounds (§9.1).
+Implementation is in progress; see Progress.
 
 Evidence was gathered on `main` at `5ba6fd6f` (2026-10-20). Every `file:line`
 was read during this review. Claims that were not proven are tagged
@@ -13,6 +13,214 @@ was read during this review. Claims that were not proven are tagged
 This is finding #1 of the second app-wide design review. PR #399 unified change
 signals. This plan unifies the **feeds**: how Kubernetes objects reach the
 stores, tables, catalog, object map, and caches that consumers read.
+
+## Progress (uncommitted working tree)
+
+- **Phase 0:** done, except the heap measurement, which waits on Q7.
+  - Presence gating: `TestGatewayKindsGetSourcesOnlyWhenServed`.
+  - Restore seed and Job owner index fix:
+    `TestRestoredJobsResolveNewPodsToTheirCronJob`.
+  - Readiness declarations: `TestEveryDomainDeclaresItsFeedReadiness`.
+  - Feed-uniqueness guard: `TestEachKindHasOneFeed`.
+  - The `AsyncBundleSink` seed/replace events are deferred to Phase 5, their
+    first consumer.
+- **Phase 1:** done.
+  - The Gateway kinds are `IngestOwned`.
+  - `GatewayCollector`, `GatewayInformer`, `CatalogGateway`, and the Gateway
+    informer factory are deleted.
+  - Coverage: the ingest-harness `HTTPRoute` and `GatewayClass` sources,
+    `TestGatewayChangesReachCatalogThroughIngest`, and the object-map Gateway
+    tests fed from projected nodes.
+- **Phase 2:** done.
+  - HPA is a single autoscaling/v2 owned reflector with the v2 identity (Q2).
+  - The v1 and v2 informers are gone. So are `registerMaintainedHandlers`,
+    `storePublication`, the `Informer` stream closures, and the shared-factory
+    parameter on the typed-table domains.
+  - HPA knowledge uses `ingestRowsComplete`, which requires partition `Ready`.
+  - The workloads version folds in the HPA store's RV. Red-proven: a
+    query-backed page kept a stale "HPA managed" flag without it, which is a
+    pre-existing bug.
+  - Tests: `TestWorkloadHPAManagedNeedsCompleteHPAData`,
+    `TestWorkloadQueryPageShowsHPAChange`,
+    `TestRestoredStoreDeniedAtStartReportsUnavailablePartitions`,
+    `TestObjectMapHPAOwnershipUnknownWhileHPADataIncomplete`, and the
+    ingest-harness HPA case.
+- **Phase 3:** done.
+  - ReplicaSet is a bespoke owned reflector (`registerReplicaSetReflector`)
+    with Catalog, ObjectMap, and Aggregate (controlling owner) halves.
+  - `ReplicaSetOwnerIndex` is a bundle sink with Seed/Replace; the pod
+    projector reads it through `pods.ReplicaSetOwnerLookup`.
+  - The RS heal is an async bundle sink. The RS informer is gone, and so are
+    the object map's informer path (`Collector.List`, `objectmapnode.Objects`,
+    `shared`, `listedGVRs`) and the streamspec `Informer` closures.
+  - Tests: `TestReplicaSetHealRingsHealedPodScopes` now driven by the RS
+    ingest store, the resourcestream RS heal tests, and the real-reflector
+    tests below.
+- **Real-reflector harness.** The tracker API server moved from `ingest`'s
+  tests to `backend/refresh/ingest/ingesttest` (resourceVersion stamping,
+  `WatchGap` for a watch gap that forces a 410 relist, access reviews). The
+  system tests run the production subsystem against it
+  (`system/real_reflector_harness_test.go`). The Phase 0/3 restore tests now
+  use it: `TestRewarmWithoutOwnerChangesResolvesNewPodsToTheirControllers`
+  (red with either owner index's seed disabled),
+  `TestRewarmAfterExpiredVersionRelistsTheOwnerIndex`, and
+  `TestReplicaSetReflectorPutsPodsInTheirDeploymentView`.
+- **Phase 4:** done.
+  - Secret and ConfigMap bundles carry `helm.StorageRecord` as their Aggregate
+    half. A release Secret's record holds its revision, decoded once at intake
+    and only when the table can show it (not superseded or uninstalled),
+    trimmed to the fields a row reads.
+  - `namespace-helm` is fed by `helmReleaseFeed`, a bundle sink with its own
+    revision index. Deviation from the plan: the index has no lock, because
+    the Secrets store's write lock already makes the sink its only writer
+    (the `maintainedStoreSink` precedent). Rings stay scope-level COMPLETE
+    per the domain contract. The store is still not spilled (Q9); restore
+    rebuilds it from the Secrets seed.
+  - Helm response-cache eviction is a bundle sink on Secrets and ConfigMaps
+    that remembers each storage object's resourceVersion, so a relist's
+    unchanged objects ring nothing.
+  - Deleted: `HelmStorageSource`, `CanClusterWide`,
+    `ResourceRequirement.ClusterWide`, `RuntimeClusterWide`, the builder's
+    lister path and decode cache. Helm now follows the Secrets partitions
+    under a namespace scope (Q5).
+  - Tests: `TestHelmReleaseLifecycleReachesTheReleaseTable`,
+    `TestHelmRevisionMovingBetweenReleasesUpdatesBoth`,
+    `TestHelmRelistRingsEachAffectedScopeOnce`,
+    `TestHelmReleasesSurviveARewarmWithoutSecretChanges`,
+    `TestHelmRewarmAfterExpiredVersionServesTheRelistedReleases`,
+    `TestScopedIdentitySeesHelmReleasesInItsNamespaces`, the ingest-harness
+    Helm case, `TestHelmReleaseRowsMatchTheirFullReleases`,
+    `TestHelmReleaseDetailsSignalFollowsEvictionThroughProductionWiring`, and
+    `TestRuntimeAccessHelmPolicyFollowsTheNamespaceScope`.
+    `TestEachKindHasOneFeed` now has an empty allowlist. The seed, relist
+    diff, and real-reflector tests were red-proven by overlay.
+- **Phase 5:** done.
+  - CustomResourceDefinition is an `IngestOwned` stream-descriptor kind
+    (Table `ClusterCRDEntry`, Aggregate `apiextensions.Definition`, Catalog).
+    `cluster-crds` moved onto the typed-table skeleton fed from ingest.
+  - Dynamic definitions: a copy-on-write `atomic.Pointer` table published by
+    the CRD store's sink (upsert, delete, relist diff by old UID, seed); the
+    lifecycle runs on an ordered `AsyncBundleSink` worker; Start replays the
+    table (pre-Start events admit nothing); commit rechecks the reservation
+    against the table (`definitionCurrentLocked`). Deviation: `AsyncBundleSink`
+    gained no seed/replace events, because the publisher turns relists and
+    seeds into per-definition events itself.
+  - The catalog's discovery-stale hook is a CRD bundle subscription
+    (`IngestManager.SubscribeBundleSink`, which replays current bundles) with a
+    UID-keyed last-seen map.
+  - Deleted: the apiext informer factory, `APIExtensionsInformerFactory`,
+    `kindspec.CatalogAPIExtensions`, the catalog's apiext collection path, the
+    response cache's apiext path, and the CRD informer harness.
+  - Tests: `TestCRDReflectorFeedsTheTableAndDynamicSources`,
+    `TestCRDRelistRetiresDefinitionsChangedDuringAWatchGap` (deleted and
+    replaced), `TestCRDRewarmKeepsDefinitionsWithoutCRDChanges`,
+    `TestBlockedDefinitionWorkerCannotCommitADeletedDefinition`,
+    `TestBlockedDefinitionWorkerCannotCommitAReplacedDefinition`, the catalog
+    hook tests (update, establishment, relist), the ingest-harness CRD case,
+    and the custom-resource and catalog root tests now run against the shared
+    API server. The relist diff, seed, and commit revalidation were red-proven
+    by overlay.
+- **Phase 6:** done.
+  - Namespace is `IngestOwned` with a bespoke cluster-scoped reflector whose
+    bundle keeps the namespace (Aggregate) and its catalog Summary.
+    `namespaces` and `cluster-overview` read it through `namespaceSource`; a
+    bundle sink on it drives `NamespaceChanged` (and so `afterRing`).
+    cluster-overview gates on the namespace ingest store. Scoped mode is
+    unchanged. AGENTS.md says "ingest-backed (owned reflector)" (Q6).
+  - Deleted: the factory's namespaces informer, its pending cluster-informer
+    machinery, `informer.New`'s unused context, and the namespace lister test
+    helper.
+  - The shared test API server now records writes and replays them to a watch
+    that resumes from a resourceVersion, as the Kubernetes API does; the
+    restore tests create their objects before the first list, so a resume
+    replays nothing and only the seed can serve them (each re-proven red).
+  - Tests: `TestNamespaceIngestRingsTheNamespacesDomain`,
+    `TestNamespaceReadinessRoutesToIngest` (both red first),
+    `TestNamespaceReflectorFeedsTheNamespacesDomain`,
+    `TestNamespacesSurviveARewarmWithoutNamespaceChanges`; the catalog
+    wait-order test now runs on the ingest half of the wait.
+- **Phase 7:** done. Events are one owned reflector; the events informer is
+  deleted.
+  - Spike: kind `dev-cluster` (`~/.kube/dev-stg-clusters`), 30,000 synthetic
+    events in a scratch namespace (deleted afterwards), LIST+WATCH for both
+    sides, managed fields stripped, two stable runs. Retained heap at 30,101
+    events: informer 36.2 MiB (1,262 B/event); stripped Event in a reflector
+    36.9 MiB; per-bundle `Indexes` add about 725 B/event; catalog Summary alone
+    20.3 MiB. Relist: LIST 201–226 ms, informer `Replace` 8–9 ms, reflector
+    `Replace` with projection 52–59 ms. Initial sync about 0.9 s for every
+    reflector variant (including a plain `cache.Store`) against 0.4–0.5 s for
+    the informer; the cause is unverified, not the projection.
+  - Shape (John's choice): catalog Summary + slim fact, no `Indexes`,
+    32.7 MiB at 30,101 events (1,140 B/event, −10% against the informer). The
+    Table half (`EventSummary`) feeds the two Events tables at intake and is
+    not stored.
+  - Correction: the plan said `object_events.go` scanned the lister. It read
+    the informer's `events:object` index and scanned only as a fallback. Object
+    events now scans the store per build: about 0.87 ms and 503 KB allocated
+    per build at 30,000 events (microbenchmark, scratch overlay).
+  - Consumers: both Events tables (a debounced table sink; a relist rings only
+    the namespaces it changed), object events (store scan, API list before
+    sync, one record projector for both), Attention (the generic ingest owner
+    sink; its informer reconcile branch is gone), the namespace warning rollup,
+    and Recent Events. The catalog skips `CatalogNone` kinds when it subscribes
+    to ingest rows. Under a namespace scope Events partition per namespace
+    (Q5).
+  - Object-event times are rebuilt in UTC from the fact, so their JSON no longer
+    depends on the machine's time zone (same instant as before).
+  - Deleted with it: the events informer, `registerMaintainedInformerHandler`,
+    the typed stores' reconcile sources (`Reconcile` is a no-op; the registry
+    hook stays for Attention's unavailable owners), `storeHandlerFuncs`,
+    `InformerUpdateIsEcho`, and the response cache's informer eviction path.
+- **Phase 8:** done in code; native checks and the heap measurement wait on
+  Q7 (see Validation).
+  - First part (before Events): every registry kind except Event was
+    `IngestOwned` (registry probe), and Event is `CatalogNone`. So the catalog's shared-informer collection path,
+    its informer watch-event pipeline (`send`/`flush`/`applyWatchEvent`, the
+    overflow counters), the informer half of its source wait,
+    `kindspec.CatalogShared`, and the catalog's `InformerFactory`,
+    `PermissionChecker`, and `InformerReadiness` dependencies are deleted. The
+    debounced full-resync request loop stays. `TestEveryBuiltinKindIsCollectedFromIngestOrExcluded`
+    replaces the per-source drift guards.
+  - Stale comments fixed (`namespace_quotas.go`, `ingest_projectors.go`), and
+    docs updated (catalog, object-map workflow, data-freshness, kind registry).
+  - `informer.Factory` is deleted. Its permission tracking moved to
+    `permissions.Grants` (`backend/refresh/permissions/grants.go`), with the
+    preflight, gate, revalidation, and stream permission checks. The
+    `informer` package keeps only the managed-fields transform and the
+    WatchList switch. `system.Config.ResyncInterval` and
+    `config.RefreshResyncInterval` are gone.
+  - The hub is ingest-only (`ingestHub`, Q1): `Start` launches the reflectors
+    without waiting, `HasSynced` reports every tracked store settled (health
+    endpoint), and readiness is per declared resource. Every declared readiness
+    key is owned (scratch probe). `ReconcileMaintainedStores` stays for
+    Attention's unavailable owners; typed stores' `Reconcile` is a no-op.
+  - The `IngestOwned` facet and `kindregistry.IngestOwnedDescriptors`/
+    `IngestOwnedGVRs` are deleted; consumers loop `kindregistry.All`.
+    `backend/feed_contract_test.go` is the grep gate: no production
+    `k8s.io/client-go/informers` import and no `SharedInformerFactory` or
+    `IngestOwned` identifier. The feed guard became
+    `TestEachKindIsFedByItsOwnedReflector`.
+  - Typed-table availability is a `kindAvailability` predicate; the sentinel
+    `ingestAvailabilityIndexer`, the typed-table and Events list paths, and
+    `listErrorPrefix` are deleted. Each domain spec carries its payload
+    constructor. The MatchesListPath tests keep an independent oracle in test
+    code (`typed_table_test_feed_test.go`): the old list projection resolved by
+    the per-build store engine. Domain tests feed maintained stores through each
+    kind's `StreamRow`.
+  - Not done (unrelated dead code found on the way): many `testsupport` lister
+    helpers were already unused at HEAD.
+- **Validation (2026-10-21, after Phases 7–8):** `mise exec -- wails3 task
+  qc:prerelease` passed (docs, fmt, bindings, vet, staticcheck, race, lint,
+  typecheck, frontend tests, knip, trivy). The first run failed once on
+  `TestDelayedPermissionCannotRestoreAnOlderCRD` under `-race`: a test race in
+  which the setup's queued CRD reconcile ran late and legitimately admitted v1.
+  It reproduces deterministically by replaying that reconcile; the test now
+  blocks every review until the replacement is published. Backend coverage of
+  the changed packages: backend 83.5%, objectcatalog 91.9%, ingest 84.5%,
+  permissions 86.1%, snapshot 84.0%, system 83.5%, informer 100%; below 80%:
+  resourcestream 76.8% and resources/events 79.1% (signature/rename changes
+  only). Native app checks, a live dev-cluster run of the cutover, and the heap
+  measurement wait on Q7.
 
 ## 1. Summary
 
@@ -721,16 +929,17 @@ its docs updated and §8 evidence recorded.
 
 ### Phase 7: Events (go/no-go after a spike)
 
-- [ ] Spike: measure the relist cost and memory of an events reflector against
+- [x] Spike: measure the relist cost and memory of an events reflector against
       the informer on a dev cluster. Stop here for John's decision.
-- [ ] Add one events reflector whose bundle halves feed:
+- [x] Add one events reflector whose bundle halves feed (no object-events
+      index: John chose the slim shape; object events scans the store):
   - `cluster-events` and `namespace-events` (Table);
   - an `object-events` index on the involved object (`RowsByIndex`);
   - `cluster-attention`, the namespace warning rollup, and recent events for
     `cluster-overview` (Aggregate).
-- [ ] Keep per-resource readiness. Ingest kinds are already excluded from the
+- [x] Keep per-resource readiness. Ingest kinds are already excluded from the
       global gate.
-- [ ] Declare a baseline for every consumer:
+- [x] Declare a baseline for every consumer:
   - The `cluster-attention` index is a maintained store with its own spill and
     reconcile (`cluster_attention.go:757-764`, `:1286`). Its event reconcile
     source switches from the informer indexer to ingest rows; it is read
@@ -738,11 +947,11 @@ its docs updated and §8 evidence recorded.
   - The `object-events` lookup and the warning rollups read the store when the
     snapshot is served, so they need no seed.
   - Any new sink-fed index implements `SeedBundles` and `ReplaceBundles`.
-- [ ] Delete the events informer.
+- [x] Delete the events informer.
 
 ### Phase 8: delete the second technology
 
-- [ ] Delete:
+- [x] Delete:
   - `IngestOwned` and its helpers, and the informer values of `CatalogSource`.
     Event exclusion stays in `objectcatalog/discovery.go:150-153`.
   - Stream `Informer` closures, `Collector.List`, `ingestAvailabilityIndexer`,
@@ -755,9 +964,9 @@ its docs updated and §8 evidence recorded.
     informer-fed stores. Ingest stores sweep deletions on relist instead. Delete
     them if no other reconcile source remains. **[unverified]** Check every
     caller first.
-- [ ] The feed-uniqueness allowlist is empty. A grep gate finds zero
+- [x] The feed-uniqueness allowlist is empty. A grep gate finds zero
       `IngestOwned` / `SharedInformerFactory` uses in `backend` production code.
-- [ ] Docs:
+- [x] Docs:
   - `docs/architecture/data-layer.md` "two cutover shapes" and the kept list.
   - `docs/architecture/data-freshness.md:134-147` (the informer-handler wording).
   - `docs/architecture/namespace-scope.md` "Deliberately cluster-wide".

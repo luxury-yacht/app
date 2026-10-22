@@ -14,16 +14,11 @@ import (
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/applog"
-	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
-	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	informers "k8s.io/client-go/informers"
-	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
 // Scope describes whether a resource is cluster- or namespace-scoped.
@@ -208,39 +203,19 @@ func (d Descriptor) GVR() schema.GroupVersionResource {
 
 // Dependencies captures collaborators required by the catalog service.
 type Dependencies struct {
-	Common                       common.Dependencies                    // common dependencies
-	Logger                       Logger                                 // logging service
-	CapabilityFactory            CapabilityFactory                      // capability evaluation service
-	Telemetry                    TelemetryRecorder                      // telemetry service
-	Now                          func() time.Time                       // function to get the current time
-	InformerFactory              informers.SharedInformerFactory        // Kubernetes informer factory
-	APIExtensionsInformerFactory apiextinformers.SharedInformerFactory  // Kubernetes API extensions informer factory
-	GatewayInformerFactory       gatewayinformers.SharedInformerFactory // Gateway API informer factory
-	PermissionChecker            permissions.ListWatchChecker           // optional; if nil, assumes all permissions granted
-	IngestSource                 IngestSource                           // optional; supplies catalog rows for ingest-owned kinds
-	ClusterID                    string                                 // stable identifier for the source cluster
-	// InformerReadiness reports when the informers collection reads have settled.
-	// sync() waits on it between the RBAC preflight and the collect fan-out, so
-	// discovery + preflight (pure API calls) overlap the factory's initial sync
-	// instead of running after it. nil skips the wait (tests, no factory).
-	InformerReadiness InformerReadiness
+	Common            common.Dependencies // common dependencies
+	Logger            Logger              // logging service
+	CapabilityFactory CapabilityFactory   // capability evaluation service
+	Telemetry         TelemetryRecorder   // telemetry service
+	Now               func() time.Time    // function to get the current time
+	IngestSource      IngestSource        // optional; supplies catalog rows for ingest-owned kinds
+	ClusterID         string              // stable identifier for the source cluster
 	// AllowedNamespaces is the cluster's namespace scope
 	// (docs/architecture/namespace-scope.md): when non-empty, collection of
 	// namespaced kinds runs per configured namespace instead of
 	// cluster-wide, and a namespace the identity cannot list is skipped
 	// without blanking the others. Empty means cluster-wide (today).
 	AllowedNamespaces []string
-}
-
-// InformerReadiness is the informer factory's startup and data-readiness
-// contract. A resource is settled once its informer has synced, failed
-// permanently (for example a forbidden watch) or passed the factory's sync
-// deadline, so a settled informer is not necessarily synced. ResourceReadiness
-// tells a still-syncing informer (pending, degraded) from one that will never
-// sync (unavailable). Keys use permissions.ResourceKey format.
-type InformerReadiness interface {
-	ResourcesSettled(keys []string) bool
-	ResourceReadiness(keys []string) map[string]refresh.ResourceReadiness
 }
 
 // IngestSource supplies catalog projections from generation-owned sources.
@@ -253,6 +228,9 @@ type IngestSource interface {
 	IsDynamicCatalogGeneration(schema.GroupResource, uint64) bool
 	CatalogRows(gvr schema.GroupVersionResource) []interface{}
 	SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func()
+	// SubscribeBundleSink replays the source's current bundles to sink, then
+	// delivers each change; the returned func detaches it.
+	SubscribeBundleSink(gvr schema.GroupVersionResource, sink ingest.BundleSink) func()
 	// Threshold admission applies only when discovery has no visible CRD definition.
 	RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project ingest.CatalogProjector, namespaced bool) bool
 	// HasSyncedFor supplies the static-source readiness gate. Dynamic collection

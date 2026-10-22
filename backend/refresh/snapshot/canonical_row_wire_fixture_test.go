@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -182,10 +182,10 @@ func canonicalRowWireFixtures(t *testing.T) canonicalRowWireFixtureDocument {
 	namespaceStorageRow := persistentvolumeclaimres.BuildStreamSummary(meta, pvc)
 
 	minimumReplicas := int32(1)
-	hpa := &autoscalingv1.HorizontalPodAutoscaler{
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: canonicalFixtureObjectMeta("hpa-wire", namespace, created),
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "deployment-wire"},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "deployment-wire"},
 			MinReplicas:    &minimumReplicas,
 			MaxReplicas:    3,
 		},
@@ -213,8 +213,8 @@ func canonicalRowWireFixtures(t *testing.T) canonicalRowWireFixtureDocument {
 			LastDeployed:  releasetime.Time{Time: created.Time},
 		},
 	}
-	helmRows, _ := mapHelmReleases([]*release.Release{helmRelease}, namespace, meta)
-	require.Len(t, helmRows, 1)
+	helmRow, ok := mapHelmRelease(helmRelease, namespace, meta)
+	require.True(t, ok)
 
 	pod := &corev1.Pod{
 		ObjectMeta: canonicalFixtureObjectMeta("pod-wire", namespace, created),
@@ -239,7 +239,7 @@ func canonicalRowWireFixtures(t *testing.T) canonicalRowWireFixtureDocument {
 	clusterCustomRow := customres.BuildClusterStreamSummary(meta, clusterCustomObject, customres.NewDescriptor("example.io", "v1", "clusterwidgets", "ClusterWidget", "clusterwidgets.example.io"))
 	hydratedCustomRow := CustomResourceSummaryFromCluster(clusterCustomRow)
 
-	objectEventRow := convertObjectEvent(meta, *namespaceEvent)
+	objectEventRow := convertObjectEvent(meta, eventRecordOf(meta, namespaceEvent))
 
 	queryEnvelope := ResourceQueryEnvelope{Total: 1, UnfilteredTotal: 1, TotalIsExact: true, FacetsExact: true}
 	entries := []canonicalRowWireFixtureEntry{
@@ -260,7 +260,7 @@ func canonicalRowWireFixtures(t *testing.T) canonicalRowWireFixtureDocument {
 		{Family: "namespace-autoscaling", Boundary: "refresh-snapshot", Domain: "namespace-autoscaling", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("namespace-autoscaling", NamespaceAutoscalingSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []AutoscalingSummary{namespaceAutoscalingRow}})},
 		{Family: "namespace-quotas", Boundary: "refresh-snapshot", Domain: "namespace-quotas", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("namespace-quotas", NamespaceQuotasSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []QuotaSummary{namespaceQuotaRow}})},
 		{Family: "namespace-events", Boundary: "refresh-snapshot", Domain: "namespace-events", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("namespace-events", NamespaceEventsSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []EventSummary{namespaceEventRow}})},
-		{Family: "namespace-helm", Boundary: "refresh-snapshot", Domain: "namespace-helm", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("namespace-helm", NamespaceHelmSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: helmRows})},
+		{Family: "namespace-helm", Boundary: "refresh-snapshot", Domain: "namespace-helm", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("namespace-helm", NamespaceHelmSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []NamespaceHelmSummary{helmRow}})},
 		{Family: "pods", Boundary: "refresh-snapshot", Domain: "pods", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("pods", PodSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []PodSummary{podRow}})},
 		{Family: "namespace-workloads", Boundary: "refresh-snapshot", Domain: "namespace-workloads", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("namespace-workloads", NamespaceWorkloadsSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []WorkloadSummary{workloadRow}})},
 		{Family: "custom-page-hydration", Boundary: "custom-hydration", Row: hydratedCustomRow},

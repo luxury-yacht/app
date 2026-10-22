@@ -198,10 +198,10 @@ func TestClusterConfigMaintainedStoreMatchesListPath(t *testing.T) {
 }
 
 // TestClusterConfigMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the
-// live ingest cutover of the MIXED cluster-config domain: StorageClass, IngressClass,
-// and the admission webhook kinds are IngestOwned and fed through the ingest Sink
-// (the bundle's Table half); GatewayClass is NOT cut and is fed through the informer
-// path (ingest()). The combined store's rows must still equal the list path exactly.
+// live ingest cutover of the cluster-config domain: every kind (StorageClass,
+// IngressClass, GatewayClass, the admission webhooks) is fed
+// through the ingest Sink (the bundle's Table half). The store's rows must equal
+// the list path exactly.
 func TestClusterConfigMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
 	scDesc := clusterConfigDescriptor(t, "storageclasses")
@@ -234,7 +234,7 @@ func TestClusterConfigMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	mwhIdx := newNamespaceIndexer()
 	store := newTypedMaintainedStore(meta, clusterConfigQuerypageSchema(), clusterConfigTableQueryAdapter())
 	sink := unpublishedSink(store, "")
-	// Cut kinds feed through the ingest Sink (the projected Table-half row).
+	// Every kind feeds through the ingest Sink (the projected Table-half row).
 	for _, sc := range scs {
 		require.NoError(t, scIdx.Add(sc))
 		sink.Upsert(scDesc.StreamRow(meta, sc))
@@ -251,10 +251,9 @@ func TestClusterConfigMaintainedStoreSinkMatchesListPath(t *testing.T) {
 		require.NoError(t, mwhIdx.Add(mwh))
 		sink.Upsert(mwhDesc.StreamRow(meta, mwh))
 	}
-	// GatewayClass is NOT cut: it still arrives via the shared/Gateway informer handler.
 	for _, gc := range gcs {
 		require.NoError(t, gcIdx.Add(gc))
-		store.ingest(gcDesc, gc)
+		sink.Upsert(gcDesc.StreamRow(meta, gc))
 	}
 
 	collect := clusterConfigCollectIndexer(scIdx, icIdx, gcIdx, vwhIdx, mwhIdx)
@@ -263,7 +262,7 @@ func TestClusterConfigMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.ElementsMatch(t, listed, store.rows("", clusterConfigAvailableAll()),
-		"sink-fed (cut) + informer-fed (GatewayClass) store rows must equal the list path")
+		"sink-fed store rows must equal the list path")
 
 	// A delete through the sink evicts a cut kind's row, exactly like a watch delete.
 	sink.Delete(scDesc.StreamRow(meta, scs[0]))
@@ -327,8 +326,8 @@ func TestClusterConfigBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 
 	collect := clusterConfigCollectIndexer(scIdx, icIdx, gcIdx, vwhIdx, mwhIdx)
-	listBuilder := &ClusterConfigBuilder{collectIndexer: collect}
-	maintainedBuilder := &ClusterConfigBuilder{collectIndexer: collect, maintained: maintained}
+	listBuilder := newTypedTableListOracle(clusterConfigDomainSpec(), collect)
+	maintainedBuilder := &ClusterConfigBuilder{available: availableFromIndexers(collect), maintained: maintained}
 
 	scopes := []string{
 		"",

@@ -11,11 +11,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"helm.sh/helm/v3/pkg/release"
 	appsv1 "k8s.io/api/apps/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,6 +27,8 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
@@ -31,6 +36,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 )
 
 var (
@@ -40,8 +46,10 @@ var (
 	serviceGVR       = corev1.SchemeGroupVersion.WithResource("services")
 	endpointSliceGVR = discoveryv1.SchemeGroupVersion.WithResource("endpointslices")
 	podGVR           = corev1.SchemeGroupVersion.WithResource("pods")
+	eventGVR         = corev1.SchemeGroupVersion.WithResource("events")
 	configMapGVR     = corev1.SchemeGroupVersion.WithResource("configmaps")
 	accountGVR       = corev1.SchemeGroupVersion.WithResource("serviceaccounts")
+	replicaSetGVR    = appsv1.SchemeGroupVersion.WithResource("replicasets")
 )
 
 // ingestHarness is the production subsystem with its owned ingest stores
@@ -62,38 +70,48 @@ func newIngestHarness(t *testing.T, allowedNamespaces ...string) *ingestHarness 
 // read the denied core resources.
 func newIngestHarnessDenying(t *testing.T, denied []string, allowedNamespaces ...string) *ingestHarness {
 	t.Helper()
+	return newIngestHarnessReviewing(t, func(attrs authorizationv1.ResourceAttributes) bool {
+		return !(attrs.Group == "" && slices.Contains(denied, attrs.Resource))
+	}, allowedNamespaces...)
+}
+
+// newIngestHarnessReviewing is newIngestHarness for an identity whose access
+// reviews allow decides.
+func newIngestHarnessReviewing(t *testing.T, allow func(authorizationv1.ResourceAttributes) bool, allowedNamespaces ...string) *ingestHarness {
+	t.Helper()
 	kube := fake.NewClientset()
 	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
 		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
 		attrs := review.Spec.ResourceAttributes
 		// No metrics API in this harness: leave the poller disabled.
-		review.Status.Allowed = attrs != nil && attrs.Group != "metrics.k8s.io" &&
-			!(attrs.Group == "" && slices.Contains(denied, attrs.Resource))
+		review.Status.Allowed = attrs != nil && attrs.Group != "metrics.k8s.io" && allow(*attrs)
 		return true, review, nil
 	})
 	subsystem, err := NewSubsystemWithServices(t.Context(), Config{
 		KubernetesClient: kube, APIExtensionsClient: apiextensionsfake.NewClientset(),
 		DynamicClient: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), ClusterID: "c1",
 		Logger: applog.Noop, ObjectDetailsProvider: noopObjectDetailProvider{},
-		NodeMaintenanceStore: nodemaintenance.NewStore(5), ResyncInterval: time.Minute,
-		AllowedNamespaces: allowedNamespaces,
+		NodeMaintenanceStore: nodemaintenance.NewStore(5),
+		AllowedNamespaces:    allowedNamespaces,
+		GatewayClient:        gatewayfake.NewSimpleClientset(), //nolint:staticcheck // the harness never runs reflectors
+		GatewayAPIPresence:   everyGatewayKind{},
 	})
 	require.NoError(t, err)
-	ctx, cancel := context.WithCancel(t.Context())
-	t.Cleanup(func() {
-		cancel()
-		subsystem.ResourceStream.Stop()
-		_ = subsystem.InformerFactory.Shutdown()
-	})
-	require.NoError(t, subsystem.InformerFactory.Start(ctx))
+	t.Cleanup(subsystem.ResourceStream.Stop)
 	// The reflectors never run; mark each owned store synced so builds serve it.
-	for _, descriptor := range kindregistry.IngestOwnedDescriptors() {
+	for _, descriptor := range kindregistry.All {
 		if store := subsystem.IngestManager.StoreFor(descriptor.Identity.GVR()); store != nil {
 			store.MarkSynced()
 		}
 	}
 	return &ingestHarness{subsystem: subsystem, kube: kube}
 }
+
+// everyGatewayKind is a cluster that serves every Gateway API kind.
+type everyGatewayKind struct{}
+
+func (everyGatewayKind) AnyPresent() bool { return true }
+func (everyGatewayKind) Has(string) bool  { return true }
 
 func (h *ingestHarness) store(t *testing.T, gvr schema.GroupVersionResource) *ingest.ProjectingStore {
 	t.Helper()
@@ -169,6 +187,31 @@ func (w *writeHold) Upsert(interface{}) { w.hold() }
 func (w *writeHold) Delete(interface{}) { w.hold() }
 func (w *writeHold) unblock()           { w.once.Do(func() { close(w.release) }) }
 
+func markDeleting(meta *metav1.ObjectMeta, deleting bool) {
+	if !deleting {
+		return
+	}
+	now := metav1.Now()
+	meta.DeletionTimestamp = &now
+	meta.Finalizers = []string{"test.example/hold"}
+}
+
+func crdObject(name, rv string, deleting bool) *apiextv1.CustomResourceDefinition {
+	crd := &apiextv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: name, ResourceVersion: rv, UID: types.UID("uid-" + name)},
+		Spec: apiextv1.CustomResourceDefinitionSpec{
+			Group: "example.com",
+			Names: apiextv1.CustomResourceDefinitionNames{Plural: "widgets", Kind: "Widget"},
+			Scope: apiextv1.NamespaceScoped,
+			Versions: []apiextv1.CustomResourceDefinitionVersion{{
+				Name: "v1", Served: true, Storage: true,
+			}},
+		},
+	}
+	markDeleting(&crd.ObjectMeta, deleting)
+	return crd
+}
+
 type ingestFedCase struct {
 	name     string
 	gvr      schema.GroupVersionResource
@@ -178,6 +221,9 @@ type ingestFedCase struct {
 	object   func(rv string, deleting bool) interface{}
 	derived  []struct{ domain, scope string }
 	heldRing bool // false when the store is a table sink, which runs before the hold
+	// ringWindow is how long a step waits for its doorbell; Event tables
+	// debounce their rings.
+	ringWindow time.Duration
 }
 
 func ingestFedCases() []ingestFedCase {
@@ -218,6 +264,57 @@ func ingestFedCases() []ingestFedCase {
 			name: "EndpointSlice", gvr: endpointSliceGVR, domain: "namespace-network", scope: "namespace:team-a", rowName: "api-x1", heldRing: true,
 			object: func(rv string, deleting bool) interface{} {
 				return &discoveryv1.EndpointSlice{ObjectMeta: meta("api-x1", "team-a", rv, deleting), AddressType: discoveryv1.AddressTypeIPv4}
+			},
+		},
+		{
+			name: "HTTPRoute", gvr: schema.GroupVersionResource{Group: gatewayv1.GroupName, Version: "v1", Resource: "httproutes"}, domain: "namespace-network", scope: "namespace:team-a", rowName: "web-route", heldRing: true,
+			object: func(rv string, deleting bool) interface{} {
+				return &gatewayv1.HTTPRoute{ObjectMeta: meta("web-route", "team-a", rv, deleting)}
+			},
+		},
+		{
+			name: "GatewayClass", gvr: schema.GroupVersionResource{Group: gatewayv1.GroupName, Version: "v1", Resource: "gatewayclasses"}, domain: "cluster-config", scope: "", rowName: "edge", heldRing: true,
+			object: func(rv string, deleting bool) interface{} {
+				return &gatewayv1.GatewayClass{ObjectMeta: meta("edge", "", rv, deleting), Spec: gatewayv1.GatewayClassSpec{ControllerName: "example.com/gateway"}}
+			},
+		},
+		{
+			name: "HorizontalPodAutoscaler", gvr: autoscalingv2.SchemeGroupVersion.WithResource("horizontalpodautoscalers"), domain: "namespace-autoscaling", scope: "namespace:team-a", rowName: "web-hpa", heldRing: true,
+			object: func(rv string, deleting bool) interface{} {
+				return &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: meta("web-hpa", "team-a", rv, deleting), Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+					ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "web"}, MaxReplicas: 3,
+				}}
+			},
+			// The workloads table joins each row's HPA at serve.
+			derived: []struct{ domain, scope string }{{"namespace-workloads", "namespace:team-a"}},
+		},
+		{
+			name: "CustomResourceDefinition", gvr: apiextensions.Identity.GVR(), domain: "cluster-crds", scope: "", rowName: "widgets.example.com", heldRing: true,
+			object: func(rv string, deleting bool) interface{} { return crdObject("widgets.example.com", rv, deleting) },
+		},
+		{
+			name: "Helm release", gvr: secretGVR, domain: "namespace-helm", scope: "namespace:team-a", rowName: "web", heldRing: true,
+			object: func(rv string, deleting bool) interface{} {
+				secret := helmRevision("team-a", "web", 1, release.StatusDeployed)
+				secret.ResourceVersion = rv
+				markDeleting(&secret.ObjectMeta, deleting)
+				return secret
+			},
+		},
+		{
+			name: "Event (namespaced object)", gvr: eventGVR, domain: "namespace-events", scope: "namespace:team-a", rowName: "web.1", heldRing: true,
+			ringWindow: time.Second,
+			object: func(rv string, deleting bool) interface{} {
+				return &corev1.Event{ObjectMeta: meta("web.1", "team-a", rv, deleting), Type: corev1.EventTypeNormal,
+					InvolvedObject: corev1.ObjectReference{APIVersion: "v1", Kind: "Pod", Namespace: "team-a", Name: "web"}}
+			},
+		},
+		{
+			name: "Event (cluster-scoped object)", gvr: eventGVR, domain: "cluster-events", scope: "", rowName: "node-a.1", heldRing: true,
+			ringWindow: time.Second,
+			object: func(rv string, deleting bool) interface{} {
+				return &corev1.Event{ObjectMeta: meta("node-a.1", "default", rv, deleting), Type: corev1.EventTypeNormal,
+					InvolvedObject: corev1.ObjectReference{APIVersion: "v1", Kind: "Node", Name: "node-a"}}
 			},
 		},
 		{
@@ -273,7 +370,11 @@ func TestIngestFedTableDoorbellFollowsItsStore(t *testing.T) {
 				}
 				hold.unblock()
 				require.NoError(t, <-done)
-				require.Positive(t, collect(sub, 300*time.Millisecond), "%s: no doorbell", step.name)
+				ringWindow := tc.ringWindow
+				if ringWindow == 0 {
+					ringWindow = 300 * time.Millisecond
+				}
+				require.Positive(t, collect(sub, ringWindow), "%s: no doorbell", step.name)
 				for i, d := range derived {
 					require.Positive(t, collect(d, 200*time.Millisecond), "%s: no %s doorbell", step.name, tc.derived[i].domain)
 				}
@@ -441,7 +542,7 @@ func workloadScope(kind, name string) string {
 // entered, so the previous owner's Pods list drops it.
 func TestPodOwnerChangeRingsPreviousOwnerScopes(t *testing.T) {
 	h := newIngestHarness(t)
-	replicaSets := h.subsystem.InformerFactory.SharedInformerFactory().Apps().V1().ReplicaSets().Informer().GetIndexer()
+	replicaSets := h.store(t, replicaSetGVR)
 	controller := true
 	require.NoError(t, replicaSets.Add(&appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
 		Name: "web-1", Namespace: "team-a", UID: "rs-web-1",
@@ -484,11 +585,10 @@ func TestReplicaSetHealRingsHealedPodScopes(t *testing.T) {
 	deployment := h.subscribe(t, "pods", workloadScope("Deployment", "web"))
 
 	controller := true
-	_, err := h.kube.AppsV1().ReplicaSets("team-a").Create(t.Context(), &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
-		Name: "web-1", Namespace: "team-a", UID: "rs-web-1",
+	require.NoError(t, h.store(t, replicaSetGVR).Add(&appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
+		Name: "web-1", Namespace: "team-a", UID: "rs-web-1", ResourceVersion: "20",
 		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: "web", UID: "dep-web", Controller: &controller}},
-	}}, metav1.CreateOptions{})
-	require.NoError(t, err)
+	}}))
 
 	require.Positive(t, collect(deployment, 2*time.Second), "the healed pod's Deployment scope did not ring")
 	require.Equal(t, []string{"web-1-abc"}, h.rowNames(t, "pods", workloadScope("Deployment", "web")))

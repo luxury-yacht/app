@@ -377,7 +377,7 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 	rs := testsupport.NewReplicaSetLister(t)
 	for _, p := range []*corev1.Pod{mkPod("alpha"), mkPod("bravo")} {
 		// Ingest the no-data metric row, exactly as the informer handler does.
-		maintained.upsertRow(podres.BuildStreamSummary(meta, p, rs, nil), p)
+		maintained.upsertRow(podres.BuildStreamSummary(meta, p, testsupport.ReplicaSetOwnerLookup(rs), nil), p)
 	}
 
 	builder := &PodBuilder{

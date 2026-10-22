@@ -2,9 +2,8 @@
  * backend/resources/hpa/streamsummary.go
  *
  * HorizontalPodAutoscaler's stream-summary builder, owned by the kind's package.
- * Produces the neutral streamrows.AutoscalingSummary row from the v1 object. The
- * namespace-autoscaling domain streams HPA under v1. Returns a leaf type, so no
- * snapshot import.
+ * Produces the neutral streamrows.AutoscalingSummary row from the v2 object.
+ * Returns a leaf type, so no snapshot import.
  */
 
 package hpa
@@ -14,12 +13,12 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	"k8s.io/utils/ptr"
 )
 
 // BuildStreamSummary builds the namespace-autoscaling row for one HPA.
-func BuildStreamSummary(meta streamrows.ClusterMeta, hpa *autoscalingv1.HorizontalPodAutoscaler) streamrows.AutoscalingSummary {
+func BuildStreamSummary(meta streamrows.ClusterMeta, hpa *autoscalingv2.HorizontalPodAutoscaler) streamrows.AutoscalingSummary {
 	if hpa == nil {
 		return streamrows.AutoscalingSummary{Ref: streamrows.NewResourceRef(meta, Identity, nil)}
 	}

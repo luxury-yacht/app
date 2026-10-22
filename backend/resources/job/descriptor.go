@@ -8,8 +8,6 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
-	IngestOwned:     true,
-	CatalogSource:   kindspec.CatalogShared,
 	DetailCacheable: true,
 	DetailListsPods: true,
 	Collector:       &ObjectMapNode,

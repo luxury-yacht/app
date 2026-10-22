@@ -3,110 +3,12 @@ package snapshot
 import (
 	"sort"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/cache"
-
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
-
-// storePublication rings a maintained store's domain after the store has
-// applied a change (docs/architecture/data-freshness.md, "Signals and source
-// clocks"). It rings the scopes the changed object left as well as the ones it
-// entered, plus the changes of any domain whose serve-time join reads it.
-type storePublication struct {
-	bell   doorbell.Bell
-	domain string
-	// clusterScoped rings the cluster scope instead of namespace scopes.
-	clusterScoped bool
-	// identity, when set, gives rings a complete diagnostic Ref.
-	identity *streamspec.Descriptor
-	meta     ClusterMeta
-	// derived maps one object state to other domains' changes.
-	derived func(obj metav1.Object) []doorbell.Change
-}
-
-// forDescriptor is the publication for one descriptor kind of the domain.
-func (p storePublication) forDescriptor(d streamspec.Descriptor) storePublication {
-	p.clusterScoped = d.ClusterScoped
-	p.identity = &d
-	return p
-}
-
-func (p storePublication) scopes(namespace string) []string {
-	if p.clusterScoped {
-		return clusterDoorbellScopes()
-	}
-	return namespaceDoorbellScopes(namespace)
-}
-
-// objectChanged publishes one applied change. before is nil for an add and
-// after is nil for a delete.
-func (p storePublication) objectChanged(before, after metav1.Object, kind doorbell.MessageType) {
-	current := after
-	if current == nil {
-		current = before
-	}
-	if current == nil {
-		return
-	}
-	scopes := p.scopes(current.GetNamespace())
-	if before != nil {
-		scopes = append(scopes, p.scopes(before.GetNamespace())...)
-	}
-	p.bell.Ring(doorbell.Change{
-		Domain:          p.domain,
-		Source:          doorbell.SourceObject,
-		Target:          doorbell.Scopes(scopes...),
-		Type:            kind,
-		Ref:             p.ref(current),
-		ResourceVersion: current.GetResourceVersion(),
-	})
-	for _, change := range p.derivedChanges(before, after) {
-		p.bell.Ring(change)
-	}
-}
-
-// rowRemoved publishes a row dropped without an informer delivery, such as a
-// restored row Reconcile found deleted while the cluster was Cold.
-func (p storePublication) rowRemoved(namespace string) {
-	p.bell.Ring(doorbell.Change{
-		Domain: p.domain,
-		Source: doorbell.SourceObject,
-		Target: doorbell.Scopes(p.scopes(namespace)...),
-		Type:   doorbell.MessageTypeDeleted,
-	})
-}
-
-func (p storePublication) ref(obj metav1.Object) *resourcemodel.ResourceRef {
-	if p.identity == nil {
-		return nil
-	}
-	d := p.identity
-	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{
-		ClusterID: p.meta.ClusterID, Group: d.Group, Version: d.Version, Kind: d.Kind, Resource: d.Resource,
-		Namespace: obj.GetNamespace(), Name: obj.GetName(), UID: string(obj.GetUID()),
-	})
-	return &ref
-}
-
-// derivedChanges merges the derived changes of both object states into one
-// change per domain, so a retarget rings the old and new targets together.
-func (p storePublication) derivedChanges(before, after metav1.Object) []doorbell.Change {
-	if p.derived == nil {
-		return nil
-	}
-	var changes []doorbell.Change
-	for _, obj := range []metav1.Object{before, after} {
-		if obj != nil {
-			changes = append(changes, p.derived(obj)...)
-		}
-	}
-	return mergeByDomain(changes)
-}
 
 // mergeByDomain folds explicit-scope changes into one change per domain over
 // the union of their scopes. A merged change describes several objects, so it
@@ -270,37 +172,4 @@ func feedsIdentities(group, resource string) bool {
 		}
 	}
 	return false
-}
-
-// storeHandlerFuncs applies one informer's deliveries to a store, then
-// publishes each real change from the same handler, so a ring never reaches a
-// reader before the store holds the change. client-go runs each handler on its
-// own goroutine; a second handler on the informer could ring first. apply gets
-// (nil, obj) for an add, (old, new) for an update, and (obj, nil) for a delete.
-// Resync echoes still apply (idempotently) but publish nothing.
-func storeHandlerFuncs(
-	apply func(before, after interface{}),
-	publish func(before, after metav1.Object, kind doorbell.MessageType),
-) cache.ResourceEventHandlerFuncs {
-	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			apply(nil, obj)
-			publish(nil, asObject(obj), doorbell.MessageTypeAdded)
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			apply(oldObj, newObj)
-			if !InformerUpdateIsEcho(oldObj, newObj) {
-				publish(asObject(oldObj), asObject(newObj), doorbell.MessageTypeModified)
-			}
-		},
-		DeleteFunc: func(obj interface{}) {
-			apply(obj, nil)
-			publish(asObject(obj), nil, doorbell.MessageTypeDeleted)
-		},
-	}
-}
-
-func asObject(obj interface{}) metav1.Object {
-	item, _ := maintainedUnwrap(obj).(metav1.Object)
-	return item
 }

@@ -104,8 +104,8 @@ Scope tails are one executable contract:
 - `buildRefreshSubsystemForSelection` is the one construction chokepoint for
   startup, selector open, auth recovery, and governor re-warm; per-cluster
   readiness, invalidation, and lifecycle wiring belong there.
-- Per-cluster order: informer factory and permission checker, snapshot
-  service and resource stream (the doorbell every producer receives at
+- Per-cluster order: permission checker and grant tracking
+  (`permissions.Grants`), owned reflectors, snapshot service and resource stream (the doorbell every producer receives at
   construction), permission preflight and ordered domain registration, the
   stream's owner-heal sources, queue, manager start, then revalidation.
 - Construction uses the caller's context and has no total deadline (a slow

@@ -149,7 +149,7 @@ func TestRBACMaintainedStoreMatchesListPath(t *testing.T) {
 
 // TestRBACMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the live ingest
 // cutover: fed the projected StreamRow through the ingest Sink (the live reflector
-// path Role/RoleBinding/ServiceAccount now take via IngestOwned), the maintained
+// path Role/RoleBinding/ServiceAccount now take), the maintained
 // store's rows must equal exactly what the list path produces, for every namespace.
 func TestRBACMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
@@ -243,8 +243,8 @@ func TestNamespaceRBACBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 
 	collect := rbacCollectIndexer(roleIdx, bindingIdx, saIdx)
-	listBuilder := &NamespaceRBACBuilder{collectIndexer: collect}
-	maintainedBuilder := &NamespaceRBACBuilder{collectIndexer: collect, maintained: maintained}
+	listBuilder := newTypedTableListOracle(namespaceRBACDomainSpec(), collect)
+	maintainedBuilder := &NamespaceRBACBuilder{available: availableFromIndexers(collect), maintained: maintained}
 
 	scopes := []string{
 		"namespace:default",

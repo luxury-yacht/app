@@ -62,28 +62,26 @@ func requireNoDetailsSignal(t *testing.T, sub *resourcestream.Subscription, cont
 	}
 }
 
-// Only Kubernetes clients are fake: subsystem construction, informers, ingest
-// stores and sinks, response-cache eviction, and the outbound doorbell are the
-// production path. Ingest-owned kinds are written to their stores directly, as
-// their reflectors would.
-func TestObjectDetailsSignalFollowsEvictionThroughProductionWiring(t *testing.T) {
+// newDetailsSignalSubsystem starts a production subsystem whose ingest kinds
+// stay unlaunched, with response-cache eviction registered.
+func newDetailsSignalSubsystem(t *testing.T) (*workspaceCoordinatorTestFixture, string, *system.Subsystem) {
+	t.Helper()
 	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
 	clusterID := target.meta.ID
 	clients := app.ClusterRuntime.clusterClientsForID(clusterID)
 	kube := clients.client.(*kubefake.Clientset)
 	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
 		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
-		// ReplicaSets take the informer path. Ingest kinds stay unlaunched: their
-		// reflectors need a real API server, so the test writes to their stores
-		// the way a reflector would.
-		review.Status.Allowed = review.Spec.ResourceAttributes.Resource == "replicasets"
+		// Ingest kinds stay unlaunched: their reflectors need a real API server,
+		// so the test writes to their stores the way a reflector would.
+		review.Status.Allowed = false
 		return true, review, nil
 	})
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	subsystem, err := system.NewSubsystemWithServices(context.Background(), system.Config{
 		KubernetesClient: kube, APIExtensionsClient: clients.apiextensionsClient, DynamicClient: clients.dynamicClient,
-		ClusterID: clusterID, ClusterName: target.meta.Name, Logger: app.AppLogs.Logger(), ResyncInterval: time.Minute,
+		ClusterID: clusterID, ClusterName: target.meta.Name, Logger: app.AppLogs.Logger(),
 		ObjectDetailsProvider: app.Resources.objectDetailProvider(), NodeMaintenanceStore: app.NodeMaintenanceStore,
 	})
 	require.NoError(t, err)
@@ -94,10 +92,17 @@ func TestObjectDetailsSignalFollowsEvictionThroughProductionWiring(t *testing.T)
 		cancel()
 		subsystem.ResourceStream.Stop()
 		subsystem.IngestManager.Stop()
-		_ = subsystem.InformerFactory.Shutdown()
 	})
 	subsystem.IngestManager.Start(ctx)
-	require.NoError(t, subsystem.InformerFactory.Start(ctx))
+	return app, clusterID, subsystem
+}
+
+// Only Kubernetes clients are fake: subsystem construction, informers, ingest
+// stores and sinks, response-cache eviction, and the outbound doorbell are the
+// production path. Ingest-owned kinds are written to their stores directly, as
+// their reflectors would.
+func TestObjectDetailsSignalFollowsEvictionThroughProductionWiring(t *testing.T) {
+	app, clusterID, subsystem := newDetailsSignalSubsystem(t)
 
 	replicaSetGVK := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "ReplicaSet"}
 	replicaSetKeys := []string{
@@ -113,31 +118,25 @@ func TestObjectDetailsSignalFollowsEvictionThroughProductionWiring(t *testing.T)
 			app.Resources.seedResponseCache(clusterID, key, "pre-change copy")
 		}
 	}
-	replicaSets := kube.AppsV1().ReplicaSets("team-a")
+	replicaSets := subsystem.IngestManager.StoreFor(appsv1.SchemeGroupVersion.WithResource("replicasets"))
+	require.NotNil(t, replicaSets)
 
-	// Informer path (ReplicaSet): create, update, resync echo, completed delete.
+	// Ingest path (ReplicaSet): create, update, completed delete each evict the
+	// cached details and ring only that object's panel.
 	seed(replicaSetKeys)
-	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "web", ResourceVersion: "1"}}
-	_, err = replicaSets.Create(ctx, replicaSet, metav1.CreateOptions{})
-	require.NoError(t, err)
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "web", UID: "rs-uid", ResourceVersion: "1"}}
+	require.NoError(t, replicaSets.Add(replicaSet))
 	requireDetailsSignal(t, app, clusterID, replicaSetPanel, "create", replicaSetKeys...)
 
 	seed(replicaSetKeys)
 	updated := replicaSet.DeepCopy()
 	updated.ResourceVersion = "2"
 	updated.Labels = map[string]string{"tier": "web"}
-	_, err = replicaSets.Update(ctx, updated, metav1.UpdateOptions{})
-	require.NoError(t, err)
+	require.NoError(t, replicaSets.Update(updated))
 	requireDetailsSignal(t, app, clusterID, replicaSetPanel, "update", replicaSetKeys...)
 
-	// The fake tracker keeps the supplied resourceVersion, so this update is a
-	// resync-shaped echo: same object, same version.
-	_, err = replicaSets.Update(ctx, updated.DeepCopy(), metav1.UpdateOptions{})
-	require.NoError(t, err)
-	requireNoDetailsSignal(t, replicaSetPanel, "resync echo")
-
 	seed(replicaSetKeys)
-	require.NoError(t, replicaSets.Delete(ctx, "web", metav1.DeleteOptions{}))
+	require.NoError(t, replicaSets.Delete(updated))
 	requireDetailsSignal(t, app, clusterID, replicaSetPanel, "completed delete", replicaSetKeys...)
 
 	// Ingest path (ConfigMap): a change rings only its own panel, and a relist of
@@ -166,4 +165,51 @@ func TestObjectDetailsSignalFollowsEvictionThroughProductionWiring(t *testing.T)
 	requireNoDetailsSignal(t, configMapPanel, "a ConfigMap does not list pods")
 
 	requireNoDetailsSignal(t, otherNamespacePanel, "changes in team-a never ring team-b")
+}
+
+// A Helm storage record changing in the Secrets or ConfigMaps ingest store
+// evicts the release's cached details, manifest, and values before the
+// release's panel rings. A relist of an unchanged record rings nothing.
+func TestHelmReleaseDetailsSignalFollowsEvictionThroughProductionWiring(t *testing.T) {
+	app, clusterID, subsystem := newDetailsSignalSubsystem(t)
+	releasePanel := subscribeObjectDetails(t, subsystem, clusterID, "team-a:helm.sh/v3:HelmRelease:demo")
+	otherPanel := subscribeObjectDetails(t, subsystem, clusterID, "team-a:helm.sh/v3:HelmRelease:other")
+	keys := []string{
+		objectDetailCacheKey("HelmRelease", "team-a", "demo"),
+		objectDetailCacheKey("HelmManifest", "team-a", "demo"),
+		objectDetailCacheKey("HelmValues", "team-a", "demo"),
+	}
+	seed := func() {
+		for _, key := range keys {
+			app.Resources.seedResponseCache(clusterID, key, "pre-change copy")
+		}
+	}
+	secrets := subsystem.IngestManager.StoreFor(corev1.SchemeGroupVersion.WithResource("secrets"))
+	configMaps := subsystem.IngestManager.StoreFor(corev1.SchemeGroupVersion.WithResource("configmaps"))
+	require.NotNil(t, secrets)
+	require.NotNil(t, configMaps)
+
+	seed()
+	record := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "sh.helm.release.v1.demo.v1", UID: "secret-uid", ResourceVersion: "1",
+			Labels: map[string]string{"owner": "helm", "name": "demo", "status": "deployed", "version": "1"}},
+		Type: "helm.sh/release.v1",
+	}
+	require.NoError(t, secrets.Add(record))
+	requireDetailsSignal(t, app, clusterID, releasePanel, "release Secret created", keys...)
+
+	require.NoError(t, secrets.Replace([]interface{}{record.DeepCopy()}, "5"))
+	requireNoDetailsSignal(t, releasePanel, "relist of an unchanged release Secret")
+
+	seed()
+	require.NoError(t, configMaps.Add(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Namespace: "team-a", Name: "sh.helm.release.v1.demo.v2", UID: "configmap-uid", ResourceVersion: "2",
+		Labels: map[string]string{"owner": "helm", "name": "demo", "status": "deployed", "version": "2"},
+	}}))
+	requireDetailsSignal(t, app, clusterID, releasePanel, "release ConfigMap created", keys...)
+
+	seed()
+	require.NoError(t, secrets.Delete(record))
+	requireDetailsSignal(t, app, clusterID, releasePanel, "release Secret deleted", keys...)
+	requireNoDetailsSignal(t, otherPanel, "another release's panel")
 }

@@ -10,7 +10,6 @@ var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
 	CatalogSource:   kindspec.CatalogDynamic,
 	DetailCacheable: true,
-	IngestOwned:     true,
 	Stream:          &StreamDescriptor,
 	Collector:       &ObjectMapNode,
 	Edges:           ObjectMapEdges,

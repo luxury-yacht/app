@@ -361,6 +361,10 @@ func (source *fakeDynamicIngestSource) SubscribeCatalogSink(gvr schema.GroupVers
 	return func() {}
 }
 
+func (*fakeDynamicIngestSource) SubscribeBundleSink(schema.GroupVersionResource, ingest.BundleSink) func() {
+	return func() {}
+}
+
 func (f *fakeDynamicIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
 	return nil
 }

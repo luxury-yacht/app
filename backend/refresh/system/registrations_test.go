@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"slices"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
@@ -874,17 +875,35 @@ func TestDomainReadinessResourcesUnionsDeclaredContracts(t *testing.T) {
 	require.Equal(t, []string{"core/namespaces"}, readiness["namespaces"])
 	require.Equal(t, []string{"core/pods"}, readiness["pods"])
 
-	// Domains with no declaration anywhere stay absent and keep the
-	// conservative factory-wide gate.
-	require.NotContains(t, readiness, "object-yaml")
-	require.NotContains(t, readiness, "object-details")
-	require.NotContains(t, readiness, "catalog")
-
-	// Every mapped domain has a non-empty, canonical (group/resource) key set.
+	// Every key is canonical (group/resource).
 	for domainName, keys := range readiness {
-		require.NotEmptyf(t, keys, "domain %q mapped with an empty readiness set", domainName)
 		for _, key := range keys {
 			require.Containsf(t, key, "/", "domain %q key %q is not canonical", domainName, key)
 		}
+	}
+}
+
+// Every domain declares which object feeds it waits on. A domain left out
+// would fall back to the shared informer factory's gate, which stops
+// covering a kind as soon as that kind moves to an owned reflector, so its
+// first build could serve an unsynced feed as empty. Domains whose payload
+// reads no object feed (catalog service, live GETs, metrics, maintenance)
+// declare an empty set and build without waiting.
+func TestEveryDomainDeclaresItsFeedReadiness(t *testing.T) {
+	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{}})
+	readiness := domainReadinessResources(registrations)
+
+	feedIndependent := []string{
+		"catalog", "catalog-diff", "namespace-metrics", "object-details",
+		"object-helm-manifest", "object-helm-values", "object-maintenance", "object-yaml",
+	}
+	for _, registration := range registrations {
+		keys, declared := readiness[registration.name]
+		require.Truef(t, declared, "domain %q declares no feed readiness", registration.name)
+		if slices.Contains(feedIndependent, registration.name) {
+			require.Emptyf(t, keys, "feed-independent domain %q must not wait on feeds", registration.name)
+			continue
+		}
+		require.NotEmptyf(t, keys, "domain %q reads object feeds but declares none", registration.name)
 	}
 }

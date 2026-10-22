@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -40,6 +40,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/referencegrant"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
+	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 func TestBuildPodSummaryResolvesDeploymentOwner(t *testing.T) {
@@ -464,13 +465,13 @@ func TestBuildClusterCRDSummaryNilCRDIsSafe(t *testing.T) {
 // production regression.
 func TestBuildHPASummaryPopulatesTargetAPIVersion(t *testing.T) {
 	minReplicasVal := int32(2)
-	hpa := &autoscalingv1.HorizontalPodAutoscaler{
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "rollout-hpa",
 			Namespace: "prod",
 		},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
 				Kind:       "Rollout",
 				Name:       "canary",
 				APIVersion: "argoproj.io/v1alpha1",
@@ -478,7 +479,7 @@ func TestBuildHPASummaryPopulatesTargetAPIVersion(t *testing.T) {
 			MinReplicas: &minReplicasVal,
 			MaxReplicas: 10,
 		},
-		Status: autoscalingv1.HorizontalPodAutoscalerStatus{
+		Status: autoscalingv2.HorizontalPodAutoscalerStatus{
 			CurrentReplicas: 5,
 		},
 	}
@@ -695,7 +696,7 @@ func TestBuildNamespaceCustomSummaryThreadsCRDName(t *testing.T) {
 // buildPodSummaryForTest calls the pods-package builder and joins usage from the
 // map the way the serve path does.
 func buildPodSummaryForTest(meta ClusterMeta, pod *corev1.Pod, usage map[string]metrics.PodUsage, rsLister v1.ReplicaSetLister) PodSummary {
-	row := podres.BuildStreamSummary(meta, pod, rsLister, nil)
+	row := podres.BuildStreamSummary(meta, pod, testsupport.ReplicaSetOwnerLookup(rsLister), nil)
 	// Mirror the production serve-time overlay so the parity harness and the real
 	// Build path render CPU/mem identically — including the no-data marker for a
 	// pod with no valid sample (Risk #9 / §3.6). overlayPodMetrics re-derives the

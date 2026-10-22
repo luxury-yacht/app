@@ -26,12 +26,6 @@ const (
 
 // Refresh subsystem settings.
 const (
-	// RefreshResyncInterval controls how often shared informers perform a full resync sweep.
-	// This is the cadence we hand to Kubernetes SharedInformers for their built-in "full resync" sweep.
-	// At that interval the informer re-lists the resource from the API to reconcile any missed events.
-	// It is a coarse, background safety-net.
-	RefreshResyncInterval = 15 * time.Second
-
 	// RefreshInformerSyncPollInterval is the poll frequency used while waiting for informer caches to sync.
 	// This is purely local to our code. While we are waiting for a set of informers to report HasSynced() == true,
 	// we poll them on that short interval so the refresh snapshot builder can unblock as soon as their caches
@@ -69,9 +63,6 @@ const (
 
 	// ResponseCacheMaxEntries caps the number of cached GET responses before eviction.
 	ResponseCacheMaxEntries = 512
-
-	// ResponseCacheInvalidationWarmupAge ignores cache invalidation events for very new objects.
-	ResponseCacheInvalidationWarmupAge = time.Minute
 
 	// SnapshotClusterEventsLimit caps cluster event summaries in refresh snapshots.
 	SnapshotClusterEventsLimit = 500
@@ -421,14 +412,9 @@ const (
 	// from an aggregated-apiserver install), not for CRDs.
 	ObjectCatalogDiscoveryCacheTTL = 10 * time.Minute
 
-	// ObjectCatalogWatchPendingBufferSize caps pending informer watch events.
-	ObjectCatalogWatchPendingBufferSize = 8192
-
-	// ObjectCatalogWatchDebounceInterval coalesces informer watch flushes.
+	// ObjectCatalogWatchDebounceInterval coalesces the catalog's full-resync
+	// requests into one sync.
 	ObjectCatalogWatchDebounceInterval = 200 * time.Millisecond
-
-	// ObjectCatalogWatchOverflowWarnInterval throttles notifier overflow warnings per cluster.
-	ObjectCatalogWatchOverflowWarnInterval = 30 * time.Second
 
 	// ObjectCatalogReactiveMinResyncInterval is the minimum full resync interval when reactive updates are enabled.
 	ObjectCatalogReactiveMinResyncInterval = 5 * time.Minute

@@ -11,7 +11,7 @@ import (
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -347,13 +347,14 @@ func parityServiceCase(meta ClusterMeta, withEndpoints bool) parityCase {
 			for _, slice := range slices {
 				ingestObjects = append(ingestObjects, slice)
 			}
+			indexers := networkCollectIndexer(networkIndexers{})
 			builder := &NamespaceNetworkBuilder{
 				networkIngest:         newFakeNetworkIngestSource(meta, ingestObjects...),
 				includeServices:       true,
 				includeEndpointSlices: true,
-				collectIndexer:        networkCollectIndexer(networkIndexers{}),
+				available:             availableFromIndexers(indexers),
 			}
-			seedNetworkMaintained(builder, meta)
+			seedNetworkMaintained(builder, meta, indexers)
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
 			payload := snap.Payload.(NamespaceNetworkSnapshot)
@@ -401,17 +402,18 @@ func parityNamespaceNetworkObjectsCase(meta ClusterMeta) parityCase {
 			// indexer-driven. The builder reads Ingress/NetworkPolicy rows from the ingest
 			// source and Gateway rows from its test indexer, all via the same shared
 			// Build*StreamSummary helpers as the streaming path.
+			indexers := networkCollectIndexer(networkIndexers{
+				ingress:       emptyIndexer,
+				networkpolicy: emptyIndexer,
+				gateway:       testsupport.NewNamespacedIndexer(t, gateway),
+			})
 			builder := &NamespaceNetworkBuilder{
 				networkIngest:          newFakeNetworkIngestSource(meta, ingress, policy),
 				includeIngresses:       true,
 				includeNetworkPolicies: true,
-				collectIndexer: networkCollectIndexer(networkIndexers{
-					ingress:       ingestAvailabilityIndexer,
-					networkpolicy: ingestAvailabilityIndexer,
-					gateway:       testsupport.NewNamespacedIndexer(t, gateway),
-				}),
+				available:              availableFromIndexers(indexers),
 			}
-			seedNetworkMaintained(builder, meta)
+			seedNetworkMaintained(builder, meta, indexers)
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
 			payload := snap.Payload.(NamespaceNetworkSnapshot)
@@ -445,12 +447,10 @@ func parityNamespaceConfigCase(meta ClusterMeta) parityCase {
 				Data:       map[string][]byte{"tls.crt": []byte("c")},
 			}
 
-			builder := &NamespaceConfigBuilder{
-				collectIndexer: configCollectIndexer(
-					testsupport.NewNamespacedIndexer(t, cm),
-					testsupport.NewNamespacedIndexer(t, secret),
-				),
-			}
+			builder := namespaceConfigBuilderFor(meta, configCollectIndexer(
+				testsupport.NewNamespacedIndexer(t, cm),
+				testsupport.NewNamespacedIndexer(t, secret),
+			))
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
 			payload := snap.Payload.(NamespaceConfigSnapshot)
@@ -481,13 +481,11 @@ func parityNamespaceRBACCase(meta ClusterMeta) parityCase {
 			}
 			sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "default"}}
 
-			builder := &NamespaceRBACBuilder{
-				collectIndexer: rbacCollectIndexer(
-					testsupport.NewNamespacedIndexer(t, role),
-					testsupport.NewNamespacedIndexer(t, binding),
-					testsupport.NewNamespacedIndexer(t, sa),
-				),
-			}
+			builder := namespaceRBACBuilderFor(meta, rbacCollectIndexer(
+				testsupport.NewNamespacedIndexer(t, role),
+				testsupport.NewNamespacedIndexer(t, binding),
+				testsupport.NewNamespacedIndexer(t, sa),
+			))
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
 			payload := snap.Payload.(NamespaceRBACSnapshot)
@@ -518,13 +516,11 @@ func parityNamespaceQuotasCase(meta ClusterMeta) parityCase {
 				Spec:       policyv1.PodDisruptionBudgetSpec{},
 			}
 
-			builder := &NamespaceQuotasBuilder{
-				collectIndexer: quotasCollectIndexer(
-					testsupport.NewNamespacedIndexer(t, quota),
-					testsupport.NewNamespacedIndexer(t, limit),
-					testsupport.NewNamespacedIndexer(t, pdb),
-				),
-			}
+			builder := namespaceQuotasBuilderFor(meta, quotasCollectIndexer(
+				testsupport.NewNamespacedIndexer(t, quota),
+				testsupport.NewNamespacedIndexer(t, limit),
+				testsupport.NewNamespacedIndexer(t, pdb),
+			))
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
 			payload := snap.Payload.(NamespaceQuotasSnapshot)
@@ -555,9 +551,7 @@ func parityNamespaceStorageCase(meta ClusterMeta) parityCase {
 				},
 			}
 
-			builder := &NamespaceStorageBuilder{
-				collectIndexer: storageCollectIndexer(testsupport.NewNamespacedIndexer(t, pvc)),
-			}
+			builder := namespaceStorageBuilderFor(meta, storageCollectIndexer(testsupport.NewNamespacedIndexer(t, pvc)))
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
 			payload := snap.Payload.(NamespaceStorageSnapshot)
@@ -578,18 +572,16 @@ func parityNamespaceAutoscalingCase(meta ClusterMeta) parityCase {
 		name: "namespace-autoscaling/hpa",
 		run: func(t *testing.T) {
 			minReplicas := int32(2)
-			hpa := &autoscalingv1.HorizontalPodAutoscaler{
+			hpa := &autoscalingv2.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "web-hpa", Namespace: "default"},
-				Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-					ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "web"},
+				Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+					ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "web"},
 					MinReplicas:    &minReplicas,
 					MaxReplicas:    10,
 				},
 			}
 
-			builder := &NamespaceAutoscalingBuilder{
-				collectIndexer: autoscalingCollectIndexer(testsupport.NewNamespacedIndexer(t, hpa)),
-			}
+			builder := namespaceAutoscalingBuilderFor(meta, autoscalingCollectIndexer(testsupport.NewNamespacedIndexer(t, hpa)))
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
 			payload := snap.Payload.(NamespaceAutoscalingSnapshot)
@@ -686,12 +678,10 @@ func parityClusterRBACCase(meta ClusterMeta) parityCase {
 				RoleRef:    rbacv1.RoleRef{Kind: "ClusterRole", Name: "view"},
 			}
 
-			builder := &ClusterRBACBuilder{
-				collectIndexer: clusterRBACCollectIndexer(
-					testsupport.NewClusterIndexer(t, cr),
-					testsupport.NewClusterIndexer(t, crb),
-				),
-			}
+			builder := clusterRBACBuilderFor(meta, clusterRBACCollectIndexer(
+				testsupport.NewClusterIndexer(t, cr),
+				testsupport.NewClusterIndexer(t, crb),
+			))
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
 			require.NoError(t, err)
 			payload := snap.Payload.(ClusterRBACSnapshot)
@@ -722,9 +712,7 @@ func parityClusterStorageCase(meta ClusterMeta) parityCase {
 				},
 			}
 
-			builder := &ClusterStorageBuilder{
-				collectIndexer: clusterStorageCollectIndexer(testsupport.NewClusterIndexer(t, pv)),
-			}
+			builder := clusterStorageBuilderFor(meta, clusterStorageCollectIndexer(testsupport.NewClusterIndexer(t, pv)))
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
 			require.NoError(t, err)
 			payload := snap.Payload.(ClusterStorageSnapshot)
@@ -759,15 +747,13 @@ func parityClusterConfigCase(meta ClusterMeta) parityCase {
 			// GatewayClass is omitted (nil indexer) here; its projector is
 			// exercised by its own unit test and shares the same descriptor
 			// dispatch as the other cluster-config classes.
-			builder := &ClusterConfigBuilder{
-				collectIndexer: clusterConfigCollectIndexer(
-					testsupport.NewClusterIndexer(t, sc),
-					testsupport.NewClusterIndexer(t, ic),
-					nil,
-					testsupport.NewClusterIndexer(t, vwh),
-					testsupport.NewClusterIndexer(t, mwh),
-				),
-			}
+			builder := clusterConfigBuilderFor(meta, clusterConfigCollectIndexer(
+				testsupport.NewClusterIndexer(t, sc),
+				testsupport.NewClusterIndexer(t, ic),
+				nil,
+				testsupport.NewClusterIndexer(t, vwh),
+				testsupport.NewClusterIndexer(t, mwh),
+			))
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
 			require.NoError(t, err)
 			payload := snap.Payload.(ClusterConfigSnapshot)
@@ -805,9 +791,7 @@ func parityClusterCRDCase(meta ClusterMeta) parityCase {
 				},
 			}
 
-			builder := &ClusterCRDBuilder{
-				crdLister: testsupport.NewCRDLister(t, crd),
-			}
+			builder := clusterCRDBuilderFor(meta, clusterCRDCollectIndexer(testsupport.NewClusterIndexer(t, crd)))
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
 			require.NoError(t, err)
 			payload := snap.Payload.(ClusterCRDSnapshot)

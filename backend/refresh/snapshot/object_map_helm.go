@@ -41,10 +41,7 @@ func (b *objectMapBuilder) buildHelmReleaseSnapshot(ctx context.Context, scope s
 	if err != nil {
 		return nil, err
 	}
-	assembler, err := b.newObjectMapAssembler(ctx)
-	if err != nil {
-		return nil, err
-	}
+	assembler := b.newObjectMapAssembler(ctx)
 	graph := assembler.index.buildHelmReleaseGraph(ctx, release.resources, opts.maxNodes)
 	seed := ObjectMapReference{
 		ClusterID:   meta.ClusterID,

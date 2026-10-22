@@ -12,7 +12,7 @@ no subsystem spells out kind names for dispatch.
   entry in `kindregistry.All`.
 - Adding or changing a kind edits only `resources/<kind>/` and that entry. If a
   dispatch path forces you to name a kind elsewhere, fix the generic mechanism.
-- Registry-driven surfaces: object catalog (informer/list/watch),
+- Registry-driven surfaces: object catalog (ingest collection and sinks),
   resource-stream, snapshot stream-summary, object-map (collectors + edges), App
   bindings + generated detail dispatch, and response-cache invalidation.
 - `resourcekind.Identity` is a dependency-free leaf that imports nothing else in
@@ -65,7 +65,7 @@ types, and tests. Any other new occurrence violates this contract.
 - `backend/resourcecontract/builtin_identity_sourcing_test.go`: every table row
   is sourced from a kind's `Identity`, not a restated literal.
 - `backend/refresh/snapshot/registry_drift_test.go`,
-  `backend/objectcatalog/informer_registry_test.go`,
+  `backend/objectcatalog/catalog_source_test.go`,
   `backend/response_cache_invalidation_registry_test.go`: each dispatch surface
   stays registry-driven.
 - Done-test: a grep for any kind name hits only its own package, its

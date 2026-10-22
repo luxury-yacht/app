@@ -10,7 +10,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	eventres "github.com/luxury-yacht/app/backend/resources/events"
-	"github.com/luxury-yacht/app/backend/testsupport"
 	types "k8s.io/apimachinery/pkg/types"
 )
 
@@ -102,14 +101,12 @@ func TestClusterEventsBuilder(t *testing.T) {
 		LastTimestamp: metav1.NewTime(now.Add(-1 * time.Minute)),
 	}
 
-	builder := &ClusterEventsBuilder{
-		eventLister: testsupport.NewEventLister(t, clusterEventNew, clusterEventOld, namespacedEvent),
-	}
+	builder := clusterEventsBuilderFor(t, ClusterMeta{}, clusterEventNew, clusterEventOld, namespacedEvent)
 
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
 	require.Equal(t, clusterEventsDomainName, snapshot.Domain)
-	require.Equal(t, uint64(20), snapshot.Version)
+	require.NotZero(t, snapshot.Version, "the snapshot carries the store's refetch identity")
 
 	payload, ok := snapshot.Payload.(ClusterEventsSnapshot)
 	require.True(t, ok)
@@ -171,9 +168,7 @@ func TestClusterEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 		LastTimestamp: timestamp,
 	}
 
-	builder := &ClusterEventsBuilder{
-		eventLister: testsupport.NewEventLister(t, lowRV, highRV),
-	}
+	builder := clusterEventsBuilderFor(t, ClusterMeta{}, lowRV, highRV)
 
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
@@ -185,15 +180,12 @@ func TestClusterEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 	require.Equal(t, "event-low-rv", payload.Rows[1].Ref.Name)
 }
 
-// An unsynced events informer lists empty with no error (client-go semantics),
-// which would publish a confident "zero events" page during the post-connect
-// sync window. The builder must wait for the sync (bounded by the request
+// An events store that has not applied its initial list is empty, which would
+// publish a confident "zero events" page during the post-connect sync window. The builder must wait for the sync (bounded by the request
 // context) and report an error if it cannot — never an exact-empty snapshot.
 func TestClusterEventsBuilderWaitsForCacheSync(t *testing.T) {
-	builder := &ClusterEventsBuilder{
-		eventLister:  testsupport.NewEventLister(t),
-		eventsSynced: func() bool { return false },
-	}
+	builder := clusterEventsBuilderFor(t, ClusterMeta{})
+	builder.eventsSynced = func() bool { return false }
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()

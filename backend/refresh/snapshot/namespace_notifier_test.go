@@ -11,8 +11,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
@@ -353,18 +351,17 @@ func TestNamespaceNotifierSkipsQuotaRollupWhenQuotaStateIsClean(t *testing.T) {
 func TestNamespaceNotifierBroadcastsOnlyWhenWarningEventRollupChanges(t *testing.T) {
 	ingest := &fakeNamespaceIngest{}
 	ingest.set(true)
-	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	events := newEventStore(t, ClusterMeta{})
 	recorder := &broadcastRecorder{}
 	notifier := newNotifierForTest(ingest, recorder)
-	notifier.eventLister = corelisters.NewEventLister(indexer)
+	notifier.events = events
 	notifier.eventsExpected = true
-	notifier.eventsSynced = func() bool { return true }
 	defer notifier.stopForTest()
 
 	notifier.EventChanged()
 	waitForBroadcasts(t, recorder, 1)
 
-	require.NoError(t, indexer.Add(&corev1.Event{
+	require.NoError(t, events.store.Add(&corev1.Event{
 		ObjectMeta:     metav1.ObjectMeta{Name: "warning", Namespace: "team-a"},
 		InvolvedObject: corev1.ObjectReference{Namespace: "team-a"},
 		Type:           corev1.EventTypeWarning,
@@ -373,7 +370,7 @@ func TestNamespaceNotifierBroadcastsOnlyWhenWarningEventRollupChanges(t *testing
 	waitForBroadcasts(t, recorder, 2)
 	require.Contains(t, recorder.lastReason(), "warning event count changed")
 
-	require.NoError(t, indexer.Add(&corev1.Event{
+	require.NoError(t, events.store.Add(&corev1.Event{
 		ObjectMeta:     metav1.ObjectMeta{Name: "normal", Namespace: "team-a"},
 		InvolvedObject: corev1.ObjectReference{Namespace: "team-a"},
 		Type:           corev1.EventTypeNormal,
@@ -418,24 +415,14 @@ func TestNamespaceNotifierSignalsTrackerReadinessFlip(t *testing.T) {
 	waitForBroadcasts(t, recorder, 2)
 }
 
-// Informer resyncs re-deliver every object with an UNCHANGED ResourceVersion;
-// treating them as real updates broadcast a doorbell every resync period
-// (observed live: a metronome of doorbells every 15s per cluster).
-func TestNamespaceUpdateIsEchoSkipsResyncDeliveries(t *testing.T) {
-	older := &corev1.Namespace{}
-	older.Name = "team-a"
-	older.ResourceVersion = "100"
-	same := &corev1.Namespace{}
-	same.Name = "team-a"
-	same.ResourceVersion = "100"
-	newer := &corev1.Namespace{}
-	newer.Name = "team-a"
-	newer.ResourceVersion = "101"
-
-	require.True(t, InformerUpdateIsEcho(older, same), "same ResourceVersion is a resync echo")
-	require.False(t, InformerUpdateIsEcho(older, newer), "advanced ResourceVersion is a real update")
-	require.False(t, InformerUpdateIsEcho(nil, newer), "unrecognized old object must not suppress")
-	require.False(t, InformerUpdateIsEcho(older, nil), "unrecognized new object must not suppress")
+// A re-delivered row with an UNCHANGED resourceVersion is an echo, not a change;
+// treating echoes as changes rang a doorbell for every object on every replay
+// (observed live: a metronome of doorbells every 15s per cluster). An unknown
+// old version must never suppress a change.
+func TestResourceVersionUnchangedRecognizesOnlyEchoes(t *testing.T) {
+	require.True(t, ResourceVersionUnchanged("100", "100"), "same resourceVersion is an echo")
+	require.False(t, ResourceVersionUnchanged("100", "101"), "advanced resourceVersion is a real update")
+	require.False(t, ResourceVersionUnchanged("", "101"), "an unknown old version must not suppress")
 }
 
 // While the workload stores are SETTLING (tracker not ready) the presence

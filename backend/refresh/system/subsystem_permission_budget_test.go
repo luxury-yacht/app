@@ -65,7 +65,7 @@ func TestSlowButHealthyPermissionReviewsStillBuildSubsystem(t *testing.T) {
 			DynamicClient:       dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
 			Logger:              applog.Noop, ObjectDetailsProvider: noopObjectDetailProvider{},
 			NodeMaintenanceStore: nodemaintenance.NewStore(5),
-			ResyncInterval:       time.Minute, MetricsInterval: time.Minute,
+			MetricsInterval:      time.Minute,
 		})
 		elapsed := time.Since(start)
 
@@ -74,7 +74,6 @@ func TestSlowButHealthyPermissionReviewsStillBuildSubsystem(t *testing.T) {
 		t.Cleanup(func() {
 			subsystem.ResourceStream.Stop()
 			subsystem.IngestManager.Stop()
-			_ = subsystem.InformerFactory.Shutdown()
 		})
 		require.Greater(t, elapsed, config.PermissionPreflightTimeout,
 			"the scenario must exceed the preflight budget to prove it bounds only priming")

@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,20 +47,25 @@ func TestSubsystemOwnsOneBelowThresholdCustomResourceWatch(t *testing.T) {
 		review.Status.Allowed = attrs.Resource == "customresourcedefinitions" || attrs.Resource == "widgets"
 		return true, review, nil
 	})
-	subsystem, err := NewSubsystemWithServices(context.Background(), Config{KubernetesClient: kube, APIExtensionsClient: apiextensionsfake.NewClientset(crd), DynamicClient: dyn, ClusterID: "test-cluster", Logger: applog.Noop, ObjectDetailsProvider: noopObjectDetailProvider{}, NodeMaintenanceStore: nodemaintenance.NewStore(5), ResyncInterval: time.Minute})
+	// The subsystem's reflectors run against an API server holding the CRD; the
+	// catalog's discovery and access reviews use the fake client.
+	server := newReflectorAPIServer(t)
+	server.Allow(func(attrs authorizationv1.ResourceAttributes) bool {
+		return attrs.Resource == "customresourcedefinitions" || attrs.Resource == "widgets"
+	})
+	server.Create(t, crd)
+	subsystem, err := NewSubsystemWithServices(context.Background(), Config{KubernetesClient: server.Client(t), APIExtensionsClient: server.APIExtensionsClient(t), DynamicClient: dyn, ClusterID: "test-cluster", Logger: applog.Noop, ObjectDetailsProvider: noopObjectDetailProvider{}, NodeMaintenanceStore: nodemaintenance.NewStore(5)})
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(func() {
 		cancel()
 		subsystem.ResourceStream.Stop()
 		subsystem.IngestManager.Stop()
-		_ = subsystem.InformerFactory.Shutdown()
 	})
 	subsystem.IngestManager.Start(ctx)
-	require.NoError(t, subsystem.InformerFactory.Start(ctx))
 	catalog := objectcatalog.NewService(objectcatalog.Dependencies{
 		ClusterID: "test-cluster", Common: common.Dependencies{KubernetesClient: kube, DynamicClient: dyn},
-		IngestSource: subsystem.IngestManager, APIExtensionsInformerFactory: subsystem.InformerFactory.APIExtensionsInformerFactory(),
+		IngestSource: subsystem.IngestManager,
 	}, nil)
 	catalogDone := make(chan error, 1)
 	go func() { catalogDone <- catalog.Run(ctx) }()

@@ -3,12 +3,12 @@ package ingest
 import (
 	"context"
 	"fmt"
-	"net/http/httptest"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/refresh/ingest/ingesttest"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -250,11 +250,9 @@ func TestProjectingStoreReplaceUsesBulkSinkWhenAvailable(t *testing.T) {
 // half live as the reflector syncs. This is exactly how the quotas cutover wires a
 // maintained store + the catalog onto one ingestion.
 func TestIngestManagerBuildsBundleAndFeedsSink(t *testing.T) {
-	server := newTrackerAPIServer(t)
-	server.add(t, newCM("default", "seed-cm"), configMapGVK)
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	kube := newKubeClientFor(t, httpSrv)
+	server := ingesttest.NewAPIServer(t)
+	server.Create(t, newCM("default", "seed-cm"))
+	kube := server.Client(t)
 
 	mgr := NewIngestManager(testMeta, kube, nil, nil)
 
@@ -421,11 +419,9 @@ type objectMapRow struct {
 // registered object-map projector makes ObjectMapRows populate alongside TableRows
 // from one reflector ingestion — exactly how the quotas cutover feeds the object map.
 func TestIngestManagerBuildsObjectMapHalf(t *testing.T) {
-	server := newTrackerAPIServer(t)
-	server.add(t, newCM("default", "seed-cm"), configMapGVK)
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	kube := newKubeClientFor(t, httpSrv)
+	server := ingesttest.NewAPIServer(t)
+	server.Create(t, newCM("default", "seed-cm"))
+	kube := server.Client(t)
 
 	mgr := NewIngestManager(testMeta, kube, nil, nil)
 	if ok := mgr.RegisterObjectMapProjector(configMapGVR, func(o metav1.Object) interface{} {

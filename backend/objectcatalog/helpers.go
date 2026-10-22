@@ -39,15 +39,6 @@ func cloneKindSet(src map[string]bool) map[string]bool {
 	return copySet
 }
 
-// toMetaObjects converts a slice of typed objects to a slice of metav1.Object.
-func toMetaObjects[T metav1.Object](items []T) []metav1.Object {
-	result := make([]metav1.Object, len(items))
-	for i, item := range items {
-		result[i] = item
-	}
-	return result
-}
-
 // listTargets returns the target namespaces for a descriptor.
 func listTargets(desc Descriptor, namespaces []string) []string {
 	if desc.Namespaced {

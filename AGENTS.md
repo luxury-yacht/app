@@ -74,9 +74,9 @@ source contract is unclear.
 - Reuse existing selectors, helpers, hooks, services, classes, and boundaries.
 - Add plain-language comments only where logic is not self-evident.
 - The object catalog owns object existence, discovery, GVK/GVR identity,
-  Browse, namespace metadata, and cluster listings. The informer-backed,
-  permission-gated `namespaces` refresh domain owns namespace LIST rows; list
-  denial fails explicitly and there is no catalog-inference fallback.
+  Browse, namespace metadata, and cluster listings. The ingest-backed (owned
+  reflector), permission-gated `namespaces` refresh domain owns namespace LIST
+  rows; list denial fails explicitly and there is no catalog-inference fallback.
 - Run repository tools through `mise exec --` when Mise is not already active.
 
 ## Validation

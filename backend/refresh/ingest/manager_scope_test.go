@@ -2,9 +2,9 @@ package ingest
 
 import (
 	"context"
-	"net/http/httptest"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/refresh/ingest/ingesttest"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -17,14 +17,12 @@ var clusterRoleGVR = schema.GroupVersionResource{Group: "rbac.authorization.k8s.
 // exactly the scope's objects.
 
 func TestScopedIngestManagerFansReflectorsPerNamespace(t *testing.T) {
-	server := newTrackerAPIServer(t)
-	server.add(t, newCM("prod", "in-prod"), configMapGVK)
-	server.add(t, newCM("dev", "in-dev"), configMapGVK)
-	server.add(t, newCM("other", "outside-scope"), configMapGVK)
+	server := ingesttest.NewAPIServer(t)
+	server.Create(t, newCM("prod", "in-prod"))
+	server.Create(t, newCM("dev", "in-dev"))
+	server.Create(t, newCM("other", "outside-scope"))
 
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	kube := newKubeClientFor(t, httpSrv)
+	kube := server.Client(t)
 
 	mgr := NewIngestManager(testMeta, kube, nil, nil, "prod", "dev")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -40,10 +38,8 @@ func TestScopedIngestManagerFansReflectorsPerNamespace(t *testing.T) {
 }
 
 func TestScopedIngestPartitionNamespaces(t *testing.T) {
-	server := newTrackerAPIServer(t)
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	kube := newKubeClientFor(t, httpSrv)
+	server := ingesttest.NewAPIServer(t)
+	kube := server.Client(t)
 
 	mgr := NewIngestManager(testMeta, kube, nil, nil, "prod", "dev")
 
@@ -58,13 +54,11 @@ func TestScopedIngestPartitionNamespaces(t *testing.T) {
 }
 
 func TestScopedIngestPermissionSkipsOnlyDeniedNamespaces(t *testing.T) {
-	server := newTrackerAPIServer(t)
-	server.add(t, newCM("prod", "in-prod"), configMapGVK)
-	server.add(t, newCM("dev", "in-dev"), configMapGVK)
+	server := ingesttest.NewAPIServer(t)
+	server.Create(t, newCM("prod", "in-prod"))
+	server.Create(t, newCM("dev", "in-dev"))
 
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	kube := newKubeClientFor(t, httpSrv)
+	kube := server.Client(t)
 
 	mgr := NewIngestManager(testMeta, kube, nil, nil, "prod", "dev")
 	mgr.SetPermissionFilter(func(_, _, namespace string) bool {

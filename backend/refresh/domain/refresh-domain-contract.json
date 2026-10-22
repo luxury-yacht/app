@@ -528,7 +528,7 @@
         "relatedResources": [
           {"group": "", "version": "v1", "kind": "Pod", "resource": "pods"},
           {"group": "apps", "version": "v1", "kind": "ReplicaSet", "resource": "replicasets"},
-          {"group": "autoscaling", "version": "v1", "kind": "HorizontalPodAutoscaler", "resource": "horizontalpodautoscalers"}
+          {"group": "autoscaling", "version": "v2", "kind": "HorizontalPodAutoscaler", "resource": "horizontalpodautoscalers"}
         ]
       },
       "namespace-config": {
@@ -580,7 +580,7 @@
       },
       "namespace-autoscaling": {
         "completeIsScopeLevel": true,
-        "primaryResources": [{"group": "autoscaling", "version": "v1", "kind": "HorizontalPodAutoscaler", "resource": "horizontalpodautoscalers"}],
+        "primaryResources": [{"group": "autoscaling", "version": "v2", "kind": "HorizontalPodAutoscaler", "resource": "horizontalpodautoscalers"}],
         "relatedResources": []
       },
       "namespace-quotas": {

@@ -74,20 +74,14 @@ type ObjectActions struct {
 	Aliases []string
 }
 
-// CatalogSource names how the object catalog lists a kind's objects.
+// CatalogSource names how the object catalog lists a kind's objects that no
+// owned reflector ingests.
 type CatalogSource int
 
 const (
-	// CatalogDynamic lists the kind via the dynamic client (no shared informer in
-	// the catalog's collection plan). This is the default for kinds with no
-	// dedicated informer wired into the catalog.
+	// CatalogDynamic collects the kind from its owned reflector's store. It is
+	// the default.
 	CatalogDynamic CatalogSource = iota
-	// CatalogShared lists the kind from the core shared informer factory.
-	CatalogShared
-	// CatalogGateway lists the kind from the Gateway-API informer factory.
-	CatalogGateway
-	// CatalogAPIExtensions lists the kind from the apiextensions informer factory.
-	CatalogAPIExtensions
 	// CatalogNone excludes a built-in kind from object-catalog collection. The
 	// kind can still participate in other descriptor-driven subsystems.
 	CatalogNone
@@ -100,42 +94,29 @@ const (
 // subsystems each read only the facets they care about.
 type Descriptor struct {
 	// Identity is the kind's canonical group/version/kind/resource. It is the
-	// single source of identity; subsystems key informers and listers off it.
+	// single source of identity; subsystems key reflectors and stores off it.
 	Identity resourcekind.Identity
 
-	// CatalogSource tells the object catalog which informer factory (or the dynamic
-	// client) backs this kind's list/watch, or excludes it with CatalogNone.
+	// CatalogSource tells the object catalog whether it collects the kind, or
+	// excludes it with CatalogNone.
 	CatalogSource CatalogSource
 
-	// DetailCacheable marks kinds whose informer drives response-cache eviction of
-	// cached detail/YAML/Helm responses. The factory is implied by the kind's group.
+	// DetailCacheable marks kinds whose cached detail/YAML responses the gateway
+	// keeps; the kind's reflector evicts them on change.
 	DetailCacheable bool
 
 	// DetailListsPods marks kinds whose cached details embed their pods, so a
 	// pod change in the namespace evicts them.
 	DetailListsPods bool
 
-	// IngestOwned marks a kind cut over to the owned-reflector ingestion path: its
-	// objects are projected at intake by an ingest reflector and the shared informer
-	// factory no longer caches it as a typed object. Every subsystem that would
-	// otherwise read this kind from the shared informer (the typed-table maintained
-	// store, the object catalog, the object map, the response-cache invalidator)
-	// instead reads the ingest projections. Adding the next domain to the ingest path
-	// is flipping this facet on its kinds — the consumers are already generic over it.
-	IngestOwned bool
-
 	// Stream is the directly-streamed-table descriptor; nil when the kind is not
 	// streamed via the generic descriptor dispatch (it streams via a bespoke path
 	// or not at all).
 	Stream *streamspec.Descriptor
 
-	// Collector projects this kind into the object map from the shared informer
-	// cache; nil when the kind has no shared-informer object-map node.
+	// Collector projects this kind into an object-map node; nil when the kind
+	// has no object-map node.
 	Collector *objectmapnode.Collector
-
-	// GatewayCollector projects a Gateway-API kind into the object map via the
-	// Gateway client; nil for non-Gateway kinds.
-	GatewayCollector *objectmapnode.GatewayCollector
 
 	// Edges builds this kind's object-map relationship edges; nil when the kind
 	// contributes no edges.

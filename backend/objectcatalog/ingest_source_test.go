@@ -11,10 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/kindspec"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/events"
 )
 
 // replayIngestSource mirrors ProjectingStore.AddCatalogSink: registering a sink
@@ -48,7 +52,7 @@ func (r replayIngestSource) Tracks(schema.GroupVersionResource) bool       { ret
 // cache rebuild + broadcast happens exactly ONCE for the whole registration loop —
 // not once per kind, right in the startup window when the app is busiest.
 func TestRegisterIngestCatalogSinksRebuildsCacheOnce(t *testing.T) {
-	rows := make(map[schema.GroupVersionResource][]interface{}, len(catalogIngestOwnedGVRs))
+	rows := make(map[schema.GroupVersionResource][]interface{}, len(catalogIngestGVRs))
 	source := replayIngestSource{rows: rows}
 	svc := NewService(Dependencies{IngestSource: source}, nil)
 
@@ -56,7 +60,7 @@ func TestRegisterIngestCatalogSinksRebuildsCacheOnce(t *testing.T) {
 	// replay resolves and applies (an unresolvable kind would skip its rebuild and
 	// mask the per-kind cost this test pins).
 	svc.mu.Lock()
-	for gvr := range catalogIngestOwnedGVRs {
+	for gvr := range catalogIngestGVRs {
 		desc := Descriptor{
 			Kind:     gvr.Resource, // any stable non-empty kind; matching matters, not naming
 			Group:    gvr.Group,
@@ -74,13 +78,13 @@ func TestRegisterIngestCatalogSinksRebuildsCacheOnce(t *testing.T) {
 
 	if rebuilds != 1 {
 		t.Fatalf("sink registration must rebuild the published cache exactly once, got %d rebuilds for %d kinds",
-			rebuilds, len(catalogIngestOwnedGVRs))
+			rebuilds, len(catalogIngestGVRs))
 	}
 
 	// Every kind's replayed row must still be present after the single rebuild.
 	svc.mu.RLock()
 	defer svc.mu.RUnlock()
-	for gvr := range catalogIngestOwnedGVRs {
+	for gvr := range catalogIngestGVRs {
 		found := false
 		for _, item := range svc.catalogIndex.items {
 			if item.Ref.Resource == gvr.Resource && item.Ref.Group == gvr.Group {
@@ -199,6 +203,39 @@ func (source replayIngestSource) SubscribeCatalogSink(gvr schema.GroupVersionRes
 	return func() {}
 }
 
+func (replayIngestSource) SubscribeBundleSink(schema.GroupVersionResource, ingest.BundleSink) func() {
+	return func() {}
+}
+
 func (replayIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
 	return nil
+}
+
+// subscriptionRecordingSource records which kinds the catalog subscribes to.
+type subscriptionRecordingSource struct {
+	replayIngestSource
+	subscribed map[schema.GroupVersionResource]bool
+}
+
+func (source subscriptionRecordingSource) SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func() {
+	source.subscribed[gvr] = true
+	return source.replayIngestSource.SubscribeCatalogSink(gvr, sink)
+}
+
+// The catalog subscribes to the ingest rows of every kind it collects, and to
+// no kind it excludes: Events are fed by an owned reflector but are not
+// catalog objects, and their row volume must not reach the catalog's sink.
+func TestCatalogSubscribesToTheIngestRowsOfCollectedKindsOnly(t *testing.T) {
+	source := subscriptionRecordingSource{subscribed: map[schema.GroupVersionResource]bool{}}
+	svc := NewService(Dependencies{IngestSource: source}, nil)
+	svc.registerIngestCatalogSinks()
+
+	want := map[schema.GroupVersionResource]bool{}
+	for _, descriptor := range kindregistry.All {
+		if descriptor.CatalogSource != kindspec.CatalogNone {
+			want[descriptor.Identity.GVR()] = true
+		}
+	}
+	require.Equal(t, want, source.subscribed)
+	require.NotContains(t, source.subscribed, events.Identity.GVR())
 }

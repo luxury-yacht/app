@@ -2,28 +2,20 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"sort"
-	"strings"
-
-	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
-	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
-	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/doorbell"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/hpa"
 )
+
+// HPAGVR is the GVR the HorizontalPodAutoscaler ingest store is registered under.
+var HPAGVR = hpa.Identity.GVR()
 
 const (
 	namespaceAutoscalingDomainName       = "namespace-autoscaling"
@@ -33,7 +25,7 @@ const (
 // NamespaceAutoscalingBuilder constructs HPA summaries via the shared typed-table
 // domain skeleton (typed_table_domain.go).
 type NamespaceAutoscalingBuilder struct {
-	collectIndexer func(streamspec.Descriptor) cache.Indexer
+	available kindAvailability
 	// maintained, when set, is an informer-fed store the builder serves rows from
 	// instead of listing + re-projecting per request. nil falls back to the list path.
 	maintained *typedMaintainedStore[AutoscalingSummary]
@@ -74,48 +66,27 @@ func namespaceAutoscalingDomainSpec() typedTableDomainSpec[AutoscalingSummary] {
 		scopeRequiredErr: errNamespaceAutoscalingScopeRequired,
 		entryLimit:       config.SnapshotNamespaceAutoscalingEntryLimit,
 		description:      "autoscaling resources",
-		listErrorPrefix:  "namespace autoscaling: failed to list hpas",
 		adapter:          autoscalingTableQueryAdapter(),
 		schema:           autoscalingQuerypageSchema(),
 		capabilities:     namespaceAutoscalingQueryCapabilities(),
 		sortRows:         sortAutoscalingSummaries,
-		derived:          hpaWorkloadChanges,
+		payload: func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []AutoscalingSummary) any {
+			return NamespaceAutoscalingSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
+		},
+		derived: rowDerivation[AutoscalingSummary]{changes: hpaWorkloadChanges, domains: []string{namespaceWorkloadsDomainName}},
 	}
 }
 
-// hpaWorkloadChanges rings the namespace's workload rows when an HPA targets a
-// workload: the workloads table joins each row's HPA from the lister at serve
-// (namespace_workloads.go), so the HPA change can change its target's row.
-func hpaWorkloadChanges(obj metav1.Object) []doorbell.Change {
-	hpaObject, ok := obj.(*autoscalingv1.HorizontalPodAutoscaler)
-	if !ok || !hpaTargetsWorkload(hpaObject.Spec.ScaleTargetRef) {
-		return nil
-	}
+// hpaWorkloadChanges rings the namespace's workload rows for an HPA change: the
+// workloads table joins each row's HPA at serve, so the change can flip a
+// workload's "HPA managed" flag. HPAs are few, so every change rings rather
+// than parsing the row's display target.
+func hpaWorkloadChanges(row AutoscalingSummary) []doorbell.Change {
 	return []doorbell.Change{{
-		Domain:          namespaceWorkloadsDomainName,
-		Source:          doorbell.SourceObject,
-		Target:          doorbell.Scopes(namespaceDoorbellScopes(hpaObject.Namespace)...),
-		ResourceVersion: hpaObject.ResourceVersion,
+		Domain: namespaceWorkloadsDomainName,
+		Source: doorbell.SourceObject,
+		Target: doorbell.Scopes(namespaceDoorbellScopes(row.Ref.Namespace)...),
 	}}
-}
-
-// hpaTargetsWorkload reports whether the scale target is a kind the workloads
-// table lists.
-func hpaTargetsWorkload(ref autoscalingv1.CrossVersionObjectReference) bool {
-	gvk := schema.FromAPIVersionAndKind(ref.APIVersion, ref.Kind)
-	if strings.TrimSpace(ref.Name) == "" {
-		return false
-	}
-	switch gvk.GroupVersion() {
-	case appsv1.SchemeGroupVersion:
-		return gvk.Kind == "Deployment" || gvk.Kind == "StatefulSet" || gvk.Kind == "DaemonSet"
-	case batchv1.SchemeGroupVersion:
-		return gvk.Kind == "Job" || gvk.Kind == "CronJob"
-	case corev1.SchemeGroupVersion:
-		return gvk.Kind == "Pod"
-	default:
-		return false
-	}
 }
 
 func sortAutoscalingSummaries(resources []AutoscalingSummary) {
@@ -130,26 +101,20 @@ func sortAutoscalingSummaries(resources []AutoscalingSummary) {
 // RegisterNamespaceAutoscalingDomain registers the autoscaling domain.
 func RegisterNamespaceAutoscalingDomain(
 	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
 	clusterMeta ClusterMeta,
+	ingestManager *ingest.IngestManager,
 	bell doorbell.Bell,
 ) error {
-	if factory == nil {
-		return fmt.Errorf("shared informer factory is nil")
-	}
-	// namespace-autoscaling has no IngestOwned kinds (HPA stays a typed informer, not
-	// cut), so the ingest manager is nil here — the cut-kind availability branch is never
-	// taken and the ingest feed is a no-op.
-	collectIndexer := unconditionalSharedIndexers(factory, namespaceAutoscalingDomainName, nil)
+	available := unconditionalIngestAvailability(namespaceAutoscalingDomainName, ingestManager)
 	maintained, err := newRegisteredTypedTableStore(reg, namespaceAutoscalingDomainSpec(), clusterMeta,
-		typedTableStoreInputs{indexers: collectIndexer, shared: factory}, bell)
+		ingestManager, bell)
 	if err != nil {
 		return err
 	}
 
 	builder := &NamespaceAutoscalingBuilder{
-		collectIndexer: collectIndexer,
-		maintained:     maintained,
+		available:  available,
+		maintained: maintained,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceAutoscalingDomainName,
@@ -159,8 +124,5 @@ func RegisterNamespaceAutoscalingDomain(
 
 // Build assembles HPA summaries for a namespace.
 func (b *NamespaceAutoscalingBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	return buildTypedTableSnapshot(ctx, scope, namespaceAutoscalingDomainSpec(), b.collectIndexer, b.maintained,
-		func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []AutoscalingSummary) any {
-			return NamespaceAutoscalingSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
-		})
+	return buildTypedTableSnapshot(ctx, scope, namespaceAutoscalingDomainSpec(), b.available, b.maintained)
 }

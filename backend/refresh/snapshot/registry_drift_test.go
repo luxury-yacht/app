@@ -68,19 +68,13 @@ func registryKinds(pred func(kindspec.Descriptor) bool) []string {
 
 func TestObjectMapCollectorKindsDoNotDrift(t *testing.T) {
 	assertKindSet(t, "object-map collectors", []string{
-		"ClusterRole", "ClusterRoleBinding", "ConfigMap", "CronJob", "DaemonSet",
-		"Deployment", "EndpointSlice", "HorizontalPodAutoscaler", "Ingress", "IngressClass", "Job",
+		"BackendTLSPolicy", "ClusterRole", "ClusterRoleBinding", "ConfigMap", "CronJob", "DaemonSet",
+		"Deployment", "EndpointSlice", "GRPCRoute", "Gateway", "GatewayClass", "HTTPRoute",
+		"HorizontalPodAutoscaler", "Ingress", "IngressClass", "Job", "ListenerSet",
 		"NetworkPolicy", "Node", "PersistentVolume", "PersistentVolumeClaim", "Pod",
-		"PodDisruptionBudget", "ReplicaSet", "Role", "RoleBinding", "Secret", "Service", "ServiceAccount",
-		"StatefulSet", "StorageClass",
+		"PodDisruptionBudget", "ReferenceGrant", "ReplicaSet", "Role", "RoleBinding", "Secret", "Service", "ServiceAccount",
+		"StatefulSet", "StorageClass", "TLSRoute",
 	}, registryKinds(func(d kindspec.Descriptor) bool { return d.Collector != nil }))
-}
-
-func TestObjectMapGatewayCollectorKindsDoNotDrift(t *testing.T) {
-	assertKindSet(t, "object-map gateway collectors", []string{
-		"BackendTLSPolicy", "GRPCRoute", "Gateway", "GatewayClass", "HTTPRoute",
-		"ListenerSet", "ReferenceGrant", "TLSRoute",
-	}, registryKinds(func(d kindspec.Descriptor) bool { return d.GatewayCollector != nil }))
 }
 
 func TestObjectMapEdgeKindsDoNotDrift(t *testing.T) {
@@ -107,6 +101,7 @@ func TestStreamSummaryDomainKindsDoNotDrift(t *testing.T) {
 	// intentionally outside the registry-derived domain set guarded here.
 	want := map[string][]string{
 		"cluster-config":        {"GatewayClass", "IngressClass", "MutatingWebhookConfiguration", "StorageClass", "ValidatingWebhookConfiguration"},
+		"cluster-crds":          {"CustomResourceDefinition"},
 		"cluster-rbac":          {"ClusterRole", "ClusterRoleBinding"},
 		"cluster-storage":       {"PersistentVolume"},
 		"namespace-autoscaling": {"HorizontalPodAutoscaler"},

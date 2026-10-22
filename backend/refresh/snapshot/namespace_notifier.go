@@ -6,9 +6,6 @@ import (
 	"sync"
 	"time"
 
-	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
-
 	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 )
 
@@ -28,29 +25,28 @@ const namespaceNotifierNotReadySettleInterval = 2 * time.Second
 // snapshot into a doorbell broadcast, replacing the frontend's 2s poll:
 //
 //   - a Namespace object add/update/delete broadcasts unconditionally (the rows
-//     come solely from the namespace informer);
+//     come solely from the namespace store);
 //   - workload/pod ingest events broadcast ONLY when the workload-presence or health-rollup
 //     signature changes (the exact signature the snapshot stamps as its "workloads" source
 //     clock), so steady pod churn stays silent;
-//   - Events informer mutations broadcast ONLY when the per-namespace Warning
+//   - events-store changes broadcast ONLY when the per-namespace Warning
 //     count or its availability state changes, so Normal-event churn stays silent;
 //   - while the workload tracker is not ready, the notifier re-arms itself so
 //     pending→degraded→ready edges broadcast even with no further ingest event.
 //     Idle ticks inspect only readiness; they do not re-walk workload rows. It
-//     also re-arms while an expected Events informer is warming, so an empty
+//     also re-arms while an expected events store is warming, so an empty
 //     synced cache becomes an authoritative zero. The re-arm stops once every
 //     expected signal source is ready.
 //
-// Inputs may fire from informer/reflector goroutines. The flush is a generation
+// Inputs may fire from reflector goroutines. The flush is a generation
 // callback of the cluster's doorbell, so stopping the generation cancels a
 // pending flush and waits for a running one.
 type NamespaceChangeNotifier struct {
 	ingest  namespacePodIngestSource
 	tracker *NamespaceWorkloadTracker
 
-	eventLister    corelisters.EventLister
+	events         eventStore
 	eventsExpected bool
-	eventsSynced   cache.InformerSynced
 
 	bell doorbell.Bell
 	// afterRing runs after each namespaces ring (the cluster-Ready self-build).
@@ -131,7 +127,7 @@ func (n *NamespaceChangeNotifier) WorkloadChanged() {
 	n.arm()
 }
 
-// EventChanged records an Events informer mutation that might change a
+// EventChanged records an events-store change that might change a
 // namespace's warning-event count. The flush compares the aggregate signature,
 // so Normal-event churn does not refetch the namespace list.
 func (n *NamespaceChangeNotifier) EventChanged() {
@@ -262,14 +258,14 @@ func workloadFlushReason(hadSignature bool, readiness NamespaceWorkloadReadiness
 }
 
 func (n *NamespaceChangeNotifier) eventFlushReasons(eventDirty bool) ([]string, bool) {
-	eventReady := !n.eventsExpected || (n.eventsSynced != nil && n.eventsSynced())
+	eventReady := !n.eventsExpected || eventsStoreSynced(n.events)
 	n.mu.Lock()
 	needEventSignature := eventDirty || !n.eventSignatureKnown || (n.eventsExpected && !n.lastEventReady)
 	n.mu.Unlock()
 	if !needEventSignature {
 		return nil, eventReady
 	}
-	counts, state := namespaceWarningEventRollups(n.eventLister, n.eventsExpected, n.eventsSynced)
+	counts, state := namespaceWarningEventRollups(n.events, n.eventsExpected)
 	signature := warningEventRollupSignature(counts, state)
 	n.mu.Lock()
 	defer n.mu.Unlock()

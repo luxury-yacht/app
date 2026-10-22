@@ -8,69 +8,98 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 )
 
-// The attention index rings its doorbell on the resource stream after it
-// applies a change, and the ring invalidates the cached Attention snapshot
-// first, so the refetch it triggers never replays the pre-change page.
-func TestClusterAttentionDoorbellInvalidatesCacheBeforeBroadcast(t *testing.T) {
-	meta := snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}
-	registry := domain.New()
-	builds := 0
-	require.NoError(t, registry.Register(refresh.DomainConfig{
-		Name: "cluster-attention",
-		BuildSnapshot: func(_ context.Context, scope string) (*refresh.Snapshot, error) {
-			builds++
-			return &refresh.Snapshot{Domain: "cluster-attention", Scope: scope, Payload: builds}, nil
-		},
-	}))
-	service := snapshot.NewServiceWithPermissions(registry, nil, snapshot.ClusterMeta{ClusterID: "c1"}, nil)
-	manager := resourcestream.NewManager(nil, nil, meta, service.InvalidateDomainCache)
-	t.Cleanup(manager.Stop)
-	selector, err := resourcestream.ParseStreamSelector("c1", "cluster-attention", "")
+func attentionRefNames(t *testing.T, h *reflectorHarness) []string {
+	t.Helper()
+	snap, err := h.subsystem.SnapshotService.Build(context.Background(), "cluster-attention", "c1|")
 	require.NoError(t, err)
-	subscription, err := manager.SubscribeSelector(selector)
-	require.NoError(t, err)
-	_, err = service.Build(context.Background(), "cluster-attention", "c1|")
-	require.NoError(t, err)
-	_, err = service.Build(context.Background(), "cluster-attention", "c1|")
-	require.NoError(t, err)
-	require.Equal(t, 1, builds)
+	payload, ok := snap.Payload.(snapshot.ClusterAttentionSnapshot)
+	require.True(t, ok, "payload %T", snap.Payload)
+	names := make([]string, 0, len(payload.Rows))
+	for _, row := range payload.Rows {
+		names = append(names, row.Ref.Kind+"/"+row.Ref.Name)
+	}
+	return names
+}
 
-	client := fake.NewClientset()
-	factory := informers.NewSharedInformerFactory(client, 0)
-	_, err = snapshot.RegisterClusterAttentionDomain(domain.New(), factory,
-		snapshot.ClusterAttentionPermissions{IncludeEvents: true}, meta, nil, snapshot.ClusterAttentionOptions{}, manager)
-	require.NoError(t, err)
-	stop := make(chan struct{})
-	t.Cleanup(func() { close(stop) })
-	factory.Start(stop)
-	factory.WaitForCacheSync(stop)
+// A Warning Event becomes an Attention finding through the events store. The
+// index rings its doorbell after it applies the change, and the ring
+// invalidates the cached Attention page first, so the refetch serves the
+// finding; deleting the Event clears it the same way.
+func TestClusterAttentionDoorbellServesEventFindingsFromTheEventsStore(t *testing.T) {
+	server := newReflectorAPIServer(t)
+	h := newReflectorHarness(t, server, "")
+	sub := h.subscribe(t, "cluster-attention", "")
+	require.Empty(t, attentionRefNames(t, h), "prime the cache")
 
-	_, err = client.CoreV1().Events("default").Create(context.Background(), &corev1.Event{
-		ObjectMeta:     metav1.ObjectMeta{Name: "node-a.1", Namespace: "default", ResourceVersion: "5", UID: "event-uid"},
+	warning := &corev1.Event{
+		ObjectMeta:     metav1.ObjectMeta{Name: "node-a.1", Namespace: "default"},
 		InvolvedObject: corev1.ObjectReference{APIVersion: "v1", Kind: "Node", Name: "node-a"},
 		Reason:         "NodeNotReady",
 		Type:           corev1.EventTypeWarning,
 		LastTimestamp:  metav1.NewTime(time.Now()),
-	}, metav1.CreateOptions{})
-	require.NoError(t, err)
-
-	var update resourcestream.Update
-	select {
-	case update = <-subscription.Updates:
-	case <-time.After(3 * time.Second):
-		t.Fatal("expected cluster attention doorbell")
 	}
-	require.Equal(t, "attention", string(update.Source))
-	_, err = service.Build(context.Background(), "cluster-attention", "c1|")
+	server.Create(t, warning)
+
+	for _, want := range [][]string{{"Event/node-a.1"}, {}} {
+		select {
+		case update := <-sub.Updates:
+			require.Equal(t, "attention", string(update.Source))
+		case <-time.After(3 * time.Second):
+			t.Fatal("expected cluster attention doorbell")
+		}
+		require.ElementsMatch(t, want, attentionRefNames(t, h))
+		if len(want) > 0 {
+			server.Delete(t, warning)
+		}
+	}
+}
+
+// The namespace warning rollup and the Cluster Overview's Recent Events read
+// the events store: a Warning Event about a Pod counts toward its namespace
+// and is listed as a recent event once the store holds it.
+func TestEventAggregatesReadTheEventsStore(t *testing.T) {
+	server := newReflectorAPIServer(t)
+	server.Create(t, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "team-a"}})
+	h := newReflectorHarness(t, server, "")
+	namespaces := h.subscribe(t, "namespaces", "")
+
+	server.Create(t, &corev1.Event{
+		ObjectMeta:     metav1.ObjectMeta{Name: "web.1", Namespace: "team-a"},
+		InvolvedObject: corev1.ObjectReference{APIVersion: "v1", Kind: "Pod", Namespace: "team-a", Name: "web", UID: "pod-uid"},
+		Reason:         "BackOff",
+		Message:        "Back-off restarting failed container",
+		Type:           corev1.EventTypeWarning,
+		LastTimestamp:  metav1.NewTime(time.Now()),
+	})
+
+	require.Eventually(t, func() bool {
+		select {
+		case <-namespaces.Updates:
+		default:
+		}
+		snap, err := h.subsystem.SnapshotService.Build(context.Background(), "namespaces", "c1|")
+		require.NoError(t, err)
+		for _, row := range snap.Payload.(snapshot.NamespaceSnapshot).Namespaces {
+			if row.Ref.Name == "team-a" {
+				return row.WarningEvents == 1 && row.WarningEventsState == snapshot.NamespaceSignalAvailable
+			}
+		}
+		return false
+	}, 5*time.Second, 20*time.Millisecond, "the team-a warning rollup never counted the event")
+
+	snap, err := h.subsystem.SnapshotService.Build(context.Background(), "cluster-overview", "c1|")
 	require.NoError(t, err)
-	require.Equal(t, 2, builds)
+	recent := snap.Payload.(snapshot.ClusterOverviewSnapshot).Overview.RecentEvents
+	require.Len(t, recent, 1)
+	require.Equal(t, "BackOff", recent[0].Reason)
+	require.Equal(t, "Back-off restarting failed container", recent[0].Message)
+	require.Equal(t, "Pod", recent[0].ObjectKind)
+	require.Equal(t, "web", recent[0].ObjectName)
+	require.Equal(t, "team-a", recent[0].ObjectNamespace)
+	require.Equal(t, "pod-uid", recent[0].ObjectUID)
+	require.NotNil(t, recent[0].InvolvedObject)
 }

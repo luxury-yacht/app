@@ -8,6 +8,6 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
-	CatalogSource:   kindspec.CatalogAPIExtensions,
 	DetailCacheable: true,
+	Stream:          &StreamDescriptor,
 }

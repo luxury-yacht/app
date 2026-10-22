@@ -294,12 +294,6 @@ func (a *RefreshCoordinator) stopRefreshGenerationProducers(clusterID string, su
 	}
 	if subsystem.Manager != nil {
 		a.shutdownRefreshGenerationManager(clusterID, subsystem)
-		return
-	}
-	// A partially built generation may own an informer factory before manager
-	// construction completes. Clear it even when no manager can own shutdown.
-	if subsystem.InformerFactory != nil {
-		_ = subsystem.InformerFactory.Shutdown()
 	}
 }
 

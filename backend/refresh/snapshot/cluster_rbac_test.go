@@ -59,12 +59,10 @@ func TestClusterRBACBuilder(t *testing.T) {
 		},
 	}
 
-	builder := &ClusterRBACBuilder{
-		collectIndexer: clusterRBACCollectIndexer(
-			testsupport.NewClusterIndexer(t, role),
-			testsupport.NewClusterIndexer(t, binding),
-		),
-	}
+	builder := clusterRBACBuilderFor(ClusterMeta{}, clusterRBACCollectIndexer(
+		testsupport.NewClusterIndexer(t, role),
+		testsupport.NewClusterIndexer(t, binding),
+	))
 
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
@@ -92,12 +90,10 @@ func TestClusterRBACBuilder(t *testing.T) {
 }
 
 func TestClusterRBACBuilderEmpty(t *testing.T) {
-	builder := &ClusterRBACBuilder{
-		collectIndexer: clusterRBACCollectIndexer(
-			testsupport.NewClusterIndexer[rbacv1.ClusterRole](t),
-			testsupport.NewClusterIndexer[rbacv1.ClusterRoleBinding](t),
-		),
-	}
+	builder := clusterRBACBuilderFor(ClusterMeta{}, clusterRBACCollectIndexer(
+		testsupport.NewClusterIndexer[rbacv1.ClusterRole](t),
+		testsupport.NewClusterIndexer[rbacv1.ClusterRoleBinding](t),
+	))
 
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
@@ -120,9 +116,7 @@ func TestClusterRBACBuilderCapsLargeSnapshots(t *testing.T) {
 		})
 	}
 
-	builder := &ClusterRBACBuilder{
-		collectIndexer: clusterRBACCollectIndexer(testsupport.NewClusterIndexer(t, roles...), nil),
-	}
+	builder := clusterRBACBuilderFor(ClusterMeta{}, clusterRBACCollectIndexer(testsupport.NewClusterIndexer(t, roles...), nil))
 
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)

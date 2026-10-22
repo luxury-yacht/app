@@ -239,16 +239,6 @@ func (c *Checker) CanInNamespace(ctx context.Context, group, resource, verb, nam
 	return c.canInNamespace(ctx, group, resource, verb, namespace)
 }
 
-// CanClusterWide checks a resource verb cluster-wide regardless of any
-// configured scope. For callers whose DATA SOURCE is cluster-wide (e.g. the
-// helm-storage informer factory) — their gate must match their source.
-func (c *Checker) CanClusterWide(ctx context.Context, group, resource, verb string) (Decision, error) {
-	if c == nil {
-		return Decision{}, fmt.Errorf("permission checker not initialized")
-	}
-	return c.canInNamespace(ctx, group, resource, verb, "")
-}
-
 func (c *Checker) canInNamespace(ctx context.Context, group, resource, verb, namespace string) (Decision, error) {
 	key, err := c.cacheKey(group, resource, verb, namespace)
 	if err != nil {

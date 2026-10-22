@@ -58,14 +58,13 @@ func TestIdentitiesProductionIngestInvalidatesBeforeSignaling(t *testing.T) {
 	client, err := kubernetes.NewForConfig(config)
 	require.NoError(t, err)
 	subsystem, err := NewSubsystemWithServices(context.Background(), Config{KubernetesClient: client, RestConfig: config, ClusterID: "identity-cluster", Logger: applog.Noop,
-		ObjectDetailsProvider: noopObjectDetailProvider{}, NodeMaintenanceStore: nodemaintenance.NewStore(5), ResyncInterval: time.Hour})
+		ObjectDetailsProvider: noopObjectDetailProvider{}, NodeMaintenanceStore: nodemaintenance.NewStore(5)})
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(func() {
 		cancel()
 		subsystem.ResourceStream.Stop()
 		subsystem.IngestManager.Stop()
-		_ = subsystem.InformerFactory.Shutdown()
 	})
 	selector, err := resourcestream.ParseStreamSelector("identity-cluster", "cluster-identities", "")
 	require.NoError(t, err)
@@ -73,7 +72,6 @@ func TestIdentitiesProductionIngestInvalidatesBeforeSignaling(t *testing.T) {
 	require.NoError(t, err)
 	defer subscription.Cancel()
 	subsystem.IngestManager.Start(ctx)
-	require.NoError(t, subsystem.InformerFactory.Start(ctx))
 	require.Eventually(t, func() bool {
 		return api.watches.Load() == 3
 	}, 3*time.Second, 10*time.Millisecond)

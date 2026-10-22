@@ -122,6 +122,16 @@ type BundleReplacer interface {
 	ReplaceBundles(rows []Bundle)
 }
 
+// BundleSeeder is an optional BundleSink extension for a consumer that needs the
+// full source set and keeps no spill of its own (an owner index, for example).
+// RestoreBundles hands it every restored Bundle, under the store's write lock,
+// after the rows and indexes are installed. Restore runs before the reflector
+// starts, so the seed precedes every live delta. Like any sink, a seeder must
+// not call back into the store.
+type BundleSeeder interface {
+	SeedBundles(rows []Bundle)
+}
+
 // ProjectingStore is a cache.Store that holds the PROJECTED row per object
 // instead of the full source object. On Add/Update/Replace it runs the injected
 // projection and stores only the result keyed by cache.MetaNamespaceKeyFunc; the
@@ -981,9 +991,8 @@ func (s *ProjectingStore) SpillBundles(path string) error {
 // Unlike Replace, restore does NOT fan the loaded rows to the incremental sinks (Table/
 // Bundle): it sets synced=true silently. Consumers that rebuild their own baseline from a
 // separate spill (the maintained stores) or only want deltas (the live-notify sinks) are
-// fine, but a sink consumer that needs the FULL baseline and has no independent restore must
-// seed itself from the store's rows once it observes sync — see NamespaceWorkloadTracker,
-// which would otherwise miss every restored workload and wrongly dim active namespaces.
+// fine. A bundle sink that needs the FULL baseline and has no independent restore
+// implements BundleSeeder and receives the restored set here.
 func (s *ProjectingStore) RestoreBundles(path string) (string, map[string]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -1009,8 +1018,25 @@ func (s *ProjectingStore) RestoreBundles(path string) (string, map[string]string
 		}
 	}
 	s.markSyncedLocked()
+	s.seedBundleSinksLocked()
 	s.mu.Unlock()
 	return snap.RV, snap.PartitionRVs, nil
+}
+
+// seedBundleSinksLocked hands the restored set to every BundleSeeder; callers
+// hold the write lock.
+func (s *ProjectingStore) seedBundleSinksLocked() {
+	var bundles []Bundle
+	for _, sink := range s.bundleSinks {
+		seeder, ok := sink.(BundleSeeder)
+		if !ok {
+			continue
+		}
+		if bundles == nil {
+			_, _, bundles = replaceRows(s.rows)
+		}
+		seeder.SeedBundles(bundles)
+	}
 }
 
 // MarkSynced flips the store's synced flag without a Replace, for the stage-3 resume path:
