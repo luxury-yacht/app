@@ -397,6 +397,7 @@ func newRacedPodIngestStore(t *testing.T, pod *corev1.Pod) *ingest.ProjectingSto
 	)
 	store := ingest.NewProjectingStore(project)
 	store.SetRetainTable(true)
+	store.AddIndex(snapshot.PodOwnerKeyIndexName, snapshot.PodOwnerKeyIndexValues)
 	require.NoError(t, store.Add(pod))
 	return store
 }
@@ -438,6 +439,7 @@ func TestJobBundleArrivalHealsPreviouslyProjectedCronJobPod(t *testing.T) {
 	)
 	store := ingest.NewProjectingStore(project)
 	store.SetRetainTable(true)
+	store.AddIndex(snapshot.PodOwnerKeyIndexName, snapshot.PodOwnerKeyIndexValues)
 	require.NoError(t, store.Add(pod))
 	manager.podIngest = podIngestStoreAdapter{store: store}
 

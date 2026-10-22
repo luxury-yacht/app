@@ -289,7 +289,7 @@ func (s fakePodWorkloadsIngestSource) RowsByIndex(gvr schema.GroupVersionResourc
 	}
 	out := make([]interface{}, 0, len(s.bundles))
 	for _, b := range s.bundles {
-		for _, ownerKey := range b.Indexes[podOwnerKeyIndexName] {
+		for _, ownerKey := range PodOwnerKeyIndexValues(b) {
 			if _, ok := wanted[ownerKey]; ok {
 				out = append(out, b)
 				break
@@ -318,11 +318,9 @@ func newFakePodWorkloadsIngestSource(meta ClusterMeta, rsLister appslisters.Repl
 		if pod == nil {
 			continue
 		}
-		aggregate := projectPodAggregate(pod, PodOwnerSources{ReplicaSetOwner: testsupport.ReplicaSetOwnerLookup(rsLister)})
 		bundles = append(bundles, ingest.Bundle{
 			Table:     podres.BuildStreamSummary(streamMeta, pod, testsupport.ReplicaSetOwnerLookup(rsLister), nil),
-			Aggregate: aggregate,
-			Indexes:   podAggregateBundleIndexes(aggregate),
+			Aggregate: projectPodAggregate(pod, PodOwnerSources{ReplicaSetOwner: testsupport.ReplicaSetOwnerLookup(rsLister)}),
 		})
 		if rv, err := strconv.ParseUint(pod.ResourceVersion, 10, 64); err == nil && rv > maxRV {
 			maxRV = rv

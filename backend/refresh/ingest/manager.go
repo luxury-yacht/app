@@ -1054,8 +1054,22 @@ func (m *IngestManager) Rows(gvr schema.GroupVersionResource) []interface{} {
 	return store.List()
 }
 
-// RowsByIndex returns the full projected values whose Bundle index includes one of
-// the supplied values under indexName, or nil when the manager has no entry for gvr.
+// AddIndex registers a secondary index on gvr's store (ProjectingStore.AddIndex), so
+// RowsByIndex and RewriteBundlesByIndex can address its bundles by the values index
+// derives. Like the projector registrations it belongs before Start, although the
+// store also indexes rows it already holds. The store call runs outside the manager
+// lock. Reports whether an entry was found.
+func (m *IngestManager) AddIndex(gvr schema.GroupVersionResource, name string, index BundleIndexFunc) bool {
+	store := m.StoreFor(gvr)
+	if store == nil {
+		return false
+	}
+	store.AddIndex(name, index)
+	return true
+}
+
+// RowsByIndex returns the full projected values whose index values under indexName
+// include one of the supplied values, or nil when the manager has no entry for gvr.
 func (m *IngestManager) RowsByIndex(gvr schema.GroupVersionResource, indexName string, values []string) []interface{} {
 	store := m.StoreFor(gvr)
 	if store == nil {

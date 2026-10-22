@@ -89,6 +89,10 @@ func registerPodReflector(
 		ReplicaSetOwner:    rsOwnerLookup,
 		JobControllerOwner: jobOwnerLookup,
 	}), true)
+	// The owner-key index serves the all-namespaces workload pod join
+	// (pod_aggregate_source.go) and the owner heals (resourcestream/owner_heals.go).
+	// It is a no-op when the cluster cannot serve pods.
+	mgr.AddIndex(snapshot.PodGVR, snapshot.PodOwnerKeyIndexName, snapshot.PodOwnerKeyIndexValues)
 }
 
 // registerReplicaSetReflector wires the bespoke ReplicaSet reflector onto the

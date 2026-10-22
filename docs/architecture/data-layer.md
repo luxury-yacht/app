@@ -76,6 +76,12 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
 - **Locking:** `IngestManager.mu` is a leaf lock that guards only the entries
   map and is never held across a store call; sink delivery runs under the
   store write lock.
+- **Secondary indexes are store config.** `AddIndex` registers a
+  `BundleIndexFunc` that derives a stored bundle's index values from its
+  retained halves; bundles carry no index data. `RowsByIndex` and
+  `RewriteBundlesByIndex` read the index, and a rewrite moves a row by changing
+  the half the func reads (the pod owner-key index reads
+  `PodAggregate.OwnerKey`).
 - **Sink contract** (`ingest/projecting_store.go`):
   - A sink never reads its own store, because `Rows`, `RowsByIndex`, and
     `GetByKey` take the same lock. A consumer that aggregates across objects

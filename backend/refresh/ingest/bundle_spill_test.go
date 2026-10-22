@@ -33,17 +33,20 @@ func init() {
 // Bundle's Table AND Catalog halves — the shape the production ingest stores hold (every
 // ingest-owned kind registers a catalog projector). retainTable mirrors the production
 // per-store flag: false (the default) drops the redundant Table half from the stored bundle
-// after fanning it; pods set it true.
+// after fanning it; pods set it true. The "name" index derives from the retained Catalog
+// half, so a restore must rebuild it from the restored bundles.
 func bundleProjectingStore(retainTable bool) *ProjectingStore {
 	s := NewProjectingStore(func(obj interface{}) (interface{}, error) {
 		m := obj.(metav1.Object)
 		return Bundle{
 			Table:   spillTestRow{Name: m.GetName(), N: len(m.GetName())},
 			Catalog: spillTestCatalog{Key: m.GetName()},
-			Indexes: map[string][]string{"name": []string{m.GetName()}},
 		}, nil
 	})
 	s.SetRetainTable(retainTable)
+	s.AddIndex("name", func(b Bundle) []string {
+		return []string{b.Catalog.(spillTestCatalog).Key}
+	})
 	return s
 }
 
