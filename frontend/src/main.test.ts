@@ -10,6 +10,8 @@ const { order, bootstrap } = vi.hoisted(() => ({
   order: [] as string[],
   bootstrap: {
     failPanelRender: false,
+    failPanelImport: false,
+    failDescriptor: false,
     descriptor: {
       schemaVersion: 1,
       role: 'workspace' as 'workspace' | 'panel',
@@ -60,12 +62,20 @@ vi.mock('./WorkspaceApp.tsx', () => {
 });
 
 vi.mock('./PanelWindowApp.tsx', () => {
+  if (bootstrap.failPanelImport) {
+    throw new Error('forced panel module failure');
+  }
   order.push('panel-module-evaluated');
   return { default: () => null };
 });
 
 vi.mock('@/core/panel-windows', () => ({
-  resolveNativeWindowDescriptor: vi.fn(async () => bootstrap.descriptor),
+  resolveNativeWindowDescriptor: vi.fn(async () => {
+    if (bootstrap.failDescriptor) {
+      throw new Error('forced descriptor failure');
+    }
+    return bootstrap.descriptor;
+  }),
   failPanelWindowTransfer: (...args: unknown[]) =>
     panelTransferMocks.failPanelWindowTransfer(...args),
 }));
@@ -108,6 +118,8 @@ describe('application bootstrap', () => {
       panel: undefined,
     };
     bootstrap.failPanelRender = false;
+    bootstrap.failPanelImport = false;
+    bootstrap.failDescriptor = false;
     panelTransferMocks.failPanelWindowTransfer.mockReset();
     panelTransferMocks.failPanelWindowTransfer.mockResolvedValue(undefined);
     reactRootMocks.render.mockReset();
@@ -175,29 +187,26 @@ describe('application bootstrap', () => {
     );
   });
 
-  it('shows a visible error and fails an opening panel transfer when bootstrap crashes', async () => {
-    bootstrap.failPanelRender = true;
-    bootstrap.descriptor = {
-      schemaVersion: 1,
-      role: 'panel',
-      workspace: undefined,
-      panel: {
-        windowName: 'panel-1',
+  const openingPanelDescriptor = () => ({
+    schemaVersion: 1,
+    role: 'panel' as const,
+    workspace: undefined,
+    panel: {
+      windowName: 'panel-1',
+      clusterId: 'cluster-1',
+      groupId: 'group-1',
+      state: 'opening',
+      transferId: 'transfer-1',
+      group: {
         clusterId: 'cluster-1',
         groupId: 'group-1',
-        state: 'opening',
-        transferId: 'transfer-1',
-        group: {
-          clusterId: 'cluster-1',
-          groupId: 'group-1',
-          activePanelId: 'panel-a',
-          tabs: [],
-        },
+        activePanelId: 'panel-a',
+        tabs: [],
       },
-    };
+    },
+  });
 
-    await import('@/main');
-
+  const expectPanelBootstrapFailure = async () => {
     await vi.waitFor(() => {
       expect(document.getElementById('app')?.textContent).toContain('Could not open this panel');
     });
@@ -206,5 +215,54 @@ describe('application bootstrap', () => {
       'panel-1',
       'transfer-1'
     );
+  };
+
+  it('shows a visible error, fails the opening transfer, and drops the preference subscription when rendering crashes', async () => {
+    const unsubscribe = vi.fn();
+    desktopRuntimeMocks.onBroadcastEvent.mockReturnValue(unsubscribe);
+    bootstrap.failPanelRender = true;
+    bootstrap.descriptor = openingPanelDescriptor();
+
+    await import('@/main');
+
+    await expectPanelBootstrapFailure();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails the opening transfer and drops the preference subscription when the panel root module fails to load', async () => {
+    const unsubscribe = vi.fn();
+    desktopRuntimeMocks.onBroadcastEvent.mockReturnValue(unsubscribe);
+    bootstrap.failPanelImport = true;
+    bootstrap.descriptor = openingPanelDescriptor();
+
+    await import('@/main');
+
+    await expectPanelBootstrapFailure();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails the opening transfer when preparation fails after the descriptor resolves', async () => {
+    desktopRuntimeMocks.onBroadcastEvent.mockImplementation(() => {
+      throw new Error('forced subscription failure');
+    });
+    bootstrap.descriptor = openingPanelDescriptor();
+
+    await import('@/main');
+
+    await expectPanelBootstrapFailure();
+    expect(order).not.toContain('panel-module-evaluated');
+  });
+
+  it('shows the window error without failing a transfer when the descriptor cannot be resolved', async () => {
+    bootstrap.failDescriptor = true;
+
+    await import('@/main');
+
+    await vi.waitFor(() => {
+      expect(document.getElementById('app')?.textContent).toContain(
+        'Could not open this application window'
+      );
+    });
+    expect(panelTransferMocks.failPanelWindowTransfer).not.toHaveBeenCalled();
   });
 });
