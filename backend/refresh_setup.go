@@ -401,7 +401,6 @@ func (a *RefreshCoordinator) buildRefreshMux(
 		ManualQueue:     aggregateQueue,
 		Telemetry:       aggregateTelemetryHandler,
 		Metrics:         aggregateMetrics,
-		HealthHub:       nil, // Health is per-cluster, not global.
 	})
 	aggregates := &refreshAggregateHandlers{
 		snapshot:      aggregateService,

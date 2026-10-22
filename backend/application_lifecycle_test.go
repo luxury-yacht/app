@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -187,7 +186,6 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 		},
 	}
 	manager := refresh.NewManager(nil, nil, nil, nil, nil)
-	handler := http.NewServeMux()
 
 	var capturedCfg system.Config
 	original := newRefreshSubsystemWithServices
@@ -195,7 +193,6 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 		capturedCfg = cfg
 		return &system.Subsystem{
 			Manager:   manager,
-			Handler:   handler,
 			Telemetry: telemetry.NewRecorder(),
 		}, nil
 	}

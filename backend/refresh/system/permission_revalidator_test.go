@@ -114,6 +114,18 @@ func TestDeniedPermissionRevalidationReviewsEachScopeOncePerCacheWindow(t *testi
 	}
 }
 
+type fakeFeedHub struct {
+	synced bool
+}
+
+func (h fakeFeedHub) Start(context.Context) error { return nil }
+
+func (h fakeFeedHub) HasSynced(context.Context) bool { return h.synced }
+
+func (h fakeFeedHub) ResourcesSettled([]string) bool { return h.synced }
+
+func (fakeFeedHub) Shutdown() error { return nil }
+
 type permissionRevalidationHub struct {
 	fakeFeedHub
 	stopped chan struct{}

@@ -76,6 +76,33 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
 - **Locking:** `IngestManager.mu` is a leaf lock that guards only the entries
   map and is never held across a store call; sink delivery runs under the
   store write lock.
+- **Sink contract** (`ingest/projecting_store.go`):
+  - A sink never reads its own store, because `Rows`, `RowsByIndex`, and
+    `GetByKey` take the same lock. A consumer that aggregates across objects
+    keeps its own index, fed by its sink (the Job owner index, the Helm
+    revision index).
+  - Work that touches another store goes through `ingest.AsyncBundleSink`,
+    which keeps delivery order off the source lock.
+  - A bundle sink receives only the new bundle. A consumer that compares old
+    and new keeps its own last-seen state (the catalog's CRD discovery hook).
+  - On an unpartitioned relist, a `BundleReplacer` gets only `ReplaceBundles`
+    with the full new set, never per-key deletes. A replacer whose removals
+    have side effects diffs that set against its previous one (CRD
+    definitions, the discovery hook, Helm releases). Partition relists deliver
+    per-key deletes.
+  - `RestoreBundles` installs spilled rows without fanning them to sinks. A
+    sink that needs the full set and has no spill of its own implements
+    `BundleSeeder`. Its seed arrives under the write lock, before any live
+    delta.
+- **Settled is not knowledge.** Two signals look complete without being so:
+  - `HasSyncedFor` is true after a deadline degrade.
+  - `RawHasSyncedFor` is true after a restore whose source the permission
+    filter then skips.
+
+  A decision that treats a missing row as an authoritative absence needs
+  `Ready` readiness on every partition it covers (`ingestRowsComplete` in
+  `snapshot/ingest_readiness.go`). The workloads HPA flag and the object-map
+  HPA join use it.
 - **LIST+WATCH is the startup transport.** `ingest/watchlist_config.go`
   disables client-go's beta WatchList gate before reflectors are built. A
   capability probe is insufficient: a proxy can deliver the terminal bookmark
@@ -100,10 +127,10 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
 - **Readiness is per resource.** Domains declare the resources they read;
   the snapshot service waits on those owned stores (`ingestHub`,
   `backend/refresh/system/ingest_hub.go`). The hub's `HasSynced` reports every
-  tracked store settled; the health endpoint reads it, and builds never wait on
-  it because every production domain declares its resources. Typed-table domains
-  read kind availability as a predicate (permitted at registration and served)
-  and always serve from their maintained store.
+  tracked store settled. Only a build for a domain that declares no resources
+  waits on it, and every production domain declares its resources. Typed-table
+  domains read kind availability as a predicate (permitted at registration and
+  served) and always serve from their maintained store.
 - **Cross-kind projection inputs need a late-arrival story.** A projection may
   read its own object freely. Reading another kind's cache at projection time
   races that kind's sync, and owned reflectors never resync, so a baked value
@@ -144,8 +171,11 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
   catalog Summary and a slim fact (involved object, type, reason, message,
   source, count, first and last observation), which object events, Attention,
   the namespace warning rollup, and Recent Events read at serve. Object events
-  scans the store per build; there is no per-object index. Event is
-  `CatalogNone`, so the catalog does not subscribe to its rows.
+  scans the store per build; there is no per-object index. A per-bundle index
+  measured about 725 B more per event, and a 30,000-event scan costs about
+  0.9 ms (microbenchmark). At 30,000 events the store retains about 31 MiB, 9% less than the
+  former informer cache (measured 2026-10-21). Event is `CatalogNone`, so the
+  catalog does not subscribe to its rows.
 - Ingest builds a Gateway kind's reflector only when discovery reports it
   served.
 - **Namespaces are an owned reflector.** The bundle keeps the namespace itself
@@ -250,6 +280,17 @@ and access reviews, not object-state queries).
   and the brute list+project path.
 - `querypage` fuzz/property test (`apply(deltas) == recompute`) and the catalog
   brute-force oracle.
+- Sink-fed consumers run against a real `cache.Reflector` and the
+  `ingest/ingesttest` API server (`system/real_reflector_harness_test.go`).
+  Each such consumer has two re-warm tests:
+  - a spilled store, a valid-version resume, and no object changes, after which
+    the consumer still sees the full set;
+  - an expired version (`WatchGap`, 410), whose relist reaches the same
+    consumer.
+
+  A replacer with removal side effects also has a watch-gap test: an object
+  deleted during the gap loses its side effect, and the survivors are
+  untouched.
 
 ## Deliberately not built (do not re-attempt as TODOs)
 
@@ -269,6 +310,10 @@ Reasons beyond these lines are in git history.
   only on a measured regression.
 - Rejected: `metricsRevision` metric index — it would only serve the unbuilt
   delta layer or profiled metric-sorted views.
+- Rejected: an adapter that presents the ingest contract over client-go
+  informers. It would add a third feed shape and give informer kinds no
+  namespace-scope partitions, spill, or delta resume. Every kind is an owned
+  reflector instead, and `backend/feed_contract_test.go` keeps informers out.
 
 ## Provenance
 

@@ -61,7 +61,8 @@ func (h *ingestHub) Start(ctx context.Context) error {
 }
 
 // HasSynced reports whether every tracked store has settled (synced,
-// permission-skipped, or past its sync deadline). The health endpoint reads it.
+// permission-skipped, or past its sync deadline). Only a domain that declares
+// no readiness resources waits on it.
 func (h *ingestHub) HasSynced(context.Context) bool {
 	return h.ingest != nil && h.ingest.HasSynced()
 }

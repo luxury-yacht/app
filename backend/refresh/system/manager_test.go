@@ -3,8 +3,6 @@ package system
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -80,37 +78,14 @@ func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T)
 		NodeMaintenanceStore: nodemaintenance.NewStore(5),
 	}
 
-	manager, handler, recorder, issues, cache, grants, err := NewSubsystem(cfg)
+	manager, recorder, issues, cache, grants, err := NewSubsystem(cfg)
 
 	require.NoError(t, err)
 	require.NotNil(t, manager)
-	require.NotNil(t, handler)
 	require.NotNil(t, recorder)
 	require.NotEmpty(t, issues)
 	require.Nil(t, cache)
 	require.NotNil(t, grants)
-}
-
-func TestHealthHandlerReflectsFeedSync(t *testing.T) {
-	t.Run("returns 503 when the feed has not synced", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/healthz/refresh", nil)
-		rec := httptest.NewRecorder()
-
-		HealthHandler(fakeFeedHub{synced: false})(rec, req)
-
-		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
-		require.Contains(t, rec.Body.String(), "owned reflectors not yet synced")
-	})
-
-	t.Run("returns 200 when the feed has synced", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/healthz/refresh", nil)
-		rec := httptest.NewRecorder()
-
-		HealthHandler(fakeFeedHub{synced: true})(rec, req)
-
-		require.Equal(t, http.StatusOK, rec.Code)
-		require.Equal(t, "ok", rec.Body.String())
-	})
 }
 
 type noopObjectDetailProvider struct {
@@ -121,30 +96,17 @@ func (p noopObjectDetailProvider) FetchObjectDetails(context.Context, schema.Gro
 	return snapshot.ObjectDetail{}, p.err
 }
 
-type fakeFeedHub struct {
-	synced bool
-}
-
-func (h fakeFeedHub) Start(context.Context) error { return nil }
-
-func (h fakeFeedHub) HasSynced(context.Context) bool { return h.synced }
-
-func (h fakeFeedHub) ResourcesSettled([]string) bool { return h.synced }
-
-func (fakeFeedHub) Shutdown() error { return nil }
-
 // NewSubsystem is the tuple-unpacking convenience over NewSubsystemWithServices,
 // kept in test scope: production uses NewSubsystemWithServices directly.
-// NewSubsystem prepares the refresh manager, HTTP handler, and supporting services.
-func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Recorder, []PermissionIssue, map[string]bool, *permissions.Grants, error) {
+// NewSubsystem prepares the refresh manager and supporting services.
+func NewSubsystem(cfg Config) (*refresh.Manager, *telemetry.Recorder, []PermissionIssue, map[string]bool, *permissions.Grants, error) {
 	subsystem, err := NewSubsystemWithServices(context.Background(), cfg)
 	if err != nil {
 		recorder := telemetry.NewRecorder()
 		recorder.SetClusterMeta(cfg.ClusterID, cfg.ClusterName)
-		return nil, nil, recorder, nil, nil, nil, err
+		return nil, recorder, nil, nil, nil, err
 	}
 	return subsystem.Manager,
-		subsystem.Handler,
 		subsystem.Telemetry,
 		subsystem.PermissionIssues,
 		nil,

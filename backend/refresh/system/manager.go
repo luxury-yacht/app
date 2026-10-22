@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -84,7 +83,6 @@ type Config struct {
 // Subsystem bundles the refresh manager and supporting services.
 type Subsystem struct {
 	Manager          *refresh.Manager        // Refresh manager for coordinating resource updates.
-	Handler          http.Handler            // HTTP handler for serving refresh-related endpoints.
 	Telemetry        *telemetry.Recorder     // Telemetry recorder for capturing metrics and events.
 	PermissionIssues []PermissionIssue       // List of permission issues encountered during refresh.
 	PermissionGrants *permissions.Grants     // List/watch decisions this generation was built with.
@@ -449,22 +447,9 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 
 	manager := refresh.NewManager(registry, hub, snapshotService, metricsPoller, queue)
 
-	// Build the core refresh routes once so all server configurations stay consistent.
-	mux := BuildRefreshMux(MuxConfig{
-		SnapshotService: snapshotService,
-		ManualQueue:     queue,
-		Telemetry:       telemetryRecorder,
-		Metrics: singleClusterMetricsDemandController{
-			clusterID: clusterMeta.ClusterID,
-			manager:   manager,
-		},
-		HealthHub: hub,
-	})
-
 	built = true
 	return &Subsystem{
 		Manager:               manager,
-		Handler:               mux,
 		Telemetry:             telemetryRecorder,
 		PermissionIssues:      issues.issues,
 		PermissionGrants:      grants,
@@ -566,19 +551,6 @@ func ingestPermissionFilter(checker *permissions.Checker) func(group, resource, 
 			return false
 		}
 		return true
-	}
-}
-
-// HealthHandler returns an HTTP handler compatible with /healthz/refresh.
-func HealthHandler(hub refresh.FeedHub) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if hub == nil || !hub.HasSynced(r.Context()) {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("owned reflectors not yet synced"))
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
 	}
 }
 
