@@ -7,9 +7,9 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 )
 
-// ingestPartitionSource reports the availability of each partition of an ingest
-// source. *ingest.IngestManager satisfies it.
-type ingestPartitionSource interface {
+// partitionReadinessReporter reports the availability of each partition of an
+// ingest source. *ingest.IngestManager satisfies it.
+type partitionReadinessReporter interface {
 	PartitionReadinessFor(gvr schema.GroupVersionResource) []ingest.PartitionReadiness
 }
 
@@ -18,7 +18,7 @@ type ingestPartitionSource interface {
 // partition covering the namespace must report Ready. Settlement is not enough:
 // a deadline-degraded store settled without data, and a baseline restored from
 // spill reports Unavailable once the permission filter skips its source.
-func ingestRowsComplete(source ingestPartitionSource, gvr schema.GroupVersionResource, namespace string) bool {
+func ingestRowsComplete(source partitionReadinessReporter, gvr schema.GroupVersionResource, namespace string) bool {
 	if source == nil {
 		return false
 	}

@@ -985,10 +985,6 @@ func (m *typedMaintainedStore[T]) RestoreFrom(path string) error {
 	return nil
 }
 
-// Reconcile is a no-op: every feed is an ingest sink, and its reflector's relist
-// (or resumed watch) removes rows restored from a stale spill.
-func (m *typedMaintainedStore[T]) Reconcile() {}
-
 func (m *typedMaintainedStore[T]) snapshotVersion() uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()

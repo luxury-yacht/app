@@ -134,7 +134,7 @@ const nodeDomainName = "nodes"
 
 func RegisterNodeDomain(reg *domain.Registry, provider metrics.Provider, clusterMeta ClusterMeta, ingestManager *ingest.IngestManager, bell doorbell.Bell) error {
 	maintained := newTypedMaintainedStore(clusterMeta, nodesQuerypageSchema(), nodeTableQueryAdapter())
-	reg.RegisterMaintainedStore(nodeDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
+	reg.RegisterMaintainedStore(nodeDomainName, maintained) // spill/restore across Cold/re-warm
 	if ingestManager != nil {
 		ingestManager.AddBundleSink(NodeGVR, maintained.sinkFor("", clusterRowPublication(maintained, nodeDomainName, bell)))
 	}

@@ -17,9 +17,6 @@ import (
 //   - SpillTo writes the store's rows to path.
 //   - RestoreFrom loads spilled rows from path INTO the existing store (warm-paint); the
 //     rows may be stale.
-//   - Reconcile diff-syncs the store against its live sources after re-warm sync, dropping
-//     rows whose objects were deleted while the cluster was Cold (a no-op for stores whose
-//     feed already reconciles on relist).
 //   - SwapToMmap spills the store's columns to path and swaps the SAME store in place to a
 //     read-only, mmap-aliased view of that file, so its bulk column data goes off-heap while
 //     the store keeps serving queries. It returns a closer that unmaps the file; the closer
@@ -29,8 +26,15 @@ import (
 type SpillableStore interface {
 	SpillTo(path string) error
 	RestoreFrom(path string) error
-	Reconcile()
 	SwapToMmap(path string) (func() error, error)
+}
+
+// Reconciler is the optional re-warm step of a SpillableStore whose rows do not all
+// come from a reflector: Reconcile diff-syncs the store against its live sources after
+// the re-warm sync, dropping rows whose objects were deleted while the cluster was Cold.
+// A store fed only by reflectors needs none, because each relist removes stale rows.
+type Reconciler interface {
+	Reconcile()
 }
 
 // maintainedStoreSet collects a registry's spillable stores keyed by a stable,
@@ -43,9 +47,10 @@ type maintainedStoreSet struct {
 }
 
 // RegisterMaintainedStore records a domain's maintained store under name so the governor
-// can spill/restore/reconcile it across Cold/re-warm. name must be filesystem-safe and
-// stable across runs (the domain name) — it is the spill file's basename. A duplicate name
-// overwrites (a domain registers exactly one maintained store).
+// can spill and restore it (and reconcile it, if it is a Reconciler) across Cold/re-warm.
+// name must be filesystem-safe and stable across runs (the domain name) — it is the spill
+// file's basename. A duplicate name overwrites (a domain registers exactly one maintained
+// store).
 func (r *Registry) RegisterMaintainedStore(name string, store SpillableStore) {
 	if name == "" || store == nil {
 		return
@@ -131,8 +136,8 @@ func (r *Registry) SpillMaintainedStores(dir string) error {
 // RestoreMaintainedStores loads each registered store's rows from its file under dir, for
 // warm-paint on re-warm. A store with no spill file is skipped (never spilled, or a newly
 // added domain) — the normal cold-start case, not an error. Other errors are joined.
-// Restored rows may be stale; ReconcileMaintainedStores reconciles them after the fresh
-// sync.
+// Restored rows may be stale; the fresh reflectors' relists, and ReconcileMaintainedStores
+// for stores that implement Reconciler, reconcile them after the fresh sync.
 func (r *Registry) RestoreMaintainedStores(dir string) error {
 	var errs []error
 	for _, ns := range r.maintainedSnapshot() {
@@ -149,10 +154,12 @@ func (r *Registry) RestoreMaintainedStores(dir string) error {
 
 // ReconcileMaintainedStores reconciles every registered store against its live sources —
 // the re-warm step that drops rows warm-painted from a stale spill for objects deleted
-// while the cluster was Cold. It must run AFTER the fresh subsystem has synced. Stores
-// whose feed already reconciles on relist treat it as a no-op.
+// while the cluster was Cold. It must run AFTER the fresh subsystem has synced. Only
+// stores that implement Reconciler take part.
 func (r *Registry) ReconcileMaintainedStores() {
 	for _, ns := range r.maintainedSnapshot() {
-		ns.store.Reconcile()
+		if reconciler, ok := ns.store.(Reconciler); ok {
+			reconciler.Reconcile()
+		}
 	}
 }

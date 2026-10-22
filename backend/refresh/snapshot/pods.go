@@ -258,7 +258,7 @@ func RegisterPodDomain(reg *domain.Registry, provider metrics.Provider, clusterM
 	// starts (this runs during registration), so the snapshot sync gate guarantees the
 	// store is populated before the first Build serves from it.
 	maintained := newTypedMaintainedStore(clusterMeta, podQuerypageSchema(), podTableQueryAdapter())
-	reg.RegisterMaintainedStore(podDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
+	reg.RegisterMaintainedStore(podDomainName, maintained) // spill/restore across Cold/re-warm
 	if ingestManager != nil {
 		ingestManager.AddSink(PodGVR, maintained.sinkFor("", podRowPublication(maintained, bell)))
 	}

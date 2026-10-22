@@ -35,7 +35,7 @@ var ResourceQuotaGVR = schema.GroupVersionResource{Group: resourcequotapkg.Ident
 // reflector's store, joined at serve with workload presence from the pod and
 // workload ingest stores, warning events, and quota pressure.
 type NamespaceBuilder struct {
-	namespaces namespaceSource
+	namespaces namespaceProvider
 	// events is the owned events store the warning rollup counts.
 	// eventsExpected is true only when the identity may list and watch
 	// Events. A denied source is unavailable, while an allowed source that has

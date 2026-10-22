@@ -127,7 +127,7 @@ func RegisterNamespaceNetworkDomain(
 		}
 	}
 	feedMaintainedFromIngest(maintained, namespaceNetworkDomainName, ingestManager, bell, rowDerivation[NetworkSummary]{})
-	reg.RegisterMaintainedStore(namespaceNetworkDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
+	reg.RegisterMaintainedStore(namespaceNetworkDomainName, maintained) // spill/restore across Cold/re-warm
 
 	builder := &NamespaceNetworkBuilder{
 		networkIngest:          ingestManager,

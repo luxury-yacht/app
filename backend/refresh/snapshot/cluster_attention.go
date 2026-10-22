@@ -738,6 +738,10 @@ func (i *clusterAttentionIndex) SwapToMmap(path string) (func() error, error) {
 	return i.maintained.SwapToMmap(path)
 }
 
+// The Attention index is the one maintained store with rows a relist does not
+// remove (findings from sources that are now unavailable), so re-warm must reach it.
+var _ domain.Reconciler = (*clusterAttentionIndex)(nil)
+
 func (i *clusterAttentionIndex) Reconcile() {
 	if i == nil {
 		return

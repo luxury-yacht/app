@@ -313,6 +313,7 @@ export class ResourceStreamManager {
         return;
       }
       case 'cancel-flush':
+      case 'cancel-trailing-resync':
         window.clearTimeout(effect.timer);
         return;
       case 'advance-source':
@@ -331,9 +332,6 @@ export class ResourceStreamManager {
         this.applyProtocolEvent(subscription, { type: 'trailing-resync-timer-attached', timer });
         return;
       }
-      case 'cancel-trailing-resync':
-        window.clearTimeout(effect.timer);
-        return;
       case 'permission-denied':
         eventBus.emit('refresh:resource-stream-permission-denied', {
           domain: subscription.domain,

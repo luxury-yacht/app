@@ -131,7 +131,7 @@ func buildTypedTableSnapshot[T any](
 
 // newRegisteredTypedTableStore wires the shared maintained-store scaffolding every
 // typed-table domain's Register performs: build the store, register it with the
-// governor for spill/restore/reconcile across Cold/re-warm, and feed it from the
+// governor for spill/restore across Cold/re-warm, and feed it from the
 // ingest reflectors' sinks. ingestManager is nil in unit tests, where the store
 // has no feed.
 func newRegisteredTypedTableStore[T any](

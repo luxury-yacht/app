@@ -32,8 +32,8 @@ func NewNamespaceIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 	}
 }
 
-// namespaceSource supplies the cluster's namespaces.
-type namespaceSource interface {
+// namespaceProvider supplies the cluster's namespaces.
+type namespaceProvider interface {
 	Namespaces() []*corev1.Namespace
 }
 

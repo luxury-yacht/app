@@ -108,7 +108,7 @@ type podWorkloadsIngestSource interface {
 // partitions' availability, and its resourceVersion for the version watermark.
 // *ingest.IngestManager satisfies it.
 type hpaTargetSource interface {
-	ingestPartitionSource
+	partitionReadinessReporter
 	AggregateRows(gvr schema.GroupVersionResource) []interface{}
 	StoreResourceVersion(gvr schema.GroupVersionResource) string
 }

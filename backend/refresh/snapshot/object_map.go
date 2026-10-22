@@ -111,7 +111,7 @@ type objectMapPermissionChecker interface {
 // objectMapRowsProvider supplies each kind's projected object-map nodes and its
 // partitions' availability. *ingest.IngestManager satisfies it.
 type objectMapRowsProvider interface {
-	ingestPartitionSource
+	partitionReadinessReporter
 	ObjectMapRows(gvr schema.GroupVersionResource) []interface{}
 }
 
@@ -503,7 +503,7 @@ func objectMapRecordIdentityKey(ref ObjectMapReference) string {
 // enrichActionFacts marks each scalable workload HPA-managed or not. "Not
 // managed" is reported only where the HPA data covering the workload's
 // namespace is complete; elsewhere the fact stays unknown.
-func (idx *objectMapIndex) enrichActionFacts(hpaSource ingestPartitionSource) {
+func (idx *objectMapIndex) enrichActionFacts(hpaSource partitionReadinessReporter) {
 	if idx == nil {
 		return
 	}

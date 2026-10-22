@@ -69,7 +69,7 @@ type clusterOverviewIngestSource interface {
 type ClusterOverviewBuilder struct {
 	client     kubernetes.Interface
 	ingest     clusterOverviewIngestSource
-	namespaces namespaceSource
+	namespaces namespaceProvider
 	metrics    metrics.Provider
 	serverHost string
 

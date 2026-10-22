@@ -368,7 +368,7 @@ func (s *APIServer) serveAccessReview(w http.ResponseWriter, r *http.Request) {
 		review.Status.Allowed = allow(*attrs)
 	}
 	review.APIVersion, review.Kind = authorizationv1.SchemeGroupVersion.String(), "SelfSubjectAccessReview"
-	w.Header().Set("Content-Type", "application/json")
+	setJSONContentType(w)
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(&review)
 }
@@ -398,7 +398,7 @@ func (s *APIServer) serveList(w http.ResponseWriter, route Route, namespace stri
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
+	setJSONContentType(w)
 	_, _ = w.Write(data)
 }
 
@@ -416,10 +416,14 @@ func watchStart(r *http.Request) (int64, bool) {
 	return version, true
 }
 
+func setJSONContentType(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", runtime.ContentTypeJSON)
+}
+
 func writeGone(w http.ResponseWriter) {
 	status := apierrors.NewResourceExpired("resource version too old").ErrStatus
 	status.APIVersion, status.Kind = "v1", "Status"
-	w.Header().Set("Content-Type", "application/json")
+	setJSONContentType(w)
 	w.WriteHeader(http.StatusGone)
 	_ = json.NewEncoder(w).Encode(&status)
 }
@@ -485,7 +489,7 @@ func (s *APIServer) serveWatch(w http.ResponseWriter, r *http.Request, route Rou
 	}
 	defer s.unregister(open)
 
-	w.Header().Set("Content-Type", "application/json")
+	setJSONContentType(w)
 	w.WriteHeader(http.StatusOK)
 	write := eventWriter(w, encoder)
 	if r.URL.Query().Get("sendInitialEvents") == "true" {
