@@ -5,11 +5,10 @@
  * native window, tearing off and dropping tabs across windows, answering the
  * registry's tab-transfer requests, tearing off a cluster tab, auto-floating
  * panels when the user prefers floating, and mounting the moves the directory
- * targets at this view. Runs the production shell's own coordinator, dock,
- * guard registry, object-panel state, publication queue, and kubeconfig owner;
- * gestures go through the real tab bars and dock controls, with open panels
- * hosted as AppLayout hosts them. Only the backend boundary is faked
- * (test-utils/appState).
+ * targets at this view. Runs in the full app: its own coordinator, dock, guard
+ * registry, object-panel state, publication queue, and kubeconfig owner, with
+ * open panels hosted by its layout; gestures go through the real tab bars and
+ * dock controls. Only the backend boundary is faked (test-utils/appState).
  *
  * Window close, quit, and cluster close preflights are covered by
  * WorkspacePanelLifecycle.test.tsx; directory reads and close intents by
@@ -28,7 +27,6 @@ import {
   type MountedApp,
   type TestCluster,
 } from '@/test-utils/appState/harness';
-import { WorkspacePanelHost } from '@/test-utils/appState/WorkspacePanelHost';
 import { requireValue } from '@/test-utils/requireValue';
 import { DockablePanel, useDockablePanelContext } from '@/ui/dockable';
 import ClusterTabs from '@/ui/layout/ClusterTabs';
@@ -42,14 +40,23 @@ let staging: TestCluster;
 let dock: ReturnType<typeof useDockablePanelContext> | undefined;
 let unsaved = new Set<string>();
 
-const podRef = (cluster: TestCluster, name: string) => ({
-  clusterId: cluster.clusterId,
+const pod = (name: string) => ({
   group: '',
   version: 'v1',
   kind: 'Pod',
   namespace: 'default',
   name,
 });
+const podRef = (cluster: TestCluster, name: string) => ({ clusterId: cluster.clusterId, ...pod(name) });
+
+/** Serves what the cluster's start screen and its pods' panels read. */
+const serveCluster = (cluster: TestCluster) => {
+  app.namespaces(cluster, ['default']);
+  app.startScreen(cluster);
+  for (const name of ['api', 'worker', 'related']) {
+    app.servePanel(cluster, pod(name));
+  }
+};
 const panelIdOf = (name: string, cluster = production) => objectPanelId(podRef(cluster, name));
 const tabOf = (name: string, cluster = production) =>
   objectPanelTabSnapshot(panelIdOf(name, cluster), podRef(cluster, name), 'details');
@@ -96,10 +103,10 @@ const start = async ({
 } = {}) => {
   unsaved = new Set();
   production = app.cluster({ name: 'dev', context: 'production' });
-  app.namespaces(production, ['default']);
+  serveCluster(production);
   if (twoClusters) {
     staging = app.cluster({ name: 'dev', context: 'staging' });
-    app.namespaces(staging, ['default']);
+    serveCluster(staging);
   }
   for (const method of [
     'RequestPanelTabTransfer',
@@ -110,10 +117,8 @@ const start = async ({
   ] as const) {
     app.backend.answer(method, () => undefined);
   }
-  view = await app.render(null);
-  await view.show(
+  view = await app.mountApp(
     <>
-      <WorkspacePanelHost />
       <DockProbe />
       <UnsavedGuards />
       {extra}

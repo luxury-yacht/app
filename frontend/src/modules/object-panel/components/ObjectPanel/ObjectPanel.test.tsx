@@ -16,7 +16,6 @@ import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   makeClusterNodeSnapshotPayload,
-  makeNamespaceWorkloadSnapshotPayload,
   makePodSnapshotEntry,
   makePodSnapshotPayload,
 } from '@/core/refresh/refreshContractTestBuilders';
@@ -88,16 +87,25 @@ type DetailsAnswer =
   | { respond: () => Response };
 
 /**
- * Serves what `identity`'s panel reads in `cluster`: its details (or their
- * failure), and the pods, namespace workloads, and HPA check a pod or workload
- * panel also reads.
+ * Serves what `identity`'s panel reads in `cluster` (test-utils/appState), with
+ * its details failed or answered by hand when `answer` says so. A node panel
+ * also reads its cluster's nodes and discovers its logs.
  */
 const servePanel = (
   target: ObjectIdentity,
   answer: DetailsAnswer = { details: {} },
   cluster = dev
 ): TestObject => {
-  const object = app.object(cluster, target);
+  const object = app.servePanel(
+    cluster,
+    target,
+    'details' in answer
+      ? ({
+          details: answer.details,
+          ...(answer.deletion ? { deletion: answer.deletion } : {}),
+        } as never)
+      : undefined
+  );
   const scope = object.scopes.detailScope ?? '';
   if ('fail' in answer) {
     app.snapshots.fail('object-details', scope, answer.fail);
@@ -105,48 +113,20 @@ const servePanel = (
     app.snapshots.respond((request) =>
       request.domain === 'object-details' && request.scope === scope ? answer.respond() : undefined
     );
-  } else {
-    app.snapshots.serve('object-details', scope, {
-      detailType: target.kind.toLowerCase(),
-      details: answer.details,
-      ...(answer.deletion ? { deletion: answer.deletion } : {}),
-    } as never);
-  }
-  const identityOfCluster = { clusterId: cluster.clusterId, clusterName: cluster.clusterName };
-  const namespace = target.namespace?.trim() ?? '';
-  const namespacePods = namespace
-    ? buildRefreshScope('pods', {
-        clusterId: cluster.clusterId,
-        selector: { kind: 'namespace', namespace },
-      })
-    : '';
-  if (namespace) {
-    app.snapshots.serve('pods', namespacePods, makePodSnapshotPayload(identityOfCluster));
-    app.snapshots.serve(
-      'namespace-workloads',
-      buildRefreshScope('namespace-workloads', {
-        clusterId: cluster.clusterId,
-        selector: { kind: 'namespace', namespace },
-      }),
-      makeNamespaceWorkloadSnapshotPayload(identityOfCluster)
-    );
   }
   if (target.kind.toLowerCase() === 'node') {
-    // A node panel also reads its cluster's nodes.
+    const identityOfCluster = { clusterId: cluster.clusterId, clusterName: cluster.clusterName };
     app.snapshots.serve(
       'nodes',
       buildRefreshScope('nodes', { clusterId: cluster.clusterId, selector: CLUSTER_SELECTOR }),
       makeClusterNodeSnapshotPayload(identityOfCluster)
     );
-    // ...and discovers its logs (backend/node_logs.go), which no test here reads.
+    // backend/node_logs.go: no test here reads a node's logs.
     app.backend.answer('DiscoverNodeLogs', () => ({
       supported: false,
       sources: [],
       reason: 'node log query is not enabled',
     }));
-  }
-  if (object.scopes.podsScope && object.scopes.podsScope !== namespacePods) {
-    app.snapshots.serve('pods', object.scopes.podsScope, makePodSnapshotPayload(identityOfCluster));
   }
   return object;
 };

@@ -3,12 +3,11 @@
  *
  * Closing a cluster tab, closing the window, or quitting freezes the affected
  * panels while their placement is published, refuses while a panel has
- * unsaved edits, and releases input however the request ends. Runs the
- * production shell's own WorkspacePanelLifecycle, publication queue, guard
- * registry, object-panel state, and kubeconfig owner; an open pod panel is
- * docked in the shell's dock as AppLayout hosts it. Only the backend boundary
- * is faked (test-utils/appState); `backend.hold` keeps a call in flight to
- * observe the app meanwhile.
+ * unsaved edits, and releases input however the request ends. Runs in the
+ * full app: its own WorkspacePanelLifecycle, publication queue, guard registry,
+ * object-panel state, and kubeconfig owner, with an open pod panel docked by
+ * its layout. Only the backend boundary is faked (test-utils/appState);
+ * `backend.hold` keeps a call in flight to observe the app meanwhile.
  */
 
 import { act, useState } from 'react';
@@ -20,7 +19,6 @@ import {
   type MountedApp,
   type TestCluster,
 } from '@/test-utils/appState/harness';
-import { WorkspacePanelHost } from '@/test-utils/appState/WorkspacePanelHost';
 import { requireValue } from '@/test-utils/requireValue';
 import { useDockablePanelContext } from '@/ui/dockable';
 import { getGroupForPanel } from '@/ui/dockable/tabGroupState';
@@ -126,22 +124,25 @@ const settleQuit = (sender?: string) =>
 beforeEach(async () => {
   production = app.cluster({ name: 'dev', context: 'production' });
   staging = app.cluster({ name: 'dev', context: 'staging' });
-  app.namespaces(production, ['default']);
-  app.namespaces(staging, ['default']);
+  for (const cluster of [production, staging]) {
+    app.namespaces(cluster, ['default']);
+    app.startScreen(cluster);
+  }
+  const { clusterId: _clusterId, ...pod } = podRef();
+  app.servePanel(production, pod);
   app.backend.answer('CloseClusterView', () => false);
   app.backend.answer('AcknowledgeWorkspaceWindowClose', () => undefined);
   app.backend.answer('AcknowledgeApplicationQuitPreflight', () => undefined);
-  view = await app.render(null);
-  await act(async () => {
-    view.owners().objectPanel.openWithObject(podRef());
-  });
-  await view.show(
+  view = await app.mountApp(
     <>
-      <WorkspacePanelHost />
       <DockProbe />
       <EditablePanel />
     </>
   );
+  await act(async () => {
+    view.owners().objectPanel.openWithObject(podRef());
+  });
+  await app.settle();
 });
 
 it('guards panels immediately but waits for tab admission before native close', async () => {

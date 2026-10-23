@@ -11,11 +11,6 @@
 
 import { act } from 'react';
 import { expect, it, vi } from 'vitest';
-import {
-  makeNamespaceWorkloadSnapshotPayload,
-  makePodSnapshotPayload,
-} from '@/core/refresh/refreshContractTestBuilders';
-import { buildRefreshScope } from '@/core/refresh/scopeSelector';
 import { installAppStateHarness, type ObjectIdentity } from '@/test-utils/appState/harness';
 
 const seen = vi.hoisted(() => ({ objects: [] as unknown[] }));
@@ -56,34 +51,11 @@ it('keeps each tab’s own object identity in the group’s shared content slot'
   app.namespaces(dev, ['argo-sandbox']);
   app.startScreen(dev);
   app.backend.answer('IsWorkloadHPAManaged', () => false);
-  const cluster = { clusterId: dev.clusterId, clusterName: dev.clusterName };
-  const objects = [deployment, pod].map((identity) => {
-    const object = app.object(dev, identity);
-    app.snapshots.serve('object-details', object.scopes.detailScope ?? '', {
+  const objects = [deployment, pod].map((identity) =>
+    app.servePanel(dev, identity, {
       detailType: identity.kind.toLowerCase(),
       details: { name: identity.name, namespace: identity.namespace },
-    } as never);
-    if (object.scopes.podsScope) {
-      app.snapshots.serve('pods', object.scopes.podsScope, makePodSnapshotPayload(cluster));
-    }
-    return object;
-  });
-  // A pod panel's metrics read its namespace's pods.
-  app.snapshots.serve(
-    'pods',
-    buildRefreshScope('pods', {
-      clusterId: dev.clusterId,
-      selector: { kind: 'namespace', namespace: 'argo-sandbox' },
-    }),
-    makePodSnapshotPayload(cluster)
-  );
-  app.snapshots.serve(
-    'namespace-workloads',
-    buildRefreshScope('namespace-workloads', {
-      clusterId: dev.clusterId,
-      selector: { kind: 'namespace', namespace: 'argo-sandbox' },
-    }),
-    makeNamespaceWorkloadSnapshotPayload(cluster)
+    } as never)
   );
   const view = await app.mountApp();
   const [deploymentPanel] = objects;

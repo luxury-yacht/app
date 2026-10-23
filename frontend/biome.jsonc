@@ -254,6 +254,9 @@
       "path": "./biome-plugins/no-owned-state-mocks.grit",
       "includes": [
         "**/src/**/*.test.{ts,tsx}",
+        // Exempt, not baseline: a benchmark times one component's own work, which real owners
+        // and StrictMode would add to (John, 2026-10-22).
+        "!**/src/**/*.benchmark.test.{ts,tsx}",
         "!**/src/App.menu.test.tsx",
         "!**/src/core/capabilities/hooks.test.tsx",
         "!**/src/core/capabilities/permissionStore.test.ts",
@@ -312,7 +315,6 @@
         "!**/src/modules/namespace/contexts/NsResourcesContext.test.tsx",
         "!**/src/modules/namespace/hooks/useNamespaceGridTablePersistence.test.tsx",
         "!**/src/modules/object-map/ObjectMap.test.tsx",
-        "!**/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.benchmark.test.tsx",
         "!**/src/modules/resource-grid/queryBackedLeafFirstLoad.test.tsx",
         "!**/src/modules/resource-grid/useAnchorOnUnmatchedFocusRequest.test.tsx",
         "!**/src/modules/resource-grid/useQueryBackedResourceGridTable.test.tsx",

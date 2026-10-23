@@ -11,11 +11,6 @@
 
 import { act } from 'react';
 import { describe, expect, it } from 'vitest';
-import {
-  makeNamespaceWorkloadSnapshotPayload,
-  makePodSnapshotPayload,
-} from '@/core/refresh/refreshContractTestBuilders';
-import { buildRefreshScope } from '@/core/refresh/scopeSelector';
 import type { ObjectDetail } from '@/core/refresh/types';
 import {
   installAppStateHarness,
@@ -39,25 +34,8 @@ const openPanel = async (identity: ObjectIdentity, detail: ObjectDetail) => {
   const dev = app.cluster({ name: 'dev', context: 'alpha' });
   app.namespaces(dev, ['team-a']);
   app.startScreen(dev);
-  const panel = app.object(dev, identity);
-  app.snapshots.serve('object-details', panel.scopes.detailScope ?? '', {
-    clusterId: dev.clusterId,
-    clusterName: dev.clusterName,
-    ...detail,
-  });
-  // The panel's metrics collector leases the object's base table scope.
-  const namespaceScope = (domain: 'pods' | 'namespace-workloads') =>
-    buildRefreshScope(domain, {
-      clusterId: dev.clusterId,
-      selector: { kind: 'namespace', namespace: 'team-a' },
-    });
-  const identityFields = { clusterId: dev.clusterId, clusterName: dev.clusterName };
-  app.snapshots.serve('pods', namespaceScope('pods'), makePodSnapshotPayload(identityFields));
-  app.snapshots.serve(
-    'namespace-workloads',
-    namespaceScope('namespace-workloads'),
-    makeNamespaceWorkloadSnapshotPayload(identityFields)
-  );
+  // The panel's reads, including its metrics collector's base table scope (test-utils/appState).
+  const panel = app.servePanel(dev, identity, detail as never);
   // backend/autoscaling_details.go IsWorkloadHPAManaged: no HPA targets the workload.
   app.backend.answer('IsWorkloadHPAManaged', () => false);
   const view = await app.mountApp();

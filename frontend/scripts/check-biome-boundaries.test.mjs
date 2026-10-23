@@ -259,6 +259,18 @@ describe('owned-state mock guard', () => {
     expect(lintTest(source).output).not.toContain(HARNESS_MESSAGE);
   });
 
+  // A benchmark times one component's own work; real owners and StrictMode
+  // would add their cost to the measurement (John, 2026-10-22).
+  it('allows owner mocks in a benchmark file', () => {
+    const result = lintWithProjectConfig(
+      "vi.mock('@/core/refresh/orchestrator', () => ({}));",
+      path.join(process.cwd(), 'src'),
+      'adversarial.benchmark.test.tsx'
+    );
+
+    expect(`${result.stdout}\n${result.stderr}`).not.toContain(HARNESS_MESSAGE);
+  });
+
   it('rejects an owned-state mock with the plugin alone', () => {
     const result = lintWithPlugin('no-owned-state-mocks', "vi.mock('@/core/refresh', () => ({}));");
 

@@ -5,21 +5,23 @@
  * lands its publication, and hands off its view state; a dirty or closing
  * source refuses. The target restores navigation only for a new tab and
  * acknowledges once its publication lands and the directory's panels are
- * mounted. Runs the production shell's own coordinator, publication queue,
- * guard registry, view state, namespace, and kubeconfig owners; transfer
- * events and the directory come from the faked backend (test-utils/appState).
+ * mounted. Runs in the full app: its own coordinator, publication queue, guard
+ * registry, view state, namespace, and kubeconfig owners, with open panels
+ * hosted by its layout; transfer events and the directory come from the faked
+ * backend (test-utils/appState).
  */
 
 import { act } from 'react';
 import { expect, it } from 'vitest';
 import { panelwindow } from '@/core/backend-api/models';
+import { makeNamespaceWorkloadSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import { objectPanelId } from '@/modules/object-panel/objectPanelRef';
 import {
   installAppStateHarness,
   type MountedApp,
   type TestCluster,
 } from '@/test-utils/appState/harness';
-import { WorkspacePanelHost } from '@/test-utils/appState/WorkspacePanelHost';
+import { snapshotResponse } from '@/test-utils/appState/transport';
 import { requireValue } from '@/test-utils/requireValue';
 import { useDockablePanelContext } from '@/ui/dockable';
 import { getGroupForPanel } from '@/ui/dockable/tabGroupState';
@@ -113,14 +115,29 @@ const rearrange = async () => {
 const start = async ({ openApi = true, extra = null as React.ReactNode } = {}) => {
   production = app.cluster({ name: 'dev', context: 'production' });
   app.namespaces(production, ['default', 'payments']);
+  app.startScreen(production);
+  const { clusterId: _clusterId, ...api } = apiRef();
+  app.servePanel(production, api);
+  // A restored namespace view lists its workloads (a sorted, paged query).
+  app.snapshots.respond((request) =>
+    request.domain === 'namespace-workloads'
+      ? snapshotResponse({
+          domain: 'namespace-workloads',
+          scope: request.scope,
+          version: 1,
+          payload: makeNamespaceWorkloadSnapshotPayload({
+            clusterId: production.clusterId,
+            clusterName: production.clusterName,
+          }),
+        })
+      : undefined
+  );
   app.backend.answer('AcceptClusterTabTransfer', () => undefined);
   app.backend.answer('AcknowledgeClusterTabTransfer', () => undefined);
   app.backend.answer('FailClusterTabTransfer', () => undefined);
   app.backend.answer('AcknowledgeWorkspaceWindowClose', () => undefined);
-  view = await app.render(null);
-  await view.show(
+  view = await app.mountApp(
     <>
-      <WorkspacePanelHost />
       <DockProbe />
       {extra}
     </>

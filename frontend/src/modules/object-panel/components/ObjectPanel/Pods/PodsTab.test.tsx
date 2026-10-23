@@ -171,16 +171,9 @@ const serveNamespaceTables = <D extends 'pods' | 'namespace-workloads'>(
   });
 };
 
-/** backend/object_detail_provider.go: the object-details snapshot a panel reads. */
-const servePanel = (identity: ObjectIdentity, detail: object): TestObject => {
-  const panel = app.object(dev, identity);
-  app.snapshots.serve('object-details', panel.scopes.detailScope ?? '', {
-    clusterId: dev.clusterId,
-    clusterName: dev.clusterName,
-    ...detail,
-  } as never);
-  return panel;
-};
+/** The reads a panel makes, with `detail` as its object-details snapshot (test-utils/appState). */
+const servePanel = (identity: ObjectIdentity, detail: object): TestObject =>
+  app.servePanel(dev, identity, detail as never);
 
 const clusterFields = () => ({ clusterId: dev.clusterId, clusterName: dev.clusterName });
 

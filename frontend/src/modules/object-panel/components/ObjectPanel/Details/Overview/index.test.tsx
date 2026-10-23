@@ -13,11 +13,6 @@
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  makeNamespaceWorkloadSnapshotPayload,
-  makePodSnapshotPayload,
-} from '@/core/refresh/refreshContractTestBuilders';
-import { buildRefreshScope } from '@/core/refresh/scopeSelector';
-import {
   installAppStateHarness,
   type MountedApp,
   type ObjectIdentity,
@@ -50,27 +45,9 @@ let view: MountedApp;
 
 const lastActionsMenu = () => captured.actionsMenu[captured.actionsMenu.length - 1];
 
-/** Serves an object's details, and the reads a workload panel also makes. */
-const servePanel = (identity: ObjectIdentity, detailType: string, details: object) => {
-  const object = app.object(dev, identity);
-  app.snapshots.serve('object-details', object.scopes.detailScope ?? '', {
-    detailType,
-    details,
-  } as never);
-  if (object.scopes.podsScope) {
-    const cluster = { clusterId: dev.clusterId, clusterName: dev.clusterName };
-    app.snapshots.serve('pods', object.scopes.podsScope, makePodSnapshotPayload(cluster));
-    app.snapshots.serve(
-      'namespace-workloads',
-      buildRefreshScope('namespace-workloads', {
-        clusterId: dev.clusterId,
-        selector: { kind: 'namespace', namespace: identity.namespace ?? '' },
-      }),
-      makeNamespaceWorkloadSnapshotPayload(cluster)
-    );
-  }
-  return object;
-};
+/** Serves the panel's reads (test-utils/appState), with these details. */
+const servePanel = (identity: ObjectIdentity, detailType: string, details: object) =>
+  app.servePanel(dev, identity, { detailType, details } as never);
 
 const openPanel = async (object: ReturnType<typeof servePanel>) => {
   view = await app.mountApp();

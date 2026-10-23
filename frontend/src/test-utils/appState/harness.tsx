@@ -29,6 +29,8 @@ import {
   makeCatalogSnapshotPayload,
   makeClusterAttentionSnapshot,
   makeClusterOverviewSnapshotPayload,
+  makeNamespaceWorkloadSnapshotPayload,
+  makePodSnapshotPayload,
 } from '@/core/refresh/refreshContractTestBuilders';
 import {
   buildClusterRefreshScope,
@@ -192,6 +194,19 @@ export interface AppStateHarness {
   /** An object of `cluster`, with the panel scopes production derives for it. */
   object(cluster: TestCluster, identity: ObjectIdentity): TestObject;
   /**
+   * Serves the reads an object's panel makes when it opens: its details
+   * (backend/object_detail_provider.go; an empty detail of its kind unless
+   * `detail` says otherwise), its YAML (a minimal manifest of its identity),
+   * its events (none), the pods its Pods tab lists, and a namespaced object's
+   * namespace pods and workloads. To fail or hold a read, follow with
+   * `snapshots.fail` or `snapshots.respond`.
+   */
+  servePanel(
+    cluster: TestCluster,
+    identity: ObjectIdentity,
+    detail?: Partial<DomainPayloadMap['object-details']>
+  ): TestObject;
+  /**
    * Serves what the full app's start screen (the cluster Overview) reads for
    * the cluster: its overview, attention findings, and discovered families.
    */
@@ -209,8 +224,12 @@ export interface AppStateHarness {
   permissions(decide: (query: PermissionQuery) => PermissionDecision): void;
   /** Provider mode: renders `ui` inside the production shell. */
   render(ui: ReactNode): Promise<MountedApp>;
-  /** Full-app mode: renders the root the native descriptor selects. */
-  mountApp(): Promise<MountedApp>;
+  /**
+   * Full-app mode: renders the root the native descriptor selects. `probes`
+   * render beside the workspace layout, inside the shell, to read owners'
+   * hooks the way `owners()` does.
+   */
+  mountApp(probes?: ReactNode): Promise<MountedApp>;
   /** Settles queued work: microtasks, lazy imports, and zero-delay timers. */
   settle(): Promise<void>;
 }
@@ -782,6 +801,11 @@ export const installAppStateHarness = (
     } satisfies MountedApp;
   };
 
+  const objectOf = (cluster: TestCluster, identity: ObjectIdentity): TestObject => {
+    const ref = { ...identity, clusterId: cluster.clusterId, clusterName: cluster.clusterName };
+    return { ref, scopes: getObjectPanelScopes(ref) };
+  };
+
   return {
     get backend() {
       return current().transport.backend;
@@ -828,9 +852,49 @@ export const installAppStateHarness = (
       }
       return cluster;
     },
-    object(cluster, identity) {
-      const ref = { ...identity, clusterId: cluster.clusterId, clusterName: cluster.clusterName };
-      return { ref, scopes: getObjectPanelScopes(ref) };
+    object: objectOf,
+    servePanel(cluster, identity, detail = {}) {
+      const { snapshots } = current().transport;
+      const object = objectOf(cluster, identity);
+      const meta = { clusterId: cluster.clusterId, clusterName: cluster.clusterName };
+      snapshots.serve('object-details', object.scopes.detailScope ?? '', {
+        ...meta,
+        detailType: identity.kind.toLowerCase(),
+        details: {},
+        ...detail,
+      } as DomainPayloadMap['object-details']);
+      const namespace = identity.namespace?.trim();
+      const apiVersion = identity.group ? `${identity.group}/${identity.version}` : identity.version;
+      snapshots.serve('object-yaml', object.scopes.detailScope ?? '', {
+        ...meta,
+        yaml: [
+          `apiVersion: ${apiVersion}`,
+          `kind: ${identity.kind}`,
+          'metadata:',
+          `  name: ${identity.name}`,
+          ...(namespace ? [`  namespace: ${namespace}`] : []),
+        ].join('\n'),
+      });
+      if (object.scopes.eventsScope) {
+        snapshots.serve('object-events', object.scopes.eventsScope, { ...meta, events: [] });
+      }
+      if (object.scopes.podsScope) {
+        snapshots.serve('pods', object.scopes.podsScope, makePodSnapshotPayload(meta));
+      }
+      if (namespace) {
+        const selector = { kind: 'namespace', namespace } as const;
+        snapshots.serve(
+          'pods',
+          buildRefreshScope('pods', { clusterId: cluster.clusterId, selector }),
+          makePodSnapshotPayload(meta)
+        );
+        snapshots.serve(
+          'namespace-workloads',
+          buildRefreshScope('namespace-workloads', { clusterId: cluster.clusterId, selector }),
+          makeNamespaceWorkloadSnapshotPayload(meta)
+        );
+      }
+      return object;
     },
     showCluster(cluster) {
       current().workspace.visibleClusterId = cluster.clusterId;
@@ -926,16 +990,17 @@ export const installAppStateHarness = (
         );
       });
     },
-    mountApp() {
+    mountApp(probes) {
       return mount(async (prepared) => {
         if (prepared.descriptor.role === panelwindow.NativeRole.NativeRolePanel) {
           return loadWindowRoot(prepared.descriptor);
         }
-        // Exactly what App renders (App.tsx), plus the bridge beside the layout.
+        // Exactly what App renders (App.tsx), plus the bridge and probes beside the layout.
         return (
           <AppShell>
             <AppLayout />
             <HarnessBridge />
+            {probes}
           </AppShell>
         );
       });

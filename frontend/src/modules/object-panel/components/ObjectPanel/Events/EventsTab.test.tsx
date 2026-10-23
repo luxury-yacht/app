@@ -1,10 +1,14 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Events/EventsTab.test.tsx
  *
- * Verifies EventsTab carries per-event cluster identity through to the panels
- * it opens, preferring it over the parent panel's cluster. Runs inside the real
- * app shell (or a native panel window's shell) over a faked backend
- * (test-utils/appState); the table is stubbed only to reach its cell renders.
+ * Verifies EventsTab opens an event, and the object it involves, with full
+ * identity in the event's cluster. That is always the panel's own cluster: a
+ * Kubernetes Event's object references carry no cluster
+ * (k8s.io/api core/v1 ObjectReference), and the backend builds an object's
+ * events from its scope's cluster (backend/refresh/snapshot/object_events.go).
+ * Runs inside the real app shell (or a native panel window's shell) over a
+ * faked backend (test-utils/appState); the table is stubbed only to reach its
+ * cell renders.
  */
 
 import type { GridTableProps } from '@shared/components/tables/GridTable';
@@ -73,7 +77,6 @@ vi.mock('@shared/components/tables/GridTable', () => ({
 vi.mock('./EventsTab.css', () => ({}));
 
 let PARENT_CLUSTER_ID = '';
-let EVENT_CLUSTER_ID = '';
 
 /** Build a minimal ObjectEventSummary for testing. */
 function makeEvent(
@@ -108,7 +111,7 @@ function makeEvent(
     // involved object, stamped with the event's cluster.
     involvedObject: {
       ref: {
-        clusterId: ref?.clusterId ?? PARENT_CLUSTER_ID,
+        clusterId: PARENT_CLUSTER_ID,
         group: '',
         version: 'v1',
         kind: 'Pod',
@@ -125,7 +128,6 @@ function makeEvent(
 describe('EventsTab', () => {
   let EventsTab: typeof import('./EventsTab').default;
   let parent: TestCluster;
-  let eventCluster: TestCluster;
   let view: MountedApp;
   let eventsScope: string;
 
@@ -140,11 +142,8 @@ describe('EventsTab', () => {
   beforeEach(async () => {
     ({ default: EventsTab } = await import('./EventsTab'));
     parent = app.cluster({ name: 'dev', context: 'parent' });
-    eventCluster = app.cluster({ name: 'dev', context: 'events' });
     PARENT_CLUSTER_ID = parent.clusterId;
-    EVENT_CLUSTER_ID = eventCluster.clusterId;
-    app.namespaces(parent, ['default']);
-    app.namespaces(eventCluster, ['team-a']);
+    app.namespaces(parent, ['default', 'team-a']);
     app.showCluster(parent);
     eventsScope = app.object(parent, parentDeployment).scopes.eventsScope ?? '';
     gridTableState.lastProps = null;
@@ -389,25 +388,6 @@ describe('EventsTab', () => {
     expect(view.openPanels()).toEqual([eventA()]);
   });
 
-  it('prefers per-event clusterId over parent panel cluster when opening related objects', async () => {
-    // Event has its own cluster identity distinct from the parent panel.
-    serveEvents([makeEvent({ ref: { clusterId: EVENT_CLUSTER_ID } })]);
-    await startWorkspace();
-    await showEventsTab();
-
-    await clickObjectName();
-
-    // Opening an object of another open cluster shows that cluster.
-    expect(view.owners().kubeconfig.selectedClusterId).toBe(eventCluster.clusterId);
-    expect(view.openPanels()).toEqual([
-      {
-        ...relatedPod(),
-        clusterId: eventCluster.clusterId,
-        clusterName: eventCluster.clusterName,
-      },
-    ]);
-  });
-
   it('keeps the exact events scope subscribed while active and its data once hidden', async () => {
     vi.useFakeTimers();
     serveEvents([makeEvent()]);
@@ -447,7 +427,7 @@ describe('EventsTab', () => {
         involvedObjectUid: 'display-uid',
         involvedObject: {
           ref: {
-            clusterId: EVENT_CLUSTER_ID,
+            clusterId: PARENT_CLUSTER_ID,
             group: 'apps',
             version: 'v1',
             kind: 'Deployment',
@@ -466,7 +446,7 @@ describe('EventsTab', () => {
 
     expect(view.openPanels().map(withoutClusterName)).toEqual([
       {
-        clusterId: eventCluster.clusterId,
+        clusterId: parent.clusterId,
         group: 'apps',
         version: 'v1',
         kind: 'Deployment',
@@ -485,7 +465,7 @@ describe('EventsTab', () => {
             kind: 'Database',
             name: 'orders-db',
             namespace: 'team-a',
-            clusterId: EVENT_CLUSTER_ID,
+            clusterId: PARENT_CLUSTER_ID,
             group: 'db.example.io',
             version: 'v1',
             resource: 'databases',
@@ -495,7 +475,6 @@ describe('EventsTab', () => {
     );
     serveEvents([
       makeEvent({
-        ref: { clusterId: EVENT_CLUSTER_ID },
         involvedObjectKind: 'Database',
         involvedObjectName: 'orders-db',
         involvedObjectNamespace: 'team-a',
@@ -503,7 +482,7 @@ describe('EventsTab', () => {
         // Without an apiVersion the backend can only send a display-only link.
         involvedObject: {
           display: {
-            clusterId: EVENT_CLUSTER_ID,
+            clusterId: PARENT_CLUSTER_ID,
             kind: 'Database',
             namespace: 'team-a',
             name: 'orders-db',
@@ -518,11 +497,11 @@ describe('EventsTab', () => {
     await clickObjectName();
 
     expect(app.backend.calls('FindCatalogObjectByUID')).toEqual([
-      [EVENT_CLUSTER_ID, 'orders-db-uid'],
+      [PARENT_CLUSTER_ID, 'orders-db-uid'],
     ]);
     expect(view.openPanels().map(withoutClusterName)).toEqual([
       {
-        clusterId: eventCluster.clusterId,
+        clusterId: parent.clusterId,
         group: 'db.example.io',
         version: 'v1',
         kind: 'Database',

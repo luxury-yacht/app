@@ -530,6 +530,7 @@ export const installTransport = (
     getWindow: windowApi.Get,
     emit: eventsApi.Emit,
     matchMedia: Object.getOwnPropertyDescriptor(window, 'matchMedia'),
+    scrollIntoView: Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView'),
   };
 
   const rpc = createFakeBackend();
@@ -550,6 +551,13 @@ export const installTransport = (
   globals._wails = { environment: { OS: 'darwin', Arch: 'arm64', Debug: false } };
   globalThis.fetch = snapshots.fetch as typeof globalThis.fetch;
   Object.defineProperty(window, 'matchMedia', { configurable: true, value: matchMedia });
+  // jsdom has no layout, so it has no scrollIntoView; the app scrolls lists to
+  // their selection (the sidebar's namespace, Sidebar.tsx). Scrolling does nothing here.
+  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    configurable: true,
+    writable: true,
+    value: () => undefined,
+  });
 
   return {
     backend: rpc.backend,
@@ -576,6 +584,11 @@ export const installTransport = (
         Object.defineProperty(window, 'matchMedia', previous.matchMedia);
       } else {
         Reflect.deleteProperty(window, 'matchMedia');
+      }
+      if (previous.scrollIntoView) {
+        Object.defineProperty(Element.prototype, 'scrollIntoView', previous.scrollIntoView);
+      } else {
+        Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
       }
     },
   };

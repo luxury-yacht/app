@@ -5,10 +5,9 @@
  * shared directory, reuses a panel shown elsewhere or already open, applies
  * the requested or retained view, moves focus to it, switches to its cluster
  * first, refuses incomplete identities, and floats only a newly opened panel
- * when the user prefers floating. Runs the hook in the production shell with
- * its real object-panel state, dock, and kubeconfig owner, with open panels
- * hosted as AppLayout hosts them; only the backend boundary is faked
- * (test-utils/appState).
+ * when the user prefers floating. Runs the hook in the full app, whose layout
+ * hosts the open panels, with its real object-panel state, dock, and
+ * kubeconfig owner; only the backend boundary is faked (test-utils/appState).
  */
 
 import {
@@ -24,7 +23,7 @@ import {
   type MountedApp,
   type TestCluster,
 } from '@/test-utils/appState/harness';
-import { WorkspacePanelHost } from '@/test-utils/appState/WorkspacePanelHost';
+import { snapshotResponse } from '@/test-utils/appState/transport';
 import { requireValue } from '@/test-utils/requireValue';
 import { useObjectPanel } from './useObjectPanel';
 
@@ -56,19 +55,27 @@ const start = async () => {
   other = app.cluster({ name: 'dev', context: 'beta' });
   app.namespaces(dev, ['default']);
   app.namespaces(other, ['default']);
-  view = await app.render(null);
-  await view.show(
-    <>
-      <WorkspacePanelHost />
-      <Probe />
-    </>
-  );
+  app.startScreen(dev);
+  app.startScreen(other);
+  view = await app.mountApp(<Probe />);
 };
 
 const openObject = async (
   ref: Parameters<ReturnType<typeof useObjectPanel>['openWithObject']>[0],
   options?: Parameters<ReturnType<typeof useObjectPanel>['openWithObject']>[1]
 ) => {
+  // The app renders the panel it opens, which reads its object. An incomplete
+  // identity opens nothing, so it has nothing to serve.
+  const cluster = [dev, other].find((candidate) => candidate.clusterId === ref.clusterId);
+  if (cluster && typeof ref.group === 'string' && ref.version && ref.kind && ref.name) {
+    app.servePanel(cluster, {
+      group: ref.group,
+      version: ref.version,
+      kind: ref.kind,
+      namespace: ref.namespace ?? '',
+      name: ref.name,
+    });
+  }
   await act(async () => {
     panel().openWithObject(ref, options);
   });
@@ -273,6 +280,29 @@ describe('opening an identity panel', () => {
       kind: 'User' as const,
       name: ' alice ',
     };
+    // An identity panel looks its subject up (backend cluster-identities query); none bound.
+    app.snapshots.respond((request) =>
+      request.domain === 'cluster-identities'
+        ? snapshotResponse({
+            domain: 'cluster-identities',
+            scope: request.scope,
+            version: 1,
+            payload: {
+              clusterId: dev.clusterId,
+              clusterName: dev.clusterName,
+              provider: 'typed-resource',
+              table: 'cluster-identities',
+              total: 0,
+              unfilteredTotal: 0,
+              totalIsExact: true,
+              facetsExact: true,
+              capabilities: {},
+              rows: [],
+              completeness: 'complete',
+            },
+          })
+        : undefined
+    );
 
     await act(async () => panel().openWithIdentity(ref));
     await app.settle();

@@ -5,11 +5,11 @@
  * publishes panels only for admitted cluster tabs, pauses a closing cluster,
  * follows the panel directory (retained panels, moves to native windows,
  * dock-backs, view moves), and lands every close intent before reopening.
- * Runs the production shell's own WorkspacePanelSync, publication queue,
- * object-panel state, dock, kubeconfig owner, and WorkspacePanelLifecycle; open
- * panels are docked as AppLayout hosts them. Only the backend boundary is
- * faked (test-utils/appState): a test scripts what the directory answers and
- * rings `panel-workspace:changed`, and `backend.hold` keeps a call in flight.
+ * Runs in the full app: its own WorkspacePanelSync, publication queue,
+ * object-panel state, dock, kubeconfig owner, and WorkspacePanelLifecycle, with
+ * open panels hosted by its layout. Only the backend boundary is faked
+ * (test-utils/appState): a test scripts what the directory answers and rings
+ * `panel-workspace:changed`, and `backend.hold` keeps a call in flight.
  */
 
 import { act } from 'react';
@@ -24,7 +24,6 @@ import {
   type MountedApp,
   type TestCluster,
 } from '@/test-utils/appState/harness';
-import { WorkspacePanelHost } from '@/test-utils/appState/WorkspacePanelHost';
 import { requireValue } from '@/test-utils/requireValue';
 import { useDockablePanelContext } from '@/ui/dockable';
 import { objectPanelTabSnapshot } from './tabTransfer';
@@ -42,14 +41,23 @@ let sync: ReturnType<typeof usePanelWorkspaceSync> | undefined;
 let incoming: readonly IncomingGroupTransfer[] = [];
 let dock: ReturnType<typeof useDockablePanelContext> | undefined;
 
-const podRef = (cluster: TestCluster, name: string) => ({
-  clusterId: cluster.clusterId,
+const pod = (name: string) => ({
   group: '',
   version: 'v1',
   kind: 'Pod',
   namespace: 'default',
   name,
 });
+const podRef = (cluster: TestCluster, name: string) => ({ clusterId: cluster.clusterId, ...pod(name) });
+
+/** Serves what the cluster's start screen and its pods' panels read. */
+const serveCluster = (cluster: TestCluster) => {
+  app.namespaces(cluster, ['default']);
+  app.startScreen(cluster);
+  for (const name of ['api', 'worker', 'second']) {
+    app.servePanel(cluster, pod(name));
+  }
+};
 const panelIdOf = (name: string, cluster = production) => objectPanelId(podRef(cluster, name));
 const tabOf = (name: string, cluster = production) =>
   objectPanelTabSnapshot(panelIdOf(name, cluster), podRef(cluster, name), 'details');
@@ -82,14 +90,8 @@ const closePod = async (name: string) => {
 
 const start = async ({ open = ['api'] }: { open?: string[] } = {}) => {
   production = app.cluster({ name: 'dev', context: 'production' });
-  app.namespaces(production, ['default']);
-  view = await app.render(null);
-  await view.show(
-    <>
-      <WorkspacePanelHost />
-      <Probe />
-    </>
-  );
+  serveCluster(production);
+  view = await app.mountApp(<Probe />);
   for (const name of open) {
     await openPod(name);
   }
@@ -178,7 +180,7 @@ describe('in the workspace window', () => {
   it('waits for confirmed tab membership before panel reads and opens, then resumes on admission', async () => {
     await start({ open: [] });
     const staging = app.cluster({ name: 'dev', context: 'staging', open: false });
-    app.namespaces(staging, ['default']);
+    serveCluster(staging);
     // The user opens a cluster tab; the backend has not admitted it yet.
     const admit = app.backend.hold('ApplyClusterWorkspace');
     act(() => {
@@ -264,7 +266,7 @@ describe('in the workspace window', () => {
   it('rejects stale menu reads and object opens after the cluster selection commits', async () => {
     await start({ open: [] });
     const staging = app.cluster({ name: 'dev', context: 'staging', open: false });
-    app.namespaces(staging, ['default']);
+    serveCluster(staging);
     await act(async () => {
       await view.owners().kubeconfig.openKubeconfig(staging.selection);
     });

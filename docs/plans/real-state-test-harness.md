@@ -14,8 +14,12 @@ guard against regression.
   pilot (John's decision A) is implemented (uncommitted); see
   [Phase 1 pilot](#phase-1-pilot-2026-10-22-uncommitted). After the pilot,
   John raised the end-state runtime budget to +60% (2026-10-22). The rest of
-  Phase 1 is implemented (uncommitted), with decisions open for John; see
-  [Phase 1 completion](#phase-1-completion-2026-10-22-uncommitted).
+  Phase 1 is implemented; see
+  [Phase 1 completion](#phase-1-completion-2026-10-22-uncommitted). John
+  settled its open decisions on 2026-10-22, and they are implemented
+  (uncommitted); see
+  [Phase 1 close-out](#phase-1-close-out-2026-10-22-uncommitted). Phase 1's
+  native checks are still pending. Phases 2–5 are not started.
 - **Base:** `main` at `2ba0fb8a` (Feed cutover #402). Line numbers are from that
   commit.
 - **Paths:** relative to `frontend/src/` unless they start with `frontend/`,
@@ -347,6 +351,16 @@ stash. Pre-migration means the stubbed suite.
    (`EventsTab.tsx:173-180`). A catalog-resolved reference has no
    `clusterName`. The suite asserts today's behavior. For John: whether an
    object's events can involve an object in another cluster [assumed: no].
+   **Resolved (John, 2026-10-22): no.**
+   - A Kubernetes Event's references (`involvedObject`, `regarding`,
+     `related`) are `ObjectReference`s with no cluster field
+     (`k8s.io/api` v0.37.1).
+   - The backend builds an object's events from its scope's cluster
+     (`backend/refresh/snapshot/object_events.go:106`, `:147`, `:269`).
+   - The cluster-name half went away with finding 3 of Phase 1 completion.
+   - The `EventsTab` suite now serves events from the panel's own cluster,
+     and its cross-cluster test is deleted (the
+     [close-out](#phase-1-close-out-2026-10-22-uncommitted)).
 5. **Stream stops linger 500 ms** (`resourceStreamManager.ts:58`). Suites that
    assert an unsubscribe advance fake timers past it.
 
@@ -483,8 +497,9 @@ noise between runs is about ±3 s.
 ## Phase 1 completion (2026-10-22, uncommitted)
 
 The rest of Phase 1, built on the pilot tree. 61 of the 62 Phase 1 suites run
-on the harness. `Logs/LogViewer.benchmark.test.tsx` keeps its stubs and its
-baseline line until John decides ([Pending](#pending-2)).
+on the harness. `Logs/LogViewer.benchmark.test.tsx` keeps its stubs: John
+exempted benchmarks from the guard in the
+[close-out](#phase-1-close-out-2026-10-22-uncommitted).
 
 ### What changed
 
@@ -533,8 +548,8 @@ baseline line until John decides ([Pending](#pending-2)).
     panel at its mount target, inside its cluster's lifecycle surface
     (`ui/layout/AppLayout.tsx:316-370`, `ObjectPanel.tsx:332`). Five suites
     use it. It is a copy of production composition, which
-    [Real owners](#real-owners-production-composition-not-a-copy) rules out;
-    see [Pending](#pending-2).
+    [Real owners](#real-owners-production-composition-not-a-copy) rules out.
+    **Deleted in the close-out:** its five suites run in full-app mode.
 - **Migrated:** 52 suites, plus the benchmark, which has not moved. 173 owner
   `vi.mock` calls were deleted, which with the pilot's 18 makes 191 of
   Phase 1's 195. Every remaining `vi.mock` in these suites stubs a child
@@ -678,14 +693,18 @@ command; checksums matched afterwards. None used git stash.
 - No helper serves a panel's reads by kind. A Deployment panel also needs
   `IsWorkloadHPAManaged` and its namespace's pods and workloads; a Node panel
   needs `nodes`, `object-maintenance`, and `DiscoverNodeLogs`. Four suites
-  write this out.
+  write this out. **Closed in the close-out:** `app.servePanel` serves a
+  panel's open reads, and the seven full-app suites that had their own copy
+  now use it. Node-only reads stay in the two suites that open nodes.
 - No helper selects a panel's sub-tab or reads the active one.
 - No panel-metrics buffer fake; three suites fake it in-file.
 - Clusters must be declared before the mount, because `GetKubeconfigs` is
   read once.
 - jsdom lacks `scrollIntoView` (`Sidebar.tsx:934`) and `elementsFromPoint`.
   Suites shim them locally; a shared shim belongs next to `matchMedia` in
-  `transport.ts`.
+  `transport.ts`. **`scrollIntoView` is closed in the close-out:** the
+  transport installs a no-op and restores the original.
+  `elementsFromPoint` is still open.
 - Named container-log streams. Only the benchmark needs them.
 
 ### Runtime
@@ -757,24 +776,143 @@ and the pilot's rows from their reports.
 
 ### Pending
 
-- **John:**
-  - **The benchmark.** Under the harness, `StrictMode` raises its medians
-    (10,000 parsed JSON lines: 13.1 ms → 23 ms), and the follow-up and
-    measured-cells columns were lost. The options are a harness option without
-    `StrictMode` plus named streams, or an exemption for `*.benchmark.test.*`.
-    Until then its baseline line stays.
-  - **The per-file limit.** Replace it with a per-test mean (for example
-    60 ms in provider mode and 200 ms in full-app mode), or keep it and split
-    the four files. Recommended: replace it, since only wall time costs
-    anything.
-  - **`WorkspacePanelHost`.** Recommended: extract `AppLayout`'s object-panel
-    host into an exported component, as with `AppShell`, so the harness
-    renders the real one. That is a production change and needs a native
-    check.
-  - Pilot finding 4.
-- **Native check** of `PanelWindowShell` (unchanged from the pilot).
+- **John's decisions:** all four are settled and implemented; see the
+  [close-out](#phase-1-close-out-2026-10-22-uncommitted). They were:
+  - **the benchmark:** exempt `*.benchmark.test.*`;
+  - **the per-file limit:** replaced by a per-test limit of 1.0 s;
+  - **`WorkspacePanelHost`:** its five suites run in full-app mode;
+  - **pilot finding 4:** no, so the `EventsTab` fixtures use one cluster.
+- **Native check** of `PanelWindowShell`: still open; see the close-out.
 - **Follow-ups:** finding 6, and the harness gaps as later phases need
   them.
+
+## Phase 1 close-out (2026-10-22, uncommitted)
+
+John settled the four open decisions on 2026-10-22. This section implements
+them.
+
+### Decisions (John, 2026-10-22)
+
+- **Benchmarks are exempt from the guard.** `*.benchmark.test.*` keeps its
+  stubs. A benchmark times one component's own work, which real owners and
+  `StrictMode` would add to. The rejected option was a harness mode without
+  `StrictMode`, plus named log streams.
+- **Time rule: every test at most 1.0 s.**
+  - It replaces the per-file p95 limit
+    ([Runtime budget](#runtime-budget)).
+  - John first chose a per-test mean (60 ms in provider mode, 200 ms in
+    full-app mode). Measured on this tree, it failed 20 of 71 harness files.
+    Each file's first test pays a one-time mount (median 80 ms in provider
+    mode, 458 ms in full-app mode), which dominates files with one to five
+    tests.
+  - A mean that skipped each file's first test still failed 4 files.
+- **`WorkspacePanelHost` is replaced by full-app mode.** Its suites mount
+  the real app, whose `AppLayout` hosts the open panels. There is no
+  production change. The rejected options were extracting an
+  `ObjectPanelHost` from `AppLayout`, and keeping the copy as an exception.
+- **Pilot finding 4: no.** An object's events cannot involve an object in
+  another cluster. See finding 4 of the
+  [Phase 1 pilot](#phase-1-pilot-2026-10-22-uncommitted).
+
+### What changed
+
+- **Guard** (`frontend/biome.jsonc`):
+  - a standing `!**/src/**/*.benchmark.test.{ts,tsx}` include, outside the
+    baseline;
+  - the benchmark's baseline line is deleted, which leaves 116 lines.
+  - A new `check-biome-boundaries.test.mjs` case, through the project
+    config, allows owner mocks in a benchmark file. It was red before the
+    include. The existing cases still reject owner mocks in other tests,
+    58 of 58 in all.
+- **Harness:**
+  - `app.servePanel(cluster, identity, detail?)` serves the reads a panel
+    makes when it opens:
+    - its details (an empty detail of its kind by default);
+    - its YAML (a minimal manifest of its identity);
+    - its events (none);
+    - its pods;
+    - for a namespaced object, its namespace's pods and workloads.
+
+    A suite fails or holds a read by following with `snapshots.fail` or
+    `snapshots.respond`; the last answer for a scope wins
+    (`transport.ts:435-446`).
+  - `mountApp(probes)` renders test probes beside the layout, inside the
+    shell, where they read owners' hooks.
+  - The transport installs a no-op `Element.prototype.scrollIntoView` and
+    restores the original afterwards. jsdom has no layout, and a restored
+    namespace view scrolls the sidebar to it (`Sidebar.tsx`).
+- **Full-app mode replaces `WorkspacePanelHost`,** which is deleted:
+
+  | Suite | Tests |
+  | --- | ---: |
+  | `core/panel-windows/WorkspacePanelSync.test.tsx` | 28 |
+  | `core/panel-windows/WorkspacePanelCoordinator.test.tsx` | 32 |
+  | `core/panel-windows/WorkspacePanelLifecycle.test.tsx` | 14 |
+  | `core/panel-windows/ClusterTabTransferCoordinator.test.tsx` | 7 |
+  | `modules/object-panel/hooks/useObjectPanel.test.tsx` | 18 |
+
+  Each serves its panels with `servePanel`. Opened panels now render their
+  real content, which the host copy left empty. Two suites also answer reads
+  their tests cause:
+  - `useObjectPanel`: an identity panel's `cluster-identities` lookup;
+  - `ClusterTabTransferCoordinator`: a restored namespace view's sorted
+    `namespace-workloads` query.
+- **Consolidated:** seven full-app suites had their own copy of panel
+  serving, and now call `servePanel`:
+  - `ObjectPanel`, `ObjectPanel.groupContext`, `Overview/index`,
+    `HelmOverview`, `useObjectPanelLogsCapability`, `PodsTab`, and
+    `JobsTab`;
+  - `ObjectPanel` keeps its node-only reads and its failed or held details.
+- **`EventsTab`:** events come from the panel's own cluster, so the second
+  cluster is gone. The test "prefers per-event clusterId over parent panel
+  cluster" checked a state the app cannot reach and is deleted (12 → 11
+  tests).
+
+### Runtime
+
+Full `vitest run --reporter=json` from `frontend/`, 4 workers, on the final
+tree:
+
+| Run | Wall | Tests |
+| --- | ---: | ---: |
+| Baseline | 75.4 s | 5,372 |
+| Phase 1 completion | 82.0 s | 5,387 |
+| Close-out | 90.1 s | 5,411 passed, 1 skipped |
+
+- **Overall:** +19.5% over the baseline, within the +60% budget.
+- **Includes other work.** The close-out tree also has this branch's YAML
+  editing changes and their tests, so this delta is not Phase 1's alone.
+- **Per test**, over the 71 harness files:
+
+  | Mode | Tests | Median | p95 | Max |
+  | --- | ---: | ---: | ---: | ---: |
+  | Provider | 692 | 30 ms | 95 ms | 196 ms |
+  | Full app | 187 | 151 ms | 445 ms | 643 ms |
+
+  No test is over 1.0 s.
+
+### Gates
+
+- **Shuffled together:** the 13 suites changed here, the harness suites, and
+  `check-biome-boundaries.test.mjs` pass shuffled (seed `20261022`): 18
+  files, 276 tests.
+- **Complexity** is 12 or lower in `harness.tsx` and `transport.ts`
+  (`npm run complexity`).
+- **`qc:prerelease`:** recorded below once run.
+
+### Pending
+
+- **Native checks** for Phases 0 and 1 ([Gates per phase](#gates-per-phase)).
+  They need John's cluster choice first (AGENTS.md):
+  - the workspace window boots with persisted preferences applied;
+  - a native panel window opens through a transfer and switches clusters
+    (`PanelWindowShell`).
+- **Follow-ups:**
+  - finding 6;
+  - the harness gaps still open: holding a stream's connection,
+    `snapshots.respond`'s single responder, sub-tab helpers, a panel-metrics
+    buffer fake, clusters declared before the mount, `elementsFromPoint`,
+    and named container-log streams.
 
 ## Problem
 
@@ -1532,6 +1670,10 @@ an owned module.
   sit in baseline files. Migration rewrites them to aliases, and the residual
   gap is listed in [Self-review](#self-review).
 - **The message names the harness.**
+- **Benchmarks are exempt** (John, 2026-10-22). A standing
+  `!**/src/**/*.benchmark.test.{ts,tsx}` include sits outside the baseline.
+  A benchmark times one component's own work, which real owners and
+  `StrictMode` would add to.
 
 The plugin's `includes` select tests only:
 
@@ -1667,8 +1809,13 @@ see [Budget decision](#budget-decision-john-2026-10-22)):
 - **Checkpoint after Phase 1:** if its measured delta extrapolates above
   +60%, try a shared module cache for stub-free harness suites before
   raising the budget again.
-- **Per migrated file:** p95 test time at most 1.0 s. Any migrated file over
-  2 s states why.
+- **Per test** (John, 2026-10-22): every test in a migrated file takes at
+  most 1.0 s.
+  - This replaced a per-file p95 of 1.0 s, which long files missed because
+    of their test count, not slow tests.
+  - A per-test mean was also rejected: small files missed it because each
+    file's first test pays a one-time mount (see the
+    [close-out](#phase-1-close-out-2026-10-22-uncommitted)).
 - **Each phase** reports its wall-time delta and per-file distribution, from
   the same `--reporter=json` run.
 

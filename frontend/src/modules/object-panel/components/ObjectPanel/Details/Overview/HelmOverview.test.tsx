@@ -56,19 +56,16 @@ describe('HelmOverview', () => {
   const serveDetails = (
     identity: { group: string; version: string; kind: string; namespace: string; name: string },
     detailType: string
-  ) => {
-    const panel = app.object(dev, identity);
-    app.snapshots.serve('object-details', panel.scopes.detailScope ?? '', {
+  ) =>
+    app.servePanel(dev, identity, {
       detailType,
       details: { name: identity.name, namespace: identity.namespace },
     } as never);
-    return panel;
-  };
 
   // Opens the release's panel with `details` as its served detail snapshot.
   const openRelease = async (details: Partial<helm.HelmReleaseDetails>) => {
-    const panel = release(details.namespace ?? '', details.name ?? '');
-    app.snapshots.serve('object-details', panel.scopes.detailScope ?? '', {
+    const { ref } = release(details.namespace ?? '', details.name ?? '');
+    const panel = app.servePanel(dev, ref, {
       detailType: 'helmrelease',
       details: partialModelFixture<helm.HelmReleaseDetails>(details),
     } as never);
