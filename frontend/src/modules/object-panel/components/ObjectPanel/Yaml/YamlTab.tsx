@@ -223,6 +223,7 @@ const buildYamlToolbarItems = ({
   toggleLineWrapping: () => void;
 } & Parameters<typeof buildYamlEditItems>[0]): IconBarItem[] => {
   const managedFieldsLabels = getManagedFieldsLabels(isEditing, showManagedFields);
+  const editItems = buildYamlEditItems({ ...editOptions, isEditing });
   return [
     {
       type: 'toggle',
@@ -243,7 +244,8 @@ const buildYamlToolbarItems = ({
       title: wrapLines ? 'Disable YAML line wrapping' : 'Enable YAML line wrapping',
       ariaLabel: 'Wrap YAML lines',
     },
-    ...buildYamlEditItems({ ...editOptions, isEditing }),
+    // The view toggles and the edit actions are separate groups.
+    ...(editItems.length > 0 ? [{ type: 'separator' } as const, ...editItems] : []),
   ];
 };
 

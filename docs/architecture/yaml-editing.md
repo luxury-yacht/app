@@ -62,9 +62,9 @@ backend and object panel. Editor mechanics: [YAML editor](../frontend/yaml-edito
      changed outside the editor, with its Original Value (when editing
      began), External Edit (live), and Your Edit (the draft's value, or a
      dash where the draft still holds the original value). Named list items
-     are keyed by name. A long path prefix shared by a row's values
-     is shown as "…", so the part that differs (an image tag) stays visible
-     in a docked panel.
+     are keyed by name. Values are shown in full, never truncated: a long
+     value wraps inside its cell, preferring its separators, so both
+     options stay in view in a docked panel.
    - A conflict is a field the draft also changed, to a different value. Its
      row offers the external edit and your edit as value chips; clicking
      a value keeps it.
