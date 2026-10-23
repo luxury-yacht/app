@@ -898,7 +898,13 @@ tree:
   files, 276 tests.
 - **Complexity** is 12 or lower in `harness.tsx` and `transport.ts`
   (`npm run complexity`).
-- **`qc:prerelease`:** recorded below once run.
+- **`mise exec -- wails3 task qc:prerelease`: exit 0.**
+  - 548 frontend files, 5,411 tests passed, 1 skipped; all 106 Go packages
+    under `-race`; lint, typecheck, knip, and trivy.
+  - The formatter rewrapped one long line in each of `harness.tsx`,
+    `WorkspacePanelCoordinator.test.tsx`, and `WorkspacePanelSync.test.tsx`,
+    and the tests ran after it. The first run stopped at the docs check,
+    because the plan linked to this section before it existed.
 
 ### Pending
 

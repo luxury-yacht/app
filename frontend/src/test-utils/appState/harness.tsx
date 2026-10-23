@@ -864,7 +864,9 @@ export const installAppStateHarness = (
         ...detail,
       } as DomainPayloadMap['object-details']);
       const namespace = identity.namespace?.trim();
-      const apiVersion = identity.group ? `${identity.group}/${identity.version}` : identity.version;
+      const apiVersion = identity.group
+        ? `${identity.group}/${identity.version}`
+        : identity.version;
       snapshots.serve('object-yaml', object.scopes.detailScope ?? '', {
         ...meta,
         yaml: [

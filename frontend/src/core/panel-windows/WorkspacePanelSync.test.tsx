@@ -48,7 +48,10 @@ const pod = (name: string) => ({
   namespace: 'default',
   name,
 });
-const podRef = (cluster: TestCluster, name: string) => ({ clusterId: cluster.clusterId, ...pod(name) });
+const podRef = (cluster: TestCluster, name: string) => ({
+  clusterId: cluster.clusterId,
+  ...pod(name),
+});
 
 /** Serves what the cluster's start screen and its pods' panels read. */
 const serveCluster = (cluster: TestCluster) => {
