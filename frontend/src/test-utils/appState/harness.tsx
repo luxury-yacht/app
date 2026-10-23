@@ -811,18 +811,56 @@ function HarnessBridge() {
   return null;
 }
 
-const settleWork = async (): Promise<void> => {
-  await act(async () => {
-    for (let turn = 0; turn < 3; turn += 1) {
-      await vi.dynamicImportSettled();
-      if (vi.isFakeTimers()) {
-        await vi.advanceTimersByTimeAsync(0);
-      }
-      for (let step = 0; step < 10; step += 1) {
-        await Promise.resolve();
-      }
-    }
+/**
+ * Applies a synchronous update through React's async act, which settles the
+ * work the update starts (effects, a lazily imported surface suspending)
+ * before it resolves; a sync act warns when a surface suspends.
+ */
+const applyInAct = (update: () => void): Promise<void> =>
+  act(() => {
+    update();
+    return Promise.resolve();
   });
+
+// Runs `step` `count` times, each after the previous one settles.
+const repeatInOrder = (count: number, step: () => Promise<unknown>): Promise<void> =>
+  Array.from({ length: count }).reduce<Promise<void>>(
+    (previous) => previous.then(step).then(() => undefined),
+    Promise.resolve()
+  );
+
+// One settling turn: lazy imports, zero-delay fake timers, queued microtasks.
+const settleTurn = async (): Promise<void> => {
+  await vi.dynamicImportSettled();
+  if (vi.isFakeTimers()) {
+    await vi.advanceTimersByTimeAsync(0);
+  }
+  await repeatInOrder(10, () => Promise.resolve());
+};
+
+const settleWork = async (): Promise<void> => {
+  await act(() => repeatInOrder(3, settleTurn));
+};
+
+// Waits for show/settle work, including work started while waiting.
+const drainInFlight = async (inFlight: ReadonlySet<Promise<unknown>>): Promise<void> => {
+  if (inFlight.size === 0) {
+    return;
+  }
+  await Promise.allSettled(inFlight);
+  await drainInFlight(inFlight);
+};
+
+const withoutKeys = <T extends { key: number }>(items: readonly T[], keys: ReadonlySet<number>) =>
+  items.filter(({ key }) => !keys.has(key));
+
+// Releases leases a test holds, as an unmounting view releases its own.
+const releaseLeases = async (held: ReadonlyArray<{ key: number }>): Promise<void> => {
+  const keys = new Set(held.map(({ key }) => key));
+  await applyInAct(() => {
+    leaseStore.set(withoutKeys(leaseStore.leases, keys));
+  });
+  await settleWork();
 };
 
 /**
@@ -873,9 +911,7 @@ export const installAppStateHarness = (
 
   afterEach(async () => {
     const ending = current();
-    while (ending.inFlight.size > 0) {
-      await Promise.allSettled([...ending.inFlight]);
-    }
+    await drainInFlight(ending.inFlight);
     session = null;
     ownersRef = null;
     surface.ui = null;
@@ -914,14 +950,16 @@ export const installAppStateHarness = (
     if (!entry) {
       throw new Error(`The sidebar has no entry ${selector}`);
     }
-    await act(async () => {
+    await applyInAct(() => {
       entry.click();
     });
     await settleWork();
   };
 
   const mount = async (
-    element: (prepared: Awaited<ReturnType<typeof prepareWindow>>) => Promise<ReactElement>
+    element: (
+      prepared: Awaited<ReturnType<typeof prepareWindow>>
+    ) => ReactElement | Promise<ReactElement>
   ) => {
     const active = current();
     const preparation = createWindowPreparation();
@@ -930,7 +968,7 @@ export const installAppStateHarness = (
     const container = document.createElement('div');
     document.body.appendChild(container);
     let root: Root | null = null;
-    await act(async () => {
+    await applyInAct(() => {
       root = renderWindowRoot(container, tree, active.errors.rootOptions);
     });
     if (!root) {
@@ -970,7 +1008,7 @@ export const installAppStateHarness = (
       show: (ui) =>
         track(
           (async () => {
-            await act(async () => {
+            await applyInAct(() => {
               surface.set(ui);
             });
             await settleWork();
@@ -982,7 +1020,7 @@ export const installAppStateHarness = (
       selectCluster: (cluster) =>
         track(
           (async () => {
-            await act(async () => {
+            await applyInAct(() => {
               owners().kubeconfig.setActiveKubeconfig(cluster.selection);
             });
             await settleWork();
@@ -1027,17 +1065,11 @@ export const installAppStateHarness = (
               key: leaseStore.nextKey + index,
             }));
             leaseStore.nextKey += leases.length;
-            await act(async () => {
+            await applyInAct(() => {
               leaseStore.set([...leaseStore.leases, ...held]);
             });
             await settleWork();
-            return async () => {
-              const keys = new Set(held.map(({ key }) => key));
-              await act(async () => {
-                leaseStore.set(leaseStore.leases.filter(({ key }) => !keys.has(key)));
-              });
-              await settleWork();
-            };
+            return () => releaseLeases(held);
           })()
         ),
       unmount() {
@@ -1114,7 +1146,7 @@ export const installAppStateHarness = (
           }
           const { next, events } = applyClusterChange(state, change);
           active.clusters.set(cluster.clusterId, next);
-          await act(async () => {
+          await applyInAct(() => {
             for (const [name, payload] of events) {
               active.transport.events.emit(name, payload);
             }
@@ -1267,7 +1299,7 @@ export const installAppStateHarness = (
     },
     render(ui) {
       surface.ui = ui;
-      return mount(async (prepared) => {
+      return mount((prepared) => {
         const panel = prepared.descriptor.panel;
         if (prepared.descriptor.role === panelwindow.NativeRole.NativeRolePanel && panel) {
           return (

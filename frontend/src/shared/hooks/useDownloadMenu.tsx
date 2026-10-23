@@ -8,7 +8,7 @@
  * saves.
  */
 
-import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import type { IconBarItem, IconBarOutcome } from '@shared/components/IconBar/IconBar';
 import { DownloadIcon } from '@shared/components/icons/SharedIcons';
 import type { DownloadOutcome } from '@shared/utils/exportFilename';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -37,7 +37,7 @@ export function useDownloadMenu({
   /** Names the view and each choice in error reports. */
   report: { source: string; copy: string; save: string };
 }): { downloadItem: IconBarItem; runCopy: () => Promise<void> } {
-  const [feedback, setFeedback] = useState<'success' | 'error' | null>(null);
+  const [feedback, setFeedback] = useState<IconBarOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -50,7 +50,7 @@ export function useDownloadMenu({
     []
   );
 
-  const showFeedback = useCallback((next: 'success' | 'error') => {
+  const showFeedback = useCallback((next: IconBarOutcome) => {
     setFeedback(next);
     if (resetTimerRef.current) {
       clearTimeout(resetTimerRef.current);

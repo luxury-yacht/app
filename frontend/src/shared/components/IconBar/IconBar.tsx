@@ -62,16 +62,19 @@ export interface IconBarDisclosure extends IconBarButton {
   active: boolean;
 }
 
+/** How an action came out, for feedback and tone colors. */
+export type IconBarOutcome = 'success' | 'error';
+
 /** An action button that fires once and optionally shows feedback. */
 export interface IconBarAction extends IconBarButton {
   type: 'action';
   /** Brief feedback state: 'success' or 'error'. Omit or null for default. */
-  feedback?: 'success' | 'error' | null;
+  feedback?: IconBarOutcome | null;
   /**
    * A lasting color while the state the action resolves lasts, such as Save
    * and Cancel while there are unsaved edits. Shown only while enabled.
    */
-  tone?: 'success' | 'error' | null;
+  tone?: IconBarOutcome | null;
 }
 
 /** A button that opens a menu of actions. */
@@ -79,7 +82,7 @@ export interface IconBarMenu extends Omit<IconBarButton, 'onClick'> {
   type: 'menu';
   menuItems: ContextMenuItem[];
   /** Brief feedback after a menu action: 'success' or 'error'. Omit or null for default. */
-  feedback?: 'success' | 'error' | null;
+  feedback?: IconBarOutcome | null;
 }
 
 /** A visual separator between groups of buttons. */
@@ -164,7 +167,7 @@ const SplitButton = ({ item }: { item: IconBarSplit }) => {
   );
 };
 
-const feedbackClassName = (feedback: 'success' | 'error' | null | undefined): string =>
+const feedbackClassName = (feedback: IconBarOutcome | null | undefined): string =>
   feedback ? `icon-bar-button feedback-${feedback}` : 'icon-bar-button';
 
 const MenuButton = ({ item }: { item: IconBarMenu }) => {

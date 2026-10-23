@@ -56,6 +56,20 @@ export interface FakeBackend {
   unfaked(): string[];
 }
 
+// Answers a held call with `handler` once its hold releases.
+const answerHeldCall =
+  (
+    handler: UntypedHandler,
+    args: unknown[],
+    resolve: (value: unknown) => void,
+    reject: (reason: unknown) => void
+  ) =>
+  () => {
+    Promise.resolve()
+      .then(() => handler(...args))
+      .then(resolve, reject);
+  };
+
 const createFakeBackend = () => {
   const handlers = new Map<string, UntypedHandler>();
   const callsByMethod = new Map<string, unknown[][]>();
@@ -76,11 +90,7 @@ const createFakeBackend = () => {
       const parked: Array<() => void> = [];
       const park: UntypedHandler = (...args) =>
         new Promise((resolve, reject) => {
-          parked.push(() => {
-            Promise.resolve()
-              .then(() => handler(...args))
-              .then(resolve, reject);
-          });
+          parked.push(answerHeldCall(handler, args, resolve, reject));
         });
       handlers.set(method, park);
       return () => {
@@ -96,15 +106,19 @@ const createFakeBackend = () => {
     unfaked: () => [...unfaked],
   };
 
-  const dispatch = async (name: string, args: unknown[]): Promise<unknown> => {
+  // The call is recorded and its handler runs at once; a missing handler or a
+  // throw rejects, as a failed RPC does.
+  const dispatch = (name: string, args: unknown[]): Promise<unknown> => {
     const method = name.startsWith(RPC_PREFIX) ? name.slice(RPC_PREFIX.length) : name;
     callsByMethod.set(method, [...(callsByMethod.get(method) ?? []), args]);
     const handler = handlers.get(method);
     if (!handler) {
       unfaked.push(method);
-      throw new Error(`Unfaked RPC: ${method}`);
+      return Promise.reject(new Error(`Unfaked RPC: ${method}`));
     }
-    return handler(...args);
+    return new Promise((resolve) => {
+      resolve(handler(...args));
+    });
   };
 
   return { backend, dispatch };
@@ -570,8 +584,9 @@ class FakeWindowHandle {
     this.#focused = focused;
   }
 
-  async Focus(): Promise<void> {
+  Focus(): Promise<void> {
     this.#focused.push(this.#name);
+    return Promise.resolve();
   }
 }
 
@@ -626,7 +641,7 @@ export const installTransport = (
   vi.mocked(Events.On).mockImplementation(runtimeEvents.on as unknown as typeof Events.On);
   eventsApi.Emit = runtimeEvents.appEmit;
   let currentWindowName = windowName;
-  windowApi.Name = async () => currentWindowName;
+  windowApi.Name = () => Promise.resolve(currentWindowName);
   const focused: string[] = [];
   windowApi.Get = (name) => new FakeWindowHandle(name, focused);
   globals.__wailsJSONStreamFactory = streams.factory;
