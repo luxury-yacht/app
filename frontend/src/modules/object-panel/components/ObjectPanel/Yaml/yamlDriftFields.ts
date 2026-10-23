@@ -154,34 +154,6 @@ export const compareDriftFields = ({
   });
 };
 
-// Shorter shared prefixes are left whole: eliding them saves little width.
-const MIN_ELIDED_PREFIX = 12;
-
-const commonPrefix = (values: string[]): string =>
-  values.reduce((prefix, value) => {
-    let length = 0;
-    while (length < prefix.length && prefix[length] === value[length]) {
-      length += 1;
-    }
-    return prefix.slice(0, length);
-  });
-
-/**
- * Display forms of one field's values side by side. A long path prefix they
- * all share, up to its last "/", is shown as "…", so the part that differs,
- * such as an image tag, stays visible in a narrow panel.
- */
-export const compactDriftValues = (
-  values: ReadonlyArray<string | undefined>
-): Array<string | undefined> => {
-  const present = values.filter((value): value is string => value !== undefined);
-  const cut = present.length < 2 ? 0 : commonPrefix(present).lastIndexOf('/') + 1;
-  if (cut < MIN_ELIDED_PREFIX) {
-    return [...values];
-  }
-  return values.map((value) => (value === undefined ? value : `…${value.slice(cut)}`));
-};
-
 type ResolvedStep = { key: string | number; node: unknown } | null;
 
 // One step of a path in `root`. An object key may be missing only when

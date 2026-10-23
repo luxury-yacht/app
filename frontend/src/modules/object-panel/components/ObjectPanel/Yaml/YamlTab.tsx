@@ -21,7 +21,7 @@ import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useShortcut } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
 import type React from 'react';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import * as YAML from 'yaml';
 import { usePanelLifecycleGuard } from '@/core/panel-windows/panelLifecycleGuards';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -35,7 +35,7 @@ import {
   YamlSaveIcon,
 } from '@shared/components/icons/YamlIcons';
 import { failureMessage } from '@/core/refresh/refreshFailure';
-import { compactDriftValues, type DriftField } from './yamlDriftFields';
+import type { DriftField } from './yamlDriftFields';
 import { resolveProtectedYamlRanges } from './yamlFieldPolicy';
 import { getYamlPanelBlockReason } from './yamlPanelGuard';
 import { INACTIVE_SCOPE, LARGE_MANIFEST_THRESHOLD, YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
@@ -134,6 +134,7 @@ const getManagedFieldsLabels = (
 const buildYamlEditItems = ({
   isEditing,
   isSaving,
+  hasUnsavedEdits,
   disableSave,
   saveBlockedReason,
   canEdit,
@@ -144,6 +145,8 @@ const buildYamlEditItems = ({
 }: {
   isEditing: boolean;
   isSaving: boolean;
+  /** Lights Save green and Cancel red: there is something to save or lose. */
+  hasUnsavedEdits: boolean;
   disableSave: boolean;
   /** Shown as Save's title while drift keeps it unavailable. */
   saveBlockedReason: string | null;
@@ -163,6 +166,7 @@ const buildYamlEditItems = ({
         title: 'Cancel edit',
         ariaLabel: 'Cancel edit',
         disabled: isSaving,
+        tone: hasUnsavedEdits ? 'error' : null,
       },
       {
         type: 'action',
@@ -172,6 +176,7 @@ const buildYamlEditItems = ({
         title: isSaving ? 'Saving YAML' : (saveBlockedReason ?? 'Save YAML'),
         ariaLabel: 'Save YAML',
         disabled: disableSave,
+        tone: hasUnsavedEdits ? 'success' : null,
       },
     ];
   }
@@ -338,24 +343,44 @@ type DriftOption = {
   onChoose?: () => void;
 };
 
+// Separator-ended parts of a value: "registry.", "example.", "com/", ... A dot
+// before a digit is not a separator, so "1.4.3" stays whole.
+const VALUE_PARTS = /(?:[^/:.,=-]|\.(?=\d))*(?:[/:,=-]|\.(?!\d))?/g;
+
+// A long value breaks after its separators first, so a wrapped value stays
+// readable; a part longer than the cell still breaks anywhere.
+const BreakableValue = ({ value }: { value: string }) => {
+  let offset = 0;
+  return (
+    <>
+      {(value.match(VALUE_PARTS) ?? [])
+        .filter((part) => part !== '')
+        .map((part) => {
+          const start = offset;
+          offset += part.length;
+          return (
+            <Fragment key={start}>
+              {start > 0 && <wbr />}
+              {part}
+            </Fragment>
+          );
+        })}
+    </>
+  );
+};
+
 // A value cell; on a field both sides changed, the value is a chip that keeps
-// it. `shown` may be shortened; the full value is the tooltip.
+// it. Values are shown in full: the choice needs them in view.
 const DriftValueCell = ({
   value,
-  shown,
   option,
-  className = 'monospace',
+  className = 'monospace yaml-drift-notice-value',
 }: {
   value: string | undefined;
-  shown: string | undefined;
   option: DriftOption | null;
   className?: string;
 }) => {
-  const text = (
-    <span className="yaml-drift-notice-value" title={value}>
-      {shown ?? ABSENT_VALUE}
-    </span>
-  );
+  const text = value === undefined ? ABSENT_VALUE : <BreakableValue value={value} />;
   return (
     <td className={className}>
       {option ? (
@@ -397,11 +422,6 @@ const DriftFieldRow = ({
     yours = chosen.yours;
   }
   const offersChoice = choosable && (field.conflict || !!chosen);
-  const [startedShown, nowShown, yoursShown] = compactDriftValues([
-    field.started,
-    field.now,
-    yours,
-  ]);
   const stateOf = (choice: DriftChoice): DriftOption['state'] => {
     if (!chosen) {
       return 'undecided';
@@ -422,16 +442,14 @@ const DriftFieldRow = ({
       <td className="monospace yaml-drift-notice-field" title={field.key}>
         {field.label}
       </td>
-      <DriftValueCell value={field.started} shown={startedShown} option={null} />
+      <DriftValueCell value={field.started} option={null} />
       <DriftValueCell
         value={field.now}
-        shown={nowShown}
         option={option('theirs', field.now, () => onChooseTheirs(field))}
       />
       <DriftValueCell
         value={yours}
-        shown={yoursShown}
-        className="monospace yaml-drift-notice-mine"
+        className="monospace yaml-drift-notice-value yaml-drift-notice-mine"
         option={option('yours', yours, () => onChooseYours(field))}
       />
     </tr>
@@ -871,6 +889,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     backendDriftCurrentYaml,
     objectReplaced,
     driftFields,
+    hasUnsavedEdits,
     driftChoices,
     saveBlockedReason,
     mergeBlockedReason,
@@ -898,12 +917,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
   });
 
   usePanelLifecycleGuard(panelId, () => {
-    const reason = getYamlPanelBlockReason({
-      isEditing,
-      isSaving,
-      draftYaml,
-      baselineYaml: effectiveYamlContent ?? '',
-    });
+    const reason = getYamlPanelBlockReason({ isEditing, isSaving, hasUnsavedEdits });
     if (!reason) {
       return null;
     }
@@ -1058,6 +1072,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
         toggleManagedFields: handleToggleManagedFields,
         toggleLineWrapping: handleToggleLineWrapping,
         isSaving,
+        hasUnsavedEdits,
         disableSave: yamlView.disableSave,
         saveBlockedReason,
         canEdit,
@@ -1068,6 +1083,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       }),
     [
       canEdit,
+      hasUnsavedEdits,
       yamlView.disableSave,
       editDisabledReason,
       handleCancelClick,

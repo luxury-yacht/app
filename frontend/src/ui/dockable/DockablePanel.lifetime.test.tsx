@@ -55,8 +55,7 @@ function Editor({ id }: { id: string }) {
     const reason = getYamlPanelBlockReason({
       isEditing: tx.isEditing,
       isSaving: tx.isSaving,
-      draftYaml: tx.draftYaml,
-      baselineYaml: seed(id),
+      hasUnsavedEdits: tx.hasUnsavedEdits,
     });
     return reason ? { reason, focus: () => undefined } : null;
   });

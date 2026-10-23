@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 import * as YAML from 'yaml';
-import { compactDriftValues, compareDriftFields, copyDriftField } from './yamlDriftFields';
+import { compareDriftFields, copyDriftField } from './yamlDriftFields';
 
 const deployment = ({
   resourceVersion = '1',
@@ -167,23 +167,5 @@ describe('copyDriftField', () => {
     );
 
     expect(draft.metadata.labels).toEqual({ app: 'api' });
-  });
-});
-
-describe('compactDriftValues', () => {
-  // A narrow panel must still show what differs between the values offered.
-  it('elides the path prefix long values share, keeping the parts that differ', () => {
-    expect(
-      compactDriftValues([
-        'registry.example.com/payments/api:1.4.2',
-        'registry.example.com/payments/api:1.4.3',
-        undefined,
-      ])
-    ).toEqual(['…api:1.4.2', '…api:1.4.3', undefined]);
-  });
-
-  it('keeps values that share no long path prefix whole', () => {
-    expect(compactDriftValues(['3', '2', '5'])).toEqual(['3', '2', '5']);
-    expect(compactDriftValues(['nginx:1.25', 'nginx:1.26'])).toEqual(['nginx:1.25', 'nginx:1.26']);
   });
 });

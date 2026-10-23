@@ -9,6 +9,7 @@
   - While you edit, the YAML tab now shows when the object is modified outside the editor: a table lists each changed field, with its original value, the external edit, and your edit. Status-only updates are ignored.
   - When a field you edited was also changed outside the editor, you pick the external edit or your edit in that field's row before saving, so no change is overwritten by accident. You can change your pick, and "Merge changes and continue editing" brings in the other external changes either way.
   - If the object is deleted and recreated while you edit, you can copy your draft and start editing the new object.
+  - Save turns green and Cancel turns red while you have unsaved edits.
 - Scrollbar tweaks. They are wider and higher-contrast. They appear only while scrolling or when the pointer is over the scroll area, and fade out shortly after scrolling stops.
 
 ### Fixed

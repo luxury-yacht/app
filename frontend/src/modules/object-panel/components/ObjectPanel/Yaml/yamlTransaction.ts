@@ -19,6 +19,7 @@ import {
   useScopedRefreshDomainLifecycle,
 } from '@/core/data-access';
 import { compareDriftFields, copyDriftField, type DriftField } from './yamlDriftFields';
+import { hasUnsavedYamlEdits } from './yamlPanelGuard';
 import { LINT_DEBOUNCE_MS } from './yamlTabConfig';
 import {
   applyResourceVersionToYaml,
@@ -100,6 +101,8 @@ export interface UseYamlTransactionResult {
   objectReplaced: boolean;
   /** Fields someone else changed since editing began, with the draft's values. */
   driftFields: DriftField[];
+  /** While editing, the draft holds edits Save would apply. */
+  hasUnsavedEdits: boolean;
   /** The value chosen for each field both sides changed, by field key. */
   driftChoices: ReadonlyMap<string, DriftChoiceView>;
   /** Why drift keeps Save unavailable, or null. */
@@ -708,6 +711,10 @@ export const useYamlTransaction = ({
           })
         : [],
     [baselineMergeYaml, draftYaml, driftLiveYaml, isEditing]
+  );
+  const hasUnsavedEdits = useMemo(
+    () => isEditing && hasUnsavedYamlEdits(draftYaml, baselineMergeYaml),
+    [baselineMergeYaml, draftYaml, isEditing]
   );
   const { driftChoices, yoursFields, saveBlockedReason, mergeBlockedReason } = useMemo(
     () => resolveDriftGates(driftFields, conflictChoices, objectReplaced),
@@ -1366,6 +1373,7 @@ export const useYamlTransaction = ({
     backendDriftCurrentYaml,
     objectReplaced,
     driftFields,
+    hasUnsavedEdits,
     driftChoices,
     saveBlockedReason,
     mergeBlockedReason,

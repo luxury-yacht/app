@@ -272,27 +272,29 @@
   font-weight: var(--font-weight-medium);
 }
 
-/* Long values end in an ellipsis, so both options stay in view in a docked
-   panel; the full value is the cell's tooltip. */
-.yaml-drift-notice-value {
-  display: inline-block;
-  max-width: 12ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: bottom;
+/* Values wrap rather than truncate: choosing between them needs them whole,
+   and wrapping keeps both options in view in a docked panel. An exception to
+   the single-line table default, for these cells only. */
+.yaml-drift-notice-table .confirmation-modal-details-table td.yaml-drift-notice-value {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* A value to keep, on a field both versions changed. */
 .yaml-drift-notice-chip {
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
+  max-width: 100%;
   padding: 1px 6px;
   border: 1px solid var(--color-text-tertiary);
-  border-radius: 90px;
+  /* A pill on one line, a rounded box when a long value wraps. */
+  border-radius: 10px;
   background: transparent;
   color: var(--color-text);
   font: inherit;
   line-height: 1.3;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
   cursor: pointer;
 }
 

@@ -979,6 +979,46 @@ describe('YamlTab', () => {
     });
   });
 
+  it('lights Save and Cancel while the draft holds edits, but not for a change made elsewhere', async () => {
+    vi.useFakeTimers();
+    await renderYamlTab();
+    await clickButton('Edit YAML');
+    const original = codeMirrorState.value;
+    // Save lights green and Cancel red while there is something to save or lose.
+    const lit = () => ({
+      save: getIconButton('Save YAML')?.classList.contains('tone-success'),
+      cancel: getIconButton('Cancel edit')?.classList.contains('tone-error'),
+    });
+    expect(lit()).toEqual({ save: false, cancel: false });
+
+    await typeDraft(UPDATED_YAML);
+    expect(lit()).toEqual({ save: true, cancel: true });
+
+    await typeDraft(original);
+    expect(lit()).toEqual({ save: false, cancel: false });
+
+    // Someone else changes the object; the draft still holds no edits.
+    await pollLiveYaml(LATER_MUTATED_YAML);
+    expect(lit()).toEqual({ save: false, cancel: false });
+  });
+
+  it('shows long values in full, so the choice is made seeing them', async () => {
+    vi.useFakeTimers();
+    const image = (tag: string) => `registry.example.com/payments/api:${tag}`;
+    const withImage = (tag: string) => YAML.replace('demo:v1', image(tag));
+    serveYaml(withImage('1.4.2'));
+    await renderYamlTab();
+    await editTo(withImage('1.5.0'));
+
+    await pollLiveYaml(withImage('1.4.3').replace('"123"', '"124"'));
+
+    expect(driftRow('containers[demo].image')?.values).toEqual([
+      image('1.4.2'),
+      image('1.4.3'),
+      image('1.5.0'),
+    ]);
+  });
+
   it('does not flag status churn on the live object while editing', async () => {
     vi.useFakeTimers();
     const { container } = await renderYamlTab();

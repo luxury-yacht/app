@@ -77,6 +77,17 @@
   color: var(--color-error);
 }
 
+/* A lasting icon color while the state an action resolves lasts, such as Save
+   (success) and Cancel (error) while there are unsaved edits. A disabled button
+   keeps the disabled look. */
+.icon-bar-button.tone-success:not(:disabled) {
+  color: var(--color-success);
+}
+
+.icon-bar-button.tone-error:not(:disabled) {
+  color: var(--color-error);
+}
+
 /* Split toggle — the toggle and the caret that opens its menu read as one control */
 .icon-bar-split {
   display: flex;

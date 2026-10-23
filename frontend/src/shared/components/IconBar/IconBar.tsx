@@ -6,7 +6,8 @@
  * - Toggle: has an on/off state, shows active styling when on
  * - Split: a toggle or cycle button with a caret beside it that opens a menu of related choices
  * - Disclosure: shows or hides a related section, such as a row of extra controls
- * - Action: fires once on click, optionally shows brief feedback (success/error)
+ * - Action: fires once on click, optionally shows brief feedback (success/error) or a
+ *   lasting tone (success/error) while a state it resolves lasts
  * - Menu: opens a menu of actions, optionally shows brief feedback (success/error)
  */
 
@@ -66,6 +67,11 @@ export interface IconBarAction extends IconBarButton {
   type: 'action';
   /** Brief feedback state: 'success' or 'error'. Omit or null for default. */
   feedback?: 'success' | 'error' | null;
+  /**
+   * A lasting color while the state the action resolves lasts, such as Save
+   * and Cancel while there are unsaved edits. Shown only while enabled.
+   */
+  tone?: 'success' | 'error' | null;
 }
 
 /** A button that opens a menu of actions. */
@@ -197,7 +203,8 @@ const buttonClassName = (item: IconBarToggle | IconBarDisclosure | IconBarAction
   if (item.type !== 'action') {
     return item.active ? 'icon-bar-button active' : 'icon-bar-button';
   }
-  return feedbackClassName(item.feedback);
+  const base = feedbackClassName(item.feedback);
+  return item.tone ? `${base} tone-${item.tone}` : base;
 };
 
 const PlainButton = ({ item }: { item: IconBarToggle | IconBarDisclosure | IconBarAction }) => (

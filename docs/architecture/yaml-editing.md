@@ -49,6 +49,11 @@ backend and object panel. Editor mechanics: [YAML editor](../frontend/yaml-edito
    - The tab keeps its `object-yaml` lease while it is active, also while
      editing. Live snapshots never touch the draft or its baseline; only
      editor actions set them.
+   - Unsaved edits are the draft against its edit baseline
+     (`hasUnsavedYamlEdits`, ignoring the fields the draft leaves out), never
+     against the live object, so a change made elsewhere is not an edit.
+     They light Save green and Cancel red, and make closing the panel ask
+     first.
    - Drift is a new resourceVersion whose content differs from the baseline
      under the field policy's semantic compare. Status, resourceVersion, uid,
      managedFields, and the other server-managed fields are ignored, so
