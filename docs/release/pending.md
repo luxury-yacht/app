@@ -13,7 +13,9 @@
 
 ### Fixed
 
-- In dark mode, the Cancel button in the YAML tab's "Take ownership of managed fields?" dialog was nearly invisible. It now uses the standard button style.
+- YAML editing:
+  - In dark mode, the Cancel button in the "Take ownership of managed fields?" dialog was nearly invisible. It now uses the standard button style.
+  - Merging the latest object into your draft no longer fails when someone else changed a field you did not edit, such as the replica count. For custom resources, it no longer undoes that change.
 - Object links:
   - Alt+click now goes to the view that lists the object. Storage classes, ingress classes, and webhook configurations open the cluster Config view, and pod disruption budgets open Quotas. Custom resources open the Custom view, even when their kind name matches a built-in kind, and built-in kinds with no list (such as Leases) open Browse. Before, some of these went to the wrong view or did nothing.
   - Opening an object whose cluster is not open in the window now says so. Before, nothing happened.

@@ -61,12 +61,16 @@ backend and object panel. Editor mechanics: [YAML editor](../frontend/yaml-edito
        draft's.
      - Save waits until every conflict has a choice. A kept choice lasts only
        while the live value is unchanged.
-   - Merge into draft is Reload & Merge: an in-process three-way merge
-     (`overwrite=false`) that never writes.
+   - Merge into draft is Reload & Merge, which never writes. It applies the
+     draft's own edits (the two-way baseline → draft patch, the same family
+     Save sends) to the live object, so a field only someone else changed
+     keeps its live value.
+     - An edit to a field the live object also changed, to a different
+       value, returns a `MergeConflict` with the live YAML. This is the field
+       table's conflict rule.
      - It is disabled while a conflict is undecided or kept, since it would
        stop on that field. Saving still keeps others' changes to fields the
        draft did not edit.
-     - Unresolvable overlap returns a `MergeConflict` with the live YAML.
    - A replaced object (a live uid that differs from the baseline's, or an
      `ObjectUIDMismatch` conflict from Apply) offers Copy draft and Edit the
      new object. It offers no merge (the merge refuses a different object),
