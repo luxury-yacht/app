@@ -113,6 +113,22 @@ describe('DataManagementSection', () => {
     expect(errorReporting().getAttribute('aria-checked')).toBe('true');
   });
 
+  it('reports imported settings it cannot read back, and keeps the current ones', async () => {
+    // The user had turned error reporting on.
+    await click(errorReporting());
+    app.backend.answer('GetAppSettings', () => {
+      throw new Error('saved settings unreadable');
+    });
+
+    await click(button('Import Settings'));
+
+    expect(status()).toBeNull();
+    expect(app.errors.take((record) => record.context?.action === 'importSettings')).toHaveLength(
+      1
+    );
+    expect(errorReporting().getAttribute('aria-checked')).toBe('true');
+  });
+
   it('imports favorites and the app’s favorites list shows them', async () => {
     let saved: backend.Favorite[] = [];
     app.backend.answer('GetFavorites', () => saved);

@@ -187,7 +187,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
 
   const objectActions = useObjectActionController({
     context: 'gridtable',
-    queryMissingPermissions: true,
     onOpen: (object) => {
       openWithObject(buildRequiredObjectReference(object));
     },

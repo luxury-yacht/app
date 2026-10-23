@@ -25,6 +25,14 @@ interface RowDetailNavigationOptions {
 
 const noExit = () => undefined;
 
+// A nested table's rows take focus through its own native table (AriaGrid).
+// The detail renders inside the parent's table, so a detail control's nearest
+// table is the parent's, which the detail does not contain.
+const focusesNestedRows = (detail: HTMLElement, target: Node): boolean => {
+  const table = (target instanceof Element ? target : target.parentElement)?.closest('table');
+  return Boolean(table && detail.contains(table));
+};
+
 export interface GridTableRowDetailNavigation {
   /** The detail whose table holds the keyboard; null when the parent's rows do. */
   keyboardDetailKey: string | null;
@@ -58,8 +66,9 @@ export function useGridTableRowDetailNavigation({
 
   // Focus decides where the keyboard is: in a detail's table once focus enters
   // that detail, back on the parent's rows once focus returns to them. Entering
-  // a detail, by click or keyboard, takes the one row highlight, so the view's
-  // selection on the parent's rows clears.
+  // a detail's rows, by click or keyboard, takes the one row highlight, so the
+  // view's selection on the parent's rows clears; the detail's own controls
+  // (its filter bar, its Close) leave the parent's row highlighted.
   useEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) {
@@ -71,7 +80,7 @@ export function useGridTableRowDetailNavigation({
         return;
       }
       const detail = queryOwnRowDetails(wrapper).find((candidate) => candidate.contains(target));
-      if (detail) {
+      if (detail && focusesNestedRows(detail, target)) {
         onRowSelectionClearRef.current?.();
       }
       setFocusedDetailKey(detail?.dataset.rowDetailKey ?? null);

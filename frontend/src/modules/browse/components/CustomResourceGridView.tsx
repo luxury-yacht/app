@@ -193,7 +193,6 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
 
   const objectActions = useObjectActionController({
     context: 'gridtable',
-    queryMissingPermissions: true,
     onOpen: (object) => openWithObject(object),
   });
 

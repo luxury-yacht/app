@@ -23,6 +23,7 @@ export const PERMISSION_FEATURES = {
   namespaceHelm: 'namespace.helm',
   namespaceEvents: 'namespace.events',
   objectMapResources: 'namespace.objectMap',
+  objectActions: 'object.actions',
   other: 'other',
 } as const;
 
@@ -53,6 +54,7 @@ export const PERMISSION_FEATURE_LABELS: Record<PermissionFeatureKey, string> = {
   [PERMISSION_FEATURES.namespaceHelm]: 'Namespace helm',
   [PERMISSION_FEATURES.namespaceEvents]: 'Namespace events',
   [PERMISSION_FEATURES.objectMapResources]: 'Object map resources',
+  [PERMISSION_FEATURES.objectActions]: 'Object actions',
   [PERMISSION_FEATURES.other]: 'Other',
 };
 

@@ -1310,13 +1310,8 @@ describe('ObjectMap', () => {
   ])(
     'offers the scale actions a workload allows when $facts',
     async ({ testPayload, offered, withheld }) => {
-      // The user is viewing the workload's namespace, whose permissions the app
-      // queries (NamespaceContext; the object panel does the same for its object).
-      const shell = await mountShell();
-      await act(async () =>
-        shell.owners().namespace.setSelectedNamespace('default', dev.clusterId)
-      );
-      await app.settle();
+      // Nothing else has asked for the workload's permissions: the map's menu does.
+      await mountShell();
       const { container, cleanup } = await renderObjectMap({ testPayload });
 
       await act(async () => {

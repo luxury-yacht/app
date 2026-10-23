@@ -27,8 +27,8 @@ import {
   getUserPermissionMap,
   initializePermissionStore,
   queryClusterPermissions,
-  queryKindPermissions,
   queryNamespacesPermissions,
+  queryPermissionChecks,
   resetPermissionStore,
   setActivePermissionCluster,
   subscribeUserPermissions,
@@ -125,14 +125,16 @@ describe('permission keys', () => {
 
   it('keeps answers for custom kinds that share a name apart by group', async () => {
     app.permissions((query) => query.group === 'rds.services.k8s.aws');
-    queryKindPermissions('DBInstance', 'default', 'cluster-1', 'rds.services.k8s.aws', 'v1alpha1');
-    queryKindPermissions(
-      'DBInstance',
-      'default',
-      'cluster-1',
-      'documentdb.services.k8s.aws',
-      'v1alpha1'
-    );
+    const deleteCheck = (group: string) => ({
+      clusterId: 'cluster-1',
+      resourceKind: 'DBInstance',
+      verb: 'delete',
+      namespace: 'default',
+      group,
+      version: 'v1alpha1',
+    });
+    queryPermissionChecks([deleteCheck('rds.services.k8s.aws')]);
+    queryPermissionChecks([deleteCheck('documentdb.services.k8s.aws')]);
     await settle();
 
     const lookup = (group?: string) =>
@@ -482,7 +484,16 @@ describe('permission store reset ownership', () => {
         if (kind === 'cluster') {
           return queryClusterPermissions('cluster-a');
         }
-        return queryKindPermissions('Pod', 'default', 'cluster-a', '', 'v1');
+        return queryPermissionChecks([
+          {
+            clusterId: 'cluster-a',
+            resourceKind: 'Pod',
+            verb: 'delete',
+            namespace: 'default',
+            group: '',
+            version: 'v1',
+          },
+        ]);
       };
       const complete = async (index: number, allowed: boolean) => {
         const completion = completions[index];
@@ -702,7 +713,16 @@ describe('permission check completion contracts', () => {
   it('retains custom-kind identity and denial reasons without sharing freshness across API groups', async () => {
     answerEach(() => ({ allowed: false, source: 'denied', reason: 'RBAC denied' }));
     const queryKind = (group: string) =>
-      queryKindPermissions('Widget', 'team-a', 'cluster-1', group, 'v1');
+      queryPermissionChecks(
+        ['delete', 'patch'].map((verb) => ({
+          clusterId: 'cluster-1',
+          resourceKind: 'Widget',
+          verb,
+          namespace: 'team-a',
+          group,
+          version: 'v1',
+        }))
+      );
     const key = getPermissionKey(
       'Widget',
       'delete',
@@ -721,7 +741,7 @@ describe('permission check completion contracts', () => {
       pending: false,
       reason: 'RBAC denied',
       error: null,
-      feature: PERMISSION_FEATURES.namespaceCustom,
+      feature: PERMISSION_FEATURES.objectActions,
       descriptor: {
         clusterId: 'cluster-1',
         group: 'first.example',
@@ -743,7 +763,16 @@ describe('permission check completion contracts', () => {
       throw new Error('offline');
     });
     const key = getPermissionKey('Widget', 'patch', null, null, 'cluster-1', 'example.io', 'v1');
-    const query = () => queryKindPermissions('Widget', null, 'cluster-1', 'example.io', 'v1');
+    const query = () =>
+      queryPermissionChecks([
+        {
+          clusterId: 'cluster-1',
+          resourceKind: 'Widget',
+          verb: 'patch',
+          group: 'example.io',
+          version: 'v1',
+        },
+      ]);
 
     query();
     expect(getUserPermissionMap().get(key)?.pending).toBe(true);

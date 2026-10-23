@@ -938,6 +938,7 @@ const createPreferenceWorkflow = <T>({
 interface PreferenceFetchResult<T> {
   value: T | null;
   failed: boolean;
+  error?: unknown;
 }
 
 const fetchPreferences = async <T>({
@@ -954,7 +955,7 @@ const fetchPreferences = async <T>({
     return { value: value ?? null, failed: false };
   } catch (error) {
     captureBootstrapError(error, { action });
-    return { value: null, failed: true };
+    return { value: null, failed: true, error };
   }
 };
 
@@ -990,7 +991,7 @@ const fetchPreferenceSnapshot = async () => {
     read: readAppSettings,
     action: 'loadAppSettings',
   });
-  return { metadata, settings: fallback.value, failed: fallback.failed };
+  return { metadata, settings: fallback.value, failed: fallback.failed, error: fallback.error };
 };
 
 const normalizePreferences = (
@@ -1146,6 +1147,11 @@ const hydrateLatestPreferences = async (): Promise<HydratedAppPreferences> => {
   if (revision !== preferenceRevision) {
     // A preference changed while the snapshot was read; read it again.
     return hydrateLatestPreferences();
+  }
+  if (snapshot.failed && hydrated) {
+    // The app already runs on confirmed preferences: keep them rather than
+    // replace them with defaults, and let the caller report the failed read.
+    throw snapshot.error ?? new Error('The saved settings could not be read.');
   }
   preferenceSchemaByKey = snapshot.metadata;
   confirmedPreferences = normalizePreferences(snapshot.settings, snapshot.failed);

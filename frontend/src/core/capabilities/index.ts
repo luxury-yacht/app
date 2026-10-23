@@ -28,9 +28,10 @@ export {
 // Permission store.
 export {
   getPermissionKey,
-  queryKindPermissions,
+  type PermissionCheck,
   queryNamespacePermissions,
   queryNamespacesPermissions,
+  queryPermissionChecks,
   setActivePermissionCluster,
 } from './permissionStore';
 export type {

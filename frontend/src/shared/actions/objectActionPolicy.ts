@@ -27,7 +27,7 @@ export interface ObjectActionData {
   // permissions correctly: getPermissionKey only auto-resolves built-in
   // GVK from a static table, so CRD callers must thread these through
   // or the lookup key won't match the spec-emit key from
-  // queryKindPermissions and the Delete action silently disappears.
+  // queryPermissionChecks and the Delete action silently disappears.
   group: string;
   version: string;
   resource?: string;

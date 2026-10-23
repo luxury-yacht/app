@@ -9,6 +9,7 @@
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { isObjectMapSupportedRef } from '@modules/object-panel/objectPanelRef';
 import { PortForwardModal, type PortForwardTarget } from '@modules/port-forward';
+import { lookupObjectActionKindCapability } from '@shared/actions/objectActionCapabilities';
 import {
   buildObjectActionTarget,
   type FinalizerPath,
@@ -45,8 +46,9 @@ import {
 import { useCallback, useMemo, useState } from 'react';
 import {
   getPermissionKey,
+  type PermissionCheck,
   type PermissionMap,
-  queryKindPermissions,
+  queryPermissionChecks,
   useUserPermissions,
 } from '@/core/capabilities';
 import { usePanelWindowRole } from '@/core/panel-windows/PanelWindowRoleContext';
@@ -71,7 +73,6 @@ interface PerObjectHandlers {
 interface ObjectActionControllerOptions {
   context: ObjectActionContext;
   actionLoading?: boolean;
-  queryMissingPermissions?: boolean;
   useDefaultHandlers?: boolean;
   onOpen?: (object: ObjectActionReference) => void;
   onOpenObjectMap?: (object: ObjectActionReference) => void;
@@ -212,10 +213,9 @@ const actionPermissionStatus = (
 ): PermissionStatus | null =>
   permissionStatusFor(permissionMap, buildObjectActionPermissionDescriptor(actionId, source));
 
-const resolveObjectActionPermissions = (
-  object: ObjectActionData,
-  permissionMap: PermissionMap
-): ObjectActionPermissionStatuses => {
+// Permissions are keyed by the normalized kind, except delete, which targets
+// the object's own kind.
+const actionIdentitySources = (object: ObjectActionData) => {
   const normalizedKind = normalizeKind(object.kind);
   const source: ObjectActionIdentitySource = {
     clusterId: object.clusterId,
@@ -225,7 +225,14 @@ const resolveObjectActionPermissions = (
     namespace: object.namespace ?? null,
     name: object.name,
   };
-  const targetSource: ObjectActionIdentitySource = { ...source, kind: object.kind };
+  return { normalizedKind, source, targetSource: { ...source, kind: object.kind } };
+};
+
+const resolveObjectActionPermissions = (
+  object: ObjectActionData,
+  permissionMap: PermissionMap
+): ObjectActionPermissionStatuses => {
+  const { normalizedKind, source, targetSource } = actionIdentitySources(object);
   const isCronJob = normalizedKind === 'CronJob';
   const nodePermissions = resolveNodePermissions(permissionMap, source, normalizedKind);
 
@@ -244,6 +251,47 @@ const resolveObjectActionPermissions = (
     ...nodePermissions,
   };
 };
+
+// The checks behind every action the object's kind supports, keyed exactly as
+// resolveObjectActionPermissions reads them.
+const actionPermissionDescriptors = (object: ObjectActionData) => {
+  const capability = lookupObjectActionKindCapability(object);
+  const { source, targetSource } = actionIdentitySources(object);
+  const supported = [
+    capability?.restart && OBJECT_ACTION_IDS.restart,
+    capability?.rollback && OBJECT_ACTION_IDS.rollback,
+    capability?.scale && OBJECT_ACTION_IDS.scale,
+    capability?.trigger && OBJECT_ACTION_IDS.triggerNow,
+    capability?.suspend && OBJECT_ACTION_IDS.suspend,
+    capability?.portForward && OBJECT_ACTION_IDS.portForward,
+  ].filter((actionId) => typeof actionId === 'string');
+  const nodeChecks =
+    capability?.cordon || capability?.drain
+      ? Object.values(buildNodeActionPermissionDescriptorMap(source))
+      : [];
+  return [
+    ...supported.map((actionId) => buildObjectActionPermissionDescriptor(actionId, source)),
+    buildObjectActionPermissionDescriptor(OBJECT_ACTION_IDS.delete, targetSource),
+    ...nodeChecks,
+  ].filter((descriptor) => descriptor !== null);
+};
+
+// The checks the permission map has no answer for yet.
+const missingPermissionChecks = (
+  object: ObjectActionData,
+  permissionMap: PermissionMap
+): PermissionCheck[] =>
+  actionPermissionDescriptors(object)
+    .filter((descriptor) => permissionStatusFor(permissionMap, descriptor) === null)
+    .map((descriptor) => ({
+      clusterId: descriptor.clusterId ?? '',
+      resourceKind: descriptor.resourceKind,
+      verb: descriptor.verb,
+      namespace: descriptor.namespace ?? null,
+      subresource: descriptor.subresource ?? null,
+      group: descriptor.group ?? null,
+      version: descriptor.version ?? null,
+    }));
 
 interface NavigationHandlerOptions {
   object: ObjectActionData;
@@ -431,7 +479,6 @@ const buildControllerHandlers = (options: ControllerHandlerOptions): ObjectActio
 export const useObjectActionController = ({
   context,
   actionLoading = false,
-  queryMissingPermissions = false,
   useDefaultHandlers = true,
   onOpen,
   onOpenObjectMap,
@@ -480,14 +527,10 @@ export const useObjectActionController = ({
         return [];
       }
       const permissions = resolveObjectActionPermissions(object, permissionMap);
-      if (queryMissingPermissions && !permissions.delete) {
-        queryKindPermissions(
-          object.kind,
-          object.namespace ?? null,
-          object.clusterId,
-          object.group,
-          object.version
-        );
+      const missing = missingPermissionChecks(object, permissionMap);
+      if (missing.length > 0) {
+        // Menus build their items while rendering; ask once the render is done.
+        queueMicrotask(() => queryPermissionChecks(missing));
       }
       return buildObjectActionItems({
         object,
@@ -534,7 +577,6 @@ export const useObjectActionController = ({
       onGoToNamespace,
       openWithObject,
       permissionMap,
-      queryMissingPermissions,
       navigateToView,
       navigateFallbackAvailable,
       useDefaultHandlers,

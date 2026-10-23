@@ -162,7 +162,6 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   // batch-queried, so missing delete permissions resolve lazily per row.
   const objectActions = useObjectActionController({
     context: 'gridtable',
-    queryMissingPermissions: true,
     onOpen: (object) => openWithObject(object),
     onGoToNamespace: (object) => goToNamespace(buildRequiredObjectReference(object)),
   });

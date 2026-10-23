@@ -19,7 +19,6 @@ import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import { buildNodeMaintenanceAggregateScope } from '@shared/hooks/useNodeMaintenanceActions';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { queryKindPermissions } from '@/core/capabilities';
 import { makeClusterNodeSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { DomainPayloadMap, ObjectDetail } from '@/core/refresh/types';
@@ -190,9 +189,8 @@ describe('an object panel’s Actions menu', () => {
   });
 
   // A custom resource's delete permission is outside the namespace permissions
-  // the panel queries on open; a table row's menu queries it (the gridtable
-  // controller's queryMissingPermissions, useObjectActionController.tsx). The
-  // panel's menu must look it up under the same group/version key.
+  // the panel queries on open, so the menu asks for it under the resource's
+  // own group/version key, and offers Delete only where the answer allows it.
   it.each([
     ['offers Delete for a custom resource where its permission allows it', true],
     ['offers no Delete for a custom resource where its permission denies it', false],
@@ -214,13 +212,6 @@ describe('an object panel’s Actions menu', () => {
     );
     view = await app.mountApp();
     await act(async () => {
-      queryKindPermissions(
-        'DBInstance',
-        'default',
-        dev.clusterId,
-        dbInstance.group,
-        dbInstance.version
-      );
       view.owners().objectPanel.openWithObject(object.ref);
     });
     await app.settle();

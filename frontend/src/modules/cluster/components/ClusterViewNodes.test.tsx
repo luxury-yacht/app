@@ -289,11 +289,14 @@ describe('ClusterViewNodes', () => {
     expect(view.openPanels()).toEqual([]);
 
     // The count closes them again; so does the attached table's own Close.
+    // Either way the node keeps its highlight.
     await click(podsToggle('node-1'));
     expect(openPodTables()).toEqual([]);
+    expect(isHighlighted('node-1')).toBe(true);
     await click(podsToggle('node-1'));
     await closePodsOf('node-1');
     expect(openPodTables()).toEqual([]);
+    expect(isHighlighted('node-1')).toBe(true);
   });
 
   it('keeps each node’s pods open while another opens, and closes only the one asked', async () => {
