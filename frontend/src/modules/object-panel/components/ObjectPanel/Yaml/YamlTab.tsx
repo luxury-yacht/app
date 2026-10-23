@@ -330,15 +330,16 @@ type YamlDriftChoiceProps = {
 };
 
 type DriftOption = {
-  group: string;
-  checked: boolean;
+  /** This value is the one kept, the other one is, or neither is yet. */
+  state: 'undecided' | 'chosen' | 'other';
   disabled: boolean;
   label: string;
-  onChoose: () => void;
+  /** Absent on the kept value: choosing it again changes nothing. */
+  onChoose?: () => void;
 };
 
-// A value cell; on a field both sides changed it is also that value's option.
-// `shown` may be shortened; the full value is the tooltip.
+// A value cell; on a field both sides changed, the value is a chip that keeps
+// it. `shown` may be shortened; the full value is the tooltip.
 const DriftValueCell = ({
   value,
   shown,
@@ -358,17 +359,16 @@ const DriftValueCell = ({
   return (
     <td className={className}>
       {option ? (
-        <label className="yaml-drift-notice-option">
-          <input
-            type="radio"
-            name={option.group}
-            checked={option.checked}
-            disabled={option.disabled}
-            aria-label={option.label}
-            onChange={option.onChoose}
-          />
+        <button
+          type="button"
+          className={`yaml-drift-notice-chip yaml-drift-notice-chip-${option.state}`}
+          aria-pressed={option.state === 'chosen'}
+          aria-label={option.label}
+          disabled={option.disabled}
+          onClick={option.onChoose}
+        >
           {text}
-        </label>
+        </button>
       ) : (
         text
       )}
@@ -383,13 +383,12 @@ type DriftTableProps = YamlDriftChoiceProps & {
 
 const DriftFieldRow = ({
   field,
-  group,
   choosable,
   isSaving,
   choices,
   onChooseTheirs,
   onChooseYours,
-}: DriftTableProps & { field: DriftField; group: string }) => {
+}: DriftTableProps & { field: DriftField }) => {
   const chosen = choices.get(field.key);
   // With the external edit in the draft, yours is the value it replaced. A
   // field you did not edit shows no value of yours.
@@ -403,14 +402,19 @@ const DriftFieldRow = ({
     field.now,
     yours,
   ]);
+  const stateOf = (choice: DriftChoice): DriftOption['state'] => {
+    if (!chosen) {
+      return 'undecided';
+    }
+    return chosen.choice === choice ? 'chosen' : 'other';
+  };
   const option = (choice: DriftChoice, value: string | undefined, onChoose: () => void) =>
     offersChoice
       ? {
-          group,
-          checked: chosen?.choice === choice,
+          state: stateOf(choice),
           disabled: isSaving,
           label: `${choice === 'theirs' ? 'Use the external edit' : 'Keep your edit'} for ${field.key}: ${value ?? 'absent'}`,
-          onChoose,
+          onChoose: stateOf(choice) === 'chosen' ? undefined : onChoose,
         }
       : null;
   return (
@@ -436,7 +440,6 @@ const DriftFieldRow = ({
 
 // Choices sit in their field's row: pick the external edit or your edit.
 const DriftFieldTable = ({ fields, ...rowProps }: DriftTableProps & { fields: DriftField[] }) => {
-  const groupPrefix = useId();
   return (
     <div className="yaml-drift-notice-table">
       <table className="confirmation-modal-details-table">
@@ -450,12 +453,7 @@ const DriftFieldTable = ({ fields, ...rowProps }: DriftTableProps & { fields: Dr
         </thead>
         <tbody>
           {fields.map((field) => (
-            <DriftFieldRow
-              key={field.key}
-              field={field}
-              group={`${groupPrefix}-${field.key}`}
-              {...rowProps}
-            />
+            <DriftFieldRow key={field.key} field={field} {...rowProps} />
           ))}
         </tbody>
       </table>

@@ -61,7 +61,8 @@ backend and object panel. Editor mechanics: [YAML editor](../frontend/yaml-edito
      is shown as "…", so the part that differs (an image tag) stays visible
      in a docked panel.
    - A conflict is a field the draft also changed, to a different value. Its
-     row offers the external edit and your edit as a radio pair.
+     row offers the external edit and your edit as value chips; clicking
+     a value keeps it.
      - The external edit copies the live value into the draft. Your edit
        keeps the draft's value, and restores it after the external edit was
        chosen.

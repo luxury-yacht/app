@@ -462,8 +462,11 @@ const driftRowElement = (field: string) =>
 const THEIRS_CELL = 2;
 const YOURS_CELL = 3;
 
+// A value the row offers to keep: a pressable chip in that value's cell.
 const rowOption = (row: HTMLTableRowElement, cell: number) =>
-  row.cells[cell]?.querySelector<HTMLInputElement>('input[type="radio"]') ?? null;
+  row.cells[cell]?.querySelector<HTMLButtonElement>('button[aria-pressed]') ?? null;
+
+const isPressed = (option: HTMLButtonElement) => option.getAttribute('aria-pressed') === 'true';
 
 /**
  * The drift notice's row for `field`: its value when editing began, theirs, and
@@ -479,7 +482,7 @@ const driftRow = (field: string) => {
   const yours = rowOption(row, YOURS_CELL);
   let choice: 'theirs' | 'yours' | null | undefined;
   if (theirs && yours) {
-    choice = theirs.checked ? 'theirs' : yours.checked ? 'yours' : null;
+    choice = isPressed(theirs) ? 'theirs' : isPressed(yours) ? 'yours' : null;
   }
   return {
     values: Array.from(row.cells)
