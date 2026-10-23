@@ -1117,8 +1117,15 @@ describe('YamlTab', () => {
     );
   });
 
-  it('compares with a newer live object after a merge conflict, so an earlier choice no longer holds', async () => {
-    vi.useFakeTimers();
+  /** The live pod with `image` at `resourceVersion`. */
+  const liveWith = (image: string, resourceVersion: string) =>
+    LATER_MUTATED_YAML.replace('image: demo:v2', `image: ${image}`).replace(
+      '"790"',
+      `"${resourceVersion}"`
+    );
+
+  /** Merge answers with a conflict whose live object is `currentYaml`. */
+  const answerMergeConflict = (currentYaml: string) => {
     app.backend.answer('MergeObjectYamlWithLatest', () => ({
       currentYAML: '',
       mergedYAML: '',
@@ -1127,26 +1134,73 @@ describe('YamlTab', () => {
         code: 'MergeConflict',
         message: 'Kubernetes-aware merge found conflicting live changes.',
         causes: ['spec.containers'],
-        currentYaml: LATER_MUTATED_YAML,
-        currentResourceVersion: '790',
+        currentYaml,
+        currentResourceVersion: parseYaml(currentYaml).metadata.resourceVersion,
       },
     }));
+  };
+
+  // A resourceVersion is opaque: only the API server's are integers, so
+  // freshness cannot come from ordering them.
+  it.each([
+    { atConflict: '790', later: '791' },
+    { atConflict: 'rev-a', later: 'rev-b' },
+  ])(
+    'compares with a newer live object after a merge conflict, so an earlier choice no longer holds (versions $atConflict, $later)',
+    async ({ atConflict, later }) => {
+      vi.useFakeTimers();
+      answerMergeConflict(liveWith('demo:v2', atConflict));
+      await renderYamlTab();
+      await editTo(UPDATED_YAML.replace('image: demo:v2', 'image: demo:v3'));
+      await pollLiveYaml(liveWith('demo:v2', atConflict));
+      await chooseInRow('containers[demo].image', 'yours');
+      await clickText('Merge changes and continue editing');
+
+      // Someone sets the image again after the conflict.
+      await pollLiveYaml(liveWith('demo:v4', later));
+
+      expect(driftRow('containers[demo].image')).toEqual({
+        values: ['demo:v1', 'demo:v4', 'demo:v3'],
+        choice: null,
+      });
+      expect(getIconButton('Save YAML')?.disabled).toBe(true);
+    }
+  );
+
+  it('keeps comparing with the conflict’s live object when a read sent before the conflict lands after it', async () => {
+    vi.useFakeTimers();
+    answerMergeConflict(liveWith('demo:v5', 'rev-c'));
     await renderYamlTab();
     await editTo(UPDATED_YAML.replace('image: demo:v2', 'image: demo:v3'));
-    await pollLiveYaml(LATER_MUTATED_YAML);
+    await pollLiveYaml(liveWith('demo:v2', 'rev-a'));
     await chooseInRow('containers[demo].image', 'yours');
-    await clickText('Merge changes and continue editing');
-
-    // Someone sets the image again after the conflict.
-    await pollLiveYaml(
-      LATER_MUTATED_YAML.replace('image: demo:v2', 'image: demo:v4').replace('"790"', '"791"')
-    );
-
-    expect(driftRow('containers[demo].image')).toEqual({
-      values: ['demo:v1', 'demo:v4', 'demo:v3'],
-      choice: null,
+    // The next poll goes out and the backend holds it.
+    let releaseRead!: () => void;
+    const readHeld = new Promise<void>((resolve) => {
+      releaseRead = resolve;
     });
-    expect(getIconButton('Save YAML')?.disabled).toBe(true);
+    let holding = true;
+    app.snapshots.respond(async ({ domain }) => {
+      if (domain === 'object-yaml' && holding) {
+        holding = false;
+        await readHeld;
+      }
+      return undefined;
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+
+    serveYaml(liveWith('demo:v5', 'rev-c'));
+    await clickText('Merge changes and continue editing');
+    // The held read saw an object older than the conflict's.
+    serveYaml(liveWith('demo:v4', 'rev-b'));
+    await act(async () => {
+      releaseRead();
+    });
+    await app.settle();
+
+    expect(driftRow('containers[demo].image')?.values).toEqual(['demo:v1', 'demo:v5', 'demo:v3']);
   });
 
   it('restores an environment variable you deleted when you keep their changed value', async () => {
@@ -1176,12 +1230,11 @@ describe('YamlTab', () => {
 
     await chooseInRow('env[MODE].value', 'theirs');
 
-    expect(parseYaml(codeMirrorState.value).spec.containers[0].env).toEqual(
-      expect.arrayContaining([
-        { name: 'MODE', value: 'b' },
-        { name: 'KEEP', value: '1' },
-      ])
-    );
+    // MODE is back where the live object lists it.
+    expect(parseYaml(codeMirrorState.value).spec.containers[0].env).toEqual([
+      { name: 'MODE', value: 'b' },
+      { name: 'KEEP', value: '1' },
+    ]);
     expect(driftRow('env[MODE].value')?.choice).toBe('theirs');
     expect(getIconButton('Save YAML')?.disabled).toBe(false);
   });

@@ -223,8 +223,33 @@ const firstOneSidedItem = (
   return null;
 };
 
-// Adds the source's whole item to the target's list, creating the list where
-// the target has none, or removes the target's whole item.
+// Where the source list's item at `index` goes in the target list: after the
+// nearest earlier source item the target still has, else before the nearest
+// later one, else at the end. Order can carry meaning: an environment variable
+// can refer only to earlier ones, and init containers run in order.
+const insertionIndex = (sourceList: unknown[], index: number, targetList: unknown[]): number => {
+  const targetIndexOf = (item: unknown) => {
+    const name = itemName(item);
+    return targetList.findIndex((candidate) => name !== null && itemName(candidate) === name);
+  };
+  for (let earlier = index - 1; earlier >= 0; earlier -= 1) {
+    const at = targetIndexOf(sourceList[earlier]);
+    if (at >= 0) {
+      return at + 1;
+    }
+  }
+  for (let later = index + 1; later < sourceList.length; later += 1) {
+    const at = targetIndexOf(sourceList[later]);
+    if (at >= 0) {
+      return at;
+    }
+  }
+  return targetList.length;
+};
+
+// Adds the source's whole item to the target's list at its source position,
+// creating the list where the target has none, or removes the target's whole
+// item.
 const copyWholeItem = (
   target: YAML.Document,
   roots: { target: unknown; source: unknown },
@@ -244,10 +269,21 @@ const copyWholeItem = (
     return;
   }
   const item = valueAt(roots.source, sourcePath);
-  if (Array.isArray(valueAt(roots.target, listPath))) {
-    target.addIn(listPath, target.createNode(item));
-  } else {
+  const targetList = valueAt(roots.target, listPath);
+  if (!Array.isArray(targetList)) {
     target.setIn(listPath, target.createNode([item]));
+    return;
+  }
+  // Splicing the list node keeps the comments on its other items.
+  const list = target.getIn(listPath);
+  if (YAML.isSeq(list)) {
+    const sourceIndex = Number(sourcePath[sourcePath.length - 1]);
+    const sourceList = valueAt(roots.source, sourcePath.slice(0, -1)) as unknown[];
+    list.items.splice(
+      insertionIndex(sourceList, sourceIndex, targetList),
+      0,
+      target.createNode(item)
+    );
   }
 };
 

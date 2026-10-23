@@ -163,12 +163,38 @@ describe('copyDriftField', () => {
   const MODE_B = { name: 'MODE', value: 'b' };
   const KEEP = { name: 'KEEP', value: '1' };
 
-  it('restores a named item the draft deleted when the live value is copied', () => {
-    const draft = YAML.parse(copyDriftField(podWithEnv(KEEP), podWithEnv(MODE_B, KEEP), ENV_PATH));
-
-    expect(draft.spec.containers[0].env).toEqual(expect.arrayContaining([MODE_B, KEEP]));
-    expect(draft.spec.containers[0].env).toHaveLength(2);
+  // Kubernetes expands $(BASE) only from variables listed before it (and runs
+  // init containers in list order), so a restored item keeps its position
+  // among the items the draft still has.
+  const envVar = (name: string) => ({
+    name,
+    value: name === 'DERIVED' ? '$(BASE)' : name.toLowerCase(),
   });
+  it.each([
+    { live: ['BASE', 'DERIVED'], draft: ['DERIVED'], restored: ['BASE', 'DERIVED'] },
+    { live: ['A', 'BASE', 'DERIVED'], draft: ['A', 'DERIVED'], restored: ['A', 'BASE', 'DERIVED'] },
+    {
+      live: ['A', 'B', 'BASE', 'DERIVED'],
+      draft: ['A', 'DERIVED'],
+      restored: ['A', 'BASE', 'DERIVED'],
+    },
+  ])(
+    'restores a named item the draft deleted at its live position: $live into $draft',
+    ({ live, draft, restored }) => {
+      const result = YAML.parse(
+        copyDriftField(podWithEnv(...draft.map(envVar)), podWithEnv(...live.map(envVar)), [
+          'spec',
+          'containers',
+          { name: 'api' },
+          'env',
+          { name: 'BASE' },
+          'value',
+        ])
+      );
+
+      expect(result.spec.containers[0].env).toEqual(restored.map(envVar));
+    }
+  );
 
   it('removes the whole named item, not only its field, when the source has no such item', () => {
     const draft = YAML.parse(copyDriftField(podWithEnv(MODE_B, KEEP), podWithEnv(KEEP), ENV_PATH));

@@ -241,41 +241,31 @@ const differsFromBaseline = (baselineYaml: string, liveYaml: string): boolean =>
 const isReplacementOf = (baseline: ObjectIdentity | null, live: ObjectIdentity | null): boolean =>
   Boolean(baseline?.uid && live?.uid && baseline.uid !== live.uid);
 
-// Whether resourceVersion `version` is newer than `than`. Versions are opaque,
-// but the API server's are integer etcd revisions; others are not ordered.
-const isNewerResourceVersion = (
-  version: string | null | undefined,
-  than: string | null | undefined
-): boolean =>
-  Boolean(
-    version && than && /^\d+$/.test(version) && /^\d+$/.test(than) && BigInt(version) > BigInt(than)
-  );
+/** A conflict's live object, and the watched snapshot when the conflict arrived. */
+type ConflictLiveObject = { yaml: string; watchedYaml: string };
 
 // The live YAML the drift notice compares with: a conflict's live object until
-// a newer watched snapshot arrives, or the watched snapshot once it has drifted
-// from the baseline or been replaced.
+// the watched snapshot changes, or the watched snapshot once it has drifted
+// from the baseline or been replaced. A conflict starts a read that cancels
+// any read already out, so the watched snapshot changes only with a read sent
+// after the conflict. (resourceVersions are opaque, so they are not ordered.)
 const driftLiveYamlOf = ({
   isEditing,
-  backendDriftCurrentYaml,
-  conflictResourceVersion,
+  conflictLiveObject,
+  watchedYaml,
   hasRemoteDrift,
   objectReplaced,
   liveYaml,
-  liveResourceVersion,
 }: {
   isEditing: boolean;
-  backendDriftCurrentYaml: string | null;
-  conflictResourceVersion: string | null;
+  conflictLiveObject: ConflictLiveObject | null;
+  watchedYaml: string;
   hasRemoteDrift: boolean;
   objectReplaced: boolean;
   liveYaml: string;
-  liveResourceVersion: string | null;
 }): string | null => {
-  if (
-    backendDriftCurrentYaml !== null &&
-    !isNewerResourceVersion(liveResourceVersion, conflictResourceVersion)
-  ) {
-    return backendDriftCurrentYaml;
+  if (conflictLiveObject?.watchedYaml === watchedYaml) {
+    return conflictLiveObject.yaml;
   }
   return isEditing && (hasRemoteDrift || objectReplaced) ? liveYaml : null;
 };
@@ -677,7 +667,7 @@ export const useYamlTransaction = ({
   const [editBaseline, setEditBaseline] = useState<YamlEditBaseline | null>(null);
   const [hasRemoteDrift, setHasRemoteDrift] = useState(false);
   const [driftForced, setDriftForced] = useState(false);
-  const [backendDriftCurrentYaml, setBackendDriftCurrentYaml] = useState<string | null>(null);
+  const [conflictLiveObject, setConflictLiveObject] = useState<ConflictLiveObject | null>(null);
   const [replacedByConflict, setReplacedByConflict] = useState(false);
   // Choices on fields both sides changed, by field key.
   const [conflictChoices, setConflictChoices] = useState<ReadonlyMap<string, ConflictChoice>>(
@@ -712,21 +702,16 @@ export const useYamlTransaction = ({
   const liveIdentity = latestObjectIdentity ?? objectIdentity ?? null;
   const objectReplaced =
     isEditing && (replacedByConflict || isReplacementOf(baselineIdentity, liveIdentity));
-  const conflictResourceVersion = useMemo(
-    () =>
-      backendDriftCurrentYaml === null
-        ? null
-        : (parseObjectIdentity(backendDriftCurrentYaml)?.resourceVersion ?? null),
-    [backendDriftCurrentYaml]
-  );
+  // Read when a conflict arrives, which can be after an await.
+  const watchedYamlRef = useRef(yamlContent);
+  watchedYamlRef.current = yamlContent;
   const driftLiveYaml = driftLiveYamlOf({
     isEditing,
-    backendDriftCurrentYaml,
-    conflictResourceVersion,
+    conflictLiveObject,
+    watchedYaml: yamlContent,
     hasRemoteDrift,
     objectReplaced,
     liveYaml: effectiveYamlContent,
-    liveResourceVersion: objectIdentity?.resourceVersion ?? null,
   });
   const driftFields = useMemo(
     () =>
@@ -870,7 +855,7 @@ export const useYamlTransaction = ({
   useEffect(() => {
     if (!isEditing) {
       setHasRemoteDrift(false);
-      setBackendDriftCurrentYaml(null);
+      setConflictLiveObject(null);
       setDriftForced(false);
       return;
     }
@@ -884,7 +869,7 @@ export const useYamlTransaction = ({
       latestObjectIdentity?.resourceVersion ?? objectIdentity?.resourceVersion ?? null;
     if (!baselineResourceVersion || !currentVersion) {
       setHasRemoteDrift(false);
-      setBackendDriftCurrentYaml(null);
+      setConflictLiveObject(null);
       return;
     }
     const driftDetected =
@@ -892,7 +877,7 @@ export const useYamlTransaction = ({
       differsFromBaseline(baselineMergeYaml, effectiveYamlContent);
     setHasRemoteDrift(driftDetected);
     if (!driftDetected) {
-      setBackendDriftCurrentYaml(null);
+      setConflictLiveObject(null);
     }
   }, [
     baselineMergeYaml,
@@ -928,7 +913,7 @@ export const useYamlTransaction = ({
     setActionDetails([]);
     setHasRemoteDrift(false);
     setDriftForced(false);
-    setBackendDriftCurrentYaml(null);
+    setConflictLiveObject(null);
     setReplacedByConflict(false);
     setConflictChoices(new Map());
     setIsSaving(false);
@@ -994,7 +979,7 @@ export const useYamlTransaction = ({
     setProtectedEditMessage(null);
     setHasRemoteDrift(false);
     setDriftForced(false);
-    setBackendDriftCurrentYaml(null);
+    setConflictLiveObject(null);
     setReplacedByConflict(false);
     setConflictChoices(new Map());
     setPostApplyNotice(null);
@@ -1035,12 +1020,18 @@ export const useYamlTransaction = ({
         setReplacedByConflict(true);
       }
       if (conflict.currentYaml) {
-        setBackendDriftCurrentYaml(
-          prepareVisibleDraftYaml(normalizeYamlString(conflict.currentYaml))
-        );
+        setConflictLiveObject({
+          yaml: prepareVisibleDraftYaml(normalizeYamlString(conflict.currentYaml)),
+          watchedYaml: watchedYamlRef.current,
+        });
+        // A user read cancels a read already out, so the next watched snapshot
+        // is at least as new as the conflict's object.
+        if (scope) {
+          void requestRefreshDomain({ domain: 'object-yaml', scope, reason: 'user' });
+        }
       }
     },
-    [prepareVisibleDraftYaml]
+    [prepareVisibleDraftYaml, scope]
   );
 
   // A replaced object is explained by the drift notice; other conflicts keep
@@ -1109,7 +1100,7 @@ export const useYamlTransaction = ({
       setProtectedEditMessage(null);
       setHasRemoteDrift(false);
       setDriftForced(false);
-      setBackendDriftCurrentYaml(null);
+      setConflictLiveObject(null);
       setReplacedByConflict(false);
       setConflictChoices(new Map());
       setPostApplyNotice(null);
@@ -1397,7 +1388,7 @@ export const useYamlTransaction = ({
     effectiveYamlContent,
     hasRemoteDrift,
     driftForced,
-    backendDriftCurrentYaml,
+    backendDriftCurrentYaml: conflictLiveObject?.yaml ?? null,
     objectReplaced,
     driftFields,
     hasUnsavedEdits,
