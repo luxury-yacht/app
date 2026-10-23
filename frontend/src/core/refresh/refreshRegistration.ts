@@ -2,7 +2,7 @@ import type { DomainCategory } from './domainRegistry';
 import type { RefreshDomain } from './types';
 
 export type StreamingRegistration = {
-  start: (scope: string) => Promise<(() => void) | undefined> | (() => void);
+  start: (scope: string) => Promise<void>;
   stop?: (scope: string, options?: { reset?: boolean }) => void;
   refreshOnce?: (scope: string) => Promise<void>;
   // No snapshot endpoint backs this domain (its data flows only through its

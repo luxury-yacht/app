@@ -12,9 +12,8 @@ import {
 
 describe('transitionScopedStreamState', () => {
   it('keeps one start owner and rejects a stale completion', () => {
-    const firstTask = Promise.resolve<(() => void) | undefined>(undefined);
-    const replacementTask = Promise.resolve<(() => void) | undefined>(undefined);
-    const cleanup = vi.fn();
+    const firstTask = Promise.resolve();
+    const replacementTask = Promise.resolve();
     let state = transitionScopedStreamState(
       {
         policy: 'allowed',
@@ -35,19 +34,17 @@ describe('transitionScopedStreamState', () => {
       transitionScopedStreamState(state, {
         type: 'start-finished',
         task: firstTask,
-        cleanup,
       })
     ).toBe(state);
     expect(
       transitionScopedStreamState(state, {
         type: 'start-finished',
         task: replacementTask,
-        cleanup,
       })
     ).toEqual({
       policy: 'allowed',
       initialization: { status: 'idle' },
-      connection: { status: 'active', cleanup, cancellationRequested: false },
+      connection: { status: 'active', cancellationRequested: false },
       health: { status: 'unknown' },
       startRetry: { status: 'idle', failures: 0 },
     });
@@ -270,8 +267,7 @@ describe('ClusterRefreshRuntime', () => {
 
   it('owns async streaming lifecycle bookkeeping', async () => {
     const runtime = new ClusterRefreshRuntime('cluster-a');
-    const cleanup = vi.fn();
-    const startPromise = Promise.resolve(cleanup);
+    const startPromise = Promise.resolve();
 
     runtime.beginStreamingStart('cluster-config', 'cluster-a|', startPromise);
     expect(runtime.isStreamingStartingOrActive('cluster-config', 'cluster-a|')).toBe(true);
@@ -279,17 +275,17 @@ describe('ClusterRefreshRuntime', () => {
       { domain: 'cluster-config', scope: 'cluster-a|' },
     ]);
 
-    runtime.finishStreamingStart('cluster-config', 'cluster-a|', startPromise, await startPromise);
+    await startPromise;
+    runtime.finishStreamingStart('cluster-config', 'cluster-a|', startPromise);
 
     expect(runtime.hasPendingStreaming('cluster-config', 'cluster-a|')).toBe(false);
     expect(runtime.isStreamingActive('cluster-config', 'cluster-a|')).toBe(true);
-    expect(runtime.getStreamingCleanup('cluster-config', 'cluster-a|')).toBe(cleanup);
 
     const pending = runtime.cancelStreamingStart('cluster-config', 'cluster-a|');
     expect(pending).toBeNull();
     expect(runtime.isStreamingCancelled('cluster-config', 'cluster-a|')).toBe(true);
 
-    runtime.deleteStreamingCleanup('cluster-config', 'cluster-a|');
+    runtime.markStreamingStopped('cluster-config', 'cluster-a|');
     runtime.clearStreamingCancelled('cluster-config', 'cluster-a|');
 
     expect(runtime.isStreamingStartingOrActive('cluster-config', 'cluster-a|')).toBe(false);
@@ -460,9 +456,10 @@ describe('ClusterRefreshRuntime', () => {
     // the stream-down fallback.
     const runtime = new ClusterRefreshRuntime('cluster-a');
     const scope = 'cluster-a|namespace:default';
-    const startPromise = Promise.resolve(vi.fn());
+    const startPromise = Promise.resolve();
     runtime.beginStreamingStart('pods', scope, startPromise);
-    runtime.finishStreamingStart('pods', scope, startPromise, await startPromise);
+    await startPromise;
+    runtime.finishStreamingStart('pods', scope, startPromise);
 
     const base = {
       domain: 'pods' as const,
@@ -489,9 +486,10 @@ describe('ClusterRefreshRuntime', () => {
     // the stream is healthy — swallowing the doorbell entirely (frozen list).
     const runtime = new ClusterRefreshRuntime('cluster-a');
     const scope = 'cluster-a|';
-    const startPromise = Promise.resolve(vi.fn());
+    const startPromise = Promise.resolve();
     runtime.beginStreamingStart('namespaces', scope, startPromise);
-    runtime.finishStreamingStart('namespaces', scope, startPromise, await startPromise);
+    await startPromise;
+    runtime.finishStreamingStart('namespaces', scope, startPromise);
 
     expect(
       runtime.resolveStreamingFetchMode({

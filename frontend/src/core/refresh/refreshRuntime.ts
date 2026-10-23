@@ -226,12 +226,12 @@ export const transitionClusterAuthState = (
   return state.status === status ? state : { status };
 };
 
-type StreamStartTask = Promise<(() => void) | undefined>;
+type StreamStartTask = Promise<void>;
 type StreamInitializationState = { status: 'idle' } | { status: 'scheduled'; task: Promise<void> };
 type StreamConnectionState =
   | { status: 'inactive' }
   | { status: 'starting'; task: StreamStartTask; cancellationRequested: boolean }
-  | { status: 'active'; cleanup: () => void; cancellationRequested: boolean };
+  | { status: 'active'; cancellationRequested: boolean };
 type StreamHealthState =
   | { status: 'unknown' }
   | { status: 'known'; payload: AppEvents['refresh:resource-stream-health'] };
@@ -258,9 +258,9 @@ export type ScopedStreamEvent =
   | { type: 'start-began'; task: StreamStartTask }
   | { type: 'start-cancelled' }
   | { type: 'start-cancellation-cleared' }
-  | { type: 'start-finished'; task: StreamStartTask; cleanup: () => void }
+  | { type: 'start-finished'; task: StreamStartTask }
   | { type: 'start-failed'; task: StreamStartTask }
-  | { type: 'cleanup-removed' }
+  | { type: 'stream-stopped' }
   | { type: 'health-received'; payload: AppEvents['refresh:resource-stream-health'] }
   | { type: 'health-cleared' }
   | { type: 'async-cleared' }
@@ -361,11 +361,7 @@ const finishStreamStart = (
   }
   return {
     ...state,
-    connection: {
-      status: 'active',
-      cleanup: event.cleanup,
-      cancellationRequested: false,
-    },
+    connection: { status: 'active', cancellationRequested: false },
   };
 };
 
@@ -379,7 +375,7 @@ const failStreamStart = (
   return { ...state, connection: { status: 'inactive' } };
 };
 
-const removeStreamCleanup = (state: ScopedStreamState): ScopedStreamState =>
+const stopActiveStream = (state: ScopedStreamState): ScopedStreamState =>
   state.connection.status === 'active' ? { ...state, connection: { status: 'inactive' } } : state;
 
 const receiveStreamHealth = (
@@ -470,8 +466,8 @@ export const transitionScopedStreamState = (
       return finishStreamStart(state, event);
     case 'start-failed':
       return failStreamStart(state, event);
-    case 'cleanup-removed':
-      return removeStreamCleanup(state);
+    case 'stream-stopped':
+      return stopActiveStream(state);
     case 'health-received':
       return receiveStreamHealth(state, event);
     case 'health-cleared':
@@ -1047,25 +1043,19 @@ export class ClusterRefreshRuntime {
     this.applyStreamEvent(domain, scope, { type: 'initialization-cleared', task });
   }
 
-  beginStreamingStart(
-    domain: RefreshDomain,
-    scope: string,
-    startPromise: Promise<(() => void) | undefined>
-  ): void {
+  beginStreamingStart(domain: RefreshDomain, scope: string, startPromise: StreamStartTask): void {
     this.applyStreamEvent(domain, scope, { type: 'start-began', task: startPromise });
   }
 
   finishStreamingStart(
     domain: RefreshDomain,
     scope: string,
-    startPromise: StreamStartTask,
-    cleanup: (() => void) | undefined
+    startPromise: StreamStartTask
   ): boolean {
     const previous = this.getScopeState(domain, scope).stream;
     const next = this.applyStreamEvent(domain, scope, {
       type: 'start-finished',
       task: startPromise,
-      cleanup: cleanup ?? (() => undefined),
     });
     return next !== previous;
   }
@@ -1074,10 +1064,7 @@ export class ClusterRefreshRuntime {
     this.applyStreamEvent(domain, scope, { type: 'start-failed', task: startPromise });
   }
 
-  cancelStreamingStart(
-    domain: RefreshDomain,
-    scope: string
-  ): Promise<(() => void) | undefined> | null {
+  cancelStreamingStart(domain: RefreshDomain, scope: string): StreamStartTask | null {
     const state = this.getScopeState(domain, scope);
     const pending =
       state.stream.connection.status === 'starting' ? state.stream.connection.task : null;
@@ -1095,13 +1082,10 @@ export class ClusterRefreshRuntime {
     this.applyStreamEvent(domain, scope, { type: 'start-cancellation-cleared' });
   }
 
-  getStreamingCleanup(domain: RefreshDomain, scope: string): (() => void) | undefined {
-    const connection = this.getScopeState(domain, scope).stream.connection;
-    return connection.status === 'active' ? connection.cleanup : undefined;
-  }
-
-  deleteStreamingCleanup(domain: RefreshDomain, scope: string): void {
-    this.applyStreamEvent(domain, scope, { type: 'cleanup-removed' });
+  // The orchestrator stopped the scope's stream; a start still in flight is
+  // cancelled separately (cancelStreamingStart).
+  markStreamingStopped(domain: RefreshDomain, scope: string): void {
+    this.applyStreamEvent(domain, scope, { type: 'stream-stopped' });
   }
 
   clearStreamHealth(domain: RefreshDomain, scope: string): void {
