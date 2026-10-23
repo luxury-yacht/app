@@ -16,6 +16,8 @@ import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
+import { HELM_RELEASE_GVK } from '@shared/kinds/kindFacets';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import {
   buildRequiredCanonicalObjectRowKey,
@@ -25,7 +27,6 @@ import React, { useCallback, useMemo } from 'react';
 import type { NamespaceHelmSnapshotPayload, NamespaceHelmSummary } from '@/core/refresh/types';
 import { usePreference } from '@/core/settings/usePreference';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 // Data interface for Helm releases
 export interface HelmData extends Omit<NamespaceHelmSummary, 'chart'> {
@@ -95,7 +96,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
         cf.createKindColumn<HelmData>({
           key: 'kind',
           getKind: () => 'HelmRelease',
-          getDisplayText: () => getDisplayKind('HelmRelease', useShortResourceNames),
+          getDisplayText: () => kindDisplayName(HELM_RELEASE_GVK, useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) => navigateToView(helmReference(resource)),
           isInteractive: () => true,

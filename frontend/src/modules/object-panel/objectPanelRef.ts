@@ -6,9 +6,9 @@
  * checks from one shared object reference contract.
  */
 
-import builtinResourceIdentityContract from '@builtin-resource-identities';
 import { buildObjectPanelPodsSelector } from '@modules/object-panel/components/ObjectPanel/Pods/objectPanelPodsScope';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { HELM_RELEASE_GVK, lookupKindFacets } from '@shared/kinds/kindFacets';
 import {
   buildObjectReference,
   buildRequiredObjectReference,
@@ -30,7 +30,6 @@ export interface ObjectPanelRefOptions {
 }
 
 export interface ObjectPanelScopes {
-  objectKind: string | null;
   detailScope: string | null;
   eventsScope: string | null;
   containerLogsScope: string | null;
@@ -39,7 +38,6 @@ export interface ObjectPanelScopes {
   /** The PodsTab's leased pods window scope; null for kinds without a pods tab. */
   podsScope: string | null;
   isHelmRelease: boolean;
-  isEvent: boolean;
 }
 
 export interface ObjectPanelScopeEviction {
@@ -55,30 +53,13 @@ export interface ObjectPanelScopeEviction {
   scope: string;
 }
 
-const HELM_RELEASE_GVK = { group: 'helm.sh', version: 'v3' };
-
-const objectMapGvkKey = (group: string, version: string, kind: string): string =>
-  `${group.trim()}/${version.trim()}/${kind.trim().toLowerCase()}`;
-
-// Identities an object map can be opened for: the built-ins from the backend
-// kind registry via the identity contract, plus the synthetic Helm release,
-// whose map holds the objects in its manifest. Matching uses the complete
-// identity, so a custom resource that shares a kind name (an Istio Gateway, a
-// Flux HelmRelease) is not mistaken for the supported one.
-const MAP_SUPPORTED_GVKS = new Set([
-  ...builtinResourceIdentityContract.resources
-    .filter((resource) => 'objectMap' in resource && resource.objectMap)
-    .map((resource) => objectMapGvkKey(resource.group, resource.version, resource.kind)),
-  objectMapGvkKey(HELM_RELEASE_GVK.group, HELM_RELEASE_GVK.version, 'HelmRelease'),
-]);
-
 const normalizeOptional = (value: string | null | undefined): string | undefined => {
   const trimmed = value?.trim() ?? '';
   return trimmed || undefined;
 };
 
 const isHelmReleaseKind = (kind: string | null | undefined): boolean =>
-  kind?.trim().toLowerCase() === 'helmrelease';
+  kind?.trim().toLowerCase() === HELM_RELEASE_GVK.kind.toLowerCase();
 
 const normalizePanelInput = (input: KubernetesObjectReference): KubernetesObjectReference => {
   if (!isHelmReleaseKind(input.kind) || normalizeOptional(input.version)) {
@@ -128,6 +109,11 @@ export const objectPanelId = (ref: KubernetesObjectReference): string => {
   return `obj:${panelRef.clusterId}:${panelRef.group}/${panelRef.version}/${panelRef.kind.toLowerCase()}:${ns}:${panelRef.name}`;
 };
 
+// Identities an object map can be opened for: a kind whose facets say the map
+// collects it (every served version), plus the synthetic Helm release, whose map
+// holds the objects in its manifest. Matching uses the complete identity, so a
+// custom resource that shares a kind name (an Istio Gateway, a Flux HelmRelease)
+// is not mistaken for the supported one.
 export const isObjectMapSupportedRef = (
   ref:
     | {
@@ -137,14 +123,7 @@ export const isObjectMapSupportedRef = (
       }
     | null
     | undefined
-): boolean =>
-  Boolean(
-    ref?.kind &&
-      ref.version &&
-      ref.group !== null &&
-      ref.group !== undefined &&
-      MAP_SUPPORTED_GVKS.has(objectMapGvkKey(ref.group, ref.version, ref.kind))
-  );
+): boolean => lookupKindFacets(ref)?.objectMap === true;
 
 export const hasCompleteObjectMapReference = (
   objectData: KubernetesObjectReference | null | undefined
@@ -169,10 +148,7 @@ export const hasCompleteObjectMapReference = (
   );
 };
 
-const emptyObjectPanelScopes = (
-  objectData: KubernetesObjectReference | null
-): ObjectPanelScopes => ({
-  objectKind: objectData?.kind ? objectData.kind.toLowerCase() : null,
+const emptyObjectPanelScopes = (): ObjectPanelScopes => ({
   detailScope: null,
   eventsScope: null,
   containerLogsScope: null,
@@ -180,11 +156,10 @@ const emptyObjectPanelScopes = (
   helmScope: null,
   podsScope: null,
   isHelmRelease: false,
-  isEvent: objectData?.kind?.trim().toLowerCase() === 'event',
 });
 
 const isSyntheticHelmRelease = (ref: ResolvedObjectReference): boolean =>
-  ref.kind.trim().toLowerCase() === 'helmrelease' &&
+  isHelmReleaseKind(ref.kind) &&
   ref.group === HELM_RELEASE_GVK.group &&
   ref.version === HELM_RELEASE_GVK.version;
 
@@ -193,7 +168,7 @@ export const getObjectPanelScopes = (
   options: ObjectPanelRefOptions = {}
 ): ObjectPanelScopes => {
   if (!objectData?.kind || !objectData.name) {
-    return emptyObjectPanelScopes(objectData);
+    return emptyObjectPanelScopes();
   }
 
   const normalizedObjectData = normalizePanelInput(objectData);
@@ -201,17 +176,16 @@ export const getObjectPanelScopes = (
     normalizeOptional(normalizedObjectData.clusterId) ??
     normalizeOptional(options.fallbackClusterId);
   if (!clusterId || !hasExplicitScopeGVK(normalizedObjectData)) {
-    return emptyObjectPanelScopes(objectData);
+    return emptyObjectPanelScopes();
   }
 
   let ref: ResolvedObjectReference;
   try {
     ref = buildObjectReference(normalizedObjectData);
   } catch {
-    return emptyObjectPanelScopes(objectData);
+    return emptyObjectPanelScopes();
   }
 
-  const objectKind = ref.kind.toLowerCase();
   // Every object-scoped domain decodes the same object selector, so the panel's
   // detail, YAML, events, log, and map consumers share one canonical scope.
   const objectSelector: ScopeSelector = {
@@ -234,19 +208,15 @@ export const getObjectPanelScopes = (
     : null;
   // The PodsTab leases a pods window under this exact scope (same selector the
   // query-backed wrapper uses); null for kinds without a pods tab.
-  const podsSelector = buildObjectPanelPodsSelector(
-    {
-      kind: ref.kind,
-      group: ref.group,
-      version: ref.version,
-      namespace: ref.namespace,
-      name: ref.name,
-    },
-    ref.kind
-  );
+  const podsSelector = buildObjectPanelPodsSelector({
+    kind: ref.kind,
+    group: ref.group,
+    version: ref.version,
+    namespace: ref.namespace,
+    name: ref.name,
+  });
 
   return {
-    objectKind,
     detailScope,
     eventsScope: buildRefreshScope('object-events', { clusterId, selector: objectSelector }),
     containerLogsScope: buildRefreshScope('container-logs', {
@@ -261,7 +231,6 @@ export const getObjectPanelScopes = (
       ? buildRefreshScope('pods', { clusterId, selector: podsSelector })
       : null,
     isHelmRelease: syntheticHelmRelease,
-    isEvent: objectKind === 'event',
   };
 };
 

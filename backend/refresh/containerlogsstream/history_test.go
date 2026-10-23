@@ -212,7 +212,7 @@ func TestHistoryReadKeepsOnlyTheNewestLinesThatFit(t *testing.T) {
 	client := &stubClient{Clientset: baseClient, core: &logCore{CoreV1Interface: baseClient.CoreV1(), overrides: map[string]*logPods{"default": pods}}}
 	target := containerTarget{namespace: "default", pod: "web-0", container: "app"}
 
-	read, leftOut, err := NewStreamer(client, applog.Noop, nil).readHistory(context.Background(), target, 100, 250_000, time.Time{})
+	read, leftOut, err := NewStreamer(client, testLogTargets, applog.Noop, nil).readHistory(context.Background(), target, 100, 250_000, time.Time{})
 
 	require.NoError(t, err)
 	require.True(t, leftOut)

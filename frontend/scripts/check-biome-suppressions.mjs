@@ -53,6 +53,7 @@ const excludedFiles = new Set([
   'package-lock.json',
   'src/core/refresh/types.generated.ts',
   'src/shared/actions/objectActions.generated.ts',
+  'src/shared/kinds/kindFacets.generated.ts',
   'scripts/check-biome-suppressions.mjs',
   'scripts/check-biome-suppressions.test.mjs',
 ]);

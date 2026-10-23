@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/luxury-yacht/app/backend/kind/logspec"
 	"slices"
 	"strings"
 	"sync"
@@ -32,7 +33,9 @@ const frameBudgetBytes = 8 * containerlogs.MaxLineBytes
 
 // Handler serves pod/workload logs over a named Wails stream.
 type Handler struct {
-	streamer    *Streamer
+	streamer *Streamer
+	// targets validate a request's scope; the streamer resolves through the same table.
+	targets     logspec.Targets
 	telemetry   *telemetry.Recorder
 	limiter     *GlobalTargetLimiter
 	sessionsMu  sync.Mutex
@@ -48,11 +51,14 @@ type JSONSender interface {
 }
 
 // NewHandler constructs a container logs stream handler.
-func NewHandler(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder, limiters ...*GlobalTargetLimiter) (*Handler, error) {
-	return NewHandlerWithLimits(client, logger, recorder, containerlogs.DefaultPerScopeTargetLimit, limiters...)
+func NewHandler(client kubernetes.Interface, targets logspec.Targets, logger Logger, recorder *telemetry.Recorder, limiters ...*GlobalTargetLimiter) (*Handler, error) {
+	return NewHandlerWithLimits(client, targets, logger, recorder, containerlogs.DefaultPerScopeTargetLimit, limiters...)
 }
 
-func NewHandlerWithLimits(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder, perScopeLimit int, limiters ...*GlobalTargetLimiter) (*Handler, error) {
+// NewHandlerWithLimits builds the container-log stream handler. targets are the
+// kind registry's container-log targets (kindregistry.MustLogTargets), the same
+// table the fetch path reads through.
+func NewHandlerWithLimits(client kubernetes.Interface, targets logspec.Targets, logger Logger, recorder *telemetry.Recorder, perScopeLimit int, limiters ...*GlobalTargetLimiter) (*Handler, error) {
 	if client == nil {
 		return nil, errors.New("containerlogsstream: kubernetes client is required")
 	}
@@ -61,7 +67,8 @@ func NewHandlerWithLimits(client kubernetes.Interface, logger Logger, recorder *
 		limiter = limiters[0]
 	}
 	return &Handler{
-		streamer: NewStreamer(client, logger, recorder, perScopeLimit), telemetry: recorder, limiter: limiter,
+		streamer: NewStreamer(client, targets, logger, recorder, perScopeLimit), targets: targets,
+		telemetry: recorder, limiter: limiter,
 		sessions: make(map[uint64]context.CancelFunc),
 	}, nil
 }
@@ -77,7 +84,7 @@ type containerLogsStream struct {
 
 // Handle serves one already-routed named-stream request.
 func (h *Handler) Handle(ctx context.Context, conn JSONSender, request Request) {
-	options, err := parseRequest(request)
+	options, err := parseRequest(request, h.targets)
 	if err != nil {
 		_ = conn.SendJSON(ErrorPayload(request.Scope, errorstatus.BadRequest(err)))
 		return
@@ -562,9 +569,9 @@ func logTargetLabel(opts Options) string {
 	return opts.Namespace + "/" + opts.Name
 }
 
-func parseRequest(request Request) (Options, error) {
+func parseRequest(request Request, targets logspec.Targets) (Options, error) {
 	rawScope := strings.TrimSpace(request.Scope)
-	identity, err := containerlogs.ParseTargetScope(rawScope)
+	identity, err := containerlogs.ParseTargetScope(rawScope, targets)
 	if err != nil {
 		return Options{}, err
 	}

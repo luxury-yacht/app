@@ -28,6 +28,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition, GridTableProps } from '@shared/components/tables/GridTable';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
@@ -35,7 +36,6 @@ import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import { usePreference } from '@/core/settings/usePreference';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { errorHandler } from '@/utils/errorHandler';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 export type CustomResourceGridRow = CatalogBackedCustomResourceRow;
 
@@ -115,10 +115,13 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
             : resource.ref.kind,
         getAlias: (resource) => resource.kindAlias,
         getDisplayText: (resource) =>
-          getDisplayKind(
-            kindFallback
-              ? resource.ref.kind || resource.kindAlias || kindFallback
-              : resource.ref.kind,
+          kindDisplayName(
+            {
+              group: resource.ref.group,
+              kind: kindFallback
+                ? resource.ref.kind || resource.kindAlias || kindFallback
+                : resource.ref.kind,
+            },
             useShortResourceNames
           ),
         onClick: handleResourceClick,

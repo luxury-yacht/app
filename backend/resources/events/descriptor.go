@@ -7,7 +7,10 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 // object catalog.
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
+	ListDomain:      "namespace-events",
+	Display:         kindspec.Display{ShortName: "ev"},
 	CatalogSource:   kindspec.CatalogNone,
 	DetailCacheable: true,
 	Binding:         &DetailBinding,
+	Panel:           kindspec.ObjectPanel{HideEvents: true, HideYAML: true},
 }

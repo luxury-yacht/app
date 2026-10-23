@@ -7,22 +7,27 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/logspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
-	appsv1client "k8s.io/client-go/kubernetes/typed/apps/v1"
 )
 
 // jobNameLabel is set by the Job controller on every pod it creates.
 const jobNameLabel = "job-name"
 
+var errNoLogTargets = errors.New("container log targets are not configured")
+
 // ParseTargetScope parses a container logs scope into the complete identity of
-// the pod or workload whose logs are read, rejecting objects logs cannot target.
-func ParseTargetScope(scope string) (refresh.ObjectScopeIdentity, error) {
+// the pod or workload whose logs are read, rejecting objects no log target
+// covers. The targets are the kind registry's (kindregistry.LogTargets), passed
+// in because this leaf cannot import the registry, whose kind packages use it.
+func ParseTargetScope(scope string, targets logspec.Targets) (refresh.ObjectScopeIdentity, error) {
 	if strings.TrimSpace(scope) == "" {
 		return refresh.ObjectScopeIdentity{}, errors.New("container logs scope is required")
 	}
@@ -33,7 +38,7 @@ func ParseTargetScope(scope string) (refresh.ObjectScopeIdentity, error) {
 	if identity.Namespace == "" {
 		return refresh.ObjectScopeIdentity{}, errors.New("log scope must reference a namespaced object")
 	}
-	if err := ValidateTargetGVK(identity.GVK); err != nil {
+	if _, err := lookupTarget(identity.GVK, targets); err != nil {
 		return refresh.ObjectScopeIdentity{}, err
 	}
 	identity.Name = strings.TrimSpace(identity.Name)
@@ -43,9 +48,19 @@ func ParseTargetScope(scope string) (refresh.ObjectScopeIdentity, error) {
 	return identity, nil
 }
 
+func lookupTarget(gvk schema.GroupVersionKind, targets logspec.Targets) (logspec.Target, error) {
+	if targets.Len() == 0 {
+		return logspec.Target{}, errNoLogTargets
+	}
+	target, ok := targets.Lookup(gvk)
+	if !ok {
+		return logspec.Target{}, fmt.Errorf("container logs are not supported for %s", gvk.String())
+	}
+	return target, nil
+}
+
 // Resolution is the set of pods a log target covers now and the watch that
-// keeps that set current. A single pod is watched by name, so a pod recreated
-// under the same name, or given a debug container, is followed.
+// keeps that set current.
 type Resolution struct {
 	Pods  []*corev1.Pod
 	Watch *PodWatch
@@ -58,160 +73,135 @@ type PodWatch struct {
 	Namespace     string
 	LabelSelector string
 	FieldSelector string
-	podName       string
-	cronJob       *cronJobOwnership
+	owns          func(ctx context.Context, pod *corev1.Pod) (bool, error)
 }
 
 // Owns reports whether a watched pod belongs to the target. An error means
 // ownership could not be looked up; the pod is reported as not owned.
 func (w *PodWatch) Owns(ctx context.Context, pod *corev1.Pod) (bool, error) {
-	if w == nil {
+	if w == nil || w.owns == nil {
 		return true, nil
 	}
-	if w.podName != "" {
-		// Also enforced here in case the server does not apply the field selector.
-		return pod.Name == w.podName, nil
-	}
-	if w.cronJob == nil {
-		return true, nil
-	}
-	return w.cronJob.owns(ctx, pod)
+	return w.owns(ctx, pod)
 }
 
-// Resolve lists the target's current pods that the selection allows.
+// Resolve lists the target's current pods that the selection allows, through
+// the kind's log target.
 func Resolve(
 	ctx context.Context,
 	client kubernetes.Interface,
+	targets logspec.Targets,
 	target refresh.ObjectScopeIdentity,
 	selection ScopeSelection,
 ) (Resolution, error) {
-	switch strings.ToLower(strings.TrimSpace(target.GVK.Kind)) {
-	case "pod":
-		return resolvePod(ctx, client, target, selection)
-	case "deployment", "replicaset", "daemonset", "statefulset":
-		selector, err := workloadSelector(ctx, client, target)
-		if err != nil {
-			return Resolution{}, err
-		}
-		return resolveBySelector(ctx, client, target.Namespace, selector, selection)
-	case "job":
-		selector := labels.Set{jobNameLabel: target.Name}.AsSelector().String()
-		return resolveBySelector(ctx, client, target.Namespace, selector, selection)
-	case "cronjob":
-		return resolveCronJob(ctx, client, target, selection)
-	default:
-		return Resolution{}, fmt.Errorf("unsupported workload type: %s", target.GVK.Kind)
-	}
-}
-
-func resolvePod(
-	ctx context.Context,
-	client kubernetes.Interface,
-	target refresh.ObjectScopeIdentity,
-	selection ScopeSelection,
-) (Resolution, error) {
-	watch := &PodWatch{
-		Namespace:     target.Namespace,
-		FieldSelector: fields.OneTermEqualSelector("metadata.name", target.Name).String(),
-		podName:       target.Name,
-	}
-	if !selection.MatchPod(target.Name) {
-		return Resolution{Watch: watch}, nil
-	}
-	pod, err := client.CoreV1().Pods(target.Namespace).Get(ctx, target.Name, metav1.GetOptions{})
-	if err != nil {
-		return Resolution{}, fmt.Errorf("get pod %s/%s: %w", target.Namespace, target.Name, err)
-	}
-	return Resolution{Pods: []*corev1.Pod{pod}, Watch: watch}, nil
-}
-
-func workloadSelector(ctx context.Context, client kubernetes.Interface, target refresh.ObjectScopeIdentity) (string, error) {
-	selector, err := getWorkloadSelector(ctx, client.AppsV1(), target)
-	if err != nil {
-		return "", fmt.Errorf("get %s %s/%s: %w", strings.ToLower(target.GVK.Kind), target.Namespace, target.Name, err)
-	}
-	return metav1.FormatLabelSelector(selector), nil
-}
-
-func getWorkloadSelector(ctx context.Context, apps appsv1client.AppsV1Interface, target refresh.ObjectScopeIdentity) (*metav1.LabelSelector, error) {
-	options := metav1.GetOptions{}
-	switch strings.ToLower(target.GVK.Kind) {
-	case "deployment":
-		object, err := apps.Deployments(target.Namespace).Get(ctx, target.Name, options)
-		if err != nil {
-			return nil, err
-		}
-		return object.Spec.Selector, nil
-	case "replicaset":
-		object, err := apps.ReplicaSets(target.Namespace).Get(ctx, target.Name, options)
-		if err != nil {
-			return nil, err
-		}
-		return object.Spec.Selector, nil
-	case "daemonset":
-		object, err := apps.DaemonSets(target.Namespace).Get(ctx, target.Name, options)
-		if err != nil {
-			return nil, err
-		}
-		return object.Spec.Selector, nil
-	case "statefulset":
-		object, err := apps.StatefulSets(target.Namespace).Get(ctx, target.Name, options)
-		if err != nil {
-			return nil, err
-		}
-		return object.Spec.Selector, nil
-	default:
-		return nil, fmt.Errorf("unsupported workload type: %s", target.GVK.Kind)
-	}
-}
-
-func resolveBySelector(
-	ctx context.Context,
-	client kubernetes.Interface,
-	namespace, selector string,
-	selection ScopeSelection,
-) (Resolution, error) {
-	pods, err := listPods(ctx, client, namespace, selector)
+	logTarget, err := lookupTarget(target.GVK, targets)
 	if err != nil {
 		return Resolution{}, err
 	}
+	resolved, err := logTarget.Resolve(ctx, client, target.Namespace, target.Name, selection.MatchPod)
+	if err != nil {
+		return Resolution{}, err
+	}
+	watch := resolved.Watch
 	return Resolution{
-		Pods:  filterPodsBySelection(pods, selection),
-		Watch: &PodWatch{Namespace: namespace, LabelSelector: selector},
+		Pods: filterPodsBySelection(resolved.Pods, selection),
+		Watch: &PodWatch{
+			Namespace:     watch.Namespace,
+			LabelSelector: watch.LabelSelector,
+			FieldSelector: watch.FieldSelector,
+			owns:          watch.Owns,
+		},
 	}, nil
 }
 
-func resolveCronJob(
+// ResolvePod reads one pod with a plain GET, so users who may read pods but not
+// list or watch them keep its logs, and watches it by name, so a pod recreated
+// under the same name, or given a debug container, is followed. A pod the
+// selection excludes is not read.
+func ResolvePod(
 	ctx context.Context,
 	client kubernetes.Interface,
-	target refresh.ObjectScopeIdentity,
-	selection ScopeSelection,
-) (Resolution, error) {
-	jobs, err := client.BatchV1().Jobs(target.Namespace).List(ctx, metav1.ListOptions{})
+	namespace, name string,
+	matchPod func(name string) bool,
+) (logspec.Resolution, error) {
+	watch := logspec.Watch{
+		Namespace:     namespace,
+		FieldSelector: fields.OneTermEqualSelector("metadata.name", name).String(),
+		// Also enforced here in case the server does not apply the field selector.
+		Owns: func(_ context.Context, pod *corev1.Pod) (bool, error) { return pod.Name == name, nil },
+	}
+	if !matchPod(name) {
+		return logspec.Resolution{Watch: watch}, nil
+	}
+	pod, err := client.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		return Resolution{}, fmt.Errorf("list jobs for cronjob %s/%s: %w", target.Namespace, target.Name, err)
+		return logspec.Resolution{}, fmt.Errorf("get pod %s/%s: %w", namespace, name, err)
 	}
-	// Future Jobs get new names, so the watch selects every Job pod in the
-	// namespace and each pod is attributed through its Job's owner.
-	watch := &PodWatch{
-		Namespace:     target.Namespace,
-		LabelSelector: jobNameLabel,
-		cronJob:       &cronJobOwnership{client: client, namespace: target.Namespace, cronJob: target.Name, known: map[string]bool{}},
+	return logspec.Resolution{Pods: []*corev1.Pod{pod}, Watch: watch}, nil
+}
+
+// ResolveWorkload lists the pods a workload's spec selector matches, read by
+// getSelector, and watches the same selector.
+func ResolveWorkload(
+	ctx context.Context,
+	client kubernetes.Interface,
+	namespace, name, kind string,
+	getSelector func(ctx context.Context) (*metav1.LabelSelector, error),
+) (logspec.Resolution, error) {
+	selector, err := getSelector(ctx)
+	if err != nil {
+		return logspec.Resolution{}, fmt.Errorf("get %s %s/%s: %w", kind, namespace, name, err)
 	}
+	return ResolveBySelector(ctx, client, namespace, metav1.FormatLabelSelector(selector))
+}
+
+// JobPodsSelector selects the pods the Job controller created for a Job.
+func JobPodsSelector(jobName string) string {
+	return labels.Set{jobNameLabel: jobName}.AsSelector().String()
+}
+
+// ResolveBySelector lists the namespace's pods a label selector matches and
+// watches the same selector.
+func ResolveBySelector(
+	ctx context.Context,
+	client kubernetes.Interface,
+	namespace, selector string,
+) (logspec.Resolution, error) {
+	pods, err := listPods(ctx, client, namespace, selector)
+	if err != nil {
+		return logspec.Resolution{}, err
+	}
+	return logspec.Resolution{Pods: pods, Watch: logspec.Watch{Namespace: namespace, LabelSelector: selector}}, nil
+}
+
+// ResolveCronJob lists the pods of the Jobs a CronJob owns. Future Jobs get new
+// names, so the watch selects every Job pod in the namespace and attributes each
+// pod through its Job's owner.
+func ResolveCronJob(
+	ctx context.Context,
+	client kubernetes.Interface,
+	namespace, name string,
+) (logspec.Resolution, error) {
+	jobs, err := client.BatchV1().Jobs(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return logspec.Resolution{}, fmt.Errorf("list jobs for cronjob %s/%s: %w", namespace, name, err)
+	}
+	ownership := &cronJobOwnership{client: client, namespace: namespace, cronJob: name, known: map[string]bool{}}
+	watch := logspec.Watch{Namespace: namespace, LabelSelector: jobNameLabel, Owns: ownership.owns}
 	var jobNames []string
 	for _, job := range jobs.Items {
-		if ownedByCronJob(job.OwnerReferences, target.Name) {
+		if ownedByCronJob(job.OwnerReferences, name) {
 			jobNames = append(jobNames, job.Name)
 		}
 	}
 	if len(jobNames) == 0 {
-		return Resolution{Watch: watch}, nil
+		return logspec.Resolution{Watch: watch}, nil
 	}
-	pods, err := listPods(ctx, client, target.Namespace, jobNameLabel+" in ("+strings.Join(jobNames, ",")+")")
+	pods, err := listPods(ctx, client, namespace, jobNameLabel+" in ("+strings.Join(jobNames, ",")+")")
 	if err != nil {
-		return Resolution{}, err
+		return logspec.Resolution{}, err
 	}
-	return Resolution{Pods: filterPodsBySelection(pods, selection), Watch: watch}, nil
+	return logspec.Resolution{Pods: pods, Watch: watch}, nil
 }
 
 func listPods(ctx context.Context, client kubernetes.Interface, namespace, selector string) ([]*corev1.Pod, error) {

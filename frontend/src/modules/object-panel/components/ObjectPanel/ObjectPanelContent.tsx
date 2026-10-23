@@ -20,6 +20,7 @@ import { loadObjectPanelDetails } from '@modules/object-panel/objectPanelDetails
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import { lookupKindFacets } from '@shared/kinds/kindFacets';
 import React, { lazy, type ReactNode } from 'react';
 
 const DetailsTab = lazy(loadObjectPanelDetails);
@@ -138,7 +139,6 @@ interface ObjectPanelContentProps {
   mapScope: string | null;
   helmScope: string | null;
   objectData: PanelObjectData | null;
-  objectKind: string | null;
   resourceDeleted: boolean;
   deletedResourceName: string;
   onClosePanel?: () => void;
@@ -155,7 +155,6 @@ interface RetainedLogsTabProps {
   isVisible: boolean;
   isAvailable: boolean;
   isPanelOpen: boolean;
-  objectKind: string | null;
   objectData: PanelObjectData | null;
   containerLogsScope: string | null;
   activePodNames: string[] | null;
@@ -168,7 +167,6 @@ const RetainedLogsTab = ({
   isVisible,
   isAvailable,
   isPanelOpen,
-  objectKind,
   objectData,
   containerLogsScope,
   activePodNames,
@@ -185,9 +183,12 @@ const RetainedLogsTab = ({
   const name = objectData?.name ?? '';
   const namespace = objectData?.namespace ?? '';
   const clusterId = objectData?.clusterId ?? null;
+  // The Logs tab exists only for a logs source (useObjectPanelTabs), so a kind
+  // that does not read node logs reads its containers.
+  const logsSource = lookupKindFacets(objectData)?.panel.logs;
   return (
     <RetainedTabFrame isVisible={isVisible}>
-      {objectKind !== 'node' ? (
+      {logsSource !== 'node' ? (
         <PanelTabBoundary
           scope="panel-logs"
           resetKeys={[name, namespace].filter(Boolean)}
@@ -196,7 +197,8 @@ const RetainedLogsTab = ({
         >
           <LogViewer
             isActive={isActive}
-            resourceKind={objectKind || 'pod'}
+            target={logsSource === 'pod' ? 'pod' : 'owned-pods'}
+            resourceKind={objectData?.kind ?? ''}
             containerLogsScope={containerLogsScope}
             activePodNames={activePodNames}
             clusterId={clusterId}
@@ -312,8 +314,7 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
   [
     'jobs',
     ({ objectData, isPanelOpen, detailTabProps }) => {
-      const activeDetail = detailTabProps?.detailModel.activeDetail;
-      const cronJobDetails = activeDetail?.detailType === 'cronjob' ? activeDetail.details : null;
+      const ownedJobs = detailTabProps?.detailModel.ownedJobs ?? null;
       return (
         <PanelTabBoundary
           scope="panel-jobs"
@@ -322,8 +323,8 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
           loadingName="jobs"
         >
           <JobsTab
-            jobs={cronJobDetails?.jobs ?? EMPTY_JOBS}
-            loading={!cronJobDetails && !!detailTabProps?.detailsLoading}
+            jobs={ownedJobs ?? EMPTY_JOBS}
+            loading={!ownedJobs && !!detailTabProps?.detailsLoading}
             isActive={isPanelOpen}
             clusterId={objectData?.clusterId}
             clusterName={objectData?.clusterName}
@@ -391,7 +392,6 @@ export function ObjectPanelContent(props: Readonly<ObjectPanelContentProps>) {
     detailScope,
     containerLogsScope,
     objectData,
-    objectKind,
     resourceDeleted,
     deletedResourceName,
     onClosePanel,
@@ -413,7 +413,6 @@ export function ObjectPanelContent(props: Readonly<ObjectPanelContentProps>) {
         isVisible={activeTab === 'logs' && logsAvailable}
         isAvailable={logsAvailable}
         isPanelOpen={isPanelOpen}
-        objectKind={objectKind}
         objectData={objectData}
         containerLogsScope={containerLogsScope}
         activePodNames={detailTabProps?.detailModel.activePodNames ?? null}

@@ -2,7 +2,11 @@
  * Frontend helpers for the backend-generated object-action catalog.
  */
 
-import type { CapabilityDescriptor } from '@/core/capabilities';
+import {
+  type CapabilityDescriptor,
+  getPermissionKey,
+  type PermissionMap,
+} from '@/core/capabilities';
 import {
   type GeneratedObjectActionDefinition,
   type GeneratedObjectActionPermission,
@@ -166,4 +170,27 @@ export const buildNodeActionPermissionDescriptorMap = (
     throw new Error('Generated node action permission contract is incomplete');
   }
   return { nodeGet, nodePatch, podEvictionCreate, podDelete };
+};
+
+/** The permission map's answer for an action permission descriptor; null when not yet answered. */
+export const objectActionPermissionStatus = (
+  permissionMap: PermissionMap,
+  descriptor: ObjectActionPermissionDescriptor | null
+): { allowed: boolean; pending: boolean } | null => {
+  if (!descriptor) {
+    return null;
+  }
+  return (
+    permissionMap.get(
+      getPermissionKey(
+        descriptor.resourceKind,
+        descriptor.verb,
+        descriptor.namespace ?? null,
+        descriptor.subresource ?? null,
+        descriptor.clusterId ?? null,
+        descriptor.group ?? null,
+        descriptor.version ?? null
+      )
+    ) ?? null
+  );
 };

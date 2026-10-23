@@ -69,7 +69,7 @@ func TestSelectRuntimeTargetsRefillsAfterPodRemoval(t *testing.T) {
 
 func TestMatchNoneTailAndStreamDoNotTouchKubernetes(t *testing.T) {
 	client := fake.NewClientset()
-	streamer := NewStreamer(client, nil, nil)
+	streamer := NewStreamer(client, testLogTargets, nil, nil)
 	opts := Options{
 		ClusterID: "cluster-a",
 		Namespace: "default",
@@ -156,7 +156,7 @@ func (f *fakeWatch) ResultChan() <-chan watch.Event {
 }
 
 func TestStreamerRunCancellationBeforeAndAfterStartup(t *testing.T) {
-	streamer := NewStreamer(fake.NewClientset(), nil, nil)
+	streamer := NewStreamer(fake.NewClientset(), testLogTargets, nil, nil)
 
 	t.Run("cancelled before match-none startup", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())

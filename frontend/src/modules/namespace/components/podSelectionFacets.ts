@@ -1,4 +1,5 @@
 import type { GridTableFilterState } from '@shared/components/tables/GridTable';
+import { lookupKindFacets } from '@shared/kinds/kindFacets';
 import type { ClusterObjectReference } from '@shared/utils/objectIdentity';
 
 const POD_OWNER_QUERY_FACET_KEY = 'owners';
@@ -26,8 +27,9 @@ export const buildPodOwnerFacetValue = (workload: ClusterObjectReference): strin
   ]);
 };
 
+// A parent whose Pods tab lists pods by node (its kind facet) narrows by node name.
 const isNodeReference = (object: ClusterObjectReference): boolean =>
-  object.kind === 'Node' && object.group === '';
+  lookupKindFacets(object)?.panel.pods === 'node';
 
 /**
  * The pods column that only repeats the parent row a pods table is attached

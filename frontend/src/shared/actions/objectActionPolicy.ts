@@ -6,16 +6,8 @@
  */
 
 import type { ResourceLink } from '@core/refresh/types';
-import {
-  lookupObjectActionKindCapability,
-  normalizeObjectActionKind,
-  objectActionKindsWith,
-} from './objectActionCapabilities';
+import { lookupObjectActionKindCapability } from './objectActionCapabilities';
 import { OBJECT_ACTION_IDS, type ObjectActionId } from './objectActionContract';
-
-export function normalizeKind(kind: string): string {
-  return normalizeObjectActionKind(kind);
-}
 
 export interface ObjectActionData {
   kind: string;
@@ -108,8 +100,6 @@ export interface ObjectActionPolicy {
   portForwardEnabled: boolean;
   deleteEnabled: boolean;
 }
-
-export const SCALABLE_KINDS: readonly string[] = objectActionKindsWith('scale');
 
 const permissionAllows = (status: PermissionStatus | null | undefined): boolean =>
   Boolean(status?.allowed && !status.pending);
@@ -267,7 +257,7 @@ export const resolveObjectActionPolicy = ({
   actionLoading?: boolean;
 }): ObjectActionPolicy => {
   const capability = lookupObjectCapability(object);
-  const normalizedKind = capability?.kind ?? normalizeKind(object.kind);
+  const normalizedKind = capability?.kind ?? object.kind;
   const isCronJob = Boolean(capability?.trigger || capability?.suspend);
   const portForward = resolvePortForwardAvailability(object, handlers, capability);
   const anyPending = hasPendingPermission(permissions);

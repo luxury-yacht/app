@@ -18,9 +18,12 @@ import {
 } from '@shared/actions/objectActionClient';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import DrainNodeModal from '@shared/components/modals/DrainNodeModal';
-import { resolveNodeDrainOperationPermissions } from '@shared/hooks/nodeActionPermissions';
+import {
+  nodeActionPermissionInputs,
+  resolveNodeDrainOperationPermissions,
+} from '@shared/hooks/nodeActionPermissions';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
+import { useUserPermissions } from '@/core/capabilities';
 import {
   acquireRefreshDomainLease,
   releaseRefreshDomainLease,
@@ -163,23 +166,12 @@ export const useNodeMaintenanceActions = ({
     setDrainTarget(target);
   }, []);
 
+  // The drain checks are the generated node-action permission templates.
   const getDrainPermissions = useCallback(
     (clusterId: string) =>
-      resolveNodeDrainOperationPermissions({
-        nodeGet:
-          permissionMap.get(getPermissionKey('Node', 'get', null, null, clusterId, '', 'v1')) ??
-          null,
-        nodePatch:
-          permissionMap.get(getPermissionKey('Node', 'patch', null, null, clusterId, '', 'v1')) ??
-          null,
-        podEvictionCreate:
-          permissionMap.get(
-            getPermissionKey('Pod', 'create', null, 'eviction', clusterId, '', 'v1')
-          ) ?? null,
-        podDelete:
-          permissionMap.get(getPermissionKey('Pod', 'delete', null, null, clusterId, '', 'v1')) ??
-          null,
-      }),
+      resolveNodeDrainOperationPermissions(
+        nodeActionPermissionInputs(permissionMap, { clusterId })
+      ),
     [permissionMap]
   );
 

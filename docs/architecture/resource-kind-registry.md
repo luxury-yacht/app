@@ -14,7 +14,22 @@ no subsystem spells out kind names for dispatch.
   dispatch path forces you to name a kind elsewhere, fix the generic mechanism.
 - Registry-driven surfaces: object catalog (ingest collection and sinks),
   resource-stream, snapshot stream-summary, object-map (collectors + edges), App
-  bindings + generated detail dispatch, and response-cache invalidation.
+  bindings + generated detail dispatch, response-cache invalidation, container-log
+  targets (`kindregistry.LogTargets`), and the frontend kind facets table.
+- Frontend kind facets: `go generate ./backend` writes
+  `frontend/src/shared/kinds/kindFacets.generated.ts` (`internal/genkindfacets`)
+  with one row per registered kind. It carries every per-kind decision the
+  frontend makes: panel tabs (`Panel`), the logs source (`Logs` /
+  `Panel.NodeLogs`), the metrics domain (`Metrics`), action eligibility, object-map
+  support, the list domain (`Stream.Domain` or `ListDomain`), and display names
+  (`Display`). The frontend reads it through `shared/kinds/kindFacets`:
+  `lookupKindFacets` (exact group, a served version, kind in any case) for
+  behavior, `lookupKindMetadata` (group and kind) for display names and list
+  navigation. Never add a frontend per-kind table or kind-name branch; add or
+  change the facet. Sections that read a DTO because of a facet are mapped types
+  over `DetailTypesWhere<…>`, so TypeScript rejects a missing or stale accessor.
+  Display-only frontend tables (badge colors, Overview layouts) are the
+  exception and stay presentation.
 - `resourcekind.Identity` is a dependency-free leaf that imports nothing else in
   the repo, so `resourcecontract` and every kind package use it without import
   cycles. Do not add repo imports to it.
@@ -42,6 +57,9 @@ links) is a separate concern: [shared-resource-model.md](shared-resource-model.m
     `builtin-resource-identities.json`.
 - **Descriptor vocabulary** (`backend/kind/`) — how each kind behaves.
   - `kindspec`: the per-kind `Descriptor`; `kindregistry`: `All`.
+  - `logspec`: the container-log target a kind declares (`Descriptor.Logs`):
+    how to find its pods and the watch that follows them. A leaf, so kind
+    packages and `internal/containerlogs` share it.
   - `streamspec`, `streamrows`: streaming row descriptor and row DTOs.
   - `objectmapnode`, `objectmapspec`, `objectmap`: object-map collector, edge
     declarations, and neutral node status/action facts.
@@ -68,5 +86,11 @@ types, and tests. Any other new occurrence violates this contract.
   `backend/objectcatalog/catalog_source_test.go`,
   `backend/response_cache_invalidation_registry_test.go`: each dispatch surface
   stays registry-driven.
+- `backend/internal/genkindfacets/render_test.go` (every facet for every kind,
+  today's decisions pinned), `backend/kind_facets_test.go` (generated file current;
+  every listed version passes the backend's target checks), and the agreement
+  tests in `backend/refresh/snapshot/kind_facets_agreement_test.go` (pods by
+  owner/node, metrics and list domains) and
+  `backend/internal/containerlogs/kind_facets_agreement_test.go` (log targets).
 - Done-test: a grep for any kind name hits only its own package, its
   `kindregistry.All` entry, and the sanctioned exceptions.

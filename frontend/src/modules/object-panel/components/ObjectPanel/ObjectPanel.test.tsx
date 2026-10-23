@@ -255,7 +255,7 @@ describe('what each tab receives', () => {
     await selectTab('Logs');
 
     expect(last(tabProps.logs)).toMatchObject({
-      resourceKind: 'pod',
+      target: 'pod',
       isActive: true,
       clusterId: dev.clusterId,
     });

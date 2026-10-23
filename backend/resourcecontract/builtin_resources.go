@@ -16,7 +16,6 @@ package resourcecontract
 import (
 	"strings"
 
-	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
@@ -62,23 +61,19 @@ import (
 
 const builtinStorageAPIGroup = "storage.k8s.io"
 
-// BuiltinResource describes one built-in Kubernetes resource identity and the
-// facets the frontend reads from the identity contract.
+// BuiltinResource describes one built-in Kubernetes resource identity. Per-kind
+// behavior facets reach the frontend through the generated kind facets table
+// (internal/genkindfacets), not this identity contract.
 type BuiltinResource struct {
 	resourcekind.Identity
-	// ObjectMap marks identities an object map can be opened for. Every served
-	// built-in version of a kind the map collects qualifies: the map resolves an
-	// object by UID whatever version names it.
-	ObjectMap bool `json:"objectMap,omitempty"`
 }
 
 // BuiltinResources is the authoritative in-repo resource identity table for
 // built-ins that Luxury Yacht handles without dynamic discovery. Every row is
 // sourced from the owning kind package's resourcekind.Identity; the only
 // exceptions are catalog-only kinds with no resource package (Endpoints,
-// CSIDriver, CSINode, VolumeAttachment, Lease), declared inline here. Facets
-// are derived from the kind registry.
-var BuiltinResources = withRegistryFacets([]resourcekind.Identity{
+// CSIDriver, CSINode, VolumeAttachment, Lease), declared inline here.
+var BuiltinResources = builtinResources([]resourcekind.Identity{
 	pods.Identity,
 	service.Identity,
 	configmap.Identity,
@@ -139,18 +134,10 @@ var BuiltinResources = withRegistryFacets([]resourcekind.Identity{
 	apiextensions.Identity,
 })
 
-// withRegistryFacets attaches the registry-derived facets to each identity.
-func withRegistryFacets(identities []resourcekind.Identity) []BuiltinResource {
-	mapped := make(map[schema.GroupKind]bool)
-	for _, id := range kindregistry.ObjectMapIdentities() {
-		mapped[schema.GroupKind{Group: id.Group, Kind: id.Kind}] = true
-	}
+func builtinResources(identities []resourcekind.Identity) []BuiltinResource {
 	out := make([]BuiltinResource, 0, len(identities))
 	for _, id := range identities {
-		out = append(out, BuiltinResource{
-			Identity:  id,
-			ObjectMap: mapped[schema.GroupKind{Group: id.Group, Kind: id.Kind}],
-		})
+		out = append(out, BuiltinResource{Identity: id})
 	}
 	return out
 }

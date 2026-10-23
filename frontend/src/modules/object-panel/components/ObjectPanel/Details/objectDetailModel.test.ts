@@ -100,6 +100,17 @@ describe('objectDetailModel', () => {
     expect(udpService.portForwardAvailable).toBe(false);
   });
 
+  // Port forwarding is offered per kind (its port-forward facet); a ReplicaSet
+  // has none, even though its DTO carries forwardable container ports.
+  it('reports no port-forward availability for a kind that cannot be port-forwarded', () => {
+    const replicaSet = buildObjectDetailModel(
+      null,
+      objectDetailOf('replicaset', { containers: [container({ ports: ['8080/TCP'] })] })
+    );
+
+    expect(replicaSet.portForwardAvailable).toBeUndefined();
+  });
+
   it('selects desired replicas only for scalable workload kinds', () => {
     expect(
       buildObjectDetailModel(

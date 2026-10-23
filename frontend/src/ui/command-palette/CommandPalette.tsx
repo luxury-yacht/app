@@ -10,6 +10,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ListboxOptionButton } from '@shared/components/aria/ListboxOptionButton';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
@@ -22,7 +23,7 @@ import { createPortal } from 'react-dom';
 import { useEventBus } from '@/core/events';
 import type { CatalogItem } from '@/core/refresh/types';
 import { usePreference } from '@/core/settings/usePreference';
-import { aliasToKindMap, canonicalKinds, getDisplayKind } from '@/utils/kindAliasMap';
+import { aliasToKindMap, canonicalKinds } from '@/utils/kindAliasMap';
 import { isMacPlatform } from '@/utils/platform';
 import type { Command } from './CommandPaletteCommands';
 import {
@@ -215,7 +216,7 @@ const scoreCatalogEntry = (
   }
   return {
     item,
-    kindLabel: getDisplayKind(item.ref.kind, useShortResourceNames),
+    kindLabel: kindDisplayName(item.ref, useShortResourceNames),
     kindClass: getKindColorClass(item.ref.kind),
     displayName: item.ref.namespace ? `${item.ref.namespace}/${item.ref.name}` : item.ref.name,
     score:

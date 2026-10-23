@@ -20,6 +20,11 @@
   - Merging the latest object into your draft no longer fails when someone else changed a field you did not edit, such as the replica count. For custom resources, it no longer undoes that change.
 - Clicking a recent warning on the cluster Overview opens its object on the Events tab again. Before, the panel opened on Details.
 - Object action menus offer every action you are allowed to take. Before, a custom resource's panel could leave out Delete, and the object map could leave out Scale, until something else had loaded those permissions.
+- Object panels:
+  - A node or service opened from a link in another object's details works like one opened from its table. A node offers Cordon and Drain, and its Shell tab opens a node shell. A service offers Port Forward. Before, those actions were missing, and the node's Shell tab was missing or failed to start.
+  - A ReplicaSet opened from its Deployment's details lists its pods in the Pods tab. Before, the tab stayed empty.
+  - A custom resource whose kind name matches a built-in kind, such as a Volcano Job, no longer shows that kind's Pods, Jobs, Logs, or Shell tab. Before, those tabs appeared, and its Logs tab could not load.
+- With short resource names on, a custom resource whose kind name matches a built-in kind shows its full kind. Before, it showed the built-in kind's short name, such as "deploy".
 - Importing settings now reports a failure when the imported settings cannot be read back, and keeps your current settings. Before, it said the import succeeded and reset every setting to its default, including turning error reporting off.
 - Closing the pods listed under a node or workload with their Close button keeps that row highlighted. Before, the highlight cleared.
 - Reopening a cluster whose data still fails to load shows the error again. Before, the error showed only the first time the cluster was open.
@@ -37,7 +42,7 @@
 - A table or Browse view with a saved search now loads filtered rows. Before, it briefly showed every row first.
 - Opening a favorite saved with no sort shows its table unsorted, and the favorite stays selected. Before, the table came back sorted by name and the favorite looked unsaved.
 - Object links:
-  - Alt+click now goes to the view that lists the object. Storage classes, ingress classes, and webhook configurations open the cluster Config view, and pod disruption budgets open Quotas. Custom resources open the Custom view, even when their kind name matches a built-in kind, and built-in kinds with no list (such as Leases) open Browse. Before, some of these went to the wrong view or did nothing.
+  - Alt+click now goes to the view that lists the object. Storage classes, ingress classes, and webhook configurations open the cluster Config view, and pod disruption budgets open Quotas. Custom resources open the Custom view, even when their kind name matches a built-in kind, and built-in kinds with no list (such as Leases and ReplicaSets) open Browse. Before, some of these went to the wrong view or did nothing; a ReplicaSet opened the Workloads view, which does not list ReplicaSets.
   - Opening an object whose cluster is not open in the window now says so. Before, nothing happened.
   - A panel opened from a link to an object in another cluster now shows that cluster's name.
 

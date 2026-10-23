@@ -77,7 +77,7 @@ func startRunWith(t *testing.T, setup runSetup) *runHarness {
 	client := &stubClient{Clientset: baseClient, core: &logCore{
 		CoreV1Interface: baseClient.CoreV1(), overrides: map[string]*logPods{"default": harness.logs},
 	}}
-	streamer := NewStreamer(client, applog.Noop, nil)
+	streamer := NewStreamer(client, testLogTargets, applog.Noop, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	harness.cancel = cancel
 	resolution, err := streamer.resolve(ctx, setup.opts)

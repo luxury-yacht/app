@@ -14,11 +14,11 @@ import {
   type RowDetailToggleOptions,
   withRowDetailToggle,
 } from '@shared/components/tables/rowDetailToggle';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useMemo } from 'react';
 import { workloadRowCpuValue, workloadRowMemoryValue } from '@/core/resource-metrics';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 interface UseWorkloadTableColumnsParams {
   handleWorkloadClick: (workload: WorkloadData) => void;
@@ -90,7 +90,7 @@ const useWorkloadTableColumns = ({
     const columns: GridColumnDefinition<WorkloadData>[] = [
       cf.createKindColumn<WorkloadData>({
         getKind: (row) => row.ref.kind,
-        getDisplayText: (row) => getDisplayKind(row.ref.kind, useShortResourceNames),
+        getDisplayText: (row) => kindDisplayName(row.ref, useShortResourceNames),
         onClick: (row) => handleWorkloadClick(row),
         onAltClick,
         isInteractive: () => true,

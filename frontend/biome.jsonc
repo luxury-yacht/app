@@ -28,7 +28,8 @@
     "includes": [
       "**",
       "!src/core/refresh/types.generated.ts",
-      "!src/shared/actions/objectActions.generated.ts"
+      "!src/shared/actions/objectActions.generated.ts",
+      "!src/shared/kinds/kindFacets.generated.ts"
     ],
     "indentStyle": "space",
     "indentWidth": 2,
@@ -42,7 +43,8 @@
     "includes": [
       "**",
       "!src/core/refresh/types.generated.ts",
-      "!src/shared/actions/objectActions.generated.ts"
+      "!src/shared/actions/objectActions.generated.ts",
+      "!src/shared/kinds/kindFacets.generated.ts"
     ],
     "actions": {
       "preset": "recommended"
@@ -55,7 +57,8 @@
     "includes": [
       "**",
       "!src/core/refresh/types.generated.ts",
-      "!src/shared/actions/objectActions.generated.ts"
+      "!src/shared/actions/objectActions.generated.ts",
+      "!src/shared/kinds/kindFacets.generated.ts"
     ],
     "rules": {
       "preset": "recommended",

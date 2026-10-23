@@ -5,10 +5,10 @@
  */
 
 import type { EdgeData, GraphData, NodeData, PathArray } from '@antv/g6';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import { fallbackKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import { formatAge } from '@/utils/ageFormatter';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
 import {
   OBJECT_MAP_G6_CARD_NODE,
@@ -320,7 +320,7 @@ export const toObjectMapG6Data = (
   return {
     nodes: layout.nodes.map<NodeData>((node) => {
       const badge = badgeForNode(node.id);
-      const kindLabel = getDisplayKind(node.ref.kind, useShortResourceNames);
+      const kindLabel = kindDisplayName(node.ref, useShortResourceNames);
       const namespaceLabel = truncate(formatNamespace(node), NODE_NAMESPACE_MAX_CHARS);
       const cardState = objectMapCardState(node, palette, ageNow);
       const kindBadgeStyle = kindBadgeStyleForKind(node.ref.kind);

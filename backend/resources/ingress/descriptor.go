@@ -8,6 +8,7 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
+	Display:         kindspec.Display{ShortName: "ing"},
 	DetailCacheable: true,
 	// Ingress is plain object→row (no cross-kind join), so the generic ingest loop
 	// builds its reflector from the Stream descriptor and feeds the namespace-network

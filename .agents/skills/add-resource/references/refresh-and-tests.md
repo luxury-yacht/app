@@ -42,9 +42,9 @@ refresh-subsystem skill for lifecycle, doorbell, or stream-health changes.
 
 - Use the object-map skill when the kind adds graph nodes or edges. Backend graph
   data, frontend support checks, and navigation refs change together. Frontend
-  map support comes from the identity contract's `objectMap` flag, which is
-  derived from the kind's registry collector. Add the flag to the JSON row; the
-  contract parity test fails until it matches. There is no frontend allowlist.
+  map support is the generated kind facets' `objectMap` facet, derived from the
+  kind's registry collector; run `go generate ./backend`. There is no frontend
+  allowlist.
 - Change `streamingResourcePriority` in `backend/objectcatalog/service.go` only
   when evidence shows the kind needs earlier catalog availability.
 

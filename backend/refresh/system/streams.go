@@ -2,6 +2,7 @@ package system
 
 import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -23,6 +24,7 @@ func registerStreamHandlers(deps streamDeps) (*containerlogsstream.Handler, *res
 	logger := applog.ClusterScoped(deps.cfg.Logger, deps.clusterMeta.ClusterID, deps.clusterMeta.ClusterName)
 	logHandler, err := containerlogsstream.NewHandlerWithLimits(
 		deps.cfg.KubernetesClient,
+		kindregistry.MustLogTargets(),
 		logger,
 		deps.telemetry,
 		deps.cfg.ContainerLogsPerScopeLimit,

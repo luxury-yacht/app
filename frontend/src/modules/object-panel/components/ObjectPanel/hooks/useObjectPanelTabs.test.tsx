@@ -26,16 +26,8 @@ const app = installAppStateHarness();
 
 const baseCapabilities: ComputedCapabilities = {
   hasObjPanelLogs: true,
-  hasNodeLogs: false,
   hasShell: false,
-  hasManifest: false,
-  hasValues: false,
-  canDelete: true,
-  canRestart: true,
-  canScale: true,
   canEditYaml: true,
-  canTrigger: false,
-  canSuspend: false,
 };
 
 const deployment: ObjectIdentity = {
@@ -71,7 +63,6 @@ interface TabsProbeProps {
   objectData: PanelObjectData | null;
   capabilities?: ComputedCapabilities;
   isHelmRelease?: boolean;
-  isEvent?: boolean;
   isOpen?: boolean;
   initialTab?: ViewType;
 }
@@ -82,7 +73,6 @@ function TabsProbe({
   objectData,
   capabilities = baseCapabilities,
   isHelmRelease = false,
-  isEvent = false,
   isOpen = true,
   initialTab = 'details',
 }: Readonly<TabsProbeProps>) {
@@ -91,7 +81,6 @@ function TabsProbe({
     capabilities,
     objectData,
     isHelmRelease,
-    isEvent,
     isOpen,
     setActiveTab,
     currentTab: activeTab,
@@ -158,6 +147,40 @@ describe('useObjectPanelTabs', () => {
     }
   );
 
+  // A custom resource whose kind name matches a built-in kind (here a Volcano Job)
+  // is not that kind: it gets none of the built-in kind's tabs.
+  it('gives a custom resource named like a built-in kind no Pods tab', async () => {
+    await start();
+    await view.show(
+      <TabsProbe
+        objectData={inCluster({
+          ...deployment,
+          group: 'batch.volcano.sh',
+          version: 'v1alpha1',
+          kind: 'Job',
+        })}
+      />
+    );
+
+    expect(shownLabels).not.toContain('Pods');
+  });
+
+  it('lists a ReplicaSet’s pods but offers no metrics for it', async () => {
+    await start();
+    await view.show(<TabsProbe objectData={inCluster({ ...deployment, kind: 'ReplicaSet' })} />);
+
+    expect(shownLabels).toEqual(['Details', 'Map', 'Pods', 'Logs', 'Events', 'YAML']);
+  });
+
+  it('lists a CronJob’s jobs, not its pods', async () => {
+    await start();
+    await view.show(
+      <TabsProbe objectData={inCluster({ ...deployment, group: 'batch', kind: 'CronJob' })} />
+    );
+
+    expect(shownLabels).toEqual(['Details', 'Map', 'Jobs', 'Logs', 'Events', 'YAML']);
+  });
+
   it('omits the Shell tab when capability is disabled', async () => {
     await start();
     await view.show(<TabsProbe objectData={inCluster(pod)} />);
@@ -194,7 +217,7 @@ describe('useObjectPanelTabs', () => {
     await view.show(
       <TabsProbe
         objectData={inCluster(node)}
-        capabilities={{ ...baseCapabilities, hasObjPanelLogs: true, hasNodeLogs: false }}
+        capabilities={{ ...baseCapabilities, hasObjPanelLogs: true }}
       />
     );
 
@@ -203,13 +226,7 @@ describe('useObjectPanelTabs', () => {
 
   it('includes map/manifest/values and omits events/yaml for Helm releases', async () => {
     await start();
-    await view.show(
-      <TabsProbe
-        isHelmRelease
-        objectData={inCluster(helmRelease)}
-        capabilities={{ ...baseCapabilities, hasManifest: true, hasValues: true }}
-      />
-    );
+    await view.show(<TabsProbe isHelmRelease objectData={inCluster(helmRelease)} />);
 
     expect(shownLabels).toEqual(['Details', 'Map', 'Logs', 'Manifest', 'Values']);
   });
@@ -217,7 +234,7 @@ describe('useObjectPanelTabs', () => {
   it('hides events and YAML tabs for Event objects', async () => {
     await start();
     await view.show(
-      <TabsProbe isEvent objectData={inCluster({ ...pod, kind: 'Event', name: 'warning' })} />
+      <TabsProbe objectData={inCluster({ ...pod, kind: 'Event', name: 'warning' })} />
     );
 
     expect(shownLabels).toEqual(['Details', 'Logs']);
@@ -272,13 +289,14 @@ describe('useObjectPanelTabs', () => {
     expect(shownLabels).toContain('Map');
   });
 
-  it('hides the Map tab for supported kinds when the object reference is incomplete', async () => {
+  // Kind facets need the complete identity too, so no kind-dependent tab shows.
+  it('hides the Map and kind tabs for supported kinds when the object reference is incomplete', async () => {
     await start();
     await view.show(
       <TabsProbe objectData={{ kind: 'Deployment', name: 'api', namespace: 'team-a' }} />
     );
 
-    expect(shownLabels).toEqual(['Details', 'Pods', 'Logs', 'Events', 'YAML']);
+    expect(shownLabels).toEqual(['Details', 'Logs', 'Events', 'YAML']);
   });
 
   it('falls back to details when the active tab becomes unavailable', async () => {
@@ -328,13 +346,7 @@ describe('useObjectPanelTabs', () => {
 
     it("follow a Helm release's own tabs", async () => {
       await start();
-      await view.show(
-        <TabsProbe
-          isHelmRelease
-          objectData={inCluster(helmRelease)}
-          capabilities={{ ...baseCapabilities, hasManifest: true, hasValues: true }}
-        />
-      );
+      await view.show(<TabsProbe isHelmRelease objectData={inCluster(helmRelease)} />);
 
       // Details, Map, Logs, Manifest, Values.
       await press('4');

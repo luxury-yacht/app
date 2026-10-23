@@ -7,9 +7,13 @@ Panel; they are neither Application nor Node Logs. Viewer controls come from the
 ## Agent Contract
 
 - The live stream and the previous-logs fetch share one canonical log scope and
-  resolver (`containerlogs.Resolve`), so they agree on a scope's pods and
-  containers. Workload targets resolve to bounded pod/container targets before
-  retrieval.
+  resolver (`containerlogs.Resolve`) over one target table
+  (`kindregistry.LogTargets`, injected at `backend/pod_logs.go` and
+  `refresh/system/streams.go`), so they agree on a scope's pods and containers.
+  Each kind declares its target in its descriptor (`Descriptor.Logs`,
+  `resources/<kind>/logstarget.go`): its pods now and the watch, with the
+  ownership check, that follows them. Workload targets resolve to bounded
+  pod/container targets before retrieval.
 - Frontend filters (search, regex, display mode, timestamps, wrap, ANSI) never
   change backend target identity. Previous logs, history size, follow,
   timestamps, and target caps are backend query concerns.
@@ -159,7 +163,7 @@ auto-refresh off; one toggle (or `R`) retries.
   otherwise the stream fails non-retryably, naming the verb. Previous logs need
   no `watch`: Pod → `get` pod; Deployment, ReplicaSet, DaemonSet, StatefulSet →
   `get` workload + `list` pods; Job → `list` pods; CronJob → `list` jobs and
-  pods (`containerlogs.Resolve`). So previous logs can load when live logs
+  pods (each kind's `LogsTarget`). So previous logs can load when live logs
   cannot: loading, paused, and failure-before-lines states render in the log
   region below the controls, leaving Previous Logs and the auto-refresh retry
   usable.

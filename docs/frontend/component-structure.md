@@ -125,13 +125,19 @@ Files under `modules/object-panel/components/ObjectPanel/Details/`:
   `coveredElsewhere`); a new DTO field fails by name until placed.
 - `Overview/GenericOverview.tsx` — fallback for custom/unregistered resources.
 - `objectDetailModel.ts` — builds `activeDetail` (the tagged `ObjectDetail`)
-  plus the sibling sections `DetailsTab` composes (Containers, RBAC rules,
-  ConfigMap/Secret data, active pods, port-forward availability, scale
-  replicas, CronJob suspend). Each is declared per detail type in
-  `DETAIL_DERIVATIONS`, reading that type's DTO, never inferred from field
-  presence, because names are overloaded (`rules` on Ingress/Webhook vs RBAC,
-  `containers` on Job, `desiredReplicas` on HPA, `pods` on Node);
-  `objectDetailModel.test.ts` locks those four exclusions.
+  plus the sibling sections the panel composes. Each reads one detail type's
+  DTO, never inferred from field presence, because names are overloaded
+  (`rules` on Ingress/Webhook vs RBAC, `containers` on Job, `desiredReplicas`
+  on HPA, `pods` on Node); `objectDetailModel.test.ts` locks those exclusions.
+  - Presentation sections (Containers, container names, ConfigMap/Secret data,
+    RBAC rules, Namespace finalization) are declared per detail type in
+    `DETAIL_DERIVATIONS`.
+  - Sections a kind has because of a kind facet (active pods, scale replicas,
+    port-forward availability, suspend state, owned Jobs) are mapped types over
+    `DetailTypesWhere<…>` from `shared/kinds/kindFacets`, so they must cover
+    exactly the detail types whose kind has the facet. Change the facet in the
+    kind's backend descriptor, then add or remove the accessor TypeScript asks
+    for.
 - The object-details payload is `{…} & ObjectDetail`: `detailType` selects the
   generated `ObjectDetailTypes` DTO of `details`. Consumers narrow on
   `detailType` or index a tag-keyed table; they never cast `details`.

@@ -67,8 +67,9 @@ changed path crosses that boundary.
 - Resource Utilization leases the base domain per
   [resource-metrics](../../../docs/architecture/resource-metrics.md);
   object-detail DTO values are fallback only while that domain loads, is
-  unavailable, or is permission denied. ReplicaSets get no panel metrics until
-  pod rows expose both direct and resolved owner identity. Embedded Pods tables
+  unavailable, or is permission denied. Which kinds have panel metrics is the
+  kind's `Metrics` facet; ReplicaSets have none because `namespace-workloads`
+  has no ReplicaSet rows. Embedded Pods tables
   use the same single base-domain query as main Pods tables (usage joined at
   serve; freshness from the query payload's `metrics`).
 - Actions and tabs respect permissions/capabilities and surface denial reasons

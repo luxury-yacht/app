@@ -62,6 +62,11 @@ describe('getViewForKind', () => {
       viewType: 'namespace',
       tab: 'browse',
     });
+    // namespace-workloads has no ReplicaSet rows, so the Workloads view cannot show one.
+    expect(getViewForKind('ReplicaSet', 'apps', 'team-a')).toEqual({
+      viewType: 'namespace',
+      tab: 'browse',
+    });
     // The cluster Browse table's view id is "browse" (BrowseView.tsx).
     expect(getViewForKind('CSIDriver', 'storage.k8s.io', '')).toEqual({
       viewType: 'cluster',

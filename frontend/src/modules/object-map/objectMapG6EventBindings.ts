@@ -24,6 +24,7 @@ import {
 import {
   findObjectMapG6Edge,
   findObjectMapG6Node,
+  objectMapG6EndpointGroup,
   objectMapG6EndpointKind,
   objectMapG6EndpointLabel,
 } from './objectMapG6RendererOptions';
@@ -100,9 +101,11 @@ const emitConnectionHover = (
     tooltipX: point.x,
     tooltipY: point.y,
     sourceLabel: objectMapG6EndpointLabel(sourceNode),
+    sourceGroup: objectMapG6EndpointGroup(sourceNode),
     sourceKind: objectMapG6EndpointKind(sourceNode),
     label: edge.label,
     targetLabel: objectMapG6EndpointLabel(targetNode),
+    targetGroup: objectMapG6EndpointGroup(targetNode),
     targetKind: objectMapG6EndpointKind(targetNode),
     type: edge.type,
     tracedBy: edge.tracedBy,

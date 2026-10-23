@@ -38,7 +38,7 @@ import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { useModalPresence } from '@shared/components/modals/useModalPresence';
-
+import { kindDisplayName, kindNameDisplay } from '@shared/kinds/kindDisplay';
 import {
   readCatalogObjectMatchForRef,
   requestData,
@@ -47,7 +47,6 @@ import {
 import { failureMessage, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import { usePreference } from '@/core/settings/usePreference';
 import { formatAgeAgo, formatFullDate } from '@/utils/ageFormatter';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 import { useObjectDiffYaml } from './useObjectDiffYaml';
 
 interface ObjectDiffModalProps {
@@ -133,7 +132,7 @@ const buildSelectionParts = (
   }
   const namespaceLabel = buildNamespaceLabel(item.ref.namespace);
   const clusterLabel = clusterName?.trim() || item.ref.clusterId.trim();
-  const kindLabel = getDisplayKind(item.ref.kind, shortNamesEnabled);
+  const kindLabel = kindDisplayName(item.ref, shortNamesEnabled);
   return {
     hasSelection: true,
     clusterLabel,
@@ -288,7 +287,8 @@ const buildKindOptions = (kinds: string[], shortNamesEnabled: boolean): Dropdown
     if (!value) {
       return;
     }
-    options.set(value.toLowerCase(), { value, label: getDisplayKind(value, shortNamesEnabled) });
+    // Options are keyed by kind name, so their labels are by name too.
+    options.set(value.toLowerCase(), { value, label: kindNameDisplay(value, shortNamesEnabled) });
   });
   return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label));
 };

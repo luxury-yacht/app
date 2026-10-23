@@ -32,6 +32,9 @@ docs only name the rule and where to start.
   `backend/internal/errorstatus`, generated as `ErrorStatus*` in
   `types.generated.ts` ([error-reporting.md](error-reporting.md#error-status-contract))
 - Resource identities: `backend/resourcecontract/builtin-resource-identities.json`
+- Per-kind facets (tabs, logs/metrics/list sources, actions, display names):
+  `frontend/src/shared/kinds/kindFacets.generated.ts`, from the kind registry
+  ([resource-kind-registry.md](resource-kind-registry.md))
 - Wails DTOs: `frontend/bindings`
 - Reader wrappers: `frontend/src/core/data-access/readers.ts`,
   `frontend/src/core/app-state-access/readers.ts`

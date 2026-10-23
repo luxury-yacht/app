@@ -66,7 +66,7 @@ describe('getObjectPanelScopeEvictions pods window', () => {
 });
 
 describe('getObjectPanelScopes', () => {
-  it('builds canonical object scopes that keep the object kind', () => {
+  it('builds canonical object scopes from the object identity', () => {
     const result = getObjectPanelScopes({
       clusterId: 'cluster-1',
       group: '',
@@ -76,11 +76,9 @@ describe('getObjectPanelScopes', () => {
       version: 'v1',
     });
 
-    expect(result.objectKind).toBe('pod');
     expect(result.detailScope).toBe('cluster-1|team-a:/v1:Pod:api');
     expect(result.helmScope).toBeNull();
     expect(result.isHelmRelease).toBe(false);
-    expect(result.isEvent).toBe(false);
   });
 
   it('returns null refresh scopes when cluster identity is missing', () => {
@@ -92,7 +90,6 @@ describe('getObjectPanelScopes', () => {
       version: 'v1',
     });
 
-    expect(result.objectKind).toBe('pod');
     expect(result.detailScope).toBeNull();
     expect(result.eventsScope).toBeNull();
     expect(result.containerLogsScope).toBeNull();
@@ -108,7 +105,6 @@ describe('getObjectPanelScopes', () => {
       namespace: 'team-a',
     });
 
-    expect(result.objectKind).toBe('deployment');
     expect(result.detailScope).toBeNull();
     expect(result.eventsScope).toBeNull();
     expect(result.containerLogsScope).toBeNull();
@@ -126,7 +122,6 @@ describe('getObjectPanelScopes', () => {
       version: 'v1',
     });
 
-    expect(result.objectKind).toBe('deployment');
     expect(result.detailScope).toBeNull();
     expect(result.eventsScope).toBeNull();
     expect(result.containerLogsScope).toBeNull();
@@ -142,7 +137,6 @@ describe('getObjectPanelScopes', () => {
       namespace: '',
     });
 
-    expect(result.objectKind).toBe('helmrelease');
     expect(result.detailScope).toBe('cluster-1|__cluster__:helm.sh/v3:HelmRelease:shopping-cart');
     expect(result.helmScope).toBe('cluster-1|__cluster__:shopping-cart');
     expect(result.isHelmRelease).toBe(true);
@@ -158,7 +152,6 @@ describe('getObjectPanelScopes', () => {
       clusterId: 'cluster-1',
     });
 
-    expect(result.objectKind).toBe('helmrelease');
     expect(result.detailScope).toBe(
       'cluster-1|apps:helm.toolkit.fluxcd.io/v2:HelmRelease:flux-app'
     );
@@ -167,20 +160,6 @@ describe('getObjectPanelScopes', () => {
     );
     expect(result.helmScope).toBeNull();
     expect(result.isHelmRelease).toBe(false);
-  });
-
-  it('marks event resources with event-specific flag', () => {
-    const result = getObjectPanelScopes({
-      clusterId: 'cluster-1',
-      group: '',
-      kind: 'Event',
-      name: 'warning-123',
-      namespace: 'default',
-      version: 'v1',
-    });
-
-    expect(result.isEvent).toBe(true);
-    expect(result.detailScope).toBe('cluster-1|default:/v1:Event:warning-123');
   });
 
   it('emits the GVK scope form when PanelObjectData carries group and version', () => {
@@ -196,7 +175,6 @@ describe('getObjectPanelScopes', () => {
       version: 'v1alpha1',
     });
 
-    expect(result.objectKind).toBe('dbinstance');
     expect(result.detailScope).toBe(
       'cluster-1|default:rds.services.k8s.aws/v1alpha1:DBInstance:my-db'
     );

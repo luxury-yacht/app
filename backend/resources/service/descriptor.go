@@ -8,6 +8,8 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
+	ListDomain:      "namespace-network",
+	Display:         kindspec.Display{ShortName: "svc"},
 	DetailCacheable: true,
 	// Service has no Stream descriptor (its namespace-network row is built joined with the Service's
 	// correlated EndpointSlices, which the per-object StreamRow cannot carry), so the

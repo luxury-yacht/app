@@ -1,34 +1,28 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport.ts
  *
- * Determines feature support for the object panel based on object kind and resource capabilities.
- * Returns a structured feature support object indicating available features.
+ * The panel features the object's kind supports (logs source, shell, debug
+ * containers), from its kind facets matched by complete identity. A custom
+ * resource that shares a built-in kind name gets none of them.
  */
+import { lookupKindFacets } from '@shared/kinds/kindFacets';
 import { useMemo } from 'react';
 
-import type { FeatureSupport, ResourceCapability } from '../types';
+import type { FeatureSupport, PanelObjectData } from '../types';
 
 export const useObjectPanelFeatureSupport = (
-  objectKind: string | null,
-  resourceCapabilities: Record<string, ResourceCapability>,
-  isHelmRelease = false
+  objectData: PanelObjectData | null
 ): FeatureSupport => {
+  const group = objectData?.group;
+  const version = objectData?.version;
+  const kind = objectData?.kind;
   return useMemo<FeatureSupport>(() => {
-    const definition = objectKind ? resourceCapabilities[objectKind] : undefined;
-    const hasKind = Boolean(objectKind);
+    const facets = lookupKindFacets({ group, version, kind });
     return {
-      objPanelLogs: Boolean(definition?.objPanelLogs),
-      nodeLogs: Boolean(definition?.nodeLogs),
-      manifest: hasKind && isHelmRelease,
-      values: hasKind && isHelmRelease,
-      delete: hasKind && (definition ? Boolean(definition.delete) : true),
-      restart: Boolean(definition?.restart),
-      scale: Boolean(definition?.scale),
-      edit: hasKind && (definition?.edit === undefined || Boolean(definition.edit)),
-      shell: Boolean(definition?.shell),
-      debug: Boolean(definition?.debug),
-      trigger: Boolean(definition?.trigger),
-      suspend: Boolean(definition?.suspend),
+      logs: facets?.panel.logs ?? 'none',
+      shell: facets?.panel.shell ?? 'none',
+      debug: facets?.panel.debugContainer ?? false,
+      edit: Boolean(kind),
     };
-  }, [isHelmRelease, objectKind, resourceCapabilities]);
+  }, [group, kind, version]);
 };

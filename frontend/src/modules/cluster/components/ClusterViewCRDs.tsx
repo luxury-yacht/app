@@ -9,10 +9,10 @@ import {
   ClusterAggregatedResourceGridView,
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import React from 'react';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { ClusterCRDEntry, ClusterCRDSnapshotPayload } from '@/core/refresh/types';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 type CRDsData = ClusterCRDEntry & { kindAlias?: string };
 
@@ -50,7 +50,10 @@ const crdsSpec: AggregatedResourceGridViewSpec<CRDsData> = {
       key: 'kind',
       getKind: (crd) => crd.ref.kind || 'CustomResourceDefinition',
       getDisplayText: (crd) =>
-        getDisplayKind(crd.ref.kind || 'CustomResourceDefinition', useShortResourceNames),
+        kindDisplayName(
+          { group: crd.ref.group, kind: crd.ref.kind || 'CustomResourceDefinition' },
+          useShortResourceNames
+        ),
       onClick: identity.open,
       onAltClick: identity.navigate,
     }),

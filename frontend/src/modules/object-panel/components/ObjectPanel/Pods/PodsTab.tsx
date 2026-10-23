@@ -116,7 +116,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   // Scope the pods query to the panel's workload/node. Null for objects we
   // cannot scope, which keeps the query gated off (see queryClusterId).
   const podsSelector = useMemo(
-    () => buildObjectPanelPodsSelector(objectData ?? null, objectData?.kind ?? null),
+    () => buildObjectPanelPodsSelector(objectData ?? null),
     [objectData]
   );
 

@@ -8,6 +8,8 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
+	ListDomain:      "namespace-network",
+	Display:         kindspec.Display{ShortName: "eps"},
 	DetailCacheable: true,
 	// EndpointSlice has no Stream descriptor because it is BOTH its own namespace-network table row AND
 	// the join input for Service rows; the system wires a bespoke EndpointSlice reflector

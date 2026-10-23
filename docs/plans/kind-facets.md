@@ -7,7 +7,9 @@ from the backend kind registry.
 - **Status:** John approved the plan on 2026-10-23 with every recommended
   answer (Q1–Q12), after [review rounds 1](#review-round-1-2026-10-23),
   [2](#review-round-2-2026-10-23), and [3](#review-round-3-2026-10-23).
-  Nothing is implemented; Phase 1 is next.
+  Phases 1–9 are implemented (uncommitted); see the
+  [completion record](#completion-record-2026-10-23-uncommitted). The native
+  app check is pending, so this plan stays until it passes.
 - **Base:** `main` at `f9ffc9e1` (Real state test harness #403). Line numbers
   are from that commit.
 - **Paths:** relative to `frontend/src/` unless they start with `frontend/`,
@@ -20,6 +22,40 @@ from the backend kind registry.
 - **Probes:** two scratch TypeScript 7.0.2 files in the session scratchpad
   (outside the repo) proved the drift guard and the synthetic-row typing in
   [TypeScript guard](#typescript-guard).
+
+## Completion record (2026-10-23, uncommitted)
+
+All nine phases are implemented in one worktree on top of `f9ffc9e1`. Nothing
+is committed. Mocks: Go tests use fake clientsets; frontend behavior tests run
+on the real-state harness (only the backend boundary is faked). The Overview
+index test keeps its pre-existing `ActionsMenu`/`GenericOverview` stubs, and
+`ObjectPanelContent.test.tsx` keeps its pre-existing tab stubs.
+
+| Criterion | Status | Evidence |
+| --- | --- | --- |
+| One generated per-kind table from the registry | passed | `backend/internal/genkindfacets`; `TestGeneratedKindFacetsAreCurrent` (`backend/kind_facets_test.go`) |
+| Every facet emitted for every kind | passed | `TestRowsCoverEveryRegisteredKindWithEveryFacet` (40 rows, keys checked by reflection) |
+| Today's kind decisions kept | passed | `TestRowsKeepTodaysKindDecisions`; tab pins in `useObjectPanelTabs.test.tsx` (ReplicaSet, CronJob, Node, Pod, Event, Helm) |
+| Behavior lookup by complete identity, metadata by group and kind | passed | `kindFacets.test.ts` (version guard proven red by mutation) |
+| TypeScript drift guards | passed | mutation checks: utilization (TS2741), owned Jobs (TS2741), list-domain views (TS2344); probes for TS2353/TS1360/TS2322/TS2820 |
+| Agreement tests: pods by owner/node, metrics, list domains, log targets, served versions | passed | `backend/refresh/snapshot/kind_facets_agreement_test.go`, `backend/internal/containerlogs/kind_facets_agreement_test.go`, `TestKindFacetVersionsPassTheBackendTargetChecks`; each proven red by mutation |
+| Fix: custom resource sharing a kind name gets no built-in tabs, HPA query, or short name | passed | red/green: `useObjectPanelTabs.test.tsx`, `useObjectPanelFeatureSupport.test.tsx`, `Overview/index.test.tsx`, `useBrowseColumns.test.tsx` |
+| Fix: lowercase `node`/`service` refs get node and port-forward actions | passed | red/green `objectActionPolicy.test.ts` ("offers node actions whatever the case") |
+| Fix: ReplicaSet opened from a Deployment lists its pods | passed | red/green `objectPanelPodsScope.test.ts` (canonical kind) |
+| Fix: ReplicaSet navigation goes to Browse | passed | red/green `kindViewMap.test.ts` |
+| Logs targets: pods + watch + ownership; fetch and stream share one key | passed | `logspec_test.go`; `TestFetchAndStreamResolveTheSameScopeThroughOneTargetTable` (red by key mutation); `TestCronJobScopeFollowsPodsOfAFutureJob` and the resolver regressions unchanged |
+| Node keeps its own logs source | passed | generator pin (`logs: 'node'`); `useObjectPanelTabs.test.tsx` node Logs case |
+| Complexity at 12 or lower in changed functions | passed | `npm run complexity` on changed frontend files; `gocognit -over 12` on changed Go files (the touched `confirmation` memo was 19 before and is now split) |
+| Full gate `qc:prerelease` | pending | running |
+| Coverage of touched code | pending | |
+| Native app check (tabs, Pods list, Logs, Shell, Metrics for Deployment, ReplicaSet, CronJob, Pod, Node, Event) | pending | blocked on John choosing a cluster (AGENTS.md) |
+
+Findings outside this plan (not acted on):
+
+- `NodeDetails.podsList` without `DetailListsPods` (section D, unverified impact).
+- `ObjectPanel/constants.ts:8-11` claims panel kinds are always the source's
+  case; lowercase links exist (`descriptors/pod.tsx:151`, `workload.tsx:700`).
+  The facet lookups now ignore case, so nothing depends on that claim.
 
 ## Problem
 
@@ -499,83 +535,83 @@ run them in order.
 
 ### Phase 1: facets and generator (no behavior change)
 
-- [ ] Red: `genkindfacets` render test asserts one row per `kindregistry.All`
+- [x] Red: `genkindfacets` render test asserts one row per `kindregistry.All`
   entry, sorted, with every facet key present. Compare each row's JSON keys
   with the facet struct's fields by reflection. Then the drift test
   `TestGeneratedKindFacetsAreCurrent`, beside
   `backend/object_actions_test.go:219-231`.
-- [ ] Add `ObjectPanel`, `MetricsSource`, and `NamespaceFinalizer`
+- [x] Add `ObjectPanel`, `MetricsSource`, and `NamespaceFinalizer`
   to `kindspec`. Set the [values](#backend-new-descriptor-facets) in the
   pods, deployment, statefulset, daemonset, replicaset, job, cronjob, nodes,
   namespaces, and events descriptors.
-- [ ] Write the generator. Move `kindCapabilities()` into it, remove
+- [x] Write the generator. Move `kindCapabilities()` into it, remove
   `kindCapabilities` from `genobjectactions`, delete `ObjectActions.Aliases`
   and the alias lists, and add the `go:generate` line and the Biome excludes.
-- [ ] Add the agreement tests (pods by owner, logs GVKs, versions, owned pods
+- [x] Add the agreement tests (pods by owner, logs GVKs, versions, owned pods
   need `DetailListsPods`, metrics domain mapping).
-- [ ] Frontend: `shared/kinds/kindFacets.ts`, with the schema-checked
+- [x] Frontend: `shared/kinds/kindFacets.ts`, with the schema-checked
   synthetic HelmRelease row, the combined literal table, and both lookups.
   Switch `objectActionCapabilities.ts` to `lookupKindFacets`. The existing `objectActionPolicy` and `objectActionContract` tests are
   the regression proof that action availability does not change.
 
 ### Phase 2: panel tabs, pods scope, logs, shell
 
-- [ ] On the harness (`useObjectPanelTabs.test.tsx` already installs it,
+- [x] On the harness (`useObjectPanelTabs.test.tsx` already installs it,
   :19-25, and `ObjectPanel.test.tsx` has a "tab availability" block at :201):
   - red: a custom resource whose kind is `Job` (group `batch.volcano.sh`)
     gets no Pods or Logs tab (Q4);
   - pin: ReplicaSet gets Pods and Logs but no Metrics; CronJob gets Jobs and
     no Pods; the existing per-kind tab cases stay as the regression set.
-- [ ] Replace `onlyForKinds`, `useObjectPanelFeatureSupport`, `isEvent`, and
+- [x] Replace `onlyForKinds`, `useObjectPanelFeatureSupport`, `isEvent`, and
   `HELM_HIDDEN_TABS` with facet predicates. Replace `WORKLOAD_SCOPE_KINDS` and the
   node check in `objectPanelPodsScope.ts` and `podSelectionFacets.ts`.
-- [ ] Switch the logs and shell branches (`ObjectPanelContent.tsx:190,199`,
+- [x] Switch the logs and shell branches (`ObjectPanelContent.tsx:190,199`,
   `LogViewer.tsx:443-445`, `useObjectPanelCapabilities.ts:186-195,253,376,567-571`,
   `ShellTab.tsx:722,1255`) to `panel.logs` and `panel.shell`.
-- [ ] Trace the permission-query side effect, then delete section E's panel
+- [x] Trace the permission-query side effect, then delete section E's panel
   flags and the unread `ComputedCapabilities` fields. If the trace finds a
   reader, keep the query and give it an owner instead.
 
 ### Phase 3: metrics
 
-- [ ] Pin (refactor): a harness test shows no Metrics tab for a custom
+- [x] Pin (refactor): a harness test shows no Metrics tab for a custom
   resource named `Deployment` (already true through the GV check at
   `scope.ts:12-15`), and the tab for each `metricsDomain` kind. The
   unsupported-version case (`scope.test.ts:35-45`) keeps passing through
   `versions`.
-- [ ] `resolveResourceMetricsScope` reads `metricsDomain`. Delete
+- [x] `resolveResourceMetricsScope` reads `metricsDomain`. Delete
   `UTILIZATION_KINDS` and type `detailUtilization` over `metricsDomain`.
-- [ ] Update `resource-metrics.md:35-36,63-67`.
+- [x] Update `resource-metrics.md:35-36,63-67`.
 
 ### Phase 4: detail derivations
 
-- [ ] Split `DETAIL_DERIVATIONS` into the four gated accessor tables
+- [x] Split `DETAIL_DERIVATIONS` into the four gated accessor tables
   ([B](#b-already-generated-switch-the-call-site)) and the ungated sections.
   The Jobs rows accessor becomes a `panel.jobs` mapped type.
-- [ ] Red first: `objectDetailModel.test.ts` adds "ReplicaSet reports no port
+- [x] Red first: `objectDetailModel.test.ts` adds "ReplicaSet reports no port
   forward" (a model change with no visible effect, per section B).
   `objectDetailModel.test.ts:71` covers the forwardable kinds.
-- [ ] Update `docs/frontend/component-structure.md:127-134`.
+- [x] Update `docs/frontend/component-structure.md:127-134`.
 
 ### Phase 5: remaining action call sites
 
-- [ ] Section B rows in `useObjectActions.tsx`,
+- [x] Section B rows in `useObjectActions.tsx`,
   `useObjectActionController.tsx`, `Overview/index.tsx`, and
   `useNodeMaintenanceActions.tsx`, plus `removeNamespaceFinalizer`.
-- [ ] Red: an Overview test where a custom resource named `Deployment` makes
+- [x] Red: an Overview test where a custom resource named `Deployment` makes
   no `workload-hpa-managed` query (today `Overview/index.tsx:72` matches the
   name).
 
 ### Phase 6: display names
 
-- [ ] Red: with short names on, a custom resource named `Deployment` (group
+- [x] Red: with short names on, a custom resource named `Deployment` (group
   `example.com`) shows `Deployment` in Browse, not `deploy`. Today
   `useBrowseColumns.tsx:47` passes only `item.ref.kind`. Pin (refactor): the
   command palette resolves `deploy`, `deployments`, and `cj`, and a built-in
   Deployment shows `deploy`.
-- [ ] Add `Display` to the 40 descriptors (values copied from
+- [x] Add `Display` to the 40 descriptors (values copied from
   `kindAliasMap.ts:11-75,112-162`), plus the HelmRelease row.
-- [ ] Replace `getDisplayKind(kind, short)` (`kindAliasMap.ts:84`) with
+- [x] Replace `getDisplayKind(kind, short)` (`kindAliasMap.ts:84`) with
   `kindDisplayName({ group, kind }, short)` over `lookupKindMetadata`, and
   migrate all 19 call sites:
   - **Holding a ref; pass it** (12):
@@ -610,23 +646,23 @@ run them in order.
     filters on `node.ref.kind` (`objectMapKindFilter.ts:140`). They label
     through `kindNameDisplay(kind)`, which keeps today's output. Making these
     filters identity-aware would change filtering, which is out of scope.
-- [ ] `kindAliasMap.ts` keeps only the command-palette token map, built from
+- [x] `kindAliasMap.ts` keeps only the command-palette token map, built from
   the table. The palette's kind-name search stays a name match
   (`CommandPalette.tsx:80-92`). `getTypeAlias` is deleted.
 
 ### Phase 7: list navigation
 
-- [ ] Red: "go to table" for a ReplicaSet does not land on the Workloads tab.
+- [x] Red: "go to table" for a ReplicaSet does not land on the Workloads tab.
   Pin today's runtime first; the expected destination is Browse, since no
   domain lists ReplicaSets (Q9).
-- [ ] `ListDomain` comes from `Stream.Domain` where present (for example
+- [x] `ListDomain` comes from `Stream.Domain` where present (for example
   `backend/resources/configmap/streamdescriptor.go:24`). It is declared on the
   descriptor for the 12 kinds without a stream descriptor (Pod, Node,
   Service, EndpointSlice, Namespace, Event, Deployment, StatefulSet,
   DaemonSet, Job, CronJob, and ReplicaSet with none).
   - Agreement test: each declared domain's query capabilities list the kind
     (for example `namespace_network.go:71-77`).
-- [ ] Each view in `core/navigation/viewRegistry.ts` declares the domain it
+- [x] Each view in `core/navigation/viewRegistry.ts` declares the domain it
   renders. `getViewForKind` maps `listDomain` to a view, and
   `BUILTIN_KIND_VIEWS` is deleted.
 
@@ -768,7 +804,7 @@ sources:
 
 Checklist:
 
-- [ ] Red first, all against one injected table:
+- [x] Red first, all against one injected table:
   - fetch and follow work for each target kind;
   - one canonical scope reaches the same pods through both paths. Send
     `cluster-a|team-a:apps/v1:Deployment:api` and a `batch/v1` `CronJob`
@@ -781,7 +817,7 @@ Checklist:
   - a GVK missing from the table is rejected by both paths with the same
     error;
   - the generator rejects a descriptor with both `Logs` and `NodeLogs`.
-- [ ] Keep these regression tests passing unchanged in intent; their setup may
+- [x] Keep these regression tests passing unchanged in intent; their setup may
   move to the injected table:
   - `TestCronJobScopeFollowsPodsOfAFutureJob` (`refresh/containerlogsstream/lifecycle_test.go:317`);
   - `TestPodScopeFollowsARecreatedPodWithTheSameName` (:167);
@@ -790,16 +826,16 @@ Checklist:
   - `resolve_test.go`'s resolver cases (`backend/internal/containerlogs/resolve_test.go:80-218`),
     including `TestResolveCronJobBatchesOwnedJobsAndWatchesOwnership` (:141)
     and `TestCronJobOwnershipRetriesAfterATransientLookupFailure` (:183).
-- [ ] Keep Node's logs mode: the generator test pins the Node row at
+- [x] Keep Node's logs mode: the generator test pins the Node row at
   `logs: 'node'`. The harness case "uses the Logs tab for node objects rather
   than a separate node logs tab" (`useObjectPanelTabs.test.tsx:192`) stays.
-- [ ] Move per-kind resolution into the kind packages, delete
+- [x] Move per-kind resolution into the kind packages, delete
   `ValidateTargetGVK` and the `Resolve` switch, and derive the container-log
   values of `panel.logs` from `Logs`.
 
 ### Phase 9: close-out
 
-- [ ] Docs:
+- [x] Docs:
   - `resource-kind-registry.md`: add the generated frontend table to
     "Registry-driven surfaces" (:15) and the facet rule.
   - `permissions.md:111-116`: the per-kind section moves.
@@ -807,7 +843,7 @@ Checklist:
     still says to add group/version to `builtinGroupVersions.ts` (generated
     since, :44-51) and to edit `constants.ts` capabilities.
   - `.agents/skills/object-panel/SKILL.md:67-73`.
-- [ ] Release notes in `docs/release/pending.md`, folded into the existing
+- [x] Release notes in `docs/release/pending.md`, folded into the existing
   area groups: a user-visible entry only for the custom-resource tab fix (Q4)
   and the ReplicaSet navigation fix (Phase 7), and only if those behaviors
   shipped in a release.

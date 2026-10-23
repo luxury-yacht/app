@@ -26,7 +26,8 @@ and [shared-resource-model](../../../../docs/architecture/shared-resource-model.
   `backend/resourcecontract/builtin_resources.go` and the matching row to
   `backend/resourcecontract/builtin-resource-identities.json`. The catalog
   derives its built-in seed from this contract; keep no second identity table.
-  First-class frontend support also needs the frontend built-in GVK
+  The frontend's built-in GVK lookup reads the same JSON, and its per-kind
+  behavior comes from the descriptor's facets
   ([frontend surfaces](frontend-surfaces.md#built-in-gvk-capabilities-and-yaml)).
 - Never add CRDs or custom resources; discovery supplies their group/version.
   `backend/resources/common/resource_identity.go` stays an interface, not a

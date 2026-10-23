@@ -12,6 +12,7 @@ import "testing"
 //   - object catalog sources:      backend/objectcatalog/catalog_source_test.go
 //   - response-cache invalidation: backend/response_cache_invalidation_registry_test.go
 //   - resource-stream descriptors: backend/refresh/resourcestream/stream_registration_registry_test.go
+//   - frontend kind facets:        backend/internal/genkindfacets/render_test.go (+ go generate ./backend)
 //
 // This count is the backstop that catches a new kind which was added to All but
 // participates in no facet the other guards pin: bumping it forces a conscious

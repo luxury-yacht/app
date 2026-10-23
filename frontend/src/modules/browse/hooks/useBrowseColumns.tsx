@@ -8,10 +8,10 @@
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { useMemo } from 'react';
 import type { CatalogActionFacts, CatalogItem } from '@/core/refresh/types';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 /**
  * Row type for the Browse table.
@@ -44,7 +44,7 @@ export const toTableRows = (
 ): BrowseTableRow[] => {
   return items.map((item) => {
     const created = item.creationTimestamp ? new Date(item.creationTimestamp) : undefined;
-    const kindLabel = getDisplayKind(item.ref.kind, useShortResourceNames);
+    const kindLabel = kindDisplayName(item.ref, useShortResourceNames);
     const namespaceDisplay = item.ref.namespace ?? '—';
     return {
       ...item,

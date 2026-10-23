@@ -24,7 +24,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { queryNamespacePermissions } from '@/core/capabilities';
 import { PanelLifecycleClusterSurface } from '@/core/panel-windows/panelLifecycleGuards';
 import './ObjectPanel.css';
-import { RESOURCE_CAPABILITIES } from '@modules/object-panel/components/ObjectPanel/constants';
 import { useObjectPanelCapabilities } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities';
 import { useObjectPanelFeatureSupport } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport';
 import { useObjectPanelRefresh } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh';
@@ -125,16 +124,8 @@ function ObjectPanel({
   const autoRefreshEnabled = usePreference('autoRefreshEnabled');
   usePanelMetricsCollector(panelId, objectRef, autoRefreshEnabled);
 
-  const {
-    objectKind,
-    detailScope,
-    eventsScope,
-    containerLogsScope,
-    mapScope,
-    helmScope,
-    isHelmRelease,
-    isEvent,
-  } = getObjectPanelScopes(objectData);
+  const { detailScope, eventsScope, containerLogsScope, mapScope, helmScope, isHelmRelease } =
+    getObjectPanelScopes(objectData);
 
   const lastPermissionScopeRef = useRef<string | null>(null);
   useEffect(() => {
@@ -152,16 +143,11 @@ function ObjectPanel({
     queryNamespacePermissions(namespace, objectData?.clusterId ?? null);
   }, [objectData?.clusterId, objectData?.namespace]);
 
-  const featureSupport = useObjectPanelFeatureSupport(
-    objectKind,
-    RESOURCE_CAPABILITIES,
-    isHelmRelease
-  );
+  const featureSupport = useObjectPanelFeatureSupport(objectData);
 
   const { capabilityStates, capabilities, capabilityReasons, nodeLogsState, nodeLogSources } =
     useObjectPanelCapabilities({
       objectData,
-      objectKind,
       detailScope,
       featureSupport,
     });
@@ -231,7 +217,6 @@ function ObjectPanel({
     capabilities,
     objectData,
     isHelmRelease,
-    isEvent,
     isOpen: true,
     setActiveTab,
     currentTab: activeTab,
@@ -359,7 +344,6 @@ function ObjectPanel({
             mapScope={mapScope}
             helmScope={helmScope}
             objectData={objectData}
-            objectKind={objectKind}
             resourceDeleted={resourceDeleted}
             deletedResourceName={deletedResourceName}
             onClosePanel={close}

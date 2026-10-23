@@ -39,10 +39,10 @@ frontend code owns visibility, layout, rendering, and interaction state.
 - Frontend: `frontend/src/modules/object-map`; object-panel Map tab integration
   in `frontend/src/modules/object-panel`.
 - Map support is per group, version, and kind, declared once by the kind
-  registry's collectors (`kindregistry.ObjectMapIdentities`). The identity
-  contract's `objectMap` facet carries it to the frontend gate
-  (`isObjectMapSupportedRef`), and the `object-map` permission list derives
-  from it. A custom resource that shares a built-in kind name gets no map.
+  registry's collectors (`kindregistry.ObjectMapIdentities`). The generated kind
+  facets table's `objectMap` facet (every served version of the kind) carries it
+  to the frontend gate (`isObjectMapSupportedRef`), and the `object-map`
+  permission list derives from it. A custom resource that shares a built-in kind name gets no map.
   The one other map seed is the app's synthetic Helm release identity
   (`helm.sh/v3` `HelmRelease`, `resourcemodel.HelmReleaseGVK`); its scope is
   the release's object scope, and its builder is

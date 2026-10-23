@@ -7,7 +7,9 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 // subsystem reads. This is the one place nodes hands itself to the app.
 
 var Descriptor = kindspec.Descriptor{
-	Identity: Identity,
+	Identity:   Identity,
+	ListDomain: "nodes",
+	Display:    kindspec.Display{ShortName: "node"},
 	// Node has no Stream descriptor (its table is the bespoke NodeSummary whose row joins
 	// per-node pod aggregates + metrics, which the per-object StreamRow cannot carry), so
 	// the generic ingest loop does not build it; the system wires a bespoke Node reflector
@@ -18,4 +20,6 @@ var Descriptor = kindspec.Descriptor{
 	Collector:       &ObjectMapNode,
 	Binding:         &DetailBinding,
 	Actions:         kindspec.ObjectActions{Cordon: true, Drain: true},
+	Panel:           kindspec.ObjectPanel{Pods: kindspec.PanelPodsByNode, NodeLogs: true, Shell: kindspec.PanelShellNode},
+	Metrics:         kindspec.MetricsNodes,
 }

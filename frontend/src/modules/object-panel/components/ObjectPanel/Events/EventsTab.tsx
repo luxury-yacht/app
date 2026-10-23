@@ -27,6 +27,7 @@ import {
 } from '@shared/events/eventGridModel';
 import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import {
   canResolveEventObjectReference,
   resolveEventObjectReference,
@@ -45,7 +46,6 @@ import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import type { CanonicalResourceRef, ObjectEventSummary, ResourceLink } from '@/core/refresh/types';
 import { errorHandler } from '@/utils/errorHandler';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
 import type { PanelObjectData } from '../types';
 import './EventsTab.css';
@@ -255,7 +255,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
       // The Event's own link, as in the Cluster and Namespace Events tables.
       createKindColumn<EventDisplay>({
         getKind: () => 'Event',
-        getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
+        getDisplayText: () => kindDisplayName({ group: '', kind: 'Event' }, useShortResourceNames),
         onClick: openEvent,
         onAltClick: navigationAvailable ? navigateToEvent : undefined,
       }),

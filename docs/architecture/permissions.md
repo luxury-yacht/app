@@ -111,9 +111,12 @@ failure behavior, and diagnostics.
   templates, and kind eligibility are backend-authored: catalog in
   `backend/objectaction`, per-kind eligibility from
   `backend/kind/kindspec.Descriptor` aggregated through `backend/kind/kindregistry`.
-  `go generate ./backend` writes
-  `frontend/src/shared/actions/objectActions.generated.ts`. Change the source
-  and regenerate; never add a frontend action matrix.
+  `go generate ./backend` writes the action vocabulary to
+  `frontend/src/shared/actions/objectActions.generated.ts` and per-kind
+  eligibility to the kind facets table
+  (`frontend/src/shared/kinds/kindFacets.generated.ts`,
+  [resource-kind-registry.md](resource-kind-registry.md)). Change the source and
+  regenerate; never add a frontend action matrix.
 - `frontend/src/shared/actions/objectActionPolicy.ts`
   (`resolveObjectActionPolicy`) projects the generated data for contract,
   policy, and port-forward helpers. Every UI-visible mutating action appears

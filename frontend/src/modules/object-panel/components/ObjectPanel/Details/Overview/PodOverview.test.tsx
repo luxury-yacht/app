@@ -155,7 +155,7 @@ describe('PodOverview', () => {
       name: 'worker',
     };
     expect(view.openPanels()).toEqual([ownerPanel]);
-    expect(buildObjectPanelPodsSelector(ownerPanel, ownerPanel.kind)).toEqual({
+    expect(buildObjectPanelPodsSelector(ownerPanel)).toEqual({
       kind: 'workload',
       object: {
         namespace: 'cluster',

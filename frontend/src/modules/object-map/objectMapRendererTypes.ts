@@ -12,9 +12,11 @@ export interface ObjectMapHoverEdge {
   tooltipX: number;
   tooltipY: number;
   sourceLabel: string;
+  sourceGroup: string;
   sourceKind: string;
   label: string;
   targetLabel: string;
+  targetGroup: string;
   targetKind: string;
   type: string;
   tracedBy?: string;

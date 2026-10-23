@@ -26,9 +26,9 @@ import {
 import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import { useCallback, useMemo } from 'react';
 import { usePreference } from '@/core/settings/usePreference';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 /** The event row shape both scope views select from their snapshots. */
 export interface EventGridRow {
@@ -119,7 +119,7 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
     const baseColumns: GridColumnDefinition<EventGridRow>[] = [
       cf.createKindColumn<EventGridRow>({
         getKind: () => 'Event',
-        getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
+        getDisplayText: () => kindDisplayName({ group: '', kind: 'Event' }, useShortResourceNames),
         onClick: openEvent,
         onAltClick: navigateToEvent,
       }),

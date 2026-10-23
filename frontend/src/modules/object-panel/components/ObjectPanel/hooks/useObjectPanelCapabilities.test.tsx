@@ -8,9 +8,7 @@
  * receives and how the panel gates on the answers.
  */
 
-import { act } from 'react';
 import { describe, expect, it } from 'vitest';
-import { queryNamespacePermissions } from '@/core/capabilities';
 import {
   installAppStateHarness,
   type MountedApp,
@@ -31,28 +29,10 @@ const queriedChecks = () =>
     .flatMap(([queries]) => queries ?? [])
     .map(({ id: _id, ...check }) => check);
 
-const noFeatures: FeatureSupport = {
-  objPanelLogs: false,
-  nodeLogs: false,
-  manifest: false,
-  values: false,
-  delete: false,
-  restart: false,
-  scale: false,
-  edit: false,
-  shell: false,
-  debug: false,
-  trigger: false,
-  suspend: false,
-};
+const noFeatures: FeatureSupport = { logs: 'none', shell: 'none', debug: false, edit: false };
 
-const workloadFeatures: FeatureSupport = {
-  ...noFeatures,
-  delete: true,
-  restart: true,
-  scale: true,
-  edit: true,
-};
+const workloadFeatures: FeatureSupport = { ...noFeatures, logs: 'owned-pods', edit: true };
+const podFeatures: FeatureSupport = { ...noFeatures, logs: 'pod', shell: 'exec', edit: true };
 
 let result: CapabilitiesResult | null = null;
 
@@ -67,7 +47,6 @@ function CapabilitiesProbe({
 }>) {
   result = useObjectPanelCapabilities({
     objectData,
-    objectKind: objectData?.kind?.toLowerCase() ?? null,
     detailScope,
     featureSupport,
   });
@@ -112,14 +91,10 @@ describe('useObjectPanelCapabilities', () => {
     name,
   });
 
-  it("queries the object's action permissions and gates each action on its answer", async () => {
-    app.permissions((query) => {
-      if (query.subresource === 'scale') {
-        return { reason: 'forbidden' };
-      }
-      // Editing YAML, restarting, and removing finalizers all patch the object.
-      return query.verb === 'patch' ? { reason: 'locked' } : true;
-    });
+  // Object actions (delete, scale, restart, ...) are gated by the shared action
+  // controller, which queries its own checks; the panel queries only what it gates.
+  it('queries the object’s YAML and finalizer permissions and gates editing on its answer', async () => {
+    app.permissions((query) => (query.verb === 'patch' ? { reason: 'locked' } : true));
     await start();
 
     await showPanel(
@@ -139,65 +114,13 @@ describe('useObjectPanelCapabilities', () => {
       expect.arrayContaining([
         expect.objectContaining({ ...deployment, verb: 'get' }),
         expect.objectContaining({ ...deployment, verb: 'patch' }),
-        expect.objectContaining({ ...deployment, verb: 'delete' }),
-        expect.objectContaining({ ...deployment, verb: 'update', subresource: 'scale' }),
       ])
     );
     const { capabilities: flags, capabilityReasons, capabilityStates } = capabilities();
-    expect(flags.canDelete).toBe(true);
-    expect(flags.canScale).toBe(false);
-    expect(capabilityReasons.scale).toBe('forbidden');
     expect(flags.canEditYaml).toBe(false);
     expect(capabilityReasons.editYaml).toBe('locked');
-    expect(flags.canRestart).toBe(false);
     expect(capabilityStates.removeFinalizer.allowed).toBe(false);
   });
-
-  // Triggering creates a Job in the namespace; suspending patches the CronJob.
-  it.each([
-    { denied: 'patch', expected: { canTrigger: true, canSuspend: false } },
-    { denied: 'create', expected: { canTrigger: false, canSuspend: true } },
-  ])(
-    'checks CronJob trigger and suspend independently in the object cluster ($denied denied)',
-    async ({ denied, expected }) => {
-      app.permissions((query) => (query.verb === denied ? { reason: 'forbidden' } : true));
-      await start();
-      // The trigger check names no Job, so it resolves from the panel's namespace
-      // query (ObjectPanel queries the object's namespace when it opens).
-      await act(async () => {
-        queryNamespacePermissions('team-a', dev.clusterId);
-      });
-
-      await showPanel(
-        { group: 'batch', version: 'v1', kind: 'CronJob', namespace: 'team-a', name: 'backup' },
-        { ...noFeatures, trigger: true, suspend: true }
-      );
-
-      const inNamespace = {
-        clusterId: dev.clusterId,
-        group: 'batch',
-        version: 'v1',
-        namespace: 'team-a',
-      };
-      expect(queriedChecks()).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            ...inNamespace,
-            resourceKind: 'Job',
-            verb: 'create',
-            name: '',
-          }),
-          expect.objectContaining({
-            ...inNamespace,
-            resourceKind: 'CronJob',
-            verb: 'patch',
-            name: 'backup',
-          }),
-        ])
-      );
-      expect(capabilities().capabilities).toMatchObject(expected);
-    }
-  );
 
   it('checks Namespace finalizer removal on metadata and on the finalize subresource separately', async () => {
     app.permissions((query) => (query.subresource === 'finalize' ? { reason: 'forbidden' } : true));
@@ -230,7 +153,7 @@ describe('useObjectPanelCapabilities', () => {
     async (missingField) => {
       await start();
       const complete = app.object(dev, pod('api')).ref;
-      const features = { ...workloadFeatures, shell: true };
+      const features = podFeatures;
       const queriesBefore = queriedChecks().length;
 
       await view.show(
@@ -241,7 +164,7 @@ describe('useObjectPanelCapabilities', () => {
       );
 
       expect(queriedChecks()).toHaveLength(queriesBefore);
-      expect(capabilities().capabilities.canDelete).toBe(false);
+      expect(capabilities().capabilities.canEditYaml).toBe(false);
       expect(capabilities().capabilities.hasShell).toBe(false);
 
       await view.show(<CapabilitiesProbe objectData={complete} featureSupport={features} />);
@@ -258,7 +181,7 @@ describe('useObjectPanelCapabilities', () => {
           subresource: '',
         })
       );
-      expect(capabilities().capabilities.canDelete).toBe(true);
+      expect(capabilities().capabilities.canEditYaml).toBe(true);
       expect(capabilities().capabilities.hasShell).toBe(true);
     }
   );
@@ -270,16 +193,8 @@ describe('useObjectPanelCapabilities', () => {
 
     expect(capabilities().capabilities).toEqual({
       hasObjPanelLogs: false,
-      hasNodeLogs: false,
       hasShell: false,
-      hasManifest: false,
-      hasValues: false,
-      canDelete: false,
-      canRestart: false,
-      canScale: false,
       canEditYaml: false,
-      canTrigger: false,
-      canSuspend: false,
     });
     expect(Object.values(capabilities().capabilityReasons).every((reason) => !reason)).toBe(true);
   });
@@ -295,7 +210,7 @@ describe('useObjectPanelCapabilities', () => {
       );
       await start();
 
-      await showPanel(pod('api-123'), { ...workloadFeatures, shell: true });
+      await showPanel(pod('api-123'), podFeatures);
 
       expect(capabilities().capabilities.hasShell).toBe(true);
       expect(capabilities().capabilityStates.shell.allowed).toBe(true);
@@ -309,7 +224,7 @@ describe('useObjectPanelCapabilities', () => {
     );
     await start();
 
-    await showPanel(pod('api-123'), { ...workloadFeatures, shell: true });
+    await showPanel(pod('api-123'), podFeatures);
 
     expect(capabilities().capabilities.hasShell).toBe(false);
     expect(capabilities().capabilityReasons.shell).toBe('Forbidden: get pods/exec');
@@ -323,7 +238,7 @@ describe('useObjectPanelCapabilities', () => {
     );
     await start();
 
-    await showPanel(pod('demo'), { ...workloadFeatures, shell: true, debug: true });
+    await showPanel(pod('demo'), { ...podFeatures, debug: true });
 
     expect(queriedChecks()).toContainEqual(
       expect.objectContaining({
@@ -347,14 +262,14 @@ describe('useObjectPanelCapabilities', () => {
     );
     await start();
 
-    await showPanel(pod('demo'), { ...workloadFeatures, shell: true, debug: true });
+    await showPanel(pod('demo'), { ...podFeatures, debug: true });
 
     expect(capabilities().capabilityStates.debug.allowed).toBe(true);
     expect(capabilities().capabilityReasons.debug).toBeUndefined();
   });
 
   describe('node logs', () => {
-    const nodeFeatures = { ...noFeatures, nodeLogs: true };
+    const nodeFeatures: FeatureSupport = { ...noFeatures, logs: 'node' };
     const journal = (unit: string) => ({
       id: `journal/${unit}`,
       label: `journal / ${unit}`,
@@ -392,7 +307,7 @@ describe('useObjectPanelCapabilities', () => {
           name: 'node-sources',
         },
       ]);
-      expect(capabilities().capabilities.hasNodeLogs).toBe(true);
+      expect(capabilities().nodeLogsState.allowed).toBe(true);
       expect(capabilities().capabilities.hasObjPanelLogs).toBe(true);
       expect(capabilities().nodeLogSources).toEqual([journal('kubelet')]);
       expect(capabilities().capabilityReasons.nodeLogs).toBeUndefined();
@@ -410,7 +325,7 @@ describe('useObjectPanelCapabilities', () => {
       await showPanel(node('node-cached'), nodeFeatures);
 
       expect(discoveryTargets()).toHaveLength(1);
-      expect(capabilities().capabilities.hasNodeLogs).toBe(true);
+      expect(capabilities().nodeLogsState.allowed).toBe(true);
       expect(capabilities().nodeLogSources).toHaveLength(1);
     });
 
@@ -451,7 +366,7 @@ describe('useObjectPanelCapabilities', () => {
 
       await showPanel(node('node-unsupported'), nodeFeatures);
 
-      expect(capabilities().capabilities.hasNodeLogs).toBe(false);
+      expect(capabilities().nodeLogsState.allowed).toBe(false);
       expect(capabilities().capabilities.hasObjPanelLogs).toBe(true);
       expect(capabilities().nodeLogSources).toEqual([]);
       expect(capabilities().capabilityReasons.nodeLogs).toBe(

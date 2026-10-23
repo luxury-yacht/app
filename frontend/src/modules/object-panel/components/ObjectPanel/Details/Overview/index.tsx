@@ -9,7 +9,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
 import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
-import { normalizeKind, SCALABLE_KINDS } from '@shared/hooks/useObjectActions';
+import { lookupKindFacets } from '@shared/kinds/kindFacets';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { readWorkloadHPAManagedForRef, requestData } from '@/core/data-access';
@@ -67,9 +67,12 @@ const Overview: React.FC<OverviewProps> = (props) => {
   const objectGroup = objectData?.group ?? '';
   const objectVersion = objectData?.version ?? '';
 
+  // The kind's facets, by the panel object's complete identity.
+  const facets = lookupKindFacets({ group: objectGroup, version: objectVersion, kind: props.kind });
+
   // Check whether a HPA manages this workload (only for scalable kinds).
   const [hpaManaged, setHpaManaged] = useState<boolean | null>(null);
-  const isScalable = SCALABLE_KINDS.includes(normalizeKind(props.kind));
+  const isScalable = facets?.actions.scale ?? false;
   useEffect(() => {
     const namespace = props.namespace;
     if (!isScalable) {
@@ -109,7 +112,8 @@ const Overview: React.FC<OverviewProps> = (props) => {
     };
   }, [clusterId, props.namespace, props.kind, props.name, objectGroup, objectVersion, isScalable]);
 
-  const isNode = normalizeKind(props.kind) === 'Node';
+  // Kinds with node maintenance actions get the drain status and openers.
+  const isNode = Boolean(facets?.actions.cordon || facets?.actions.drain);
   const watchClusterIds = useMemo(
     () => (isNode && clusterId ? [clusterId] : undefined),
     [isNode, clusterId]

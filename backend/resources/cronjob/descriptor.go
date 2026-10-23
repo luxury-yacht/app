@@ -8,10 +8,15 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
+	ListDomain:      "namespace-workloads",
+	Display:         kindspec.Display{ShortName: "cron", SearchAliases: []string{"cj"}},
 	DetailCacheable: true,
 	DetailListsPods: true,
 	Collector:       &ObjectMapNode,
 	Edges:           ObjectMapEdges,
 	Binding:         &DetailBinding,
-	Actions:         kindspec.ObjectActions{Trigger: true, Suspend: true, Aliases: []string{"cronjob"}},
+	Actions:         kindspec.ObjectActions{Trigger: true, Suspend: true},
+	// Its pods are listed per Job in the Jobs tab, not in a Pods tab.
+	Panel: kindspec.ObjectPanel{Jobs: true},
+	Logs:  &LogsTarget,
 }

@@ -1,10 +1,13 @@
-package containerlogs
+package containerlogs_test
 
 import (
 	"context"
 	"errors"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/logspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,6 +19,10 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
+
+// logTargets are the kind registry's container-log targets, which production
+// injects into both log paths.
+var logTargets = kindregistry.MustLogTargets()
 
 func logTarget(group, kind, name string) refresh.ObjectScopeIdentity {
 	return refresh.ObjectScopeIdentity{
@@ -58,16 +65,19 @@ func TestParseTargetScopeRequiresNamespacedSupportedObject(t *testing.T) {
 	}{
 		{name: "missing", scope: "  ", message: "container logs scope is required"},
 		{name: "cluster scoped", scope: "cluster-a|:apps/v1:Deployment:api", message: "log scope must reference a namespaced object"},
-		{name: "unsupported kind", scope: "cluster-a|team-a:/v1:Service:api", message: "unsupported workload type"},
+		{name: "unsupported kind", scope: "cluster-a|team-a:/v1:Service:api", message: "not supported"},
 		{name: "wrong group for kind", scope: "cluster-a|team-a:batch/v1:Deployment:api", message: "not supported"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := ParseTargetScope(test.scope)
+			_, err := containerlogs.ParseTargetScope(test.scope, logTargets)
 			require.ErrorContains(t, err, test.message)
 		})
 	}
 
-	identity, err := ParseTargetScope("cluster-a|team-a:apps/v1:Deployment:api")
+	_, err := containerlogs.ParseTargetScope("cluster-a|team-a:/v1:Pod:api", logspec.Targets{})
+	require.ErrorContains(t, err, "not configured", "an empty table is an explicit error, not no logs")
+
+	identity, err := containerlogs.ParseTargetScope("cluster-a|team-a:apps/v1:Deployment:api", logTargets)
 	require.NoError(t, err)
 	require.Equal(t, "team-a", identity.Namespace)
 	require.Equal(t, schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}, identity.GVK)
@@ -80,7 +90,7 @@ func TestParseTargetScopeRequiresNamespacedSupportedObject(t *testing.T) {
 func TestResolvePodUsesGetAndWatchesByName(t *testing.T) {
 	client := fake.NewClientset(labeledPod("api-0", nil))
 
-	resolution, err := Resolve(context.Background(), client, logTarget("", "Pod", "api-0"), ScopeSelection{})
+	resolution, err := containerlogs.Resolve(context.Background(), client, logTargets, logTarget("", "Pod", "api-0"), containerlogs.ScopeSelection{})
 	require.NoError(t, err)
 	require.Equal(t, []string{"api-0"}, podNames(resolution.Pods))
 	require.Len(t, client.Actions(), 1)
@@ -93,7 +103,7 @@ func TestResolvePodUsesGetAndWatchesByName(t *testing.T) {
 	require.False(t, owns, "another pod in the namespace is not the target")
 
 	client.ClearActions()
-	resolution, err = Resolve(context.Background(), client, logTarget("", "Pod", "api-0"), ParseScopeSelection([]string{"pod:other"}))
+	resolution, err = containerlogs.Resolve(context.Background(), client, logTargets, logTarget("", "Pod", "api-0"), containerlogs.ParseScopeSelection([]string{"pod:other"}))
 	require.NoError(t, err)
 	require.Empty(t, resolution.Pods)
 	require.Empty(t, client.Actions(), "a deselected pod must not be read")
@@ -114,7 +124,7 @@ func TestResolveWorkloadsListPodsByTheirSelector(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			client := fake.NewClientset(objects...)
 
-			resolution, err := Resolve(context.Background(), client, logTarget("apps", kind, "web"), ScopeSelection{})
+			resolution, err := containerlogs.Resolve(context.Background(), client, logTargets, logTarget("apps", kind, "web"), containerlogs.ScopeSelection{})
 			require.NoError(t, err)
 			require.Equal(t, []string{"web-1"}, podNames(resolution.Pods))
 			require.Equal(t, []string{"app=web"}, listedPodSelectors(client))
@@ -131,7 +141,7 @@ func TestResolveJobListsPodsByJobName(t *testing.T) {
 		labeledPod("unrelated", map[string]string{"job-name": "other"}),
 	)
 
-	resolution, err := Resolve(context.Background(), client, logTarget("batch", "Job", "migrate"), ScopeSelection{})
+	resolution, err := containerlogs.Resolve(context.Background(), client, logTargets, logTarget("batch", "Job", "migrate"), containerlogs.ScopeSelection{})
 	require.NoError(t, err)
 	require.Equal(t, []string{"migrate-abc"}, podNames(resolution.Pods))
 	require.Equal(t, []string{"job-name=migrate"}, listedPodSelectors(client))
@@ -151,7 +161,7 @@ func TestResolveCronJobBatchesOwnedJobsAndWatchesOwnership(t *testing.T) {
 		labeledPod("hourly-1-a", map[string]string{"job-name": "hourly-1"}),
 	)
 
-	resolution, err := Resolve(context.Background(), client, logTarget("batch", "CronJob", "nightly"), ScopeSelection{})
+	resolution, err := containerlogs.Resolve(context.Background(), client, logTargets, logTarget("batch", "CronJob", "nightly"), containerlogs.ScopeSelection{})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"nightly-1-a", "nightly-2-a"}, podNames(resolution.Pods))
 	require.Len(t, listedPodSelectors(client), 1, "owned jobs' pods are listed in one call")
@@ -185,7 +195,7 @@ func TestCronJobOwnershipRetriesAfterATransientLookupFailure(t *testing.T) {
 		Namespace: "default", Name: "nightly-9",
 		OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "nightly"}},
 	}})
-	resolution, err := Resolve(context.Background(), client, logTarget("batch", "CronJob", "nightly"), ScopeSelection{})
+	resolution, err := containerlogs.Resolve(context.Background(), client, logTargets, logTarget("batch", "CronJob", "nightly"), containerlogs.ScopeSelection{})
 	require.NoError(t, err)
 	failures := 1
 	client.PrependReactor("get", "jobs", func(k8stesting.Action) (bool, runtime.Object, error) {
@@ -210,7 +220,7 @@ func TestResolveAppliesPodSelectionToWorkloads(t *testing.T) {
 		labeledPod("migrate-b", map[string]string{"job-name": "migrate"}),
 	)
 
-	resolution, err := Resolve(context.Background(), client, logTarget("batch", "Job", "migrate"), ParseScopeSelection([]string{"pod:migrate-b"}))
+	resolution, err := containerlogs.Resolve(context.Background(), client, logTargets, logTarget("batch", "Job", "migrate"), containerlogs.ParseScopeSelection([]string{"pod:migrate-b"}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"migrate-b"}, podNames(resolution.Pods))
 }
@@ -234,7 +244,7 @@ func TestResolveReturnsListFailures(t *testing.T) {
 				return true, nil, errors.New("list failed")
 			})
 
-			_, err := Resolve(context.Background(), client, test.target, ScopeSelection{})
+			_, err := containerlogs.Resolve(context.Background(), client, logTargets, test.target, containerlogs.ScopeSelection{})
 			require.ErrorContains(t, err, "list failed")
 		})
 	}

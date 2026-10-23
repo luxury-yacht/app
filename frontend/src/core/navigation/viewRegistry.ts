@@ -5,6 +5,7 @@
  * and UI navigation all consume the same vocabulary.
  */
 
+import type { RefreshDomain } from '@/core/refresh/types';
 import type { ResourceFamily } from './resourceFamilies';
 
 export type ViewScope = 'global' | 'cluster' | 'namespace';
@@ -17,6 +18,11 @@ interface ViewDescriptor<Scope extends ViewScope, Id extends string> {
   readonly keywords: readonly string[];
   readonly supportsAllNamespaces?: boolean;
   readonly resourceFamily?: ResourceFamily;
+  /**
+   * The refresh domain whose table the view lists. Navigation sends an object to
+   * the view that lists its kind's list domain (shared/kinds/kindFacets).
+   */
+  readonly listDomain?: RefreshDomain;
 }
 
 // Global views compare data across the app's open clusters. Presentation scope
@@ -72,6 +78,7 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     scope: 'cluster',
     sidebarGroup: 'primary',
     id: 'events',
+    listDomain: 'cluster-events',
     label: 'Events',
     description: 'Review cluster events associated with recent changes and operations',
     keywords: ['events', 'change', 'changes', 'cluster', 'logs', 'history'],
@@ -88,6 +95,7 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     scope: 'cluster',
     sidebarGroup: 'resources',
     id: 'config',
+    listDomain: 'cluster-config',
     label: 'Config',
     description: 'View cluster configuration resources',
     keywords: ['config', 'cluster', 'ingress', 'classes'],
@@ -96,6 +104,7 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     scope: 'cluster',
     sidebarGroup: 'resources',
     id: 'namespaces',
+    listDomain: 'namespaces',
     label: 'Namespaces',
     description: 'Compare health, workloads, events, utilization, and quotas across namespaces',
     keywords: ['namespaces', 'cluster', 'health', 'workloads', 'events', 'utilization', 'quotas'],
@@ -104,6 +113,7 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     scope: 'cluster',
     sidebarGroup: 'resources',
     id: 'nodes',
+    listDomain: 'nodes',
     label: 'Nodes',
     description: 'Inspect node health, scheduling, and capacity',
     keywords: ['nodes', 'capacity', 'cluster', 'servers', 'machines'],
@@ -112,6 +122,7 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     scope: 'cluster',
     sidebarGroup: 'resources',
     id: 'rbac',
+    listDomain: 'cluster-rbac',
     label: 'RBAC',
     description: 'View cluster RBAC resources',
     keywords: ['rbac', 'cluster', 'security', 'roles', 'bindings', 'admission'],
@@ -120,6 +131,7 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     scope: 'cluster',
     sidebarGroup: 'resources',
     id: 'storage',
+    listDomain: 'cluster-storage',
     label: 'Storage',
     description: 'View persistent volumes and storage classes',
     keywords: ['storage', 'cluster', 'volumes', 'pvs', 'persistent', 'classes'],
@@ -128,6 +140,7 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     scope: 'cluster',
     sidebarGroup: 'extensions',
     id: 'crds',
+    listDomain: 'cluster-crds',
     label: 'CRDs',
     description: 'View custom resource definitions',
     keywords: ['crds', 'cluster', 'custom', 'resources', 'definitions'],
@@ -190,6 +203,7 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     scope: 'namespace',
     sidebarGroup: 'primary',
     id: 'events',
+    listDomain: 'namespace-events',
     supportsAllNamespaces: true,
     label: 'Events',
     description: 'Review namespace events associated with recent changes and operations',
@@ -208,6 +222,7 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     scope: 'namespace',
     sidebarGroup: 'resources',
     id: 'workloads',
+    listDomain: 'namespace-workloads',
     supportsAllNamespaces: true,
     label: 'Workloads',
     description: 'View deployments, statefulsets, daemonsets, jobs, and pods',
@@ -226,6 +241,7 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     scope: 'namespace',
     sidebarGroup: 'resources',
     id: 'pods',
+    listDomain: 'pods',
     supportsAllNamespaces: true,
     label: 'Pods',
     description: 'View and filter pods by namespace, owner, and node',
@@ -237,6 +253,7 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     scope: 'namespace',
     sidebarGroup: 'resources',
     id: 'autoscaling',
+    listDomain: 'namespace-autoscaling',
     supportsAllNamespaces: true,
     label: 'Autoscaling',
     description: 'View horizontal pod autoscalers',
@@ -246,6 +263,7 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     scope: 'namespace',
     sidebarGroup: 'resources',
     id: 'config',
+    listDomain: 'namespace-config',
     supportsAllNamespaces: true,
     label: 'Config',
     description: 'View configmaps and secrets',
@@ -255,6 +273,7 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     scope: 'namespace',
     sidebarGroup: 'resources',
     id: 'network',
+    listDomain: 'namespace-network',
     supportsAllNamespaces: true,
     label: 'Network',
     description: 'View services and ingresses',
@@ -264,6 +283,7 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     scope: 'namespace',
     sidebarGroup: 'resources',
     id: 'quotas',
+    listDomain: 'namespace-quotas',
     supportsAllNamespaces: true,
     label: 'Quotas',
     description: 'View resource quotas and limits',
@@ -273,6 +293,7 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     scope: 'namespace',
     sidebarGroup: 'resources',
     id: 'rbac',
+    listDomain: 'namespace-rbac',
     supportsAllNamespaces: true,
     label: 'RBAC',
     description: 'View roles and bindings',
@@ -282,6 +303,7 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     scope: 'namespace',
     sidebarGroup: 'resources',
     id: 'storage',
+    listDomain: 'namespace-storage',
     supportsAllNamespaces: true,
     label: 'Storage',
     description: 'View persistent volume claims',
@@ -330,6 +352,7 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
     scope: 'namespace',
     sidebarGroup: 'extensions',
     id: 'helm',
+    listDomain: 'namespace-helm',
     supportsAllNamespaces: true,
     label: 'Helm',
     description: 'View Helm releases',

@@ -34,6 +34,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { useCallback, useMemo } from 'react';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
@@ -42,7 +43,6 @@ import { usePreference } from '@/core/settings/usePreference';
 import type { NamespaceViewType } from '@/types/navigation/views';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 /** The row fields the shared skeleton itself reads. */
 export interface AggregatedRowBase {
@@ -81,7 +81,7 @@ export const createAggregatedIdentityColumns = <
     key: 'kind',
     getKind: (row) => row.ref.kind,
     getAlias: (row) => row.kindAlias,
-    getDisplayText: (row) => getDisplayKind(row.ref.kind, useShortResourceNames),
+    getDisplayText: (row) => kindDisplayName(row.ref, useShortResourceNames),
     onClick: identity.open,
     onAltClick: identity.navigate,
   }),

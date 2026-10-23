@@ -109,6 +109,9 @@ import {
 import { buildStablePodColorMap } from './podColors';
 
 interface LogViewerProps {
+  /** Whose containers the viewer reads: one pod's, or the pods the object owns. */
+  target: 'pod' | 'owned-pods';
+  /** The object's kind; names the download file. */
   resourceKind: string;
   /**
    * Refresh-domain scope string for the container-logs producer. Owned by
@@ -374,6 +377,7 @@ const hasActiveLogResultFilter = (
 ): boolean => isNarrowingFilterSelection(selectedFilters) || textFilterHidesLines;
 
 const LogViewerInner: React.FC<LogViewerProps> = ({
+  target,
   resourceKind,
   containerLogsScope,
   isActive = false,
@@ -441,8 +445,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const terminalTheme = useTerminalTheme(logsContentRef);
 
   const resourceKindKey = resourceKind?.toLowerCase() ?? '';
-  const isWorkload = resourceKindKey !== 'pod';
-  const supportsPreviousContainerLogs = resourceKindKey === 'pod';
+  const isWorkload = target === 'owned-pods';
+  const supportsPreviousContainerLogs = target === 'pod';
   const selectedFilterValues = useMemo(
     () => filterSelectionValues(selectedFilters),
     [selectedFilters]

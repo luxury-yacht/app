@@ -214,6 +214,7 @@ describe.runIf(process.env.LOGS_BENCHMARK === '1')('Logs tab stream-batch benchm
     await act(async () => {
       root.render(
         <LogViewer
+          target="owned-pods"
           resourceKind="deployment"
           containerLogsScope={SCOPE}
           isActive

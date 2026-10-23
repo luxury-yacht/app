@@ -12,7 +12,7 @@ import {
   filterSelectionValues,
   type MultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
-import { getDisplayKind } from '@/utils/kindAliasMap';
+import { kindDisplayName, kindNameDisplay } from '@shared/kinds/kindDisplay';
 import { OBJECT_MAP_EDGE_KINDS } from './objectMapEdgeStyle';
 import { contractObjectMapKindFilter, FILTERED_PATH_EDGE_TYPE } from './objectMapKindFilter';
 import {
@@ -100,7 +100,8 @@ const computeKindOptions = (
   );
   return kinds.map((kind) => ({
     value: kind,
-    label: getDisplayKind(kind, useShortResourceNames),
+    // The kind filter groups objects by kind name, so its label is by name too.
+    label: kindNameDisplay(kind, useShortResourceNames),
   }));
 };
 
@@ -189,7 +190,7 @@ const computeSearchMatches = (
   }
   return nodes.filter((node) => {
     const namespace = node.ref.namespace ?? '';
-    const displayKind = getDisplayKind(node.ref.kind, useShortResourceNames);
+    const displayKind = kindDisplayName(node.ref, useShortResourceNames);
     return `${node.ref.kind} ${displayKind} ${namespace} ${node.ref.name}`
       .toLowerCase()
       .includes(normalizedSearchQuery);

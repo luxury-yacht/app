@@ -12,6 +12,10 @@ package backend
 // authored JSON also generates the typed backend domain-policy table.
 //go:generate go run ./internal/genrefreshcontracts/cmd -out ../frontend/src/core/refresh/types.generated.ts -go-policy-out refresh/domain/policy_generated.go
 
-// Object-action ids, backend command names, permission templates, labels, and
-// per-kind capabilities are generated from the backend catalog and kind registry.
+// Object-action ids, backend command names, permission templates, and labels are
+// generated from the backend catalog.
 //go:generate go run ./internal/genobjectactions/cmd -out ../frontend/src/shared/actions/objectActions.generated.ts
+
+// The frontend's per-kind facets (tabs, logs/shell/metrics sources, object-map
+// support, action eligibility) are generated from the kind registry.
+//go:generate go run ./internal/genkindfacets/cmd -out ../frontend/src/shared/kinds/kindFacets.generated.ts

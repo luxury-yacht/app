@@ -53,7 +53,7 @@ func startLogSession(t *testing.T, setup sessionSetup) *logSession {
 	client := &stubClient{Clientset: baseClient, core: &logCore{
 		CoreV1Interface: baseClient.CoreV1(), overrides: map[string]*logPods{"default": logs},
 	}}
-	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
+	handler, err := NewHandler(client, testLogTargets, applog.Noop, telemetry.NewRecorder())
 	require.NoError(t, err)
 	if setup.tune != nil {
 		setup.tune(handler.streamer)

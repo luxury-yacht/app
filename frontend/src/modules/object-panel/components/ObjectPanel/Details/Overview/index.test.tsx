@@ -97,6 +97,36 @@ describe('an opened panel’s Overview', () => {
     });
   });
 
+  // Only a built-in scalable workload can be HPA-managed; a custom resource that
+  // shares the Deployment kind name is not asked about.
+  it('asks whether an HPA manages a scalable workload, not a custom resource named like one', async () => {
+    const deployment = servePanel(workload('Deployment', 'demo'), 'deployment', {
+      name: 'demo',
+      namespace: 'default',
+    });
+    await openPanel(deployment);
+    const deploymentQueries = app.backend.calls('IsWorkloadHPAManaged').length;
+    expect(deploymentQueries).toBeGreaterThan(0);
+
+    const lookalike = servePanel(
+      {
+        group: 'example.com',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'default',
+        name: 'look',
+      },
+      'customresource',
+      { name: 'look', namespace: 'default' }
+    );
+    await act(async () => {
+      view.owners().objectPanel.openWithObject(lookalike.ref);
+    });
+    await app.settle();
+
+    expect(app.backend.calls('IsWorkloadHPAManaged')).toHaveLength(deploymentQueries);
+  });
+
   it('hands a ReplicaSet’s desired replicas from its detail to the actions menu', async () => {
     const replicaSet = servePanel(workload('ReplicaSet', 'rs-demo'), 'replicaset', {
       name: 'rs-demo',

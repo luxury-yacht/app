@@ -30,10 +30,9 @@ changed path crosses that boundary.
   `backend/refresh/snapshot/object_map_test.go` and adjacent object-map tests.
 - Frontend support gate: `frontend/src/modules/object-panel/objectPanelRef.ts`
   (`isObjectMapSupportedRef`, `hasCompleteObjectMapReference`). It matches the
-  complete group/version/kind against contract rows flagged `objectMap`. Those
-  rows are derived from the registry collectors
-  (`kindregistry.ObjectMapIdentities`), so a new collector needs no frontend
-  list edit.
+  complete group/version/kind against the generated kind facets' `objectMap`
+  facet (`shared/kinds/kindFacets`). It is derived from the registry collectors,
+  so a new collector needs no frontend list edit.
 - Frontend module `frontend/src/modules/object-map/`: `ObjectMap.tsx`,
   `useObjectMapModel.ts`, `objectMapLayout.ts`, `objectMapVisibleState.ts`,
   `ObjectMapG6Renderer.tsx`, `objectMapEdgeStyle.ts`, `objectMapDebugStore.ts`,
@@ -50,8 +49,8 @@ For missing kinds or links:
    resources, and fixtures asserting the nodes and edges (not just no error).
    Gateway API fake-client tests may need explicit list reactors; use
    `gatewayfake.NewClientset()`, not deprecated constructors.
-3. Then update the frontend together: the `objectMap` contract flag (run
-   `go test ./backend/resourcecontract` and update the JSON row), payload types,
+3. Then update the frontend together: regenerate the kind facets
+   (`go generate ./backend`, which sets `objectMap`), payload types,
    model/filter/collapse, visible state and layout, renderer and apply-queue
    equality, legend/palette/status styling, and targeted Vitest coverage.
 4. Update `docs/workflows/object-map.md` when supported kinds, edge semantics,

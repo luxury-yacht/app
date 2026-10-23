@@ -138,16 +138,8 @@ describe('ObjectPanelContent', () => {
     isPanelOpen: true,
     capabilities: {
       hasObjPanelLogs: true,
-      hasNodeLogs: false,
       hasShell: false,
-      hasManifest: true,
-      hasValues: true,
-      canDelete: true,
-      canRestart: true,
-      canScale: true,
       canEditYaml: true,
-      canTrigger: false,
-      canSuspend: false,
     },
     capabilityReasons: {},
     nodeLogsState: { allowed: false, pending: false, reason: undefined },
@@ -157,8 +149,13 @@ describe('ObjectPanelContent', () => {
     containerLogsScope: 'cluster-a|team-a:apps/v1:deployment:api',
     mapScope: 'cluster-a|team-a:apps/v1:Deployment:api',
     helmScope: 'team-a:api',
-    objectData: { kind: 'Deployment', name: 'api', namespace: 'team-a' },
-    objectKind: 'deployment',
+    objectData: {
+      kind: 'Deployment',
+      group: 'apps',
+      version: 'v1',
+      name: 'api',
+      namespace: 'team-a',
+    },
     resourceDeleted: false,
     deletedResourceName: '',
     onClosePanel: vi.fn(),
@@ -238,7 +235,8 @@ describe('ObjectPanelContent', () => {
   it('renders logs viewer when logs tab is active and capability present', async () => {
     await renderContent({ activeTab: 'logs' });
     expect(hoistedRefs.logViewerProps.current).toMatchObject({
-      resourceKind: 'deployment',
+      target: 'owned-pods',
+      resourceKind: 'Deployment',
       isActive: true,
     });
   });
@@ -283,9 +281,14 @@ describe('ObjectPanelContent', () => {
   it('renders node logs tab when logs tab is active for a node', async () => {
     const nodeProps: Partial<React.ComponentProps<typeof ObjectPanelContent>> = {
       activeTab: 'logs',
-      capabilities: { ...baseProps.capabilities, hasObjPanelLogs: true, hasNodeLogs: false },
-      objectData: { kind: 'Node', name: 'node-1', clusterId: 'alpha:ctx' },
-      objectKind: 'node',
+      capabilities: { ...baseProps.capabilities, hasObjPanelLogs: true },
+      objectData: {
+        kind: 'Node',
+        group: '',
+        version: 'v1',
+        name: 'node-1',
+        clusterId: 'alpha:ctx',
+      },
       nodeLogsState: { allowed: false, pending: true, reason: undefined },
       nodeLogSources: [
         {
@@ -322,8 +325,13 @@ describe('ObjectPanelContent', () => {
 
     await renderContent({
       activeTab: 'logs',
-      objectData: { kind: 'Node', name: 'node-1', clusterId: 'alpha:ctx' },
-      objectKind: 'node',
+      objectData: {
+        kind: 'Node',
+        group: '',
+        version: 'v1',
+        name: 'node-1',
+        clusterId: 'alpha:ctx',
+      },
     });
 
     expect(container.textContent).toContain('Failed to load Logs');
@@ -427,7 +435,7 @@ describe('ObjectPanelContent', () => {
       objectData: pod,
       detailModel: buildObjectDetailModel(pod, podDetail),
     };
-    const podProps = { objectData: pod, objectKind: 'pod', detailTabProps };
+    const podProps = { objectData: pod, detailTabProps };
     await renderContent({ activeTab: 'details', ...podProps });
     expect(container.querySelector('[data-testid="metrics-tab"]')).toBeNull();
 

@@ -16,6 +16,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useGridTableExternalFilters } from '@shared/components/tables/hooks/useGridTableExternalFilters';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -32,7 +33,6 @@ import {
 } from '@/core/settings/clusterAttentionIgnores';
 import { usePreference } from '@/core/settings/usePreference';
 import { errorHandler } from '@/utils/errorHandler';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 import AttentionIgnoredModal from './AttentionIgnoredModal';
 import './ClusterViewAttention.css';
 
@@ -111,7 +111,7 @@ export default function ClusterViewAttention() {
     const result: GridColumnDefinition<ClusterAttentionFinding>[] = [
       cf.createKindColumn<ClusterAttentionFinding>({
         getKind: (row) => row.ref.kind,
-        getDisplayText: (row) => getDisplayKind(row.ref.kind, useShortResourceNames),
+        getDisplayText: (row) => kindDisplayName(row.ref, useShortResourceNames),
         onClick: openObject,
         onAltClick: navigateObject,
       }),

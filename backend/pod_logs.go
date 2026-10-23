@@ -13,10 +13,15 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 )
+
+// containerLogTargets is the kind registry's container-log target table, the one
+// the log stream reads through too (refresh/system/streams.go).
+var containerLogTargets = kindregistry.MustLogTargets()
 
 func (g *ResourceGateway) FetchContainerLogs(clusterID string, req ContainerLogsFetchRequest) (ContainerLogsFetchResponse, error) {
 	if err := requireMatchingContainerLogsScopeCluster(clusterID, req.Scope); err != nil {
@@ -26,7 +31,7 @@ func (g *ResourceGateway) FetchContainerLogs(clusterID string, req ContainerLogs
 	if err != nil {
 		return ContainerLogsFetchResponse{}, err
 	}
-	service := pods.NewService(deps)
+	service := pods.NewContainerLogsService(deps, containerLogTargets)
 	// No budget for the whole call: each container's read has its own timeout,
 	// and a shared one would fail the containers read last.
 	return service.FetchContainerLogs(g.CtxOrBackground(), req)
@@ -53,7 +58,7 @@ func (g *ResourceGateway) GetContainerLogsScopeContainers(clusterID, scope strin
 	if err != nil {
 		return nil, err
 	}
-	service := pods.NewService(deps)
+	service := pods.NewContainerLogsService(deps, containerLogTargets)
 	return service.ContainerLogsScopeContainers(g.CtxOrBackground(), scope)
 }
 

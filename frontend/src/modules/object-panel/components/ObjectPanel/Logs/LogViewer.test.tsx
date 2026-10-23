@@ -354,6 +354,7 @@ describe('LogViewer active pod synchronisation', () => {
     <>
       <KeyboardProbe />
       <LogViewer
+        target="owned-pods"
         resourceKind="deployment"
         containerLogsScope={defaultScope()}
         isActive
@@ -390,6 +391,7 @@ describe('LogViewer active pod synchronisation', () => {
 
   /** The props of the Logs tab of the `api` pod. */
   const podProps = (props: ViewerProps = {}): ViewerProps => ({
+    target: 'pod',
     resourceKind: 'Pod',
     containerLogsScope: podScope(),
     activePodNames: ['api'],
@@ -1049,6 +1051,7 @@ describe('LogViewer active pod synchronisation', () => {
     answerContainers(scopeContainer('app'), scopeContainer('sidecar'));
     const pod = object({ group: '', version: 'v1', kind: 'Pod', name: 'api-pod-0' });
     await openLogs([logLine('api-pod-0', 'pod scoped log entry', '2024-05-01T10:00:00.123456Z')], {
+      target: 'pod',
       resourceKind: 'pod',
       containerLogsScope: scopeOf(pod),
     });
@@ -1071,6 +1074,7 @@ describe('LogViewer active pod synchronisation', () => {
     const debugLine = (line: string, timestamp: string) =>
       logLine('api-pod-0', line, timestamp, { container: 'debugger', isEphemeral: true });
     await openLogs([logLine('api-pod-0', 'app line', '2024-05-01T10:00:00Z')], {
+      target: 'pod',
       resourceKind: 'pod',
       containerLogsScope: scope,
     });
@@ -1102,6 +1106,7 @@ describe('LogViewer active pod synchronisation', () => {
     const line = (text: string, timestamp: string, name: string) =>
       logLine('api-pod-0', text, timestamp, { container: name });
     await openLogs([line('one', '2024-05-01T10:00:00Z', 'app')], {
+      target: 'pod',
       resourceKind: 'pod',
       containerLogsScope: scope,
     });

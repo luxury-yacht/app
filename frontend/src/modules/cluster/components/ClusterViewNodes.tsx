@@ -30,6 +30,7 @@ import {
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import {
@@ -48,7 +49,6 @@ import type {
 import { nodeRowCpuValue, nodeRowMemoryValue } from '@/core/resource-metrics';
 import { usePreference } from '@/core/settings/usePreference';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 // The table is query-backed (sourced from the typed query + replay cache);
 // only `error` is consumed, for the empty-state text.
@@ -169,7 +169,7 @@ const NodesTable: React.FC<NodesTableProps> = React.memo(
       const columns: GridColumnDefinition<ClusterNodeRow>[] = [
         cf.createKindColumn<ClusterNodeRow>({
           getKind: () => 'Node',
-          getDisplayText: () => getDisplayKind('Node', useShortResourceNames),
+          getDisplayText: () => kindDisplayName({ group: '', kind: 'Node' }, useShortResourceNames),
           onClick: (row) => handleNodeClick(row),
           onAltClick: handleNodeAltClick,
           isInteractive: () => true,

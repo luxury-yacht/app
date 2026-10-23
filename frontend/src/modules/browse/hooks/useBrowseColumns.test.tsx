@@ -114,6 +114,32 @@ describe('toTableRows', () => {
   });
 });
 
+describe('toTableRows kind labels', () => {
+  // Short names belong to built-in kinds; a custom resource sharing a kind name
+  // keeps its full kind.
+  it('shortens only the built-in kind a row names', () => {
+    const builtIn = catalogItem('team-a');
+    const lookalike: CatalogItem = {
+      ...builtIn,
+      ref: { ...builtIn.ref, group: 'example.com', kind: 'Deployment', resource: 'deployments' },
+    };
+    const deployment: CatalogItem = {
+      ...builtIn,
+      ref: { ...builtIn.ref, group: 'apps', kind: 'Deployment', resource: 'deployments' },
+    };
+
+    const [shortLookalike, shortDeployment, shortCronJob] = toTableRows(
+      [lookalike, deployment, builtIn],
+      true
+    );
+
+    expect(shortLookalike?.kindDisplay).toBe('Deployment');
+    expect(shortDeployment?.kindDisplay).toBe('deploy');
+    expect(shortCronJob?.kindDisplay).toBe('cron');
+    expect(toTableRows([deployment], false)[0]?.kindDisplay).toBe('Deployment');
+  });
+});
+
 describe('useBrowseColumns', () => {
   it('adds a Namespace column only across namespaces, opening the row namespace in its cluster', async () => {
     await showColumns(false);

@@ -10,6 +10,7 @@ import {
   NamespaceAggregatedResourceGridView,
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import { parseAutoscalingTarget } from '@shared/resources/resourceDescriptorSelectors';
 import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
 import React from 'react';
@@ -17,7 +18,6 @@ import type {
   NamespaceAutoscalingSnapshotPayload,
   NamespaceAutoscalingSummary,
 } from '@/core/refresh/types';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 export type AutoscalingData = NamespaceAutoscalingSummary & {
   kindAlias?: string;
@@ -101,8 +101,11 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
         getKind: (resource) => resource.ref.kind,
         getAlias: (resource) => resource.kindAlias,
         getDisplayText: (resource) =>
-          getDisplayKind(
-            resource.ref.kind || resource.kindAlias || 'Autoscaler',
+          kindDisplayName(
+            {
+              group: resource.ref.group,
+              kind: resource.ref.kind || resource.kindAlias || 'Autoscaler',
+            },
             useShortResourceNames
           ),
         onClick: identity.open,

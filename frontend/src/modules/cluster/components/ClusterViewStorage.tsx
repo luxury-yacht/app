@@ -10,11 +10,11 @@ import {
   ClusterAggregatedResourceGridView,
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import React from 'react';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { ClusterStorageEntry, ClusterStorageSnapshotPayload } from '@/core/refresh/types';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 type StorageData = ClusterStorageEntry & { kindAlias?: string };
 
@@ -77,7 +77,10 @@ const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
         key: 'kind',
         getKind: (pv) => pv.ref.kind || 'PersistentVolume',
         getDisplayText: (pv) =>
-          getDisplayKind(pv.ref.kind || 'PersistentVolume', useShortResourceNames),
+          kindDisplayName(
+            { group: pv.ref.group, kind: pv.ref.kind || 'PersistentVolume' },
+            useShortResourceNames
+          ),
         onClick: identity.open,
         onAltClick: identity.navigate,
       }),

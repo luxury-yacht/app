@@ -12,7 +12,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,17 +50,4 @@ func TestBuiltinResourceJSONContractMatchesGoTable(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(contents, &contract))
 	require.Equal(t, BuiltinResources, contract.Resources)
-}
-
-// The frontend opens object maps only for contract rows flagged objectMap, so a
-// kind the map collects without a flagged row could never be opened.
-func TestEveryObjectMapKindHasAMapRow(t *testing.T) {
-	for _, id := range kindregistry.ObjectMapIdentities() {
-		row, ok := FindBuiltin(id.Group, id.Version, id.Kind)
-		require.Truef(t, ok, "object-map kind %s has no contract row", id.GVK())
-		require.Truef(t, row.ObjectMap, "object-map kind %s is not flagged objectMap", id.GVK())
-	}
-	event, ok := FindBuiltin("", "v1", "Event")
-	require.True(t, ok)
-	require.False(t, event.ObjectMap, "kinds the map does not collect stay unflagged")
 }

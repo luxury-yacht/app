@@ -44,7 +44,7 @@ func (s *Service) FetchContainerLogs(ctx context.Context, req types.ContainerLog
 		req.TailLines = 1000
 	}
 	if req.MatchNone {
-		if _, err := containerlogs.ParseTargetScope(req.Scope); err != nil {
+		if _, err := containerlogs.ParseTargetScope(req.Scope, s.logTargets); err != nil {
 			return types.ContainerLogsFetchResponse{}, errorstatus.BadRequest(err)
 		}
 		return types.ContainerLogsFetchResponse{}, nil
@@ -211,11 +211,11 @@ func (s *Service) ContainerLogsScopeContainers(ctx context.Context, scope string
 // resolveTargetPods returns the scope's pods through the resolver shared with
 // the live stream.
 func (s *Service) resolveTargetPods(ctx context.Context, scope string, selection containerlogs.ScopeSelection) ([]*corev1.Pod, error) {
-	target, err := containerlogs.ParseTargetScope(scope)
+	target, err := containerlogs.ParseTargetScope(scope, s.logTargets)
 	if err != nil {
 		return nil, errorstatus.BadRequest(err)
 	}
-	resolution, err := containerlogs.Resolve(ctx, s.deps.KubernetesClient, target, selection)
+	resolution, err := containerlogs.Resolve(ctx, s.deps.KubernetesClient, s.logTargets, target, selection)
 	if err != nil {
 		return nil, err
 	}

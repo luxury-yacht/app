@@ -80,7 +80,7 @@ func TestParseRequestPreservesCompleteObjectIdentityAndSelection(t *testing.T) {
 		SelectedFilters: []string{" pod:api-1 ", "", "init:setup"},
 		MaxEntries:      250,
 		MaxBytes:        10,
-	})
+	}, testLogTargets)
 
 	require.NoError(t, err)
 	require.Equal(t, "cluster-a", options.ClusterID)
@@ -98,12 +98,12 @@ func TestParseRequestPreservesCompleteObjectIdentityAndSelection(t *testing.T) {
 }
 
 func TestParseRequestBoundsTheClientBufferLimits(t *testing.T) {
-	options, err := parseRequest(Request{Scope: "cluster-a|team-a:/v1:Pod:api", MaxEntries: 1_000_000, MaxBytes: 1 << 40})
+	options, err := parseRequest(Request{Scope: "cluster-a|team-a:/v1:Pod:api", MaxEntries: 1_000_000, MaxBytes: 1 << 40}, testLogTargets)
 	require.NoError(t, err)
 	require.Equal(t, config.ContainerLogsStreamMaxTailLines, options.MaxEntries)
 	require.Equal(t, config.ContainerLogsStreamMaxBytes, options.MaxBytes)
 
-	options, err = parseRequest(Request{Scope: "cluster-a|team-a:/v1:Pod:api"})
+	options, err = parseRequest(Request{Scope: "cluster-a|team-a:/v1:Pod:api"}, testLogTargets)
 	require.NoError(t, err)
 	require.Equal(t, config.ContainerLogsStreamDefaultTailLines, options.MaxEntries)
 	require.Equal(t, config.ContainerLogsStreamMaxBytes, options.MaxBytes)
@@ -119,7 +119,7 @@ func TestParseRequestRejectsMissingScopeAndCluster(t *testing.T) {
 		{name: "no cluster prefix", scope: "team-a:/v1:Pod:api", message: "log scope requires a cluster scope"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := parseRequest(Request{Scope: test.scope})
+			_, err := parseRequest(Request{Scope: test.scope}, testLogTargets)
 			require.ErrorContains(t, err, test.message)
 		})
 	}
@@ -142,7 +142,7 @@ func TestHandleSendsStructuredErrorForInvalidFirstFrame(t *testing.T) {
 }
 
 func TestHandleStreamsInitialResetAndStopsWithHandlerGeneration(t *testing.T) {
-	handler, err := NewHandler(fake.NewSimpleClientset(), nil, nil)
+	handler, err := NewHandler(fake.NewSimpleClientset(), testLogTargets, nil, nil)
 	require.NoError(t, err)
 	conn := newNativeLogStreamConn()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -192,7 +192,7 @@ func TestHandleStreamsInitialSnapshotAndUpdatesWithTelemetry(t *testing.T) {
 		}},
 	}
 	recorder := telemetry.NewRecorder()
-	handler, err := NewHandler(client, applog.Noop, recorder)
+	handler, err := NewHandler(client, testLogTargets, applog.Noop, recorder)
 	require.NoError(t, err)
 	conn := newNativeLogStreamConn()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -247,7 +247,7 @@ func TestHandleLimiterKeepsAllowedTargetAndWarns(t *testing.T) {
 			"default": override,
 		}},
 	}
-	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder(), NewGlobalTargetLimiter(1))
+	handler, err := NewHandler(client, testLogTargets, applog.Noop, telemetry.NewRecorder(), NewGlobalTargetLimiter(1))
 	require.NoError(t, err)
 	conn := newNativeLogStreamConn()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -281,7 +281,7 @@ func TestHandleStopsWhenTheClientRejectsTheSnapshot(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "write-pod"},
 		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
 	}
-	handler, err := NewHandler(fake.NewClientset(pod), applog.Noop, telemetry.NewRecorder())
+	handler, err := NewHandler(fake.NewClientset(pod), testLogTargets, applog.Noop, telemetry.NewRecorder())
 	require.NoError(t, err)
 	conn := newNativeLogStreamConn()
 	conn.failAt = 1
@@ -296,7 +296,7 @@ func TestHandleStopsWhenTheClientRejectsTheSnapshot(t *testing.T) {
 }
 
 func TestStoppedHandlerRejectsSessionsThatStartAfterTeardown(t *testing.T) {
-	handler, err := NewHandler(fake.NewSimpleClientset(), nil, nil)
+	handler, err := NewHandler(fake.NewSimpleClientset(), testLogTargets, nil, nil)
 	require.NoError(t, err)
 	handler.Stop()
 
@@ -370,7 +370,7 @@ func twoContainerLogSession(t *testing.T, respond func(*corev1.PodLogOptions) lo
 	client := &stubClient{Clientset: baseClient, core: &logCore{
 		CoreV1Interface: baseClient.CoreV1(), overrides: map[string]*logPods{"default": override},
 	}}
-	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
+	handler, err := NewHandler(client, testLogTargets, applog.Noop, telemetry.NewRecorder())
 	require.NoError(t, err)
 	conn := newNativeLogStreamConn()
 	ctx, cancel := context.WithCancel(context.Background())

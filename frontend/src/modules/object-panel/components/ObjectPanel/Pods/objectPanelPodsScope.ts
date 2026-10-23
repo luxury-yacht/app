@@ -2,58 +2,44 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Pods/objectPanelPodsScope.ts
  *
  * Computes the pods-query selector for the object panel's Pods tab from the
- * panel's object identity. Workloads resolve to a workload selector and nodes to
- * a node selector; everything else (and incomplete identities) resolves to null
- * so the caller never issues a cluster-wide pods fetch.
+ * panel's object identity and its kind's pods facet: owners select by workload,
+ * nodes by node name. Everything else (and incomplete identities) resolves to
+ * null so the caller never issues a cluster-wide pods fetch.
  */
+import { lookupKindFacets } from '@shared/kinds/kindFacets';
 import type { ScopeSelector } from '@/core/refresh/scopeSelector';
 import type { PanelObjectData } from '../types';
 
-// These keys mirror the pods tab's `onlyForKinds` (see constants.ts) plus `node`.
-const WORKLOAD_SCOPE_KINDS = new Set([
-  'deployment',
-  'daemonset',
-  'statefulset',
-  'job',
-  'replicaset',
-]);
-
 /**
  * Builds the pods-query base selector for an object panel object: the node
- * selector for nodes, the workload selector for the supported workload kinds, or
- * null when the object cannot be scoped (missing identity, no namespace, or an
- * unsupported kind).
+ * selector or the workload selector its kind's pods facet names, or null when
+ * the object cannot be scoped (incomplete identity, no namespace for a workload,
+ * or a kind without a Pods tab).
  */
 export function buildObjectPanelPodsSelector(
-  objectData: PanelObjectData | null,
-  objectKind: string | null
+  objectData: PanelObjectData | null
 ): ScopeSelector | null {
-  const normalizedKind = objectKind?.trim().toLowerCase() ?? null;
-  if (!objectData || !normalizedKind) {
+  const facets = lookupKindFacets(objectData);
+  const objectName = objectData?.name?.trim();
+  if (!facets || !objectName) {
     return null;
   }
-  const objectName = objectData.name?.trim();
-  if (!objectName) {
-    return null;
-  }
-
-  if (normalizedKind === 'node') {
+  if (facets.panel.pods === 'node') {
     return { kind: 'node', node: objectName };
   }
-
-  const workloadNamespace = objectData.namespace?.trim();
-  if (workloadNamespace && WORKLOAD_SCOPE_KINDS.has(normalizedKind)) {
-    const kind = objectData.kind?.trim();
-    const group = objectData.group?.trim();
-    const version = objectData.version?.trim();
-    if (!group || !version || !kind) {
-      return null;
-    }
-    return {
-      kind: 'workload',
-      object: { namespace: workloadNamespace, group, version, kind, name: objectName },
-    };
+  const namespace = objectData?.namespace?.trim();
+  if (facets.panel.pods !== 'owner' || !namespace) {
+    return null;
   }
-
-  return null;
+  return {
+    kind: 'workload',
+    // The backend matches the owner's kind exactly, so send the canonical spelling.
+    object: {
+      namespace,
+      group: facets.group,
+      version: objectData?.version?.trim() ?? '',
+      kind: facets.kind,
+      name: objectName,
+    },
+  };
 }

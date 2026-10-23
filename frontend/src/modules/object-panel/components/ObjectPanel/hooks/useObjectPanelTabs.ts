@@ -12,6 +12,7 @@ import type {
   ViewType,
 } from '@modules/object-panel/components/ObjectPanel/types';
 import { hasCompleteObjectMapReference } from '@modules/object-panel/objectPanelRef';
+import { type KindFacets, lookupKindFacets } from '@shared/kinds/kindFacets';
 import { useShortcuts } from '@ui/shortcuts';
 import { useEffect, useMemo } from 'react';
 import { resolveResourceMetricsScope } from '@/core/resource-metrics';
@@ -20,7 +21,6 @@ interface UseObjectPanelTabsArgs {
   capabilities: ComputedCapabilities;
   objectData: PanelObjectData | null;
   isHelmRelease: boolean;
-  isEvent: boolean;
   isOpen: boolean;
   /**
    * Persist the active sub-tab — it lives in ObjectPanelStateContext
@@ -37,71 +37,62 @@ interface ObjectPanelTabsResult {
 
 type PanelTab = (typeof TABS)[keyof typeof TABS];
 
-// Helm releases show their manifest, values, and a map of the manifest's objects instead of the
-// object tabs; Event objects have no events, YAML, or map of their own.
-const HELM_HIDDEN_TABS = new Set(['events', 'yaml', 'pods', 'jobs', 'metrics']);
-const HELM_ONLY_TABS = new Set(['manifest', 'values']);
-const EVENT_HIDDEN_TABS = new Set(['events', 'yaml', 'map']);
+interface TabContext {
+  facets: KindFacets | null;
+  objectData: PanelObjectData | null;
+  capabilities: ComputedCapabilities;
+  isHelmRelease: boolean;
+}
 
-const isHiddenForObjectType = (tabId: string, isHelmRelease: boolean, isEvent: boolean): boolean =>
-  (isHelmRelease ? HELM_HIDDEN_TABS.has(tabId) : HELM_ONLY_TABS.has(tabId)) ||
-  (isEvent && EVENT_HIDDEN_TABS.has(tabId));
-
-const isAllowedForKind = (tab: PanelTab, objectKind: string | null): boolean => {
-  const kinds: readonly string[] = 'onlyForKinds' in tab ? tab.onlyForKinds : [];
-  return kinds.length === 0 || (objectKind !== null && kinds.includes(objectKind));
+// Whether each tab is offered. Kind-dependent tabs read the object's kind facets
+// (a custom resource that shares a built-in kind name has none); a kind without
+// facets keeps the generic Events and YAML tabs. Helm releases read their
+// manifest and values from the Helm path instead of the object.
+const TAB_GATES: Record<PanelTab['id'], (context: TabContext) => boolean> = {
+  details: () => true,
+  map: ({ objectData }) => hasCompleteObjectMapReference(objectData),
+  pods: ({ facets }) => (facets?.panel.pods ?? 'none') !== 'none',
+  jobs: ({ facets }) => facets?.panel.jobs ?? false,
+  logs: ({ capabilities }) => capabilities.hasObjPanelLogs,
+  metrics: ({ objectData }) => resolveResourceMetricsScope(objectData).kind === 'domain',
+  events: ({ facets }) => facets?.panel.eventsTab ?? true,
+  yaml: ({ facets }) => facets?.panel.yamlTab ?? true,
+  shell: ({ capabilities }) => capabilities.hasShell,
+  manifest: ({ isHelmRelease }) => isHelmRelease,
+  values: ({ isHelmRelease }) => isHelmRelease,
 };
 
-const hasRequiredCapability = (tab: PanelTab, capabilities: ComputedCapabilities): boolean => {
-  if ('alwaysShow' in tab && tab.alwaysShow) {
-    return true;
-  }
-  if ('requiresCapability' in tab && tab.requiresCapability) {
-    return capabilities[tab.requiresCapability as keyof ComputedCapabilities];
-  }
-  return true;
-};
+const ORDERED_TABS: readonly PanelTab[] = [
+  TABS.DETAILS,
+  TABS.MAP,
+  TABS.PODS,
+  TABS.JOBS,
+  TABS.LOGS,
+  TABS.METRICS,
+  TABS.EVENTS,
+  TABS.YAML,
+  TABS.SHELL,
+  TABS.MANIFEST,
+  TABS.VALUES,
+];
 
 export const useObjectPanelTabs = ({
   capabilities,
   objectData,
   isHelmRelease,
-  isEvent,
   isOpen,
   setActiveTab,
   currentTab,
 }: UseObjectPanelTabsArgs): ObjectPanelTabsResult => {
-  const objectKind = objectData?.kind?.toLowerCase() ?? null;
-
   const availableTabs = useMemo(() => {
-    const orderedTabs = [
-      TABS.DETAILS,
-      TABS.MAP,
-      TABS.PODS,
-      TABS.JOBS,
-      TABS.LOGS,
-      TABS.METRICS,
-      TABS.EVENTS,
-      TABS.YAML,
-      TABS.SHELL,
-      TABS.MANIFEST,
-      TABS.VALUES,
-    ];
-
-    return orderedTabs.filter((tab) => {
-      if (isHiddenForObjectType(tab.id, isHelmRelease, isEvent)) {
-        return false;
-      }
-      // These tabs depend on the object's full identity, not just its kind.
-      if (tab.id === 'map') {
-        return hasCompleteObjectMapReference(objectData);
-      }
-      if (tab.id === 'metrics') {
-        return resolveResourceMetricsScope(objectData).kind === 'domain';
-      }
-      return isAllowedForKind(tab, objectKind) && hasRequiredCapability(tab, capabilities);
-    });
-  }, [capabilities, isEvent, isHelmRelease, objectData, objectKind]);
+    const context: TabContext = {
+      facets: lookupKindFacets(objectData),
+      objectData,
+      capabilities,
+      isHelmRelease,
+    };
+    return ORDERED_TABS.filter((tab) => TAB_GATES[tab.id](context));
+  }, [capabilities, isHelmRelease, objectData]);
 
   useEffect(() => {
     if (!objectData) {

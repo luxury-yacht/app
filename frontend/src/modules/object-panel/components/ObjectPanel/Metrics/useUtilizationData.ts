@@ -7,9 +7,14 @@
 
 import type { daemonset, deployment, nodes, statefulset } from '@core/backend-api/models';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import {
+  type DetailTypesWhere,
+  type KindMetricsDomain,
+  lookupKindFacets,
+} from '@shared/kinds/kindFacets';
 import { parseResourceQuantity } from '@shared/utils/resourceCalculations';
 import { useMemo } from 'react';
-import type { ObjectDetail } from '@/core/refresh/types';
+import type { ObjectDetail, ObjectDetailType, ObjectDetailTypes } from '@/core/refresh/types';
 import { type ResourceMetricValues, useResourceMetrics } from '@/core/resource-metrics';
 
 export interface UtilizationData {
@@ -24,8 +29,6 @@ export interface UtilizationData {
   podCount?: number;
   readyPodCount?: number;
 }
-
-const UTILIZATION_KINDS = new Set(['pod', 'deployment', 'daemonset', 'statefulset', 'node']);
 
 // Detail DTOs carry formatted quantity strings; they are parsed once here.
 interface StandardMetricSource {
@@ -147,22 +150,32 @@ const deriveWorkloadUtilization = (detail: WorkloadDetails): UtilizationData | n
   };
 };
 
+type MetricsDetailType = DetailTypesWhere<{
+  metricsDomain: Exclude<KindMetricsDomain, 'none'>;
+}>;
+type UtilizationOf<K extends ObjectDetailType> = (
+  details: ObjectDetailTypes[K]
+) => UtilizationData | null;
+
 // Utilization from the active detail, by the DTO that carries it: node capacity, pod usage, or
-// workload totals (podMetricsSummary when available, else averages on the detail itself).
-const detailUtilization = (detail: ObjectDetail): UtilizationData | null => {
-  switch (detail.detailType) {
-    case 'node':
-      return deriveNodeUtilization(detail.details);
-    case 'pod':
-      return standardMetricSections(detail.details);
-    case 'deployment':
-    case 'daemonset':
-    case 'statefulset':
-      return deriveWorkloadUtilization(detail.details);
-    default:
-      return null;
-  }
+// workload totals (podMetricsSummary when available, else averages on the detail itself). Every
+// kind with a metrics facet must read its DTO here; TypeScript rejects a missing or stale entry.
+const DETAIL_UTILIZATION: { [K in MetricsDetailType]: UtilizationOf<K> } = {
+  node: deriveNodeUtilization,
+  pod: standardMetricSections,
+  deployment: deriveWorkloadUtilization,
+  daemonset: deriveWorkloadUtilization,
+  statefulset: deriveWorkloadUtilization,
 };
+const UTILIZATION_BY_DETAIL_TYPE: { [K in ObjectDetailType]?: UtilizationOf<K> } =
+  DETAIL_UTILIZATION;
+
+function detailUtilization<K extends ObjectDetailType>(
+  detail: ObjectDetail<K>
+): UtilizationData | null {
+  const derive: UtilizationOf<K> | undefined = UTILIZATION_BY_DETAIL_TYPE[detail.detailType];
+  return derive ? derive(detail.details) : null;
+}
 
 function deriveDetailUtilizationData(
   objectData: ObjectPanelRef | null | undefined,
@@ -174,7 +187,7 @@ function deriveDetailUtilizationData(
   if (detail) {
     return detailUtilization(detail);
   }
-  if (!UTILIZATION_KINDS.has(objectData.kind.toLowerCase())) {
+  if ((lookupKindFacets(objectData)?.metricsDomain ?? 'none') === 'none') {
     return null;
   }
   // Fallback to objectData fields (dynamic properties on the object reference).

@@ -12,6 +12,7 @@ import {
   type MutatingObjectActionId,
   OBJECT_ACTION_IDS,
 } from '@shared/actions/objectActionContract';
+import { lookupKindFacets } from '@shared/kinds/kindFacets';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   type CapabilityDescriptor,
@@ -24,7 +25,7 @@ import {
   getCachedNodeLogDiscovery,
   type NodeLogSource,
 } from '../NodeLogs/nodeLogsApi';
-import { isNodeShellTarget, NODE_SHELL_POD_NAMESPACE } from '../Shell/nodeShell';
+import { NODE_SHELL_POD_NAMESPACE } from '../Shell/nodeShell';
 
 import {
   type CapabilityReasons,
@@ -38,7 +39,6 @@ import {
 
 interface UseObjectPanelCapabilitiesOptions {
   objectData: PanelObjectData | null;
-  objectKind: string | null;
   detailScope: string | null;
   featureSupport: FeatureSupport;
 }
@@ -83,10 +83,9 @@ const normalizeOptionalIdentity = (value: string | null | undefined): string | u
 };
 
 const buildCapabilityDescriptorContext = (
-  objectData: PanelObjectData | null,
-  objectKind: string | null
+  objectData: PanelObjectData | null
 ): CapabilityDescriptorContext | null => {
-  if (!objectData || !objectKind) {
+  if (!objectData) {
     return null;
   }
   const resourceKind = normalizeOptionalIdentity(objectData.kind);
@@ -138,35 +137,13 @@ const addYamlCapabilityDescriptors = (accumulator: CapabilityDescriptorAccumulat
   addCapabilityDescriptor(accumulator, { id: 'edit-yaml', verb: 'patch' }, 'editYaml');
 };
 
-const addMutatingCapabilityDescriptors = (
-  accumulator: CapabilityDescriptorAccumulator,
-  featureSupport: FeatureSupport
-): void => {
-  if (featureSupport.delete) {
-    addObjectActionCapability(accumulator, OBJECT_ACTION_IDS.delete, 'delete');
-  }
-  if (featureSupport.restart) {
-    addObjectActionCapability(accumulator, OBJECT_ACTION_IDS.restart, 'restart');
-  }
-  if (featureSupport.scale) {
-    addObjectActionCapability(accumulator, OBJECT_ACTION_IDS.scale, 'scale');
-  }
-  if (featureSupport.trigger) {
-    addObjectActionCapability(accumulator, OBJECT_ACTION_IDS.triggerNow, 'trigger');
-  }
-  if (featureSupport.suspend) {
-    addObjectActionCapability(accumulator, OBJECT_ACTION_IDS.suspend, 'suspend');
-  }
-};
-
 const addFinalizerRemovalCapabilityDescriptors = (
   accumulator: CapabilityDescriptorAccumulator
 ): void => {
   addObjectActionCapability(accumulator, OBJECT_ACTION_IDS.removeFinalizer, 'removeFinalizer');
 
-  const { group, version, resourceKind } = accumulator.context;
-  const isCoreNamespace = group === '' && version === 'v1' && resourceKind === 'Namespace';
-  if (isCoreNamespace) {
+  const { group, version, resourceKind: kind } = accumulator.context;
+  if (lookupKindFacets({ group, version, kind })?.actions.removeNamespaceFinalizer) {
     addObjectActionCapability(
       accumulator,
       OBJECT_ACTION_IDS.removeNamespaceFinalizer,
@@ -175,15 +152,15 @@ const addFinalizerRemovalCapabilityDescriptors = (
   }
 };
 
+// Container logs are read from the pod itself, or from the pods the object owns.
 const addLogsCapabilityDescriptor = (
   accumulator: CapabilityDescriptorAccumulator,
-  objectKind: string,
   featureSupport: FeatureSupport
 ): void => {
-  if (!featureSupport.objPanelLogs) {
+  if (featureSupport.logs !== 'pod' && featureSupport.logs !== 'owned-pods') {
     return;
   }
-  const isPod = objectKind === 'pod';
+  const isPod = featureSupport.logs === 'pod';
   addCapabilityDescriptor(
     accumulator,
     {
@@ -245,14 +222,10 @@ const addNodeShellCapabilityDescriptors = (accumulator: CapabilityDescriptorAccu
 
 const nodeShellPermissionClusterId = (
   objectData: PanelObjectData | null,
-  objectKind: string | null,
   featureSupport: FeatureSupport
 ): string | null => {
-  const context = buildCapabilityDescriptorContext(objectData, objectKind);
-  const { group = '', version = '', resourceKind: kind = '' } = context ?? {};
-  return featureSupport.shell && context && isNodeShellTarget({ group, version, kind })
-    ? context.clusterId
-    : null;
+  const context = buildCapabilityDescriptorContext(objectData);
+  return featureSupport.shell === 'node' && context ? context.clusterId : null;
 };
 
 // Node panels never query the debug pod namespace for their own data, so the
@@ -272,13 +245,9 @@ const addShellCapabilityDescriptors = (
   accumulator: CapabilityDescriptorAccumulator,
   featureSupport: FeatureSupport
 ): void => {
-  if (!featureSupport.shell) {
-    return;
-  }
-  const { group, version, resourceKind } = accumulator.context;
-  if (isNodeShellTarget({ group, version, kind: resourceKind })) {
+  if (featureSupport.shell === 'node') {
     addNodeShellCapabilityDescriptors(accumulator);
-  } else {
+  } else if (featureSupport.shell === 'exec') {
     addPodShellCapabilityDescriptors(accumulator);
   }
 };
@@ -304,35 +273,12 @@ const addDebugCapabilityDescriptor = (
   );
 };
 
-const addHelmCapabilityDescriptors = (
-  accumulator: CapabilityDescriptorAccumulator,
-  featureSupport: FeatureSupport
-): void => {
-  const addRead = (id: string, key: CapabilityIdSlot): void => {
-    addCapabilityDescriptor(
-      accumulator,
-      {
-        id,
-        verb: 'get',
-      },
-      key
-    );
-  };
-  if (featureSupport.manifest) {
-    addRead('view-manifest', 'viewManifest');
-  }
-  if (featureSupport.values) {
-    addRead('view-values', 'viewValues');
-  }
-};
-
 const computeCapabilityDescriptors = (
   objectData: PanelObjectData | null,
-  objectKind: string | null,
   featureSupport: FeatureSupport
 ) => {
-  const context = buildCapabilityDescriptorContext(objectData, objectKind);
-  if (!context || !objectKind) {
+  const context = buildCapabilityDescriptorContext(objectData);
+  if (!context) {
     return {
       descriptors: [] as CapabilityDescriptor[],
       idMap: createEmptyCapabilityIdMap(),
@@ -345,11 +291,9 @@ const computeCapabilityDescriptors = (
   };
   addYamlCapabilityDescriptors(accumulator);
   addFinalizerRemovalCapabilityDescriptors(accumulator);
-  addMutatingCapabilityDescriptors(accumulator, featureSupport);
-  addLogsCapabilityDescriptor(accumulator, objectKind, featureSupport);
+  addLogsCapabilityDescriptor(accumulator, featureSupport);
   addShellCapabilityDescriptors(accumulator, featureSupport);
   addDebugCapabilityDescriptor(accumulator, featureSupport);
-  addHelmCapabilityDescriptors(accumulator, featureSupport);
   return { descriptors: accumulator.descriptors, idMap: accumulator.idMap };
 };
 
@@ -368,12 +312,11 @@ type NodeLogCapabilityResult = {
 
 const resolveNodeLogDiscoveryTarget = (
   objectData: PanelObjectData | null,
-  objectKind: string | null,
   enabled: boolean
 ): NodeLogDiscoveryTarget | null => {
   const clusterId = objectData?.clusterId?.trim() ?? '';
   const nodeName = objectData?.name?.trim() ?? '';
-  return objectKind === 'node' && enabled && clusterId && nodeName ? { clusterId, nodeName } : null;
+  return enabled && clusterId && nodeName ? { clusterId, nodeName } : null;
 };
 
 const nodeLogCapabilityResult = (response: NodeLogDiscoveryResponse): NodeLogCapabilityResult => {
@@ -424,11 +367,6 @@ const computeCapabilityReasons = (
   nodeLogsCapabilityState: CapabilityState
 ): CapabilityReasons => ({
   nodeLogs: capabilityReason(nodeLogsCapabilityState),
-  delete: capabilityReason(capabilityStates.delete),
-  restart: capabilityReason(capabilityStates.restart),
-  scale: capabilityReason(capabilityStates.scale),
-  trigger: capabilityReason(capabilityStates.trigger),
-  suspend: capabilityReason(capabilityStates.suspend),
   editYaml: capabilityReason(capabilityStates.editYaml),
   shell: capabilityReason(capabilityStates.shell),
   debug: capabilityReason(capabilityStates.debug),
@@ -436,7 +374,6 @@ const computeCapabilityReasons = (
 
 export const useObjectPanelCapabilities = ({
   objectData,
-  objectKind,
   detailScope,
   featureSupport,
 }: UseObjectPanelCapabilitiesOptions): ObjectPanelCapabilitiesResult => {
@@ -445,10 +382,10 @@ export const useObjectPanelCapabilities = ({
     createCapabilityState()
   );
   const capabilityDescriptorInfo = useMemo(
-    () => computeCapabilityDescriptors(objectData, objectKind, featureSupport),
-    [featureSupport, objectData, objectKind]
+    () => computeCapabilityDescriptors(objectData, featureSupport),
+    [featureSupport, objectData]
   );
-  useNodeShellPermissionQuery(nodeShellPermissionClusterId(objectData, objectKind, featureSupport));
+  useNodeShellPermissionQuery(nodeShellPermissionClusterId(objectData, featureSupport));
 
   const capabilityRefreshKey = useMemo(() => {
     if (detailScope) {
@@ -490,13 +427,6 @@ export const useObjectPanelCapabilities = ({
     return {
       viewYaml: getCapabilityState(capabilityDescriptorInfo.idMap.viewYaml),
       editYaml: getCapabilityState(capabilityDescriptorInfo.idMap.editYaml),
-      viewManifest: getCapabilityState(capabilityDescriptorInfo.idMap.viewManifest),
-      viewValues: getCapabilityState(capabilityDescriptorInfo.idMap.viewValues),
-      delete: getCapabilityState(capabilityDescriptorInfo.idMap.delete),
-      restart: getCapabilityState(capabilityDescriptorInfo.idMap.restart),
-      scale: getCapabilityState(capabilityDescriptorInfo.idMap.scale),
-      trigger: getCapabilityState(capabilityDescriptorInfo.idMap.trigger),
-      suspend: getCapabilityState(capabilityDescriptorInfo.idMap.suspend),
       shell: combineShellCapabilityStates(
         shellAllOf.map((id) => getCapabilityState(id)),
         shellAnyOf.map((id) => getCapabilityState(id))
@@ -515,9 +445,10 @@ export const useObjectPanelCapabilities = ({
     ? getCapabilityState(capabilityDescriptorInfo.idMap.viewObjPanelLogs)
     : null;
 
+  const nodeLogsSupported = featureSupport.logs === 'node';
   const nodeLogDiscoveryTarget = useMemo(
-    () => resolveNodeLogDiscoveryTarget(objectData, objectKind, featureSupport.nodeLogs),
-    [featureSupport.nodeLogs, objectData, objectKind]
+    () => resolveNodeLogDiscoveryTarget(objectData, nodeLogsSupported),
+    [nodeLogsSupported, objectData]
   );
 
   useEffect(() => {
@@ -563,33 +494,21 @@ export const useObjectPanelCapabilities = ({
     };
   }, [nodeLogDiscoveryTarget]);
 
+  // A node's Logs tab shows its discovery state itself; container logs hide
+  // only on a settled denial.
   const capabilities = useMemo<ComputedCapabilities>(() => {
+    const containerLogs = featureSupport.logs === 'pod' || featureSupport.logs === 'owned-pods';
     const hasObjPanelLogs =
-      objectKind === 'node'
-        ? featureSupport.nodeLogs
-        : featureSupport.objPanelLogs &&
-          !(viewObjPanelLogs && !viewObjPanelLogs.pending && !viewObjPanelLogs.allowed);
+      featureSupport.logs === 'node' ||
+      (containerLogs &&
+        !(viewObjPanelLogs && !viewObjPanelLogs.pending && !viewObjPanelLogs.allowed));
 
     return {
       hasObjPanelLogs,
-      hasNodeLogs: featureSupport.nodeLogs && nodeLogsCapabilityState.allowed,
-      hasShell: featureSupport.shell && capabilityStates.shell.allowed,
-      hasManifest: featureSupport.manifest,
-      hasValues: featureSupport.values,
-      canDelete: featureSupport.delete && capabilityStates.delete.allowed,
-      canRestart: featureSupport.restart && capabilityStates.restart.allowed,
-      canScale: featureSupport.scale && capabilityStates.scale.allowed,
+      hasShell: featureSupport.shell !== 'none' && capabilityStates.shell.allowed,
       canEditYaml: featureSupport.edit && capabilityStates.editYaml.allowed,
-      canTrigger: featureSupport.trigger && capabilityStates.trigger.allowed,
-      canSuspend: featureSupport.suspend && capabilityStates.suspend.allowed,
     };
-  }, [
-    capabilityStates,
-    featureSupport,
-    nodeLogsCapabilityState.allowed,
-    objectKind,
-    viewObjPanelLogs,
-  ]);
+  }, [capabilityStates, featureSupport, viewObjPanelLogs]);
 
   const capabilityReasons = useMemo<CapabilityReasons>(
     () => computeCapabilityReasons(capabilityStates, nodeLogsCapabilityState),

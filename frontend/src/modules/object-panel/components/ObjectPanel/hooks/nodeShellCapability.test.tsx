@@ -13,7 +13,6 @@ import {
   type TestCluster,
   type TestObject,
 } from '@/test-utils/appState/harness';
-import { RESOURCE_CAPABILITIES } from '../constants';
 import { useObjectPanelCapabilities } from './useObjectPanelCapabilities';
 import { useObjectPanelFeatureSupport } from './useObjectPanelFeatureSupport';
 
@@ -37,10 +36,9 @@ let shell: ReturnType<typeof useObjectPanelCapabilities> | null = null;
 
 // The node panel's capability wiring, as ObjectPanel composes it.
 function NodePanelProbe({ panel }: Readonly<{ panel: TestObject }>) {
-  const featureSupport = useObjectPanelFeatureSupport('node', RESOURCE_CAPABILITIES);
+  const featureSupport = useObjectPanelFeatureSupport(panel.ref);
   shell = useObjectPanelCapabilities({
     objectData: panel.ref,
-    objectKind: 'node',
     detailScope: panel.scopes.detailScope,
     featureSupport,
   });

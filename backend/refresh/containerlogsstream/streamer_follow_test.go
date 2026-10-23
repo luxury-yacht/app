@@ -47,7 +47,7 @@ func TestFollowContainerStreamsBatches(t *testing.T) {
 		core:      coreOverride,
 	}
 
-	streamer := NewStreamer(client, applog.Noop, nil)
+	streamer := NewStreamer(client, testLogTargets, applog.Noop, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -116,7 +116,7 @@ func TestFollowContainerRetriesAfterStreamFailure(t *testing.T) {
 		core:      coreOverride,
 	}
 
-	streamer := NewStreamer(client, applog.Noop, nil)
+	streamer := NewStreamer(client, testLogTargets, applog.Noop, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -172,7 +172,7 @@ func TestFollowContainerStopsOnNotFoundWithoutUserFacingError(t *testing.T) {
 			"default": podsOverride,
 		}},
 	}
-	streamer := NewStreamer(client, applog.Noop, nil)
+	streamer := NewStreamer(client, testLogTargets, applog.Noop, nil)
 	issues := newIssueSet()
 	done := make(chan struct{})
 	go func() {
@@ -205,7 +205,7 @@ func TestFollowContainerPreCancelledContextDoesNotOpenStream(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	NewStreamer(client, applog.Noop, nil).followContainer(
+	NewStreamer(client, testLogTargets, applog.Noop, nil).followContainer(
 		ctx,
 		containerTarget{namespace: "default", pod: "never-opened", container: "app"},
 		channelSink(make(chan Entry)),
@@ -230,7 +230,7 @@ func TestFollowContainerClosesCompletedStreamExactlyOnce(t *testing.T) {
 		}},
 	}
 	entries := make(chan Entry, 1)
-	NewStreamer(client, applog.Noop, nil).followContainer(
+	NewStreamer(client, testLogTargets, applog.Noop, nil).followContainer(
 		context.Background(),
 		containerTarget{namespace: "default", pod: "completed-pod", container: "app"},
 		channelSink(entries),
@@ -284,7 +284,7 @@ func TestFollowContainerDeduplicatesMultipleLinesAtSameTimestamp(t *testing.T) {
 		core:      coreOverride,
 	}
 
-	streamer := NewStreamer(client, applog.Noop, nil)
+	streamer := NewStreamer(client, testLogTargets, applog.Noop, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -370,7 +370,7 @@ func TestFollowContainerStopsOnceTheContainerIsNoLongerRunning(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		NewStreamer(client, applog.Noop, nil).followContainer(context.Background(),
+		NewStreamer(client, testLogTargets, applog.Noop, nil).followContainer(context.Background(),
 			containerTarget{namespace: "default", pod: "done-pod", container: "app"}, channelSink(entriesCh),
 			followOptions{running: func() bool { return !stopped.Load() }})
 	}()
@@ -576,7 +576,7 @@ func TestFollowContainerDeliversLinesAfterAnOversizedLine(t *testing.T) {
 	client := &stubClient{Clientset: baseClient, core: &logCore{
 		CoreV1Interface: delegateCore, overrides: map[string]*logPods{"default": podsOverride},
 	}}
-	streamer := NewStreamer(client, applog.Noop, nil)
+	streamer := NewStreamer(client, testLogTargets, applog.Noop, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	entriesCh := make(chan Entry, 8)
@@ -627,7 +627,7 @@ func followLines(t *testing.T, responses []logResponse, want int) ([]string, *lo
 	client := &stubClient{Clientset: baseClient, core: &logCore{
 		CoreV1Interface: delegateCore, overrides: map[string]*logPods{"default": podsOverride},
 	}}
-	streamer := NewStreamer(client, applog.Noop, nil)
+	streamer := NewStreamer(client, testLogTargets, applog.Noop, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	entriesCh := make(chan Entry, 64)
 	done := make(chan struct{})
@@ -754,7 +754,7 @@ func TestFollowContainerFirstOpenCarriesTailLines(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		NewStreamer(client, applog.Noop, nil).followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app"}, testPending(), followOptions{tailLines: 500})
+		NewStreamer(client, testLogTargets, applog.Noop, nil).followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app"}, testPending(), followOptions{tailLines: 500})
 	}()
 	require.Eventually(t, func() bool { return pods.requestCount("app") == 1 }, time.Second, 5*time.Millisecond)
 	stopFollower(t, cancel, done)
@@ -779,7 +779,7 @@ func TestFollowContainerResumeCarriesTheTailBound(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		NewStreamer(client, applog.Noop, nil).followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app", cursor: cursor}, testPending(), followOptions{tailLines: 500})
+		NewStreamer(client, testLogTargets, applog.Noop, nil).followContainer(ctx, containerTarget{namespace: "default", pod: "demo", container: "app", cursor: cursor}, testPending(), followOptions{tailLines: 500})
 	}()
 	require.Eventually(t, func() bool { return pods.requestCount("app") == 1 }, time.Second, 5*time.Millisecond)
 	stopFollower(t, cancel, done)
@@ -801,7 +801,7 @@ func TestFollowContainerRetriesARequestThatNeverResponds(t *testing.T) {
 		{body: buildContainerLogsStream(origin, []time.Duration{time.Millisecond}, []string{"answered"}), holdOpen: true},
 	})
 	client := &stubClient{Clientset: baseClient, core: &logCore{CoreV1Interface: baseClient.CoreV1(), overrides: map[string]*logPods{"default": pods}}}
-	streamer := NewStreamer(client, applog.Noop, nil)
+	streamer := NewStreamer(client, testLogTargets, applog.Noop, nil)
 	streamer.responseTimeout = 50 * time.Millisecond
 	entries := make(chan Entry, 4)
 	issues := newIssueSet()
@@ -837,7 +837,7 @@ func TestFollowContainerKeepsAQuietEstablishedStreamOpen(t *testing.T) {
 	baseClient := fake.NewClientset()
 	pods := newLogPodsWithResponses(baseClient.CoreV1().Pods("default"), "default", []logResponse{{holdOpen: true, onClose: func() { closed.Store(true) }}})
 	client := &stubClient{Clientset: baseClient, core: &logCore{CoreV1Interface: baseClient.CoreV1(), overrides: map[string]*logPods{"default": pods}}}
-	streamer := NewStreamer(client, applog.Noop, nil)
+	streamer := NewStreamer(client, testLogTargets, applog.Noop, nil)
 	streamer.responseTimeout = 20 * time.Millisecond
 	issues := newIssueSet()
 	ctx, cancel := context.WithCancel(context.Background())

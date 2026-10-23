@@ -8,6 +8,8 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
+	ListDomain:      "pods",
+	Display:         kindspec.Display{ShortName: "pod", SearchAliases: []string{"po"}},
 	DetailCacheable: true,
 	// A bespoke pod reflector (snapshot.NewPodIngestProjector, wired via
 	// IngestManager.RegisterReflector) projects each Pod at intake into a four-half
@@ -18,5 +20,7 @@ var Descriptor = kindspec.Descriptor{
 	Collector:   &ObjectMapNode,
 	Edges:       ObjectMapEdges,
 	PortForward: &kindspec.PortForwardTarget{ResolvePod: ForwardPodName},
-	Actions:     kindspec.ObjectActions{Aliases: []string{"pod"}},
+	Panel:       kindspec.ObjectPanel{Shell: kindspec.PanelShellExec, DebugContainer: true},
+	Logs:        &LogsTarget,
+	Metrics:     kindspec.MetricsPods,
 }

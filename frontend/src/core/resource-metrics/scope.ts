@@ -1,4 +1,4 @@
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { lookupKindFacets } from '@shared/kinds/kindFacets';
 import {
   assertObjectRefHasRequiredIdentity,
   buildRequiredObjectReference,
@@ -8,23 +8,22 @@ import { buildClusterRefreshScope, buildRefreshScope } from '@/core/refresh/scop
 import type { KubernetesObjectReference } from '@/types/view-state';
 import type { ResourceMetricsResolution } from './types';
 
+// The kind's metrics facet names the domain whose rows carry its usage, matched by
+// complete identity: a custom resource sharing a built-in kind name, or a version
+// the backend does not serve, has none.
 const resolveMetricsReference = (ref: ClusterObjectReference): ResourceMetricsResolution => {
-  const builtin = resolveBuiltinGroupVersion(ref.kind);
-  if (ref.group !== builtin.group || ref.version !== builtin.version) {
+  const domain = lookupKindFacets(ref)?.metricsDomain ?? 'none';
+  if (domain === 'none') {
     return { kind: 'unsupported', reason: 'unsupported-kind' };
   }
-  const kind = ref.kind.toLowerCase();
-  if (kind === 'node') {
+  if (domain === 'nodes') {
     return {
       kind: 'domain',
       ref,
-      source: 'nodes',
-      domain: 'nodes',
-      scope: buildClusterRefreshScope('nodes', ref.clusterId),
+      source: domain,
+      domain,
+      scope: buildClusterRefreshScope(domain, ref.clusterId),
     };
-  }
-  if (!['pod', 'deployment', 'daemonset', 'statefulset'].includes(kind)) {
-    return { kind: 'unsupported', reason: 'unsupported-kind' };
   }
   if (!ref.namespace) {
     return {
@@ -32,7 +31,6 @@ const resolveMetricsReference = (ref: ClusterObjectReference): ResourceMetricsRe
       error: `Object identity for ${ref.kind}/${ref.name} is missing namespace`,
     };
   }
-  const domain = kind === 'pod' ? 'pods' : 'namespace-workloads';
   return {
     kind: 'domain',
     ref,

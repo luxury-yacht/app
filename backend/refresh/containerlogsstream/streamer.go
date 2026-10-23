@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/luxury-yacht/app/backend/kind/logspec"
 	"io"
 	"slices"
 	"strings"
@@ -26,7 +27,9 @@ import (
 
 // Streamer manages Kubernetes container logs streaming sessions.
 type Streamer struct {
-	client        kubernetes.Interface
+	client kubernetes.Interface
+	// targets are the kind registry's container-log targets.
+	targets       logspec.Targets
 	logger        Logger
 	telemetry     *telemetry.Recorder
 	perScopeLimit int
@@ -39,7 +42,7 @@ type Streamer struct {
 }
 
 // NewStreamer constructs a Streamer.
-func NewStreamer(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder, limits ...int) *Streamer {
+func NewStreamer(client kubernetes.Interface, targets logspec.Targets, logger Logger, recorder *telemetry.Recorder, limits ...int) *Streamer {
 	if logger == nil {
 		logger = applog.Noop
 	}
@@ -48,7 +51,7 @@ func NewStreamer(client kubernetes.Interface, logger Logger, recorder *telemetry
 		limit = containerlogs.ClampPerScopeTargetLimit(limits[0])
 	}
 	return &Streamer{
-		client: client, logger: logger, telemetry: recorder, perScopeLimit: limit,
+		client: client, targets: targets, logger: logger, telemetry: recorder, perScopeLimit: limit,
 		responseTimeout: config.ContainerLogsStreamResponseTimeout,
 		caughtUpIdle:    config.ContainerLogsStreamCaughtUpIdle,
 		historyGather:   config.ContainerLogsStreamHistoryGather,
@@ -187,7 +190,7 @@ func (s *Streamer) resolve(ctx context.Context, opts Options) (containerlogs.Res
 	if opts.MatchNone {
 		return containerlogs.Resolution{}, nil
 	}
-	return containerlogs.Resolve(ctx, s.client, opts.target(), opts.Selection)
+	return containerlogs.Resolve(ctx, s.client, s.targets, opts.target(), opts.Selection)
 }
 
 // containerLogRun owns one session's pod inventory and container followers.

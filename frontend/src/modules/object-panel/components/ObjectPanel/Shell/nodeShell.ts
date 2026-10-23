@@ -6,10 +6,11 @@
  */
 
 import type { ResourceRef } from '@core/refresh/types';
+import { lookupKindFacets } from '@shared/kinds/kindFacets';
 
 /** Namespace of node shell debug pods; mirrors backend `nodes.DebugPodNamespace`. */
 export const NODE_SHELL_POD_NAMESPACE = 'default';
 
-/** Whether a shell target is a core/v1 Node, which opens a node shell. */
+/** Whether a shell target's kind opens a node shell (its shell facet), not a pod exec. */
 export const isNodeShellTarget = (target: Pick<ResourceRef, 'group' | 'version' | 'kind'>) =>
-  target.group === '' && target.version === 'v1' && target.kind === 'Node';
+  lookupKindFacets(target)?.panel.shell === 'node';

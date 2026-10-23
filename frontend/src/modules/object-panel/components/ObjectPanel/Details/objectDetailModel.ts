@@ -1,5 +1,6 @@
 import type { types } from '@core/backend-api/models';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import type { DetailTypesWhere } from '@shared/kinds/kindFacets';
 import type { ObjectDetail, ObjectDetailType, ObjectDetailTypes } from '@/core/refresh/types';
 
 type DetailContainer = {
@@ -56,6 +57,8 @@ export interface ObjectDetailModel {
   namespaceFinalization: NamespaceFinalizationDetails | null;
   desiredScaleReplicas: number;
   cronJobSuspended: boolean;
+  /** The Jobs a kind with a Jobs tab owns; null when the detail is not loaded or has no Jobs tab. */
+  ownedJobs: types.JobSimpleInfo[] | null;
   actionState: DetailActionState;
 }
 
@@ -69,11 +72,12 @@ export interface DetailActionState {
 type DetailSections = Omit<ObjectDetailModel, 'objectData' | 'activeDetail' | 'actionState'>;
 
 /**
- * Per-detail-type derivations: the single source of truth for which detail types feed which panel
- * sections. Capabilities are declared per type, not inferred from DTO field names — those names are
- * overloaded across kinds (e.g. `rules` on Ingress/Route/Webhook vs RBAC; `containers` on Job;
- * `desiredReplicas` on HPA; `pods` on Node). Each entry reads its own DTO's fields, so a renamed
- * backend field fails to compile here instead of rendering an empty section.
+ * Per-detail-type presentation derivations: which detail types render which sibling sections.
+ * Sections are declared per type, not inferred from DTO field names — those names are overloaded
+ * across kinds (e.g. `rules` on Ingress/Route/Webhook vs RBAC; `containers` on Job). Each entry
+ * reads its own DTO's fields, so a renamed backend field fails to compile here instead of
+ * rendering an empty section. Sections a kind has because of a kind facet are in the facet tables
+ * below instead.
  */
 interface DetailDerivations<T> {
   /** Pods + core workloads show a Containers sibling section (Jobs/CronJobs deliberately do not). */
@@ -82,16 +86,8 @@ interface DetailDerivations<T> {
   availableContainers?: (detail: T) => string[];
   /** ConfigMap/Secret show a DataSection; Secret masks its values. */
   dataSection?: (detail: T) => DetailDataSection;
-  /** Port-forward availability, from container ports or service ports. */
-  portForwardAvailable?: (detail: T) => boolean;
-  /** Scalable via the scale action (NOT HPA, which also carries desiredReplicas). */
-  desiredScaleReplicas?: (detail: T) => number;
   /** Role/ClusterRole expose RBAC policy rules (rendered by the separate RBACRules section). */
   roleRules?: (detail: T) => PolicyRule[] | undefined;
-  /** Workloads/Jobs surface their owned pods (NOT Node, which also carries `pods`). */
-  activePodNames?: (detail: T) => string[] | null;
-  /** CronJob surfaces its suspend toggle. */
-  cronJobSuspended?: (detail: T) => boolean;
   /** Namespace carries spec.finalizers and controller-authored deletion conditions. */
   namespaceFinalization?: (detail: T) => NamespaceFinalizationDetails;
 }
@@ -148,12 +144,7 @@ const stringMap = (
       )
     : undefined;
 
-const scalableWorkload = {
-  containerSection: containerSectionOf,
-  portForwardAvailable: podsForwardable,
-  desiredScaleReplicas: scaleReplicasOf,
-  activePodNames: podNamesOf,
-};
+const workloadContainers = { containerSection: containerSectionOf };
 
 const DETAIL_DERIVATIONS: { [K in ObjectDetailType]?: DetailDerivations<ObjectDetailTypes[K]> } = {
   pod: {
@@ -162,18 +153,11 @@ const DETAIL_DERIVATIONS: { [K in ObjectDetailType]?: DetailDerivations<ObjectDe
       detail.containers
         ?.map((container) => container.name?.trim())
         .filter((name): name is string => Boolean(name)) ?? [],
-    portForwardAvailable: podsForwardable,
   },
-  deployment: scalableWorkload,
-  replicaset: scalableWorkload,
-  statefulset: scalableWorkload,
-  daemonset: {
-    containerSection: containerSectionOf,
-    portForwardAvailable: podsForwardable,
-    activePodNames: podNamesOf,
-  },
-  job: { activePodNames: podNamesOf },
-  cronjob: { activePodNames: podNamesOf, cronJobSuspended: (detail) => detail.suspend ?? false },
+  deployment: workloadContainers,
+  replicaset: workloadContainers,
+  statefulset: workloadContainers,
+  daemonset: workloadContainers,
   configmap: {
     dataSection: (detail) => ({
       data: stringMap(detail.data),
@@ -188,11 +172,6 @@ const DETAIL_DERIVATIONS: { [K in ObjectDetailType]?: DetailDerivations<ObjectDe
       isSecret: true,
     }),
   },
-  service: {
-    portForwardAvailable: (detail) =>
-      detail.ports?.some((port) => !port.protocol || port.protocol.toUpperCase() === 'TCP') ??
-      false,
-  },
   role: { roleRules: (detail) => detail.rules ?? undefined },
   clusterrole: { roleRules: (detail) => detail.rules ?? undefined },
   namespace: {
@@ -202,6 +181,59 @@ const DETAIL_DERIVATIONS: { [K in ObjectDetailType]?: DetailDerivations<ObjectDe
     }),
   },
 };
+
+type Accessors<K extends ObjectDetailType, R> = {
+  [P in K]: (details: ObjectDetailTypes[P]) => R;
+};
+type PartialAccessors<R> = { [K in ObjectDetailType]?: (details: ObjectDetailTypes[K]) => R };
+
+// Sections a kind has because of a kind facet. Each table must cover exactly the detail types
+// whose kind has the facet (TypeScript rejects a missing or a stale entry), so a facet change in
+// the backend kind registry cannot leave its section behind.
+/** Workloads/Jobs list their owned pods (NOT Node, whose detail lists pods but not as owner). */
+const ACTIVE_POD_NAMES: Accessors<DetailTypesWhere<{ detailListsPods: true }>, string[] | null> = {
+  cronjob: podNamesOf,
+  daemonset: podNamesOf,
+  deployment: podNamesOf,
+  job: podNamesOf,
+  replicaset: podNamesOf,
+  statefulset: podNamesOf,
+};
+/** The replica count the scale action starts from (NOT HPA, which also carries desiredReplicas). */
+const DESIRED_SCALE_REPLICAS: Accessors<DetailTypesWhere<{ actions: { scale: true } }>, number> = {
+  deployment: scaleReplicasOf,
+  replicaset: scaleReplicasOf,
+  statefulset: scaleReplicasOf,
+};
+/** Whether the target has a TCP port to forward to: container ports, or service ports. */
+const PORT_FORWARD_AVAILABLE: Accessors<
+  DetailTypesWhere<{ actions: { portForward: true } }>,
+  boolean
+> = {
+  daemonset: podsForwardable,
+  deployment: podsForwardable,
+  pod: podsForwardable,
+  service: (detail) =>
+    detail.ports?.some((port) => !port.protocol || port.protocol.toUpperCase() === 'TCP') ?? false,
+  statefulset: podsForwardable,
+};
+/** The suspend toggle's state. */
+const SUSPENDED: Accessors<DetailTypesWhere<{ actions: { suspend: true } }>, boolean> = {
+  cronjob: (detail) => detail.suspend ?? false,
+};
+/** The Jobs the Jobs tab lists. */
+const OWNED_JOBS: Accessors<DetailTypesWhere<{ panel: { jobs: true } }>, types.JobSimpleInfo[]> = {
+  cronjob: (detail) => detail.jobs ?? [],
+};
+
+function readFacetSection<K extends ObjectDetailType, R>(
+  accessors: PartialAccessors<R>,
+  detail: ObjectDetail<K>,
+  fallback: R
+): R {
+  const select: ((details: ObjectDetailTypes[K]) => R) | undefined = accessors[detail.detailType];
+  return select ? select(detail.details) : fallback;
+}
 
 const EMPTY_SECTIONS: DetailSections = {
   activePodNames: null,
@@ -213,6 +245,7 @@ const EMPTY_SECTIONS: DetailSections = {
   namespaceFinalization: null,
   desiredScaleReplicas: 0,
   cronJobSuspended: false,
+  ownedJobs: null,
 };
 
 function deriveDetailSections<K extends ObjectDetailType>(detail: ObjectDetail<K>): DetailSections {
@@ -221,18 +254,23 @@ function deriveDetailSections<K extends ObjectDetailType>(detail: ObjectDetail<K
   const derive = <R>(select: ((value: ObjectDetailTypes[K]) => R) | undefined, fallback: R): R =>
     select ? select(detail.details) : fallback;
   return {
-    activePodNames: derive(derivations.activePodNames, EMPTY_SECTIONS.activePodNames),
+    activePodNames: readFacetSection(ACTIVE_POD_NAMES, detail, EMPTY_SECTIONS.activePodNames),
     availableContainers: derive(
       derivations.availableContainers,
       EMPTY_SECTIONS.availableContainers
     ),
     containerSection: derive(derivations.containerSection, EMPTY_SECTIONS.containerSection),
     dataSection: derive(derivations.dataSection, EMPTY_SECTIONS.dataSection),
-    portForwardAvailable: derive(derivations.portForwardAvailable, undefined),
+    portForwardAvailable: readFacetSection<K, boolean | undefined>(
+      PORT_FORWARD_AVAILABLE,
+      detail,
+      undefined
+    ),
     roleRules: derive(derivations.roleRules, undefined),
     namespaceFinalization: derive(derivations.namespaceFinalization, null),
-    desiredScaleReplicas: derive(derivations.desiredScaleReplicas, 0),
-    cronJobSuspended: derive(derivations.cronJobSuspended, false),
+    desiredScaleReplicas: readFacetSection(DESIRED_SCALE_REPLICAS, detail, 0),
+    cronJobSuspended: readFacetSection(SUSPENDED, detail, false),
+    ownedJobs: readFacetSection<K, types.JobSimpleInfo[] | null>(OWNED_JOBS, detail, null),
   };
 }
 
