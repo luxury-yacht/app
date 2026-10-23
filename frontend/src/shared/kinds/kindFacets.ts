@@ -9,13 +9,7 @@
 
 import { GENERATED_KIND_FACETS, type KindFacetsSchema } from './kindFacets.generated';
 
-export type {
-  KindFacetsSchema,
-  KindMetricsDomain,
-  KindPanelLogs,
-  KindPanelPods,
-  KindPanelShell,
-} from './kindFacets.generated';
+export type { KindMetricsDomain, KindPanelLogs, KindPanelShell } from './kindFacets.generated';
 
 /** The Helm release identity the backend's Helm path serves (not a Kubernetes kind). */
 export const HELM_RELEASE_GVK = { group: 'helm.sh', version: 'v3', kind: 'HelmRelease' } as const;
@@ -64,8 +58,6 @@ const SYNTHETIC_KIND_FACETS = [
 export const KIND_FACETS = [...GENERATED_KIND_FACETS, ...SYNTHETIC_KIND_FACETS] as const;
 
 export type KindFacets = (typeof KIND_FACETS)[number];
-/** Kind names whose facets match `P`, e.g. `KindsWhere<{ panel: { jobs: true } }>`. */
-export type KindsWhere<P> = Extract<KindFacets, P>['kind'];
 /** Detail types whose kind's facets match `P`; accessor tables map over these. */
 export type DetailTypesWhere<P> = Extract<KindFacets, P>['detailType'];
 

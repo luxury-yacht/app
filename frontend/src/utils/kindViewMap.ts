@@ -15,7 +15,7 @@ import {
   NAMESPACE_VIEW_DESCRIPTORS,
 } from '@core/navigation/viewRegistry';
 import { isBuiltinResource } from '@shared/constants/builtinGroupVersions';
-import { type KindFacets, lookupKindMetadata } from '@shared/kinds/kindFacets';
+import { lookupKindMetadata } from '@shared/kinds/kindFacets';
 import type { ClusterViewType, NamespaceViewType, ViewType } from '@/types/navigation/views';
 
 export interface ViewDestination {
@@ -24,17 +24,11 @@ export interface ViewDestination {
   destinationViewId?: string;
 }
 
+// Views that list a refresh domain. kindViewMap.test.ts checks at compile time
+// that every kind's list domain has one.
 const LIST_VIEWS = [...NAMESPACE_VIEW_DESCRIPTORS, ...CLUSTER_VIEW_DESCRIPTORS].filter(
   (view) => 'listDomain' in view
 );
-type ListedDomain = Extract<(typeof LIST_VIEWS)[number], { listDomain: string }>['listDomain'];
-
-// Every kind's list domain needs a view that lists it; TypeScript rejects a list
-// domain no view declares.
-type DomainWithoutView = Exclude<Exclude<KindFacets['listDomain'], 'none'>, ListedDomain>;
-type AssertNoDomainWithoutView<T extends never> = T;
-/** Compile-time check that every kind's list domain has a view. */
-export type EveryListDomainHasAView = AssertNoDomainWithoutView<DomainWithoutView>;
 
 /** The view that lists a kind's list domain (its kind facet), if any view does. */
 const listViewFor = (group: string, kind: string): ViewDestination | null => {

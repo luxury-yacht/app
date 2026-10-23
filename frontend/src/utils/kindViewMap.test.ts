@@ -7,10 +7,27 @@
  * other custom resource, or Browse for a built-in kind that no view lists.
  */
 
-import { describe, expect, it } from 'vitest';
+import type {
+  CLUSTER_VIEW_DESCRIPTORS,
+  NAMESPACE_VIEW_DESCRIPTORS,
+} from '@core/navigation/viewRegistry';
+import type { KindFacets } from '@shared/kinds/kindFacets';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { getViewForKind } from './kindViewMap';
 
+type ViewListDomain = Extract<
+  (typeof NAMESPACE_VIEW_DESCRIPTORS)[number] | (typeof CLUSTER_VIEW_DESCRIPTORS)[number],
+  { listDomain: string }
+>['listDomain'];
+type KindListDomain = Exclude<KindFacets['listDomain'], 'none'>;
+
 describe('getViewForKind', () => {
+  // A kind's list domain without a view would send Alt+click nowhere; this
+  // fails to compile when the backend adds a list domain no view declares.
+  it('has a view for every kind list domain', () => {
+    expectTypeOf<Exclude<KindListDomain, ViewListDomain>>().toBeNever();
+  });
+
   it.each([
     ['', 'Pod', 'pods'],
     ['apps', 'Deployment', 'workloads'],

@@ -7,9 +7,9 @@ from the backend kind registry.
 - **Status:** John approved the plan on 2026-10-23 with every recommended
   answer (Q1–Q12), after [review rounds 1](#review-round-1-2026-10-23),
   [2](#review-round-2-2026-10-23), and [3](#review-round-3-2026-10-23).
-  Phases 1–9 are implemented (uncommitted); see the
-  [completion record](#completion-record-2026-10-23-uncommitted). The native
-  app check is pending, so this plan stays until it passes.
+  Phases 1–9 are implemented on branch `kind-facets`; see the
+  [completion record](#completion-record-2026-10-23). The native app check is
+  pending, so this plan stays until it passes.
 - **Base:** `main` at `f9ffc9e1` (Real state test harness #403). Line numbers
   are from that commit.
 - **Paths:** relative to `frontend/src/` unless they start with `frontend/`,
@@ -23,10 +23,12 @@ from the backend kind registry.
   (outside the repo) proved the drift guard and the synthetic-row typing in
   [TypeScript guard](#typescript-guard).
 
-## Completion record (2026-10-23, uncommitted)
+## Completion record (2026-10-23)
 
-All nine phases are implemented in one worktree on top of `f9ffc9e1`. Nothing
-is committed. Mocks: Go tests use fake clientsets; frontend behavior tests run
+All nine phases are implemented on branch `kind-facets` on top of `f9ffc9e1`:
+John's commits `870614fc` (plan) and `904c4d02` (wip), plus the uncommitted
+`knip` fix (three files: `shared/kinds/kindFacets.ts`, `utils/kindViewMap.ts`,
+`utils/kindViewMap.test.ts`). Mocks: Go tests use fake clientsets; frontend behavior tests run
 on the real-state harness (only the backend boundary is faked). The Overview
 index test keeps its pre-existing `ActionsMenu`/`GenericOverview` stubs, and
 `ObjectPanelContent.test.tsx` keeps its pre-existing tab stubs.
@@ -37,7 +39,7 @@ index test keeps its pre-existing `ActionsMenu`/`GenericOverview` stubs, and
 | Every facet emitted for every kind | passed | `TestRowsCoverEveryRegisteredKindWithEveryFacet` (40 rows, keys checked by reflection) |
 | Today's kind decisions kept | passed | `TestRowsKeepTodaysKindDecisions`; tab pins in `useObjectPanelTabs.test.tsx` (ReplicaSet, CronJob, Node, Pod, Event, Helm) |
 | Behavior lookup by complete identity, metadata by group and kind | passed | `kindFacets.test.ts` (version guard proven red by mutation) |
-| TypeScript drift guards | passed | mutation checks: utilization (TS2741), owned Jobs (TS2741), list-domain views (TS2344); probes for TS2353/TS1360/TS2322/TS2820 |
+| TypeScript drift guards | passed | mutation checks: utilization (TS2741), owned Jobs (TS2741), list-domain views (TS2349 from the `expectTypeOf(...).toBeNever()` type test in `kindViewMap.test.ts`); probes for TS2353/TS1360/TS2322/TS2820 |
 | Agreement tests: pods by owner/node, metrics, list domains, log targets, served versions | passed | `backend/refresh/snapshot/kind_facets_agreement_test.go`, `backend/internal/containerlogs/kind_facets_agreement_test.go`, `TestKindFacetVersionsPassTheBackendTargetChecks`; each proven red by mutation |
 | Fix: custom resource sharing a kind name gets no built-in tabs, HPA query, or short name | passed | red/green: `useObjectPanelTabs.test.tsx`, `useObjectPanelFeatureSupport.test.tsx`, `Overview/index.test.tsx`, `useBrowseColumns.test.tsx` |
 | Fix: lowercase `node`/`service` refs get node and port-forward actions | passed | red/green `objectActionPolicy.test.ts` ("offers node actions whatever the case") |
