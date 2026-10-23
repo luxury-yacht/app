@@ -7,7 +7,7 @@
  * the permission gate refused before any request is `denied`.
  */
 
-import { errorStatusOf, statusError } from '@utils/errorStatus';
+import { errorStatusOf } from '@utils/errorStatus';
 import { resolvePermissionDeniedMessage } from './permissionErrors';
 import type { ErrorStatus } from './types';
 
@@ -69,15 +69,3 @@ const PERMISSION_DENIED = deniedFailure('Insufficient permissions');
 export const permissionDeniedFailure = (
   stored: RefreshFailure | null | undefined
 ): RefreshFailure => (stored && isPermissionDenied(stored) ? stored : PERMISSION_DENIED);
-
-/** An Error for the error handler, carrying the backend status when there is one. */
-export const errorFromFailure = (failure: RefreshFailure): Error => {
-  if (failure.kind === 'backend') {
-    return statusError(failure.status, failureMessage(failure));
-  }
-  const error = new Error(failure.message);
-  if (failure.kind === 'local') {
-    error.name = failure.errorName;
-  }
-  return error;
-};
